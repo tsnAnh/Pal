@@ -25,7 +25,6 @@ import {
   queryClient,
   RowButton,
   SessionStatusDot,
-  SidebarRowLead,
   Tip,
   useI18n,
   useValue
@@ -111,9 +110,18 @@ interface BotRowProps {
   /** Opens the New section dialog; the bot is filed into it on create. */
   onNewSection: (bot: RosterRow) => void
   showHandle?: boolean
+  variant?: 'row' | 'tile'
 }
 
-export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandle }: BotRowProps) {
+function ActiveStatusDot({ className, storedSessionId }: { className?: string; storedSessionId: null | string }) {
+  return (
+    <span className={cn('flex rounded-full bg-background p-0.5 empty:hidden', className)}>
+      <SessionStatusDot hideIdle storedSessionId={storedSessionId} />
+    </span>
+  )
+}
+
+export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandle, variant = 'row' }: BotRowProps) {
   const { t } = useI18n()
   const b = useBots()
   const focusedOwner = focusedRosterOwner(useValue($focusedBotOwner))
@@ -160,7 +168,6 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
   // the moment the 150 s liveness window lapses (#105874). An absent
   // worker_session (past the gateway's 20-row window) degrades to chat age.
   const workerActive = workerActiveAt(bot)
-  const rowAgeTs = Math.max(activitySession?.last_active || 0, bot.worker_session?.last_active || 0)
 
   const groupKeys = useValue($activeGroupMemberKeys)
   const botMood = botWorkingMood(bot, focusedOwner, turnBusy, activeConnectionId, Date.now(), groupKeys)
@@ -241,16 +248,15 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
   const dragging = useValue($draggingBot) === rosterKey
   const currentSectionId = botSectionId(bot, allMeta)
 
-  const row = (
+  const tileSubtitle = meta?.title || ''
+
+  const tile = (
     <RowButton
       aria-busy={isOpening || undefined}
-      aria-label={rowTooltip}
+      aria-label={attention ? `${rowTooltip} · ${b.roster.needsAttention}` : rowTooltip}
       className={cn(
-        'flex w-full min-w-0 max-w-full items-center gap-2.5 overflow-hidden rounded-md px-2 py-2 text-left transition-colors',
-        'hover:bg-(--chrome-action-hover)',
-        isActive && 'bg-(--ui-row-active-background)',
-        // The row being dragged fades in place; the browser's drag image is
-        // the row itself, so the ghost under the pointer is the full row.
+        'group/tile flex w-24 min-w-0 flex-col items-center gap-1.5 overflow-hidden rounded-xl px-1 py-1 text-center transition-opacity',
+        'hover:opacity-80',
         dragging && 'opacity-40'
       )}
       data-roster-key={rosterKey}
@@ -264,70 +270,123 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
       }}
       onPointerEnter={warm}
     >
-      <div className={cn('shrink-0', !sourceStatus.available && 'grayscale opacity-60')}>
+      <div className={cn('relative shrink-0 rounded-full p-0.5', !sourceStatus.available && 'grayscale opacity-60')}>
         <BotFace
           color={avatarColor(color, bot.name)}
           image={photo ? image : null}
           mood={botMood}
           name={bot.name}
           shape={shape}
-          size={34}
+          size={56}
         />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-baseline justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1.5">
-            {/* The session row's own lead cell, so a bot's name sits on the
-                same left edge as every session name above it in the rail. */}
-            <SidebarRowLead>
-              <SessionStatusDot storedSessionId={canonicalSessionId} />
-            </SidebarRowLead>
-            {pinned ? (
-              <Tip label={b.roster.pinned}>
-                <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
-              </Tip>
-            ) : null}
-            {hidden ? (
-              <Tip label={b.roster.hiddenFromRoster}>
-                <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="eye-closed" />
-              </Tip>
-            ) : null}
-            <Tip label={rowTooltip}>
-              <span className="min-w-0 truncate text-[0.8125rem] font-medium">{displayName(bot, meta)}</span>
-            </Tip>
-          </div>
-          {attention ? (
-            <Tip label={botAttentionHint(attention.reason)}>
-              <Codicon
-                aria-label={b.roster.needsAttention}
-                className="shrink-0 text-[0.6875rem] text-amber-600 dark:text-amber-300"
-                name="warning"
-              />
-            </Tip>
-          ) : null}
-          {isOpening ? (
-            <GlyphSpinner ariaLabel={b.bot.openingChat} className="shrink-0 text-xs text-(--ui-text-secondary)" />
-          ) : null}
-          {rowAgeTs ? (
-            <span className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)">
-              {rowAge(rowAgeTs * 1000, t.sidebar.row)}
-            </span>
-          ) : null}
-        </div>
-        {showDetailsRow ? (
-          <div className="flex min-w-0 items-center gap-1.5 text-xs text-(--ui-text-tertiary)">
-            {showHandle ? (
-              <span className="shrink-0 font-mono text-[0.6875rem] text-(--ui-text-quaternary)">{`@${handle}`}</span>
-            ) : null}
-            {showHandle && displayPreview ? <span className="shrink-0 text-(--ui-text-quaternary)">·</span> : null}
-            {displayPreview ? (
-              <span className={cn('min-w-0 truncate', fromBot && 'italic')}>{displayPreview}</span>
-            ) : null}
-          </div>
+        <ActiveStatusDot className="absolute right-0 top-0" storedSessionId={canonicalSessionId} />
+        {attention ? (
+          <Codicon
+            aria-label={b.roster.needsAttention}
+            className="absolute -bottom-1 -right-1 text-[0.6875rem] text-amber-600 dark:text-amber-300"
+            name="warning"
+          />
+        ) : null}
+        {isOpening ? (
+          <GlyphSpinner
+            ariaLabel={b.bot.openingChat}
+            className="absolute -bottom-1 -left-1 text-xs text-(--ui-text-secondary)"
+          />
         ) : null}
       </div>
+      <span className="w-full truncate text-[0.8125rem] leading-[18px]">{displayName(bot, meta)}</span>
+      {tileSubtitle ? (
+        <span className="-mt-1 w-full truncate text-[0.75rem] leading-4 text-(--ui-text-tertiary)">{tileSubtitle}</span>
+      ) : null}
     </RowButton>
   )
+
+  const row =
+    variant === 'tile' ? (
+      tile
+    ) : (
+      <RowButton
+        aria-busy={isOpening || undefined}
+        aria-label={rowTooltip}
+        className={cn(
+          'flex min-h-12 w-full min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-[10px] px-2.5 py-1.5 text-left transition-colors',
+          'hover:bg-(--bot-row-active,var(--chrome-action-hover))',
+          isActive && 'bg-(--ui-row-active-background)',
+          // The row being dragged fades in place; the browser's drag image is
+          // the row itself, so the ghost under the pointer is the full row.
+          dragging && 'opacity-40'
+        )}
+        data-roster-key={rosterKey}
+        draggable
+        onClick={open}
+        onDragEnd={() => $draggingBot.set(null)}
+        onDragStart={event => {
+          event.dataTransfer.setData(BOT_DRAG_MIME, rosterKey)
+          event.dataTransfer.effectAllowed = 'move'
+          $draggingBot.set(rosterKey)
+        }}
+        onPointerEnter={warm}
+      >
+        <div className={cn('relative shrink-0', !sourceStatus.available && 'grayscale opacity-60')}>
+          <BotFace
+            color={avatarColor(color, bot.name)}
+            image={photo ? image : null}
+            mood={botMood}
+            name={bot.name}
+            shape={shape}
+            size={32}
+          />
+          <ActiveStatusDot className="absolute -right-0.5 -top-0.5" storedSessionId={canonicalSessionId} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              {pinned ? (
+                <Tip label={b.roster.pinned}>
+                  <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
+                </Tip>
+              ) : null}
+              {hidden ? (
+                <Tip label={b.roster.hiddenFromRoster}>
+                  <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="eye-closed" />
+                </Tip>
+              ) : null}
+              <Tip label={rowTooltip}>
+                <span className="min-w-0 truncate text-[0.875rem] leading-[18px]">{displayName(bot, meta)}</span>
+              </Tip>
+              {meta?.title ? (
+                <span className="min-w-0 shrink truncate text-[0.6875rem] text-(--ui-text-quaternary)">
+                  {meta.title}
+                </span>
+              ) : null}
+            </div>
+            {attention ? (
+              <Tip label={botAttentionHint(attention.reason)}>
+                <Codicon
+                  aria-label={b.roster.needsAttention}
+                  className="shrink-0 text-[0.6875rem] text-amber-600 dark:text-amber-300"
+                  name="warning"
+                />
+              </Tip>
+            ) : null}
+            {isOpening ? (
+              <GlyphSpinner ariaLabel={b.bot.openingChat} className="shrink-0 text-xs text-(--ui-text-secondary)" />
+            ) : null}
+          </div>
+          {showDetailsRow ? (
+            <div className="flex min-w-0 items-center gap-1.5 text-[0.8125rem] leading-[18px] text-(--ui-text-tertiary)">
+              {showHandle ? (
+                <span className="shrink-0 font-mono text-[0.6875rem] text-(--ui-text-quaternary)">{`@${handle}`}</span>
+              ) : null}
+              {showHandle && displayPreview ? <span className="shrink-0 text-(--ui-text-quaternary)">·</span> : null}
+              {displayPreview ? (
+                <span className={cn('min-w-0 truncate', fromBot && 'italic')}>{displayPreview}</span>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </RowButton>
+    )
 
   return (
     <ContextMenu>
@@ -551,8 +610,8 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
     <RowButton
       aria-label={`${group}, ${b.group.memberCount(members.length)}, ${availabilityLabel}`}
       className={cn(
-        'flex w-full min-w-0 max-w-full items-center gap-2.5 overflow-hidden rounded-md px-2 py-2 text-left transition-colors',
-        'hover:bg-(--chrome-action-hover)',
+        'flex min-h-12 w-full min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-[10px] px-2.5 py-1.5 text-left transition-colors',
+        'hover:bg-(--bot-row-active,var(--chrome-action-hover))',
         active && 'bg-(--ui-row-active-background)',
         dragging && 'opacity-40'
       )}
@@ -568,20 +627,17 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
         $draggingBot.set(dragKey)
       }}
     >
-      <div className="relative flex w-[34px] shrink-0 items-center justify-center">
+      <div className="relative flex w-8 shrink-0 items-center justify-center">
         {room.image ? (
           <img
             alt=""
-            className={cn(
-              'size-8 rounded-md object-cover ring-1 ring-(--ui-stroke-tertiary)',
-              availableMembers === 0 && 'grayscale opacity-60'
-            )}
+            className={cn('size-8 rounded-full object-cover', availableMembers === 0 && 'grayscale opacity-60')}
             src={room.image}
           />
         ) : (
           <span
             className={cn(
-              'flex size-8 items-center justify-center rounded-md bg-(--chrome-action-hover) text-(--ui-text-tertiary)',
+              'flex size-8 items-center justify-center rounded-full bg-(--chrome-action-hover) text-(--ui-text-tertiary)',
               availableMembers === 0 && 'opacity-60'
             )}
           >
@@ -601,7 +657,7 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">{group}</span>
+          <span className="min-w-0 flex-1 truncate text-[0.875rem] leading-[18px]">{group}</span>
           {room.pinned ? (
             <Tip label={b.roster.pinned}>
               <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
@@ -618,7 +674,7 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
             </span>
           ) : null}
         </div>
-        <div className="min-w-0 truncate text-xs text-(--ui-text-tertiary)">{preview}</div>
+        <div className="min-w-0 truncate text-[0.8125rem] leading-[18px] text-(--ui-text-tertiary)">{preview}</div>
       </div>
     </RowButton>
   )

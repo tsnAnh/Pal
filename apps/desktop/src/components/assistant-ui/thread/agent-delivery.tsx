@@ -2,7 +2,8 @@ import { type ToolCallMessagePartProps } from '@assistant-ui/react'
 import { type FC, useEffect, useState } from 'react'
 
 import { messageContentText } from '@/components/assistant-ui/thread/content'
-import { AGENT_MESSAGE_RE, agentAvatarCache, resolveAgentAvatar } from '@/components/assistant-ui/thread/user-message'
+import { AGENT_MESSAGE_RE } from '@/components/assistant-ui/thread/content'
+import { agentAvatarCache, resolveAgentAvatar } from '@/components/assistant-ui/thread/user-message'
 
 // Sender-side inter-agent delivery: `hermes -p <agent> chat … -q "Message
 // from 🤖 <sender>…"` run through the terminal tool IS the messaging
@@ -121,7 +122,7 @@ export function replyTextFromResult(result: unknown): string {
 const NOTICE_CLASS =
   'flex max-w-[min(86%,44rem)] flex-col gap-0.5 self-center px-2 py-0.5 text-[0.6875rem] leading-5 text-muted-foreground/60'
 
-const AgentGlyph: FC<{ handle: string }> = ({ handle }) => {
+export const AgentGlyph: FC<{ handle: string }> = ({ handle }) => {
   const [avatar, setAvatar] = useState<null | string>(() => agentAvatarCache.get(handle.toLowerCase())?.url ?? null)
 
   useEffect(() => {

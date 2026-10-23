@@ -63,7 +63,7 @@ describe('host.settings', () => {
     })
 
     host.settings.set('sessionListDensity', 'detailed')
-    host.settings.set('tabStripDefault', 'never')
+    host.settings.set('tabStripDefault', 'always')
     host.settings.set('backdrop.v1', true)
     host.settings.set('intro-splash.v1', false)
     host.settings.set('reasoning.collapsedByDefault', true)
@@ -75,7 +75,7 @@ describe('host.settings', () => {
     expect(writes).toEqual(
       expect.arrayContaining([
         ['hermes.desktop.sessionListDensity', 'detailed'],
-        ['hermes.desktop.tabStripDefault', 'never'],
+        ['hermes.desktop.tabStripDefault.v2', 'always'],
         ['hermes.desktop.backdrop.v1', 'true'],
         ['hermes.desktop.intro-splash.v1', 'false'],
         ['hermes.desktop.reasoning.collapsedByDefault', 'true'],

@@ -141,11 +141,7 @@ describe('streaming-status invalidation scope', () => {
     expect(rootRenders).toBe(rendersAfterFirstToken)
   })
 
-  it('keeps the same root DOM node across the settle transition', async () => {
-    // The inter-agent reply collapses once it settles. Rendering that as a
-    // competing root swapped the element type at this position, so React
-    // unmounted the row and mounted a fresh one — discarding the DOM the
-    // scroll anchor was holding.
+  it('keeps the reply DOM mounted when a watched inter-agent reply settles', async () => {
     const delivery = 'Message from 🤖 Hermes (@hermes): please check the build'
     const messages = [user('u1', delivery), assistant('a1', 'working on it', true)]
     const { container, findByText, rerender } = render(<Harness messages={messages} />)
@@ -158,9 +154,6 @@ describe('streaming-status invalidation scope', () => {
     rerender(<Harness messages={[messages[0], assistant('a1', 'working on it', false)]} />)
     await findByText(/Replied to/)
 
-    const after = container.querySelector('[data-slot="aui_assistant-message-root"]')
-
-    // Same element, updated in place — not a remount.
-    expect(after).toBe(before)
+    expect(container.querySelector('[data-slot="aui_assistant-message-root"]')).toBe(before)
   })
 })

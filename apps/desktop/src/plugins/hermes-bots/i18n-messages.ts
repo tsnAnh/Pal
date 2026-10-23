@@ -89,6 +89,8 @@ export type BotsMessages = {
     allHidden: string
     allHiddenDesc: string
     showHidden: string
+    silenceActivityToasts: string
+    enableActivityToasts: string
     noHiddenMatch: string
     hiddenFromRoster: string
     pinned: string
@@ -97,6 +99,8 @@ export type BotsMessages = {
     /** The kind filter's three options, in menu order. */
     botsAndGroups: string
     botsOnly: string
+    botsOnlyMode: string
+    showSessionsSidebar: string
     groupsOnly: string
     /** The activity filter's four options, in menu order. */
     anyActivity: string
@@ -420,6 +424,10 @@ export type BotsMessages = {
     filterHint: string
     needsRosterFirst: string
     staleNotice: string
+    profileDetailsTab: string
+    profileComputerTab: string
+    profileAddLabel: string
+    routinesLabel: string
     readFailure: string
     createDesc: (bot: string) => string
     instruction: string
@@ -454,6 +462,7 @@ export type BotsMessages = {
     runsMonthly: (day: string, time: string) => string
     runsInterval: (count: number, unit: string) => string
     runsRaw: string
+    scheduleAt: (label: string, time: string) => string
     timesTotal: (count: number) => string
   }
 }

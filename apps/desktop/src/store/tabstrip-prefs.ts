@@ -1,38 +1,48 @@
 import type { TabStripMode } from '@/components/pane-shell/tree/model'
 import { type Codec, persistentAtom } from '@/lib/persisted'
+import { readKey } from '@/lib/storage'
 
-const TAB_STRIP_DEFAULT_STORAGE_KEY = 'hermes.desktop.tabStripDefault'
+const LEGACY_TAB_STRIP_DEFAULT_STORAGE_KEY = 'hermes.desktop.tabStripDefault'
+const TAB_STRIP_DEFAULT_STORAGE_KEY = 'hermes.desktop.tabStripDefault.v2'
 
 /** What a zone does when it has made no choice of its own. */
 export type TabStripDefault = 'auto' | TabStripMode
 
+const isTabStripDefault = (raw: null | string): raw is TabStripDefault =>
+  raw === 'always' || raw === 'auto' || raw === 'never'
+
 const codec: Codec<TabStripDefault> = {
-  decode: raw => (raw === 'always' || raw === 'never' ? raw : 'auto'),
-  encode: value => (value === 'auto' ? null : value)
+  decode: raw => (isTabStripDefault(raw) ? raw : 'never'),
+  encode: value => value
 }
 
 /**
- * The app-wide answer for zones on auto, VS Code's `workbench.editor.showTabs`
- * and Zed's `tab_bar.show`. `auto` keeps the contextual rule (a lone pane is
- * not a tab); the other two are for people who want one answer everywhere
- * rather than a per-zone choice they have to repeat.
- *
- * A zone that states its own preference still wins — this is the fallback, not
- * an override — and neither value can strand a pane (see resolveTabStripVisible).
+ * The legacy key stored `auto` as an absent key, so absent cannot be told from
+ * untouched: it gets the new hidden default. Explicit `always` / `never` carry
+ * over. The legacy key is left in place so a rollback still finds it.
  */
-export const $tabStripDefault = persistentAtom<TabStripDefault>(TAB_STRIP_DEFAULT_STORAGE_KEY, 'auto', codec)
+function legacyTabStripDefault(): TabStripDefault {
+  const raw = readKey(LEGACY_TAB_STRIP_DEFAULT_STORAGE_KEY)
+
+  return isTabStripDefault(raw) ? raw : 'never'
+}
+
+/**
+ * The app-wide answer for zones with no choice of their own, VS Code's
+ * `workbench.editor.showTabs` and Zed's `tab_bar.show`. `never` is the product
+ * default; `auto` keeps the contextual rule (a lone pane is not a tab);
+ * `always` shows strips everywhere.
+ *
+ * A zone that states its own preference still wins. A lone closeable tile or
+ * tool panel keeps its strip unless the zone itself says never (see
+ * resolveTabStripVisible).
+ */
+export const $tabStripDefault = persistentAtom<TabStripDefault>(
+  TAB_STRIP_DEFAULT_STORAGE_KEY,
+  legacyTabStripDefault(),
+  codec
+)
 
 export function setTabStripDefault(value: TabStripDefault) {
   $tabStripDefault.set(value)
-}
-
-/** The mode a zone resolves against: its own choice, else the app default. */
-export function effectiveTabStripMode(zoneMode: TabStripMode | undefined): TabStripMode | undefined {
-  if (zoneMode) {
-    return zoneMode
-  }
-
-  const fallback = $tabStripDefault.get()
-
-  return fallback === 'auto' ? undefined : fallback
 }

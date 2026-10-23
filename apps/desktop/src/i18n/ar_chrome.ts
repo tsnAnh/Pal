@@ -199,6 +199,7 @@ export const arChrome = {
       cron: 'المهام المجدولة'
     },
     searchAria: 'البحث في الجلسات',
+    paneSwitcherAria: 'لوحات الشريط الجانبي',
     searchPlaceholder: 'البحث في الجلسات...',
     clearSearch: 'مسح البحث',
     noMatch: query => `لا توجد جلسات تطابق "${query}"`,

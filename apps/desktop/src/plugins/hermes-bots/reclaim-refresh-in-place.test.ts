@@ -32,6 +32,7 @@ const { openBotCanonicalChat, onEvent } = vi.hoisted(() => ({
 
 const listeners: Array<(event: { payload?: unknown }) => void> = []
 
+vi.mock('./bot-accent', () => ({ startBotChatAccent: () => () => undefined }))
 vi.mock('@hermes/plugin-sdk', async () => {
   const { atom } = await import('nanostores')
 

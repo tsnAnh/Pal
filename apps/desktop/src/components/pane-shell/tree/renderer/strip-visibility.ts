@@ -10,7 +10,7 @@
  */
 
 import type { Contribution } from '@/contrib/types'
-import { effectiveTabStripMode } from '@/store/tabstrip-prefs'
+import { $tabStripDefault, type TabStripDefault } from '@/store/tabstrip-prefs'
 
 import type { TabStripMode } from '../model'
 
@@ -29,8 +29,10 @@ export interface StripPane {
 export interface StripZone {
   /** The ACTIVE pane declines to be tabbed (a full-page view). */
   headerVeto?: boolean
-  /** The zone's standing choice; undefined = auto. */
+  /** The zone's own choice; undefined = defer to the app default. */
   mode?: TabStripMode
+  /** The app-wide default, applied when the zone has no choice. */
+  fallback?: TabStripDefault
   /** Panes currently rendered as chips — chrome-hidden and narrow-collapsed
    *  panes are already filtered out. */
   shown: readonly StripPane[]
@@ -38,25 +40,14 @@ export interface StripZone {
 
 /**
  * A pane is STRANDED without a strip when the strip is the only thing carrying
- * its handle: a lone main tile needs its ✕ and +, a lone tool panel needs a
- * chip to grab. The workspace cannot leave the tree, but Close still empties
- * it to a draft and + still opens a tab — chromeless is a dead zone for those
- * handles. Hide-only chrome (sessions / Bots) is different: the panes stay,
- * Show/Hide is a separate verb, and a hidden strip comes back via ⌘⌥T.
- * Treating side chrome as stranded at any count made Hide tabs a silent no-op
- * on the sessions sidebar.
+ * its handle: a lone closeable tile needs its ✕, a lone tool panel needs a
+ * chip to grab. The workspace is exempt: it cannot leave the tree, and the
+ * chat zone is deliberately chromeless under the app default. Hide-only chrome
+ * (sessions / Bots) is different: the panes stay, Show/Hide is a separate verb,
+ * and a hidden strip comes back via ⌘⌥T.
  *
- * This outranks an explicit `never` on purpose. "Hide the strip" is a request
- * about chrome, never a request to make a surface unreachable, and a zone that
- * answers no gesture at all is not a state any setting should be able to
- * produce. Hiding still works everywhere it cannot trap you.
- *
- * IT IS THE LAST HANDLE THAT IS PROTECTED, NOT THE PRESENCE OF TABS. A stack
- * of two or more answers tab cycling and ⌘1…⌘9, so hiding its strip costs
- * chrome and no handle. Scoping the tile and tool-panel rungs to a LONE pane is
- * what keeps "Hide tabs" a working command in the zone that actually
- * accumulates tabs: unscoped, one session tab in main pinned the strip on and
- * both the menu row and ⌘⌥T became silent no-ops.
+ * Only a LONE pane is protected. A stack of two or more answers tab cycling and
+ * ⌘1…⌘9, so hiding its strip costs chrome and no handle.
  */
 function stranded(shown: readonly StripPane[]): boolean {
   if (shown.length !== 1) {
@@ -64,6 +55,10 @@ function stranded(shown: readonly StripPane[]): boolean {
   }
 
   const [only] = shown
+
+  if (only.uncloseable) {
+    return false
+  }
 
   return only.collapsePane || only.placement === 'main'
 }
@@ -73,25 +68,25 @@ export function resolveTabStripVisible(zone: StripZone): boolean {
     return false
   }
 
-  // A page is not a tab-able surface. Contextual and self-lifting: the strip
-  // returns with the chat, so it is resolved ahead of any stored choice and
-  // never written down.
   if (zone.headerVeto) {
     return false
-  }
-
-  if (stranded(zone.shown)) {
-    return true
   }
 
   if (zone.mode) {
     return zone.mode === 'always'
   }
 
-  // Auto: two or more panes need a strip to switch between them. A lone main
-  // tile never reaches here (it is stranded above), so what is left alone is
-  // standing side chrome, which goes without.
-  return zone.shown.length > 1
+  if (stranded(zone.shown)) {
+    return true
+  }
+
+  const fallback = zone.fallback ?? 'auto'
+
+  if (fallback !== 'auto') {
+    return fallback === 'always'
+  }
+
+  return zone.shown.length > 1 || zone.shown[0].uncloseable === true
 }
 
 /**
@@ -112,7 +107,8 @@ export function tabStripVisibleForZone(zone: {
 }): boolean {
   return resolveTabStripVisible({
     headerVeto: paneChrome(zone.paneFor(zone.active)).headerVeto,
-    mode: effectiveTabStripMode(zone.mode),
+    fallback: $tabStripDefault.get(),
+    mode: zone.mode,
     shown: zone.shown.map(id => {
       const chrome = paneChrome(zone.paneFor(id))
 

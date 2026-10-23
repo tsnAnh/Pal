@@ -39,6 +39,38 @@ describe('useRuntimeMessageRepository', () => {
     expect(ids).toEqual(['user-1', 'assistant-1'])
   })
 
+  it('leaves background-process notices and [SILENT] replies out of the transcript', () => {
+    const { result } = renderHook(() =>
+      useRuntimeMessageRepository([
+        text('user-1', 'user', 'hi'),
+        { ...text('process-1', 'system', 'background process finished'), asyncResultKind: 'process' },
+        text('user-2', 'user', '[IMPORTANT: Background process proc_1 finished]'),
+        text('assistant-1', 'assistant', '  [SILENT]\n'),
+        text('assistant-2', 'assistant', '[SILENT] but more'),
+        text('user-3', 'user', '[SILENT]')
+      ])
+    )
+
+    expect(feedToRepository(result.current).map(item => item.id)).toEqual(['user-1', 'assistant-2', 'user-3'])
+  })
+
+  it('marks the message after a hidden background-process notice as a new turn', () => {
+    const { result } = renderHook(() =>
+      useRuntimeMessageRepository([
+        text('user-1', 'user', 'Message from 🤖 Hermes (@hermes): check the build'),
+        text('assistant-1', 'assistant', 'on it'),
+        text('user-2', 'user', '[IMPORTANT: Background process proc_1 finished]'),
+        text('assistant-2', 'assistant', 'build failed: missing module')
+      ])
+    )
+
+    const custom = (id: string) =>
+      result.current.messages.find(item => item.message.id === id)?.message.metadata.custom as Record<string, unknown>
+
+    expect(custom('assistant-2').afterHiddenNotice).toBe(true)
+    expect(custom('assistant-1').afterHiddenNotice).toBeUndefined()
+  })
+
   it('builds a repository the runtime can link without throwing', () => {
     const { result } = renderHook(() =>
       useRuntimeMessageRepository([

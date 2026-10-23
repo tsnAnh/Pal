@@ -111,6 +111,7 @@ export interface SessionStatusDotProps {
   /** Applied to the OUTER wrapper (stem + dot) — e.g. hover-fade on the
    *  reorder handle. */
   className?: string
+  hideIdle?: boolean
 }
 
 /**
@@ -122,7 +123,7 @@ export interface SessionStatusDotProps {
  * An idle session shows its project color; the active states own the dot with
  * their semantic color so an attention cue is never masked by the tint.
  */
-export function SessionStatusDot({ storedSessionId, session, branchStem, className }: SessionStatusDotProps) {
+export function SessionStatusDot({ storedSessionId, session, branchStem, className, hideIdle }: SessionStatusDotProps) {
   const { t } = useI18n()
   const r = t.sidebar.row
 
@@ -138,6 +139,10 @@ export function SessionStatusDot({ storedSessionId, session, branchStem, classNa
   )
 
   const variant = DOT_VARIANTS[dotState]
+
+  if (hideIdle && (dotState === 'idle' || dotState === 'draft')) {
+    return null
+  }
 
   return (
     <span className={cn('flex items-center gap-0.5', className)}>

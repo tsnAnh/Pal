@@ -1,4 +1,5 @@
 import {
+  $hiddenStripTabs,
   Button,
   cn,
   Codicon,
@@ -8,8 +9,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   SearchField,
-  Tip
+  setStripTabHidden,
+  Tip,
+  useValue
 } from '@hermes/plugin-sdk'
+import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import { seatableGroupBots, useGroupCapability } from './canonical-group-capabilities'
 import { botSourceStatus } from './data'
@@ -18,6 +23,45 @@ import { setActivityToasts } from './roster-actions'
 import { GatewayKindGlyph } from './roster-sections'
 import type { rosterGatewayOptions } from './roster-sections'
 import type { RosterActivityFilter, RosterKindFilter, RosterRow } from './types'
+
+export const SESSIONS_PANE = 'sessions'
+
+function TitlebarLift({ children, lifted }: { children: ReactNode; lifted: boolean }) {
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const [header, setHeader] = useState<HTMLElement | null>(null)
+
+  useLayoutEffect(() => {
+    const zone = lifted ? anchorRef.current?.closest('[data-tree-group]') : null
+
+    setHeader(zone?.querySelector<HTMLElement>(':scope > [data-panel-header]') ?? null)
+  }, [lifted])
+
+  if (lifted && header) {
+    return createPortal(
+      <div className="absolute top-0.5 right-[19px] z-10 flex items-center [-webkit-app-region:no-drag]">
+        {children}
+      </div>,
+      header
+    )
+  }
+
+  return (
+    <div className="flex items-center justify-end px-[19px] pt-[15px] pb-3" ref={anchorRef}>
+      {children}
+    </div>
+  )
+}
+
+function BotsOnlyModeItem({ enterLabel, exitLabel }: { enterLabel: string; exitLabel: string }) {
+  const botsOnly = useValue($hiddenStripTabs).has(SESSIONS_PANE)
+
+  return (
+    <DropdownMenuItem onSelect={() => setStripTabHidden(SESSIONS_PANE, !botsOnly)}>
+      <Codicon className="mr-1.5" name={botsOnly ? 'list-unordered' : 'hubot'} />
+      {botsOnly ? exitLabel : enterLabel}
+    </DropdownMenuItem>
+  )
+}
 
 interface NewGroupChatItemProps {
   label: string
@@ -32,7 +76,10 @@ function NewGroupChatItem({ label, onSelect, roster }: NewGroupChatItemProps) {
   const { connectionId, mode, seatable } = useGroupCapability(true)
 
   return (
-    <DropdownMenuItem disabled={seatableGroupBots(roster, { connectionId, mode, seatable }).length < 2} onSelect={onSelect}>
+    <DropdownMenuItem
+      disabled={seatableGroupBots(roster, { connectionId, mode, seatable }).length < 2}
+      onSelect={onSelect}
+    >
       <Codicon className="mr-1.5" name="organization" />
       {label}
     </DropdownMenuItem>
@@ -41,6 +88,7 @@ function NewGroupChatItem({ label, onSelect, roster }: NewGroupChatItemProps) {
 
 interface renderRosterToolbarProps {
   b: ReturnType<typeof useBots>
+  botsOnly: boolean
   activityToasts: boolean
   activeSourceRoster: RosterRow[]
   /** Full roster; New Group Chat seats only `seatableGroupBots` of it. */
@@ -51,6 +99,9 @@ interface renderRosterToolbarProps {
     value: null | { bot?: RosterRow; mode: 'create' } | { id: string; mode: 'rename'; name: string }
   ) => void
   showRosterTools: boolean
+  searchInputRef: RefObject<HTMLInputElement | null>
+  searchOpen: boolean
+  setSearchOpen: (value: boolean) => void
   showRosterSearch: boolean
   showRosterFilters: boolean
   query: string
@@ -66,6 +117,7 @@ interface renderRosterToolbarProps {
 }
 
 export function renderRosterToolbar({
+  botsOnly,
   b,
   activityToasts,
   activeSourceRoster,
@@ -74,6 +126,9 @@ export function renderRosterToolbar({
   setGroupCreateOpen,
   setSectionDialog,
   showRosterTools,
+  searchInputRef,
+  searchOpen,
+  setSearchOpen,
   showRosterSearch,
   showRosterFilters,
   query,
@@ -89,33 +144,32 @@ export function renderRosterToolbar({
 }: renderRosterToolbarProps) {
   return (
     <>
-      <div className="flex items-center justify-between gap-2 px-2.5 pt-2.5 pb-1.5">
-        <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-(--ui-text-quaternary)">
-          Bots
-        </span>
-        <div className="flex items-center gap-0.5">
-          <Tip
-            label={activityToasts ? 'Activity toasts on — click to silence' : 'Activity toasts off — click to enable'}
-          >
-            <Button
-              className="rounded-md text-(--ui-text-tertiary) hover:text-foreground"
-              onClick={() => setActivityToasts(!activityToasts)}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <Codicon name={activityToasts ? 'bell' : 'bell-slash'} />
-            </Button>
-          </Tip>
+      <TitlebarLift lifted={botsOnly}>
+        <div className="flex items-center gap-2">
+          {showRosterSearch ? null : (
+            <Tip label={b.roster.search}>
+              <Button
+                aria-label={b.roster.search}
+                aria-pressed={searchOpen}
+                className="grid size-[30px] place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
+                onClick={() => setSearchOpen(!searchOpen)}
+                size="icon-xs"
+                variant="ghost"
+              >
+                <Codicon className="block leading-none" name="search" />
+              </Button>
+            </Tip>
+          )}
           <DropdownMenu>
             <Tip label="New…">
               <DropdownMenuTrigger asChild>
                 <Button
                   aria-label={b.roster.newBotOrGroup}
-                  className="rounded-md text-(--ui-text-tertiary) hover:text-foreground"
+                  className="grid size-[30px] place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
                   size="icon-xs"
                   variant="ghost"
                 >
-                  <Codicon name="add" />
+                  <Codicon className="block leading-none" name="add" />
                 </Button>
               </DropdownMenuTrigger>
             </Tip>
@@ -130,17 +184,24 @@ export function renderRosterToolbar({
                 <Codicon className="mr-1.5" name="new-folder" />
                 {b.sections.newSection}
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setActivityToasts(!activityToasts)}>
+                <Codicon className="mr-1.5" name={activityToasts ? 'bell-slash' : 'bell'} />
+                {activityToasts ? b.roster.silenceActivityToasts : b.roster.enableActivityToasts}
+              </DropdownMenuItem>
+              <BotsOnlyModeItem enterLabel={b.roster.botsOnlyMode} exitLabel={b.roster.showSessionsSidebar} />
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
-      {showRosterTools ? (
+      </TitlebarLift>
+      {showRosterTools || searchOpen ? (
         <div className="flex min-w-0 items-center gap-1 px-2.5 pb-1.5">
-          {showRosterSearch ? (
+          {showRosterSearch || searchOpen ? (
             <SearchField
               aria-label={b.roster.search}
               containerClassName={cn('min-w-0 flex-1', query ? 'opacity-100!' : 'opacity-50 focus-within:opacity-100')}
               inputClassName="w-full text-[0.75rem] placeholder:text-(--ui-text-tertiary)"
+              inputRef={searchInputRef}
               key={'roster-search'}
               onChange={setQuery}
               placeholder={b.roster.searchPlaceholder}

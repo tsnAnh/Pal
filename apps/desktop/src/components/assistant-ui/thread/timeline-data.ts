@@ -1,5 +1,5 @@
 // Pure timeline helpers — no React/DOM; tested in thread-timeline-data.test.ts.
-import { PROCESS_NOTIFICATION_RE } from './content'
+import { AGENT_MESSAGE_RE, PROCESS_NOTIFICATION_RE } from './content'
 
 export interface TimelineSourceMessage {
   id: string
@@ -53,7 +53,7 @@ export function deriveTimelineEntries(messages: readonly TimelineSourceMessage[]
 
     const text = message.text.trim()
 
-    if (!text || PROCESS_NOTIFICATION_RE.test(text)) {
+    if (!text || PROCESS_NOTIFICATION_RE.test(text) || AGENT_MESSAGE_RE.test(text)) {
       continue
     }
 

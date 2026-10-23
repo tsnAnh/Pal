@@ -2420,6 +2420,7 @@ export const ruOverrides = {
       cron: 'Запланированные задачи'
     },
     searchAria: 'Поиск сеансов',
+    paneSwitcherAria: 'Панели боковой панели',
     searchPlaceholder: 'Поиск сеансов…',
     clearSearch: 'Очистить поиск',
     noMatch: query => `Нет сеансов по запросу «${query}».`,
@@ -2514,6 +2515,8 @@ export const ruOverrides = {
     message: 'Сообщение',
     wakingProfile: profile => `Пробуждаем ${profile}…`,
     placeholderStarting: 'Запуск Hermes...',
+    placeholderBot: name => `Сообщение для ${name}`,
+    openBotProfile: name => `Открыть профиль ${name}`,
     placeholderReconnecting: 'Переподключение к Hermes…',
     placeholderFollowUp: 'Отправить продолжение',
     newSessionPlaceholders: [
@@ -3508,6 +3511,7 @@ export const ruOverrides = {
       loadingSession: 'Загрузка сеанса',
       showEarlier: 'Показать ранние сообщения',
       loadingResponse: 'Hermes загружает ответ',
+      peerRun: (count, peer) => `${count} ${RU_NOUN(count, 'сообщение', 'сообщения', 'сообщений')} с ${peer}`,
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'Продолжится, когда фоновая задача завершится'

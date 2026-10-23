@@ -6,6 +6,8 @@ import type { ChatMessage } from '@/lib/chat-messages'
 import { withUniqueToolCallIdsWithinMessage } from '@/lib/chat-messages'
 import { coalesceToolOnlyAssistants, createToolMergeCache, toRuntimeMessage } from '@/lib/chat-runtime'
 
+import { isProcessNotice, isSilentInTranscript } from './transcript-silence'
+
 // The exact fallback status ExportedMessageRepository.fromBranchableArray uses.
 // Normalization happens HERE, once per message, so the cached record below is
 // already the final ThreadMessage the runtime consumes.
@@ -26,6 +28,7 @@ const FALLBACK_STATUS = getAutoStatus(false, false, false, false, undefined)
  */
 export function useRuntimeMessageRepository(messages: ChatMessage[]): ExportedMessageRepository {
   const cacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
+  const afterNoticeCacheRef = useRef(new WeakMap<ThreadMessage, ThreadMessage>())
   const toolMergeCacheRef = useRef(createToolMergeCache())
 
   return useMemo(() => {
@@ -34,8 +37,15 @@ export function useRuntimeMessageRepository(messages: ChatMessage[]): ExportedMe
     const seenIds = new Set<string>()
     let visibleParentId: string | null = null
     let headId: string | null = null
+    let followsHiddenNotice = false
 
     for (const message of coalesceToolOnlyAssistants(messages, toolMergeCacheRef.current)) {
+      if (isSilentInTranscript(message)) {
+        followsHiddenNotice ||= isProcessNotice(message)
+
+        continue
+      }
+
       // A repeated id is a transcript bug upstream, but it must not reach the
       // repository: MessageRepository throws on the second link ("A message
       // with the same id already exists in the parent tree") and takes the
@@ -73,7 +83,13 @@ export function useRuntimeMessageRepository(messages: ChatMessage[]): ExportedMe
         cacheRef.current.set(message, runtimeMessage)
       }
 
-      items.push({ message: runtimeMessage, parentId })
+      items.push({
+        message: followsHiddenNotice
+          ? markedAfterHiddenNotice(runtimeMessage, afterNoticeCacheRef.current)
+          : runtimeMessage,
+        parentId
+      })
+      followsHiddenNotice = false
 
       if (!message.hidden) {
         visibleParentId = message.id
@@ -83,4 +99,21 @@ export function useRuntimeMessageRepository(messages: ChatMessage[]): ExportedMe
 
     return { headId, messages: items }
   }, [messages])
+}
+
+function markedAfterHiddenNotice(message: ThreadMessage, cache: WeakMap<ThreadMessage, ThreadMessage>): ThreadMessage {
+  const cached = cache.get(message)
+
+  if (cached) {
+    return cached
+  }
+
+  const marked = {
+    ...message,
+    metadata: { ...message.metadata, custom: { ...message.metadata.custom, afterHiddenNotice: true } }
+  } as ThreadMessage
+
+  cache.set(message, marked)
+
+  return marked
 }

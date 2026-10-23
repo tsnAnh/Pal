@@ -87,6 +87,7 @@ const { cache, hostMock, live } = vi.hoisted(() => {
   }
 })
 
+vi.mock('./bot-accent', () => ({ startBotChatAccent: () => () => undefined }))
 vi.mock('@hermes/plugin-sdk', async () => {
   const { atom } = await import('nanostores')
 

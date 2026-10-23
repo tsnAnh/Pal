@@ -2170,6 +2170,7 @@ export const jaOverrides = {
       cron: 'スケジュール済みジョブ'
     },
     searchAria: 'セッションを検索',
+    paneSwitcherAria: 'サイドバーのパネル',
     searchPlaceholder: 'セッションを検索…',
     clearSearch: '検索をクリア',
     noMatch: query => `"${query}" に一致するセッションがありません。`,
@@ -2259,6 +2260,8 @@ export const jaOverrides = {
     message: 'メッセージ',
     wakingProfile: profile => `${profile} を起動中…`,
     placeholderStarting: 'Hermes を起動中...',
+    placeholderBot: name => `${name} にメッセージ`,
+    openBotProfile: name => `${name} のプロフィールを開く`,
     placeholderReconnecting: 'Hermes に再接続中…',
     placeholderFollowUp: 'フォローアップを送信',
     newSessionPlaceholders: [
@@ -3266,6 +3269,7 @@ export const jaOverrides = {
       loadingSession: 'セッションを読み込み中',
       showEarlier: '以前のメッセージを表示',
       loadingResponse: 'Hermes が応答を読み込み中',
+      peerRun: (count, peer) => `${peer} との ${count} 件のメッセージ`,
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'バックグラウンドタスクの完了後に再開します'

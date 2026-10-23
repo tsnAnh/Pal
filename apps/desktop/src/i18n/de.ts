@@ -3621,6 +3621,7 @@ export const deOverrides = {
       cron: 'Geplante Jobs'
     },
     searchAria: 'Sessions durchsuchen',
+    paneSwitcherAria: 'Sidebar-Bereiche',
     searchPlaceholder: 'Sessions durchsuchen…',
     clearSearch: 'Suche löschen',
     noMatch: query => `Keine Sessions passen zu “${query}”.`,
@@ -3723,6 +3724,8 @@ export const deOverrides = {
     message: 'Nachricht',
     wakingProfile: profile => `Wecke ${profile}…`,
     placeholderStarting: 'Hermes wird gestartet…',
+    placeholderBot: name => `Nachricht an ${name}`,
+    openBotProfile: name => `Profil von ${name} öffnen`,
     placeholderReconnecting: 'Verbindung zu Hermes wird wiederhergestellt…',
     placeholderFollowUp: 'Folge senden',
     newSessionPlaceholders: [
@@ -4834,6 +4837,7 @@ export const deOverrides = {
       loadingResponse: 'Hermes lädt eine Antwort',
       loadingLocalModel: model => `${model} wird in den Speicher geladen`,
       processingPrompt: 'Verarbeite Prompt',
+      peerRun: (count, peer) => (count === 1 ? `1 Nachricht mit ${peer}` : `${count} Nachrichten mit ${peer}`),
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'Wird fortgesetzt, wenn die Hintergrundaufgabe endet'

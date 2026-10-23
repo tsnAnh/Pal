@@ -26,6 +26,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { $touchPointer } from '@/lib/touch-interaction'
 import { useStoreSelector, useStoresSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
+import { useChatPersona } from '@/store/chat-persona'
 import { sessionCompacting } from '@/store/compaction'
 import { draftRetry } from '@/store/composer-draft-retry'
 import { browseBackward, browseForward, deriveUserHistory, isBrowsingHistory } from '@/store/composer-input-history'
@@ -460,7 +461,11 @@ export function ChatBar({
 
   // Resting / reconnecting / starting placeholder text, re-rolled only on a real
   // conversation change.
-  const placeholder = useComposerPlaceholder({ disabled, reconnecting, sessionId })
+  const persona = useChatPersona(queueSessionKey)
+  const restingPlaceholder = useComposerPlaceholder({ disabled, reconnecting, sessionId })
+
+  const placeholder =
+    persona && !disabled && !reconnecting ? t.composer.placeholderBot(persona.name) : restingPlaceholder
 
   // Trigger / completion engine: @// detection, the adapter-driven item list,
   // popover selection, and chip insertion. The keydown nav block below consumes
@@ -1145,7 +1150,7 @@ export function ChatBar({
       disabled={disabled}
       foldVoice={foldVoice}
       hasComposerPayload={hasComposerPayload}
-      hideModelPill={guidedChat}
+      hideModelPill={guidedChat || botChat}
       minimal={minimal || chatOnboardingSolo}
       onDictate={dictate}
       onQueue={() => {
@@ -1322,6 +1327,7 @@ export function ChatBar({
               it. Collapses to nothing when every status is empty. */}
           <StatusDrawerContent collapsed={statusDrawerCollapsed} id={statusDrawerId}>
             <ComposerStatusStack
+              botChat={botChat}
               onSubmit={onSubmit}
               queue={renderComposerQueueSlot({
                 activeQueueSessionKey,
@@ -1343,7 +1349,8 @@ export function ChatBar({
           </StatusDrawerContent>
           <ComposerPrimitive.Root
             className={cn(
-              'group/composer relative w-full overflow-visible rounded-2xl',
+              'group/composer relative w-full overflow-visible',
+              botChat && !stacked && attachments.length === 0 ? 'rounded-full' : 'rounded-2xl',
               poppedOut && 'bg-transparent',
               dragging && 'cursor-grabbing select-none touch-none',
               // Native Wayland HUD: setBounds cannot position a top-level

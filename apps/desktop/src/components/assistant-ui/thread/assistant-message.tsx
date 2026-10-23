@@ -30,6 +30,7 @@ import {
   messageContentText,
   pickPrimaryPreviewTarget
 } from '@/components/assistant-ui/thread/content'
+import { AGENT_MESSAGE_RE } from '@/components/assistant-ui/thread/content'
 import { MessageHoverTime } from '@/components/assistant-ui/thread/message-hover-time'
 import { MESSAGE_PARTS_COMPONENTS } from '@/components/assistant-ui/thread/message-parts'
 import { ReactionPicker } from '@/components/assistant-ui/thread/message-reactions'
@@ -38,7 +39,6 @@ import { ResponseLoadingIndicator, TurnActivityIndicator } from '@/components/as
 import { threadMessageIndex } from '@/components/assistant-ui/thread/thread-message-index'
 import { MessageTimelineTimestamp } from '@/components/assistant-ui/thread/timeline-timestamp'
 import { useMessageReactions, useTapbackDoubleClick } from '@/components/assistant-ui/thread/use-message-reactions'
-import { AGENT_MESSAGE_RE } from '@/components/assistant-ui/thread/user-message'
 import { isApprovalActivity, isCurrentTurnMessage } from '@/components/assistant-ui/tool/approval-activity'
 import { TooltipIconButton } from '@/components/assistant-ui/tooltip-icon-button'
 import { formatElapsed } from '@/components/chat/activity-timer'
@@ -84,6 +84,7 @@ import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { playSpeechText, stopVoicePlayback } from '@/lib/voice-playback'
 import { $billingBlock, requestBillingSettings, runBillingRecovery } from '@/store/billing-block'
+import { type ChatPersona, useSurfacePersona } from '@/store/chat-persona'
 import { DESKTOP_BUTTON_ACTIONS, recordAction } from '@/store/desktop-metrics'
 import { openFreeTierSignIn } from '@/store/free-tier-sign-in'
 import { notifyError } from '@/store/notifications'
@@ -287,6 +288,9 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
   )
 
   const fullResponseAvailable = responseIds.length > 1
+  const persona = useSurfacePersona()
+
+  const opensResponse = responseIds.length === 0 || responseIds[0] === messageId
 
   // useEnterAnimation consults `enabled` ONLY when its callback ref fires,
   // i.e. at mount: the hook parks the value in a ref and returns a
@@ -320,19 +324,22 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
     >
       {collapsedNotice ?? (
         <>
-          <div
-            className="wrap-anywhere min-w-0 max-w-full overflow-hidden text-pretty text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) text-foreground"
-            data-slot="aui_assistant-message-content"
-          >
-            {/* Todos render in the composer status stack now, not inline. */}
-            {MESSAGE_PARTS}
-            <StoppedNotice />
-            <AssistantStatusSlot />
-            <AssistantPreviewEmbeds />
-            <MessagePrimitive.Error>
-              <ErrorCard onDismiss={onDismissError ? () => onDismissError(messageId) : undefined} />
-            </MessagePrimitive.Error>
-          </div>
+          <BotReplyFrame opensResponse={opensResponse} persona={persona} responseTail={responseTail}>
+            <div
+              className="wrap-anywhere min-w-0 max-w-full overflow-hidden text-pretty text-[length:var(--conversation-text-font-size)] leading-(--dt-line-height) text-foreground"
+              data-bubble="assistant"
+              data-slot="aui_assistant-message-content"
+            >
+              {/* Todos render in the composer status stack now, not inline. */}
+              {MESSAGE_PARTS}
+              <StoppedNotice />
+              <AssistantStatusSlot />
+              <AssistantPreviewEmbeds />
+              <MessagePrimitive.Error>
+                <ErrorCard onDismiss={onDismissError ? () => onDismissError(messageId) : undefined} />
+              </MessagePrimitive.Error>
+            </div>
+          </BotReplyFrame>
           <MessageTimelineTimestamp className="px-(--message-text-indent) pt-0.5" suppressIfDuplicatePart />
           {/* Sealed interims skip the footer so a tool-heavy turn doesn't grow a
               copy bar per paragraph (72dd01c553) — EXCEPT when the interim is the
@@ -358,6 +365,33 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
         </>
       )}
     </MessagePrimitive.Root>
+  )
+}
+
+const BotReplyFrame: FC<{
+  children: ReactNode
+  opensResponse: boolean
+  persona: ChatPersona | null
+  responseTail: boolean
+}> = ({ children, opensResponse, persona, responseTail }) => {
+  if (!persona) {
+    return children
+  }
+
+  return (
+    <div className="flex min-w-0 flex-col" data-slot="bot-reply">
+      {opensResponse ? (
+        <span className="truncate" data-slot="bot-reply-name">
+          {persona.name}
+        </span>
+      ) : null}
+      <div className="flex min-w-0 items-end" data-slot="bot-reply-row">
+        <span aria-hidden className="grid shrink-0 place-items-center" data-slot="bot-reply-avatar">
+          {responseTail ? persona.avatar(20) : null}
+        </span>
+        {children}
+      </div>
+    </div>
   )
 }
 

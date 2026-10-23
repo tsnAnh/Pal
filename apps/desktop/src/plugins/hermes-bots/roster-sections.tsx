@@ -229,7 +229,6 @@ interface RosterSectionHeaderProps {
   collapsed: boolean
   count: number
   gatewayKind?: string
-  icon?: string
   label: string
   onDoubleClick?: () => void
   onToggle: () => void
@@ -242,7 +241,6 @@ export function RosterSectionHeader({
   collapsed,
   count,
   gatewayKind,
-  icon,
   label,
   onDoubleClick,
   onToggle,
@@ -253,27 +251,28 @@ export function RosterSectionHeader({
     <RowButton
       aria-expanded={!collapsed}
       className={cn(
-        'flex w-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[0.6875rem] font-semibold uppercase tracking-wider text-(--ui-text-quaternary) transition-colors hover:bg-(--chrome-action-hover) hover:text-(--ui-text-secondary)',
+        'group/heading flex w-full min-w-0 items-center gap-1.5 rounded-md px-[7px] pt-4 pb-2.5 text-left text-[0.8125rem] leading-4 text-(--ui-text-tertiary) transition-colors hover:text-(--ui-text-secondary)',
         action ? 'flex-1' : 'mt-1'
       )}
       onClick={onToggle}
       onDoubleClick={onDoubleClick}
     >
-      <DisclosureCaret open={!collapsed} />
-      {gatewayKind ? (
-        <GatewayKindGlyph kind={gatewayKind} />
-      ) : (
-        // TODO(bot-mode-types): neither `gatewayKind` nor `icon` is required, so a header
-        // given neither renders `codicon-undefined`. Both current callers pass exactly one.
-        // @ts-expect-error `icon` is optional here; Codicon's `name` is required.
-        <Codicon className="shrink-0" name={icon} />
-      )}
+      {gatewayKind ? <GatewayKindGlyph kind={gatewayKind} /> : null}
       <span className="flex min-w-0 items-center gap-1">
         <span className="min-w-0 truncate">{label}</span>
         {status && !status.available ? <span className="sr-only">{status.label}</span> : null}
       </span>
+      <DisclosureCaret
+        className={cn(
+          'opacity-0 group-hover/heading:opacity-100 group-focus-visible/heading:opacity-100',
+          collapsed && 'opacity-100'
+        )}
+        open={!collapsed}
+      />
       <span aria-hidden className="min-w-0 flex-1" />
-      <span className="shrink-0 font-normal tabular-nums text-(--ui-text-quaternary)">{count}</span>
+      <span className="shrink-0 tabular-nums text-(--ui-text-quaternary) opacity-0 group-hover/heading:opacity-100 group-focus-visible/heading:opacity-100">
+        {count}
+      </span>
       {status && !status.available ? (
         <Codicon aria-hidden className="shrink-0 text-amber-600 dark:text-amber-300" name="debug-disconnect" />
       ) : null}

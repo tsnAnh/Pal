@@ -19,6 +19,7 @@ import {
   GlyphSpinner,
   host,
   Input,
+  LocalizedTabTitle,
   nextRunOverdueMs,
   PanelEmpty,
   queryClient,
@@ -30,6 +31,9 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
+  Tabs,
+  TabsList,
+  TabsTrigger,
   Textarea,
   Tip,
   translateNow,
@@ -43,6 +47,7 @@ import { avatarColor, botAppearance, BotFace } from './avatar'
 import { $focusedBotOwner, $selectedBot, focusedRosterOwner } from './bot-state'
 import { $botMeta, $lastRoster, botHandle, botRosterKey, botSelectionKey, isActiveRosterBot } from './data'
 import { labeled } from './dialog-parts'
+import { EditProfileDialog } from './edit-profile-dialog'
 import { botsText, type BotsText, useBots } from './i18n'
 import { displayName } from './labels'
 import { botConnectionRoute, botRosterMeta, requestForBot } from './routing'
@@ -287,8 +292,54 @@ export function routinePrompt(
   )
 }
 
-function scheduleLabel(schedule: string | undefined): string {
+function cronClockLabel(hour: number, minute: number, locale?: string): string {
+  return new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit' }).format(
+    new Date(2000, 0, 1, hour, minute)
+  )
+}
+
+function fixedTimeCronLabel(schedule: string, c: BotsText['cron'], locale?: string): null | string {
+  const match = /^(\d{1,2}) (\d{1,2}) (\*|\d{1,2}) \* (\*|1-5|[0-6])$/.exec(schedule.trim())
+
+  if (!match) {
+    return null
+  }
+
+  const [, minute, hour, monthday, weekday] = match
+
+  if (
+    Number(minute) > 59 ||
+    Number(hour) > 23 ||
+    (monthday !== '*' && (Number(monthday) < 1 || Number(monthday) > 31))
+  ) {
+    return null
+  }
+
+  const time = cronClockLabel(Number(hour), Number(minute), locale)
+
+  if (monthday !== '*') {
+    return weekday === '*' ? c.runsMonthly(monthday, time) : null
+  }
+
+  if (weekday === '*') {
+    return c.scheduleAt(c.freqDaily, time)
+  }
+
+  if (weekday === '1-5') {
+    return c.scheduleAt(c.freqWeekdays, time)
+  }
+
+  return c.scheduleAt(translateNow(`cron.days.${weekday}`), time)
+}
+
+function scheduleLabel(schedule: string | undefined, locale?: string): string {
   const c = botsText().cron
+  const fixed = fixedTimeCronLabel(schedule || '', c, locale)
+
+  if (fixed) {
+    return fixed
+  }
+
   const once = /^once in (.+)$/.exec(schedule || '')
 
   if (once) {
@@ -489,7 +540,7 @@ interface RoutineRowProps {
 
 export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
   const b = useBots()
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const c = t.cron
   const profile = typeof owner === 'string' ? owner : owner?.name
   const [busy, setBusy] = useState(false)
@@ -534,47 +585,31 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
     }
   }
 
+  const status = !active
+    ? c.states.paused
+    : job.next_run_at
+      ? `${nextRunOverdueMs(job) === null ? c.next : c.overdueSince} ${relativeTime(new Date(job.next_run_at).getTime())}`
+      : null
+
   return (
-    <div
-      // `min-w-0` on the card AND on each line: a grid item's min-width defaults
-      // to `auto`, so a long nowrap title made the row as wide as its text (~530px
-      // in the 250px pane) and the pane's overflow clipped the Switch and delete
-      // control clean off the right edge, with the title hard-cut instead of
-      // ellipsized (#91623). The chain has to be unbroken — one `auto` in it
-      // re-pins the whole row.
-      className={cn(
-        'group grid min-w-0 gap-1.5 rounded-lg border border-(--ui-stroke-secondary) p-2.5 transition-colors',
-        'hover:border-(--ui-stroke-primary, var(--ui-stroke-secondary))'
-      )}
-    >
+    <div className="group grid min-w-0 gap-1.5 rounded-xl bg-(--chrome-action-hover) px-3 py-2.5 transition-colors">
       <div className="flex min-w-0 items-center gap-2">
-        {/* The row's own button, not a click handler on the card: the switch */
-        /* and delete control are siblings, so opening the details can never */
-        /* swallow a toggle (and a nested button would be invalid markup). */}
         <RowButton
-          className="flex min-w-0 flex-1 items-center gap-2 text-left transition-colors hover:text-foreground"
+          className="grid min-w-0 flex-1 gap-0.5 text-left transition-colors hover:text-foreground"
           onClick={() => onOpen?.(job)}
         >
-          {/* `--ui-success` rather than a literal emerald: the token is rotated
-              toward the accent, so a column of active dots can't fight the
-              theme — the same reason the session status dots use it. */}
-          <span
-            aria-hidden
-            className={cn('size-1.5 shrink-0 rounded-full', active ? 'bg-(--ui-success)' : 'bg-(--ui-text-quaternary)')}
-          />
-          <span className={cn('min-w-0 flex-1 truncate text-xs font-medium', !active && 'text-(--ui-text-tertiary)')}>
+          <span className={cn('min-w-0 truncate text-sm font-medium', !active && 'text-(--ui-text-tertiary)')}>
             {routineTitle(job, b.cron)}
           </span>
+          <span className="min-w-0 truncate text-xs text-(--ui-text-tertiary)">
+            {scheduleLabel(job.schedule, locale)}
+            {status ? <span className="text-(--ui-text-quaternary) first-letter:uppercase"> · {status}</span> : null}
+          </span>
         </RowButton>
-        <Switch
-          checked={active}
-          disabled={busy || legacyUnsafe}
-          onCheckedChange={value => act(value ? 'resume' : 'pause')}
-        />
         <Tip label={t.common.delete}>
           <Button
             aria-label={t.common.delete}
-            className="opacity-0 transition-opacity group-hover:opacity-100"
+            className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
             disabled={busy}
             onClick={() => act('remove')}
             size="icon-xs"
@@ -583,20 +618,11 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
             <Codicon name="trash" />
           </Button>
         </Tip>
-      </div>
-      {/* The schedule pill and the next-run label keep their words: when the
-          pane can't fit both on one line the next-run label wraps to a second
-          line instead of being cut to "next in 4" (#89534). */}
-      <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 pl-3.5">
-        <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.65rem] text-(--ui-text-tertiary)">
-          <Codicon className="text-[0.7rem]" name="calendar" />
-          {scheduleLabel(job.schedule)}
-        </span>
-        <span className="ml-auto shrink-0 whitespace-nowrap text-[0.65rem] text-(--ui-text-quaternary)">
-          {active && job.next_run_at
-            ? `${nextRunOverdueMs(job) === null ? c.next : c.overdueSince} ${relativeTime(new Date(job.next_run_at).getTime())}`
-            : c.states.paused}
-        </span>
+        <Switch
+          checked={active}
+          disabled={busy || legacyUnsafe}
+          onCheckedChange={value => act(value ? 'resume' : 'pause')}
+        />
       </div>
       {legacyUnsafe ? (
         <div className="rounded-md border border-(--ui-stroke-secondary) px-2 py-1.5 text-[0.65rem] leading-4 text-(--ui-accent)">
@@ -1200,6 +1226,15 @@ export function resolveRoutineOwner(
   )
 }
 
+const PROFILE_TABS = [
+  { id: 'details', label: 'profileDetailsTab' },
+  { id: 'computer', label: 'profileComputerTab' }
+] as const
+
+export function RoutinesTabTitle() {
+  return <LocalizedTabTitle select={t => t.sidebar.filter.profile} />
+}
+
 export function RoutinesPane() {
   const selected = useValue($selectedBot)
   const focusedOwner = focusedRosterOwner(useValue($focusedBotOwner))
@@ -1220,11 +1255,15 @@ export function RoutinesPane() {
   const { t } = useI18n()
   const c = t.cron
   const [createOpen, setCreateOpen] = useState(false)
+  const [editOpen, setEditOpen] = useState(false)
+  const [profileTab, setProfileTab] = useState('details')
   const [createOwner, setCreateOwner] = useState<RosterRow | null>(null)
   // Hold the id, not the record: the 20s poll replaces every job object, and
   // an open inspector must follow the live row (next run, pause, last error)
   // instead of freezing the snapshot that was on screen when it opened.
   const [detailJobId, setDetailJobId] = useState<null | string>(null)
+  const profileLabel = (meta?.title || owner?.title || owner?.description || meta?.description || '').trim()
+  const profileName = (meta?.title || owner?.title || owner?.display_name || bot).trim()
   const createTarget = owner ? routineCreateTarget(createOwner, bot) : null
 
   const openCreate = () => {
@@ -1255,76 +1294,129 @@ export function RoutinesPane() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="px-3 pt-3">
-        <ScreenHero bot={owner} meta={meta} />
-      </div>
-      <div className="flex items-center gap-2 px-3 pt-3 pb-2">
-        <BotFace color={avatarColor(color, bot)} image={image} name={bot} shape={shape} size={22} />
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-baseline gap-1.5 truncate">
-            <div className="truncate text-xs font-semibold">
-              {displayName(
-                {
-                  name: bot
-                },
-                meta
-              )}
-            </div>
-            {showsHandle(bot, meta, owner) ? (
-              <span className="shrink-0 font-mono text-[0.65rem] text-(--ui-text-quaternary)">{`@${botHandle(bot, owner)}`}</span>
-            ) : null}
-          </div>
-          <div className="text-[0.65rem] uppercase tracking-wider text-(--ui-text-quaternary)">{c.title}</div>
-        </div>
-        <Tip label={c.newCron}>
-          <Button aria-label={c.newCron} onClick={openCreate} size="icon-xs" variant="ghost">
-            <Codicon name="add" />
+      <div
+        className="relative flex flex-col items-center gap-1 px-4 pt-5 pb-3 text-center"
+        data-slot="bot-profile-header"
+      >
+        {typeof host.closePane === 'function' ? (
+          <Button
+            aria-label={t.common.close}
+            className="absolute top-2 right-2 size-8 rounded-full bg-(--chrome-action-hover) text-(--ui-text-secondary) hover:text-foreground"
+            onClick={() => host.closePane(`${ID}:routines`)}
+            size="icon"
+            variant="ghost"
+          >
+            <Codicon name="close" />
           </Button>
-        </Tip>
+        ) : null}
+        <BotFace color={avatarColor(color, bot)} image={image} name={bot} shape={shape} size={96} />
+        <div className="mt-3 max-w-full truncate text-xl font-semibold">{profileName}</div>
+        {showsHandle(bot, meta, owner) ? (
+          <span className="font-mono text-[0.65rem] text-(--ui-text-quaternary)">{`@${botHandle(bot, owner)}`}</span>
+        ) : null}
+        {profileLabel ? (
+          <div className="line-clamp-3 max-w-full text-xs text-(--ui-text-tertiary)">{profileLabel}</div>
+        ) : (
+          <button
+            className="text-xs text-(--ui-text-tertiary) underline-offset-2 hover:text-foreground hover:underline"
+            onClick={() => setEditOpen(true)}
+            type="button"
+          >
+            {b.cron.profileAddLabel}
+          </button>
+        )}
       </div>
-      <div className="mx-3 border-t border-(--ui-stroke-secondary)" />
-      {staleNotice ? (
-        <div className="mx-3 mt-2 rounded-md bg-(--chrome-action-hover) px-2 py-1.5 text-[0.6875rem] text-(--ui-text-tertiary)">
-          {staleNotice}
-        </div>
-      ) : null}
-      {isLoading && !view.all.length ? (
-        <div className="flex flex-1 items-center justify-center">
-          <GlyphSpinner className="text-(--ui-text-tertiary)" spinner="breathe" />
-        </div>
-      ) : error && !view.all.length ? (
-        <PanelEmpty
-          action={
-            <Button onClick={() => void refetch()} size="sm" variant="secondary">
-              {t.common.retry}
-            </Button>
-          }
-          description={b.cron.readFailure}
-          icon="warning"
-          title={c.failedLoad}
-        />
-      ) : jobs.length === 0 ? (
-        // `filterHint` is the informative case (jobs exist on the profile but
-        // none are tagged for this bot), so it wins the description slot.
-        <PanelEmpty
-          action={
-            <Button onClick={openCreate} size="sm">
-              {c.newCron}
-            </Button>
-          }
-          description={filterHint || c.emptyDescNew}
-          icon="watch"
-          title={c.emptyTitleNew}
-        />
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-          <div className="grid gap-1.5 px-2.5 py-2">
-            {jobs.map(job => (
-              <RoutineRow job={job} key={job.job_id} onOpen={opened => setDetailJobId(opened.job_id)} owner={owner} />
-            ))}
+      <Tabs className="gap-0" onValueChange={setProfileTab} value={profileTab}>
+        <TabsList aria-label={t.sidebar.filter.profile} className="mx-auto mb-2 h-auto gap-1 bg-transparent p-0 px-3">
+          {PROFILE_TABS.map(tab => (
+            <TabsTrigger
+              aria-controls={`bot-profile-panel-${tab.id}`}
+              className={cn(
+                'h-auto rounded-full px-3 py-1 text-xs shadow-none transition-colors',
+                profileTab === tab.id
+                  ? 'bg-(--chrome-action-hover) font-medium text-foreground'
+                  : 'text-(--ui-text-tertiary) hover:text-foreground'
+              )}
+              id={`bot-profile-tab-${tab.id}`}
+              key={tab.id}
+              value={tab.id}
+            >
+              {b.cron[tab.label]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+      {profileTab === 'details' ? (
+        <div
+          aria-labelledby="bot-profile-tab-details"
+          className="flex min-h-0 flex-1 flex-col"
+          id="bot-profile-panel-details"
+          role="tabpanel"
+        >
+          <div className="flex items-center gap-2 px-4 pt-2 pb-1.5">
+            <div className="min-w-0 flex-1 text-sm text-(--ui-text-tertiary)">{b.cron.routinesLabel}</div>
+            <Tip label={c.newCron}>
+              <Button
+                aria-label={c.newCron}
+                className="size-6 rounded-full bg-(--chrome-action-hover)"
+                onClick={openCreate}
+                size="icon-xs"
+                variant="ghost"
+              >
+                <Codicon name="add" />
+              </Button>
+            </Tip>
           </div>
+          {staleNotice ? (
+            <div className="mx-3 mb-2 rounded-md bg-(--chrome-action-hover) px-2 py-1.5 text-[0.6875rem] text-(--ui-text-tertiary)">
+              {staleNotice}
+            </div>
+          ) : null}
+          {isLoading && !view.all.length ? (
+            <div className="flex flex-1 items-center justify-center">
+              <GlyphSpinner className="text-(--ui-text-tertiary)" spinner="breathe" />
+            </div>
+          ) : error && !view.all.length ? (
+            <PanelEmpty
+              action={
+                <Button onClick={() => void refetch()} size="sm" variant="secondary">
+                  {t.common.retry}
+                </Button>
+              }
+              description={b.cron.readFailure}
+              icon="warning"
+              title={c.failedLoad}
+            />
+          ) : jobs.length === 0 ? (
+            <div className="px-4 py-2">
+              <div className="text-sm text-(--ui-text-tertiary)">{filterHint || c.emptyTitleNew}</div>
+            </div>
+          ) : (
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <div className="grid gap-2 px-3 py-1">
+                {jobs.map(job => (
+                  <RoutineRow
+                    job={job}
+                    key={job.job_id}
+                    onOpen={opened => setDetailJobId(opened.job_id)}
+                    owner={owner}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div
+          aria-labelledby="bot-profile-tab-computer"
+          className="min-h-0 flex-1 overflow-y-auto px-3"
+          id="bot-profile-panel-computer"
+          role="tabpanel"
+        >
+          <ScreenHero bot={owner} meta={meta} />
         </div>
       )}
+      <EditProfileDialog bot={editOpen ? owner : null} onClose={() => setEditOpen(false)} open={editOpen} />
       <RoutineDetailDialog job={detailJob} onClose={() => setDetailJobId(null)} open={Boolean(detailJob)} />
       <CreateRoutineDialog
         // Non-null past the `!owner` early return above: `routineCreateTarget`

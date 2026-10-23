@@ -3084,6 +3084,7 @@ export const zhOverrides = {
       cron: '定时任务'
     },
     searchAria: '搜索会话',
+    paneSwitcherAria: '侧边栏面板',
     searchPlaceholder: '搜索会话…',
     clearSearch: '清除搜索',
     noMatch: query => `没有会话匹配"${query}"。`,
@@ -3180,6 +3181,8 @@ export const zhOverrides = {
     message: '消息',
     wakingProfile: profile => `正在唤醒 ${profile}…`,
     placeholderStarting: '正在启动 Hermes…',
+    placeholderBot: name => `给 ${name} 发消息`,
+    openBotProfile: name => `打开 ${name} 的资料`,
     placeholderReconnecting: '正在重新连接 Hermes…',
     placeholderFollowUp: '发送后续消息',
     newSessionPlaceholders: [
@@ -4250,6 +4253,7 @@ export const zhOverrides = {
       loadingResponse: 'Hermes 正在加载回复',
       loadingLocalModel: model => `正在将 ${model} 载入内存`,
       processingPrompt: '正在处理提示词',
+      peerRun: (count, peer) => `与 ${peer} 的 ${count} 条消息`,
       resumeWhenBackgroundDone: count =>
         count === 1 ? '后台任务完成后将自动继续' : `${count} 个后台任务完成后将自动继续`,
       thinking: '思考中',

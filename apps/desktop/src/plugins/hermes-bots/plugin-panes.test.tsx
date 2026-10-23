@@ -61,7 +61,11 @@ vi.mock('./session-sweep', () => ({ startHideSweepScheduler: vi.fn() }))
 vi.mock('./canonical-chat', () => ({ openBotCanonicalChat: vi.fn() }))
 vi.mock('./chat-empty', () => ({ BotChatEmpty: () => null }))
 vi.mock('./hygiene', () => ({ annotateOrphanedGroupChatMembers: () => ({ changed: false, rooms: {} }) }))
-vi.mock('./cron', () => ({ bindProfileSync: () => () => undefined, RoutinesPane: () => null }))
+vi.mock('./cron', () => ({
+  bindProfileSync: () => () => undefined,
+  resolveRoutineOwner: () => null,
+  RoutinesPane: () => null
+}))
 vi.mock('./roster-pane', () => ({
   botChatOwnsWorkspace: mocks.botChatOwnsWorkspace,
   BotsPane: () => null,

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { registry } from '@/contrib/registry'
+import { setTabStripDefault } from '@/store/tabstrip-prefs'
 
 import { allPaneIds, group, split } from '../model'
 import { $layoutTree } from '../store'
@@ -20,6 +21,8 @@ class TestResizeObserver {
   unobserve() {}
   disconnect() {}
 }
+
+beforeEach(() => setTabStripDefault('auto'))
 
 beforeAll(() => {
   vi.stubGlobal('ResizeObserver', TestResizeObserver)

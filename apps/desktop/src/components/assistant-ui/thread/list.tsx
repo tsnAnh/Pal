@@ -46,6 +46,7 @@ import { isSecondaryWindow } from '@/store/windows'
 import { MessageRenderBoundary } from '../message-render-boundary'
 import { PendingApprovalStack } from '../tool/approval'
 
+import { peerOfMessage, PeerRun, structuralFlags } from './peer-run'
 import { responseMessageRole, ResponseMessages } from './response-group'
 import { holdSessionSwitching } from './session-switching'
 import { resolveShowEarlierAction, shouldAutoShowEarlier, useTranscriptWindow } from './transcript-window'
@@ -56,7 +57,9 @@ import { useTimelineReveal } from './use-timeline-reveal'
 type ThreadMessageComponents = ComponentProps<typeof ThreadPrimitive.MessageByIndex>['components']
 
 export type MessageGroup = { id: string; weight: number } & (
-  { index: number; kind: 'standalone' } | { indices: number[]; kind: 'turn' }
+  | { index: number; kind: 'standalone' }
+  | { indices: number[]; kind: 'turn' }
+  | { attention: boolean; count: number; indices: number[]; kind: 'peer-run'; turns: number[][] }
 )
 
 // DOM is bounded by a render-cost budget, not a message/turn count. The
@@ -285,31 +288,68 @@ export function buildGroups(signature: string): MessageGroup[] {
   }
 
   const messages = signature.split('\n').map(row => {
-    const [index, id, role, weight] = row.split(':')
+    const [index, id, role, weight, peer = '', flags = ''] = row.split(':')
 
-    return { id, index: Number(index), role, weight: Number(weight) || 1 }
+    return {
+      attention: flags.includes('a'),
+      boundary: flags.includes('b'),
+      id,
+      index: Number(index),
+      peer,
+      role,
+      weight: Number(weight) || 1
+    }
   })
 
   const groups: MessageGroup[] = []
+  let peerRunOf = ''
 
   for (let i = 0; i < messages.length; i++) {
     const message = messages[i]
 
-    if (message.role !== 'user') {
+    if (message.role !== 'user' && !message.boundary) {
       groups.push({ id: message.id, index: message.index, kind: 'standalone', weight: message.weight })
+      peerRunOf = ''
 
       continue
     }
 
     const indices = [message.index]
     let weight = message.weight
+    let count = 1
+    let attention = message.attention
 
-    while (i + 1 < messages.length && messages[i + 1].role !== 'user') {
+    while (i + 1 < messages.length && messages[i + 1].role !== 'user' && !messages[i + 1].boundary) {
       weight += messages[++i].weight
       indices.push(messages[i].index)
+      count += messages[i].role === 'assistant' ? 1 : 0
+      attention ||= messages[i].attention
     }
 
-    groups.push({ id: message.id, indices, kind: 'turn', weight })
+    const previous = groups.at(-1)
+    const peer = message.role === 'user' ? message.peer : ''
+
+    if (peer && peer === peerRunOf && previous?.kind === 'peer-run') {
+      previous.indices.push(...indices)
+      previous.turns.push(indices)
+      previous.count += count
+      previous.weight += weight
+      previous.attention ||= attention
+    } else if (peer) {
+      groups.push({
+        attention,
+        count,
+        id: message.id,
+        indices: [...indices],
+        kind: 'peer-run',
+        turns: [indices],
+        weight
+      })
+    } else {
+      groups.push({ id: message.id, indices, kind: 'turn', weight })
+    }
+
+    peerRunOf = peer
   }
 
   return groups
@@ -447,6 +487,7 @@ export function turnRowKeys(rowKeySignature: string, structuralSignature: string
 interface TurnRowProps {
   components: ThreadMessageComponents
   group: MessageGroup
+  live: boolean
   resetKey: string
   virtualized: boolean
 }
@@ -478,7 +519,7 @@ interface TurnRowProps {
 // The live tail (newest turns) is exempt: virtualizing a turn whose final
 // size hasn't been remembered yet snaps it to a stale height when it scrolls
 // off, drifting stick-to-bottom up over old turns. See liveTailStart.
-const TurnRow = memo(function TurnRow({ components, group, resetKey, virtualized }: TurnRowProps) {
+const TurnRow = memo(function TurnRow({ components, group, live, resetKey, virtualized }: TurnRowProps) {
   return (
     <div
       className={cn(
@@ -495,6 +536,14 @@ const TurnRow = memo(function TurnRow({ components, group, resetKey, virtualized
           >
             <ResponseMessages components={components} indices={group.indices} />
           </div>
+        ) : group.kind === 'peer-run' ? (
+          <PeerRun
+            attention={group.attention}
+            components={components}
+            count={group.count}
+            live={live}
+            turns={group.turns}
+          />
         ) : (
           <ThreadPrimitive.MessageByIndex components={components} index={group.index} />
         )}
@@ -522,7 +571,12 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
   // every tick (measured: 540 wasted Block renders per explain() sample with
   // two threads streaming).
   const structuralSignature = useAuiState(s =>
-    s.thread.messages.map((message, index) => `${index}:${message.id}:${responseMessageRole(message)}`).join('\n')
+    s.thread.messages
+      .map(
+        (message, index) =>
+          `${index}:${message.id}:${responseMessageRole(message)}::${peerOfMessage(s.thread.messages, index)}:${structuralFlags(message)}`
+      )
+      .join('\n')
   )
 
   const weightSignature = useAuiState(s =>
@@ -678,7 +732,7 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
     return groups.map(group => ({
       ...group,
       weight:
-        group.kind === 'turn'
+        'indices' in group
           ? group.indices.reduce((sum, index) => sum + (weights[index] ?? 1), 0)
           : (weights[group.index] ?? 1)
     }))
@@ -1592,11 +1646,12 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
         components={components}
         group={group}
         key={rowKeys[group.kind === 'turn' ? group.indices[0] : group.index] ?? group.id}
+        live={isRunning && indexInVisible === visibleGroups.length - 1}
         resetKey={structuralSignature}
         virtualized={indexInVisible < tailStart}
       />
     ))
-  }, [visibleGroups, components, rowKeySignature, structuralSignature, tailStart])
+  }, [visibleGroups, components, isRunning, rowKeySignature, structuralSignature, tailStart])
 
   useMessagesBelow({ contentRef, scrollRef, isAtBottom, paneVisible, rows, sessionKey, sessionId: scrollSessionId })
   useStickyPromptClip({ contentRef, scrollRef, paneVisible, rows })

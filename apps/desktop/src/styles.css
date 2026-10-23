@@ -700,6 +700,25 @@
     );
   }
 
+  [data-bots-pane] {
+    --bot-row-active: #ebebeb;
+    --bot-control-fill: #ececec;
+    --ui-row-active-background: var(--bot-row-active);
+  }
+
+  :root.dark [data-bots-pane] {
+    --bot-row-active: #202020;
+    --bot-control-fill: #1f1f1f;
+  }
+
+  :root:not([data-hermes-glass]) [data-bots-pane] {
+    background: #f7f7f7;
+  }
+
+  :root.dark:not([data-hermes-glass]) [data-bots-pane] {
+    background: #0e0e0e;
+  }
+
   /* The app shell's two full-window opaque painters (the contrib controller
      root and the SidebarProvider wrapper) sit between <body> and every
      surface. Their fills are Tailwind utilities (bg-(--ui-bg-chrome) /
@@ -2171,6 +2190,76 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 [data-slot='composer-dock']:is(:hover, :focus-within) [data-slot='composer-root'][data-thread-scrolled-up] {
   --composer-fill: color-mix(in srgb, var(--dt-card) 88%, transparent);
+}
+
+[data-chat-surface][data-bot-chat] {
+  --ui-chat-surface-background: #ffffff;
+  --bot-reply-card: #f3f3f3;
+  --bot-composer-fill: #f1f1f1;
+  --bot-reply-name: color-mix(in srgb, var(--dt-bot-accent, var(--ui-text-secondary)) 82%, #000);
+  --dt-user-bubble: #e7e7e7;
+  --dt-user-bubble-border: transparent;
+  --composer-width: 960px;
+  --conversation-text-font-size: 14px;
+  --dt-line-height: 22px;
+}
+
+:root.dark [data-chat-surface][data-bot-chat] {
+  --ui-chat-surface-background: #121212;
+  --bot-reply-card: #1c1c1c;
+  --bot-composer-fill: #1f1f1f;
+  --bot-reply-name: color-mix(in srgb, var(--dt-bot-accent, var(--ui-text-secondary)) 80%, #fff);
+  --dt-user-bubble: #3c3c3c;
+}
+
+[data-bot-chat] [data-slot='composer-root'],
+[data-bot-chat] [data-slot='composer-root'][data-thread-scrolled-up] {
+  --composer-fill: var(--bot-composer-fill);
+}
+
+[data-bot-chat] [data-slot='aui_thread-content'] {
+  max-width: calc(var(--composer-width) + 3rem);
+}
+
+[data-bot-chat] [data-bubble-frame] {
+  width: fit-content;
+  max-width: calc(100% - max(32px, clamp(0px, (100% - 480px) * 0.4, 20%)));
+  margin-left: auto;
+}
+
+[data-bot-chat] [data-slot='user-bubble-actions'] {
+  top: 50%;
+  right: calc(100% + 6px);
+  bottom: auto;
+  background: transparent;
+  transform: translateY(-50%);
+}
+
+[data-bot-chat] [data-bubble='user'] {
+  border-color: transparent;
+  border-radius: 18px;
+  padding: 6.5px 12px;
+  color: var(--dt-foreground);
+}
+
+[data-bot-chat] [data-slot='bot-reply-name'] {
+  margin-bottom: 6px;
+  padding-left: 44px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--bot-reply-name);
+}
+
+[data-bot-chat] [data-slot='bot-reply-avatar'] {
+  width: 20px;
+  margin-right: 14px;
+}
+
+[data-bot-chat] [data-bubble='assistant'] {
+  max-width: 552px;
+  border-radius: 12px;
+  padding: 5px 14px;
+  background: var(--bot-reply-card);
 }
 
 /* Tool/thinking blocks now live at message-text alignment (no leading

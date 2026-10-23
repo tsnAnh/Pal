@@ -98,6 +98,7 @@ const hasRunningTodo = (group: StatusGroup) =>
   group.type === 'todo' && group.items.some(item => item.todoStatus === 'in_progress' && item.state === 'running')
 
 interface ComposerStatusStackProps {
+  botChat?: boolean
   onSubmit?: (value: string, options?: SubmitTextOptions) => Promise<boolean> | boolean
   /** The queue, built by the composer (it owns the queue's callbacks). */
   queue: ReactNode
@@ -109,7 +110,7 @@ interface ComposerStatusStackProps {
  * every session-scoped status — subagents, background tasks, queue — grouped by
  * type and separated by light dividers. Collapses to nothing when empty.
  */
-export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStatusStackProps) {
+export function ComposerStatusStack({ botChat = false, onSubmit, queue, sessionId }: ComposerStatusStackProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const storedSessionId = useStore(useSessionView().$storedId)
@@ -146,7 +147,9 @@ export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStat
   const freeTierNotice = ownsFreeTierNotice && freeTierStripPending(freeTierStatus, freeTierRoute)
   // Same single owner, one offer at a time: the metrics question waits for the free-tier notice.
   const sharedMetricsConsent = useStore($sharedMetricsConsent)
-  const sharedMetricsOffer = ownsFreeTierNotice && !freeTierNotice && sharedMetricsOfferPending(sharedMetricsConsent)
+
+  const sharedMetricsOffer =
+    !botChat && ownsFreeTierNotice && !freeTierNotice && sharedMetricsOfferPending(sharedMetricsConsent)
 
   const isStructuredSupported = controlEntry?.capability === 'supported'
 

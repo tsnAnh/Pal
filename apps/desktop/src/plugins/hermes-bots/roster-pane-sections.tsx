@@ -134,7 +134,7 @@ export function rosterSectionRenderers({
                 onToggle={() => toggleRosterSection(key)}
               />
               {collapsed ? null : block.rows.length ? (
-                <div className="grid min-w-0 gap-0.5">
+                <div className="grid min-w-0 gap-2.5">
                   {block.rows.map(row =>
                     row.kind === 'group' ? renderGroupRow(row) : renderBotRow(row.bot, `${key}:`)
                   )}
@@ -165,7 +165,7 @@ export function rosterSectionRenderers({
           option={section.option}
         />
         {collapsed ? null : (
-          <div className="grid min-w-0 gap-0.5">{renderUserSections(section.rows, `${section.id}:`)}</div>
+          <div className="grid min-w-0 gap-2.5">{renderUserSections(section.rows, `${section.id}:`)}</div>
         )}
       </div>
     )
@@ -180,13 +180,12 @@ export function rosterSectionRenderers({
         <RosterSectionHeader
           collapsed={collapsed}
           count={sortedGroupRows.length}
-          icon="organization"
           label={b.roster.groupChats}
           onToggle={() => toggleRosterSection(sectionId)}
           tip={`${sortedGroupRows.length} global group chat${sortedGroupRows.length === 1 ? '' : 's'}`}
         />
         {collapsed ? null : (
-          <div className="grid min-w-0 gap-0.5">{renderUserSections(sortedGroupRows, 'groups:')}</div>
+          <div className="grid min-w-0 gap-2.5">{renderUserSections(sortedGroupRows, 'groups:')}</div>
         )}
       </div>
     )
@@ -194,7 +193,7 @@ export function rosterSectionRenderers({
 
   const renderHiddenGatewaySection = (section: ResolvedRosterGatewaySection) => (
     <div className="min-w-0" key={`hidden-gateway:${section.id}`}>
-      <div className="flex min-w-0 items-center gap-1.5 px-2 py-1 text-[0.625rem] font-semibold uppercase tracking-wider text-(--ui-text-quaternary)">
+      <div className="flex min-w-0 items-center gap-1.5 px-2 py-1 text-[0.6875rem] font-medium text-(--ui-text-quaternary)">
         <GatewayKindGlyph kind={section.option?.kind} />
         <span className="min-w-0 flex-1 truncate">
           {section.option?.label || section.option?.connectionId || 'Current gateway'}

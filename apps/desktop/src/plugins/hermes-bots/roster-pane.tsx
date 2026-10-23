@@ -1,4 +1,4 @@
-import { host, useI18n, useValue } from '@hermes/plugin-sdk'
+import { $hiddenStripTabs, host, useI18n, useValue } from '@hermes/plugin-sdk'
 import { useEffect, useRef, useState } from 'react'
 
 import { BotRow } from './bot-row'
@@ -47,7 +47,8 @@ import { renderRosterDialogs } from './roster-pane-dialogs'
 import { RosterGroupRowView } from './roster-pane-groups'
 import { $lastSources, usePublishRosterSnapshot } from './roster-pane-lifecycle'
 import { rosterSectionRenderers } from './roster-pane-sections'
-import { renderRosterToolbar } from './roster-pane-toolbar'
+import { renderRosterToolbar, SESSIONS_PANE } from './roster-pane-toolbar'
+import { isPinnedBotRow, pinnedBots, PinnedStrip } from './roster-pinned-strip'
 import { botNeedsHandleLabel, rosterGatewayOptions } from './roster-sections'
 import { botWorkspaceOwnerKey, setBotsWorkspaceOwner } from './routing'
 import { activeBots, useTurnBusy } from './row-helpers'
@@ -256,6 +257,15 @@ export function BotsPane() {
 
   const [grouping, setGrouping] = useState<null | RosterRow>(null)
   const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus()
+    }
+  }, [searchOpen])
+
   const [rowKindFilter, setRowKindFilter] = useState<RosterKindFilter>('all')
   const [activityFilter, setActivityFilter] = useState<RosterActivityFilter>('all')
   const [gatewayFilter, setGatewayFilter] = useState('all')
@@ -268,6 +278,7 @@ export function BotsPane() {
   // (#89788 follow-up — without it a stale render could paint the in-pane
   // room beside a live main tab and stick).
   useValue($groupMainTabsRev)
+  const botsOnly = useValue($hiddenStripTabs).has(SESSIONS_PANE)
   const groupNeedsYou = useValue($groupNeedsYou)
   const groupClarify = useValue($groupClarify)
   const groupRooms = useValue($groupChats)
@@ -336,9 +347,9 @@ export function BotsPane() {
     visibleRoster,
     filteredHiddenBots,
     groupNames,
-    rosterRows,
+    rosterRows: allRosterRows,
     sortedGroupRows,
-    gatewaySections,
+    gatewaySections: allGatewaySections,
     showGatewaySections
   } = deriveRosterRows({
     roster,
@@ -353,6 +364,16 @@ export function BotsPane() {
     activityOf,
     isPinned
   })
+
+  const stripBots = pinnedBots(allRosterRows)
+  const rosterRows = allRosterRows.filter(row => !isPinnedBotRow(row))
+
+  const gatewaySections = {
+    ...allGatewaySections,
+    sections: allGatewaySections.sections
+      .map(section => ({ ...section, rows: section.rows.filter(row => !isPinnedBotRow(row)) }))
+      .filter(section => section.rows.length)
+  }
 
   const {
     activeFilterCount,
@@ -421,8 +442,24 @@ export function BotsPane() {
   const groupChatMembers = groupChatName ? groupChatMemberBots(groupChatName, roster, allMeta) : []
 
   if (shouldRenderGroupChatInPane(groupChatName) && groupChatMembers.length) {
-    return <GroupChatWorkspace group={groupChatName} members={groupChatMembers} origin={groupOpenOrigin(groupChatName)} />
+    return (
+      <GroupChatWorkspace group={groupChatName} members={groupChatMembers} origin={groupOpenOrigin(groupChatName)} />
+    )
   }
+
+  const onlyPinnedRemain =
+    stripBots.length > 0 && rosterRows.length === 0 && matchingHiddenBots.length === 0 && !hasRosterConstraint
+
+  const renderPinnedTile = (bot: RosterRow) => (
+    <BotRow
+      bot={bot}
+      onDelete={setDeleting}
+      onEdit={setEditing}
+      onGroup={setGrouping}
+      onNewSection={target => setSectionDialog({ bot: target, mode: 'create' })}
+      variant="tile"
+    />
+  )
 
   const renderBotRow = (bot: RosterRow, keyPrefix = '') => (
     <BotRow
@@ -470,10 +507,11 @@ export function BotsPane() {
     })
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col" data-bots-pane="">
       <CanonicalGroupList onOpen={openGroupChat} />
       {renderRosterToolbar({
         b,
+        botsOnly,
         activityToasts,
         activeSourceRoster,
         roster,
@@ -481,6 +519,9 @@ export function BotsPane() {
         setGroupCreateOpen,
         setSectionDialog,
         showRosterTools,
+        searchInputRef,
+        searchOpen,
+        setSearchOpen,
         showRosterSearch,
         showRosterFilters,
         query,
@@ -494,36 +535,39 @@ export function BotsPane() {
         gatewayFilter,
         setGatewayFilter
       })}
-      {renderRosterContent({
-        b,
-        staleNotice,
-        isLoading,
-        initialRosterLoading,
-        roster,
-        error,
-        gatewayUp,
-        refetch,
-        allBotsHidden,
-        hiddenExpanded,
-        rosterRows,
-        matchingHiddenBots,
-        query,
-        selectedGateway,
-        showGatewaySections,
-        sortedGroupRows,
-        gatewaySections,
-        showHiddenSection,
-        hiddenSectionRef,
-        hasRosterConstraint,
-        hiddenBots,
-        showHiddenRows,
-        hiddenGatewaySections,
-        renderBotRow,
-        renderGroupChatSection,
-        renderGatewaySection,
-        renderUserSections,
-        renderHiddenGatewaySection
-      })}
+      <PinnedStrip bots={stripBots} renderTile={renderPinnedTile} />
+      {onlyPinnedRemain
+        ? null
+        : renderRosterContent({
+            b,
+            staleNotice,
+            isLoading,
+            initialRosterLoading,
+            roster,
+            error,
+            gatewayUp,
+            refetch,
+            allBotsHidden,
+            hiddenExpanded,
+            rosterRows,
+            matchingHiddenBots,
+            query,
+            selectedGateway,
+            showGatewaySections,
+            sortedGroupRows,
+            gatewaySections,
+            showHiddenSection,
+            hiddenSectionRef,
+            hasRosterConstraint,
+            hiddenBots,
+            showHiddenRows,
+            hiddenGatewaySections,
+            renderBotRow,
+            renderGroupChatSection,
+            renderGatewaySection,
+            renderUserSections,
+            renderHiddenGatewaySection
+          })}
       {renderRosterDialogs({
         b,
         t,

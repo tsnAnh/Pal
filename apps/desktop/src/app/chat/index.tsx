@@ -17,6 +17,7 @@ import { IntroCopy } from '@/components/onboarding/first-run/intro-copy'
 import { usePaneGroup, usePaneVisible } from '@/components/pane-shell/pane-visibility'
 import { $hoveredTreeGroup, $sessionTileDragging, $sessionTileEdgeHover } from '@/components/pane-shell/tree/store'
 import { PromptOverlays } from '@/components/prompt-overlays'
+import { Codicon } from '@/components/ui/codicon'
 import { TitleMenuTrigger } from '@/components/ui/title-menu-trigger'
 import { type HermesGateway, type ResolvedOwner } from '@/hermes'
 import { useI18n } from '@/i18n'
@@ -25,6 +26,7 @@ import { NEW_SESSION_TITLE, sessionTitle } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
+import { ChatPersonaContext, useChatPersona } from '@/store/chat-persona'
 import { migrateSessionDraft } from '@/store/composer'
 import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
 import { $introSplash } from '@/store/intro-splash'
@@ -125,11 +127,32 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   onDismissError?: (messageId: string) => void
 }
 
+const botChipClass =
+  'flex h-7 min-w-0 max-w-full items-center gap-2 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/80 px-2.5 text-sm font-medium text-foreground backdrop-blur-md'
+
+function BotTileChip({ storedId }: { storedId: null | string | undefined }) {
+  const persona = useChatPersona(storedId ?? null)
+
+  if (!persona) {
+    return null
+  }
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-3 z-3 flex justify-center px-24">
+      <span className={botChipClass} data-slot="bot-title-chip">
+        <span className="grid shrink-0 place-items-center">{persona.avatar(20)}</span>
+        <span className="truncate">{persona.name}</span>
+      </span>
+    </div>
+  )
+}
+
 interface ChatHeaderProps {
   activeSessionId: null | string
   isRoutedSessionView: boolean
   onDeleteSelectedSession: () => void
   onToggleSelectedPin: () => void
+  personaSessionId: null | string | undefined
   selectedSessionId: null | string
 }
 
@@ -138,8 +161,10 @@ function ChatHeader({
   isRoutedSessionView,
   onDeleteSelectedSession,
   onToggleSelectedPin,
+  personaSessionId,
   selectedSessionId
 }: ChatHeaderProps) {
+  const { t } = useI18n()
   const sessions = useStore($sessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const profiles = useStore($profiles)
@@ -150,6 +175,7 @@ function ChatHeader({
     null
 
   const title = activeStoredSession ? sessionTitle(activeStoredSession) : NEW_SESSION_TITLE
+  const persona = useChatPersona(personaSessionId ?? null)
 
   // Which agent/persona owns this chat — glanceable in the header once a
   // second profile exists, so the open session's ownership is never ambiguous
@@ -168,8 +194,57 @@ function ChatHeader({
   // Secondary windows (new-session scratch, subagent watch, cmd-click pop-out)
   // are compact side panels — they drop the session-actions header + border
   // entirely. A brand-new draft has nothing to pin/delete/rename either.
-  if (isAuxiliaryWindow() || (!selectedSessionId && !activeSessionId && !isRoutedSessionView)) {
+  if (isAuxiliaryWindow() || (!persona && !selectedSessionId && !activeSessionId && !isRoutedSessionView)) {
     return null
+  }
+
+  const actionsMenu = (children: React.ReactNode) => (
+    <SessionActionsMenu
+      align={persona ? 'center' : 'start'}
+      onDelete={selectedSessionId ? onDeleteSelectedSession : undefined}
+      onPin={selectedSessionId ? onToggleSelectedPin : undefined}
+      pinned={selectedIsPinned}
+      profile={activeStoredSession?.profile}
+      sessionId={selectedSessionId || activeSessionId || ''}
+      sideOffset={8}
+      title={title}
+    >
+      {children}
+    </SessionActionsMenu>
+  )
+
+  if (persona) {
+    return (
+      <div className="pointer-events-none absolute inset-x-0 top-3 z-3 flex justify-center px-24">
+        <div className="flex min-w-0 max-w-full items-center gap-1.5">
+          {actionsMenu(
+            <button
+              className={cn(
+                botChipClass,
+                'pointer-events-auto hover:bg-(--ui-control-hover-background) data-[state=open]:bg-(--ui-control-active-background) [-webkit-app-region:no-drag]'
+              )}
+              data-slot="bot-title-chip"
+              type="button"
+            >
+              <span className="grid shrink-0 place-items-center">{persona.avatar(20)}</span>
+              <span className="truncate">{persona.name}</span>
+              <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="chevron-down" size="0.8125rem" />
+            </button>
+          )}
+          {persona.openProfile ? (
+            <button
+              aria-label={t.composer.openBotProfile(persona.name)}
+              className="pointer-events-auto grid size-7 shrink-0 place-items-center rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/80 text-(--ui-text-secondary) backdrop-blur-md hover:bg-(--ui-control-hover-background) hover:text-foreground [-webkit-app-region:no-drag]"
+              data-slot="bot-profile-reopen"
+              onClick={persona.openProfile}
+              type="button"
+            >
+              <Codicon name="account" size="0.9375rem" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -182,18 +257,7 @@ function ChatHeader({
         }}
       >
         {showProfileTag && <ProfileTag className="pointer-events-auto mr-1.5" profile={activeStoredSession?.profile} />}
-        <SessionActionsMenu
-          align="start"
-          onDelete={selectedSessionId ? onDeleteSelectedSession : undefined}
-          onPin={selectedSessionId ? onToggleSelectedPin : undefined}
-          pinned={selectedIsPinned}
-          profile={activeStoredSession?.profile}
-          sessionId={selectedSessionId || activeSessionId || ''}
-          sideOffset={8}
-          title={title}
-        >
-          <TitleMenuTrigger>{title}</TitleMenuTrigger>
-        </SessionActionsMenu>
+        {actionsMenu(<TitleMenuTrigger>{title}</TitleMenuTrigger>)}
       </div>
     </header>
   )
@@ -742,6 +806,7 @@ const ChatViewContent = memo(function ChatViewContent({
   const sessionEdgeHover = useStore($sessionTileEdgeHover)
 
   const overlayKind = dropOverlayKind(dragKind, sessionDragging, sessionEdgeHover)
+  const surfacePersona = useChatPersona(queueSessionKey)
 
   return (
     <div
@@ -749,6 +814,7 @@ const ChatViewContent = memo(function ChatViewContent({
         'relative isolate flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
         className
       )}
+      data-bot-chat={surfacePersona ? '' : undefined}
       data-chat-surface=""
       data-chat-unfocused={surfaceFocused || surfaceHovered ? undefined : ''}
       data-composer-surface-id={composerSurfaceId}
@@ -756,6 +822,7 @@ const ChatViewContent = memo(function ChatViewContent({
       data-guide-arrived={isPrimary && guideStarted ? '' : undefined}
       data-session-anchor={sessionAnchor}
       data-setup-chat={setupChat ? '' : undefined}
+      data-stored-session-id={storedId ?? undefined}
     >
       <Backdrop />
       {/* Tiles get their chrome from the layout zone (chip strip); the modal
@@ -766,9 +833,11 @@ const ChatViewContent = memo(function ChatViewContent({
           isRoutedSessionView={isRoutedSessionView}
           onDeleteSelectedSession={onDeleteSelectedSession}
           onToggleSelectedPin={onToggleSelectedPin}
+          personaSessionId={queueSessionKey}
           selectedSessionId={selectedSessionId}
         />
       )}
+      {!isPrimary && <BotTileChip storedId={queueSessionKey} />}
 
       {/* Mounted for the primary AND every tile, each scoped to its own session
           so a tiled/background session's blocking prompt surfaces instead of
@@ -789,20 +858,22 @@ const ChatViewContent = memo(function ChatViewContent({
           data-slot="composer-bounds"
           {...dropHandlers}
         >
-          <Thread
-            clampToComposer={showChatBar}
-            cwd={currentCwd}
-            gateway={gateway}
-            intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
-            loading={threadLoading}
-            onBranchInNewChat={onBranchInNewChat}
-            onCancel={haltRun}
-            onDismissError={onDismissError}
-            onRestoreToMessage={onRestoreToMessage}
-            scrollProfile={modelOptionsProfile || activeGatewayProfile}
-            sessionId={activeSessionId}
-            sessionKey={threadKey}
-          />
+          <ChatPersonaContext.Provider value={surfacePersona}>
+            <Thread
+              clampToComposer={showChatBar}
+              cwd={currentCwd}
+              gateway={gateway}
+              intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
+              loading={threadLoading}
+              onBranchInNewChat={onBranchInNewChat}
+              onCancel={haltRun}
+              onDismissError={onDismissError}
+              onRestoreToMessage={onRestoreToMessage}
+              scrollProfile={modelOptionsProfile || activeGatewayProfile}
+              sessionId={activeSessionId}
+              sessionKey={threadKey}
+            />
+          </ChatPersonaContext.Provider>
           {isPrimary && isMainWindow() && <IntroCopy />}
           {resumeExhausted && routedSessionId && (
             <ResumeExhaustedOverlay onRetryResume={onRetryResume} sessionId={routedSessionId} />

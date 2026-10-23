@@ -136,6 +136,7 @@ interface PaneChrome extends PaneSizing {
    *  this and the readers resolve it at menu-open / drag-start time. Absent,
    *  they fall back to `title`. */
   tabTitleText?: () => string
+  switcherIcon?: string
 }
 
 export const paneChrome = (c: Contribution | undefined) => (c?.data ?? {}) as PaneChrome

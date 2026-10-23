@@ -27,6 +27,8 @@ import {
 import type { ChatEmptyProps, PluginContext, ProfileGroupRoute } from '@hermes/plugin-sdk'
 
 import { startFaceClock, stopFaceClock } from './avatar'
+import { startBotChatAccent } from './bot-accent'
+import { startBotChatPersonas } from './bot-persona'
 import {
   $botChatFocused,
   $botsPaneVisible,
@@ -39,7 +41,7 @@ import {
 } from './bot-state'
 import { isCanonicalChatOnScreen, openBotCanonicalChat } from './canonical-chat'
 import { BotChatEmpty } from './chat-empty'
-import { bindProfileSync, RoutinesPane } from './cron'
+import { bindProfileSync, RoutinesPane, RoutinesTabTitle } from './cron'
 import {
   $botMeta,
   $lastRoster,
@@ -126,6 +128,8 @@ export default {
     startBotRelay()
     // Opt-in per bot: raise a bot's Screen tab on its first live screen tool call.
     const stopScreenAutoRaise = startScreenAutoRaise()
+    const stopBotChatAccent = startBotChatAccent()
+    const stopBotChatPersonas = startBotChatPersonas()
 
     // Disabling the plugin (or a hot reload) must actually stop the clock —
     // before this, the rAF loop + 1Hz document scan ran until app restart.
@@ -134,6 +138,8 @@ export default {
       ctx.onDispose(stopFaceClock)
       ctx.onDispose(stopBotRelay)
       ctx.onDispose(stopScreenAutoRaise)
+      ctx.onDispose(stopBotChatAccent)
+      ctx.onDispose(stopBotChatPersonas)
     }
 
     // @-mention autocomplete: typing "@rese…" in ANY composer offers the
@@ -475,6 +481,7 @@ export default {
         hideOnly: true,
         tabTitle: () => <LocalizedTabTitle select={t => t.common.bots} />,
         tabTitleText: () => translateNow('common.bots'),
+        switcherIcon: 'hubot',
         dock: {
           pane: 'sessions',
           pos: 'center',
@@ -501,12 +508,13 @@ export default {
         id: 'routines',
         area: 'panes',
         // The app's noun for these, so the tab agrees with the pane header and
-        // with the core Scheduled jobs surface. `translateNow`, not `useI18n`:
+        // with the core vocabulary. `translateNow`, not `useI18n`:
         // a pane title is read at registration, outside React.
-        title: translateNow('cron.title'),
+        title: translateNow('sidebar.filter.profile'),
         data: {
-          tabTitle: () => <LocalizedTabTitle select={t => t.cron.title} />,
-          tabTitleText: () => translateNow('cron.title'),
+          tabTitle: () => <RoutinesTabTitle />,
+          tabTitleText: () => translateNow('sidebar.filter.profile'),
+          headerVeto: true,
           placement: 'main',
           // Repair persisted layouts that stranded Cronjobs in the Bots tab strip.
           dock: {
@@ -514,23 +522,11 @@ export default {
             pos: 'right',
             enforce: true
           },
-          // A bot's schedule is glanceable, not something you sit in — it
-          // arrives as the right edge's vertical tab and takes no width off the
-          // chat until the user opens it.
-          defaultCollapsed: true,
-          width: '250px'
+          width: '300px'
         },
         render: () => <RoutinesPane />
       })
 
-      // The pane's ✕ remembers a Close across launches, and nothing else ever
-      // shows this pane again — it only comes back by being registered here.
-      // Entering Bot Mode is the user asking for their bot's chrome, so a
-      // remembered Close is dropped and the pane returns the way it first
-      // arrived: as the collapsed right-edge tab (#102224). Only on ENTRY:
-      // the pane also re-registers whenever a bot chat regains the workspace
-      // inside one Bots session (a group room and back), and a ✕ from that
-      // same session must survive those.
       if (restoreDismissed && typeof host.undismissPane === 'function') {
         host.undismissPane(`${ID}:routines`)
       }

@@ -3628,6 +3628,7 @@ export const frOverrides = {
       cron: 'Tâches planifiées'
     },
     searchAria: 'Rechercher des sessions',
+    paneSwitcherAria: 'Volets de la barre latérale',
     searchPlaceholder: 'Rechercher des sessions…',
     clearSearch: 'Effacer la recherche',
     noMatch: query => `Aucune session ne correspond à « ${query} ».`,
@@ -3729,6 +3730,8 @@ export const frOverrides = {
     message: 'Message',
     wakingProfile: profile => `Réveil de ${profile}…`,
     placeholderStarting: 'Démarrage de Hermes…',
+    placeholderBot: name => `Message à ${name}`,
+    openBotProfile: name => `Ouvrir le profil de ${name}`,
     placeholderReconnecting: 'Reconnexion à Hermes…',
     placeholderFollowUp: 'Envoyer un suivi',
     newSessionPlaceholders: [
@@ -4845,6 +4848,7 @@ export const frOverrides = {
       loadingResponse: 'Hermes charge une réponse',
       loadingLocalModel: model => `Chargement de ${model} en mémoire`,
       processingPrompt: "Traitement de l'invite",
+      peerRun: (count, peer) => (count === 1 ? `1 message avec ${peer}` : `${count} messages avec ${peer}`),
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'Reprendra une fois la tâche en arrière-plan terminée'

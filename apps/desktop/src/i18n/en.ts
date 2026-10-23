@@ -3186,6 +3186,7 @@ export const en: Translations = {
       cron: 'Scheduled jobs'
     },
     searchAria: 'Search sessions',
+    paneSwitcherAria: 'Sidebar panes',
     searchPlaceholder: 'Search sessions…',
     clearSearch: 'Clear search',
     noMatch: query => `No sessions match “${query}”.`,
@@ -3288,6 +3289,8 @@ export const en: Translations = {
     message: 'Message',
     wakingProfile: profile => `Waking up ${profile}…`,
     placeholderStarting: 'Starting Hermes...',
+    placeholderBot: name => `Message ${name}`,
+    openBotProfile: name => `Open ${name}'s profile`,
     placeholderReconnecting: 'Reconnecting to Hermes…',
     placeholderFollowUp: 'Send follow-up',
     newSessionPlaceholders: [
@@ -4418,6 +4421,7 @@ export const en: Translations = {
       loadingResponse: 'Hermes is loading a response',
       loadingLocalModel: model => `Loading ${model} into memory`,
       processingPrompt: 'Processing prompt',
+      peerRun: (count, peer) => (count === 1 ? `1 message with ${peer}` : `${count} messages with ${peer}`),
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'Will resume when the background task finishes'

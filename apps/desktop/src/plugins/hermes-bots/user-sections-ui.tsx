@@ -147,15 +147,7 @@ export function UserSectionHeader({
   // left over — so it gets the plain heading rather than a menu of disabled
   // items.
   if (!id) {
-    return (
-      <RosterSectionHeader
-        collapsed={collapsed}
-        count={count}
-        icon="inbox"
-        label={b.sections.unassigned}
-        onToggle={onToggle}
-      />
-    )
+    return <RosterSectionHeader collapsed={collapsed} count={count} label={b.sections.unassigned} onToggle={onToggle} />
   }
 
   // RIGHT-CLICK IS THE SAME MENU. The ⋯ button only appears on hover and is a
@@ -202,7 +194,6 @@ export function UserSectionHeader({
             action={action}
             collapsed={collapsed}
             count={count}
-            icon="folder"
             label={name}
             onDoubleClick={onRename}
             onToggle={onToggle}

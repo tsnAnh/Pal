@@ -13,7 +13,7 @@
 //    Nothing in the app itself reads it, so without this test a delete would
 //    look free and would silently regress that repro's response gate.
 import { AssistantRuntimeProvider, type ThreadMessage, useExternalStoreRuntime } from '@assistant-ui/react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { Thread } from '.'
@@ -63,6 +63,17 @@ function assistant(id: string, text: string, running: boolean): ThreadMessage {
     status: running ? { type: 'running' } : { type: 'complete', reason: 'stop' },
     createdAt,
     metadata: assistantMetadata
+  } as ThreadMessage
+}
+
+function afterHiddenNotice(message: ThreadMessage): ThreadMessage {
+  return { ...message, metadata: { ...message.metadata, custom: { afterHiddenNotice: true } } } as ThreadMessage
+}
+
+function failed(id: string, text: string): ThreadMessage {
+  return {
+    ...assistant(id, text, false),
+    status: { type: 'incomplete', reason: 'error', error: 'boom' }
   } as ThreadMessage
 }
 
@@ -128,6 +139,7 @@ describe('inter-agent collapse gate', () => {
       <Harness messages={[dispatch('a0', 'scribe'), user('u2', DELIVERY), assistant('a1', 'build is green', false)]} />
     )
 
+    fireEvent.click(await screen.findByRole('button', { name: /2 messages with Hermes/ }))
     expect(await screen.findByText(/Replied to/)).toBeTruthy()
     expect(screen.getByText('show reply')).toBeTruthy()
   })
@@ -151,6 +163,9 @@ describe('inter-agent collapse gate', () => {
       />
     )
 
+    await screen.findByText('here is the list hermes sent')
+    expect(screen.getAllByRole('button', { name: /messages with Hermes/ })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: /2 messages with Hermes/ }))
     expect(await screen.findByText(/Replied to/)).toBeTruthy()
     expect(screen.getAllByText(/Replied to/)).toHaveLength(1)
     expect(screen.getByText('show reply')).toBeTruthy()
@@ -159,6 +174,9 @@ describe('inter-agent collapse gate', () => {
   it('collapses a settled reply to an inter-agent delivery', async () => {
     render(<Harness messages={[user('u1', DELIVERY), assistant('a1', 'build is green', false)]} />)
 
+    const summary = await screen.findByRole('button', { name: /2 messages with Hermes/ })
+    expect(screen.queryByText(/Replied to/)).toBeNull()
+    fireEvent.click(summary)
     expect(await screen.findByText(/Replied to/)).toBeTruthy()
     expect(screen.getByText('show reply')).toBeTruthy()
   })
@@ -172,10 +190,72 @@ describe('inter-agent collapse gate', () => {
     expect(container.querySelector('[data-message-streaming="true"]')).toBeTruthy()
   })
 
+  it('folds consecutive deliveries from one peer into a single summary', async () => {
+    render(
+      <Harness
+        messages={[
+          user('u1', DELIVERY),
+          assistant('a1', 'build is green', false),
+          user('u2', 'Message from 🤖 Hermes (@hermes): and the tests?'),
+          assistant('a2', 'all passing', false),
+          user('u3', 'Message from 🤖 Scribe (@scribe): notes ready'),
+          assistant('a3', 'thanks', false)
+        ]}
+      />
+    )
+
+    expect(await screen.findByRole('button', { name: /4 messages with Hermes/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /2 messages with Scribe/ })).toBeTruthy()
+    expect(screen.queryByText('all passing')).toBeNull()
+  })
+
   it('leaves an ordinary reply expanded', async () => {
     render(<Harness messages={[user('u1', 'ordinary question'), assistant('a1', 'ordinary answer', false)]} />)
 
     await screen.findByText('ordinary answer')
     expect(screen.queryByText(/Replied to/)).toBeNull()
+  })
+
+  it('shows a reply that followed a hidden background-process notice outside the peer summary', async () => {
+    render(
+      <Harness
+        messages={[
+          user('u1', DELIVERY),
+          assistant('a1', 'build is green', false),
+          afterHiddenNotice(assistant('a2', 'build failed: missing module', false))
+        ]}
+      />
+    )
+
+    expect(await screen.findByRole('button', { name: /2 messages with Hermes/ })).toBeTruthy()
+    expect(screen.getByText('build failed: missing module')).toBeTruthy()
+  })
+
+  it('keeps a peer run expanded when a message in it failed', async () => {
+    render(
+      <Harness
+        messages={[
+          user('u1', DELIVERY),
+          failed('a1', 'partial before the error'),
+          user('u2', 'Message from 🤖 Hermes (@hermes): and the tests?'),
+          assistant('a2', 'all passing', false)
+        ]}
+      />
+    )
+
+    const summary = await screen.findByRole('button', { name: /4 messages with Hermes/ })
+    expect(summary.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByText('all passing')).toBeTruthy()
+  })
+
+  it('keeps a run the user watched stream expanded after it settles', async () => {
+    const messages = [user('u1', DELIVERY), assistant('a1', 'checking now', true)]
+    const { rerender } = render(<Harness messages={messages} />)
+
+    await screen.findByText('checking now')
+    rerender(<Harness messages={[messages[0], assistant('a1', 'checking now', false)]} />)
+
+    expect(await screen.findByText(/Replied to/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /2 messages with Hermes/ }).getAttribute('aria-expanded')).toBe('true')
   })
 })

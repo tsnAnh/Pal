@@ -3610,6 +3610,7 @@ export const esOverrides = {
       cron: 'Tareas programadas'
     },
     searchAria: 'Buscar sesiones',
+    paneSwitcherAria: 'Paneles de la barra lateral',
     searchPlaceholder: 'Buscar sesiones…',
     clearSearch: 'Limpiar búsqueda',
     noMatch: query => `Ninguna sesión coincide con “${query}”.`,
@@ -3712,6 +3713,8 @@ export const esOverrides = {
     message: 'Mensaje',
     wakingProfile: profile => `Despertando ${profile}…`,
     placeholderStarting: 'Iniciando Hermes...',
+    placeholderBot: name => `Mensaje para ${name}`,
+    openBotProfile: name => `Abrir el perfil de ${name}`,
     placeholderReconnecting: 'Reconectando con Hermes…',
     placeholderFollowUp: 'Enviar seguimiento',
     newSessionPlaceholders: [
@@ -4821,6 +4824,7 @@ export const esOverrides = {
       loadingResponse: 'Hermes está cargando una respuesta',
       loadingLocalModel: (model: string) => `Cargando ${model} en memoria`,
       processingPrompt: 'Procesando el prompt',
+      peerRun: (count, peer) => (count === 1 ? `1 mensaje con ${peer}` : `${count} mensajes con ${peer}`),
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'Se reanudará cuando termine la tarea en segundo plano.'

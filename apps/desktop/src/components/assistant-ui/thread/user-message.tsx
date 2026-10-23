@@ -5,6 +5,7 @@ import { type FC, type ReactNode, useCallback, useEffect, useRef, useState } fro
 import { DirectiveContent } from '@/components/assistant-ui/directive-text'
 import { isAttachmentRef } from '@/components/assistant-ui/reference-kinds'
 import {
+  AGENT_MESSAGE_RE,
   messageAttachmentRefs,
   messageContentText,
   PROCESS_NOTIFICATION_RE
@@ -84,17 +85,6 @@ export const USER_ACTION_ICON_BUTTON_CLASS =
 
 export const USER_ACTION_ICON_SIZE = '0.6875rem'
 export const StopGlyph = <StopFilled aria-hidden className="size-3.5 -translate-y-px" />
-
-// Agent-to-agent deliveries ("Message from 🤖 <sender>: …", the Bot Mode /
-// multi-profile convention; optional "(@<handle>)" carries the sender's
-// profile name for avatar resolution — a relayed sender is re-stamped
-// "(@<handle>@<connection>)" so a reply reaches the right machine (#103731);
-// legacy "[Message from agent '<sender>'] …" too). They arrive on the user
-// role because the recipient's turn runs on it, but they are NOT the human
-// speaking — render them as a compact attributed timeline notice instead of
-// a user bubble.
-export const AGENT_MESSAGE_RE =
-  /^(?:Message from (?:🤖\s*)?([^:\n(]{1,64}?)(?:\s*\(@([a-z0-9][a-z0-9_-]{0,63})(?:@[a-zA-Z0-9][a-zA-Z0-9_-]{0,63})?\))?:\s*|\[Message from agent '([^']{1,64})'\]\s*)([\s\S]*)$/u
 
 // sender handle -> avatar data URL. Module-level so a chat full of notices
 // from one bot resolves once. Bounded LRU: handles are parsed out of message
@@ -287,6 +277,7 @@ const UserBubbleActions: FC<UserBubbleActionsProps> = ({
           ? 'opacity-100'
           : 'opacity-0 group-hover/user-message:opacity-100 group-hover/user-message:transition-none group-focus-within/user-message:opacity-100'
       )}
+      data-slot="user-bubble-actions"
     >
       {!touch && <MessageHoverTime className={cn(!showStop && !showRestore && 'pr-0.5')} />}
       {showStop ? (
@@ -600,6 +591,7 @@ export const UserMessage: FC<{
             >
               <div
                 className="relative w-full"
+                data-bubble-frame=""
                 // The app context menu skips PLAIN right-clicks here (the
                 // attr below) so this handler keeps the picker gesture; a
                 // link/image/selection inside the bubble still gets the app
@@ -640,6 +632,7 @@ export const UserMessage: FC<{
                   <button
                     aria-expanded={bodyClamped ? expanded : undefined}
                     className={cn(bubbleClassName, !bodyClamped && 'cursor-default')}
+                    data-bubble="user"
                     onClick={() => {
                       // Drag-select ends on mouseup→click; don't collapse the
                       // clamp just because the highlight finished.
@@ -663,6 +656,7 @@ export const UserMessage: FC<{
                     <button
                       aria-label={copy.editMessage}
                       className={bubbleClassName}
+                      data-bubble="user"
                       onClick={event => {
                         if (hasTextSelection()) {
                           event.preventDefault()

@@ -200,7 +200,7 @@ async function revealScreenHero(page: Page): Promise<void> {
     .catch(() => undefined)
 
   if ((await hero(page).count()) === 0) {
-    await page.getByRole('tab', { name: 'Scheduled jobs' }).first().click()
+    await page.getByRole('tab', { name: 'Computer', exact: true }).first().click()
   }
 }
 

@@ -2793,6 +2793,7 @@ export interface Translations extends NoticeTranslations {
     profileRail: string
     nav: Record<string, string>
     searchAria: string
+    paneSwitcherAria: string
     searchPlaceholder: string
     clearSearch: string
     noMatch: (query: string) => string
@@ -2894,6 +2895,8 @@ export interface Translations extends NoticeTranslations {
     message: string
     wakingProfile: (profile: string) => string
     placeholderStarting: string
+    placeholderBot: (name: string) => string
+    openBotProfile: (name: string) => string
     placeholderReconnecting: string
     placeholderFollowUp: string
     newSessionPlaceholders: readonly string[]
@@ -3873,6 +3876,7 @@ export interface Translations extends NoticeTranslations {
       loadingResponse: string
       loadingLocalModel: (model: string) => string
       processingPrompt: string
+      peerRun: (count: number, peer: string) => string
       resumeWhenBackgroundDone: (count: number) => string
       thinking: string
       thought: string

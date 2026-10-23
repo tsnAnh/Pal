@@ -30,6 +30,7 @@ export const arAssistant = {
       loadingSession: 'جار تحميل الجلسة...',
       showEarlier: 'عرض الرسائل الأقدم',
       loadingResponse: 'جار تحميل الرد...',
+      peerRun: (count, peer) => (count === 1 ? `رسالة واحدة مع ${peer}` : `${count} رسائل مع ${peer}`),
       resumeWhenBackgroundDone: count =>
         count === 1 ? 'سيُستأنف عند انتهاء المهمة الخلفية' : `سيُستأنف عند انتهاء ${count} مهام خلفية`,
       thinking: 'يفكر...',
