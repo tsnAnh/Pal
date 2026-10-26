@@ -16,6 +16,12 @@ import { atom } from 'nanostores'
 
 import { $gateway } from '@/store/gateway'
 
+export const SUPPORT_LINKS = [
+  { key: 'github', url: 'https://github.com/NousResearch/hermes-agent/issues' },
+  { key: 'portal', url: 'https://portal.nousresearch.com/help' },
+  { key: 'discord', url: 'https://discord.gg/NousResearch' }
+] as const
+
 export interface SendDiagnosticsResult {
   expiresAt?: string
   uploadId?: string

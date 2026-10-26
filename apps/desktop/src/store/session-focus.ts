@@ -10,7 +10,7 @@ import { $selectedStoredSessionId } from './session'
 // zone can show — the sessions list, Files, Terminal, a preview tab — is chrome.
 export const TILE_PANE_PREFIX = 'session-tile:'
 
-const isChatPane = (paneId?: string): boolean => paneId === 'workspace' || Boolean(paneId?.startsWith(TILE_PANE_PREFIX))
+export const isChatPane = (paneId?: string): boolean => paneId === 'workspace' || Boolean(paneId?.startsWith(TILE_PANE_PREFIX))
 
 // Chrome can own keyboard focus, but working in it (navigating the sessions
 // list, browsing Files, typing in Terminal) must not replace the chat being

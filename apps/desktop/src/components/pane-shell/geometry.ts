@@ -298,7 +298,20 @@ export function useWindowControlsOverlap(ref: RefObject<HTMLElement | null>, ena
     ro.observe(el)
     window.addEventListener('resize', update)
 
+    let frame = 0
+
+    const unsubTree = $layoutTree.listen(() => {
+      if (sashDragging()) {
+        return
+      }
+
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(update)
+    })
+
     return () => {
+      cancelAnimationFrame(frame)
+      unsubTree()
       ro.disconnect()
       window.removeEventListener('resize', update)
     }

@@ -2516,7 +2516,6 @@ export const ruOverrides = {
     wakingProfile: profile => `Пробуждаем ${profile}…`,
     placeholderStarting: 'Запуск Hermes...',
     placeholderBot: name => `Сообщение для ${name}`,
-    openBotProfile: name => `Открыть профиль ${name}`,
     placeholderReconnecting: 'Переподключение к Hermes…',
     placeholderFollowUp: 'Отправить продолжение',
     newSessionPlaceholders: [

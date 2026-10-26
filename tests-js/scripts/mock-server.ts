@@ -96,6 +96,7 @@ export interface MockServer {
 export interface ScriptedTurn {
   /** Assistant text content to stream. Empty string = no visible text. */
   text: string
+  reasoning?: string
   /** Tool calls to emit. Empty array = final turn (finish_reason: stop). */
   toolCalls?: Array<{
     name: string
@@ -517,40 +518,47 @@ export function groupScriptedLine(userText: string, history: string[] = []): str
 }
 
 /**
- * One scripted tool call driven by the user's own text, for specs that need the
- * agent to exercise a REAL tool once (e.g. Bot Mode's `message_agent`):
- * `E2E_CALL(message_agent)[{"target":"scribe","message":"ping"}]`. The first
- * completion of that turn emits the call; once its tool result is in the
- * history the turn ends with `E2E_CALL_RESULT: <tool result>` so the spec can
- * assert on what the tool actually returned. Later turns (a completion
- * notification waking the same chat) carry a different last user message and
- * fall through to the canned reply.
+ * Scripted tool calls driven by the user's own text, for specs that need the
+ * agent to exercise REAL tools (e.g. Bot Mode's `message_agent`):
+ * `E2E_CALL(message_agent)[{"target":"scribe","message":"ping"}]`. Several
+ * `E2E_CALL(...)[...]` segments are emitted together in the first completion of
+ * that turn, after the reasoning in an optional `E2E_THINK[...]`; once a tool
+ * result is in the history the turn ends with `E2E_CALL_RESULT: <last tool
+ * result>` so the spec can assert on what the tool actually returned. Later
+ * turns (a completion notification waking the same chat) carry a different last
+ * user message and fall through to the canned reply.
  */
 export function directToolCallTurn(userText: string, messages: any[]): ScriptedTurn | null {
-  const match = /E2E_CALL\(([a-z_][a-z0-9_]*)\)\[(\{.*\})\]/s.exec(userText)
+  const calls = userText
+    .split(/(?=E2E_CALL\()/)
+    .map(segment => /^E2E_CALL\(([a-z_][a-z0-9_]*)\)\[(\{.*\})\]/s.exec(segment))
+    .filter((match): match is RegExpExecArray => match !== null)
 
-  if (!match) {
+  if (calls.length === 0) {
     return null
   }
 
+  const reasoning = /E2E_THINK\[([^\]]*)\]/.exec(userText)?.[1]
   const toolResults = messages.filter(m => m?.role === 'tool')
 
   if (toolResults.length === 0) {
-    let args: Record<string, unknown> = {}
+    const toolCalls: NonNullable<ScriptedTurn['toolCalls']> = []
 
-    try {
-      args = JSON.parse(match[2]) as Record<string, unknown>
-    } catch {
-      return null
+    for (const match of calls) {
+      try {
+        toolCalls.push({ name: match[1], args: JSON.parse(match[2]) as Record<string, unknown> })
+      } catch {
+        return null
+      }
     }
 
-    return { text: '', toolCalls: [{ name: match[1], args }] }
+    return { text: '', reasoning, toolCalls }
   }
 
   const last = toolResults[toolResults.length - 1]
   const content = typeof last?.content === 'string' ? last.content : JSON.stringify(last?.content ?? '')
 
-  return { text: `E2E_CALL_RESULT: ${content}` }
+  return { text: `E2E_CALL_RESULT: ${content}`, reasoning }
 }
 
 function includesBlockingClarifyTrigger(value: unknown): boolean {
@@ -1136,6 +1144,10 @@ function streamScriptedTurn(
     Connection: 'keep-alive',
   })
 
+  if (turn.reasoning) {
+    res.write(sseChunk(model, { reasoning_content: turn.reasoning }))
+  }
+
   const hasToolCalls = turn.toolCalls && turn.toolCalls.length > 0
   const finishReason = hasToolCalls ? 'tool_calls' : 'stop'
 
@@ -1209,6 +1221,10 @@ function nonStreamingScriptedTurn(
   const finishReason = hasToolCalls ? 'tool_calls' : 'stop'
 
   const message: Record<string, unknown> = { role: 'assistant' }
+
+  if (turn.reasoning) {
+    message.reasoning_content = turn.reasoning
+  }
 
   if (turn.text) {
     message.content = turn.text

@@ -58,6 +58,7 @@ export function ComposerControls({
   foldVoice = false,
   hasComposerPayload,
   hideModelPill = false,
+  hideVoiceConversation = false,
   minimal = false,
   state,
   voiceStatus,
@@ -78,6 +79,7 @@ export function ComposerControls({
   foldVoice?: boolean
   hasComposerPayload: boolean
   hideModelPill?: boolean
+  hideVoiceConversation?: boolean
   minimal?: boolean
   state: ChatBarState
   voiceStatus: VoiceStatus
@@ -94,7 +96,7 @@ export function ComposerControls({
     return <ConversationPill {...conversation} disabled={disabled} />
   }
 
-  const showVoicePrimary = !busy && !hasComposerPayload
+  const showVoicePrimary = !busy && !hasComposerPayload && !hideVoiceConversation
   // Steer is just send: a payload keeps the Send affordance mid-turn (it answers
   // a waiting card). Stop only when the composer is empty and a turn is running.
   const showStop = busy && !hasComposerPayload
@@ -116,6 +118,7 @@ export function ComposerControls({
     <VoiceMenu
       autoSpeak={autoSpeak}
       disabled={disabled}
+      hideConversation={hideVoiceConversation}
       onDictate={onDictate}
       onStartConversation={conversation.onStart}
       onToggleAutoSpeak={onToggleAutoSpeak}

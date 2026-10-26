@@ -13,6 +13,12 @@ export const AGENT_MESSAGE_RE =
 
 export const PROCESS_NOTIFICATION_RE = /^\[IMPORTANT: Background process [\s\S]*\]$/
 
+const CRONJOB_TURN_PREFIX = '[Cronjob "'
+
+export function isCronjobTurnText(text: string): boolean {
+  return text.trimStart().startsWith(CRONJOB_TURN_PREFIX)
+}
+
 export function partText(part: unknown): string {
   if (typeof part === 'string') {
     return part

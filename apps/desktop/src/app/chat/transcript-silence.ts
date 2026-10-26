@@ -1,4 +1,4 @@
-import { PROCESS_NOTIFICATION_RE } from '@/components/assistant-ui/thread/content'
+import { isCronjobTurnText, PROCESS_NOTIFICATION_RE } from '@/components/assistant-ui/thread/content'
 import type { ChatMessage } from '@/lib/chat-messages'
 import { chatMessageText } from '@/lib/chat-messages'
 
@@ -12,7 +12,7 @@ function isSilentReply(message: ChatMessage): boolean {
   )
 }
 
-export function isProcessNotice(message: ChatMessage): boolean {
+function isProcessNotice(message: ChatMessage): boolean {
   if (message.role === 'system') {
     return message.asyncResultKind === 'process'
   }
@@ -20,6 +20,14 @@ export function isProcessNotice(message: ChatMessage): boolean {
   return message.role === 'user' && PROCESS_NOTIFICATION_RE.test(chatMessageText(message).trim())
 }
 
-export function isSilentInTranscript(message: ChatMessage): boolean {
-  return isProcessNotice(message) || isSilentReply(message)
+function isCronjobTurn(message: ChatMessage): boolean {
+  return message.role === 'user' && isCronjobTurnText(chatMessageText(message))
+}
+
+export function isHiddenNotice(message: ChatMessage, botChat: boolean): boolean {
+  return isProcessNotice(message) || (botChat && isCronjobTurn(message))
+}
+
+export function isSilentInTranscript(message: ChatMessage, botChat: boolean): boolean {
+  return isHiddenNotice(message, botChat) || isSilentReply(message)
 }

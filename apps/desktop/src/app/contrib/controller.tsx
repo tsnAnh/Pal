@@ -54,6 +54,7 @@ import {
 import { type KeybindContribution, KEYBINDS_AREA } from '@/lib/keybinds/actions'
 import { TRANSCRIPT_DIRECTIVE_AREA, type TranscriptDirectiveContribution } from '@/lib/transcript-directives'
 import { setYoloEnabled } from '@/lib/yolo-session'
+import { bindBotSurface } from '@/store/bot-surface-binding'
 import { $connectionsRegistry } from '@/store/connection-registry-state'
 import { watchDeadSessionPrune } from '@/store/dead-session-prune'
 import { $interfaceMode, $showsAdvancedChrome, setModeContext, toggleSimpleMode } from '@/store/interface-mode'
@@ -94,7 +95,7 @@ import {
 import { watchSessionPins } from '@/store/session-pin-sync'
 import { $botChatScopes } from '@/store/session-states'
 import { watchUnreadWriteGuard } from '@/store/session-unread-remote'
-import { $statusbarVisible } from '@/store/statusbar-prefs'
+import { $statusbarShown, setStatusbarShown } from '@/store/statusbar-prefs'
 import { isBrowserWindow, isHudWindow } from '@/store/windows'
 
 import { BrowserPopoutShell } from '../chat/browser-popout-shell'
@@ -206,6 +207,7 @@ registry.registerMany([
       collapsible: true,
       dock: { pane: 'workspace', pos: 'left' },
       revealAliases: ['chat-sidebar'],
+      ownsTitlebarRow: true,
       // Standing chrome: no close gestures at all — the tab is shown/hidden
       // (zone menu Show/Hide rows + the auto-registered ⌘K toggle below).
       hideOnly: true,
@@ -371,8 +373,8 @@ registry.registerMany([
     action: 'view.toggleStatusbar',
     icon: PanelBottom,
     keywords: ['status bar', 'statusbar', 'bottom bar', 'hide', 'show', 'chrome'],
-    get: () => $statusbarVisible.get(),
-    set: enabled => $statusbarVisible.set(enabled)
+    get: () => $statusbarShown.get(),
+    set: setStatusbarShown
   }),
   paletteToggle({
     id: 'view.toggleProfileRail',
@@ -470,6 +472,7 @@ if (!isBrowserWindow() && !isHudWindow()) {
   startTileBackendIdentityGuard()
   watchRouteTiles()
   watchPreviewTiles()
+  bindBotSurface()
 }
 
 // Mirror sidebar pins into the backend keep-flag so the auto-archive sweep
@@ -784,7 +787,7 @@ registerPaneCloser('files', () =>
 
 export function ContribController() {
   const sidebarOpen = useStore($sidebarOpen)
-  const statusbarVisible = useStore($statusbarVisible)
+  const statusbarVisible = useStore($statusbarShown)
 
   // HUD mode is the SAME app with its frame removed: the wiring (gateway,
   // sessions, streams, submit) mounts identically, and only the shell around

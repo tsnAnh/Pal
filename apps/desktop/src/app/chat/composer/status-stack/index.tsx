@@ -161,8 +161,14 @@ export function ComposerStatusStack({ botChat = false, onSubmit, queue, sessionI
   const hasRunningBackground = allGroups.some(g => g.type === 'background' && g.items.some(i => i.state === 'running'))
 
   const groups = useMemo(
-    () => allGroups.filter(group => shown(GROUP_TIER[group.type]) && (group.type !== 'goal' || !isStructuredSupported)),
-    [allGroups, isStructuredSupported, shown]
+    () =>
+      allGroups.filter(
+        group =>
+          shown(GROUP_TIER[group.type]) &&
+          (group.type !== 'goal' || !isStructuredSupported) &&
+          (group.type !== 'todo' || !botChat)
+      ),
+    [allGroups, botChat, isStructuredSupported, shown]
   )
 
   // Seed from the registry on session open; event-driven refreshes (terminal /
@@ -313,7 +319,7 @@ export function ComposerStatusStack({ botChat = false, onSubmit, queue, sessionI
 
   // A settled snapshot is reviewable but never re-enters the live progress
   // feed. Only show this disclosure once the live Todo section has retired.
-  if (!busy && retainedTodos.length > 0 && !groups.some(group => group.type === 'todo')) {
+  if (!botChat && !busy && retainedTodos.length > 0 && !groups.some(group => group.type === 'todo')) {
     const done = retainedTodos.filter(todo => todo.status === 'completed').length
     sections.push({
       key: 'retained-todo',

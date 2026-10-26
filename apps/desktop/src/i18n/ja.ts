@@ -2261,7 +2261,6 @@ export const jaOverrides = {
     wakingProfile: profile => `${profile} を起動中…`,
     placeholderStarting: 'Hermes を起動中...',
     placeholderBot: name => `${name} にメッセージ`,
-    openBotProfile: name => `${name} のプロフィールを開く`,
     placeholderReconnecting: 'Hermes に再接続中…',
     placeholderFollowUp: 'フォローアップを送信',
     newSessionPlaceholders: [

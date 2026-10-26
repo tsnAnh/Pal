@@ -1,9 +1,10 @@
 import { ActionBarPrimitive, BranchPickerPrimitive, MessagePrimitive, useAuiState } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
-import { type FC, type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type FC, type ReactNode, useCallback, useRef, useState } from 'react'
 
 import { DirectiveContent } from '@/components/assistant-ui/directive-text'
 import { isAttachmentRef } from '@/components/assistant-ui/reference-kinds'
+import { AgentGlyph } from '@/components/assistant-ui/thread/agent-glyph'
 import {
   AGENT_MESSAGE_RE,
   messageAttachmentRefs,
@@ -25,10 +26,9 @@ import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { StopFilled } from '@/lib/icons'
-import { LruCache } from '@/lib/lru-cache'
 import { $touchPointer, isTouchInteraction } from '@/lib/touch-interaction'
 import { cn } from '@/lib/utils'
-import { $gateway } from '@/store/gateway'
+import { useSurfacePersona } from '@/store/chat-persona'
 import { notifyThreadEditOpen } from '@/store/thread-scroll'
 import { isWatchWindow } from '@/store/windows'
 
@@ -48,6 +48,8 @@ export function StickyHumanMessageContainer({
   children: ReactNode
   messageId?: string
 }) {
+  const botChat = useSurfacePersona() !== null
+
   return (
     // Fragment, not a wrapper: a wrapping element becomes the sticky's
     // containing block (it'd stick within its own height = never). The bubble
@@ -55,10 +57,14 @@ export function StickyHumanMessageContainer({
     // while attachments below it scroll away.
     <>
       <div
-        className="group/user-message sticky z-40 -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-stretch gap-0 self-end overflow-visible px-4 pb-(--conversation-turn-gap) pt-1"
+        className={cn(
+          'group/user-message z-40 -mx-4 flex w-[calc(100%+2rem)] min-w-0 max-w-none flex-col items-stretch gap-0 self-end overflow-visible px-4 pb-(--conversation-turn-gap) pt-1',
+          botChat ? 'relative' : 'sticky'
+        )}
         data-message-id={messageId}
         data-role="user"
         data-slot="aui_user-message-root"
+        style={botChat ? { top: 'auto' } : undefined}
       >
         {children}
       </div>
@@ -86,133 +92,23 @@ export const USER_ACTION_ICON_BUTTON_CLASS =
 export const USER_ACTION_ICON_SIZE = '0.6875rem'
 export const StopGlyph = <StopFilled aria-hidden className="size-3.5 -translate-y-px" />
 
-// sender handle -> avatar data URL. Module-level so a chat full of notices
-// from one bot resolves once. Bounded LRU: handles are parsed out of message
-// text (unbounded distinct senders over a long session list) and hits hold
-// base64 avatar data URLs, so an unbounded map pins image bytes for the
-// window's lifetime. Eviction only costs a refetch.
-// Misses expire after 30s — an avatar can appear at any moment (bot just
-// created, art backfill still running), and a permanent negative cache
-// froze the 🤖 glyph until an app restart.
-const AGENT_AVATAR_CACHE_MAX = 128
-export const agentAvatarCache = new LruCache<string, { at: number; url: null | string }>(AGENT_AVATAR_CACHE_MAX)
-const AVATAR_MISS_TTL_MS = 30_000
-const agentAvatarInflight = new Map<string, Promise<null | string>>()
-
-export async function resolveAgentAvatar(handle: string): Promise<null | string> {
-  const key = handle.trim().toLowerCase()
-
-  if (!key) {
-    return null
-  }
-
-  const hit = agentAvatarCache.get(key)
-
-  if (hit) {
-    if (hit.url !== null) {
-      return hit.url
-    }
-
-    // Negative entry: honor it only within the TTL, then re-probe.
-    if (Date.now() - hit.at < AVATAR_MISS_TTL_MS) {
-      return null
-    }
-  }
-
-  const inflight = agentAvatarInflight.get(key)
-
-  if (inflight) {
-    return inflight
-  }
-
-  const run = (async (): Promise<null | string> => {
-    try {
-      const gateway = $gateway.get()
-
-      if (!gateway) {
-        return null
-      }
-
-      const res = await gateway.request<{ profiles?: Array<{ has_avatar?: boolean; name: string }> }>('profiles.list', {
-        include_sessions: false
-      })
-
-      const profiles = res?.profiles ?? []
-      let profile = profiles.find(p => p.name.toLowerCase() === key)
-
-      // 'hermes' is the conventional alias for the primary profile.
-      if (!profile && key === 'hermes') {
-        profile = profiles.find(p => p.name === 'default')
-      }
-
-      if (!profile?.has_avatar) {
-        return null
-      }
-
-      const asset = await gateway.request<{ data?: string; found?: boolean }>('profiles.get_asset', {
-        asset: 'avatar',
-        name: profile.name
-      })
-
-      return asset?.found && asset.data ? asset.data : null
-    } catch {
-      // Older gateway (no profiles.* RPCs) or transient failure — the 🤖
-      // glyph fallback is always correct.
-      return null
-    } finally {
-      agentAvatarInflight.delete(key)
-    }
-  })()
-
-  agentAvatarInflight.set(key, run)
-  const out = await run
-  agentAvatarCache.set(key, { at: Date.now(), url: out })
-
-  return out
-}
-
 const AgentMessageNote: FC<{ text: string }> = ({ text }) => {
   const match = AGENT_MESSAGE_RE.exec(text)
   const sender = (match?.[1] || match?.[3] || 'agent').trim()
   const handle = (match?.[2] || match?.[3] || sender).trim()
   const body = (match?.[4] || '').trim()
-  const [avatar, setAvatar] = useState<null | string>(() => agentAvatarCache.get(handle.toLowerCase())?.url ?? null)
+  const botChat = useSurfacePersona() !== null
 
-  useEffect(() => {
-    let live = true
-
-    void resolveAgentAvatar(handle).then(url => {
-      if (live && url) {
-        setAvatar(url)
-      }
-    })
-
-    return () => {
-      live = false
-    }
-  }, [handle])
-
-  // Grok-bots shape: an inter-agent delivery is a timeline EVENT, not a
-  // conversation bubble — a subtle centered notice ("Message from 🤖 X"),
-  // with the delivered text one click away instead of shouting in the
-  // transcript. The recipient's reply below it stays a normal assistant
-  // message, so the exchange still reads in order.
   return (
     <div
       className="flex max-w-[min(86%,44rem)] flex-col gap-0.5 self-center px-2 py-0.5 text-[0.6875rem] leading-5 text-muted-foreground/60"
       data-slot="aui_agent-message-note"
     >
       <span className="flex items-center justify-center gap-1.5">
-        {avatar ? (
-          <img alt="" aria-hidden className="size-4 shrink-0 rounded-full object-cover" src={avatar} />
-        ) : (
-          <span aria-hidden className="text-[0.8125rem] leading-none">
-            🤖
-          </span>
-        )}
+        <AgentGlyph handle={handle} />
         <span className="wrap-anywhere">Message from {sender}</span>
       </span>
-      {body && (
+      {body && !botChat && (
         <details className="self-center">
           <summary className="cursor-pointer select-none text-center text-muted-foreground/45 hover:text-muted-foreground/70">
             show message
@@ -392,18 +288,19 @@ function TouchUserBubble({
  *  dominate the viewport while the response streams underneath. On a mouse the
  *  clamp lifts only in the edit composer (see styles.css), never on hover.
  *  Touch and watch windows open no editor on tap, so there an explicit
- *  `expanded` toggle lifts the clamp instead. We measure the *unclamped* inner
+ *  `expanded` toggle lifts the clamp instead. A bot chat shows its prompts
+ *  whole, so it never clamps. We measure the *unclamped* inner
  *  wrapper so the ResizeObserver only fires on real content / width changes,
  *  not on every frame while the outer max-height animates open, and compare it
  *  with the clamp's own max-height so the fade and toggle only appear when
  *  text is actually hidden. */
-function useUserBubbleClamp(readOnly: boolean, touch: boolean) {
+function useUserBubbleClamp(readOnly: boolean, touch: boolean, neverClamp: boolean) {
   const clampInnerRef = useRef<HTMLDivElement | null>(null)
   const [bodyClamped, setBodyClamped] = useState(false)
   const lastClampHeightRef = useRef(-1)
   const clampHeightRef = useRef(0)
   const [expanded, setExpanded] = useState(false)
-  const clampActive = !(expanded && (readOnly || touch))
+  const clampActive = !neverClamp && !(expanded && (readOnly || touch))
 
   const measureClamp = useCallback((entries: readonly ResizeObserverEntry[]) => {
     const inner = clampInnerRef.current
@@ -493,8 +390,9 @@ export const UserMessage: FC<{
   // Watch windows spectate a subagent run driven elsewhere — prompts can't be
   // edited, restored, or stopped from here. The bubble stays a button that
   // toggles the 2-line clamp so long prompts are still fully readable.
+  const botChat = useSurfacePersona() !== null
   const readOnly = isWatchWindow()
-  const { bodyClamped, clampActive, clampInnerRef, expanded, setExpanded } = useUserBubbleClamp(readOnly, touch)
+  const { bodyClamped, clampActive, clampInnerRef, expanded, setExpanded } = useUserBubbleClamp(readOnly, touch, botChat)
 
   // Injected background-process notification, not a human prompt — render the
   // compact system-style notice (after all hooks above have run).

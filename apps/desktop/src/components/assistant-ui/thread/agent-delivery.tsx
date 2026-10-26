@@ -1,9 +1,10 @@
 import { type ToolCallMessagePartProps } from '@assistant-ui/react'
-import { type FC, useEffect, useState } from 'react'
+import { type FC } from 'react'
 
+import { AgentGlyph } from '@/components/assistant-ui/thread/agent-glyph'
 import { messageContentText } from '@/components/assistant-ui/thread/content'
 import { AGENT_MESSAGE_RE } from '@/components/assistant-ui/thread/content'
-import { agentAvatarCache, resolveAgentAvatar } from '@/components/assistant-ui/thread/user-message'
+import { useSurfacePersona } from '@/store/chat-persona'
 
 // Sender-side inter-agent delivery: `hermes -p <agent> chat … -q "Message
 // from 🤖 <sender>…"` run through the terminal tool IS the messaging
@@ -122,36 +123,11 @@ export function replyTextFromResult(result: unknown): string {
 const NOTICE_CLASS =
   'flex max-w-[min(86%,44rem)] flex-col gap-0.5 self-center px-2 py-0.5 text-[0.6875rem] leading-5 text-muted-foreground/60'
 
-export const AgentGlyph: FC<{ handle: string }> = ({ handle }) => {
-  const [avatar, setAvatar] = useState<null | string>(() => agentAvatarCache.get(handle.toLowerCase())?.url ?? null)
-
-  useEffect(() => {
-    let live = true
-
-    void resolveAgentAvatar(handle).then(url => {
-      if (live && url) {
-        setAvatar(url)
-      }
-    })
-
-    return () => {
-      live = false
-    }
-  }, [handle])
-
-  return avatar ? (
-    <img alt="" aria-hidden className="size-4 shrink-0 rounded-full object-cover" src={avatar} />
-  ) : (
-    <span aria-hidden className="text-[0.8125rem] leading-none">
-      🤖
-    </span>
-  )
-}
-
 /** "Messaged X" (+ "Message from X" once the reply lands) for a delivery
  *  command run via the terminal tool. Returns null when the command is not
  *  a delivery — caller falls through to the normal terminal row. */
 export const AgentDeliveryNotice: FC<ToolCallMessagePartProps> = props => {
+  const botChat = useSurfacePersona() !== null
   const command = typeof props.args?.command === 'string' ? props.args.command : ''
   const target = deliveryTargetFromCommand(command)
 
@@ -181,14 +157,16 @@ export const AgentDeliveryNotice: FC<ToolCallMessagePartProps> = props => {
             <AgentGlyph handle={target} />
             <span className="wrap-anywhere">Message from {target}</span>
           </span>
-          <details className="self-center">
-            <summary className="cursor-pointer select-none text-center text-muted-foreground/45 hover:text-muted-foreground/70">
-              show message
-            </summary>
-            <div className="mt-1 max-w-[36rem] whitespace-pre-wrap rounded-lg border border-(--ui-stroke-tertiary) px-3 py-2 text-left text-[0.75rem] leading-5 text-foreground/85">
-              {replyBody}
-            </div>
-          </details>
+          {!botChat && (
+            <details className="self-center">
+              <summary className="cursor-pointer select-none text-center text-muted-foreground/45 hover:text-muted-foreground/70">
+                show message
+              </summary>
+              <div className="mt-1 max-w-[36rem] whitespace-pre-wrap rounded-lg border border-(--ui-stroke-tertiary) px-3 py-2 text-left text-[0.75rem] leading-5 text-foreground/85">
+                {replyBody}
+              </div>
+            </details>
+          )}
         </div>
       )}
     </div>

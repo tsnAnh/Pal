@@ -1659,6 +1659,7 @@ export { ListRow, ToggleRow } from '@/app/settings/primitives'
  *  decoupled (the "manage keys" deep link is a no-op outside the router); pass
  *  `toolset`, optional `onConfiguredChange`, and an optional `profile`. */
 export { ToolsetConfigPanel } from '@/app/settings/toolset-config-panel'
+export { AccountPill } from '@/app/shell/account-pill'
 /** THE model catalog menu — the same searchable, provider-grouped, family-
  *  collapsing picker the chat composer uses, including the per-row
  *  thinking/effort/fast submenu. Drive it with a `ModelMenuController`: the
@@ -1901,7 +1902,8 @@ export {
   type TranscriptDirectiveProps
 } from '@/lib/transcript-directives'
 export { cn } from '@/lib/utils'
-export { type ChatPersona, setChatPersonas } from '@/store/chat-persona'
+export { $botChromeless } from '@/store/bot-surface'
+export { type ChatPersona, setChatPersonas, setHandlePersonas } from '@/store/chat-persona'
 export { gatewayActivationEpoch, useGatewayActivationEpoch } from '@/store/gateway'
 /** THE unread store behind `SessionStatusDot`'s emerald dot. A plugin that
  *  learns out-of-band that a session produced something the user hasn't seen

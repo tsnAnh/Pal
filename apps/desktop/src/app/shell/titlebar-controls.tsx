@@ -18,6 +18,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { hostHas } from '@/lib/host-capabilities'
 import { formatModifierToken } from '@/lib/keybinds/combo'
 import { cn } from '@/lib/utils'
+import { $botChromeless } from '@/store/bot-surface'
 import { recordAction } from '@/store/desktop-metrics'
 import { canUseHud, toggleHud } from '@/store/hud'
 import { $interfaceMode, shownInMode, type Tiered } from '@/store/interface-mode'
@@ -189,6 +190,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   const location = useLocation()
   const modHeld = useModifierHeld()
   const botsOnly = useStore($hiddenStripTabs).has('sessions')
+  const chromeless = useStore($botChromeless)
   const panesFlipped = useStore($panesFlipped)
   const unreadCount = useStore($unreadSessionCount)
   const appActionsSide = useStore($titlebarAppActionsSide)
@@ -368,7 +370,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
   const visibleRightFixedTools = [flipTool, rightSidebarTool].filter(visibleTool)
 
   return (
-    <>
+    <div className={chromeless ? 'hidden' : 'contents'}>
       <div aria-label={t.shell.windowControls} className={leftClusterClass} data-titlebar-cluster="left">
         {visibleLeftTools.map(tool => (
           <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
@@ -405,7 +407,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         ))}
         <Slot area="titleBar.right" />
       </div>
-    </>
+    </div>
   )
 }
 

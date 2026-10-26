@@ -1,4 +1,4 @@
-import { $hiddenStripTabs, host, useI18n, useValue } from '@hermes/plugin-sdk'
+import { $hiddenStripTabs, AccountPill, host, useI18n, useValue } from '@hermes/plugin-sdk'
 import { useEffect, useRef, useState } from 'react'
 
 import { BotRow } from './bot-row'
@@ -568,6 +568,7 @@ export function BotsPane() {
             renderUserSections,
             renderHiddenGatewaySection
           })}
+      <AccountPill />
       {renderRosterDialogs({
         b,
         t,

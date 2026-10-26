@@ -542,10 +542,12 @@ const AssistantPreviewEmbeds: FC = () => {
  * retires it — the working tree it describes is already history by then.
  */
 const SettledChangedFiles: FC = () => {
+  const botChat = useSurfacePersona() !== null
+
   const settledParts = useAuiState(s => {
     const isLastMessage = s.thread.messages[s.thread.messages.length - 1]?.id === s.message.id
 
-    return s.message.status?.type === 'running' || !isLastMessage ? EMPTY_PARTS : s.message.parts
+    return botChat || s.message.status?.type === 'running' || !isLastMessage ? EMPTY_PARTS : s.message.parts
   })
 
   return <ChangedFilesCard parts={settledParts} />

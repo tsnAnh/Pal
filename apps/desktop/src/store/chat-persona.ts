@@ -5,7 +5,6 @@ import { createContext, type ReactNode, useContext } from 'react'
 export interface ChatPersona {
   avatar: (size: number) => ReactNode
   name: string
-  openProfile?: () => void
 }
 
 export const $chatPersonas = atom<Readonly<Record<string, ChatPersona>>>({})
@@ -20,6 +19,21 @@ export function setChatPersonas(personas: Readonly<Record<string, ChatPersona>>)
   if (!samePersonas($chatPersonas.get(), personas)) {
     $chatPersonas.set(personas)
   }
+}
+
+export const $handlePersonas = atom<Readonly<Record<string, ChatPersona>>>({})
+
+export function setHandlePersonas(personas: Readonly<Record<string, ChatPersona>>): void {
+  if (!samePersonas($handlePersonas.get(), personas)) {
+    $handlePersonas.set(personas)
+  }
+}
+
+export function useHandlePersona(handle: null | string | undefined): ChatPersona | null {
+  const personas = useStore($handlePersonas)
+  const key = handle?.trim().toLowerCase()
+
+  return key && Object.hasOwn(personas, key) ? personas[key] : null
 }
 
 export function useChatPersona(storedSessionId: null | string | undefined): ChatPersona | null {

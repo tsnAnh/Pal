@@ -1,11 +1,10 @@
-import { type ChatPersona, host, setChatPersonas } from '@hermes/plugin-sdk'
+import { type ChatPersona, setChatPersonas, setHandlePersonas } from '@hermes/plugin-sdk'
 
 import { avatarColor, botAppearance, BotFace } from './avatar'
 import { isBackfilledFacePng } from './avatar-image'
-import { $botMeta, $lastRoster } from './data'
+import { $botMeta, $lastRoster, botHandle } from './data'
 import { displayName } from './labels'
 import { botRosterMeta } from './routing'
-import { ID } from './shared'
 import type { RosterRow } from './types'
 
 let personaCache = new Map<string, ChatPersona>()
@@ -26,7 +25,6 @@ function personaFor(bot: RosterRow, live: Map<string, ChatPersona>): ChatPersona
 
   const persona: ChatPersona = {
     name,
-    openProfile: typeof host.revealPane === 'function' ? () => host.revealPane(`${ID}:routines`) : undefined,
     avatar: size => (
       <BotFace
         color={avatarColor(color, bot.name)}
@@ -44,36 +42,58 @@ function personaFor(bot: RosterRow, live: Map<string, ChatPersona>): ChatPersona
   return persona
 }
 
-function personas(roster: readonly RosterRow[]): Record<string, ChatPersona> {
-  const out: Record<string, ChatPersona> = {}
+function handleKey(value: string): string {
+  return value.trim().toLowerCase()
+}
+
+function claimHandle(byHandle: Record<string, ChatPersona>, key: string, persona: ChatPersona): void {
+  if (key && !Object.hasOwn(byHandle, key)) {
+    byHandle[key] = persona
+  }
+}
+
+function personas(roster: readonly RosterRow[]): {
+  byHandle: Record<string, ChatPersona>
+  bySession: Record<string, ChatPersona>
+} {
+  const byHandle: Record<string, ChatPersona> = {}
+  const bySession: Record<string, ChatPersona> = {}
   const live = new Map<string, ChatPersona>()
+  const entries = roster.map(bot => ({ bot, persona: personaFor(bot, live) }))
 
-  for (const bot of roster) {
-    const ids = [bot.canonical_session?.id, bot.canonical_session?.resolved_id].filter((id): id is string =>
-      Boolean(id)
-    )
+  for (const { bot, persona } of entries) {
+    claimHandle(byHandle, handleKey(bot.name), persona)
+  }
 
-    if (!ids.length) {
-      continue
+  for (const { bot, persona } of entries) {
+    claimHandle(byHandle, handleKey(botHandle(bot.name, bot)), persona)
+
+    if (handleKey(bot.name) === 'default') {
+      claimHandle(byHandle, 'hermes', persona)
     }
+  }
 
-    const persona = personaFor(bot, live)
-
-    for (const id of ids) {
-      out[id] = persona
+  for (const { bot, persona } of entries) {
+    for (const id of [bot.canonical_session?.id, bot.canonical_session?.resolved_id]) {
+      if (id) {
+        bySession[id] = persona
+      }
     }
   }
 
   personaCache = live
 
-  return out
+  return { byHandle, bySession }
 }
 
 export function startBotChatPersonas(): () => void {
   const apply = () => {
     const roster = $lastRoster.get()
 
-    setChatPersonas(personas(Array.isArray(roster) ? roster : []))
+    const { byHandle, bySession } = personas(Array.isArray(roster) ? roster : [])
+
+    setChatPersonas(bySession)
+    setHandlePersonas(byHandle)
   }
 
   const stops = [$lastRoster, $botMeta].map(store => store.listen(apply))
@@ -84,5 +104,6 @@ export function startBotChatPersonas(): () => void {
     stops.forEach(stop => stop())
     personaCache.clear()
     setChatPersonas({})
+    setHandlePersonas({})
   }
 }

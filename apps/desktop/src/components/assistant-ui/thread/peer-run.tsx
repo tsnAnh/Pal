@@ -4,7 +4,8 @@ import { type ComponentProps, type FC, useState } from 'react'
 
 import { useI18n } from '@/i18n'
 
-import { AgentGlyph, dispatchedTo } from './agent-delivery'
+import { dispatchedTo } from './agent-delivery'
+import { AgentGlyph } from './agent-glyph'
 import { messageContentText } from './content'
 import { AGENT_MESSAGE_RE } from './content'
 import { ResponseMessages } from './response-group'

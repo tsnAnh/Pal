@@ -62,7 +62,13 @@ vi.mock('@hermes/plugin-sdk', async () => {
   })
 })
 
-vi.mock('./avatar', () => ({ startFaceClock: vi.fn(), stopFaceClock: vi.fn() }))
+vi.mock('./avatar', () => ({
+  avatarColor: vi.fn(() => '#000000'),
+  botAppearance: vi.fn(() => ({ color: '#000000', image: null, shape: 'round' })),
+  BotFace: () => null,
+  startFaceClock: vi.fn(),
+  stopFaceClock: vi.fn()
+}))
 vi.mock('./canonical-chat', () => ({
   CANONICAL_CHAT_TITLE: 'Bot Chat',
   isCanonicalChatOnScreen: vi.fn(() => false),

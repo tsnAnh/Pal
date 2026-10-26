@@ -6,7 +6,6 @@ export const zhHantChat = {
     wakingProfile: profile => `正在喚醒 ${profile}…`,
     placeholderStarting: '正在啟動 Hermes...',
     placeholderBot: name => `傳訊息給 ${name}`,
-    openBotProfile: name => `開啟 ${name} 的資料`,
     placeholderReconnecting: '正在重新連線至 Hermes…',
     placeholderFollowUp: '傳送後續訊息',
     newSessionPlaceholders: [

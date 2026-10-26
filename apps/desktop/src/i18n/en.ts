@@ -3290,7 +3290,6 @@ export const en: Translations = {
     wakingProfile: profile => `Waking up ${profile}…`,
     placeholderStarting: 'Starting Hermes...',
     placeholderBot: name => `Message ${name}`,
-    openBotProfile: name => `Open ${name}'s profile`,
     placeholderReconnecting: 'Reconnecting to Hermes…',
     placeholderFollowUp: 'Send follow-up',
     newSessionPlaceholders: [

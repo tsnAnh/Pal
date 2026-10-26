@@ -2896,7 +2896,6 @@ export interface Translations extends NoticeTranslations {
     wakingProfile: (profile: string) => string
     placeholderStarting: string
     placeholderBot: (name: string) => string
-    openBotProfile: (name: string) => string
     placeholderReconnecting: string
     placeholderFollowUp: string
     newSessionPlaceholders: readonly string[]

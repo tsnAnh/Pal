@@ -1,5 +1,8 @@
+import { computed } from 'nanostores'
+
 import { Codecs, persistentAtom } from '@/lib/persisted'
 import { readKey } from '@/lib/storage'
+import { $botChromeless, $botStatusbarShown } from '@/store/bot-surface'
 import { modeBound } from '@/store/interface-mode'
 
 // v1 (`hermes.desktop.statusbarHidden`) was seeded with the approval pill
@@ -24,8 +27,21 @@ export const $statusbarVisible = modeBound('statusbarVisible', $statusbarVisible
   $statusbarVisiblePref.set(value)
 )
 
+export const $statusbarShown = computed(
+  [$botChromeless, $botStatusbarShown, $statusbarVisible],
+  (chromeless, forced, preferred) => (chromeless ? forced : preferred)
+)
+
+export function setStatusbarShown(shown: boolean) {
+  if ($botChromeless.get()) {
+    $botStatusbarShown.set(shown)
+  } else {
+    $statusbarVisible.set(shown)
+  }
+}
+
 export function toggleStatusbarVisible() {
-  $statusbarVisible.set(!$statusbarVisible.get())
+  setStatusbarShown(!$statusbarShown.get())
 }
 
 // Items the bar hides until the user turns them on from its context menu. The

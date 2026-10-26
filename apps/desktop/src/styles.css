@@ -2219,6 +2219,7 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 [data-bot-chat] [data-slot='aui_thread-content'] {
   max-width: calc(var(--composer-width) + 3rem);
+  padding-top: 3.25rem;
 }
 
 [data-bot-chat] [data-bubble-frame] {
@@ -2260,6 +2261,10 @@ body.guest-pointer-lock :is(webview, iframe) {
   border-radius: 12px;
   padding: 5px 14px;
   background: var(--bot-reply-card);
+}
+
+[data-bot-chat] [data-slot='aui_assistant-message-root']:has([data-bubble='assistant']:empty) {
+  display: none;
 }
 
 /* Tool/thinking blocks now live at message-text alignment (no leading

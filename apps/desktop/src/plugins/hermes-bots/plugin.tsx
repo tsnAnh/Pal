@@ -479,6 +479,7 @@ export default {
         width: '260px',
         collapsible: true,
         hideOnly: true,
+        ownsTitlebarRow: true,
         tabTitle: () => <LocalizedTabTitle select={t => t.common.bots} />,
         tabTitleText: () => translateNow('common.bots'),
         switcherIcon: 'hubot',

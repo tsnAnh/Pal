@@ -1,4 +1,5 @@
 import {
+  $botChromeless,
   $hiddenStripTabs,
   Button,
   cn,
@@ -28,13 +29,14 @@ export const SESSIONS_PANE = 'sessions'
 
 function TitlebarLift({ children, lifted }: { children: ReactNode; lifted: boolean }) {
   const anchorRef = useRef<HTMLDivElement>(null)
+  const chromeless = useValue($botChromeless)
   const [header, setHeader] = useState<HTMLElement | null>(null)
 
   useLayoutEffect(() => {
-    const zone = lifted ? anchorRef.current?.closest('[data-tree-group]') : null
+    const zone = lifted && !chromeless ? anchorRef.current?.closest('[data-tree-group]') : null
 
     setHeader(zone?.querySelector<HTMLElement>(':scope > [data-panel-header]') ?? null)
-  }, [lifted])
+  }, [lifted, chromeless])
 
   if (lifted && header) {
     return createPortal(
@@ -42,6 +44,18 @@ function TitlebarLift({ children, lifted }: { children: ReactNode; lifted: boole
         {children}
       </div>,
       header
+    )
+  }
+
+  if (chromeless) {
+    return (
+      <div
+        className="flex h-[34px] shrink-0 items-center justify-end px-[19px] [-webkit-app-region:drag]"
+        data-slot="bots-roster-toolbar"
+        ref={anchorRef}
+      >
+        <div className="[-webkit-app-region:no-drag]">{children}</div>
+      </div>
     )
   }
 

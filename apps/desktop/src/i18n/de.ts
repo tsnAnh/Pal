@@ -3725,7 +3725,6 @@ export const deOverrides = {
     wakingProfile: profile => `Wecke ${profile}…`,
     placeholderStarting: 'Hermes wird gestartet…',
     placeholderBot: name => `Nachricht an ${name}`,
-    openBotProfile: name => `Profil von ${name} öffnen`,
     placeholderReconnecting: 'Verbindung zu Hermes wird wiederhergestellt…',
     placeholderFollowUp: 'Folge senden',
     newSessionPlaceholders: [

@@ -35,8 +35,9 @@ import { isTodoToolName } from '@/lib/todos'
 import { type CardToolName, isCardTool, isCardToolName } from '@/lib/tool-render-class'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
+import { useSurfacePersona } from '@/store/chat-persona'
 import { onboardingChatStore } from '@/store/onboarding-session'
-import { $reasoningCollapsedByDefault, $showReasoning } from '@/store/reasoning-disclosure'
+import { $reasoningCollapsedByDefault, useShowReasoning } from '@/store/reasoning-disclosure'
 import { useForcedTextDirection } from '@/store/text-direction'
 import { $showToolActivity } from '@/store/tool-activity'
 
@@ -144,6 +145,7 @@ const failedCallNeedsUser = (part: TimelineToolCallProps): boolean => {
 
 const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   const showToolActivity = useStore($showToolActivity)
+  const botChat = useSurfacePersona() !== null
 
   // todo parts are hoisted to a dedicated panel above the message content.
   if (isTodoToolName(props.toolName)) {
@@ -170,6 +172,10 @@ const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   }
 
   if (isCardToolName(props.toolName)) {
+    if (botChat && props.toolName === 'delegate_task') {
+      return null
+    }
+
     const ToolCard = TOOL_CARDS[props.toolName]
 
     return <ToolCard {...props} />
@@ -178,6 +184,10 @@ const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   // A reloaded transcript holds the model's own call: set_theme reached through the tool_call bridge.
   if (setThemeCall(props.toolName, props.args)) {
     return <ThemeToolPart {...props} />
+  }
+
+  if (botChat && !failedCallNeedsUser(props)) {
+    return null
   }
 
   if (toolLabels(props.args).length > 0) {
@@ -370,7 +380,7 @@ const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; star
   endIndex,
   startIndex
 }) => {
-  const showReasoning = useStore($showReasoning)
+  const showReasoning = useShowReasoning()
   const messageId = useAuiState(s => s.message.id)
   const messageRunning = useAuiState(s => s.message.status?.type === 'running')
 
@@ -442,7 +452,7 @@ const ReasoningTextPart: ReasoningMessagePartComponent = () => {
   // The group above already hides grouped parts; this covers a Reasoning part
   // rendered without a ReasoningGroup wrapper (assistant-ui drops the group
   // when a ChainOfThought component is registered).
-  const showReasoning = useStore($showReasoning)
+  const showReasoning = useShowReasoning()
   const textDirection = useForcedTextDirection()
 
   if (!showReasoning) {

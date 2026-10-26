@@ -6,7 +6,7 @@ import type { ChatMessage } from '@/lib/chat-messages'
 import { withUniqueToolCallIdsWithinMessage } from '@/lib/chat-messages'
 import { coalesceToolOnlyAssistants, createToolMergeCache, toRuntimeMessage } from '@/lib/chat-runtime'
 
-import { isProcessNotice, isSilentInTranscript } from './transcript-silence'
+import { isHiddenNotice, isSilentInTranscript } from './transcript-silence'
 
 // The exact fallback status ExportedMessageRepository.fromBranchableArray uses.
 // Normalization happens HERE, once per message, so the cached record below is
@@ -26,7 +26,7 @@ const FALLBACK_STATUS = getAutoStatus(false, false, false, false, undefined)
  * cache miss keeps identity stable for settled turns, which is what lets the
  * runtime reconcile detect that only the tail moved.
  */
-export function useRuntimeMessageRepository(messages: ChatMessage[]): ExportedMessageRepository {
+export function useRuntimeMessageRepository(messages: ChatMessage[], botChat = false): ExportedMessageRepository {
   const cacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
   const afterNoticeCacheRef = useRef(new WeakMap<ThreadMessage, ThreadMessage>())
   const toolMergeCacheRef = useRef(createToolMergeCache())
@@ -40,8 +40,8 @@ export function useRuntimeMessageRepository(messages: ChatMessage[]): ExportedMe
     let followsHiddenNotice = false
 
     for (const message of coalesceToolOnlyAssistants(messages, toolMergeCacheRef.current)) {
-      if (isSilentInTranscript(message)) {
-        followsHiddenNotice ||= isProcessNotice(message)
+      if (isSilentInTranscript(message, botChat)) {
+        followsHiddenNotice ||= isHiddenNotice(message, botChat)
 
         continue
       }
@@ -98,7 +98,7 @@ export function useRuntimeMessageRepository(messages: ChatMessage[]): ExportedMe
     }
 
     return { headId, messages: items }
-  }, [messages])
+  }, [botChat, messages])
 }
 
 function markedAfterHiddenNotice(message: ThreadMessage, cache: WeakMap<ThreadMessage, ThreadMessage>): ThreadMessage {

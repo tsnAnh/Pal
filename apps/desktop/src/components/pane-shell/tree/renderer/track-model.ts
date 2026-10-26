@@ -81,6 +81,7 @@ interface PaneChrome extends PaneSizing {
   /** No Close in the tab menu — the one surface the app can't lose (the
    *  main workspace). Session tiles share `placement: 'main'` but close. */
   uncloseable?: boolean
+  ownsTitlebarRow?: boolean
   /** Standing chrome tab (sessions / Bots) with NO close verb at all: no ✕,
    *  no middle / ⌘-click, no Close menu rows. It is shown/hidden instead (the
    *  zone menu's Show/Hide rows and a ⌘K toggle, via `setStripTabHidden`).

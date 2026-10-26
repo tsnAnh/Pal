@@ -3714,7 +3714,6 @@ export const esOverrides = {
     wakingProfile: profile => `Despertando ${profile}…`,
     placeholderStarting: 'Iniciando Hermes...',
     placeholderBot: name => `Mensaje para ${name}`,
-    openBotProfile: name => `Abrir el perfil de ${name}`,
     placeholderReconnecting: 'Reconectando con Hermes…',
     placeholderFollowUp: 'Enviar seguimiento',
     newSessionPlaceholders: [

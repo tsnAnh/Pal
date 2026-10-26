@@ -15,11 +15,12 @@ import { getLocalModelsStatus } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { sessionBackgroundResume } from '@/store/background-delegation'
+import { useSurfacePersona } from '@/store/chat-persona'
 import { sessionCompacting } from '@/store/compaction'
 import { $localModelsEnabled } from '@/store/local-models-flag'
 import { sessionAwaitingInput } from '@/store/prompts'
 import { parseModelLoadWait, sessionProviderWait } from '@/store/provider-wait'
-import { $showReasoning } from '@/store/reasoning-disclosure'
+import { useShowReasoning } from '@/store/reasoning-disclosure'
 import { $currentModel, $currentProvider } from '@/store/session'
 import { type DraftingTool, sessionDraftingTool } from '@/store/tool-drafting'
 import type { LocalModelLoadProgress } from '@/types/hermes'
@@ -368,7 +369,8 @@ const TurnActivityRow: FC<TurnActivityRowProps> = ({ active, elapsed, hint, loca
 // AssistantMessage subtree.
 export const TurnActivityIndicator: FC<{ thinking?: boolean }> = ({ thinking = false }) => {
   // Same rule the reasoning disclosure renders by (message-parts.tsx).
-  const showReasoning = useStore($showReasoning)
+  const showReasoning = useShowReasoning()
+  const botChat = useSurfacePersona() !== null
   const activity = useAuiState(s => activitySignature(s.message.content, showReasoning))
 
   // Timestamp of the last visible progress, held from the moment the quiet
@@ -383,7 +385,7 @@ export const TurnActivityIndicator: FC<{ thinking?: boolean }> = ({ thinking = f
   // calls, its ticker names the current one, and it carries its own timer. A
   // second spinner under that adds a line and says nothing new. Silent tools
   // (`todo`, reactions) render nothing, so they narrate nothing.
-  const toolNarrating = useAuiState(s => toolNarratesWait(s.message.content))
+  const toolNarrating = useAuiState(s => toolNarratesWait(s.message.content, !botChat))
 
   // Streaming can lead busy by one view flush on the first turn of a fresh
   // chat. Honor that lead only while this session still has an armed turn

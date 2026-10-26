@@ -3182,7 +3182,6 @@ export const zhOverrides = {
     wakingProfile: profile => `正在唤醒 ${profile}…`,
     placeholderStarting: '正在启动 Hermes…',
     placeholderBot: name => `给 ${name} 发消息`,
-    openBotProfile: name => `打开 ${name} 的资料`,
     placeholderReconnecting: '正在重新连接 Hermes…',
     placeholderFollowUp: '发送后续消息',
     newSessionPlaceholders: [

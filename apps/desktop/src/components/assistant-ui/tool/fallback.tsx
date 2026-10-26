@@ -50,7 +50,7 @@ import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import { recordPreviewArtifact } from '@/store/preview-status'
 import { sessionApprovalRequest } from '@/store/prompts'
-import { $showToolActivity } from '@/store/tool-activity'
+import { useShowToolActivity } from '@/store/tool-activity'
 import { $toolRowDismissed, dismissToolRow } from '@/store/tool-dismiss'
 import { $toolProgressFor, formatToolProgress } from '@/store/tool-progress'
 import {
@@ -1097,7 +1097,7 @@ export const ToolGroupSlot: FC<PropsWithChildren<{ endIndex: number; startIndex:
   endIndex,
   startIndex
 }) => {
-  const showToolActivity = useStore($showToolActivity)
+  const showToolActivity = useShowToolActivity()
 
   // Joined rather than returned as an array: assistant-ui compares selector
   // results with `Object.is` and re-runs them on every store update, so a

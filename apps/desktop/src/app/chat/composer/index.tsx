@@ -1150,7 +1150,8 @@ export function ChatBar({
       disabled={disabled}
       foldVoice={foldVoice}
       hasComposerPayload={hasComposerPayload}
-      hideModelPill={guidedChat || botChat}
+      hideModelPill={guidedChat}
+      hideVoiceConversation={botChat}
       minimal={minimal || chatOnboardingSolo}
       onDictate={dictate}
       onQueue={() => {

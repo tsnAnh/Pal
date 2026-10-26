@@ -17,7 +17,6 @@ import { IntroCopy } from '@/components/onboarding/first-run/intro-copy'
 import { usePaneGroup, usePaneVisible } from '@/components/pane-shell/pane-visibility'
 import { $hoveredTreeGroup, $sessionTileDragging, $sessionTileEdgeHover } from '@/components/pane-shell/tree/store'
 import { PromptOverlays } from '@/components/prompt-overlays'
-import { Codicon } from '@/components/ui/codicon'
 import { TitleMenuTrigger } from '@/components/ui/title-menu-trigger'
 import { type HermesGateway, type ResolvedOwner } from '@/hermes'
 import { useI18n } from '@/i18n'
@@ -164,7 +163,6 @@ function ChatHeader({
   personaSessionId,
   selectedSessionId
 }: ChatHeaderProps) {
-  const { t } = useI18n()
   const sessions = useStore($sessions)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const profiles = useStore($profiles)
@@ -216,7 +214,7 @@ function ChatHeader({
   if (persona) {
     return (
       <div className="pointer-events-none absolute inset-x-0 top-3 z-3 flex justify-center px-24">
-        <div className="flex min-w-0 max-w-full items-center gap-1.5">
+        <div className="flex min-w-0 max-w-full items-center">
           {actionsMenu(
             <button
               className={cn(
@@ -228,20 +226,8 @@ function ChatHeader({
             >
               <span className="grid shrink-0 place-items-center">{persona.avatar(20)}</span>
               <span className="truncate">{persona.name}</span>
-              <Codicon className="shrink-0 text-(--ui-text-tertiary)" name="chevron-down" size="0.8125rem" />
             </button>
           )}
-          {persona.openProfile ? (
-            <button
-              aria-label={t.composer.openBotProfile(persona.name)}
-              className="pointer-events-auto grid size-7 shrink-0 place-items-center rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/80 text-(--ui-text-secondary) backdrop-blur-md hover:bg-(--ui-control-hover-background) hover:text-foreground [-webkit-app-region:no-drag]"
-              data-slot="bot-profile-reopen"
-              onClick={persona.openProfile}
-              type="button"
-            >
-              <Codicon name="account" size="0.9375rem" />
-            </button>
-          ) : null}
         </div>
       </div>
     )
@@ -414,7 +400,8 @@ export function ChatRuntimeBoundary({
     runtimeId,
     storedSessionId: storedId
   })
-  const runtimeMessageRepository = useRuntimeMessageRepository(currentMessages)
+  const botChat = useChatPersona(storedId) !== null
+  const runtimeMessageRepository = useRuntimeMessageRepository(currentMessages, botChat)
   // Subscribed (not read imperatively) so the "Show earlier" affordance
   // appears/retires as tail hydrations and backfill pages record their state.
   const transcriptTailStates = useStore($transcriptTailBySessionId)

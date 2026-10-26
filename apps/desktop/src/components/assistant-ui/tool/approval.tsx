@@ -35,7 +35,7 @@ import {
   sessionApprovalRequests,
   sessionApprovalStackSize
 } from '@/store/prompts'
-import { $showToolActivity } from '@/store/tool-activity'
+import { useShowToolActivity } from '@/store/tool-activity'
 import { setToolDisclosureOpen } from '@/store/tool-view'
 
 import { isApprovalActivity } from './approval-activity'
@@ -79,7 +79,7 @@ export const PendingApprovalStack: FC = () => {
 function ApprovalActivity({ floating, visible }: { floating: boolean; visible: boolean }) {
   const { t } = useI18n()
   const reduced = useReducedMotion()
-  const showToolActivity = useStore($showToolActivity)
+  const showToolActivity = useShowToolActivity()
 
   const summary = useAuiState(state => {
     if (!visible) {

@@ -7,6 +7,7 @@ import { usePaneVisible } from '@/components/pane-shell/pane-visibility'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { useStoreSelector } from '@/lib/use-session-slice'
+import { useSurfacePersona } from '@/store/chat-persona'
 import { $hideThreadTimeline } from '@/store/thread-timeline'
 
 import { messageContentText } from './content'
@@ -34,8 +35,9 @@ export const ownViewport = (root: HTMLElement | null): HTMLElement | null =>
 export const ThreadTimeline: FC = () => {
   const paneVisible = usePaneVisible()
   const hidden = useStore($hideThreadTimeline)
+  const botChat = useSurfacePersona() !== null
 
-  return paneVisible && !hidden ? <ActiveThreadTimeline /> : null
+  return paneVisible && !hidden && !botChat ? <ActiveThreadTimeline /> : null
 }
 
 const ActiveThreadTimeline: FC = () => {

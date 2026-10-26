@@ -184,12 +184,31 @@ test('bot roster, chat bubbles and profile panel follow the Grok Bot layout', as
   await expect(profile).toBeVisible({ timeout: 15_000 })
   await expect(profile).toContainText(/alpha/i)
 
-  await expect(page.locator('[data-slot="bot-title-chip"]').filter({ visible: true })).toContainText('alpha')
+  await expect(page.locator('[data-slot="bot-title-chip"]').filter({ visible: true })).toContainText(/alpha/i)
   await expect(
     page
       .locator('[placeholder="Message alpha"], [aria-placeholder="Message alpha"], [data-placeholder="Message alpha"]')
       .filter({ visible: true })
   ).toBeVisible()
+
+  const botSurface = page.locator('[data-chat-surface][data-bot-chat]').filter({ visible: true }).first()
+
+  await expect(
+    botSurface.getByRole('button', { name: /^(Model · |Switch model$|Open model picker$)/ }),
+    'bot composer offers model selection'
+  ).toBeVisible()
+  await expect(
+    botSurface.getByRole('button', { name: 'Start voice conversation' }),
+    'bot composer has no voice-conversation button'
+  ).toHaveCount(0)
+  await expect(
+    botSurface.getByRole('button', { name: 'Voice dictation' }),
+    'bot composer keeps dictation'
+  ).toBeVisible()
+  await expect(
+    botSurface.getByRole('button', { name: /^(Tasks|Previous tasks) \d+\/\d+$/ }),
+    'bot composer status stack carries no todo group'
+  ).toHaveCount(0)
 
   await expect(
     page.getByText('Share usage stats?').filter({ visible: true }),
@@ -259,13 +278,22 @@ test('bot roster, chat bubbles and profile panel follow the Grok Bot layout', as
   await page.getByRole('menuitem', { name: 'Bots-only mode' }).click()
   await expect(switcher, 'pane switcher leaves with the sessions tab').toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Hide sidebar' }), 'sidebar toggle leaves too').toHaveCount(0)
+  await expect(
+    page.locator('[data-tree-group] > [data-panel-header]').filter({ visible: true }),
+    'bots-only mode has no titlebar row'
+  ).toHaveCount(0)
   const plusBox = (await newMenu.boundingBox())!
-  expect(plusBox.y + plusBox.height / 2, '+ sits in the titlebar row').toBeLessThanOrEqual(34)
+  expect(plusBox.y + plusBox.height / 2, '+ sits in the roster top row').toBeLessThanOrEqual(34)
   await expect(page.locator('[data-slot="bots-roster"]').filter({ visible: true })).toBeVisible()
   await expect(sessionsNav, 'sessions surfaces are gone').toHaveCount(0)
   await capture(page, `${process.env.GROK_LAYOUT_SHOT_NAME ?? 'after'}-bots-only`)
 
   await newMenu.click()
   await page.getByRole('menuitem', { name: 'Show sessions' }).click()
-  await expect(switcher, 'switcher returns with the sessions tab').toBeVisible({ timeout: 10_000 })
+  await page.locator('[data-slot="account-pill"]').filter({ visible: true }).click()
+  await expect(
+    page.locator('[data-slot="account-menu"]').getByRole('menuitem', { name: /^Sidebar panes/ }),
+    'pane switching returns to the account menu with the sessions tab'
+  ).toBeVisible({ timeout: 10_000 })
+  await page.keyboard.press('Escape')
 })

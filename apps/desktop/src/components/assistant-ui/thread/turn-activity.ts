@@ -74,8 +74,9 @@ export function activitySignature(content: readonly ActivityPart[], reasoningSho
  * on the bubble, so neither leaves anything on screen to time — a wait on one
  * of those is as unnarrated as a wait on nothing at all.
  */
-export function toolNarratesWait(content: readonly ActivityPart[]): boolean {
+export function toolNarratesWait(content: readonly ActivityPart[], toolRowsShown = true): boolean {
   return content.some(
-    part => part.type === 'tool-call' && !settled(part) && !isSilentTool(part.toolName ?? '') && !isQuestionCard(part)
+    part =>
+      toolRowsShown && part.type === 'tool-call' && !settled(part) && !isSilentTool(part.toolName ?? '') && !isQuestionCard(part)
   )
 }
