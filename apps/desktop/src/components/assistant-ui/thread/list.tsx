@@ -1645,7 +1645,7 @@ const ThreadMessageListInner: FC<ThreadMessageListProps> = ({
       <TurnRow
         components={components}
         group={group}
-        key={rowKeys[group.kind === 'turn' ? group.indices[0] : group.index] ?? group.id}
+        key={rowKeys['indices' in group ? group.indices[0] : group.index] ?? group.id}
         live={isRunning && indexInVisible === visibleGroups.length - 1}
         resetKey={structuralSignature}
         virtualized={indexInVisible < tailStart}

@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { atom } from 'nanostores'
-import type { ComponentProps } from 'react'
+import type { ComponentProps, ReactNode } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const request = vi.hoisted(() => vi.fn())
@@ -18,6 +18,8 @@ vi.mock('@hermes/plugin-sdk', async () => {
     Button: (p: ComponentProps<'button'>) => <button {...p} />,
     Input: (p: ComponentProps<'input'>) => <input {...p} />,
     RowButton: (p: ComponentProps<'button'>) => <button type="button" {...p} />,
+    Codicon: () => null,
+    Tip: ({ children }: { children: ReactNode }) => children,
     host: { ...gateway.host, requestProfile: request } }
 })
 import { host } from '@hermes/plugin-sdk'
