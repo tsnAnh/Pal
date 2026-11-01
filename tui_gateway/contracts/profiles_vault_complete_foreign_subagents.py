@@ -178,11 +178,35 @@ class ProfilesListResult(Result):
 
     profiles: list[ProfileRow] = Field(default_factory=list)
     bot_mode_protocol: bool = True
+    bot_birth_notice: bool = False
+    bot_about_you: bool = False
     install_id: str = ""
 
 
 method("profiles.list", params=ProfilesListParams, result=ProfilesListResult,
        doc="Roster of profiles with previews so a client paints without N follow-up calls.")
+
+
+class BotAboutYouFacts(Result):
+    name: str = ""
+    timezone: str = ""
+
+
+class BotAboutYouGetParams(ProfileParams):
+    pass
+
+
+class BotAboutYouSetParams(ProfileParams):
+    """A key left out is unchanged; ``null`` or blank clears it."""
+
+    name: str | None = None
+    timezone: str | None = None
+
+
+method("bot_mode.about_you.get", params=BotAboutYouGetParams, result=BotAboutYouFacts,
+       doc="Owner facts (name, time zone) shared by every Bot Mode bot on this install.")
+method("bot_mode.about_you.set", params=BotAboutYouSetParams, result=BotAboutYouFacts,
+       doc="Save owner facts install-wide; validates the time zone and answers the normalized values.")
 
 
 class ProfilesCreateParams(ProfileParams):

@@ -4019,6 +4019,22 @@ export interface Translations extends NoticeTranslations {
       alwaysTitle: string
       alwaysDescription: (pattern: string) => string
       alwaysAllow: string
+      allowOnce: string
+      deny: string
+      alwaysDescriptionBot: (pattern: string) => string
+      draftTitle: string
+      draftTo: (recipient: string) => string
+      draftVia: (channel: string) => string
+      draftSubject: (subject: string) => string
+      draftSend: string
+      draftSendEdited: string
+      draftDiscard: string
+      draftEdit: string
+      draftCancelEdit: string
+      draftEditLabel: string
+      draftHeld: string
+      draftExpired: string
+      draftUnviewable: string
     }
     clarify: ClarifyCopy
     themePicker: ThemePickerCopy

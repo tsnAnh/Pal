@@ -40,6 +40,7 @@ import {
   focusedRosterOwner,
   saveSelectedRosterBot
 } from './bot-state'
+import { BotShareSubmenu } from './bot-template-export'
 import { ensureBotMetadata } from './canonical-chat'
 import {
   $botAttention,
@@ -119,6 +120,24 @@ function ActiveStatusDot({ className, storedSessionId }: { className?: string; s
       <SessionStatusDot hideIdle storedSessionId={storedSessionId} />
     </span>
   )
+}
+
+function duplicateBotFromRow(bot: RosterRow, label: string, failedMessage: string) {
+  host.notify({
+    kind: 'info',
+    message: `Duplicating ${label}…`
+  })
+  duplicateBot(bot, $lastRoster.get())
+    .then(name => {
+      queryClient.invalidateQueries({
+        queryKey: ROSTER_KEY
+      })
+      host.notify({
+        kind: 'success',
+        message: `Created ${name} — full copy of ${bot.name}`
+      })
+    })
+    .catch(err => host.notifyError(err, failedMessage))
 }
 
 export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandle, variant = 'row' }: BotRowProps) {
@@ -479,27 +498,10 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
         >
           {groups.length ? b.bot.groupsMenu(groups.join(', ')) : b.bot.manageGroups}
         </ContextMenuItem>
-        <ContextMenuItem
-          onSelect={() => {
-            host.notify({
-              kind: 'info',
-              message: `Duplicating ${displayName(bot, meta)}…`
-            })
-            duplicateBot(bot, $lastRoster.get())
-              .then(name => {
-                queryClient.invalidateQueries({
-                  queryKey: ROSTER_KEY
-                })
-                host.notify({
-                  kind: 'success',
-                  message: `Created ${name} — full copy of ${bot.name}`
-                })
-              })
-              .catch(err => host.notifyError(err, b.bot.duplicateFailed))
-          }}
-        >
+        <ContextMenuItem onSelect={() => duplicateBotFromRow(bot, displayName(bot, meta), b.bot.duplicateFailed)}>
           {b.bot.duplicate}
         </ContextMenuItem>
+        <BotShareSubmenu bot={bot} />
         <ContextMenuSeparator />
         <ContextMenuItem
           onSelect={() => {

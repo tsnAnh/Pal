@@ -337,6 +337,13 @@ declare global {
         filters?: Array<{ extensions: string[]; name: string }>
         title?: string
       }) => Promise<{ canceled?: boolean; path?: string; saved: boolean }>
+      saveBotTemplate?: (request: {
+        data: string
+        suggestedName?: string
+      }) => Promise<{ canceled?: boolean; path?: string; saved: boolean }>
+      openBotTemplate?: () => Promise<
+        { canceled: true } | { canceled: false; data: string; name: string; size: number }
+      >
       writeClipboard: (text: string) => Promise<boolean>
       readClipboard: () => Promise<string>
       saveGatewayFile?: (payload: {

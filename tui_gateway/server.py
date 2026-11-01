@@ -192,7 +192,8 @@ _LONG_HANDLERS = frozenset({
     "learning.frames", "plugins.manage", "plugins.catalog.lookup", "reload.mcp", "mcp.servers.test",
     "mcp.servers.oauth.start",
     "process.list", "profiles.configure", "profiles.create", "profiles.describe", "profiles.get_asset",
-    "profiles.list", "profiles.set_asset", "bot_relay.roster.sync", "bot_relay.outbox.drain",
+    "profiles.list", "profiles.set_asset", "profiles.template.export", "profiles.template.import",
+    "bot_relay.roster.sync", "bot_relay.outbox.drain",
     "bot_relay.deliver", "bot_relay.reply", "image.generate", "projects.discover_repos",
     "projects.record_repos", "projects.for_cwd", "projects.tree", "projects.project_sessions",
     "setup.runtime_check", "setup.status", "free_tier.provision", "voice.toggle", "voice.record", "voice.tts", "wake.start",
@@ -728,8 +729,10 @@ def _emit_approval_request(sid: str, data: dict | None) -> None:
                                                     "(update the Hermes app)")
             return
         choice = str(result.get("choice") or "deny")
+        edited = result.get("edited_text")
         _approval.resolve_gateway_approval(session_key, choice, resolve_all=bool(result.get("all")),
-                                           request_id=request_id or None)
+                                           request_id=request_id or None,
+                                           **({"edited_text": edited} if isinstance(edited, str) else {}))
 
     settle = server_requests.send_async("approval", sid, payload, on_result)
     # The wait can end between the frame going out and the hook attaching (the client answered by RPC, another
@@ -1254,9 +1257,10 @@ def _write_config_keys(updates: dict) -> None:
 _STATUSBAR_MODES = frozenset({"off", "top", "bottom"})
 _APPROVAL_MODES = frozenset({"manual", "smart", "off"})
 
-# Appearance switches the renderer owns but the AGENT must see (each gates a tool's `check_fn`). `config.set`
+# Switches the renderer owns but the AGENT must see (each gates a tool's `check_fn`, or a Bot Mode policy). `config.set`
 # answers 4002 for unlisted keys — a mirrored switch missing here writes nothing and its tool stays dark.
-_DISPLAY_TOGGLE_KEYS = frozenset({"display.message_reactions", "display.in_app_tips", "display.in_app_tours"})
+_DISPLAY_TOGGLE_KEYS = frozenset({
+    "display.message_reactions", "display.in_app_tips", "display.in_app_tours", "bot_mode.drafts"})
 _BOOL_WORDS = {
     "1": True, "on": True, "true": True, "yes": True, "0": False, "off": False, "false": False, "no": False,
 }
@@ -2016,13 +2020,15 @@ from . import (
     methods_bot_relay as _methods_bot_relay,
     methods_complete as _methods_complete, methods_config as _methods_config,
     methods_config_set as _methods_config_set, methods_images as _methods_images,
-    methods_profiles as _methods_profiles, methods_prompt as _methods_prompt, methods_session as _methods_session,
+    methods_profiles as _methods_profiles, methods_profile_templates as _methods_profile_templates,
+    methods_prompt as _methods_prompt, methods_session as _methods_session,
     methods_tools as _methods_tools, methods_tools_plugin_servers as _methods_tools_plugin_servers,
     methods_projects as _methods_projects, methods_session_foreign as _methods_session_foreign,
     methods_session_control as _methods_session_control, methods_subagents as _methods_subagents,
     methods_vault as _methods_vault, methods_free_tier as _methods_free_tier,
     methods_connectors as _methods_connectors, methods_connectors_account as _methods_connectors_account,
     methods_display as _methods_display, methods_display_watch as _methods_display_watch,
+    methods_teach as _methods_teach,
     methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n, methods_machine as _methods_machine,
     methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog)
 
@@ -2033,10 +2039,10 @@ for _m in (
     _prompt_attachments, _session_history, _agent_callbacks, _session_auto_continue, _plugin_inject, _rpc_dispatch,
     _methods_complete_helpers, _methods_slash, _methods_voice, _methods_browser,
     _methods_session, _methods_prompt, _methods_config,
-    _methods_config_set, _methods_complete, _methods_tools, _methods_tools_plugin_servers, _methods_profiles, _methods_images,
+    _methods_config_set, _methods_complete, _methods_tools, _methods_tools_plugin_servers, _methods_profiles, _methods_profile_templates, _methods_images,
     _methods_bot_relay, _prompt_turn, _billing_view, _methods_projects, _methods_session_foreign,
     _methods_session_control, _methods_subagents, _methods_vault, _methods_free_tier, _methods_connectors,
-    _methods_connectors_account, _methods_display, _methods_display_watch, _methods_onboarding,
+    _methods_connectors_account, _methods_display, _methods_display_watch, _methods_teach, _methods_onboarding,
     _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog):
     _m.register(sys.modules[__name__])
 del _m

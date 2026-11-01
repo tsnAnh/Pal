@@ -40,6 +40,7 @@ from gateway.platforms.base import BasePlatformAdapter, SendResult
 from gateway.platforms.event import MessageEvent, MessageType
 from gateway.platforms.tcp_site import start_tcp_site
 from gateway.platforms.webhook_coalesce import WebhookCoalescer, validate_coalesce_config
+from gateway.platforms.webhook_cron_context import cron_event_context
 from gateway.platforms.webhook_filters import DEFAULT_SCRIPT_TIMEOUT_SECONDS, WebhookRouteProcessor
 from gateway.platforms.webhook_mcp_events import (
     handle_mcp_event_control, mcp_event_delivery_id, render_mcp_event_prompt)
@@ -600,8 +601,7 @@ class WebhookAdapter(BasePlatformAdapter):
         the job's own prompt, skills, model and delivery apply. Same auth/rate-limit/filter/script/idempotency
         pipeline as agent routes; 202 immediately, the run happens on a worker thread."""
         job_ref = str(route_config["cron_job"])
-        event_context = (f"This run was triggered by webhook event '{event_type}' on route '{route_name}' "
-                         f"(not the schedule).\n\n{prompt}")
+        event_context = cron_event_context(event_type, route_name, prompt)
         logger.info("[webhook] cron-trigger event=%s route=%s job=%s delivery=%s", event_type, route_name, job_ref,
                     delivery_id)
 

@@ -32,13 +32,24 @@
 import { type PluginLocaleBundles, type PluginTranslate, usePluginI18n } from '@hermes/plugin-sdk'
 import { useMemo } from 'react'
 
+import { ABOUTYOU_LOCALES } from './about-you-locales'
+import { BOT_DETAIL_LOCALES } from './bot-detail-locales'
+import { BOT_TEMPLATE_LOCALES } from './bot-template-locales'
 import { CANONICAL_GROUP_LOCALES } from './canonical-group-locales'
+import { CONNECT_APPS_LOCALES } from './connect-apps-locales'
+import { HANDBACK_LOCALES } from './handback-locales'
 import { bind, type Bound } from './i18n-bind'
 import { type BotsMessages } from './i18n-messages'
+import { ROUTINES_LOCALES } from './routines-locales'
 import { getPluginCtx } from './shared'
+import { VOICE_LOCALES } from './voice-locales'
 
 const en: BotsMessages = {
   canonical: CANONICAL_GROUP_LOCALES.en,
+  routines: ROUTINES_LOCALES.en,
+  voice: VOICE_LOCALES.en,
+  template: BOT_TEMPLATE_LOCALES.en,
+  detail: BOT_DETAIL_LOCALES.en,
   editor: {
     fullConfigHint: 'Full configuration needs a newer gateway (restart it after updating Hermes).',
     liveCapabilities: 'Capabilities (applies immediately — skills, tools, MCP)',
@@ -154,6 +165,8 @@ const en: BotsMessages = {
     waitingForGateway:
       'Waiting for the gateway connection… (remote gateways can take a few seconds; retries automatically)'
   },
+  connectApps: CONNECT_APPS_LOCALES['en'],
+  aboutYou: ABOUTYOU_LOCALES['en'],
   sections: {
     newSection: 'New section',
     newTitle: 'New section',
@@ -215,6 +228,10 @@ const en: BotsMessages = {
     advanced: 'Advanced',
     advancedHint: 'Advanced — model, skills, toolsets, SOUL.md',
     advancedFailed: 'Advanced configuration failed',
+    sendWithoutAsking: 'Send without asking',
+    sendWithoutAskingHint:
+      'Off: anything this bot wants to send for you waits for your Send first. Routines and webhook runs always wait.',
+    sendPolicySaveFailed: 'Could not save the send setting',
     openAnotherChatUnsupported: 'Update Hermes Desktop to open another Bot chat.',
     remoteConnectionsUnsupported: 'Update Hermes Desktop to chat with bots on other connections.',
     openNeedsUpdateTitle: 'This bot lives on an older Hermes',
@@ -225,7 +242,9 @@ const en: BotsMessages = {
     openChatFailedMessage: 'Try again.',
     openGateways: 'Open Gateways',
     chatEmpty: 'Say something to get started.',
-    kickoff: 'Hey, tell me about yourself!'
+    kickoff: 'Hey, tell me about yourself!',
+    birthNotice:
+      'You were just created and your owner has opened this chat. Greet them first, in one or two short sentences: say who you are, and ask what job you should own unless you already have one.'
   },
   avatar: {
     classicShapes: 'Classic shapes',
@@ -356,6 +375,8 @@ const en: BotsMessages = {
     searchHub: 'Search the hub (community + well-known sources)…',
     noMcpServers: 'No MCP servers configured or in the catalog.'
   },
+  handback: HANDBACK_LOCALES['en'],
+
   screen: {
     title: 'Screen',
     menu: 'Open Screen',
@@ -490,6 +511,10 @@ const en: BotsMessages = {
 
 const ja: BotsMessages = {
   canonical: CANONICAL_GROUP_LOCALES.ja,
+  routines: ROUTINES_LOCALES.ja,
+  voice: VOICE_LOCALES.ja,
+  template: BOT_TEMPLATE_LOCALES.ja,
+  detail: BOT_DETAIL_LOCALES.ja,
   editor: {
     fullConfigHint: 'すべての設定を使うには新しいゲートウェイが必要です（Hermes 更新後に再起動してください）。',
     liveCapabilities: '機能（即時適用 — スキル、ツール、MCP）',
@@ -606,6 +631,8 @@ const ja: BotsMessages = {
       `名簿を取得できません: ${reason}。ゲートウェイが profiles.list より前の場合は、Hermes を更新してゲートウェイを再起動してください。`,
     waitingForGateway: 'ゲートウェイ接続を待っています…（リモートは数秒かかることがあります。自動で再試行します）'
   },
+  connectApps: CONNECT_APPS_LOCALES['ja'],
+  aboutYou: ABOUTYOU_LOCALES['ja'],
   sections: {
     newSection: '新しいセクション',
     newTitle: '新しいセクション',
@@ -667,6 +694,10 @@ const ja: BotsMessages = {
     advanced: '詳細設定',
     advancedHint: '詳細設定 — モデル、スキル、ツールセット、SOUL.md',
     advancedFailed: '詳細設定に失敗しました',
+    sendWithoutAsking: '確認なしで送信',
+    sendWithoutAskingHint:
+      'オフ: このボットがあなたに代わって送るものは、あなたが送信するまで待機します。ルーティンと Webhook 実行は常に待機します。',
+    sendPolicySaveFailed: '送信設定を保存できませんでした',
     openAnotherChatUnsupported: '別のボットチャットを開くには Hermes Desktop を更新してください。',
     remoteConnectionsUnsupported: '他の接続上のボットとチャットするには Hermes Desktop を更新してください。',
     openNeedsUpdateTitle: 'このボットは古い Hermes 上で動いています',
@@ -677,7 +708,9 @@ const ja: BotsMessages = {
     openChatFailedMessage: 'もう一度お試しください。',
     openGateways: 'ゲートウェイを開く',
     chatEmpty: '何か書いて始めましょう。',
-    kickoff: 'こんにちは、自己紹介をしてください！'
+    kickoff: 'こんにちは、自己紹介をしてください！',
+    birthNotice:
+      'あなたは作成されたばかりで、ユーザーがこのチャットを開きました。まず一、二文の短い挨拶をしてください。自分が誰かを伝え、まだ担当する仕事がなければ、何を担当すればよいか尋ねてください。日本語で返答してください。'
   },
   avatar: {
     classicShapes: 'クラシックシェイプ',
@@ -808,6 +841,8 @@ const ja: BotsMessages = {
     searchHub: 'ハブを検索（コミュニティと既知のソース）…',
     noMcpServers: '設定済みまたはカタログ内の MCP サーバーはありません。'
   },
+  handback: HANDBACK_LOCALES['ja'],
+
   screen: {
     title: '画面',
     menu: '画面を開く',
@@ -945,6 +980,10 @@ const ja: BotsMessages = {
 
 const zh: BotsMessages = {
   canonical: CANONICAL_GROUP_LOCALES.zh,
+  routines: ROUTINES_LOCALES.zh,
+  voice: VOICE_LOCALES.zh,
+  template: BOT_TEMPLATE_LOCALES.zh,
+  detail: BOT_DETAIL_LOCALES.zh,
   editor: {
     fullConfigHint: '完整配置需要更新网关（更新 Hermes 后请重启网关）。',
     liveCapabilities: '功能（立即生效 — 技能、工具、MCP）',
@@ -1054,6 +1093,8 @@ const zh: BotsMessages = {
     rosterUnavailable: reason => `无法获取名单：${reason}。如果网关早于 profiles.list，请更新 Hermes 并重启网关。`,
     waitingForGateway: '正在等待网关连接…（远程网关可能需要几秒；会自动重试）'
   },
+  connectApps: CONNECT_APPS_LOCALES['zh'],
+  aboutYou: ABOUTYOU_LOCALES['zh'],
   sections: {
     newSection: '新建分区',
     newTitle: '新建分区',
@@ -1112,6 +1153,10 @@ const zh: BotsMessages = {
     advanced: '高级',
     advancedHint: '高级 — 模型、技能、工具集、SOUL.md',
     advancedFailed: '高级配置失败',
+    sendWithoutAsking: '无需确认直接发送',
+    sendWithoutAskingHint:
+      '关闭时：该机器人替你发出的内容会先等你点击发送。例行任务和 Webhook 运行始终会等待。',
+    sendPolicySaveFailed: '无法保存发送设置',
     openAnotherChatUnsupported: '请更新 Hermes Desktop 以打开另一个机器人聊天。',
     remoteConnectionsUnsupported: '请更新 Hermes Desktop 以与其他连接上的机器人聊天。',
     openNeedsUpdateTitle: '这个机器人运行在较旧的 Hermes 上',
@@ -1122,7 +1167,9 @@ const zh: BotsMessages = {
     openChatFailedMessage: '请重试。',
     openGateways: '打开网关',
     chatEmpty: '说点什么开始吧。',
-    kickoff: '你好，介绍一下你自己吧！'
+    kickoff: '你好，介绍一下你自己吧！',
+    birthNotice:
+      '你刚刚被创建，用户已经打开了这个对话。请先用一两句简短的话打招呼：说明你是谁；如果你还没有负责的工作，问问用户希望你负责什么。请用简体中文回复。'
   },
   avatar: {
     classicShapes: '经典形状',
@@ -1250,6 +1297,8 @@ const zh: BotsMessages = {
     searchHub: '搜索技能中心（社区和常见来源）…',
     noMcpServers: '未配置 MCP 服务器，目录中也没有。'
   },
+  handback: HANDBACK_LOCALES['zh'],
+
   screen: {
     title: '屏幕',
     menu: '打开屏幕',
@@ -1383,6 +1432,10 @@ const zh: BotsMessages = {
 
 const zhHant: BotsMessages = {
   canonical: CANONICAL_GROUP_LOCALES['zh-hant'],
+  routines: ROUTINES_LOCALES['zh-hant'],
+  voice: VOICE_LOCALES['zh-hant'],
+  template: BOT_TEMPLATE_LOCALES['zh-hant'],
+  detail: BOT_DETAIL_LOCALES['zh-hant'],
   editor: {
     fullConfigHint: '完整設定需要更新閘道（更新 Hermes 後請重新啟動閘道）。',
     liveCapabilities: '功能（立即生效 — 技能、工具、MCP）',
@@ -1492,6 +1545,8 @@ const zhHant: BotsMessages = {
     rosterUnavailable: reason => `無法取得名單：${reason}。如果閘道早於 profiles.list，請更新 Hermes 並重新啟動閘道。`,
     waitingForGateway: '正在等待閘道連線…（遠端閘道可能需要幾秒；會自動重試）'
   },
+  connectApps: CONNECT_APPS_LOCALES['zh-hant'],
+  aboutYou: ABOUTYOU_LOCALES['zh-hant'],
   sections: {
     newSection: '新增分區',
     newTitle: '新增分區',
@@ -1550,6 +1605,10 @@ const zhHant: BotsMessages = {
     advanced: '進階',
     advancedHint: '進階 — 模型、技能、工具集、SOUL.md',
     advancedFailed: '進階設定失敗',
+    sendWithoutAsking: '無需確認直接傳送',
+    sendWithoutAskingHint:
+      '關閉時：這個機器人代你送出的內容會先等你按下傳送。例行任務和 Webhook 執行一律會等待。',
+    sendPolicySaveFailed: '無法儲存傳送設定',
     openAnotherChatUnsupported: '請更新 Hermes Desktop 以開啟另一個機器人聊天。',
     remoteConnectionsUnsupported: '請更新 Hermes Desktop 以與其他連線上的機器人聊天。',
     openNeedsUpdateTitle: '這個機器人運行在較舊的 Hermes 上',
@@ -1560,7 +1619,9 @@ const zhHant: BotsMessages = {
     openChatFailedMessage: '請再試一次。',
     openGateways: '開啟閘道',
     chatEmpty: '說點什麼開始吧。',
-    kickoff: '你好，介紹一下你自己吧！'
+    kickoff: '你好，介紹一下你自己吧！',
+    birthNotice:
+      '你剛剛被建立，使用者已經開啟了這個對話。請先用一兩句簡短的話打招呼：說明你是誰；如果你還沒有負責的工作，問問使用者希望你負責什麼。請用繁體中文回覆。'
   },
   avatar: {
     classicShapes: '經典形狀',
@@ -1688,6 +1749,8 @@ const zhHant: BotsMessages = {
     searchHub: '搜尋技能中心（社群和常見來源）…',
     noMcpServers: '未設定 MCP 伺服器，目錄中也沒有。'
   },
+  handback: HANDBACK_LOCALES['zh-hant'],
+
   screen: {
     title: '螢幕',
     menu: '開啟螢幕',

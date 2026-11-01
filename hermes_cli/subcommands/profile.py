@@ -73,6 +73,15 @@ def build_profile_parser(subparsers, *, cmd_profile: Callable) -> None:
         "--all", dest="all_missing", action="store_true",
         help="With --auto, run on every profile missing a description")
 
+    profile_about_you = profile_subparsers.add_parser(
+        "about-you",
+        help="Read or set the owner facts (name, time zone) every Bot Mode bot shares",
+        description="Facts about the owner shared by all Bot Mode bots on this install. "
+            "With no flags, prints the saved values.")
+    profile_about_you.add_argument("--name", default=None, help="Owner's name (single line, up to 80 characters)")
+    profile_about_you.add_argument("--timezone", default=None, help="Owner's IANA time zone, e.g. Europe/Paris")
+    profile_about_you.add_argument("--clear", action="store_true", help="Forget both facts")
+
     profile_show = profile_subparsers.add_parser("show", help="Show profile details")
     profile_show.add_argument("profile_name", help="Profile to show")
 

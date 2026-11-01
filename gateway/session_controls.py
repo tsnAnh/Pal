@@ -221,7 +221,7 @@ class AuthorityConnection:
                     'slash.exec': self.slash_exec, 'command.dispatch': self.command_dispatch,
                     'session.list': self.list_sessions, 'session.info': self.info,
                     'session.mutate': self.mutate, 'bot_relay.deliver': self.bot_deliver,
-                    'bot_relay.settle': self.bot_settle,
+                    'bot_relay.settle': self.bot_settle, 'bot_relay.stop': self.bot_stop,
                     'bot_relay.roster.sync': self.bot_roster, 'bot_relay.outbox.drain': self.bot_outbox,
                     'bot_relay.reply': self.bot_reply, 'a2a.forward': self.a2a_forward,
                     'kanban.run': self.kanban_run,
@@ -419,6 +419,10 @@ class AuthorityConnection:
     async def bot_settle(self, ref, params):
         from gateway.session_bot import settle
         return await settle(self, params)
+
+    async def bot_stop(self, ref, params):
+        from gateway.session_bot_stop import stop_delivery
+        return await stop_delivery(self, params)
 
     async def worker_register(self, ref, params):
         from gateway.session_worker import worker_request

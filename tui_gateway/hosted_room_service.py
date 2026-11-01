@@ -548,6 +548,9 @@ class HostedRoomService:
     def send(self, *, room_id: str, event_id: str, payload: Any) -> dict[str, Any]:
         normalized = discussion.validate_user_payload(payload)
         gateway_id, epoch = self._owned_authority(room_id)
+        discussion.validate_reply_target(normalized, self._room(room_id)["members"])
+        if "reply_to" in normalized:
+            discussion.validate_reply_anchor(normalized, self._events(room_id))
         from gateway.session_hosted_attachments import append_user_event
         event = append_user_event(
             self, room_id=room_id, event_id=event_id, payload=normalized,
@@ -586,6 +589,8 @@ class HostedRoomService:
                     pending += 1
         if require_acknowledged and pending:
             raise RuntimeError("room work is still stopping; retry deletion after Stop completes")
+        from tui_gateway.hosted_room_stop import stop_room_member_work
+        stop_room_member_work(self, room_id)
         self.runtime.wakeup()
         return len(tasks)
 

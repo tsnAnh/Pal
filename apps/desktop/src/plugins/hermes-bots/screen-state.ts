@@ -112,3 +112,48 @@ export function setScreenViewer(bot: RosterRow, viewer: ScreenViewer | null): vo
 
   $screenState.set({ ...current, [key]: { status: prev?.status ?? null, lease: prev?.lease ?? null, viewer } })
 }
+
+/** The bot asked a person to take its screen ("Open computer" on a hand-back card). The pane acquires the
+ *  lease once it has a viewer identity; an intent nobody consumed in time is dropped, so a pane that mounts
+ *  much later never takes control on a stale click. */
+export interface ScreenTakeoverIntent {
+  reason: string
+  at: number
+}
+
+export const TAKEOVER_INTENT_TTL_MS = 20_000
+
+export const $takeoverIntents = atom<Record<string, ScreenTakeoverIntent>>({})
+
+export function pruneExpiredTakeoverIntents(now = Date.now()): void {
+  const current = $takeoverIntents.get()
+  const live = Object.entries(current).filter(([, intent]) => now - intent.at <= TAKEOVER_INTENT_TTL_MS)
+
+  if (live.length !== Object.keys(current).length) {
+    $takeoverIntents.set(Object.fromEntries(live))
+  }
+}
+
+export function requestScreenTakeover(bot: RosterRow, reason: string, now = Date.now()): void {
+  pruneExpiredTakeoverIntents(now)
+  $takeoverIntents.set({ ...$takeoverIntents.get(), [botSelectionKey(bot)]: { at: now, reason } })
+}
+
+export function clearScreenTakeover(bot: RosterRow): void {
+  const key = botSelectionKey(bot)
+  const { [key]: dropped, ...rest } = $takeoverIntents.get()
+
+  if (dropped) {
+    $takeoverIntents.set(rest)
+  }
+}
+
+export function liveTakeoverIntent(
+  all: Record<string, ScreenTakeoverIntent>,
+  bot: RosterRow,
+  now = Date.now()
+): ScreenTakeoverIntent | null {
+  const intent = all[botSelectionKey(bot)]
+
+  return intent && now - intent.at <= TAKEOVER_INTENT_TTL_MS ? intent : null
+}

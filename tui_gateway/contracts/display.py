@@ -32,6 +32,8 @@ class DisplayLease(Result):
     since: float
     epoch: int
     reason: str = ""
+    ask: str = ""
+    ask_at: float = 0.0
 
 
 class DisplayImageSwitch(Result):
@@ -155,6 +157,14 @@ class DisplayLeaseReleaseParams(ProfileParams):
 
 method("display.lease.release", params=DisplayLeaseReleaseParams, result=DisplayLeaseResult,
        doc="Hand back. Without a viewer id the release is refused while a human holds unless force.")
+
+
+class DisplayLeaseResolveParams(ProfileParams):
+    ask_at: float | None = None
+
+
+method("display.lease.resolve", params=DisplayLeaseResolveParams, result=DisplayLeaseResult,
+       doc="End the bot's pending hand-back ask (I'm done / Cancel). ask_at limits it to the ask the card showed.")
 
 
 # ── server → client ───────────────────────────────────────────────────────────────────────────

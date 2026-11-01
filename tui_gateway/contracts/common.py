@@ -205,6 +205,19 @@ TERMINAL_SUBAGENT_STATUSES = frozenset({
 })
 
 
+class ApprovalDraft(Params):
+    kind: str = "outbound_message"
+    channel: str = ""
+    recipient: str = ""
+    subject: str = ""
+    text: str = ""
+    editable: bool = False
+    held: bool = False
+    state: Literal["pending", "expired"] = "pending"
+    expires_at: float | None = None
+    origin: str | None = None
+
+
 class PendingApproval(OpenModel):
     """One unresolved ``tools/approval.py`` gateway queue entry as ``server._approval_request_payload``
     renders it (command redacted; ``choices`` precomputed). The key set is owned by the approval tool."""
@@ -218,6 +231,8 @@ class PendingApproval(OpenModel):
     allow_session: bool | None = None
     smart_denied: bool | None = None
     choices: list[str] | None = None
+    scope: str | None = None
+    draft: ApprovalDraft | None = None
     tool_name: str | None = None
 
 

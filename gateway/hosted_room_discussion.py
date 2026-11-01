@@ -29,6 +29,7 @@ MAX_DISCUSSION_ROUNDS = 3
 MAX_DISCUSSION_MESSAGES = 10
 MAX_DISCUSSION_DELTA_LINES = 24
 MAX_USER_TEXT_BYTES = 64 * 1024
+MAX_REPLY_QUOTE_CHARS = 280
 MAX_MEMBER_TEXT_BYTES = 64 * 1024
 _TRUNCATED_REPLY_NOTICE = "\n\n[Reply truncated. Ask the Bot to share the full result as a file.]"
 
@@ -59,6 +60,7 @@ _REMOTE_MEMBER_FIELDS = frozenset({
     "connectionId", "connectionKind", "connectionLabel", "connection_id", "connection_kind", "connection_label",
     "remoteSource", "route", "sourceMissing", "sourceReachable", "sourceScoped", "targetProfile", "target_profile"})
 _USER_PAYLOAD_FIELDS = frozenset({"text", "thread_id"})
+_REPLY_TO_FIELDS = frozenset({"event_id", "member_id", "quote"})
 _TURN_COORDINATE_FIELDS = frozenset(
     {"discussion_event_id", "member_id", "member_index", "round_index", "task_id", "thread_id", "turn_id", })
 _MEMBER_MESSAGE_FIELDS = _TURN_COORDINATE_FIELDS | {"text"}
@@ -210,10 +212,13 @@ def _all_failure_reasons() -> frozenset[str]:
 
 def validate_user_payload(value: Any) -> dict[str, Any]:
     """Validate and normalize the exact ``message.user`` Discussion payload."""
-    payload = _exact_fields(value, label="user payload", required=_USER_PAYLOAD_FIELDS, optional={"attachments"})
+    payload = _exact_fields(
+        value, label="user payload", required=_USER_PAYLOAD_FIELDS, optional={"attachments", "reply_to"})
     normalized: dict[str, Any] = {"thread_id": _identifier(payload["thread_id"], label="thread_id")}
     if "attachments" in payload:
         normalized["attachments"] = _message_manifest(payload["attachments"])
+    if "reply_to" in payload:
+        normalized["reply_to"] = _validate_reply_to(payload["reply_to"])
     text = payload["text"]
     if not isinstance(text, str) or len(text.encode("utf-8")) > MAX_USER_TEXT_BYTES:
         raise DiscussionValidationError("user payload text must be a bounded string")
@@ -221,6 +226,38 @@ def validate_user_payload(value: Any) -> dict[str, Any]:
         raise DiscussionValidationError("user payload must contain text or attachments")
     normalized["text"] = text.strip()
     return normalized
+
+
+def _validate_reply_to(value: Any) -> dict[str, str]:
+    reply = _exact_fields(value, label="reply_to", required=_REPLY_TO_FIELDS)
+    quote = reply["quote"]
+    if not isinstance(quote, str) or len(quote) > MAX_REPLY_QUOTE_CHARS:
+        raise DiscussionValidationError(f"reply_to quote must be a string of at most {MAX_REPLY_QUOTE_CHARS} characters")
+    return {
+        "event_id": _identifier(reply["event_id"], label="reply_to event_id"),
+        "member_id": _identifier(reply["member_id"], label="reply_to member_id"),
+        "quote": " ".join(quote.split())}
+
+
+def validate_reply_target(payload: Mapping[str, Any], members: Iterable[Any]) -> None:
+    """Reject a reply whose author is not a member of the room the message is sent to."""
+    reply = payload.get("reply_to")
+    if reply is not None and reply["member_id"] not in {
+            member["member_id"] if isinstance(member, Mapping) else member.member_id for member in members}:
+        raise DiscussionValidationError("reply_to names a member that is not in this room")
+
+
+def validate_reply_anchor(payload: Mapping[str, Any], events: Iterable[Mapping[str, Any]]) -> None:
+    """Reject a reply whose event is not in the room log or was not written by the member it names."""
+    reply = payload.get("reply_to")
+    if reply is None:
+        return
+    anchor = next((event for event in events if event.get("event_id") == reply["event_id"]), None)
+    if anchor is None:
+        raise DiscussionValidationError("reply_to event is not in this room's log")
+    actor = anchor.get("actor") or {}
+    if anchor.get("kind") != "message.member" or actor.get("id") != reply["member_id"]:
+        raise DiscussionValidationError("reply_to event was not written by the member it names")
 
 
 def _message_manifest(value: Any) -> list[dict[str, Any]]:
@@ -349,6 +386,22 @@ def resolve_mentions(
     return tuple(member for member in members if member.handle.casefold() in mentioned)
 
 
+def explicit_user_addressees(
+    payload: Payload, members: Sequence[DiscussionMember]) -> tuple[DiscussionMember, ...]:
+    """Members a user message names: its @mentions (``@everyone`` names each member) plus the author
+    of a replied-to message."""
+    addressed = resolve_mentions((str(payload["text"]),), members, default_all=False)
+    reply = payload.get("reply_to")
+    if reply is None:
+        return addressed
+    return tuple(member for member in members if member in addressed or member.member_id == reply["member_id"])
+
+
+def user_addressees(payload: Payload, members: Sequence[DiscussionMember]) -> tuple[DiscussionMember, ...]:
+    """Members a user message wakes: the ones it names, else the whole room."""
+    return explicit_user_addressees(payload, members) or tuple(members)
+
+
 def _unaddressed_member_mentions(
     messages: Sequence[_ValidatedEvent], room: DiscussionRoom) -> tuple[DiscussionMember, ...]:
     """Return peers explicitly cited by a Bot and not heard from afterward."""
@@ -394,6 +447,7 @@ def _validate_user_event(kind: str, payload: Payload, actor: Payload, room: Disc
     payload = validate_user_payload(payload)
     if actor.get("kind") != "user":
         raise DiscussionValidationError("message.user requires a user actor")
+    validate_reply_target(payload, room.members)
     return payload
 
 
@@ -549,9 +603,17 @@ def _rotate(members: Sequence[DiscussionMember], round_index: int) -> tuple[Disc
     return tuple((*members[shift:], *members[:shift]))
 
 
+def _reply_context(event: _ValidatedEvent, room: DiscussionRoom) -> str:
+    reply = event.payload.get("reply_to")
+    if reply is None:
+        return ""
+    quote = _MEMBER_CONTROL_FRAME_RE.sub(_MEMBER_CONTROL_FRAME_RELABEL, reply["quote"])
+    return f' [replying to @{_member_by_id(room, reply["member_id"]).handle}: "{quote}"]'
+
+
 def _format_message(event: _ValidatedEvent, room: DiscussionRoom) -> str:
     if event.kind == "message.user":
-        return f"User (user): {event.payload['text']}"
+        return f"User (user){_reply_context(event, room)}: {event.payload['text']}"
     text = _MEMBER_CONTROL_FRAME_RE.sub(_MEMBER_CONTROL_FRAME_RELABEL, event.payload["text"])
     return f"@{_member_by_id(room, event.payload['member_id']).handle}: {text}"
 
@@ -608,7 +670,7 @@ def _requires_direct_reply(
     # Only the user's initial address requires a reply. A later peer handoff may
     # legitimately pass after this member has already answered that user.
     return (round_index == 0 and source is not None and source.kind == "message.user"
-            and member in resolve_mentions((str(source.payload["text"]),), room.members, default_all=False))
+            and member in explicit_user_addressees(source.payload, room.members))
 
 
 def _make_task_plan(
@@ -745,7 +807,7 @@ def plan_next_task(
         # watermark remains intact, so a peer cited later still receives the
         # complete bounded transcript delta without consuming turns meanwhile.
         responders = (
-            resolve_mentions((str(discussion.payload["text"]),), room.members) if round_index == 0
+            user_addressees(discussion.payload, room.members) if round_index == 0
             else _unaddressed_member_mentions(discussion_messages, room))
         for member_index, member in enumerate(_rotate(responders, round_index)):
             watermark = watermarks.get((thread_id, member.member_id), 0)

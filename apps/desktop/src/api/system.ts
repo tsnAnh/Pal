@@ -260,10 +260,10 @@ export function setSttLease(lease: string, active: boolean, owner: ResolvedOwner
   })
 }
 
-export function getElevenLabsVoices(profile?: null | string): Promise<ElevenLabsVoicesResponse> {
+export function getElevenLabsVoices(profile?: ProfileScope): Promise<ElevenLabsVoicesResponse> {
   return hermesApi<ElevenLabsVoicesResponse>({
     path: '/api/audio/elevenlabs/voices',
-    ...profileScoped(profile)
+    ...(profile && typeof profile === 'object' ? capabilityScoped(profile) : profileScoped(profile))
   })
 }
 

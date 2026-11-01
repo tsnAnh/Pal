@@ -2,11 +2,12 @@
 
 When any profile carries ``ui_meta['hermes-bots']`` in profile.yaml (Bot-Mode-managed),
 a bot's canonical "Bot Chat" session — ONLY that session (agent/system_prompt.py enforces
-the ``BOT_CHAT_TITLE`` gate) — gets a "Messaging other agents" section. Silent (``""``)
+the ``BOT_CHAT_TITLE`` gate) — gets the house reply style, its own job and a "Messaging other
+agents" section. Silent (``""``)
 when no profile is managed or on any error. Older desktop builds appended a frozen copy of
 the section to SOUL.md; ``strip_legacy_protocol`` drops it at load time so the live roster
-here is the only copy any session sees. Cached per (process, home) so compression rebuilds
-produce identical bytes. Toggle: ``agent.bot_mode_protocol``. Also hosts path/roster
+here is the only copy any session sees. Cached per (process, home); a prompt build reads it
+fresh so an epoch rebuild carries the change that triggered it. Toggle: ``agent.bot_mode_protocol``. Also hosts path/roster
 helpers shared by ``bot_mode_dm`` and ``bot_relay``.
 """
 
@@ -280,6 +281,72 @@ def _peer_paragraph(root: Path) -> str:
     )
 
 
+_HOUSE_STYLE = (
+    "## How you talk\n"
+    "Lead with the answer, result or decision; no preamble, no restating the question, no "
+    "closing recap or offer of more help. Be direct and plain-spoken, with dry wit when it "
+    "costs no clarity. Keep replies as short as the question allows; use headings, lists or "
+    "tables only when they make the answer faster to scan. Before work that will take a "
+    "while, send one short line saying what you are doing, then come back with the result. "
+    "For anything that changes over time (prices, schedules, news, versions), check a "
+    "current source instead of memory and say where it came from. When you won't or can't "
+    "do something, say so in one line and offer the closest thing you can do.\n\n"
+)
+
+
+_HANDBACK_PARAGRAPH = (
+    "## Steps only a person can do\n"
+    "Never try to get past a sign-in (password, SSO, passkey), a CAPTCHA or bot check, a code sent to "
+    "another device, or a site that blocks automation. Call `request_handback` with one short sentence "
+    "naming the step, end your turn with one line saying what you need, and touch nothing on the screen "
+    "until the person messages you that they are done; then continue from where you stopped. If they "
+    "cancel, stop that task.\n\n"
+)
+
+
+def _own_job(profile_dir: Path) -> str:
+    def _job() -> str:
+        data = _read_yaml_dict(profile_dir / "profile.yaml") or {}
+        title = " ".join(str((_bots_meta(data) or {}).get("title") or "").split())
+        job = " ".join(str(data.get("description") or "").split())
+        if title and job.casefold() == title.casefold():
+            return ""
+        prefix = f"{title} — "
+        if title and job[: len(prefix)].casefold() == prefix.casefold():
+            job = job[len(prefix):].strip()
+        return job[:300]
+
+    return _swallow(_job, "")
+
+
+def _own_job_paragraph(me: str, job: str) -> str:
+    if me == "default":
+        return ""
+    save = (
+        f"`hermes profile describe {me} --text '<your job in one sentence>'` (single quotes; "
+        "write any ' inside the job as '\\''), then confirm it in one line"
+    )
+    if job:
+        return f"## Your job\n{job}\nIf your owner gives you a different job, save it with {save}.\n\n"
+    return (
+        "## Your job\n"
+        "You have no job yet. Your owner sets it in this chat: when you greet them, ask what "
+        f"you should own. Once they say, save it with {save}, and start on it.\n\n"
+    )
+
+
+def _about_you_block(root: Path) -> str:
+    from tools.bot_mode_about_you import about_you_section
+
+    return about_you_section(root)
+
+
+def _about_you_facts(root: Path) -> dict:
+    from tools.bot_mode_about_you import read_about_you
+
+    return _swallow(lambda: read_about_you(root), {})
+
+
 def _build_section(home: Path) -> str:
     root = _hermes_root(home)
     me = _profile_name(home)
@@ -290,9 +357,14 @@ def _build_section(home: Path) -> str:
     names = [name for name, _d in roster]
     roster_lines = [_bullet(f"@{_handle(name, names)}", _profile_role(d)) for name, d in roster if name != me]
     roster_block = "\n".join(roster_lines) or "- (no teammates yet)"
+    own_job = next((_own_job(d) for name, d in roster if name == me), "")
 
     return (
-        f"{_PROTOCOL_HEADING}\n"
+        _HOUSE_STYLE
+        + _HANDBACK_PARAGRAPH
+        + _own_job_paragraph(me, own_job)
+        + _about_you_block(root)
+        + f"{_PROTOCOL_HEADING}\n"
         "This install runs Bot Mode: each Hermes profile is an agent teammate with "
         'one canonical "Bot Chat" conversation, and you have the `message_agent` '
         "tool to DM any of them. It is FIRE-AND-FORGET: it delivers your message "
@@ -445,7 +517,9 @@ def capability_fingerprint(home: str | os.PathLike | None = None) -> str:
         surface["roster"] = []
     # Protocol-text version salt: bumping it refreshes every eternal Bot Chat
     # prompt ONCE so existing bots adopt a new protocol section.
-    surface["protocol_version"] = 2
+    surface["protocol_version"] = 4
+    surface["own_job"] = _own_job(resolved)
+    surface["about_you"] = _about_you_facts(root)
     # Peer gateways and the Desktop relay roster are part of the messaging
     # surface too: registering a peer or (dis)connecting a machine must show up.
     surface["peers"] = _peers(root)

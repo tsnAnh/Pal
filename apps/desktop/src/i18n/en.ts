@@ -4532,7 +4532,24 @@ export const en: Translations = {
       alwaysTitle: 'Always allow this command?',
       alwaysDescription: pattern =>
         `This adds the “${pattern}” pattern to your permanent allowlist (~/.hermes/config.yaml). Hermes won’t ask again for commands like this — in this session or any future one.`,
-      alwaysAllow: 'Always allow'
+      alwaysAllow: 'Always allow',
+      allowOnce: 'Allow once',
+      deny: 'Deny',
+      alwaysDescriptionBot: pattern =>
+        `This bot will stop asking before “${pattern}” — in every chat from now on.`,
+      draftTitle: 'Draft message',
+      draftTo: recipient => `To ${recipient}`,
+      draftVia: channel => `via ${channel}`,
+      draftSubject: subject => `Subject: ${subject}`,
+      draftSend: 'Send',
+      draftSendEdited: 'Send edited',
+      draftDiscard: 'Discard',
+      draftEdit: 'Edit',
+      draftCancelEdit: 'Cancel edit',
+      draftEditLabel: 'Edit message',
+      draftHeld: 'Made while you were away. Nothing has been sent.',
+      draftExpired: 'Expired — this draft can no longer be sent. Discard it to dismiss.',
+      draftUnviewable: 'Part of this message cannot be shown in full, so it can only be discarded.'
     },
     clarify: enClarify,
     themePicker: enThemePicker,

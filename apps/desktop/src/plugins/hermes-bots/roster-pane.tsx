@@ -1,6 +1,7 @@
 import { $hiddenStripTabs, AccountPill, host, useI18n, useValue } from '@hermes/plugin-sdk'
 import { useEffect, useRef, useState } from 'react'
 
+import { useBotDeleteRequest } from './bot-detail-state'
 import { BotRow } from './bot-row'
 import {
   $botChatFocused,
@@ -53,6 +54,7 @@ import { botNeedsHandleLabel, rosterGatewayOptions } from './roster-sections'
 import { botWorkspaceOwnerKey, setBotsWorkspaceOwner } from './routing'
 import { activeBots, useTurnBusy } from './row-helpers'
 import type { BotMeta, GatewaySource, GroupMember, RosterActivityFilter, RosterKindFilter, RosterRow } from './types'
+import { useBotModeMarker } from './use-bot-mode-marker'
 import {
   $botSections,
   $draggingBot,
@@ -246,6 +248,7 @@ export function BotsPane() {
   // `path` is the profile directory the gateway reports on a profiles.list row;
   // it is not part of the shared RosterRow model, so it rides as an extra here.
   const [deleting, setDeleting] = useState<null | (RosterRow & { path?: string })>(null)
+  useBotDeleteRequest(setDeleting)
   const [deletingGroup, setDeletingGroup] = useState<null | { members: GroupMember[]; name: string }>(null)
   const userSections = useValue($botSections)
   const dragging = useValue($draggingBot)
@@ -259,6 +262,8 @@ export function BotsPane() {
   const [query, setQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const paneRef = useRef<HTMLDivElement>(null)
+  useBotModeMarker(paneRef)
 
   useEffect(() => {
     if (searchOpen) {
@@ -507,7 +512,7 @@ export function BotsPane() {
     })
 
   return (
-    <div className="flex h-full flex-col" data-bots-pane="">
+    <div className="flex h-full flex-col" data-bots-pane="" ref={paneRef}>
       <CanonicalGroupList onOpen={openGroupChat} />
       {renderRosterToolbar({
         b,

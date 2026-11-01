@@ -106,6 +106,45 @@ describe('approval request routing', () => {
   })
 })
 
+describe('approval notification actions', () => {
+  const notify = vi.fn().mockResolvedValue(true)
+  const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
+
+  beforeEach(() => {
+    notify.mockClear()
+    setActiveSessionId('session-b')
+    desktopWindow.hermesDesktop = { notify } as unknown as Window['hermesDesktop']
+  })
+
+  afterEach(() => {
+    delete desktopWindow.hermesDesktop
+    setActiveSessionId(null)
+  })
+
+  it('keeps approve and reject when the draft payload does not parse', () => {
+    deliver(
+      'approval',
+      { command: 'ls', draft: { kind: 'unknown' }, request_id: 'r9', session_id: 'session-d' },
+      'session-b'
+    )
+
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ actions: expect.arrayContaining([expect.objectContaining({ id: 'approve:r9' })]) })
+    )
+  })
+
+  it('offers no approve or reject on a parsed outbound draft', () => {
+    deliver(
+      'approval',
+      { command: 'ls', draft: { kind: 'outbound_message', text: 'hi' }, request_id: 'r10', session_id: 'session-c' },
+      'session-b'
+    )
+
+    expect(notify).toHaveBeenCalledTimes(1)
+    expect(notify.mock.calls[0][0].actions ?? []).toEqual([])
+  })
+})
+
 describe('preview action request routing', () => {
   it('retries a replayed scoped request only while no session is bound yet', () => {
     expect(previewSessionRoute({ replayed: true, sessionId: 'session-a', activeSessionId: null })).toBe('retry')

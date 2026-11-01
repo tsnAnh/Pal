@@ -48,6 +48,13 @@ def _gemini_key() -> str:
 # and prepends SPEECH_INTERRUPTED_NOTE to the model-bound message (API-call local, never
 # persisted). The TTL keeps a stale barge from annotating an unrelated message minutes later.
 SPEECH_INTERRUPTED_NOTE = "[Note: the user interrupted your previous spoken reply before it finished.]"
+# A spoken turn's reply is read aloud: the surface marks it and the note rides the model-bound message
+# for that turn only (never the system prompt, so the cached prefix survives a typed turn in between).
+VOICE_REPLY_NOTE = (
+    "[Note: the user spoke this message and your reply will be read aloud. Answer in one to three short, "
+    "conversational sentences. Use plain spoken language only: no markdown, lists, headings, tables, code "
+    "blocks, emoji or links, and never read out a URL or file path.]"
+)
 _INTERRUPT_TTL_S = 120.0
 _interrupted_at: Optional[float] = None
 

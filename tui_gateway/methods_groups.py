@@ -251,7 +251,7 @@ def _(rid, params: dict, _catalog=_local_catalog, _methods=_METHODS, _owner=_for
         "features": [
             "authority_epoch", "coordinator_fencing", "room_identity", "monotonic_log",
             "idempotent_send", "replayable_disband", "typed_events", "actor_identity",
-            "log_replication", "authority_takeover"],
+            "log_replication", "authority_takeover", "reply_to", "explicit_stop"],
         "methods": list(_methods), "max_log_limit": MAX_LOG_LIMIT})
 
 

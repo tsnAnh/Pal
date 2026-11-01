@@ -485,6 +485,83 @@ export interface ProjectFacts {
   verifyCommands: string[]
   contextFiles: string[]
 }
+export interface BotTeachStatus {
+  available: boolean
+  reason?: string | null
+  max_seconds: number
+  now: number
+  recording: boolean
+  capture: string
+  ended?: string | null
+  teach_id?: string | null
+  started_at?: number | null
+  deadline_at?: number | null
+  event_count: number
+  truncated: boolean
+  pending?: BotTeachPending | null
+}
+/** The profile's one unresolved draft: ``drafting`` until the bot has written SKILL.md, then ``ready``. */
+export interface BotTeachPending {
+  teach_id: string
+  skill_name: string
+  event_count: number
+  truncated: boolean
+  state: string
+}
+export interface BotTeachStartParams {
+  profile?: string | null
+  viewer_id: string
+}
+export interface BotTeachStopParams {
+  profile?: string | null
+  discard?: boolean | null
+}
+export interface BotTeachStopResult {
+  empty: boolean
+  reason?: string | null
+  teach_id?: string | null
+  skill_name?: string | null
+  event_count?: number | null
+  truncated?: boolean | null
+  prompt?: string | null
+}
+export interface BotTeachIdParams {
+  profile?: string | null
+  teach_id: string
+}
+export interface BotTeachPromptResult {
+  prompt: string
+}
+export interface BotTeachDraft {
+  teach_id: string
+  skill_name: string
+  event_count: number
+  truncated: boolean
+  state: string
+  content?: string | null
+  content_hash?: string | null
+  extra_files?: string[]
+}
+export interface BotTeachDraftSaveParams {
+  profile?: string | null
+  teach_id: string
+  content: string
+}
+export interface BotTeachApproveParams {
+  profile?: string | null
+  teach_id: string
+  content?: string | null
+  content_hash?: string | null
+}
+export interface BotTeachApproveResult {
+  teach_id: string
+  skill_name: string
+  enabled: boolean
+}
+export interface BotTeachDiscardResult {
+  teach_id: string
+  discarded: boolean
+}
 /** ``key`` selects one getter from ``_CONFIG_GETTERS``; ``cwd`` feeds the ``project`` getter, ``session_id`` lets ``reasoning`` / ``fast`` answer with the session's live pin. */
 export interface ConfigGetParams {
   profile?: string | null
@@ -1395,6 +1472,8 @@ export interface DisplayLease {
   since: number
   epoch: number
   reason?: string
+  ask?: string
+  ask_at?: number
 }
 export type LeaseHolder = 'agent' | 'human'
 /** ``data_url`` is null while the screen is stopped or while a human holds the lease (``suppressed``): the frame may show what they are typing. */
@@ -1496,6 +1575,10 @@ export interface DisplayLeaseReleaseParams {
   profile?: string | null
   viewer_id?: string | null
   force?: boolean | null
+}
+export interface DisplayLeaseResolveParams {
+  profile?: string | null
+  ask_at?: number | null
 }
 export interface GroupsCapabilitiesParams {
   profile?: string | null
@@ -2023,6 +2106,8 @@ export interface ProfilesListParams {
 export interface ProfilesListResult {
   profiles?: ProfileRow[]
   bot_mode_protocol?: boolean
+  bot_birth_notice?: boolean
+  bot_about_you?: boolean
   install_id?: string
 }
 /** One roster row; the session fields are present only with ``include_sessions``. */
@@ -2071,6 +2156,19 @@ export interface ProfileCanonicalSession {
   last_active?: number
   message_count?: number
   live_message_count?: number | null
+}
+export interface BotAboutYouGetParams {
+  profile?: string | null
+}
+export interface BotAboutYouFacts {
+  name?: string
+  timezone?: string
+}
+/** A key left out is unchanged; ``null`` or blank clears it. */
+export interface BotAboutYouSetParams {
+  profile?: string | null
+  name?: string | null
+  timezone?: string | null
 }
 /** ``clone_from`` omitted = fresh profile + bundled skills; ``mirror_credentials`` defaults on so a headless bot has a provider. */
 export interface ProfilesCreateParams {
@@ -2403,6 +2501,82 @@ export interface SubagentTailResult {
   available?: boolean
   text?: string
   truncated?: boolean
+}
+export interface ProfilesTemplateExportParams {
+  profile?: string | null
+  name?: string | null
+}
+export interface ProfilesTemplateExportResult {
+  filename: string
+  data: string
+  size: number
+  sha256: string
+}
+export interface ProfilesTemplateImportParams {
+  profile?: string | null
+  data?: string | null
+  dry_run?: boolean | string | null
+  reviewed_digest?: string | null
+  name?: string | null
+  display_name?: string | null
+  no_alias?: boolean | string | null
+  share_auth?: boolean | string | null
+  mirror_credentials?: boolean | string | null
+}
+export interface ProfilesTemplateImportResult {
+  dry_run: boolean
+  review?: BotTemplateReview | null
+  name?: string | null
+  path?: string | null
+  display_name?: string | null
+  skills_imported?: number
+  routines_imported?: number
+  routines_skipped?: string[]
+  has_avatar?: boolean
+  model_set?: boolean
+  mirrored?: ProfileMirrored | null
+}
+export interface BotTemplateReview {
+  format_version: number
+  created_at: string
+  app_version: string
+  digest: string
+  size: number
+  display_name: string
+  description?: string
+  suggested_name: string
+  suggested_display_name: string
+  soul?: string
+  model?: TemplateModelPin | null
+  toolsets?: string[] | null
+  skills?: TemplateSkill[]
+  mcp_servers?: TemplateMcpServer[]
+  routines?: TemplateRoutine[]
+  skipped_routines?: string[]
+  has_avatar?: boolean
+  look?: Record<string, unknown>
+}
+export interface TemplateModelPin {
+  provider?: string
+  default?: string
+}
+export interface TemplateSkill {
+  name: string
+  files?: number
+  has_scripts?: boolean
+}
+export interface TemplateMcpServer {
+  name: string
+  transport?: string
+  command?: string
+  url?: string
+  enabled?: boolean
+  needs?: string[]
+}
+export interface TemplateRoutine {
+  name: string
+  schedule: string
+  prompt: string
 }
 /** ``methods_projects._projects_payload``: every project (archived included) + the active id. */
 export interface ProjectsPayload {
@@ -2932,8 +3106,22 @@ export interface PendingApproval {
   allow_session?: boolean | null
   smart_denied?: boolean | null
   choices?: string[] | null
+  scope?: string | null
+  draft?: ApprovalDraft | null
   tool_name?: string | null
   [key: string]: unknown
+}
+export interface ApprovalDraft {
+  kind?: string
+  channel?: string
+  recipient?: string
+  subject?: string
+  text?: string
+  editable?: boolean
+  held?: boolean
+  state?: 'pending' | 'expired'
+  expires_at?: number | null
+  origin?: string | null
 }
 export interface ApprovalReceivedParams {
   session_id: string
@@ -2950,6 +3138,7 @@ export interface ApprovalRespondParams {
   choice?: string | null
   all?: boolean | null
   request_id?: string | null
+  edited_text?: string | null
 }
 export interface ApprovalRespondResult {
   resolved: number
@@ -3706,6 +3895,7 @@ export interface ProcessStopParams {
 export interface ProcessStopResult {
   killed: number
   delegations?: number
+  handoffs?: number
 }
 export interface AgentsListParams {
   profile?: string | null
@@ -3931,6 +4121,7 @@ export interface RollbackDiffResult {
 export interface CronManageParams {
   action?: CronAction
   name?: string | null
+  run_id?: string | null
   include_disabled?: boolean | string | null
   schedule?: string | null
   prompt?: string | null
@@ -3939,8 +4130,8 @@ export interface CronManageParams {
   deliver?: string | null
   profile?: string | null
 }
-export type CronAction = 'list' | 'add' | 'remove' | 'pause' | 'resume'
-/** Pass-through of ``tools/cronjob_tools.py::cronjob`` JSON: ``list`` → ``jobs``/``count`` (+ ``scoped`` when profile-scoped); ``add`` → the created job's summary + ``job``; ``remove`` → ``removed_job``; ``pause``/``resume`` → ``job``. A tool-level failure lands in ``error``. */
+export type CronAction = 'list' | 'add' | 'remove' | 'pause' | 'resume' | 'run' | 'history' | 'history_output' | 'schedule_preview' | 'trigger_status' | 'trigger_issue' | 'trigger_remove'
+/** Pass-through of ``tools/cronjob_tools.py::cronjob`` JSON: ``list`` → ``jobs``/``count`` (+ ``scoped`` when profile-scoped, ``actions`` = the routine actions this gateway supports); ``add`` → the created job's summary + ``job`` (or ``reason`` when the schedule is refused); ``remove`` → ``removed_job``; ``pause``/``resume`` → ``job``; ``run`` → ``started``/``reason``; ``history`` → ``runs``; ``history_output`` → ``output``; ``schedule_preview`` → normalized ``schedule``; ``trigger_*`` → the routine's webhook trigger (``key`` only on ``trigger_issue``). A tool-level failure lands in ``error``. */
 export interface CronManageResult {
   success?: boolean | null
   error?: string | null
@@ -3961,6 +4152,23 @@ export interface CronManageResult {
   message?: string | null
   guidance?: unknown | null
   removed_job?: CronRemovedJob | null
+  actions?: string[] | null
+  started?: boolean | null
+  reason?: string | null
+  mode?: string | null
+  limit?: number | null
+  runs?: CronRunRecord[] | null
+  run_id?: string | null
+  output?: string | null
+  truncated?: boolean | null
+  kind?: string | null
+  available?: boolean | null
+  blocked_by?: string | null
+  configured?: boolean | null
+  url?: string | null
+  key?: string | null
+  created_at?: string | null
+  removed?: boolean | null
   [key: string]: unknown
 }
 /** ``tools/cronjob_job_args.py::_format_job``. */
@@ -4004,6 +4212,16 @@ export interface CronRemovedJob {
   id: string
   name?: string
   schedule?: string | null
+}
+/** One attempt in ``cron.manage {action: "history"}``: newest first, at most 20 per job. */
+export interface CronRunRecord {
+  run_id: string
+  status: string
+  reason?: string | null
+  started_at?: string | null
+  finished_at?: string | null
+  duration_seconds?: number | null
+  has_output?: boolean
 }
 export interface BrowserManageParams {
   action?: BrowserAction
@@ -5264,6 +5482,8 @@ export interface CanonicalProfilesParams {
 export interface CanonicalProfilesResult {
   profiles: CanonicalProfileRow[]
   bot_mode_protocol?: boolean
+  bot_birth_notice?: boolean
+  bot_about_you?: boolean
   install_id?: string
 }
 export interface CanonicalProfileRow {
@@ -5340,6 +5560,16 @@ export interface CanonicalBotDeliverResult {
   retry_admission_id?: string | null
   error?: string | null
   reason?: string | null
+}
+export interface CanonicalBotStopParams {
+  profile?: string | null
+  id: string
+}
+/** Stop of one delivery's turn: ``cancelled`` while queued, ``interrupted`` while running, ``finished`` when it already ended, ``not_found`` when this authority never admitted the id. */
+export interface CanonicalBotStopResult {
+  status: string
+  stopped: boolean
+  handoffs: number
 }
 /** ``answers`` rides only on a reconnect replay (locks the server already accepted; null = skipped). */
 export interface ClarifyRequestParams {
@@ -5428,6 +5658,8 @@ export interface ApprovalRequestParams {
   allow_permanent?: boolean | null
   allow_session?: boolean | null
   smart_denied?: boolean | null
+  scope?: 'bot_chat' | null
+  draft?: ApprovalDraft | null
   tool_name?: string | null
   gateway_session_id?: string | null
   [key: string]: unknown
@@ -5435,6 +5667,7 @@ export interface ApprovalRequestParams {
 export interface ApprovalResult {
   choice: ApprovalChoice
   all?: boolean | null
+  edited_text?: string | null
 }
 /** Original command, redacted server-side before any password-injection rewrite. */
 export interface SudoRequestParams {
@@ -6059,6 +6292,26 @@ export interface RpcMethods {
   'billing.state': { params: ProfileParams; result: BillingStateResult }
   /** Run the billing:manage device flow; the URL/code arrive via billing.step_up.verification. */
   'billing.step_up': { params: BillingStepUpParams; result: BillingStepUpResult }
+  /** Approve: optionally save an edit, validate, then enable the skill (the only path that does). */
+  'bot.teach.approve': { params: BotTeachApproveParams; result: BotTeachApproveResult }
+  /** Delete the draft skill and its recording. */
+  'bot.teach.discard': { params: BotTeachIdParams; result: BotTeachDiscardResult }
+  /** The draft's state and SKILL.md. Once it exists the recording is deleted. */
+  'bot.teach.draft': { params: BotTeachIdParams; result: BotTeachDraft }
+  /** The owner's edit of the draft SKILL.md; stays disabled. */
+  'bot.teach.draft.save': { params: BotTeachDraftSaveParams; result: BotTeachDraft }
+  /** The hidden-turn prompt again (the bot's first turn failed); refused once the draft exists. */
+  'bot.teach.prompt': { params: BotTeachIdParams; result: BotTeachPromptResult }
+  /** Start recording for the viewer that holds the lease (5310, code not_in_control / draft_pending / ...). */
+  'bot.teach.start': { params: BotTeachStartParams; result: BotTeachStatus }
+  /** Whether this bot can be taught, the live recording and the unresolved draft, if any. */
+  'bot.teach.status': { params: ProfileParams; result: BotTeachStatus }
+  /** End the recording; creates the disabled draft and returns the prompt that asks the bot to write it. */
+  'bot.teach.stop': { params: BotTeachStopParams; result: BotTeachStopResult }
+  /** Owner facts (name, time zone) shared by every Bot Mode bot on this install. */
+  'bot_mode.about_you.get': { params: BotAboutYouGetParams; result: BotAboutYouFacts }
+  /** Save owner facts install-wide; validates the time zone and answers the normalized values. */
+  'bot_mode.about_you.set': { params: BotAboutYouSetParams; result: BotAboutYouFacts }
   /** Deliver a relayed DM into a Bot Chat on this gateway and return the one-turn reply (blocking). */
   'bot_relay.deliver': { params: BotRelayDeliverParams; result: BotRelayDeliverResult }
   /** Atomically claim every pending cross-connection envelope queued on this gateway. */
@@ -6117,7 +6370,7 @@ export interface RpcMethods {
   'connectors.policy.set': { params: ConnectorPolicySetParams; result: ConnectorPolicySetResult }
   /** The scoped profile's cached or current tool list for one connector. */
   'connectors.tools': { params: ConnectorToolsParams; result: ConnectorToolsResult }
-  /** List/add/remove/pause/resume cron jobs in the (optionally profile-scoped) cron store. */
+  /** List/add/remove/pause/resume/run cron jobs, read run history, preview a schedule and manage a routine's webhook trigger in the (optionally profile-scoped) cron store. */
   'cron.manage': { params: CronManageParams; result: CronManageResult }
   /** Block/unblock NEW spawns globally (active children keep running); returns the new state. */
   'delegation.pause': { params: DelegationPauseParams; result: DelegationPauseResult }
@@ -6131,6 +6384,8 @@ export interface RpcMethods {
   'display.lease.acquire': { params: DisplayLeaseAcquireParams; result: DisplayLeaseResult }
   /** Hand back. Without a viewer id the release is refused while a human holds unless force. */
   'display.lease.release': { params: DisplayLeaseReleaseParams; result: DisplayLeaseResult }
+  /** End the bot's pending hand-back ask (I'm done / Cancel). ask_at limits it to the ask the card showed. */
+  'display.lease.resolve': { params: DisplayLeaseResolveParams; result: DisplayLeaseResult }
   /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
   'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
@@ -6333,6 +6588,10 @@ export interface RpcMethods {
   'profiles.list': { params: ProfilesListParams; result: ProfilesListResult }
   /** Store or clear a profile asset (avatar) atomically. */
   'profiles.set_asset': { params: ProfilesSetAssetParams; result: ProfilesSetAssetResult }
+  /** A bot's shareable template (.hermesbot, base64): setup only, never history or secrets. */
+  'profiles.template.export': { params: ProfilesTemplateExportParams; result: ProfilesTemplateExportResult }
+  /** Review a .hermesbot template (dry_run) or create the bot from the exact reviewed bytes; routines arrive paused. */
+  'profiles.template.import': { params: ProfilesTemplateImportParams; result: ProfilesTemplateImportResult }
   /** Structured project facts for a cwd so UIs don't re-sniff the workspace. */
   'project.facts': { params: ProjectFactsParams; result: ProjectFactsResult }
   /** Attach a folder to a project (optionally as its primary path). */
@@ -6566,6 +6825,16 @@ export const RPC_METHODS = [
   'billing.keep_going_on_credits',
   'billing.state',
   'billing.step_up',
+  'bot.teach.approve',
+  'bot.teach.discard',
+  'bot.teach.draft',
+  'bot.teach.draft.save',
+  'bot.teach.prompt',
+  'bot.teach.start',
+  'bot.teach.status',
+  'bot.teach.stop',
+  'bot_mode.about_you.get',
+  'bot_mode.about_you.set',
   'bot_relay.deliver',
   'bot_relay.outbox.drain',
   'bot_relay.reply',
@@ -6602,6 +6871,7 @@ export const RPC_METHODS = [
   'display.install',
   'display.lease.acquire',
   'display.lease.release',
+  'display.lease.resolve',
   'display.observe',
   'display.start',
   'display.status',
@@ -6703,6 +6973,8 @@ export const RPC_METHODS = [
   'profiles.get_asset',
   'profiles.list',
   'profiles.set_asset',
+  'profiles.template.export',
+  'profiles.template.import',
   'project.facts',
   'projects.add_folder',
   'projects.archive',
@@ -6822,6 +7094,7 @@ export interface CanonicalRpcMethods {
   'approval.respond': { params: CanonicalApprovalParams; result: PromptResponseResult }
   'bot_relay.deliver': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
   'bot_relay.settle': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
+  'bot_relay.stop': { params: CanonicalBotStopParams; result: CanonicalBotStopResult }
   /** Lock one answer of the owner's batch clarify request (editable until every question is locked); only a viewer attached to that session with session:respond may lock. */
   'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }
   /** Generation-fenced answer to a pending clarify prompt (empty answer = skipped). */
@@ -6902,6 +7175,7 @@ export const CANONICAL_RPC_METHODS = [
   'approval.respond',
   'bot_relay.deliver',
   'bot_relay.settle',
+  'bot_relay.stop',
   'clarify.lock',
   'clarify.respond',
   'command.observe',

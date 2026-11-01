@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 AGENT = "agent"
 HUMAN = "human"
+MAX_ASK_CHARS = 200
 
 
 class HumanHasControl(RuntimeError):
@@ -52,6 +53,8 @@ class Lease:
     since: float = field(default_factory=time.time)
     reason: str = ""
     epoch: int = 0
+    ask: str = ""
+    ask_at: float = 0.0
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -227,6 +230,32 @@ def release(viewer_id: Optional[str] = None, *, profile_key: Optional[str] = Non
             # agent action (a double-clicked Hand back, a stray CLI stop) look overtaken and get voided.
             return False
         lease.holder, lease.viewer_id, lease.since, lease.reason = AGENT, None, time.time(), ""
+        return True
+    return _transition(profile_key, _m)
+
+
+def request_handback(reason: str, *, profile_key: Optional[str] = None) -> Lease:
+    """The agent asks a human to do a step only a person can do (sign-in, CAPTCHA, a code from another
+    device). The ask lives ON the lease so the Desktop, the CLI and every process read one truth; it
+    survives a takeover and a release (an owner who closes the screen without finishing leaves the ask
+    pending) and ends only through :func:`resolve_ask`. A new ask replaces the previous one."""
+    reason = " ".join(str(reason or "").split())[:MAX_ASK_CHARS]
+
+    def _m(lease: Lease) -> bool:
+        lease.ask, lease.ask_at = reason, time.time()
+        return True
+    return _transition(profile_key, _m)
+
+
+def resolve_ask(*, profile_key: Optional[str] = None, ask_at: Optional[float] = None) -> Lease:
+    """End the pending ask (the person finished, or cancelled the task). With ``ask_at`` only that
+    ask is ended: a late "I'm done" for an earlier card must not erase a newer request."""
+    def _m(lease: Lease) -> bool:
+        if not lease.ask:
+            return False
+        if ask_at is not None and lease.ask_at != ask_at:
+            return False
+        lease.ask, lease.ask_at = "", 0.0
         return True
     return _transition(profile_key, _m)
 

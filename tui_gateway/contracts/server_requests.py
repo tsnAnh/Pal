@@ -14,6 +14,7 @@ from pydantic import Field
 from tools.tour_presets import TourPreset
 
 from .base import JsonValue, Params, Payload, Result, WireEnum
+from .common import ApprovalDraft
 from .registry import event, server_request
 
 
@@ -180,6 +181,8 @@ class ApprovalRequestParams(ServerRequestParams):
     allow_permanent: bool | None = None
     allow_session: bool | None = None
     smart_denied: bool | None = None
+    scope: Literal["bot_chat"] | None = None
+    draft: ApprovalDraft | None = None
     tool_name: str | None = None
     session_id_hint: str | None = Field(default=None, alias="gateway_session_id")
     # The approval queue entry carries tool-specific context the card may render; the closed set
@@ -190,6 +193,7 @@ class ApprovalRequestParams(ServerRequestParams):
 class ApprovalResult(Result):
     choice: ApprovalChoice
     all: bool | None = None
+    edited_text: str | None = None
 
 
 server_request("approval", params=ApprovalRequestParams, result=ApprovalResult,

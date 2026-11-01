@@ -49,3 +49,11 @@ describe('bot chat handle personas', () => {
     expect(personas['hermes-laptop']?.name).toBe('Laptop Hermes')
   })
 })
+
+describe('bot chat stop now', () => {
+  it('gives every bot chat a localized Stop now label', () => {
+    const personas = handlePersonasFor([{ name: 'scribe', title: 'Scribe' }])
+
+    expect(personas.scribe?.stopNowLabel?.()).toBe('Stop now')
+  })
+})

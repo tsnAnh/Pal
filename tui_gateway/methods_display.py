@@ -270,5 +270,18 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"lease": _bd_lease.public_view(lease)})
 
 
+@method("display.lease.resolve")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    """End the bot's pending hand-back ask ("I'm done" or Cancel). ``ask_at`` names the ask the card showed, so a
+    late click on an old card cannot erase a newer request."""
+    from tools.bot_desktop import lease as _bd_lease
+    raw = params.get("ask_at")
+    if raw is not None and (isinstance(raw, bool) or not isinstance(raw, (int, float))):
+        return _err(rid, _DISPLAY_ERR, "ask_at must be a number", data={"code": "bad_ask_at"})
+    lease = _bd_lease.resolve_ask(ask_at=raw)
+    return _ok(rid, {"lease": _bd_lease.public_view(lease)})
+
+
 def register(server) -> None:
     bind_module(globals(), server, skip=("_",))

@@ -187,6 +187,186 @@
       }
     },
     {
+      "name": "bot.teach.approve",
+      "summary": "Approve: optionally save an edit, validate, then enable the skill (the only path that does).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotTeachApproveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotTeachApproveResult"
+        }
+      }
+    },
+    {
+      "name": "bot.teach.discard",
+      "summary": "Delete the draft skill and its recording.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotTeachIdParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotTeachDiscardResult"
+        }
+      }
+    },
+    {
+      "name": "bot.teach.draft",
+      "summary": "The draft's state and SKILL.md. Once it exists the recording is deleted.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotTeachIdParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotTeachDraft"
+        }
+      }
+    },
+    {
+      "name": "bot.teach.draft.save",
+      "summary": "The owner's edit of the draft SKILL.md; stays disabled.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotTeachDraftSaveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotTeachDraft"
+        }
+      }
+    },
+    {
+      "name": "bot.teach.prompt",
+      "summary": "The hidden-turn prompt again (the bot's first turn failed); refused once the draft exists.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotTeachIdParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotTeachPromptResult"
+        }
+      }
+    },
+    {
+      "name": "bot.teach.start",
+      "summary": "Start recording for the viewer that holds the lease (5310, code not_in_control / draft_pending / ...).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotTeachStartParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotTeachStatus"
+        }
+      }
+    },
+    {
+      "name": "bot.teach.status",
+      "summary": "Whether this bot can be taught, the live recording and the unresolved draft, if any.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotTeachStatus"
+        }
+      }
+    },
+    {
+      "name": "bot.teach.stop",
+      "summary": "End the recording; creates the disabled draft and returns the prompt that asks the bot to write it.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotTeachStopParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotTeachStopResult"
+        }
+      }
+    },
+    {
+      "name": "bot_mode.about_you.get",
+      "summary": "Owner facts (name, time zone) shared by every Bot Mode bot on this install.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotAboutYouGetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotAboutYouFacts"
+        }
+      }
+    },
+    {
+      "name": "bot_mode.about_you.set",
+      "summary": "Save owner facts install-wide; validates the time zone and answers the normalized values.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotAboutYouSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotAboutYouFacts"
+        }
+      }
+    },
+    {
       "name": "bot_relay.deliver",
       "summary": "Deliver a relayed DM into a Bot Chat on this gateway and return the one-turn reply (blocking).",
       "params": [
@@ -710,7 +890,7 @@
     },
     {
       "name": "cron.manage",
-      "summary": "List/add/remove/pause/resume cron jobs in the (optionally profile-scoped) cron store.",
+      "summary": "List/add/remove/pause/resume/run cron jobs, read run history, preview a schedule and manage a routine's webhook trigger in the (optionally profile-scoped) cron store.",
       "params": [
         {
           "name": "params",
@@ -824,6 +1004,24 @@
           "name": "params",
           "schema": {
             "$ref": "#/components/schemas/DisplayLeaseReleaseParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DisplayLeaseResult"
+        }
+      }
+    },
+    {
+      "name": "display.lease.resolve",
+      "summary": "End the bot's pending hand-back ask (I'm done / Cancel). ask_at limits it to the ask the card showed.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DisplayLeaseResolveParams"
           }
         }
       ],
@@ -2649,6 +2847,42 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ProfilesSetAssetResult"
+        }
+      }
+    },
+    {
+      "name": "profiles.template.export",
+      "summary": "A bot's shareable template (.hermesbot, base64): setup only, never history or secrets.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfilesTemplateExportParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ProfilesTemplateExportResult"
+        }
+      }
+    },
+    {
+      "name": "profiles.template.import",
+      "summary": "Review a .hermesbot template (dry_run) or create the bot from the exact reviewed bytes; routines arrive paused.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfilesTemplateImportParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ProfilesTemplateImportResult"
         }
       }
     },
@@ -5279,6 +5513,81 @@
         "title": "ApprovalChoice",
         "type": "string"
       },
+      "ApprovalDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "default": "outbound_message",
+            "title": "Kind",
+            "type": "string"
+          },
+          "channel": {
+            "default": "",
+            "title": "Channel",
+            "type": "string"
+          },
+          "recipient": {
+            "default": "",
+            "title": "Recipient",
+            "type": "string"
+          },
+          "subject": {
+            "default": "",
+            "title": "Subject",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "title": "Text",
+            "type": "string"
+          },
+          "editable": {
+            "default": false,
+            "title": "Editable",
+            "type": "boolean"
+          },
+          "held": {
+            "default": false,
+            "title": "Held",
+            "type": "boolean"
+          },
+          "state": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "expired"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires At"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Origin"
+          }
+        },
+        "title": "ApprovalDraft",
+        "type": "object"
+      },
       "ApprovalPendingParams": {
         "additionalProperties": false,
         "properties": {
@@ -5432,6 +5741,30 @@
             "default": null,
             "title": "Smart Denied"
           },
+          "scope": {
+            "anyOf": [
+              {
+                "const": "bot_chat",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scope"
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalDraft"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "tool_name": {
             "anyOf": [
               {
@@ -5519,6 +5852,18 @@
             ],
             "default": null,
             "title": "Request Id"
+          },
+          "edited_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Edited Text"
           }
         },
         "required": [
@@ -5558,6 +5903,18 @@
             ],
             "default": null,
             "title": "All"
+          },
+          "edited_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Edited Text"
           }
         },
         "required": [
@@ -7270,6 +7627,86 @@
         "title": "BillingStepUpVerificationPayload",
         "type": "object"
       },
+      "BotAboutYouFacts": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "timezone": {
+            "default": "",
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "title": "BotAboutYouFacts",
+        "type": "object"
+      },
+      "BotAboutYouGetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          }
+        },
+        "title": "BotAboutYouGetParams",
+        "type": "object"
+      },
+      "BotAboutYouSetParams": {
+        "additionalProperties": false,
+        "description": "A key left out is unchanged; ``null`` or blank clears it.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "timezone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Timezone"
+          }
+        },
+        "title": "BotAboutYouSetParams",
+        "type": "object"
+      },
       "BotRelayDeliverParams": {
         "additionalProperties": false,
         "description": "``profile`` here is the TARGET profile on this gateway (also what the desktop route wrapper adds).",
@@ -7484,6 +7921,652 @@
           "count"
         ],
         "title": "BotRelayRosterSyncResult",
+        "type": "object"
+      },
+      "BotTeachApproveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "teach_id": {
+            "title": "Teach Id",
+            "type": "string"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Content"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Content Hash"
+          }
+        },
+        "required": [
+          "teach_id"
+        ],
+        "title": "BotTeachApproveParams",
+        "type": "object"
+      },
+      "BotTeachApproveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "teach_id": {
+            "title": "Teach Id",
+            "type": "string"
+          },
+          "skill_name": {
+            "title": "Skill Name",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "teach_id",
+          "skill_name",
+          "enabled"
+        ],
+        "title": "BotTeachApproveResult",
+        "type": "object"
+      },
+      "BotTeachDiscardResult": {
+        "additionalProperties": false,
+        "properties": {
+          "teach_id": {
+            "title": "Teach Id",
+            "type": "string"
+          },
+          "discarded": {
+            "title": "Discarded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "teach_id",
+          "discarded"
+        ],
+        "title": "BotTeachDiscardResult",
+        "type": "object"
+      },
+      "BotTeachDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "teach_id": {
+            "title": "Teach Id",
+            "type": "string"
+          },
+          "skill_name": {
+            "title": "Skill Name",
+            "type": "string"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Content"
+          },
+          "content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Content Hash"
+          },
+          "extra_files": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Extra Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "teach_id",
+          "skill_name",
+          "event_count",
+          "truncated",
+          "state"
+        ],
+        "title": "BotTeachDraft",
+        "type": "object"
+      },
+      "BotTeachDraftSaveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "teach_id": {
+            "title": "Teach Id",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          }
+        },
+        "required": [
+          "teach_id",
+          "content"
+        ],
+        "title": "BotTeachDraftSaveParams",
+        "type": "object"
+      },
+      "BotTeachIdParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "teach_id": {
+            "title": "Teach Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "teach_id"
+        ],
+        "title": "BotTeachIdParams",
+        "type": "object"
+      },
+      "BotTeachPending": {
+        "additionalProperties": false,
+        "description": "The profile's one unresolved draft: ``drafting`` until the bot has written SKILL.md, then ``ready``.",
+        "properties": {
+          "teach_id": {
+            "title": "Teach Id",
+            "type": "string"
+          },
+          "skill_name": {
+            "title": "Skill Name",
+            "type": "string"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "teach_id",
+          "skill_name",
+          "event_count",
+          "truncated",
+          "state"
+        ],
+        "title": "BotTeachPending",
+        "type": "object"
+      },
+      "BotTeachPromptResult": {
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "title": "BotTeachPromptResult",
+        "type": "object"
+      },
+      "BotTeachStartParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "viewer_id": {
+            "title": "Viewer Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "viewer_id"
+        ],
+        "title": "BotTeachStartParams",
+        "type": "object"
+      },
+      "BotTeachStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "max_seconds": {
+            "title": "Max Seconds",
+            "type": "integer"
+          },
+          "now": {
+            "title": "Now",
+            "type": "number"
+          },
+          "recording": {
+            "title": "Recording",
+            "type": "boolean"
+          },
+          "capture": {
+            "title": "Capture",
+            "type": "string"
+          },
+          "ended": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ended"
+          },
+          "teach_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Teach Id"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Started At"
+          },
+          "deadline_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deadline At"
+          },
+          "event_count": {
+            "title": "Event Count",
+            "type": "integer"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "pending": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BotTeachPending"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "available",
+          "max_seconds",
+          "now",
+          "recording",
+          "capture",
+          "event_count",
+          "truncated"
+        ],
+        "title": "BotTeachStatus",
+        "type": "object"
+      },
+      "BotTeachStopParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "discard": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Discard"
+          }
+        },
+        "title": "BotTeachStopParams",
+        "type": "object"
+      },
+      "BotTeachStopResult": {
+        "additionalProperties": false,
+        "properties": {
+          "empty": {
+            "title": "Empty",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "teach_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Teach Id"
+          },
+          "skill_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Skill Name"
+          },
+          "event_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Count"
+          },
+          "truncated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Truncated"
+          },
+          "prompt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Prompt"
+          }
+        },
+        "required": [
+          "empty"
+        ],
+        "title": "BotTeachStopResult",
+        "type": "object"
+      },
+      "BotTemplateReview": {
+        "additionalProperties": false,
+        "properties": {
+          "format_version": {
+            "title": "Format Version",
+            "type": "integer"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "app_version": {
+            "title": "App Version",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "suggested_name": {
+            "title": "Suggested Name",
+            "type": "string"
+          },
+          "suggested_display_name": {
+            "title": "Suggested Display Name",
+            "type": "string"
+          },
+          "soul": {
+            "default": "",
+            "title": "Soul",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TemplateModelPin"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "toolsets": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Toolsets"
+          },
+          "skills": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateSkill"
+            },
+            "title": "Skills",
+            "type": "array"
+          },
+          "mcp_servers": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateMcpServer"
+            },
+            "title": "Mcp Servers",
+            "type": "array"
+          },
+          "routines": {
+            "items": {
+              "$ref": "#/components/schemas/TemplateRoutine"
+            },
+            "title": "Routines",
+            "type": "array"
+          },
+          "skipped_routines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Skipped Routines",
+            "type": "array"
+          },
+          "has_avatar": {
+            "default": false,
+            "title": "Has Avatar",
+            "type": "boolean"
+          },
+          "look": {
+            "additionalProperties": true,
+            "title": "Look",
+            "type": "object"
+          }
+        },
+        "required": [
+          "format_version",
+          "created_at",
+          "app_version",
+          "digest",
+          "size",
+          "display_name",
+          "suggested_name",
+          "suggested_display_name"
+        ],
+        "title": "BotTemplateReview",
         "type": "object"
       },
       "BrowserAction": {
@@ -7976,6 +9059,57 @@
           "message"
         ],
         "title": "CanonicalBotDeliverResult",
+        "type": "object"
+      },
+      "CanonicalBotStopParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CanonicalBotStopParams",
+        "type": "object"
+      },
+      "CanonicalBotStopResult": {
+        "additionalProperties": false,
+        "description": "Stop of one delivery's turn: ``cancelled`` while queued, ``interrupted`` while running,\n``finished`` when it already ended, ``not_found`` when this authority never admitted the id.",
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stopped": {
+            "title": "Stopped",
+            "type": "boolean"
+          },
+          "handoffs": {
+            "title": "Handoffs",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status",
+          "stopped",
+          "handoffs"
+        ],
+        "title": "CanonicalBotStopResult",
         "type": "object"
       },
       "CanonicalConfigGetResult": {
@@ -9279,6 +10413,16 @@
           "bot_mode_protocol": {
             "default": true,
             "title": "Bot Mode Protocol",
+            "type": "boolean"
+          },
+          "bot_birth_notice": {
+            "default": false,
+            "title": "Bot Birth Notice",
+            "type": "boolean"
+          },
+          "bot_about_you": {
+            "default": false,
+            "title": "Bot About You",
             "type": "boolean"
           },
           "install_id": {
@@ -15361,7 +16505,14 @@
           "add",
           "remove",
           "pause",
-          "resume"
+          "resume",
+          "run",
+          "history",
+          "history_output",
+          "schedule_preview",
+          "trigger_status",
+          "trigger_issue",
+          "trigger_remove"
         ],
         "title": "CronAction",
         "type": "string"
@@ -15794,6 +16945,18 @@
             "default": null,
             "title": "Name"
           },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Run Id"
+          },
           "include_disabled": {
             "anyOf": [
               {
@@ -15893,7 +17056,7 @@
       },
       "CronManageResult": {
         "additionalProperties": true,
-        "description": "Pass-through of ``tools/cronjob_tools.py::cronjob`` JSON: ``list`` \u2192 ``jobs``/``count``\n(+ ``scoped`` when profile-scoped); ``add`` \u2192 the created job's summary + ``job``; ``remove`` \u2192\n``removed_job``; ``pause``/``resume`` \u2192 ``job``. A tool-level failure lands in ``error``.",
+        "description": "Pass-through of ``tools/cronjob_tools.py::cronjob`` JSON: ``list`` \u2192 ``jobs``/``count``\n(+ ``scoped`` when profile-scoped, ``actions`` = the routine actions this gateway supports); ``add``\n\u2192 the created job's summary + ``job`` (or ``reason`` when the schedule is refused); ``remove`` \u2192\n``removed_job``; ``pause``/``resume`` \u2192 ``job``; ``run`` \u2192 ``started``/``reason``; ``history`` \u2192\n``runs``; ``history_output`` \u2192 ``output``; ``schedule_preview`` \u2192 normalized ``schedule``;\n``trigger_*`` \u2192 the routine's webhook trigger (``key`` only on ``trigger_issue``). A tool-level\nfailure lands in ``error``.",
         "properties": {
           "success": {
             "anyOf": [
@@ -16127,6 +17290,216 @@
               }
             ],
             "default": null
+          },
+          "actions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Actions"
+          },
+          "started": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Started"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mode"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Limit"
+          },
+          "runs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CronRunRecord"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Runs"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Run Id"
+          },
+          "output": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Output"
+          },
+          "truncated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Truncated"
+          },
+          "kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Kind"
+          },
+          "available": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Available"
+          },
+          "blocked_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Blocked By"
+          },
+          "configured": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Configured"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
+          },
+          "removed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Removed"
           }
         },
         "title": "CronManageResult",
@@ -16192,6 +17565,79 @@
           "extra_prompt"
         ],
         "title": "CronRunParams",
+        "type": "object"
+      },
+      "CronRunRecord": {
+        "additionalProperties": false,
+        "description": "One attempt in ``cron.manage {action: \"history\"}``: newest first, at most 20 per job.",
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Finished At"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Duration Seconds"
+          },
+          "has_output": {
+            "default": false,
+            "title": "Has Output",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "CronRunRecord",
         "type": "object"
       },
       "CronStatusResult": {
@@ -16776,6 +18222,16 @@
             "default": "",
             "title": "Reason",
             "type": "string"
+          },
+          "ask": {
+            "default": "",
+            "title": "Ask",
+            "type": "string"
+          },
+          "ask_at": {
+            "default": 0.0,
+            "title": "Ask At",
+            "type": "number"
           }
         },
         "required": [
@@ -16883,6 +18339,37 @@
           }
         },
         "title": "DisplayLeaseReleaseParams",
+        "type": "object"
+      },
+      "DisplayLeaseResolveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "ask_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ask At"
+          }
+        },
+        "title": "DisplayLeaseResolveParams",
         "type": "object"
       },
       "DisplayLeaseResult": {
@@ -25447,6 +26934,29 @@
             "default": null,
             "title": "Choices"
           },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scope"
+          },
+          "draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApprovalDraft"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "tool_name": {
             "anyOf": [
               {
@@ -29130,6 +30640,11 @@
             "default": 0,
             "title": "Delegations",
             "type": "integer"
+          },
+          "handoffs": {
+            "default": 0,
+            "title": "Handoffs",
+            "type": "integer"
           }
         },
         "required": [
@@ -30297,6 +31812,16 @@
             "title": "Bot Mode Protocol",
             "type": "boolean"
           },
+          "bot_birth_notice": {
+            "default": false,
+            "title": "Bot Birth Notice",
+            "type": "boolean"
+          },
+          "bot_about_you": {
+            "default": false,
+            "title": "Bot About You",
+            "type": "boolean"
+          },
           "install_id": {
             "default": "",
             "title": "Install Id",
@@ -30411,6 +31936,292 @@
           "asset"
         ],
         "title": "ProfilesSetAssetResult",
+        "type": "object"
+      },
+      "ProfilesTemplateExportParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          }
+        },
+        "title": "ProfilesTemplateExportParams",
+        "type": "object"
+      },
+      "ProfilesTemplateExportResult": {
+        "additionalProperties": false,
+        "properties": {
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "data": {
+            "title": "Data",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          },
+          "sha256": {
+            "title": "Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "data",
+          "size",
+          "sha256"
+        ],
+        "title": "ProfilesTemplateExportResult",
+        "type": "object"
+      },
+      "ProfilesTemplateImportParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Data"
+          },
+          "dry_run": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dry Run"
+          },
+          "reviewed_digest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reviewed Digest"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Name"
+          },
+          "no_alias": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "No Alias"
+          },
+          "share_auth": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Share Auth"
+          },
+          "mirror_credentials": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mirror Credentials"
+          }
+        },
+        "title": "ProfilesTemplateImportParams",
+        "type": "object"
+      },
+      "ProfilesTemplateImportResult": {
+        "additionalProperties": false,
+        "properties": {
+          "dry_run": {
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BotTemplateReview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Path"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Name"
+          },
+          "skills_imported": {
+            "default": 0,
+            "title": "Skills Imported",
+            "type": "integer"
+          },
+          "routines_imported": {
+            "default": 0,
+            "title": "Routines Imported",
+            "type": "integer"
+          },
+          "routines_skipped": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Routines Skipped",
+            "type": "array"
+          },
+          "has_avatar": {
+            "default": false,
+            "title": "Has Avatar",
+            "type": "boolean"
+          },
+          "model_set": {
+            "default": false,
+            "title": "Model Set",
+            "type": "boolean"
+          },
+          "mirrored": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProfileMirrored"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "dry_run"
+        ],
+        "title": "ProfilesTemplateImportResult",
         "type": "object"
       },
       "ProjectFacts": {
@@ -43657,6 +45468,112 @@
         "title": "TaskIdResult",
         "type": "object"
       },
+      "TemplateMcpServer": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "transport": {
+            "default": "stdio",
+            "title": "Transport",
+            "type": "string"
+          },
+          "command": {
+            "default": "",
+            "title": "Command",
+            "type": "string"
+          },
+          "url": {
+            "default": "",
+            "title": "Url",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "needs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Needs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TemplateMcpServer",
+        "type": "object"
+      },
+      "TemplateModelPin": {
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "default": "",
+            "title": "Provider",
+            "type": "string"
+          },
+          "default": {
+            "type": "string",
+            "default": "",
+            "title": "Default"
+          }
+        },
+        "title": "TemplateModelPin",
+        "type": "object"
+      },
+      "TemplateRoutine": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "schedule": {
+            "title": "Schedule",
+            "type": "string"
+          },
+          "prompt": {
+            "title": "Prompt",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "schedule",
+          "prompt"
+        ],
+        "title": "TemplateRoutine",
+        "type": "object"
+      },
+      "TemplateSkill": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "files": {
+            "default": 0,
+            "title": "Files",
+            "type": "integer"
+          },
+          "has_scripts": {
+            "default": false,
+            "title": "Has Scripts",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "TemplateSkill",
+        "type": "object"
+      },
       "TerminalClosePayload": {
         "additionalProperties": false,
         "properties": {
@@ -47822,6 +49739,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/CanonicalBotDeliverResult"
+        }
+      }
+    },
+    {
+      "name": "bot_relay.stop",
+      "summary": "",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/CanonicalBotStopParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CanonicalBotStopResult"
         }
       }
     },

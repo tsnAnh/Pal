@@ -25,7 +25,7 @@ def test_desktop_process_kill_stop_and_mcp_reload_reach_only_this_session(tmp_pa
     assert receipt['kill'] == 'killed', receipt
     # Not ``not_found``, which Desktop's session-gone latch reads as a dead chat (dokterdok N64).
     assert receipt['foreign_kill'] == 'process_not_found', receipt
-    assert receipt['stop'] == {'killed': 1, 'delegations': 0}, receipt
+    assert receipt['stop'] == {'killed': 1, 'delegations': 0, 'handoffs': 0}, receipt
     assert receipt['list_fields'] == ['completion_reason', 'exited_at', 'started_epoch'], receipt
     assert receipt['list_ids'] is True, receipt
     # tools.show is served for an owner session (the classic CLI's /tools), not -32601.

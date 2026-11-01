@@ -1,6 +1,10 @@
 import { ConfirmDialog, host } from '@hermes/plugin-sdk'
 import type { useI18n } from '@hermes/plugin-sdk'
 
+import { AboutYouDialog } from './about-you-dialog'
+import { BotSearchDialog } from './bot-search'
+import { BotTemplateImportDialog } from './bot-template-dialog'
+import { ConnectAppsDialog } from './connect-apps-dialog'
 import { CreateAgentDialog, CreateGroupChatDialog, GroupDialog } from './create-dialog'
 import type { useRoster } from './data'
 import { EditProfileDialog } from './edit-profile-dialog'
@@ -72,6 +76,10 @@ export function renderRosterDialogs({
         // the full roster before allowing a group to be created.
         roster={roster}
       />
+      <AboutYouDialog />
+      <BotTemplateImportDialog />
+      <ConnectAppsDialog />
+      <BotSearchDialog />
       <SectionNameDialog
         initialName={sectionDialog?.mode === 'rename' ? sectionDialog.name : ''}
         mode={sectionDialog?.mode === 'rename' ? 'rename' : 'create'}

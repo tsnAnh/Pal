@@ -39,6 +39,7 @@ import { useShowToolActivity } from '@/store/tool-activity'
 import { setToolDisclosureOpen } from '@/store/tool-view'
 
 import { isApprovalActivity } from './approval-activity'
+import { BotChatApprovalActions, DraftApprovalCard } from './draft-approval'
 import { toolEntryDisclosureId } from './fallback-model/targets'
 import { isToolCallPart, summarizeToolRun } from './run-summary'
 
@@ -166,7 +167,7 @@ function ApprovalActivity({ floating, visible }: { floating: boolean; visible: b
   )
 }
 
-async function sendApproval(request: ApprovalRequest, choice: ApprovalChoice) {
+async function sendApproval(request: ApprovalRequest, choice: ApprovalChoice, editedText?: string) {
   const gateway = $gateway.get()
 
   if (!gateway) {
@@ -181,7 +182,7 @@ async function sendApproval(request: ApprovalRequest, choice: ApprovalChoice) {
     return
   }
 
-  await answerApproval(gateway, request, choice)
+  await answerApproval(gateway, request, choice, false, editedText)
   triggerHaptic(choice === 'deny' ? 'cancel' : 'submit')
   clearApprovalRequest(request.sessionId, request.requestId)
   void replayPendingApproval(gateway, request.sessionId).catch(() => undefined)
@@ -216,14 +217,24 @@ export function ApprovalQueue({
       )}
       swipeDirections={['left']}
     >
-      {(request, action) => (
-        <ApprovalCard
-          position={total - requests.length + requests.indexOf(request) + 1}
-          request={request}
-          stack={action}
-          total={total}
-        />
-      )}
+      {(request, action) =>
+        request.draft ? (
+          <DraftApprovalCard
+            position={total - requests.length + requests.indexOf(request) + 1}
+            request={request}
+            send={sendApproval}
+            stack={action}
+            total={total}
+          />
+        ) : (
+          <ApprovalCard
+            position={total - requests.length + requests.indexOf(request) + 1}
+            request={request}
+            stack={action}
+            total={total}
+          />
+        )
+      }
     </CardStack>
   )
 }
@@ -233,6 +244,45 @@ interface ApprovalCardProps {
   total: number
   position: number
   stack: CardStackAction
+}
+
+interface ApprovalMoreOptionsProps {
+  allowAlways: boolean
+  allowSession: boolean
+  busy: boolean
+  onAlways: () => void
+  onDeny: () => void
+  onSession: () => void
+}
+
+const ApprovalMoreOptions: FC<ApprovalMoreOptionsProps> = ({
+  allowAlways,
+  allowSession,
+  busy,
+  onAlways,
+  onDeny,
+  onSession
+}) => {
+  const { t } = useI18n()
+  const copy = t.assistant.approval
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button aria-label={copy.moreOptions} disabled={busy} size="sm" variant="secondary">
+          {copy.alwaysAllowMenu}
+          <ChevronDown className="size-3" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-44">
+        {allowSession && <DropdownMenuItem onSelect={onSession}>{copy.allowSession}</DropdownMenuItem>}
+        {allowAlways && <DropdownMenuItem onSelect={onAlways}>{copy.alwaysAllowMenu}</DropdownMenuItem>}
+        <DropdownMenuItem onSelect={onDeny} variant="destructive">
+          {copy.reject}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }) => {
@@ -349,43 +399,40 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
         </pre>
       )}
       <div className="flex items-center justify-end gap-1.5 px-2 pb-2 pt-1" data-slot="tool-approval-actions">
-        <Button data-approval-deny="" disabled={busy} onClick={() => void respond('deny')} size="sm" variant="text">
-          {submitting === 'deny' ? <Loader2 className="size-3 animate-spin" /> : copy.reject}
-        </Button>
-        {hasMoreOptions && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button aria-label={copy.moreOptions} disabled={busy} size="sm" variant="secondary">
-                {copy.alwaysAllowMenu}
-                <ChevronDown className="size-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="min-w-44">
-              {allowSession && (
-                <DropdownMenuItem onSelect={() => void respond('session')}>{copy.allowSession}</DropdownMenuItem>
-              )}
-              {allowAlways && (
-                <DropdownMenuItem
-                  onSelect={() => {
-                    // Defer one tick so the menu fully unmounts before the dialog
-                    // mounts — otherwise Radix's focus-return races the dialog and
-                    // dismisses it via onInteractOutside.
-                    setTimeout(() => setConfirmAlways(true), 0)
-                  }}
-                >
-                  {copy.alwaysAllowMenu}
-                </DropdownMenuItem>
-              )}
-              <DropdownMenuItem onSelect={() => void respond('deny')} variant="destructive">
-                {copy.reject}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        {request.scope === 'bot_chat' ? (
+          <BotChatApprovalActions
+            allowAlways={allowAlways}
+            busy={busy}
+            description={request.description}
+            onAnswer={choice => void respond(choice)}
+            submitting={submitting}
+          />
+        ) : (
+          <>
+            <Button data-approval-deny="" disabled={busy} onClick={() => void respond('deny')} size="sm" variant="text">
+              {submitting === 'deny' ? <Loader2 className="size-3 animate-spin" /> : copy.reject}
+            </Button>
+            {hasMoreOptions && (
+              <ApprovalMoreOptions
+                allowAlways={allowAlways}
+                allowSession={allowSession}
+                busy={busy}
+                onAlways={() => {
+                  // Defer one tick so the menu fully unmounts before the dialog
+                  // mounts — otherwise Radix's focus-return races the dialog and
+                  // dismisses it via onInteractOutside.
+                  setTimeout(() => setConfirmAlways(true), 0)
+                }}
+                onDeny={() => void respond('deny')}
+                onSession={() => void respond('session')}
+              />
+            )}
+            <Button data-approval-run="" disabled={busy} onClick={() => void respond('once')} size="sm">
+              {submitting === 'once' ? <Loader2 className="size-3 animate-spin" /> : copy.run}
+              <span className="opacity-60">↵</span>
+            </Button>
+          </>
         )}
-        <Button data-approval-run="" disabled={busy} onClick={() => void respond('once')} size="sm">
-          {submitting === 'once' ? <Loader2 className="size-3 animate-spin" /> : copy.run}
-          <span className="opacity-60">↵</span>
-        </Button>
       </div>
 
       <Dialog onOpenChange={setConfirmAlways} open={confirmAlways}>

@@ -59,6 +59,7 @@ import {
 } from './composer-utils'
 import { ContextMenu } from './context-menu'
 import { COMPOSER_AREAS } from './contrib'
+import { ComposerControlRow } from './control-row'
 import { ComposerControls } from './controls'
 import { ComposerDirectiveActions } from './directive-actions'
 import { COMPOSER_DROP_ACTIVE_CLASS, COMPOSER_DROP_FADE_CLASS } from './drop-affordance'
@@ -117,19 +118,6 @@ import {
   selectionLinkLabel
 } from './url-refs'
 import { VoiceActivity, VoicePlaybackActivity } from './voice-activity'
-
-/** Grid areas for the menu / input / controls row: one row when roomy, input
- *  above menu + controls when stacked, and one area per row once two touch-size
- *  controls no longer fit side by side. */
-function controlRowGridClass(singleColumn: boolean, stacked: boolean): string {
-  if (singleColumn) {
-    return 'grid-cols-[minmax(0,1fr)] gap-(--composer-row-gap) [grid-template-areas:"input"_"menu"_"controls"]'
-  }
-
-  return stacked
-    ? 'grid-cols-[auto_1fr] gap-(--composer-row-gap) [grid-template-areas:"input_input"_"menu_controls"]'
-    : 'grid-cols-[auto_1fr_auto] items-center gap-(--composer-control-gap) [grid-template-areas:"menu_input_controls"]'
-}
 
 export function ChatBar({
   busy,
@@ -1132,6 +1120,7 @@ export function ChatBar({
   const controls = (
     <ComposerControls
       autoSpeak={autoSpeak}
+      botLayout={botChat && !singleColumn}
       busy={busy}
       busyAction={busyAction}
       canSubmit={canSubmit}
@@ -1166,7 +1155,8 @@ export function ChatBar({
     />
   )
 
-  const inputWidthClass = composerInputWidthClass(stacked)
+  const cardLayout = stacked || botChat
+  const inputWidthClass = composerInputWidthClass(cardLayout)
 
   const input = (
     <div className={cn('relative', inputWidthClass)}>
@@ -1178,7 +1168,7 @@ export function ChatBar({
         className={cn(
           'min-h-[1.625rem] min-h-(--composer-input-min-height) max-h-(--composer-input-max-height) cursor-text overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] bg-transparent pb-1 pr-1 pt-1 leading-normal text-foreground outline-none disabled:cursor-not-allowed',
           '**:data-ref-text:cursor-default',
-          stacked && 'pl-3',
+          cardLayout && 'pl-3',
           inputWidthClass,
           // Inside the native Wayland HUD drag region: a drag region swallows
           // the page's mouse input whole, so the input must opt back out or it
@@ -1350,8 +1340,7 @@ export function ChatBar({
           </StatusDrawerContent>
           <ComposerPrimitive.Root
             className={cn(
-              'group/composer relative w-full overflow-visible',
-              botChat && !stacked && attachments.length === 0 ? 'rounded-full' : 'rounded-2xl',
+              'group/composer relative w-full overflow-visible rounded-2xl',
               poppedOut && 'bg-transparent',
               dragging && 'cursor-grabbing select-none touch-none',
               // Native Wayland HUD: setBounds cannot position a top-level
@@ -1511,22 +1500,14 @@ export function ChatBar({
                   <VoicePlaybackActivity />
                   {queueEdit && editingQueuedPrompt && <QueuedEditBanner onExit={exitQueuedEdit} />}
                   {attachments.length > 0 && <AttachmentList attachments={attachments} onRemove={onRemoveAttachment} />}
-                  <div className={cn('grid w-full', controlRowGridClass(singleColumn, stacked))}>
-                    <div className="flex translate-y-[3px] items-start gap-(--composer-control-gap) self-start [grid-area:menu]">
-                      {contextMenu}
-                      <ContribSlot area={COMPOSER_AREAS.leading} />
-                    </div>
-                    <div className="min-w-0 [grid-area:input]">{input}</div>
-                    {/* `justify-end` packs contributed actions and the send cluster
-                      together on the right. The cluster must not carry its own
-                      `ml-auto`: in the stacked layout the auto margin absorbs the
-                      row's free space and pins a contributed action to the row
-                      start, detached from the cluster (#116332). */}
-                    <div className="flex min-w-0 items-center justify-end gap-(--composer-control-gap) [grid-area:controls]">
-                      <ContribSlot area={COMPOSER_AREAS.actions} />
-                      {controls}
-                    </div>
-                  </div>
+                  <ComposerControlRow
+                    botChat={botChat}
+                    contextMenu={contextMenu}
+                    controls={controls}
+                    input={input}
+                    singleColumn={singleColumn}
+                    stacked={stacked}
+                  />
                   <ContribSlot area={COMPOSER_AREAS.bottom} />
                 </div>
               </div>

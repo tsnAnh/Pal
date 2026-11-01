@@ -84,7 +84,7 @@ def test_emits_for_default_when_any_profile_is_managed(tmp_path):
     _make_bot_profile(home, "researcher", managed=True)
 
     section = bot_mode_probe.get_bot_mode_protocol_section(home)
-    assert section.startswith("## Messaging other agents")
+    assert "## Messaging other agents" in section
     # default's callable alias is @hermes, never @default
     assert "@hermes" in section
     assert "@default" not in section
@@ -129,6 +129,88 @@ def test_roster_lines_carry_roles(tmp_path):
     assert "`@researcher`" in section
     assert "Research Buddy" in section
     assert "Deep research and literature review" in section
+
+
+def _write_profile_yaml(d, description, title):
+    (d / "profile.yaml").write_text(
+        f"description: {description}\nui_meta:\n  hermes-bots:\n    title: {title}\n", encoding="utf-8"
+    )
+
+
+def _own_part(profile_dir):
+    return bot_mode_probe.get_bot_mode_protocol_section(profile_dir).split("## Messaging other agents")[0]
+
+
+def test_bot_named_in_the_create_dialog_without_a_job_asks_for_one(tmp_path):
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    d = _make_bot_profile(home, "scout", managed=True)
+    _write_profile_yaml(d, "Scout", "Scout")
+
+    own = _own_part(d)
+    assert "no job yet" in own
+    assert "hermes profile describe scout --text '" in own
+
+
+def test_bot_with_a_job_is_told_the_job_not_its_title(tmp_path):
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    d = _make_bot_profile(home, "scout", managed=True)
+    _write_profile_yaml(d, "Price Scout — Tracks competitor pricing", "Price Scout")
+
+    own = _own_part(d)
+    assert "Tracks competitor pricing" in own
+    assert "Price Scout — Tracks" not in own
+    assert "no job yet" not in own
+
+
+def test_main_agent_is_not_asked_for_a_job(tmp_path):
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    _make_bot_profile(home, "scout", managed=True)
+
+    assert "## Your job" not in bot_mode_probe.get_bot_mode_protocol_section(home)
+
+
+def test_a_saved_job_reaches_the_rebuilt_bot_chat_prompt(tmp_path):
+    from unittest.mock import MagicMock, patch
+
+    from agent.system_prompt import _bot_mode_parts
+
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    d = _make_bot_profile(home, "scout", managed=True)
+    _write_profile_yaml(d, "Scout", "Scout")
+    agent = MagicMock()
+    agent._session_title_hint = "Bot Chat"
+
+    with patch("agent.system_prompt._agent_home", return_value=str(d)):
+        assert "no job yet" in "".join(_bot_mode_parts(agent))
+        _write_profile_yaml(d, "Tracks competitor pricing", "Scout")
+        rebuilt = "".join(_bot_mode_parts(agent))
+
+    assert "Tracks competitor pricing" in rebuilt
+    assert "no job yet" not in rebuilt
+
+
+def test_editing_the_tail_of_a_long_job_refreshes_the_epoch(tmp_path):
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    d = _make_bot_profile(home, "scout", managed=True)
+    long_job = "Tracks competitor pricing across every regional storefront " * 4
+    _write_profile_yaml(d, long_job + "daily", "Scout")
+    before = bot_mode_probe.capability_fingerprint(d)
+    _write_profile_yaml(d, long_job + "weekly", "Scout")
+
+    assert bot_mode_probe.capability_fingerprint(d) != before
+
+
+def test_house_style_rides_the_bot_chat_section(tmp_path):
+    home = tmp_path / ".hermes"
+    home.mkdir()
+    profile_dir = _make_bot_profile(home, "scout", managed=True)
+
+    assert "## How you talk" in bot_mode_probe.get_bot_mode_protocol_section(profile_dir)
 
 
 def test_soul_legacy_protocol_no_longer_suppresses_live_section(tmp_path):

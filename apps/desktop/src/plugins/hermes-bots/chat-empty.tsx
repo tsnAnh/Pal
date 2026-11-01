@@ -48,7 +48,7 @@ function focusedStoredId(): string {
   return String(host.state.focusedStoredSessionId?.get?.() ?? '')
 }
 
-function botForChat(roster: readonly RosterRow[], sessionId: string): null | RosterRow {
+export function botForChat(roster: readonly RosterRow[], sessionId: string): null | RosterRow {
   // Stored ids pass straight through, so a shell that hands us one still
   // resolves; otherwise the focused chat is the empty one being looked at.
   return botForStoredId(roster, sessionId) ?? botForStoredId(roster, focusedStoredId())

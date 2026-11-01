@@ -1307,6 +1307,7 @@ def _(rid, params: dict) -> dict:
     """cronjob() keys off HERMES_HOME, so ``profile`` reaches a per-profile cron store."""
     cronjob = _tools_mod("tools.cronjob_tools").cronjob
     action, jid = params.get("action", "list"), params.get("name", "")
+    routine = _tools_mod("tui_gateway.cron_routine_actions")
     if action == "list":
         # Paused jobs are excluded by default (reads as deletion in a toggle UI) — forward the flag.
         include_disabled = is_truthy_value(params.get("include_disabled", False))
@@ -1315,8 +1316,14 @@ def _(rid, params: dict) -> dict:
         # keep the safe [bot:<name>] filter.
         if profile := _str_arg(params, "profile"):
             result["scoped"] = profile
+        # Older gateways omit ``actions``; clients hide the routine controls they do not list.
+        result["actions"] = list(routine.ROUTINE_ACTIONS)
         return _ok(rid, result)
     if action == "add":
+        preview = routine.schedule_preview(params)
+        if not preview["success"]:
+            return _ok(rid, preview)
+        params = {**params, "schedule": preview["accepted_as"]}
         # Optional repeat / continuity / deliver ('bot-chat[:name]'): None keeps each cronjob() default.
         raw = cronjob(
             action="create", name=jid, schedule=params.get("schedule", ""), prompt=params.get("prompt", ""),
@@ -1324,7 +1331,11 @@ def _(rid, params: dict) -> dict:
             continuity=is_truthy_value(params.get("continuity")) if params.get("continuity") is not None else None,
             deliver=_str_arg(params, "deliver") or None)
         return _ok(rid, json.loads(raw))
-    if action in {"remove", "pause", "resume"}:
+    if action in routine.HANDLERS:
+        return _ok(rid, routine.HANDLERS[action](params))
+    if action == "remove":
+        return _ok(rid, routine.remove_routine(params, cronjob))
+    if action in {"pause", "resume"}:
         return _ok(rid, json.loads(cronjob(action=action, job_id=jid)))
     return _err(rid, 4016, f"unknown cron action: {action}")
 

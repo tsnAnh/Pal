@@ -21,7 +21,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RosterRow } from './types'
 
-const { hostMock, persistMock, pluginCtx, requestForBotMock, saveBotMetaMock } = vi.hoisted(() => ({
+const { dataFlags, hostMock, persistMock, pluginCtx, requestForBotMock, saveBotMetaMock } = vi.hoisted(() => ({
+  dataFlags: { byConnection: {} as Record<string, boolean>, serverGreetsUnprompted: true },
   hostMock: { openSession: vi.fn(), request: vi.fn() },
   persistMock: vi.fn(),
   // Null unless a test installs one — the plugin ctx is genuinely absent until
@@ -53,7 +54,15 @@ vi.mock('./data', () => ({
       ? { bot: { name: owner }, key: owner, name: owner, route: null }
       : { bot: owner, key: owner?.name, name: owner?.name, route: null },
   persistBotMetaSnapshot: persistMock,
-  saveBotMeta: saveBotMetaMock
+  saveBotMeta: saveBotMetaMock,
+  botServerGreetsUnprompted: (
+    bot: { connectionId?: string } | null,
+    route: null | { connectionId?: string } = null
+  ) => {
+    const id = route?.connectionId ?? bot?.connectionId
+
+    return id && id in dataFlags.byConnection ? dataFlags.byConnection[id] : dataFlags.serverGreetsUnprompted
+  }
 }))
 
 vi.mock('./shared', () => ({ getPluginCtx: () => pluginCtx.current }))
@@ -78,15 +87,17 @@ async function loadModule() {
 beforeEach(() => {
   vi.clearAllMocks()
   events = []
+  dataFlags.serverGreetsUnprompted = true
+  dataFlags.byConnection = {}
   pluginCtx.current = null
   hostMock.openSession.mockImplementation(async (id: string) => {
     events.push(`open:${id}`)
   })
 })
 
-/** Runs a kickoff creation and hands back the text the intro turn submitted. */
-async function kickoffTextSent(): Promise<string> {
-  let sent = ''
+/** Runs a kickoff creation and hands back what the intro turn submitted. */
+async function kickoffSubmitted(owner: RosterRow | string = 'ops'): Promise<Record<string, unknown>> {
+  let sent: Record<string, unknown> = {}
 
   respondWith((method, params) => {
     if (method === 'session.create') {
@@ -94,7 +105,7 @@ async function kickoffTextSent(): Promise<string> {
     }
 
     if (method === 'prompt.submit') {
-      sent = String(params.text ?? '')
+      sent = params
     }
 
     return {}
@@ -102,9 +113,13 @@ async function kickoffTextSent(): Promise<string> {
 
   const { createCanonicalChat } = await loadModule()
 
-  await createCanonicalChat('ops', { kickoff: true })
+  await createCanonicalChat(owner, { kickoff: true })
 
   return sent
+}
+
+async function kickoffTextSent(): Promise<string> {
+  return String((await kickoffSubmitted()).text ?? '')
 }
 
 describe('the lazy row is materialized before anything else touches it', () => {
@@ -206,18 +221,48 @@ describe('the lazy row is materialized before anything else touches it', () => {
   it('speaks the intro in the active locale (#91827)', async () => {
     // The first line of the forever-chat, and the bot's reply follows its
     // language — so a hardcoded English intro biased the whole conversation.
-    pluginCtx.current = { i18n: { t: key => (key === 'bot.kickoff' ? 'こんにちは、自己紹介をしてください！' : key) } }
+    pluginCtx.current = { i18n: { t: key => (key === 'bot.birthNotice' ? '作成されたばかりです。' : key) } }
 
-    expect(await kickoffTextSent()).toBe('こんにちは、自己紹介をしてください！')
+    expect(await kickoffTextSent()).toBe('作成されたばかりです。')
   })
 
   it('falls back to English when the bundle has not registered yet', async () => {
     // Creation can race plugin registration; an unresolved key must never
-    // reach the model as the literal `bot.kickoff`.
+    // reach the model as the literal `bot.birthNotice`.
     const text = await kickoffTextSent()
 
     expect(text.trim()).not.toBe('')
-    expect(text).not.toContain('bot.kickoff')
+    expect(text).not.toContain('bot.birthNotice')
+  })
+
+  it('greets unprompted: the birth notice is a hidden turn, never a user bubble', async () => {
+    expect((await kickoffSubmitted()).display_kind).toBe('hidden')
+  })
+
+  it('keeps the visible intro on a gateway that cannot hide the birth notice', async () => {
+    dataFlags.serverGreetsUnprompted = false
+
+    const sent = await kickoffSubmitted()
+
+    expect(sent.display_kind).toBeUndefined()
+    expect(sent.text).toBe('Hey, tell me about yourself!')
+  })
+
+  it('decides the birth notice per the bot connection, not the local roster', async () => {
+    dataFlags.serverGreetsUnprompted = true
+    dataFlags.byConnection = { 'remote-1': false }
+
+    const sent = await kickoffSubmitted({ name: 'ops', connectionId: 'remote-1' } as RosterRow)
+
+    expect(sent.display_kind).toBeUndefined()
+    expect(sent.text).toBe('Hey, tell me about yourself!')
+  })
+
+  it('hides the birth notice for a remote bot whose own connection advertises it', async () => {
+    dataFlags.serverGreetsUnprompted = false
+    dataFlags.byConnection = { 'remote-1': true }
+
+    expect((await kickoffSubmitted({ name: 'ops', connectionId: 'remote-1' } as RosterRow)).display_kind).toBe('hidden')
   })
 
   it('retries navigation after the compat kickoff when the eager title is unsupported', async () => {
@@ -251,6 +296,33 @@ describe('the lazy row is materialized before anything else touches it', () => {
 
     expect(await createCanonicalChat('ops')).toBe('stored-1')
     expect(events).toEqual(['open:stored-1', 'kickoff:persisted', 'open:stored-1'])
+  })
+
+  it('keeps the visible compat intro on a gateway without the eager title write', async () => {
+    let sent: Record<string, unknown> = {}
+
+    respondWith((method, params) => {
+      if (method === 'session.create') {
+        return { session_id: 'runtime-1', stored_session_id: 'stored-1' }
+      }
+
+      if (method === 'session.title') {
+        throw new Error('unknown method')
+      }
+
+      if (method === 'prompt.submit') {
+        sent = params
+      }
+
+      return {}
+    })
+
+    const { createCanonicalChat } = await loadModule()
+
+    await createCanonicalChat('ops', { kickoff: true })
+
+    expect(sent.display_kind).toBeUndefined()
+    expect(sent.text).toBe('Hey, tell me about yourself!')
   })
 
   it('still returns the created registry row when the intro fails', async () => {

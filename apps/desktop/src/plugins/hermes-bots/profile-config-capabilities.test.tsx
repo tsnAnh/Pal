@@ -119,7 +119,9 @@ const advancedState: {
   skills: CapabilityEntry[]
   soul: string
   toolsets: CapabilityEntry[]
+  voice: { language: null; languageKey: null; voice: null; voiceKey: null }
 } = {
+  voice: { language: null, languageKey: null, voice: null, voiceKey: null },
   dirtyMcp: false,
   dirtyModel: false,
   dirtySkills: false,

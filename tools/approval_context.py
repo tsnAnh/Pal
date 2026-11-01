@@ -28,6 +28,7 @@ _approval_tool_call_id: contextvars.ContextVar[str] = _ctx("approval_tool_call_i
 # hooks so observer plugins attach marks to the REAL session scope — otherwise they fall back to a synthetic "default"
 # session whose scope never closes, so close-time exporters never ship them.
 _approval_session_id: contextvars.ContextVar[str] = _ctx("approval_session_id")
+_approval_bot_chat: contextvars.ContextVar[bool] = contextvars.ContextVar("approval_bot_chat", default=False)
 # Interactive-CLI flag. Concurrent ACP sessions share a ThreadPoolExecutor, so mutating
 # os.environ["HERMES_INTERACTIVE"] races: one session's `finally` restore can clobber another's set mid-run, dropping
 # it onto the non-interactive auto-approve path so a dangerous command runs without the approval callback firing
@@ -138,6 +139,23 @@ def reset_current_observability_context(tokens: _Tokens) -> None:
     _approval_session_id.reset(session_token)
     _approval_tool_call_id.reset(tool_token)
     _approval_turn_id.reset(turn_token)
+
+
+def set_current_bot_chat(active: bool) -> contextvars.Token[bool]:
+    """Mark the current turn as a Bot-Mode-managed bot's canonical Bot Chat."""
+    return _approval_bot_chat.set(bool(active))
+
+
+def reset_current_bot_chat(token: contextvars.Token[bool]) -> None:
+    _approval_bot_chat.reset(token)
+
+
+def is_bot_chat_turn() -> bool:
+    return _approval_bot_chat.get()
+
+
+def get_current_turn_id() -> str:
+    return _approval_turn_id.get()
 
 
 def get_current_session_key(default: str = "default") -> str:

@@ -46,6 +46,7 @@ vi.mock('@hermes/plugin-sdk', async importOriginal => {
       // `$focusedBotOwner` is resolved once at bot-state module load.
       state: { ...sdk.host.state, focusedSessionOwner: nanoAtom(null) }
     },
+    useConnectorApps: () => ({ catalog: { curated: [], others: [] }, usedBy: () => [] }),
     // The plugin bundle normally lands via `ctx.i18n.register` at load, so
     // without this every localized label renders empty.
     usePluginI18n: () => translateBots

@@ -1,13 +1,20 @@
-import { type ChatPersona, setChatPersonas, setHandlePersonas } from '@hermes/plugin-sdk'
+import { type ChatPersona, type ChatVoiceLabels, setChatPersonas, setHandlePersonas } from '@hermes/plugin-sdk'
 
 import { avatarColor, botAppearance, BotFace } from './avatar'
 import { isBackfilledFacePng } from './avatar-image'
 import { $botMeta, $lastRoster, botHandle } from './data'
+import { botsText } from './i18n'
 import { displayName } from './labels'
 import { botRosterMeta } from './routing'
 import type { RosterRow } from './types'
 
 let personaCache = new Map<string, ChatPersona>()
+
+function voiceLabels(): ChatVoiceLabels {
+  const { ended, ...labels } = botsText().voice.call
+
+  return { ...labels, callEnded: ended }
+}
 
 function personaFor(bot: RosterRow, live: Map<string, ChatPersona>): ChatPersona {
   const meta = botRosterMeta(bot, $botMeta.get())
@@ -25,6 +32,8 @@ function personaFor(bot: RosterRow, live: Map<string, ChatPersona>): ChatPersona
 
   const persona: ChatPersona = {
     name,
+    stopNowLabel: () => botsText().canonical.stopNow,
+    voice: voiceLabels,
     avatar: size => (
       <BotFace
         color={avatarColor(color, bot.name)}

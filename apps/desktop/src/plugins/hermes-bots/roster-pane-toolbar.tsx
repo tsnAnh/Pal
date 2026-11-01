@@ -17,7 +17,11 @@ import {
 import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
+import { AboutYouMenuItem } from './about-you-dialog'
+import { openBotSearch } from './bot-search-state'
+import { BotTemplateImportMenuItem } from './bot-template-dialog'
 import { seatableGroupBots, useGroupCapability } from './canonical-group-capabilities'
+import { ConnectAppsMenuItem } from './connect-apps-dialog'
 import { botSourceStatus } from './data'
 import type { useBots } from './i18n'
 import { setActivityToasts } from './roster-actions'
@@ -164,9 +168,8 @@ export function renderRosterToolbar({
             <Tip label={b.roster.search}>
               <Button
                 aria-label={b.roster.search}
-                aria-pressed={searchOpen}
                 className="grid size-[30px] place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
-                onClick={() => setSearchOpen(!searchOpen)}
+                onClick={openBotSearch}
                 size="icon-xs"
                 variant="ghost"
               >
@@ -192,18 +195,21 @@ export function renderRosterToolbar({
                 <Codicon className="mr-1.5" name="hubot" />
                 {b.bot.newTitle}
               </DropdownMenuItem>
+              <BotTemplateImportMenuItem />
               <NewGroupChatItem label={b.group.newTitle} onSelect={() => setGroupCreateOpen(true)} roster={roster} />
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setSectionDialog({ mode: 'create' })}>
                 <Codicon className="mr-1.5" name="new-folder" />
                 {b.sections.newSection}
               </DropdownMenuItem>
+              <ConnectAppsMenuItem />
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setActivityToasts(!activityToasts)}>
                 <Codicon className="mr-1.5" name={activityToasts ? 'bell-slash' : 'bell'} />
                 {activityToasts ? b.roster.silenceActivityToasts : b.roster.enableActivityToasts}
               </DropdownMenuItem>
               <BotsOnlyModeItem enterLabel={b.roster.botsOnlyMode} exitLabel={b.roster.showSessionsSidebar} />
+              <AboutYouMenuItem />
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

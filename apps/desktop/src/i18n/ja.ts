@@ -3418,7 +3418,24 @@ export const jaOverrides = {
       alwaysTitle: 'このコマンドを常に許可しますか？',
       alwaysDescription: pattern =>
         `これにより "${pattern}" パターンが永続的な許可リスト (~/.hermes/config.yaml) に追加されます。Hermes はこのセッションや将来のセッションで、このようなコマンドについて再度尋ねません。`,
-      alwaysAllow: '常に許可'
+      alwaysAllow: '常に許可',
+      allowOnce: '今回のみ許可',
+      deny: '拒否',
+      alwaysDescriptionBot: pattern =>
+        `このボットは今後、すべてのチャットで “${pattern}” の前に確認しなくなります。`,
+      draftTitle: 'メッセージの下書き',
+      draftTo: recipient => `宛先: ${recipient}`,
+      draftVia: channel => `${channel} 経由`,
+      draftSubject: subject => `件名: ${subject}`,
+      draftSend: '送信',
+      draftSendEdited: '編集して送信',
+      draftDiscard: '破棄',
+      draftEdit: '編集',
+      draftCancelEdit: '編集をやめる',
+      draftEditLabel: 'メッセージを編集',
+      draftHeld: '不在中に作成されました。何も送信されていません。',
+      draftExpired: '期限切れ — この下書きは送信できません。破棄して閉じてください。',
+      draftUnviewable: 'このメッセージは全体を表示できないため、破棄のみ可能です。'
     },
     clarify: jaClarify,
     themePicker: jaThemePicker,

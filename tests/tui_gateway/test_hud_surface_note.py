@@ -100,6 +100,40 @@ class TestTurnRouting:
         assert server._hud_surface_note(session) == ""
 
 
+class TestSpokenTurnOnTheHud:
+    """The HUD's tool_call branch must not swallow the voice-turn reply note."""
+
+    def _bridged_hud_session(self, **extra):
+        return _session(tools={"tool_call"}, client_surface="hud", **extra)
+
+    def test_spoken_hud_turn_carries_both_notes(self):
+        from tools.tts_streaming import VOICE_REPLY_NOTE
+
+        session = self._bridged_hud_session()
+        hud_only = server._hud_surface_note(session)
+        note = server._hud_surface_note(session, voice_turn=True)
+
+        assert hud_only and VOICE_REPLY_NOTE not in hud_only
+        assert note == f"{hud_only}\n\n{VOICE_REPLY_NOTE}"
+
+    def test_typed_hud_turn_has_no_voice_note(self):
+        from tools.tts_streaming import VOICE_REPLY_NOTE
+
+        assert VOICE_REPLY_NOTE not in server._hud_surface_note(self._bridged_hud_session(), voice_turn=False)
+
+    def test_spoken_turn_leaves_the_system_prompt_byte_identical(self):
+        agent = types.SimpleNamespace(valid_tool_names={"tool_call"}, _cached_system_prompt="SYSTEM PROMPT \u00e9")
+        session = _session(client_surface="hud") | {"agent": agent}
+        before = agent._cached_system_prompt.encode()
+
+        note = server._hud_surface_note(session, voice_turn=True)
+        sent = server._prepend_note("what is this?", note)
+
+        assert agent._cached_system_prompt.encode() == before
+        assert note in sent and sent.endswith("what is this?")
+        assert "SYSTEM PROMPT" not in sent
+
+
 class TestPrepending:
     """Notes ride the model input; the persisted prompt stays what was typed."""
 

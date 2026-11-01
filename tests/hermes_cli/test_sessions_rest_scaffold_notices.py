@@ -119,3 +119,40 @@ def test_rest_projection_keeps_steer_row_without_marker_as_is():
     assert len(projected) == 1
     assert "display_content" not in projected[0]
     assert projected[0]["content"] == "plain legacy text"
+
+
+def test_oldest_page_of_a_compacted_session_ships_the_human_opening_visible_and_the_handoff_hidden():
+    from agent.context_compressor import _SUMMARY_END_MARKER, SUMMARY_PREFIX
+    from hermes_state import SessionDB
+
+    handoff = f"{SUMMARY_PREFIX}\nolder work\n\n{_SUMMARY_END_MARKER}"
+    db = SessionDB()
+    try:
+        db.create_session(session_id="compacted-opening", source="desktop")
+        db.append_message("compacted-opening", "user", "hello greeting", timestamp=1.0)
+        db.append_message("compacted-opening", "assistant", "hi", timestamp=2.0)
+        db.append_message("compacted-opening", "user", "more", timestamp=3.0)
+        db.archive_and_compact(
+            "compacted-opening",
+            [
+                {"role": "user", "content": handoff, "_compressed_summary": True, "timestamp": 1.5},
+                {"role": "assistant", "content": "tail", "timestamp": 4.0},
+            ],
+        )
+        page = db.get_messages(
+            "compacted-opening", limit=20, offset=0, latest=False,
+            include_compacted=True, include_ancestors=True,
+        )
+    finally:
+        db.close()
+
+    projected = _project_for_display(page)
+    opening = next(message for message in projected if message["role"] == "user")
+    hidden_users = [
+        message for message in projected
+        if message["role"] == "user" and message.get("display_kind") == "hidden"
+    ]
+
+    assert opening["content"] == "hello greeting"
+    assert not opening.get("display_kind")
+    assert [message["content"] for message in hidden_users] == [handoff]

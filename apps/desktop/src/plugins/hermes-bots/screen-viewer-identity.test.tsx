@@ -31,6 +31,7 @@ vi.mock('@hermes/plugin-sdk', async () => {
   }
 })
 vi.mock('./data', () => ({ botSelectionKey: (bot: RosterRow) => bot.name }))
+vi.mock('./teach-skill-controls', () => ({ TeachSkillBanner: () => null, TeachSkillControls: () => null }))
 vi.mock('./i18n', () => ({
   useBots: () => ({
     screen: {

@@ -29,51 +29,7 @@ import {
   type TranscriptProfileScope,
   transcriptTailState
 } from '@/store/transcript-tail'
-import type { SessionMessage, SessionMessagesResponse } from '@/types/hermes'
-
-/**
- * Compaction projection can stamp the session's opening USER row
- * `display_kind: hidden` (#96875): the durable store holds the greeting but
- * hydration drops the row, so paging to the very top of a compacted session
- * renders only the first assistant reply. When an older page carries the
- * opening user turn, clear the hidden stamp (keeping the content as the
- * display projection) so `toChatMessages` keeps it on screen. Only the
- * FIRST user row with content is unhidden — later hidden rows stay hidden
- * (model scaffolding, muted turns), and an opening row with no content
- * was never a greeting.
- */
-export function unhideOpeningUserRows(messages: SessionMessage[]): SessionMessage[] {
-  const openingIndex = messages.findIndex(message => message.role === 'user')
-
-  if (openingIndex < 0) {
-    return messages
-  }
-
-  const opening = messages[openingIndex]
-
-  if (opening.display_kind !== 'hidden') {
-    return messages
-  }
-
-  const content = opening.display_content ?? opening.content
-
-  if (content == null || content === '') {
-    return messages
-  }
-
-  return messages.map((message, index) => {
-    if (index !== openingIndex) {
-      return message
-    }
-
-    const { display_kind: _hidden, ...rest } = message
-
-    return {
-      ...rest,
-      display_content: typeof content === 'string' ? content : String(content)
-    }
-  })
-}
+import type { SessionMessagesResponse } from '@/types/hermes'
 
 /** Older rows likely exist beyond what the in-memory store holds. */
 export function transcriptBackfillAvailable(
@@ -623,12 +579,14 @@ export function backfillOlderTranscriptPage(request: BackfillRequest): Promise<b
     // below prepends whatever prefix the store is missing, and the recorded
     // state marks the session fully loaded so the REST action retires.
     recordTranscriptBackfillPage(storedSessionId, page, profile)
-    const olderRows = unhideOpeningUserRows(page.messages)
+    const olderRows = page.messages
     request.applyOlderPage(toChatMessages(olderRows))
 
     // #96875: paging can reach the top while the opening USER turn is still
-    // missing — the durable row is compaction-projected to display_kind=hidden
-    // (dropped at hydration) or sits before the last reachable `latest` page.
+    // missing — it sits before the last reachable `latest` page. The server
+    // projects a genuine human opening visible; display_kind=hidden rows are
+    // model scaffolding (compaction handoffs, Bot Mode birth notices,
+    // onboarding openings) and must stay off screen.
     // Once the tail bookkeeping reports the session fully loaded and the page
     // that landed carries no user turn, fetch the oldest display rows once and
     // prepend the opening user turn. Best-effort: a failure keeps the older
@@ -645,7 +603,7 @@ export function backfillOlderTranscriptPage(request: BackfillRequest): Promise<b
         })
 
         if (request.isCurrent()) {
-          request.applyOlderPage(toChatMessages(unhideOpeningUserRows(origin.messages)))
+          request.applyOlderPage(toChatMessages(origin.messages))
         }
       } catch {
         // Origin fetch is best-effort; the already-applied older page stays.

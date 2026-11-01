@@ -448,6 +448,65 @@ def execute_job_for_event(
     return _execute_job_now(job, extra_prompt=extra_prompt)
 
 
+RUN_REFUSED_NOT_FOUND = "not_found"
+RUN_REFUSED_PAUSED = "paused"
+RUN_REFUSED_RUNNING = "already_running"
+RUN_REFUSED_UNAVAILABLE = "unavailable"
+
+
+def _refused_run(code: str, message: str, job_id: Optional[str] = None) -> dict[str, Any]:
+    return {"started": False, "reason": code, "error": message, **({"job_id": job_id} if job_id else {})}
+
+
+def _routed_run_result(raw: str, job_id: str) -> dict[str, Any]:
+    outcome = json.loads(raw)
+    if outcome.get("success"):
+        return {"started": True, "job_id": job_id, "mode": "queued"}
+    return _refused_run(RUN_REFUSED_UNAVAILABLE, str(outcome.get("error") or "The run could not start."), job_id)
+
+
+def start_job_run_detached(job_ref: str) -> dict[str, Any]:
+    """Start a real run of an existing job without holding the caller for the run's length.
+
+    The at-most-once claim is taken synchronously, so a job that cannot run (missing, paused, already
+    in flight) is refused with a stable ``reason`` here; once claimed, the run executes on a thread that
+    carries the caller's profile scope and its outcome lands in the execution ledger. Returns
+    ``{"started": True, "job_id", "mode"}`` or ``{"started": False, "reason", "error"}``."""
+    try:
+        job = resolve_job_ref(job_ref)
+    except AmbiguousJobReference as exc:
+        return _refused_run(RUN_REFUSED_NOT_FOUND, str(exc))
+    if job is None:
+        return _refused_run(RUN_REFUSED_NOT_FOUND, "That routine no longer exists.")
+    job_id = job["id"]
+    if not is_job_runnable(job):
+        return _refused_run(RUN_REFUSED_PAUSED, "Turn the routine on before testing it.", job_id)
+    for hand_off in (_hand_off_primary_routed_run, _forward_relay_fronted_run):
+        raw = hand_off(job)
+        if raw is not None:
+            return _routed_run_result(raw, job_id)
+    _reap_stale_executions(str(job.get("name") or job_id))
+    from cron.scheduler import is_job_running
+    if is_job_running(job_id):
+        return _refused_run(RUN_REFUSED_RUNNING, _ALREADY_RUNNING_ERROR, job_id)
+    claimed_job, refusal = _claim_for_manual_run(job_id, "detached run")
+    if refusal is not None:
+        return _refused_run(RUN_REFUSED_UNAVAILABLE, str(refusal.get("error") or "The run could not start."), job_id)
+    from agent.memory_provider import spawn_context_thread
+    worker = spawn_context_thread(_run_claimed_job, name=f"cron-run-{job_id}", args=(claimed_job,))
+    try:
+        worker.start()
+    except RuntimeError as exc:
+        claim = claimed_job.get("fire_claim")
+        with contextlib.suppress(Exception):
+            mark_job_run(
+                job_id, False, str(exc),
+                expected_fire_owner=str(claim.get("by") or "") if isinstance(claim, dict) else None)
+        return _refused_run(RUN_REFUSED_UNAVAILABLE, "The run could not start.", job_id)
+    _notify_provider_jobs_changed_safe()
+    return {"started": True, "job_id": job_id, "mode": "background"}
+
+
 def _latest_job_output_excerpt(job_id: str, max_chars: int = 2000) -> Optional[str]:
     """Excerpt of the job's most recent saved output file for the background completion
     block (parent sees what the job produced). Never raises."""

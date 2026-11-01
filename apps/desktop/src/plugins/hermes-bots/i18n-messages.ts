@@ -2,10 +2,21 @@
  * Message SHAPE for Bot Mode's plugin-scoped i18n bundles (see `./i18n.ts`).
  */
 
+import { type BotDetailMessages } from './bot-detail-locales'
+import { type BotTemplateMessages } from './bot-template-locales'
 import { type CanonicalGroupMessages } from './canonical-group-locales'
+import { type RoutinesMessages } from './routines-locales'
+import { type VoiceMessages } from './voice-locales'
 
 export type BotsMessages = {
   canonical: { [K in keyof CanonicalGroupMessages]: string }
+  /** Routine operations: test now, run history, schedule preview, triggers. */
+  routines: RoutinesMessages
+  /** Per-bot voice, voice chat from the bot's chat, voice memos. */
+  voice: VoiceMessages
+  /** Bot templates: export a bot as a shareable file, import one after a review step. */
+  template: BotTemplateMessages
+  detail: BotDetailMessages
   /** Left rail: the bot + group-chat roster. */
   editor: {
     fullConfigHint: string
@@ -117,6 +128,51 @@ export type BotsMessages = {
     rosterUnavailable: (reason: string) => string
     waitingForGateway: string
   }
+  /** Facts about the owner every bot shares (name, time zone). */
+  aboutYou: {
+    menu: string
+    title: string
+    description: string
+    nameLabel: string
+    namePlaceholder: string
+    timezoneLabel: string
+    timezoneAuto: (zone: string) => string
+    loading: string
+    loadFailed: string
+    saveFailed: string
+    invalidTimezone: string
+    retry: string
+  }
+  /** Connect apps: the catalog of apps a bot can use, and which bots use each. */
+  connectApps: {
+    menu: string
+    title: string
+    description: string
+    focusDescription: (bot: string) => string
+    searchPlaceholder: string
+    searchLabel: string
+    popular: string
+    moreApps: string
+    noResults: string
+    loading: string
+    noBots: string
+    status: { connected: string; needsSignIn: string; notConnected: string }
+    comingSoon: string
+    unknown: string
+    offByOrg: string
+    action: { cancel: string; connect: string; reconnect: string; setup: string; turnOn: string }
+    waiting: string
+    usedBy: (bots: string) => string
+    usedByNone: string
+    manageBots: string
+    useFor: (bot: string) => string
+    botNeedsSignIn: string
+    botSignIn: string
+    botUnknown: string
+    notice: { failed: string; retry: string; signedOut: string; unavailable: string }
+    failure: { failed: string; needsSetup: string; rulesReadOnly: string }
+    openFromBot: string
+  }
   /** User-made roster sections (folders the user files bots into). */
   sections: {
     newSection: string
@@ -182,6 +238,9 @@ export type BotsMessages = {
     advanced: string
     advancedHint: string
     advancedFailed: string
+    sendWithoutAsking: string
+    sendWithoutAskingHint: string
+    sendPolicySaveFailed: string
     openAnotherChatUnsupported: string
     remoteConnectionsUnsupported: string
     /** Bot-open failure toasts (canonical-chat.ts notifyBotOpenFailure). The
@@ -197,6 +256,7 @@ export type BotsMessages = {
     chatEmpty: string
     /** First line of a brand-new bot's forever-chat — see `kickoffText`. */
     kickoff: string
+    birthNotice: string
   }
   /** Avatar picker: shapes, blobs, pets, uploads, generation. */
   avatar: {
@@ -329,6 +389,21 @@ export type BotsMessages = {
     filterSkills: string
     searchHub: string
     noMcpServers: string
+  }
+
+  /** The card a bot raises when a step is only a person can do (sign-in, CAPTCHA, a code from another device). */
+  handback: {
+    needsYou: string
+    openComputer: string
+    done: string
+    cancel: string
+    inControl: string
+    elsewhere: string
+    resolved: string
+    continueMessage: string
+    cancelMessage: string
+    actionFailed: string
+    sendFailed: (name: string) => string
   }
 
   /** Bot Screen: the bot's headless desktop on the gateway host, live in a pane. */

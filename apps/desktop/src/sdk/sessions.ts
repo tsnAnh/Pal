@@ -1,3 +1,4 @@
+import { hermesApi } from '@/hermes'
 import {
   pinSession,
   setPinnedSessionOrder,
@@ -7,6 +8,9 @@ import {
 } from '@/store/layout'
 import { $sessions, sessionMatchesStoredId, sessionPinId } from '@/store/session'
 import { setSessionColorOverride } from '@/store/session-color'
+import type { PaginatedSessions, SessionSearchResponse } from '@/types/hermes'
+
+import type { PluginProfileRoute } from './profile-request'
 
 /** Pins and colours are keyed by the DURABLE (lineage-root) id so they survive
  *  compression's session-id rotation; a row's live id resolves through
@@ -76,4 +80,69 @@ export const sessionsHost = {
   setColor: (storedSessionId: string, color: null | string): void => {
     setSessionColorOverride(durableSessionPinId(storedSessionId), color)
   }
+}
+
+/** Read persisted sessions from a profile's owning source without dialing
+ *  that profile's gateway. The source primary opens state.db directly. */
+export async function listPersistedSessions(
+  route: PluginProfileRoute | null,
+  options: { profile: string; limit?: number }
+): Promise<PaginatedSessions> {
+  if (route && (!route.connectionId.trim() || !route.profile.trim() || !route.targetProfile.trim())) {
+    throw new Error('Profile route must include connectionId, profile, and targetProfile')
+  }
+
+  const profile = options.profile.trim()
+
+  if (!profile) {
+    throw new Error('Persisted session reads require a profile')
+  }
+
+  const limit = Math.min(500, Math.max(0, options.limit ?? 200))
+
+  const query = new URLSearchParams({
+    limit: String(limit),
+    offset: '0',
+    min_messages: '0',
+    archived: 'exclude',
+    order: 'created',
+    profile
+  })
+
+  return hermesApi<PaginatedSessions>({
+    ...(route ? { connectionId: route.connectionId } : {}),
+    path: `/api/profiles/sessions?${query.toString()}`,
+    timeoutMs: 60_000
+  })
+}
+
+/** Full-text search over one profile's persisted sessions (hidden Bot Chats
+ *  included) on the source primary, without dialing that profile's gateway.
+ *  Same endpoint and result shape the Sessions sidebar search uses. */
+export async function searchPersistedSessions(
+  route: PluginProfileRoute | null,
+  options: { profile: string; query: string; limit?: number }
+): Promise<SessionSearchResponse> {
+  if (route && (!route.connectionId.trim() || !route.profile.trim() || !route.targetProfile.trim())) {
+    throw new Error('Profile route must include connectionId, profile, and targetProfile')
+  }
+
+  const profile = options.profile.trim()
+  const query = options.query.trim()
+
+  if (!profile || !query) {
+    throw new Error('Persisted session search requires a profile and a query')
+  }
+
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(Math.min(100, Math.max(1, options.limit ?? 20))),
+    profile
+  })
+
+  return hermesApi<SessionSearchResponse>({
+    ...(route ? { connectionId: route.connectionId } : {}),
+    path: `/api/sessions/search?${params.toString()}`,
+    timeoutMs: 30_000
+  })
 }

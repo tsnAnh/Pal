@@ -14,9 +14,10 @@ interface CanonicalGroupHeaderProps {
   onStop: () => void
   phases: Map<string, CanonicalMemberPhase>
   room?: CanonicalRoom
+  working: boolean
 }
 
-export function CanonicalGroupHeader({ busy, canStop, onBack, onDisband, onRename, onStop, phases, room }: CanonicalGroupHeaderProps) {
+export function CanonicalGroupHeader({ busy, canStop, onBack, onDisband, onRename, onStop, phases, room, working }: CanonicalGroupHeaderProps) {
   const labels = useCanonicalGroupLabels()
   const [renaming, setRenaming] = useState<string | null>(null)
   const [ending, setEnding] = useState(false)
@@ -34,7 +35,7 @@ export function CanonicalGroupHeader({ busy, canStop, onBack, onDisband, onRenam
         <h2 className="text-sm font-medium">{room?.name || labels.loadingGroup}</h2>
         <CanonicalGroupRoster label={labels.members} labels={labels} members={room?.members} phases={phases} />
       </div>
-      <Button disabled={busy || !canStop} onClick={onStop}>{labels.stop}</Button>
+      {working && <Button data-slot="group-stop-now" disabled={busy || !canStop} onClick={onStop}>{labels.stopNow}</Button>}
       <Button disabled={busy || !room} onClick={() => setRenaming(room?.name ?? '')}>{labels.rename}</Button>
       <Button disabled={busy || !room} onClick={() => setEnding(true)}>{labels.disband}</Button>
     </header>

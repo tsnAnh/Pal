@@ -21,7 +21,7 @@ from typing import Optional
 
 from utils import env_var_enabled, is_truthy_value
 from agent.i18n import t
-from tools import approval_context
+from tools import approval_bot_chat, approval_context
 from tools.approval_context import (
     _get_session_platform, _is_cron_approval_context,
     _is_gateway_approval_context, _is_interactive_cli, _is_single_query_approval_context,
@@ -142,12 +142,15 @@ def unregister_gateway_notify(session_key: str) -> None:
 def resolve_gateway_approval(session_key: str, choice: str,
                              resolve_all: bool = False,
                              reason: Optional[str] = None,
-                             request_id: Optional[str] = None) -> int:
+                             request_id: Optional[str] = None,
+                             edited_text: Optional[str] = None) -> int:
     """Unblock waiting agent thread(s) from the gateway's /approve or /deny handler.
 
     *resolve_all* resolves every pending approval (``/approve all``); otherwise the oldest
     (FIFO) or the one matching *request_id*. *reason* is the ``/deny <reason>`` free text,
-    relayed to the agent in the BLOCKED message. Returns the number resolved.
+    relayed to the agent in the BLOCKED message. *edited_text* is the owner's rewrite of one outbound
+    draft, honoured only on ``once``, only when a single *request_id* is targeted and only by gates that
+    accept edits. Returns the number resolved.
     """
     with _lock:
         queue = _gateway_queues.get(session_key)
@@ -172,6 +175,8 @@ def resolve_gateway_approval(session_key: str, choice: str,
             entry.result = choice
             if reason:
                 entry.reason = reason
+            if edited_text is not None and choice == "once" and request_id and len(targets) == 1:
+                entry.edited_text = edited_text
             entry.event.set()
     return len(targets)
 
@@ -305,6 +310,7 @@ def clear_session(session_key: str) -> None:
         _session_yolo.discard(session_key)
         _launch_yolo_applied.discard(session_key)
         _pending.pop(session_key, None)
+        approval_bot_chat.clear(session_key)
         for entry in _gateway_queues.pop(session_key, []):
             # Cancel blocked waits now so the old run unwinds instead of idling until timeout;
             # the prompt was withdrawn, nobody denied it.
@@ -706,6 +712,8 @@ class _GateSpec:
     cli_timeout: str          # {breaker}
     cli_denied: str           # {description}{breaker}
     smart_log: str            # {command}{description}{session_key}
+    one_shot: bool = False
+    editable: bool = False
 
 
 _STOP_COMMAND = (
@@ -770,6 +778,20 @@ _ACTION_GATE = _GateSpec(
     smart_log="",
 )
 
+_STOP_DRAFT = (
+    " The message was NOT sent. Do NOT retry it, do NOT rephrase it, and do NOT deliver the same "
+    "message through another tool or route."
+)
+_DRAFT_GATE = _GateSpec(
+    noun="message", transport=False, user_approved=False, redact_cli=False, pending_keys=False,
+    notify_failed="BLOCKED: The draft could not be shown to the owner." + _STOP_DRAFT,
+    gateway_refused="BLOCKED: The draft {reason}.{reason_addendum}" + _STOP_DRAFT + "{timeout_addendum}",
+    transport_denied="",
+    cli_timeout="BLOCKED: The draft timed out without a decision." + _STOP_DRAFT + " Silence is not consent.",
+    cli_denied="BLOCKED: The owner discarded this draft." + _STOP_DRAFT,
+    smart_log="", one_shot=True, editable=True,
+)
+
 
 def _smart_gate(spec: _GateSpec, command: str, description: str, pattern_key: str,
                 pattern_keys: list[str], session_key: str, *,
@@ -803,10 +825,30 @@ def _smart_gate(spec: _GateSpec, command: str, description: str, pattern_key: st
     }, True
 
 
+def _gateway_prompt_data(*, command: str, description: str, pattern_key: str, pattern_keys: list[str],
+                         one_shot: bool, smart_denied: bool, extra_data: dict | None) -> dict:
+    data = {
+        "command": command, "pattern_key": pattern_key, "pattern_keys": pattern_keys, "description": description,
+        "allow_permanent": not one_shot, "allow_session": not one_shot,
+    }
+    if smart_denied:
+        data["smart_denied"] = True
+    if approval_context.is_bot_chat_turn():
+        data["choices"] = approval_bot_chat.choices(allow_permanent=not one_shot)
+        data["scope"] = approval_bot_chat.BOT_CHAT_SCOPE
+    return {**data, **(extra_data or {})}
+
+
+def _with_edit(spec: _GateSpec, decision: dict, result: dict) -> dict:
+    if spec.editable and decision.get("edited_text") is not None:
+        result["edited_text"] = decision["edited_text"]
+    return result
+
+
 def _human_decision(spec: _GateSpec, *, command: str, description: str,
                     pattern_key: str, pattern_keys: list[str],
                     session_key: str, approval_callback, is_cli: bool, is_gateway: bool,
-                    is_ask: bool, smart: bool = False, pending_body=None) -> dict:
+                    is_ask: bool, smart: bool = False, pending_body=None, extra_data: dict | None = None) -> dict:
     """Ask a human (after the optional guardian-LLM step) and turn the answer into the gate result.
 
     ``pattern_keys`` are what :func:`_persist_choice` stores on session/always; a smart-DENY
@@ -822,7 +864,8 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
         if result is not None:
             return result
     pending_body = pending_body() if pending_body else None
-    allow_permanent = not smart_denied
+    one_shot = smart_denied or spec.one_shot
+    allow_permanent = not one_shot
 
     def deny(template: str, outcome: str, **fmt) -> dict:
         breaker = ""
@@ -836,7 +879,7 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
 
     def grant(choice: str) -> dict:
         # A smart-DENY owner override is always one operation, even if an older client returns "session" or "always".
-        if not smart_denied:
+        if not one_shot:
             _persist_choice(session_key, choice, pattern_keys)
         if spec.user_approved:
             return _user_approved(session_key, description)
@@ -845,7 +888,7 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
     if spec.transport:
         attempt = _present_with_selected_transport(
             command=command, description=description, pattern_key=pattern_key, pattern_keys=pattern_keys,
-            session_key=session_key, allow_session=not smart_denied, allow_permanent=allow_permanent,
+            session_key=session_key, allow_session=not one_shot, allow_permanent=allow_permanent,
             surface=approval_context.gateway_approval_surface() if (is_gateway or is_ask) else "cli",
         )
         choice, denied = _transport_choice(attempt, pattern_key=pattern_key, description=description)
@@ -866,16 +909,13 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
         display_description = redact_sensitive_text(description)
         notify_cb = _gateway_notify_cb(session_key)
         if notify_cb is not None:
-            # Smart DENY overrides are one-operation decisions, so the UI must not offer a
-            # permanent or session scope.
-            data = {
-                "command": display_command, "pattern_key": pattern_key,
-                "pattern_keys": pattern_keys, "description": display_description,
-                "allow_permanent": not smart_denied,
-                "allow_session": not smart_denied,
-            }
-            if smart_denied:
-                data["smart_denied"] = True
+            if approval_bot_chat.denial_held(session_key, pattern_keys):
+                return deny(spec.gateway_refused, "denied", reason="denied by user earlier in this turn",
+                            reason_addendum=" Wait for the user's next message before asking again.",
+                            timeout_addendum="", deny_reason=None)
+            data = _gateway_prompt_data(
+                command=display_command, description=display_description, pattern_key=pattern_key,
+                pattern_keys=pattern_keys, one_shot=one_shot, smart_denied=smart_denied, extra_data=extra_data)
             decision = _await_gateway_decision(session_key, notify_cb, data, surface="gateway")
             if decision.get("notify_failed"):
                 return _denied(spec.notify_failed, pattern_key=pattern_key,
@@ -883,7 +923,7 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
             # Consent contract: silence is NOT consent, and an explicit deny is a hard
             # halt — both produce a BLOCKED outcome. ``/deny <reason>`` free text is
             # relayed verbatim so the agent can adapt rather than only hearing "denied".
-            choice, deny_reason = decision["choice"], decision.get("reason")
+            choice, deny_reason = approval_bot_chat.coerce_choice(decision["choice"]), decision.get("reason")
             if decision.get("cancelled"):
                 # The prompt was withdrawn (turn interrupted or ended) before anyone answered:
                 # still fail closed, but do not attribute a refusal to the user.
@@ -895,10 +935,11 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
                             reason_addendum="", timeout_addendum=" Silence is not consent.",
                             deny_reason=deny_reason)
             if choice is None or choice == "deny":
+                approval_bot_chat.hold_denial(session_key, pattern_keys)
                 return deny(spec.gateway_refused, "denied", reason="denied by user",
                             reason_addendum=(f' Reason given by the user: "{deny_reason}".' if deny_reason else ""),
                             timeout_addendum="", deny_reason=deny_reason)
-            return grant(choice)
+            return _with_edit(spec, decision, grant(choice))
 
         # No gateway callback (cron, batch, or ask-mode leaked into an interactive CLI, historically via `import
         # gateway.run`): paint the local panel when possible instead of a pending_approval that makes the agent look
@@ -922,7 +963,8 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
                        pattern_keys=list(pattern_keys), session_key=session_key, surface="cli")
     approval_context._fire_approval_hook("pre_approval_request", **hook_kwargs)
     choice = prompt_dangerous_approval(prompt_command, prompt_description, allow_permanent=allow_permanent,
-                                       smart_denied=smart_denied, approval_callback=approval_callback)
+                                       allow_session=not spec.one_shot, smart_denied=smart_denied,
+                                       approval_callback=approval_callback)
     approval_context._fire_approval_hook("post_approval_response", **hook_kwargs, choice=choice)
     if choice == "timeout":
         return deny(spec.cli_timeout, "timeout")
@@ -1153,6 +1195,17 @@ def request_tool_approval(tool_name: str, reason: str, *, rule_key: str = "", ap
         fail_closed_when_no_human=True,
         no_human_block_message=(f"BLOCKED: {subject} but no interactive user or gateway is present "
                                 "to approve it. A plugin flagged this action for human confirmation."),
+    )
+
+
+def request_draft_approval(*, text: str, description: str, pattern_key: str, draft: dict,
+                           details: list[dict] | None = None, approval_callback=None) -> dict:
+    approval_callback, is_cli, is_gateway, is_ask = _presence(approval_callback)
+    return _human_decision(
+        _DRAFT_GATE, command=text, description=description, pattern_key=pattern_key, pattern_keys=[pattern_key],
+        session_key=get_current_session_key(), approval_callback=approval_callback,
+        is_cli=is_cli, is_gateway=is_gateway, is_ask=is_ask,
+        extra_data={"choices": ["once", "deny"], "draft": draft, "details": details or []},
     )
 
 

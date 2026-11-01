@@ -30,6 +30,7 @@ import { useComposerScope, useComposerSurfaceId } from '../scope'
 import type { ChatBarProps } from '../types'
 
 import { useAutoSpeakReplies } from './use-auto-speak-replies'
+import { useVoiceCallSync } from './use-voice-call-sync'
 import { useVoiceConversation } from './use-voice-conversation'
 import { useVoiceLiveConversation } from './use-voice-live-conversation'
 import { useVoiceRecorder } from './use-voice-recorder'
@@ -430,6 +431,15 @@ export function useComposerVoice({
     setVoiceConversationActive(false)
     void conversation.end()
   }, [conversation])
+
+  useVoiceCallSync({
+    active: voiceConversationActive,
+    enabled: target === 'main',
+    end: endConversation,
+    muted: conversation.muted,
+    status: conversation.status,
+    toggleMute: conversation.toggleMute
+  })
 
   const handleToggleAutoSpeak = useCallback(() => {
     void setAutoSpeakReplies(!$autoSpeakReplies.get()).catch(error =>

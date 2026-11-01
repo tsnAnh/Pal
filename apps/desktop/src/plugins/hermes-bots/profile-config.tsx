@@ -10,6 +10,7 @@
 
 import * as sdk from '@hermes/plugin-sdk'
 import {
+  Button,
   Checkbox,
   GlyphSpinner,
   host,
@@ -20,6 +21,8 @@ import {
 } from '@hermes/plugin-sdk'
 import { useState } from 'react'
 
+import { BotVoiceSection, emptyVoiceDraft, type VoiceDraft } from './bot-voice-section'
+import { connectAppsSupported, openConnectApps } from './connect-apps'
 import { $lastRoster, ROSTER_KEY } from './data'
 import { labeled, ResizableFrame } from './dialog-parts'
 import { botsText, useBots } from './i18n'
@@ -121,6 +124,7 @@ interface AdvancedConfigState {
   skills: CapabilityEntry[]
   soul: string
   toolsets: CapabilityEntry[]
+  voice: VoiceDraft
 }
 interface AdvancedProfileConfigProps {
   bot: RosterRow
@@ -354,6 +358,11 @@ export function AdvancedProfileConfig({ bot, state, setState }: AdvancedProfileC
           model: state.model
         }}
       />
+      <BotVoiceSection
+        bot={bot}
+        draft={state.voice}
+        onDraft={update => setState(prev => ({ ...prev, voice: update(prev.voice) }))}
+      />
       {labeled(
         b.editor.skillsEnabled(enabledSkills, state.skills.length),
         <div className="grid gap-1.5 rounded-md border border-(--ui-stroke-secondary) p-2">
@@ -425,6 +434,13 @@ export function AdvancedProfileConfig({ bot, state, setState }: AdvancedProfileC
           </div>
         </div>
       )}
+      {connectAppsSupported ? (
+        <div className="flex justify-end">
+          <Button onClick={() => openConnectApps(bot)} size="xs" type="button" variant="secondary">
+            {b.connectApps.openFromBot}
+          </Button>
+        </div>
+      ) : null}
       {labeled(
         b.editor.mcpServers,
         <div className="overflow-hidden rounded-md border border-(--ui-stroke-secondary)">
@@ -512,6 +528,7 @@ export function emptyAdvancedState(): AdvancedConfigState {
     skills: [],
     toolsets: [],
     mcp: [],
+    voice: emptyVoiceDraft(),
     dirtyModel: false,
     dirtySoul: false,
     dirtySkills: false,

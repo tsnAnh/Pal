@@ -420,7 +420,9 @@ async def stop_processes(connection, ref, params):
         return sum(r.get('status') in {'killed', 'already_exited'} and 'scope_stop_failed' not in r
                    for r in results)
     killed = await asyncio.to_thread(kill) if targets else 0
-    return {'killed': killed, 'delegations': await asyncio.to_thread(_interrupt_delegations, connection.authority, ref)}
+    from gateway.session_bot_stop import stop_handed_on
+    return {'killed': killed, 'delegations': await asyncio.to_thread(_interrupt_delegations, connection.authority, ref),
+            'handoffs': await stop_handed_on(connection.authority, ref)}
 
 
 def _interrupt_delegations(authority, ref):

@@ -22,9 +22,10 @@ import {
   LocalizedTabTitle,
   PALETTE_AREA,
   SIDEBAR_PROFILE_GROUP_HEADER_AREA,
+  TOOL_CARD_AREA,
   translateNow
 } from '@hermes/plugin-sdk'
-import type { ChatEmptyProps, PluginContext, ProfileGroupRoute } from '@hermes/plugin-sdk'
+import type { ChatEmptyProps, PluginContext, ProfileGroupRoute, ToolCardProps } from '@hermes/plugin-sdk'
 
 import { startFaceClock, stopFaceClock } from './avatar'
 import { startBotChatAccent } from './bot-accent'
@@ -69,6 +70,7 @@ import {
   updateGroupChat
 } from './group-chat'
 import { groupWorkspaceOwnerKey } from './group-membership'
+import { HandbackCard } from './handback-card'
 import { annotateOrphanedGroupChatMembers } from './hygiene'
 import { BOTS_LOCALES } from './i18n'
 import { displayName } from './labels'
@@ -86,6 +88,7 @@ import { startScreenAutoRaise } from './screen-autoraise'
 import { ProfileGroupScreenPortal } from './screen-portal'
 import { startHideSweepScheduler } from './session-sweep'
 import { bumpBotOpenGeneration, getBotOpenGeneration, ID, setPluginCtx } from './shared'
+import { TEACH_BUNDLES } from './teach-locales'
 import type { GroupChat, RosterRow } from './types'
 import { loadBotSections } from './user-sections'
 
@@ -121,6 +124,7 @@ export default {
     // writes through.
     loadBotSections()
     const disposeLocales = ctx.i18n.register(BOTS_LOCALES)
+    const disposeTeachLocales = ctx.i18n.register(TEACH_BUNDLES)
     setGroupChatSyncDisposed(false)
     startFaceClock()
     // The cross-connection relay rides every gateway socket this Desktop
@@ -135,6 +139,7 @@ export default {
     // before this, the rAF loop + 1Hz document scan ran until app restart.
     if (typeof ctx.onDispose === 'function') {
       ctx.onDispose(disposeLocales)
+      ctx.onDispose(disposeTeachLocales)
       ctx.onDispose(stopFaceClock)
       ctx.onDispose(stopBotRelay)
       ctx.onDispose(stopScreenAutoRaise)
@@ -722,6 +727,15 @@ export default {
 
     // A bot's chat before it has spoken: core's splash is Hermes' wordmark and
     // stands down for any session that exists, so the bot titles its own.
+    ctx.register({
+      id: 'handback-card',
+      area: TOOL_CARD_AREA,
+      data: {
+        tools: ['request_handback'],
+        render: (props: ToolCardProps) => <HandbackCard {...props} />
+      }
+    })
+
     ctx.register({
       id: 'chat-empty',
       area: CHAT_EMPTY_AREA,

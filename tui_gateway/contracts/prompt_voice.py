@@ -336,6 +336,7 @@ class ApprovalRespondParams(SessionParams):
     choice: str | None = None  # default "deny"
     all: bool | None = None
     request_id: str | None = None
+    edited_text: str | None = None
 
 
 class ApprovalRespondResult(Result):

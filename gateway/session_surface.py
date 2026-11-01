@@ -69,7 +69,8 @@ _SURFACE_NOTES = {'hud': _hud_note, 'voice-live': _voice_live_note}
 
 def surface_note(committed, valid_tool_names=None):
     """The model-bound note for a committed surface (``""`` for the plain app window): barge-in
-    first, then the HUD read-the-window-below prior or the spoken-delegation contract."""
+    first, then the HUD read-the-window-below prior or the spoken-delegation contract, then the
+    short-spoken-reply note of a chained voice turn."""
     notes = []
     if committed.get('interrupted'):
         from tools.tts_streaming import SPEECH_INTERRUPTED_NOTE
@@ -77,6 +78,9 @@ def surface_note(committed, valid_tool_names=None):
     render = _SURFACE_NOTES.get(committed.get('surface'))
     if render is not None:
         notes.append(render(committed, valid_tool_names))
+    if committed.get('voice_turn'):
+        from tools.tts_streaming import VOICE_REPLY_NOTE
+        notes.append(VOICE_REPLY_NOTE)
     return '\n\n'.join(note for note in notes if note)
 
 

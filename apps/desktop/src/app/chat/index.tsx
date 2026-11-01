@@ -11,6 +11,7 @@ import { Thread } from '@/components/assistant-ui/thread'
 import { TranscriptWindowProvider } from '@/components/assistant-ui/thread/transcript-window'
 import { Backdrop } from '@/components/Backdrop'
 import { COMPOSER_HEART_CONFIG, HeartField } from '@/components/chat/vibe-hearts'
+import { PersonaVoiceCall } from '@/components/chat/voice-call-controls'
 import { useSetupChatView } from '@/components/onboarding/first-run/assembly'
 import { $introHoldsThread } from '@/components/onboarding/first-run/intro'
 import { IntroCopy } from '@/components/onboarding/first-run/intro-copy'
@@ -27,7 +28,7 @@ import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { ChatPersonaContext, useChatPersona } from '@/store/chat-persona'
 import { migrateSessionDraft } from '@/store/composer'
-import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
+import { migrateQueuedPrompts } from '@/store/composer-queue'
 import { $introSplash } from '@/store/intro-splash'
 import { $pinnedSessionIds } from '@/store/layout'
 import { $introView } from '@/store/onboarding-intro'
@@ -58,6 +59,7 @@ import { isAuxiliaryWindow, isMainWindow } from '@/store/windows'
 import { primaryRouteSelectedSessionId, routeSessionId } from '../routes'
 import { titlebarHeaderBaseClass, titlebarHeaderShadowClass, titlebarHeaderTitleClass } from '../shell/titlebar'
 
+import { BotStopNow, useChatHalt } from './bot-stop-now'
 import { ChatDropOverlay } from './chat-drop-overlay'
 import { dropOverlayKind, useShowChatBar } from './chat-surface-state'
 import { ChatSwapOverlay, ChatSyncBadge } from './chat-swap-overlay'
@@ -129,7 +131,15 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
 const botChipClass =
   'flex h-7 min-w-0 max-w-full items-center gap-2 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/80 px-2.5 text-sm font-medium text-foreground backdrop-blur-md'
 
-function BotTileChip({ storedId }: { storedId: null | string | undefined }) {
+function BotTileChip({
+  busy,
+  onStopNow,
+  storedId
+}: {
+  busy: boolean
+  onStopNow: () => void
+  storedId: null | string | undefined
+}) {
   const persona = useChatPersona(storedId ?? null)
 
   if (!persona) {
@@ -142,13 +152,16 @@ function BotTileChip({ storedId }: { storedId: null | string | undefined }) {
         <span className="grid shrink-0 place-items-center">{persona.avatar(20)}</span>
         <span className="truncate">{persona.name}</span>
       </span>
+      {busy && persona.stopNowLabel && <BotStopNow label={persona.stopNowLabel()} onStop={onStopNow} />}
     </div>
   )
 }
 
 interface ChatHeaderProps {
   activeSessionId: null | string
+  busy: boolean
   isRoutedSessionView: boolean
+  onStopNow: () => void
   onDeleteSelectedSession: () => void
   onToggleSelectedPin: () => void
   personaSessionId: null | string | undefined
@@ -157,7 +170,9 @@ interface ChatHeaderProps {
 
 function ChatHeader({
   activeSessionId,
+  busy,
   isRoutedSessionView,
+  onStopNow,
   onDeleteSelectedSession,
   onToggleSelectedPin,
   personaSessionId,
@@ -228,6 +243,8 @@ function ChatHeader({
               <span className="truncate">{persona.name}</span>
             </button>
           )}
+          {busy && persona.stopNowLabel && <BotStopNow label={persona.stopNowLabel()} onStop={onStopNow} />}
+          <PersonaVoiceCall persona={persona} />
         </div>
       </div>
     )
@@ -658,16 +675,8 @@ const ChatViewContent = memo(function ChatViewContent({
     migrateQueuedPrompts(selectedSessionId, queueSessionKey)
   }, [queueSessionKey, selectedSessionId, sessions])
 
-  // Transcript-side stops (the streaming message's hover Stop, the runtime's
-  // cancel) are explicit halts, same as the composer's Stop button: park any
-  // queued turns so the interrupt doesn't roll straight into the next one.
-  // ChatBar wraps its own onCancel internally — its send-now-while-busy path
-  // needs the raw interrupt — so it still receives the unwrapped prop.
-  const haltRun = useCallback(() => {
-    parkQueuedPrompts(queueSessionKey || activeSessionId)
-
-    return onCancel()
-  }, [activeSessionId, onCancel, queueSessionKey])
+  const halt = useChatHalt({ activeSessionId, gateway, onCancel, queueSessionKey, request: requestModelOptionsForOwner })
+  const { haltRun, stopNow } = halt
 
   // A tile IS its session — no route involved, never "mismatched".
   const routedSessionId = isPrimary ? routeSessionId(location.pathname) : selectedSessionId
@@ -817,14 +826,16 @@ const ChatViewContent = memo(function ChatViewContent({
       {isPrimary && (
         <ChatHeader
           activeSessionId={activeSessionId}
+          busy={busy}
           isRoutedSessionView={isRoutedSessionView}
           onDeleteSelectedSession={onDeleteSelectedSession}
+          onStopNow={stopNow}
           onToggleSelectedPin={onToggleSelectedPin}
           personaSessionId={queueSessionKey}
           selectedSessionId={selectedSessionId}
         />
       )}
-      {!isPrimary && <BotTileChip storedId={queueSessionKey} />}
+      {!isPrimary && <BotTileChip busy={busy} onStopNow={stopNow} storedId={queueSessionKey} />}
 
       {/* Mounted for the primary AND every tile, each scoped to its own session
           so a tiled/background session's blocking prompt surfaces instead of

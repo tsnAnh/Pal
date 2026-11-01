@@ -22,6 +22,7 @@ import {
 import { defaultRemarkPlugins } from 'streamdown'
 
 import { useSessionView } from '@/app/chat/session-view'
+import { VoiceMemoPlayer } from '@/components/assistant-ui/voice-memo-player'
 import { ExpandableBlock } from '@/components/chat/expandable-block'
 import { PreviewAttachment } from '@/components/chat/preview-attachment'
 import { chunkByLines, SyntaxHighlighter } from '@/components/chat/shiki-highlighter'
@@ -54,6 +55,7 @@ import { sessionRefFromMarkdownHref } from '@/lib/session-refs'
 import { TOOL_MEDIA_RENDERER_AREA } from '@/lib/tool-media-renderers'
 import { remarkTranscriptDirectives } from '@/lib/transcript-directives'
 import { cn } from '@/lib/utils'
+import { useSurfacePersona } from '@/store/chat-persona'
 import { useForcedTextDirection } from '@/store/text-direction'
 
 import { ArtifactCard } from './artifact-card'
@@ -183,6 +185,16 @@ function MediaPlaybackAttachment({ path }: { path: string }) {
   const { failed, kind, onError, onLoadedMetadata, src } = useMediaPlaybackSrc(path)
   const { open, openFailed } = useOpenMediaFile(path)
   const name = mediaName(path)
+  const memoLabels = useSurfacePersona()?.voice?.()
+
+  if (kind === 'audio' && src && memoLabels) {
+    return (
+      <span className="block">
+        <VoiceMemoPlayer labels={memoLabels} name={name} onError={onError} onLoadedMetadata={onLoadedMetadata} src={src} />
+        {failed && <OpenMediaButton kind="audio" path={path} />}
+      </span>
+    )
+  }
 
   if (kind === 'audio' && src) {
     return (

@@ -24,7 +24,8 @@ logger = logging.getLogger("tools.approval")
 
 class _ApprovalEntry:
     """One pending dangerous-command approval inside a gateway session."""
-    __slots__ = ("acknowledged", "cancelled", "data", "event", "expired", "observers", "reason", "result", "settle")
+    __slots__ = ("acknowledged", "cancelled", "data", "edited_text", "event", "expired", "observers", "reason", "result",
+                 "settle")
 
     def __init__(self, data: dict):
         self.event = threading.Event()
@@ -38,6 +39,8 @@ class _ApprovalEntry:
         self.result: str | None = None  # "once"|"session"|"always"|"deny"
         # Free-text reason from ``/deny <reason>`` so the agent can adapt, not just hear "denied".
         self.reason: str | None = None
+        # The owner's rewrite of an outbound draft, set with a ``once`` answer by the surface that edited it.
+        self.edited_text: str | None = None
         # Why the prompt was withdrawn with nobody answering (interrupt cause, session teardown);
         # followers and teardown read it so a withdrawn prompt never renders as a user deny.
         self.cancelled: str | None = None
@@ -261,4 +264,7 @@ def _await_gateway_decision(session_key: str, notify_cb, approval_data: dict, *,
         resolved = state != "timeout" or choice is not None
         extra = {"cancelled": cancelled} if cancelled else {}
         human.outcome = _hook_choice(resolved, choice, extra)
-        return _finish(payload, resolved, choice, entry.reason, **extra)
+        decision = _finish(payload, resolved, choice, entry.reason, **extra)
+        if entry.edited_text is not None:
+            decision["edited_text"] = entry.edited_text
+        return decision

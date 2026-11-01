@@ -698,6 +698,21 @@ export async function migrateBotMeta(storage: BotMetaStorage | undefined = getPl
  *  Gates every SOUL.md protocol append below. */
 export let serverInjectsProtocol = false
 
+const birthNoticeByConnection = new Map<string, boolean>()
+
+function recordBirthNotice(connectionId: null | string | undefined, snapshot: null | RosterSnapshot | undefined) {
+  birthNoticeByConnection.set(connectionId || '', Boolean(snapshot?.bot_birth_notice))
+}
+
+export function botServerGreetsUnprompted(
+  bot: null | Partial<RosterRow> | undefined,
+  route: null | ProfileRoute = null
+): boolean {
+  const id = route?.connectionId || bot?.connectionId || host.state.connectionId?.get?.() || ''
+
+  return birthNoticeByConnection.get(id) === true
+}
+
 /** A `profiles.list` answer as Bot Mode consumes it, plus the fields the
  *  multi-source merge and the roster query stamp on afterwards. Not in
  *  types.ts: this is the query-cache envelope around RosterRow, not a domain
@@ -705,6 +720,7 @@ export let serverInjectsProtocol = false
 interface RosterSnapshot {
   /** Newer backends inject the teammate protocol into the system prompt. */
   bot_mode_protocol?: boolean
+  bot_birth_notice?: boolean
   /** Time the request was ISSUED, the conservative bound mergeServerMeta wants. */
   fetchedAt?: number
   primaryConnectionId?: string
@@ -825,6 +841,7 @@ async function fetchRosterSnapshot(activeConnectionId: null | string | undefined
   // session's system prompt (agent.bot_mode_protocol) — SOUL.md must not
   // carry a second copy. Older gateways lack the flag: keep appending.
   serverInjectsProtocol = Boolean(local?.bot_mode_protocol)
+  recordBirthNotice(activeConnectionId, local)
 
   // Multi-source desktops (hermes-agent #86875) also expose the union
   // agent roster across every registered connection. Merge agents from

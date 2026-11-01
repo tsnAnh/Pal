@@ -2021,10 +2021,10 @@ def _dispatch_pre_tool_call_hooks(
 ) -> tuple[Optional[str], Optional[dict[str, Any]]]:
     """Invoke ``pre_tool_call`` hooks once; return ``(block_message, modified_args)`` — the resolved
     block/approve message (``None`` to proceed) and merged ``modify`` args (``None`` if none)."""
-    details = _get_pre_tool_call_directive_details(tool_name, args, **hook_kwargs)
-    block_msg = _resolve_block_from_details(
-        details, tool_name, **{k: hook_kwargs.get(k, "") for k in ("turn_id", "tool_call_id", "session_id")})
-    return (block_msg, details.modified_args)
+    from tools.bot_mode_drafts import review_after_hooks
+    ids = {k: hook_kwargs.get(k, "") for k in ("turn_id", "tool_call_id", "session_id")}
+    return review_after_hooks(tool_name, args, lambda: _get_pre_tool_call_directive_details(tool_name, args, **hook_kwargs),
+                              lambda details: _resolve_block_from_details(details, tool_name, **ids))
 
 
 def get_pre_verify_continue_message(

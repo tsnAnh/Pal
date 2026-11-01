@@ -178,3 +178,6 @@ export const setMcpBearerToken = (scope: ProfileScope, name: string, value: stri
 export const listMcpServers = (scope: ProfileScope) => call(scope, 'mcp.servers.list', {})
 
 export const mcpServerStatus = (scope: ProfileScope) => call(scope, 'mcp.servers.status', {})
+
+export const configureProfileMcp = (scope: ProfileScope, enabled: readonly string[]) =>
+  call(scope, 'profiles.configure', { enabled_mcp_servers: [...enabled], name: routeOf(scope).profile }, 'foreground')

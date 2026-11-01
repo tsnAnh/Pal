@@ -254,6 +254,12 @@ def _cfg_get_mtime(params):
     return {"mtime": mtime, "mcp_rev": _compute_mcp_rev()}
 
 
+def _bot_mode_drafts_ask() -> bool:
+    from tools.bot_mode_drafts import policy_for_profile
+    policy = policy_for_profile()
+    return policy is not None and policy.ask
+
+
 # key -> getter(params); bind_module rebinds the table's functions onto server.py's globals.
 _CONFIG_GETTERS = {
     "provider": _cfg_get_provider,
@@ -279,6 +285,7 @@ _CONFIG_GETTERS = {
     "focus": lambda params: {"value": "on" if bool(_display_cfg().get("focus_view", False)) else "off",
                              "tool_progress": _load_tool_progress_mode()},
     "mouse": lambda params: {"value": _display_mouse_tracking(_load_cfg().get("display"))},
+    "bot_mode.drafts": lambda params: {"value": _bot_mode_drafts_ask()},
     "mtime": _cfg_get_mtime}
 # Getters whose failure is a JSON-RPC error of this code (others propagate to dispatch).
 _CONFIG_GET_ERR = {"provider": 5013, "approval_mode": 5001, "approvals.mode": 5001}

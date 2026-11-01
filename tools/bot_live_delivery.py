@@ -80,6 +80,11 @@ def authority_settle(home, params):
     return _authority_rpc(home, 'bot_relay.settle', params)
 
 
+def authority_stop(home, params):
+    """The same authority's ``bot_relay.stop``: stop the turn one delivery started (or cancel it while queued)."""
+    return _authority_rpc(home, 'bot_relay.stop', params)
+
+
 def _authority_rpc(home, method, params):
     import asyncio
     from hermes_cli.gateway_runtime import discover_gateway_endpoint

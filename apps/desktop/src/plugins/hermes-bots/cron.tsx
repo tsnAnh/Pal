@@ -44,12 +44,18 @@ import {
 import { useState } from 'react'
 
 import { avatarColor, botAppearance, BotFace } from './avatar'
+import { botJob } from './bot-detail-model'
+import { BotDetailsSummary, BotHeaderMenu, BotNameEditor, BotRunHistoryPanel } from './bot-detail-panels'
+import { useRoutineOpenRequest } from './bot-detail-state'
 import { $focusedBotOwner, $selectedBot, focusedRosterOwner } from './bot-state'
 import { $botMeta, $lastRoster, botHandle, botRosterKey, botSelectionKey, isActiveRosterBot } from './data'
 import { labeled } from './dialog-parts'
 import { EditProfileDialog } from './edit-profile-dialog'
 import { botsText, type BotsText, useBots } from './i18n'
 import { displayName } from './labels'
+import { RoutineOperations } from './routine-operations'
+import { useSchedulePreview } from './routine-schedule-preview'
+import { supportsRoutineAction, throwIfRoutineRefused } from './routines-api'
 import { botConnectionRoute, botRosterMeta, requestForBot } from './routing'
 import { ScreenHero } from './screen-hero'
 import { ID } from './shared'
@@ -87,6 +93,8 @@ type RoutineOwner = RosterRow | string | null | undefined
 /** `cron.manage {action: 'list'}` reply. `scoped` carries the profile the
  *  gateway scoped the store to; gateways that ignore `profile` omit it. */
 interface RoutineListResult {
+  /** The routine actions this gateway supports; older gateways omit it. */
+  actions?: string[]
   jobs?: RoutineJob[]
   scoped?: string
 }
@@ -97,7 +105,7 @@ function routineBot(job: RoutineJob | null | undefined): null | string {
   return match ? match[1].toLowerCase() : null
 }
 
-function routineTitle(job: RoutineJob | null | undefined, c: BotsText['cron']): string {
+export function routineTitle(job: RoutineJob | null | undefined, c: BotsText['cron']): string {
   return (job?.name || '').replace(BOT_TAG_RE, '') || c.untitled
 }
 
@@ -468,15 +476,18 @@ export function routineDetailIssue(job: RoutineJob | null | undefined): null | s
 }
 
 interface RoutineDetailDialogProps {
+  actions?: readonly string[]
   job: RoutineJob | null
   onClose: () => void
   open: boolean
+  /** Without an owner the inspector stays read-only, as before. */
+  owner?: RosterRow
 }
 
-/** Read-only inspector for one cronjob, rendered from the list payload the
- *  pane already holds — no extra RPC, and no second mutation path beside the
- *  row's own switch and delete. */
-export function RoutineDetailDialog({ job, onClose, open }: RoutineDetailDialogProps) {
+/** Inspector for one cronjob, rendered from the list payload the pane already
+ *  holds. Given an owner it also hosts the routine's operations: the Active
+ *  switch, Test now, run history and triggers. */
+export function RoutineDetailDialog({ actions, job, onClose, open, owner }: RoutineDetailDialogProps) {
   const b = useBots()
   const { t } = useI18n()
   const rows = job ? routineDetailRows(job, b.cron) : []
@@ -492,7 +503,7 @@ export function RoutineDetailDialog({ job, onClose, open }: RoutineDetailDialogP
       }}
       open={Boolean(open && job)}
     >
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="truncate">{routineTitle(job, b.cron)}</DialogTitle>
           <DialogDescription>{b.cron.detailDescription}</DialogDescription>
@@ -519,6 +530,15 @@ export function RoutineDetailDialog({ job, onClose, open }: RoutineDetailDialogP
                 </div>
               )
             : null}
+          {job && owner ? (
+            <RoutineOperations
+              actions={actions}
+              job={job}
+              locked={isLegacyDelegatedRoutine(job)}
+              onChanged={() => invalidateRoutineOwner(owner)}
+              owner={owner}
+            />
+          ) : null}
         </div>
         <DialogFooter>
           <Button onClick={onClose} variant="secondary">
@@ -619,6 +639,7 @@ export function RoutineRow({ job, onOpen, owner }: RoutineRowProps) {
           </Button>
         </Tip>
         <Switch
+          aria-label={b.routines.active.label}
           checked={active}
           disabled={busy || legacyUnsafe}
           onCheckedChange={value => act(value ? 'resume' : 'pause')}
@@ -698,7 +719,7 @@ function composeSchedule(state: ScheduleState): string {
     case 'once': {
       const n = Math.max(1, parseInt(state.onceN, 10) || 1)
 
-      return `${n}${state.onceUnit || 'h'}`
+      return `in ${n}${state.onceUnit || 'h'}`
     }
 
     case 'hourly':
@@ -929,7 +950,7 @@ function SchedulePicker({ state, setState }: SchedulePickerProps) {
               raw: event.target.value
             })
           }
-          placeholder="every 1d · every 2h · 0 9 * * * (cron)"
+          placeholder={b.routines.schedule.placeholder}
           value={state.raw}
         />
       ) : null}
@@ -970,6 +991,7 @@ function defaultScheduleState(): ScheduleState {
 }
 
 interface CreateRoutineDialogProps {
+  actions?: readonly string[]
   /** Never nullish: the pane early-returns its empty state before it renders
    *  this dialog, so `createTarget` has already fallen back to the active
    *  profile name — which is the bare-name arm, normalized to a row on entry. */
@@ -978,9 +1000,9 @@ interface CreateRoutineDialogProps {
   open: boolean
 }
 
-export function CreateRoutineDialog({ bot, open, onClose }: CreateRoutineDialogProps) {
+export function CreateRoutineDialog({ actions, bot, open, onClose }: CreateRoutineDialogProps) {
   const b = useBots()
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const c = t.cron
   const [name, setName] = useState('')
   const [instruction, setInstruction] = useState('')
@@ -1001,6 +1023,13 @@ export function CreateRoutineDialog({ bot, open, onClose }: CreateRoutineDialogP
   const owner: RosterRow = typeof bot === 'string' ? { name: bot } : bot
   const profile = owner.name
   const schedule = composeSchedule(sched)
+
+  const schedulePreview = useSchedulePreview({
+    describe: value => scheduleLabel(value, locale),
+    owner,
+    remote: sched.freq === 'advanced' && supportsRoutineAction(actions, 'schedule_preview'),
+    schedule
+  })
 
   const reset = () => {
     setName('')
@@ -1036,7 +1065,7 @@ export function CreateRoutineDialog({ bot, open, onClose }: CreateRoutineDialogP
           ? Math.max(1, parseInt(sched.repeatN, 10) || 1)
           : null
 
-      await requestForBot(owner, 'cron.manage', {
+      const created = await requestForBot(owner, 'cron.manage', {
         action: 'add',
         name: `[bot:${profile}] ${title}`,
         schedule: schedule.trim(),
@@ -1065,6 +1094,8 @@ export function CreateRoutineDialog({ bot, open, onClose }: CreateRoutineDialogP
             }
           : {})
       })
+
+      throwIfRoutineRefused(created, b.routines.schedule)
       await invalidateRoutineOwner(owner)
       host.notify({
         kind: 'success',
@@ -1115,6 +1146,7 @@ export function CreateRoutineDialog({ bot, open, onClose }: CreateRoutineDialogP
             />
           )}
           {labeled(b.cron.whenToRun, <SchedulePicker setState={setSched} state={sched} />)}
+          {schedulePreview.notice}
           {labeled(
             b.cron.sendResultsTo,
             pickerSelect(target, setTarget, [
@@ -1149,7 +1181,10 @@ export function CreateRoutineDialog({ bot, open, onClose }: CreateRoutineDialogP
           >
             {t.common.cancel}
           </Button>
-          <Button disabled={busy || !name.trim() || !instruction.trim() || !schedule.trim()} onClick={submit}>
+          <Button
+            disabled={busy || !name.trim() || !instruction.trim() || !schedule.trim() || schedulePreview.blocked}
+            onClick={submit}
+          >
             {busy ? t.common.saving : c.createAction}
           </Button>
         </DialogFooter>
@@ -1227,12 +1262,216 @@ export function resolveRoutineOwner(
 }
 
 const PROFILE_TABS = [
-  { id: 'details', label: 'profileDetailsTab' },
-  { id: 'computer', label: 'profileComputerTab' }
+  { id: 'details', label: (b: BotsText) => b.cron.profileDetailsTab },
+  { id: 'history', label: (b: BotsText) => b.detail.runHistoryTab },
+  { id: 'computer', label: (b: BotsText) => b.cron.profileComputerTab }
 ] as const
 
 export function RoutinesTabTitle() {
   return <LocalizedTabTitle select={t => t.sidebar.filter.profile} />
+}
+
+interface BotProfileHeaderProps {
+  bot: string
+  meta: BotMeta | null
+  onAddLabel: () => void
+  owner: RosterRow
+  profileLabel: string
+  profileName: string
+}
+
+function BotProfileHeader({ bot, meta, onAddLabel, owner, profileLabel, profileName }: BotProfileHeaderProps) {
+  const b = useBots()
+  const { t } = useI18n()
+  const { shape, color, image } = botAppearance(bot, meta)
+
+  return (
+    <div
+      className="relative flex flex-col items-center gap-1 px-4 pt-5 pb-3 text-center"
+      data-slot="bot-profile-header"
+    >
+      {typeof host.closePane === 'function' ? (
+        <Button
+          aria-label={t.common.close}
+          className="absolute top-2 right-2 size-8 rounded-full bg-(--chrome-action-hover) text-(--ui-text-secondary) hover:text-foreground"
+          onClick={() => host.closePane(`${ID}:routines`)}
+          size="icon"
+          variant="ghost"
+        >
+          <Codicon name="close" />
+        </Button>
+      ) : null}
+      <BotFace color={avatarColor(color, bot)} image={image} name={bot} shape={shape} size={96} />
+      <BotHeaderMenu bot={owner} />
+      <BotNameEditor bot={owner} name={profileName} />
+      {showsHandle(bot, meta, owner) ? (
+        <span className="font-mono text-[0.65rem] text-(--ui-text-quaternary)">{`@${botHandle(bot, owner)}`}</span>
+      ) : null}
+      {profileLabel ? (
+        <div className="line-clamp-3 max-w-full text-xs text-(--ui-text-tertiary)">{profileLabel}</div>
+      ) : (
+        <button
+          className="text-xs text-(--ui-text-tertiary) underline-offset-2 hover:text-foreground hover:underline"
+          onClick={onAddLabel}
+          type="button"
+        >
+          {b.cron.profileAddLabel}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function BotProfileTabs({ onChange, tab: profileTab }: { onChange: (tab: string) => void; tab: string }) {
+  const b = useBots()
+  const { t } = useI18n()
+
+  return (
+    <Tabs className="gap-0" onValueChange={onChange} value={profileTab}>
+      <TabsList aria-label={t.sidebar.filter.profile} className="mx-auto mb-2 h-auto gap-1 bg-transparent p-0 px-3">
+        {PROFILE_TABS.map(tab => (
+          <TabsTrigger
+            aria-controls={`bot-profile-panel-${tab.id}`}
+            className={cn(
+              'h-auto rounded-full px-3 py-1 text-xs shadow-none transition-colors',
+              profileTab === tab.id
+                ? 'bg-(--chrome-action-hover) font-medium text-foreground'
+                : 'text-(--ui-text-tertiary) hover:text-foreground'
+            )}
+            id={`bot-profile-tab-${tab.id}`}
+            key={tab.id}
+            value={tab.id}
+          >
+            {tab.label(b)}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  )
+}
+
+interface BotProfileBodyProps {
+  actions: readonly string[] | undefined
+  error: unknown
+  isLoading: boolean
+  jobs: RoutineJob[]
+  meta: BotMeta | null
+  onCreate: () => void
+  onOpenJob: (jobId: string) => void
+  owner: RosterRow
+  refetch: () => unknown
+  tab: string
+  view: ReturnType<typeof selectRoutineJobs>
+}
+
+function BotProfileBody({
+  actions,
+  error,
+  isLoading,
+  jobs,
+  meta,
+  onCreate,
+  onOpenJob,
+  owner,
+  refetch,
+  tab,
+  view
+}: BotProfileBodyProps) {
+  const b = useBots()
+  const { t } = useI18n()
+  const c = t.cron
+  const staleNotice = error && !view.live && view.all.length ? b.cron.staleNotice : null
+  const filterHint = routineFilterHint(view.all, jobs)
+
+  return (
+    <>
+  {tab === 'details' ? (
+    <div
+      aria-labelledby="bot-profile-tab-details"
+      className="flex min-h-0 flex-1 flex-col"
+      id="bot-profile-panel-details"
+      role="tabpanel"
+    >
+      <BotDetailsSummary bot={owner} job={botJob(owner.description, meta?.title ?? owner.title)} />
+      <div className="flex items-center gap-2 px-4 pt-2 pb-1.5">
+        <div className="min-w-0 flex-1 text-sm text-(--ui-text-tertiary)">{b.cron.routinesLabel}</div>
+        <Tip label={c.newCron}>
+          <Button
+            aria-label={c.newCron}
+            className="size-6 rounded-full bg-(--chrome-action-hover)"
+            onClick={onCreate}
+            size="icon-xs"
+            variant="ghost"
+          >
+            <Codicon name="add" />
+          </Button>
+        </Tip>
+      </div>
+      {staleNotice ? (
+        <div className="mx-3 mb-2 rounded-md bg-(--chrome-action-hover) px-2 py-1.5 text-[0.6875rem] text-(--ui-text-tertiary)">
+          {staleNotice}
+        </div>
+      ) : null}
+      {isLoading && !view.all.length ? (
+        <div className="flex flex-1 items-center justify-center">
+          <GlyphSpinner className="text-(--ui-text-tertiary)" spinner="breathe" />
+        </div>
+      ) : error && !view.all.length ? (
+        <PanelEmpty
+          action={
+            <Button onClick={() => void refetch()} size="sm" variant="secondary">
+              {t.common.retry}
+            </Button>
+          }
+          description={b.cron.readFailure}
+          icon="warning"
+          title={c.failedLoad}
+        />
+      ) : jobs.length === 0 ? (
+        <div className="px-4 py-2">
+          <div className="text-sm text-(--ui-text-tertiary)">{filterHint || c.emptyTitleNew}</div>
+        </div>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+          <div className="grid gap-2 px-3 py-1">
+            {jobs.map(job => (
+              <RoutineRow
+                job={job}
+                key={job.job_id}
+                onOpen={opened => onOpenJob(opened.job_id)}
+                owner={owner}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  ) : tab === 'history' ? (
+    <div
+      aria-labelledby="bot-profile-tab-history"
+      className="flex min-h-0 flex-1 flex-col"
+      id="bot-profile-panel-history"
+      role="tabpanel"
+    >
+      <BotRunHistoryPanel
+        actions={actions}
+        jobs={jobs}
+        owner={owner}
+        titleOf={job => routineTitle(job, b.cron)}
+      />
+    </div>
+  ) : (
+    <div
+      aria-labelledby="bot-profile-tab-computer"
+      className="min-h-0 flex-1 overflow-y-auto px-3"
+      id="bot-profile-panel-computer"
+      role="tabpanel"
+    >
+      <ScreenHero bot={owner} meta={meta} />
+    </div>
+  )}
+    </>
+  )
 }
 
 export function RoutinesPane() {
@@ -1249,7 +1488,6 @@ export function RoutinesPane() {
   const bot = String(owner?.name || focusedOwner?.name || 'default').trim() || 'default'
   const allMeta = useValue($botMeta)
   const meta = owner ? botRosterMeta(owner, allMeta) : null
-  const { shape, color, image } = botAppearance(bot, meta)
   const { data, error, isLoading, refetch } = useRoutines(owner)
   const b = useBots()
   const { t } = useI18n()
@@ -1265,6 +1503,12 @@ export function RoutinesPane() {
   const profileLabel = (meta?.title || owner?.title || owner?.description || meta?.description || '').trim()
   const profileName = (meta?.title || owner?.title || owner?.display_name || bot).trim()
   const createTarget = owner ? routineCreateTarget(createOwner, bot) : null
+  const ownerKey = owner ? botRosterKey(owner) : null
+
+  useRoutineOpenRequest(ownerKey, jobId => {
+    setProfileTab('details')
+    setDetailJobId(jobId)
+  })
 
   const openCreate = () => {
     if (!owner) {
@@ -1288,137 +1532,40 @@ export function RoutinesPane() {
   const jobs = view.jobs
   const detailJob = detailJobId ? jobs.find(job => job.job_id === detailJobId) || null : null
 
-  const staleNotice = error && !view.live && view.all.length ? b.cron.staleNotice : null
-
-  const filterHint = routineFilterHint(view.all, jobs)
-
   return (
     <div className="flex h-full flex-col">
-      <div
-        className="relative flex flex-col items-center gap-1 px-4 pt-5 pb-3 text-center"
-        data-slot="bot-profile-header"
-      >
-        {typeof host.closePane === 'function' ? (
-          <Button
-            aria-label={t.common.close}
-            className="absolute top-2 right-2 size-8 rounded-full bg-(--chrome-action-hover) text-(--ui-text-secondary) hover:text-foreground"
-            onClick={() => host.closePane(`${ID}:routines`)}
-            size="icon"
-            variant="ghost"
-          >
-            <Codicon name="close" />
-          </Button>
-        ) : null}
-        <BotFace color={avatarColor(color, bot)} image={image} name={bot} shape={shape} size={96} />
-        <div className="mt-3 max-w-full truncate text-xl font-semibold">{profileName}</div>
-        {showsHandle(bot, meta, owner) ? (
-          <span className="font-mono text-[0.65rem] text-(--ui-text-quaternary)">{`@${botHandle(bot, owner)}`}</span>
-        ) : null}
-        {profileLabel ? (
-          <div className="line-clamp-3 max-w-full text-xs text-(--ui-text-tertiary)">{profileLabel}</div>
-        ) : (
-          <button
-            className="text-xs text-(--ui-text-tertiary) underline-offset-2 hover:text-foreground hover:underline"
-            onClick={() => setEditOpen(true)}
-            type="button"
-          >
-            {b.cron.profileAddLabel}
-          </button>
-        )}
-      </div>
-      <Tabs className="gap-0" onValueChange={setProfileTab} value={profileTab}>
-        <TabsList aria-label={t.sidebar.filter.profile} className="mx-auto mb-2 h-auto gap-1 bg-transparent p-0 px-3">
-          {PROFILE_TABS.map(tab => (
-            <TabsTrigger
-              aria-controls={`bot-profile-panel-${tab.id}`}
-              className={cn(
-                'h-auto rounded-full px-3 py-1 text-xs shadow-none transition-colors',
-                profileTab === tab.id
-                  ? 'bg-(--chrome-action-hover) font-medium text-foreground'
-                  : 'text-(--ui-text-tertiary) hover:text-foreground'
-              )}
-              id={`bot-profile-tab-${tab.id}`}
-              key={tab.id}
-              value={tab.id}
-            >
-              {b.cron[tab.label]}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-      {profileTab === 'details' ? (
-        <div
-          aria-labelledby="bot-profile-tab-details"
-          className="flex min-h-0 flex-1 flex-col"
-          id="bot-profile-panel-details"
-          role="tabpanel"
-        >
-          <div className="flex items-center gap-2 px-4 pt-2 pb-1.5">
-            <div className="min-w-0 flex-1 text-sm text-(--ui-text-tertiary)">{b.cron.routinesLabel}</div>
-            <Tip label={c.newCron}>
-              <Button
-                aria-label={c.newCron}
-                className="size-6 rounded-full bg-(--chrome-action-hover)"
-                onClick={openCreate}
-                size="icon-xs"
-                variant="ghost"
-              >
-                <Codicon name="add" />
-              </Button>
-            </Tip>
-          </div>
-          {staleNotice ? (
-            <div className="mx-3 mb-2 rounded-md bg-(--chrome-action-hover) px-2 py-1.5 text-[0.6875rem] text-(--ui-text-tertiary)">
-              {staleNotice}
-            </div>
-          ) : null}
-          {isLoading && !view.all.length ? (
-            <div className="flex flex-1 items-center justify-center">
-              <GlyphSpinner className="text-(--ui-text-tertiary)" spinner="breathe" />
-            </div>
-          ) : error && !view.all.length ? (
-            <PanelEmpty
-              action={
-                <Button onClick={() => void refetch()} size="sm" variant="secondary">
-                  {t.common.retry}
-                </Button>
-              }
-              description={b.cron.readFailure}
-              icon="warning"
-              title={c.failedLoad}
-            />
-          ) : jobs.length === 0 ? (
-            <div className="px-4 py-2">
-              <div className="text-sm text-(--ui-text-tertiary)">{filterHint || c.emptyTitleNew}</div>
-            </div>
-          ) : (
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-              <div className="grid gap-2 px-3 py-1">
-                {jobs.map(job => (
-                  <RoutineRow
-                    job={job}
-                    key={job.job_id}
-                    onOpen={opened => setDetailJobId(opened.job_id)}
-                    owner={owner}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div
-          aria-labelledby="bot-profile-tab-computer"
-          className="min-h-0 flex-1 overflow-y-auto px-3"
-          id="bot-profile-panel-computer"
-          role="tabpanel"
-        >
-          <ScreenHero bot={owner} meta={meta} />
-        </div>
-      )}
+      <BotProfileHeader
+        bot={bot}
+        meta={meta}
+        onAddLabel={() => setEditOpen(true)}
+        owner={owner}
+        profileLabel={profileLabel}
+        profileName={profileName}
+      />
+      <BotProfileTabs onChange={setProfileTab} tab={profileTab} />
+      <BotProfileBody
+        actions={data?.actions}
+        error={error}
+        isLoading={isLoading}
+        jobs={jobs}
+        meta={meta}
+        onCreate={openCreate}
+        onOpenJob={setDetailJobId}
+        owner={owner}
+        refetch={refetch}
+        tab={profileTab}
+        view={view}
+      />
       <EditProfileDialog bot={editOpen ? owner : null} onClose={() => setEditOpen(false)} open={editOpen} />
-      <RoutineDetailDialog job={detailJob} onClose={() => setDetailJobId(null)} open={Boolean(detailJob)} />
+      <RoutineDetailDialog
+        actions={data?.actions}
+        job={detailJob}
+        onClose={() => setDetailJobId(null)}
+        open={Boolean(detailJob)}
+        owner={owner}
+      />
       <CreateRoutineDialog
+        actions={data?.actions}
         // Non-null past the `!owner` early return above: `routineCreateTarget`
         // falls back to the active profile name.
         bot={createTarget!}

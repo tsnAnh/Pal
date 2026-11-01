@@ -3,6 +3,7 @@ module is listed here so the generator and the runtime see the same catalog."""
 
 from . import (
     billing_delegation_pets,
+    bot_teach,
     common,
     config_free_tier_control,
     connectors,
@@ -13,6 +14,7 @@ from . import (
     i18n,
     liveness,
     machine,
+    profile_templates,
     profiles_vault_complete_foreign_subagents,
     projects_pets,
     prompt_voice,

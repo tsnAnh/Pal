@@ -4398,7 +4398,24 @@ export const zhOverrides = {
       alwaysTitle: '始终允许此命令？',
       alwaysDescription: pattern =>
         `这会将“${pattern}”模式加入永久允许列表 (~/.hermes/config.yaml)。Hermes 对类似命令将不再询问，包括当前会话和未来会话。`,
-      alwaysAllow: '始终允许'
+      alwaysAllow: '始终允许',
+      allowOnce: '仅允许一次',
+      deny: '拒绝',
+      alwaysDescriptionBot: pattern =>
+        `此后在所有聊天中，该机器人执行“${pattern}”前将不再询问。`,
+      draftTitle: '消息草稿',
+      draftTo: recipient => `发送给 ${recipient}`,
+      draftVia: channel => `通过 ${channel}`,
+      draftSubject: subject => `主题：${subject}`,
+      draftSend: '发送',
+      draftSendEdited: '发送编辑后的内容',
+      draftDiscard: '丢弃',
+      draftEdit: '编辑',
+      draftCancelEdit: '取消编辑',
+      draftEditLabel: '编辑消息',
+      draftHeld: '在你离开期间生成，尚未发送任何内容。',
+      draftExpired: '已过期 — 此草稿无法再发送。丢弃即可关闭。',
+      draftUnviewable: '此消息无法完整显示，因此只能丢弃。'
     },
     clarify: zhClarify,
     themePicker: zhThemePicker,

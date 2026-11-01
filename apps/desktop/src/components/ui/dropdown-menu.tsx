@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 // full-width, square, and compact so the highlight spans the whole surface.
 // Reuse these instead of re-deriving per menu so every searchable/compact menu
 // reads identically.
-export const dropdownMenuRow = 'gap-2 rounded-none px-2.5 py-1 text-xs'
+export const dropdownMenuRow = 'gap-2 rounded-md px-2.5 py-1 text-xs'
 export const dropdownMenuSectionLabel =
   'px-2.5 pt-1 pb-0.5 text-[0.625rem] font-medium uppercase tracking-wide text-(--ui-text-secondary)'
 

@@ -12,8 +12,9 @@ import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { releaseTypingFocus } from '@/components/ui/keyboard-first'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { ChevronDown } from '@/lib/icons'
+import { ChevronDown, Cpu } from '@/lib/icons'
 import { formatModelPillLabel, providerDisplayName } from '@/lib/model-status-label'
+import { ProviderBrandIcon } from '@/lib/provider-brand-icon'
 import { cn } from '@/lib/utils'
 import { $currentModelSource, setModelPickerOpen } from '@/store/session'
 
@@ -143,6 +144,11 @@ export function ModelPill({
     <ChevronDown className="size-3.5 shrink-0 opacity-70" />
   ) : (
     <>
+      <ProviderBrandIcon
+        className="size-3.5"
+        fallback={<Cpu className="hidden size-3.5 shrink-0 [[data-bot-chat]_&]:block" />}
+        provider={currentProvider}
+      />
       {currentModel.trim() ? (
         <span className="truncate">{pillLabel ?? formatModelPillLabel(currentModel, { fastMode, serviceTier })}</span>
       ) : (

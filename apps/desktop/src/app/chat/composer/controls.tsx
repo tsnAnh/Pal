@@ -48,6 +48,7 @@ interface ConversationProps {
 
 export function ComposerControls({
   autoSpeak,
+  botLayout = false,
   busy,
   busyAction,
   canSubmit,
@@ -68,6 +69,7 @@ export function ComposerControls({
   onToggleAutoSpeak
 }: {
   autoSpeak: boolean
+  botLayout?: boolean
   busy: boolean
   busyAction: 'interrupt' | 'steer' | 'queue' | 'stop'
   canSubmit: boolean
@@ -112,12 +114,11 @@ export function ComposerControls({
   // same reason — same controls, same state, different budget. Below that
   // even the menu goes: at `minimal` the row is the send button and nothing
   // else, which is the one thing that must survive every width.
-  const foldedVoice = hudMode || foldVoice
-
-  const voiceControls = foldedVoice ? (
-    <VoiceMenu
+  const voiceControls = (
+    <VoiceControls
       autoSpeak={autoSpeak}
       disabled={disabled}
+      folded={hudMode || foldVoice}
       hideConversation={hideVoiceConversation}
       onDictate={onDictate}
       onStartConversation={conversation.onStart}
@@ -125,38 +126,14 @@ export function ComposerControls({
       state={state}
       voiceStatus={voiceStatus}
     />
-  ) : (
-    // One mic in the row; hovering it fans the other voice toggles out of it.
-    <VoiceFan
-      autoSpeak={autoSpeak}
-      disabled={disabled}
-      onDictate={onDictate}
-      onToggleAutoSpeak={onToggleAutoSpeak}
-      state={state}
-      voiceStatus={voiceStatus}
-    />
   )
 
-  // The browser host's touch-size controls can outgrow a minimal row, so there
-  // they pack to the end and wrap. Native Desktop keeps main's single row.
-  const browserHost = hostHas('touchSizedControls')
+  const modelChips = (
+    <ModelChips compact={compactModelPill} disabled={disabled} hidden={minimal || hideModelPill} model={state.model} />
+  )
 
-  return (
-    <div
-      className={cn('flex min-w-0 shrink items-center gap-(--composer-control-gap)', browserHost && 'justify-end')}
-      style={{ flexWrap: browserHost && minimal ? 'wrap' : undefined }}
-    >
-      {minimal ? null : (
-        <>
-          {hideModelPill ? null : (
-            <>
-              <ModelPill compact={compactModelPill} disabled={disabled} model={state.model} />
-              {compactModelPill ? null : <ReasoningPill disabled={disabled} model={state.model} />}
-            </>
-          )}
-          {voiceControls}
-        </>
-      )}
+  const sendCluster = (
+    <>
       {renderSteerButton(busy, busyAction, onSteer, disabled, c.steer)}
       {showQueueButton ? (
         <Tip label={<TipKeybindLabel actionId="composer.queue" text={c.queueMessage} />} placement="control">
@@ -203,6 +180,36 @@ export function ComposerControls({
           </Button>
         </Tip>
       )}
+    </>
+  )
+
+  if (botLayout) {
+    return (
+      <>
+        <div className="flex min-w-0 items-center gap-1 [grid-area:chips]" data-slot="composer-chips">
+          {modelChips}
+        </div>
+        <div
+          className="flex shrink-0 items-center gap-(--composer-control-gap) [grid-area:actions]"
+          data-slot="composer-actions"
+        >
+          {minimal ? null : voiceControls}
+          {sendCluster}
+          {hudMode ? <HudWindowButtons /> : null}
+        </div>
+      </>
+    )
+  }
+
+  return (
+    <div {...controlsRowProps(minimal)}>
+      {minimal ? null : (
+        <>
+          {modelChips}
+          {voiceControls}
+        </>
+      )}
+      {sendCluster}
       {/* The way out of HUD mode, riding the controls row rather than floating
           above the bar. The old chip lived in a 26px transparent strip reserved
           over the composer (--hud-chip-strip), which under glass is bare
@@ -212,6 +219,73 @@ export function ComposerControls({
           things you can press. */}
       {hudMode ? <HudWindowButtons /> : null}
     </div>
+  )
+}
+
+// The browser host's touch-size controls can outgrow a minimal row, so there
+// they pack to the end and wrap. Native Desktop keeps main's single row.
+function controlsRowProps(minimal: boolean) {
+  const browserHost = hostHas('touchSizedControls')
+
+  return {
+    className: cn('flex min-w-0 shrink items-center gap-(--composer-control-gap)', browserHost && 'justify-end'),
+    style: { flexWrap: browserHost && minimal ? ('wrap' as const) : undefined }
+  }
+}
+
+function ModelChips({
+  compact,
+  disabled,
+  hidden,
+  model
+}: {
+  compact: boolean
+  disabled: boolean
+  hidden: boolean
+  model: ChatBarState['model']
+}) {
+  if (hidden) {
+    return null
+  }
+
+  return (
+    <>
+      <ModelPill compact={compact} disabled={disabled} model={model} />
+      {compact ? null : <ReasoningPill disabled={disabled} model={model} />}
+    </>
+  )
+}
+
+function VoiceControls({
+  folded,
+  hideConversation,
+  ...props
+}: {
+  autoSpeak: boolean
+  disabled: boolean
+  folded: boolean
+  hideConversation?: boolean
+  onDictate: () => void
+  onStartConversation: () => void
+  onToggleAutoSpeak: () => void
+  state: ChatBarState
+  voiceStatus: VoiceStatus
+}) {
+  if (folded) {
+    return <VoiceMenu {...props} hideConversation={hideConversation} />
+  }
+
+  const { autoSpeak, disabled, onDictate, onToggleAutoSpeak, state, voiceStatus } = props
+
+  return (
+    <VoiceFan
+      autoSpeak={autoSpeak}
+      disabled={disabled}
+      onDictate={onDictate}
+      onToggleAutoSpeak={onToggleAutoSpeak}
+      state={state}
+      voiceStatus={voiceStatus}
+    />
   )
 }
 

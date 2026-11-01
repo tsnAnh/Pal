@@ -671,7 +671,7 @@ def _blocked_tool_result(agent, ref: _ToolCallRef, *, block_body: dict[str, Any]
 
 def _pre_tool_block(agent, ref: _ToolCallRef):
     """Run ``pre_tool_call`` plugin hooks; returns ``(block_message, final_args)`` with any
-    hook-modified args applied. Hook failures never block."""
+    hook-modified args applied. Hook failures never block, except that an outbound send fails closed in a Bot Mode profile."""
     try:
         from hermes_cli.plugins import _dispatch_pre_tool_call_hooks
 
@@ -683,7 +683,8 @@ def _pre_tool_block(agent, ref: _ToolCallRef):
         )
         return block_msg, (ref.args if modified_args is None else modified_args)
     except Exception:
-        return None, ref.args
+        from tools.bot_mode_drafts import blocked_on_failure
+        return blocked_on_failure(ref.name), ref.args
 
 
 def _dispatch_authorized_once(

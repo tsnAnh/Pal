@@ -570,6 +570,27 @@ def _profile_update(args):
         _die(f"Error: {e}")
 
 
+def _profile_about_you(args):
+    from tools.bot_mode_about_you import read_about_you, write_about_you
+
+    name, timezone = getattr(args, "name", None), getattr(args, "timezone", None)
+    clear = getattr(args, "clear", False)
+    if clear and (name is not None or timezone is not None):
+        _die("Error: --clear cannot be combined with --name or --timezone.")
+    try:
+        if clear:
+            facts = write_about_you(name="", timezone="")
+        elif name is None and timezone is None:
+            facts = read_about_you()
+        else:
+            updates = {k: v for k, v in (("name", name), ("timezone", timezone)) if v is not None}
+            facts = write_about_you(**updates)
+    except (ValueError, OSError) as e:
+        _die(f"Error: {e}")
+    print(f"Name:      {facts['name'] or '(not set)'}")
+    print(f"Time zone: {facts['timezone'] or '(not set)'}")
+
+
 _INFO_FIELDS = (
     ("description", "Description:  "),
     ("author", "Author:       "),
@@ -626,6 +647,7 @@ PROFILE_ACTIONS = {
     'install': _profile_install,
     'update': _profile_update,
     'info': _profile_info,
+    'about-you': _profile_about_you,
 }
 
 

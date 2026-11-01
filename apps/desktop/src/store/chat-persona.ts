@@ -2,9 +2,30 @@ import { useStore } from '@nanostores/react'
 import { atom } from 'nanostores'
 import { createContext, type ReactNode, useContext } from 'react'
 
+export interface ChatVoiceLabels {
+  callEnded: (duration: string) => string
+  callLive: string
+  hangUp: string
+  hideTranscript: string
+  listening: string
+  mute: string
+  muted: string
+  pauseMemo: string
+  playMemo: string
+  showTranscript: string
+  speaking: string
+  startCall: string
+  thinking: string
+  transcriptEmpty: string
+  unmute: string
+  you: string
+}
+
 export interface ChatPersona {
   avatar: (size: number) => ReactNode
   name: string
+  stopNowLabel?: () => string
+  voice?: () => ChatVoiceLabels
 }
 
 export const $chatPersonas = atom<Readonly<Record<string, ChatPersona>>>({})

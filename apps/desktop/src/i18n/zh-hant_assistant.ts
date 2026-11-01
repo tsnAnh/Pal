@@ -297,7 +297,24 @@ export const zhHantAssistant = {
       alwaysTitle: '一律允許此指令？',
       alwaysDescription: pattern =>
         `這會將「${pattern}」模式加入永久允許清單（~/.hermes/config.yaml）。Hermes 對類似指令將不再詢問，包括目前工作階段和未來工作階段。`,
-      alwaysAllow: '一律允許'
+      alwaysAllow: '一律允許',
+      allowOnce: '僅允許一次',
+      deny: '拒絕',
+      alwaysDescriptionBot: pattern =>
+        `此後在所有聊天中，這個機器人執行「${pattern}」前將不再詢問。`,
+      draftTitle: '訊息草稿',
+      draftTo: recipient => `傳送給 ${recipient}`,
+      draftVia: channel => `透過 ${channel}`,
+      draftSubject: subject => `主旨：${subject}`,
+      draftSend: '傳送',
+      draftSendEdited: '傳送編輯後的內容',
+      draftDiscard: '捨棄',
+      draftEdit: '編輯',
+      draftCancelEdit: '取消編輯',
+      draftEditLabel: '編輯訊息',
+      draftHeld: '在你離開期間產生，尚未傳送任何內容。',
+      draftExpired: '已過期 — 此草稿無法再傳送。捨棄即可關閉。',
+      draftUnviewable: '此訊息無法完整顯示，因此只能捨棄。'
     },
     clarify: {
       notReady: '澄清請求尚未就緒',

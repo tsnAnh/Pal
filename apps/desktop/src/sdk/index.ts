@@ -104,7 +104,7 @@ import {
   sessionTileDelegate
 } from '@/store/session-states'
 import { runGatewayRestart } from '@/store/system-actions'
-import type { PaginatedSessions, UsageStats } from '@/types/hermes'
+import type { UsageStats } from '@/types/hermes'
 
 import type { SessionMutationSnapshot } from '../../../shared/src/session-http-mutations'
 
@@ -119,7 +119,7 @@ import {
   pluginRouteStillRegistered,
   requestPluginProfile
 } from './profile-request'
-import { sessionsHost } from './sessions'
+import { listPersistedSessions, searchPersistedSessions, sessionsHost } from './sessions'
 import { desktopSettings } from './settings'
 import { spellcheckHost } from './spellcheck'
 import { $viewport, type ViewportRect } from './viewport'
@@ -1435,39 +1435,8 @@ export const host = {
     return retainGatewayForAgent(null, route.trim() || 'default', options)
   },
 
-  /** Read persisted sessions from a profile's owning source without dialing
-   *  that profile's gateway. The source primary opens state.db directly. */
-  listPersistedSessions: async (
-    route: PluginProfileRoute | null,
-    options: { profile: string; limit?: number }
-  ): Promise<PaginatedSessions> => {
-    if (route && (!route.connectionId.trim() || !route.profile.trim() || !route.targetProfile.trim())) {
-      throw new Error('Profile route must include connectionId, profile, and targetProfile')
-    }
-
-    const profile = options.profile.trim()
-
-    if (!profile) {
-      throw new Error('Persisted session reads require a profile')
-    }
-
-    const limit = Math.min(500, Math.max(0, options.limit ?? 200))
-
-    const query = new URLSearchParams({
-      limit: String(limit),
-      offset: '0',
-      min_messages: '0',
-      archived: 'exclude',
-      order: 'created',
-      profile
-    })
-
-    return hermesApi<PaginatedSessions>({
-      ...(route ? { connectionId: route.connectionId } : {}),
-      path: `/api/profiles/sessions?${query.toString()}`,
-      timeoutMs: 60_000
-    })
-  },
+  listPersistedSessions,
+  searchPersistedSessions,
 
   /** Mutate the durable hidden flag through the source primary. Keeping the
    *  owner profile in the body (not request.profile) prevents Electron from
@@ -1654,6 +1623,9 @@ export { APPEARANCE_AREAS } from '@/app/settings/appearance-contrib'
  *  never an Off/On pill pair. Use them for preference rows in plugin panes and
  *  dialogs so they line up with core Settings. */
 export { ListRow, ToggleRow } from '@/app/settings/primitives'
+/** Headless voice settings of one profile (voice list, `setVoice`, `setLanguage`, `preview`);
+ *  probe `typeof useProfileVoice === 'function'` first: older builds lack it. */
+export { type ProfileVoice, type ProfileVoiceLabels, saveProfileVoice, useProfileVoice } from '@/app/settings/profile-voice'
 /** THE full per-toolset config panel core Settings renders — provider picker,
  *  env vars / API keys, model catalog picker, and post-setup runners. Route-
  *  decoupled (the "manage keys" deep link is a no-op outside the router); pass
@@ -1903,7 +1875,7 @@ export {
 } from '@/lib/transcript-directives'
 export { cn } from '@/lib/utils'
 export { $botChromeless } from '@/store/bot-surface'
-export { type ChatPersona, setChatPersonas, setHandlePersonas } from '@/store/chat-persona'
+export { type ChatPersona, type ChatVoiceLabels, setChatPersonas, setHandlePersonas } from '@/store/chat-persona'
 export { gatewayActivationEpoch, useGatewayActivationEpoch } from '@/store/gateway'
 /** THE unread store behind `SessionStatusDot`'s emerald dot. A plugin that
  *  learns out-of-band that a session produced something the user hasn't seen
@@ -1960,6 +1932,8 @@ export type { StatusResponse } from '@/types/hermes'
 export type { GatewayEvent as RpcEvent } from '@hermes/shared'
 /** Bot Screen wire shapes, generated from `tui_gateway/contracts/display.py`. */
 export type { DisplayLease, DisplayObserveResult, DisplayStatus, DisplayThumbnailResult } from '@hermes/shared'
+/** Teach-a-skill wire shapes, generated from `tui_gateway/contracts/bot_teach.py`. */
+export type { BotTeachDraft, BotTeachPending, BotTeachStatus, BotTeachStopResult } from '@hermes/shared'
 /** `session.list` / `profiles.list` session rows, generated from `tui_gateway/contracts`. */
 export type { ProfileSessionPreview, SessionListRow } from '@hermes/shared'
 /** THE compact-number formatter — every user-facing count/token figure goes

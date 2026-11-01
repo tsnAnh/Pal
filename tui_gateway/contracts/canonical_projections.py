@@ -74,6 +74,20 @@ class CanonicalBotDeliverParams(Params):
     notification_category: str | None = None
 
 
+class CanonicalBotStopParams(Params):
+    profile: str | None = None
+    id: str
+
+
+class CanonicalBotStopResult(Result):
+    """Stop of one delivery's turn: ``cancelled`` while queued, ``interrupted`` while running,
+    ``finished`` when it already ended, ``not_found`` when this authority never admitted the id."""
+
+    status: str
+    stopped: bool
+    handoffs: int
+
+
 class CanonicalBotDeliverResult(Result):
     """A delivery's receipt. It names its admission, unless ``refused``: the FIFO refused the
     delivery before anything was committed (``gateway/session_bot.py``), a terminal ``failed``
@@ -110,5 +124,6 @@ for _name, _params, _result in (
     # The sender's finalize of a refusal marked ``admitted: false``: the same identity, answered
     # with the id's terminal not-sent receipt or its existing admission (``gateway/session_bot.py``).
     ('bot_relay.settle', CanonicalBotDeliverParams, CanonicalBotDeliverResult),
+    ('bot_relay.stop', CanonicalBotStopParams, CanonicalBotStopResult),
 ):
     canonical_method(_name, params=_params, result=_result)

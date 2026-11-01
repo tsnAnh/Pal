@@ -704,6 +704,9 @@ def _start_delivery(argv: list[str], content: str, label: str, *, stdin_file: bo
                 "error": f"Live delivery admission could not be confirmed: {exc}. Do not resend.",
                 "evidence_file": dm_file})
         if record is not None:
+            from tools.bot_handoff_ledger import record_handoff
+            record_handoff(getattr(agent, "session_id", ""), delivery_id=record["delivery_id"],
+                           profile_home=profile_home, profile=argv[2] if len(argv) > 2 else "")
             command = _delivery_command(argv, dm_file, stdin_file=False, profile_home=profile_home, author=author)
             notification = json.loads(_spawn_delivery(command, label, task_id=task_id, agent=agent))
             result = dict(status=record["status"], delivery_id=record["delivery_id"], to=label,

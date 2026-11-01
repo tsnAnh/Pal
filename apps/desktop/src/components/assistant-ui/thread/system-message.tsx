@@ -9,7 +9,9 @@ import { Codicon } from '@/components/ui/codicon'
 import { LogView } from '@/components/ui/log-view'
 import { ToolIcon } from '@/components/ui/tool-icon'
 import { LinkifiedText } from '@/lib/external-link'
+import { AudioLines, iconSize } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { voiceCallCardLabel } from '@/store/voice-call'
 
 const SLASH_STATUS_RE = /^slash:(?<command>\/[^\n]+)\n(?<output>[\s\S]*)$/
 const STEER_NOTE_RE = /^steer:(?<text>[\s\S]+)$/
@@ -112,6 +114,26 @@ export const SystemMessage: FC = () => {
         {detail && (
           <span className={cn(SCAFFOLD_LABEL_CLASS, 'tool-memory-legendary-meta min-w-0 wrap-anywhere')}>{detail}</span>
         )}
+      </MessagePrimitive.Root>
+    )
+  }
+
+  const callCard = voiceCallCardLabel(text)
+
+  if (callCard) {
+    return (
+      <MessagePrimitive.Root
+        className="flex w-full min-w-0 justify-center py-1"
+        data-role="system"
+        data-slot="aui_system-message-root"
+      >
+        <div
+          className="flex max-w-full items-center gap-2 rounded-full border border-(--ui-stroke-tertiary) bg-muted/35 px-3 py-1 text-xs font-medium text-(--ui-text-secondary)"
+          data-slot="voice-call-card"
+        >
+          <AudioLines className={cn(iconSize.sm, 'shrink-0')} />
+          <span className="truncate">{callCard}</span> <MessageTimelineTimestamp />
+        </div>
       </MessagePrimitive.Root>
     )
   }

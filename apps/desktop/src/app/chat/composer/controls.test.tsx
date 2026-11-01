@@ -98,6 +98,14 @@ describe('HUD mode', () => {
     expect(screen.queryByLabelText('Read replies aloud')).toBeNull()
   })
 
+  it('keeps the HUD exit buttons in the bot layout', () => {
+    $hudMode.set(true)
+    renderControls({ botLayout: true })
+
+    expect(screen.getByLabelText('Reset HUD size and position')).toBeTruthy()
+    expect(screen.getByLabelText('Exit HUD mode')).toBeTruthy()
+  })
+
   // A collapsed menu that looked idle while the mic was open would be a worse
   // trade than the space it saves, so the trigger reports the live state.
   it('reports a live voice state on the collapsed trigger', () => {

@@ -59,6 +59,7 @@ class ProcessStopParams(Params):
 class ProcessStopResult(Result):
     killed: int
     delegations: int = 0
+    handoffs: int = 0
 
 
 method("process.stop", params=ProcessStopParams, result=ProcessStopResult,
@@ -441,11 +442,19 @@ class CronAction(WireEnum):
     remove = "remove"
     pause = "pause"
     resume = "resume"
+    run = "run"
+    history = "history"
+    history_output = "history_output"
+    schedule_preview = "schedule_preview"
+    trigger_status = "trigger_status"
+    trigger_issue = "trigger_issue"
+    trigger_remove = "trigger_remove"
 
 
 class CronManageParams(Params):
     action: CronAction = CronAction.list
     name: str | None = None
+    run_id: str | None = None
     include_disabled: bool | str | None = None
     schedule: str | None = None
     prompt: str | None = None
@@ -499,10 +508,26 @@ class CronRemovedJob(Result):
     schedule: str | None = None
 
 
+class CronRunRecord(Result):
+    """One attempt in ``cron.manage {action: "history"}``: newest first, at most 20 per job."""
+
+    run_id: str
+    status: str
+    reason: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+    duration_seconds: float | None = None
+    has_output: bool = False
+
+
 class CronManageResult(_Open):
     """Pass-through of ``tools/cronjob_tools.py::cronjob`` JSON: ``list`` → ``jobs``/``count``
-    (+ ``scoped`` when profile-scoped); ``add`` → the created job's summary + ``job``; ``remove`` →
-    ``removed_job``; ``pause``/``resume`` → ``job``. A tool-level failure lands in ``error``."""
+    (+ ``scoped`` when profile-scoped, ``actions`` = the routine actions this gateway supports); ``add``
+    → the created job's summary + ``job`` (or ``reason`` when the schedule is refused); ``remove`` →
+    ``removed_job``; ``pause``/``resume`` → ``job``; ``run`` → ``started``/``reason``; ``history`` →
+    ``runs``; ``history_output`` → ``output``; ``schedule_preview`` → normalized ``schedule``;
+    ``trigger_*`` → the routine's webhook trigger (``key`` only on ``trigger_issue``). A tool-level
+    failure lands in ``error``."""
 
     success: bool | None = None
     error: str | None = None
@@ -523,10 +548,27 @@ class CronManageResult(_Open):
     message: str | None = None
     guidance: JsonValue | None = None
     removed_job: CronRemovedJob | None = None
+    actions: list[str] | None = None
+    started: bool | None = None
+    reason: str | None = None
+    mode: str | None = None
+    limit: int | None = None
+    runs: list[CronRunRecord] | None = None
+    run_id: str | None = None
+    output: str | None = None
+    truncated: bool | None = None
+    kind: str | None = None
+    available: bool | None = None
+    blocked_by: str | None = None
+    configured: bool | None = None
+    url: str | None = None
+    key: str | None = None
+    created_at: str | None = None
+    removed: bool | None = None
 
 
 method("cron.manage", params=CronManageParams, result=CronManageResult,
-       doc="List/add/remove/pause/resume cron jobs in the (optionally profile-scoped) cron store.")
+       doc="List/add/remove/pause/resume/run cron jobs, read run history, preview a schedule and manage a routine's webhook trigger in the (optionally profile-scoped) cron store.")
 
 
 # ── browser.manage ────────────────────────────────────────────────────────────────────────────

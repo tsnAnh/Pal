@@ -15,6 +15,7 @@ import { ClarifyTool } from '@/components/assistant-ui/clarify'
 import { ConnectorExecution, ConnectorTool } from '@/components/assistant-ui/connector-tool'
 import { MarkdownText, MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { McpSetupTool } from '@/components/assistant-ui/mcp-setup-tool'
+import { PluginToolCard } from '@/components/assistant-ui/plugin-tool-card'
 import { SetupBeatTool } from '@/components/assistant-ui/setup-beat/setup-beat-tool'
 import { setThemeCall } from '@/components/assistant-ui/theme-picker/args'
 import { ThemeTool } from '@/components/assistant-ui/theme-picker/theme-tool'
@@ -128,6 +129,7 @@ const TOOL_CARDS: Record<CardToolName, FC<TimelineToolCallProps>> = {
   image_generate: ImageGenerateTool,
   manage_catalog: CatalogInstallTool,
   manage_connections: ConnectionsToolPart,
+  request_handback: PluginToolCard,
   set_theme: ThemeToolPart,
   setup_beat: SetupBeatToolPart
 }
@@ -186,7 +188,7 @@ const ChainToolFallback: FC<TimelineToolCallProps> = props => {
     return <ThemeToolPart {...props} />
   }
 
-  if (botChat && !failedCallNeedsUser(props)) {
+  if (botChat) {
     return null
   }
 

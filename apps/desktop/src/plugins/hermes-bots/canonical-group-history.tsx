@@ -8,12 +8,32 @@ import type { CanonicalGroupBinding, CanonicalRoomMember } from './canonical-gro
 const MessageTextContent = typeof sdk === 'undefined' ? undefined : sdk.MessageTextContent
 const Streamdown = typeof sdk === 'undefined' ? undefined : sdk.Streamdown
 
+export interface CanonicalGroupReplyTo { event_id: string; member_id: string; quote: string }
+
+export interface CanonicalGroupReplyTarget extends CanonicalGroupReplyTo { author: string }
+
+export const REPLY_QUOTE_MAX_CHARS = 280
+
+export function replyTargetFor(event: CanonicalGroupEvent, author: string): CanonicalGroupReplyTarget | null {
+  const memberId = event.kind === 'message.member' ? event.actor?.id : undefined
+  const text = (event.payload.text || event.payload.content || '').split(/\s+/).filter(Boolean).join(' ')
+
+  if (!event.event_id || !memberId || !text) {return null}
+
+  return {
+    event_id: event.event_id,
+    member_id: memberId,
+    quote: text.length > REPLY_QUOTE_MAX_CHARS ? `${text.slice(0, REPLY_QUOTE_MAX_CHARS - 1)}…` : text,
+    author
+  }
+}
+
 export interface CanonicalGroupEvent {
   seq: number
   event_id?: string
   room_id?: string
   kind: string
-  payload: { text?: string; content?: string; attachments?: CanonicalGroupAttachment[]; member_id?: string; error?: string; reason?: string; reason_code?: string; status?: string }
+  payload: { text?: string; content?: string; attachments?: CanonicalGroupAttachment[]; member_id?: string; error?: string; reason?: string; reason_code?: string; status?: string; reply_to?: CanonicalGroupReplyTo }
   actor?: { kind?: string; id?: string; display_name?: string }
   created_at?: number
 }
@@ -23,6 +43,7 @@ interface CanonicalGroupHistoryProps {
   events: CanonicalGroupEvent[]
   members?: CanonicalRoomMember[]
   disabled?: boolean
+  onReply?: (target: CanonicalGroupReplyTarget) => void
 }
 
 function eventAuthor(event: CanonicalGroupEvent, roster: Map<string, CanonicalRoomMember>, isMessage: boolean) {
@@ -153,7 +174,17 @@ function ImagePreview({ binding, eventId, attachment, disabled }: {
   return previewable ? <div ref={box}>{src && <img alt={attachment.name} className="max-h-64 max-w-full rounded object-contain" src={src} />}</div> : null
 }
 
-export function CanonicalGroupHistory({ binding, events, members = [], disabled = false }: CanonicalGroupHistoryProps) {
+function ReplyQuote({ reply, roster }: { reply: CanonicalGroupReplyTo; roster: Map<string, CanonicalRoomMember> }) {
+  const labels = useCanonicalGroupLabels()
+  const member = roster.get(reply.member_id)
+
+  return <blockquote className="border-l-2 border-(--ui-stroke-tertiary) pl-2 text-[0.7rem] text-(--ui-text-tertiary)" data-slot="group-reply-quote">
+    <span className="font-medium">{labels.replyingTo} {member?.display_name || member?.handle || reply.member_id}</span>
+    <span className="line-clamp-2 block">{reply.quote}</span>
+  </blockquote>
+}
+
+export function CanonicalGroupHistory({ binding, events, members = [], disabled = false, onReply }: CanonicalGroupHistoryProps) {
   const labels = useCanonicalGroupLabels()
   const roster = new Map(members.map(member => [member.member_id, member]))
 
@@ -177,11 +208,15 @@ export function CanonicalGroupHistory({ binding, events, members = [], disabled 
     const author = eventAuthor(event, roster, isMessage)
     const previewEventId = event.room_id === binding.roomId ? event.event_id : undefined
 
-    return <div className="grid grid-cols-[minmax(0,1fr)] gap-1 px-2 py-1.5" key={event.seq}>
+    const reply = onReply && !notice ? replyTargetFor(event, author || '') : null
+
+    return <div className="group/message grid grid-cols-[minmax(0,1fr)] gap-1 px-2 py-1.5" key={event.seq}>
     <div className="flex items-center gap-2">
       {author && <strong className="text-[0.7rem] font-semibold text-(--ui-accent)">{author}</strong>}
       <EventTime timestamp={event.created_at} />
+      {reply && <button className="text-[0.65rem] text-(--ui-text-tertiary) opacity-0 transition-opacity hover:text-(--ui-text-secondary) focus-visible:opacity-100 group-hover/message:opacity-100" data-slot="group-reply-action" onClick={() => onReply?.(reply)} type="button">{labels.replyAction}</button>}
     </div>
+    {event.payload.reply_to && !notice && <ReplyQuote reply={event.payload.reply_to} roster={roster} />}
     <EventBody event={event} notice={notice} />
     {previewEventId && event.payload.attachments?.filter(a => a.kind === 'image').map(a =>
       <ImagePreview attachment={a} binding={binding} disabled={disabled} eventId={previewEventId} key={a.attachment_id ?? a.name} />)}

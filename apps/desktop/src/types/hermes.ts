@@ -828,7 +828,10 @@ export interface SessionResumeResult {
     choices?: string[]
     command?: string
     description?: string
+    details?: unknown
+    draft?: unknown
     request_id?: string
+    scope?: unknown
     smart_denied?: boolean
   }
   // Server→client requests still unanswered for this session (clarify, sudo,

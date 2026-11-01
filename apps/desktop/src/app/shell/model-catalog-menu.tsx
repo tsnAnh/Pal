@@ -46,6 +46,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { isSubmitEnter } from '@/lib/ime'
 import { catalogProviderMatches, modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 import { displayModelName, modelDisplayParts } from '@/lib/model-status-label'
+import { ProviderBrandIcon } from '@/lib/provider-brand-icon'
 import { accountResetMs, formatReset, modelResetMs } from '@/lib/provider-limit'
 import { reasoningEffortLabel } from '@/lib/reasoning-effort'
 import { foldIncludes, normalize } from '@/lib/text'
@@ -810,6 +811,7 @@ export function ModelCatalogMenu({
                   }}
                   textValue=""
                 >
+                  <ProviderBrandIcon className="size-3" provider={slug} />
                   <span className="truncate">
                     <HighlightMatches foldSeparators query={search} text={group.provider.name} />
                   </span>

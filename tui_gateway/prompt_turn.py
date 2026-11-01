@@ -206,6 +206,7 @@ class _TurnScopes:
     """Reset tokens for the thread/context scopes a turn binds (filled incrementally)."""
 
     approval: Any = None
+    bot_chat: Any = None
     session_tokens: list = dataclasses.field(default_factory=list)
     home: Any = None  # per-turn HERMES_HOME override for a resumed remote profile
     secret: Any = None
@@ -679,6 +680,9 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
     bound = _profile_runtime_scope_tokens(session.get("profile_home"))
     if bound is not None:
         scopes.home, scopes.secret, scopes.terminal = bound.home, bound.secret, bound.terminal
+    from tools.bot_mode_drafts import profile_is_bot_managed
+    from tools.approval_context import set_current_bot_chat
+    scopes.bot_chat = set_current_bot_chat(_is_bot_mode_session(session) and profile_is_bot_managed())
     # The sudo password callback is thread-local: without re-wiring here, sudo prompts
     # fall through to /dev/tty and hang the headless gateway (re-run is a no-op).
     _wire_callbacks(sid)
@@ -735,8 +739,9 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
     if take_speech_interrupted():
         run_message = _prepend_note(run_message, SPEECH_INTERRUPTED_NOTE)
     run_message = _prepend_note(run_message, _pending_reaction_notes(session))
-    agent._voice_turn_pending = bool(session.pop("voice_turn", False))  # auxiliary.voice_chat route
-    return prompt, _prepend_note(run_message, _hud_surface_note(session)), cols, streamer
+    voice_turn = bool(session.pop("voice_turn", False))
+    agent._voice_turn_pending = voice_turn  # auxiliary.voice_chat route
+    return prompt, _prepend_note(run_message, _hud_surface_note(session, voice_turn)), cols, streamer
 
 
 def _invoke_agent(
@@ -1048,6 +1053,10 @@ def _release_turn_scopes(sid: str, session: dict, st: _TurnRun) -> None:
         if scopes.approval is not None:
             from tools.approval_context import reset_current_session_key
             reset_current_session_key(scopes.approval)
+    with contextlib.suppress(Exception):
+        if scopes.bot_chat is not None:
+            from tools.approval_context import reset_current_bot_chat
+            reset_current_bot_chat(scopes.bot_chat)
     if scopes.secret is not None:
         reset_secret_scope(scopes.secret)
     if scopes.terminal is not None:

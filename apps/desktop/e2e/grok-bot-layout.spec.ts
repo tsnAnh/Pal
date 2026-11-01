@@ -52,7 +52,10 @@ test.beforeAll(async () => {
     ({ BrowserWindow }, size) => {
       BrowserWindow.getAllWindows()[0]?.setBounds({ x: 0, y: 0, ...size })
     },
-    { width: Math.max(VISUAL_WINDOW_WIDTH, 1400), height: VISUAL_WINDOW_HEIGHT }
+    {
+      width: Number(process.env.GROK_LAYOUT_WIDTH) || Math.max(VISUAL_WINDOW_WIDTH, 1400),
+      height: Number(process.env.GROK_LAYOUT_HEIGHT) || VISUAL_WINDOW_HEIGHT
+    }
   )
 
   fixture = {
@@ -214,6 +217,13 @@ test('bot roster, chat bubbles and profile panel follow the Grok Bot layout', as
     page.getByText('Share usage stats?').filter({ visible: true }),
     'bot chats never carry the usage-stats strip'
   ).toHaveCount(0)
+  await page
+    .getByText('alpha pinned to top')
+    .locator('xpath=ancestor::*[.//button][1]')
+    .getByRole('button')
+    .first()
+    .click({ timeout: 3_000 })
+    .catch(() => undefined)
   await capture(page, process.env.GROK_LAYOUT_SHOT_NAME ?? 'after')
 
   await page.emulateMedia({ colorScheme: 'dark' })
@@ -251,6 +261,49 @@ test('bot roster, chat bubbles and profile panel follow the Grok Bot layout', as
     'bots sidebar is near-black in dark mode'
   ).toBeLessThan(40)
   await capture(page, `${process.env.GROK_LAYOUT_SHOT_NAME ?? 'after'}-dark`)
+
+  const paneTab = (name: string) => page.getByRole('tab', { name }).filter({ visible: true }).first()
+
+  await expect(paneTab('Details')).toBeVisible()
+  await expect(paneTab('Computer')).toBeVisible()
+  await expect(page.locator('[data-slot="bot-details-summary"]').filter({ visible: true })).toBeVisible({
+    timeout: 15_000
+  })
+  await capture(page, 'u10-details-dark')
+
+  await paneTab('Run history').click()
+  await expect(page.getByText('No runs yet').filter({ visible: true })).toBeVisible({ timeout: 15_000 })
+  await capture(page, 'u10-run-history-dark')
+  await paneTab('Details').click()
+
+  await page.getByRole('button', { name: 'Search bots and group chats' }).filter({ visible: true }).first().click()
+
+  const searchBox = page.getByRole('textbox', { name: 'Search', exact: true })
+
+  await searchBox.fill('alpha')
+  await expect(page.getByRole('option').filter({ visible: true }).first()).toBeVisible({ timeout: 15_000 })
+  await capture(page, 'u10-search-dark')
+  await page.keyboard.press('Escape')
+  await expect(searchBox).toHaveCount(0)
+
+  await page.locator('[data-tour="model-pill"]').filter({ visible: true }).first().click()
+
+  const modelMenu = page.locator('[role="menu"]').filter({ visible: true }).first()
+
+  await expect(modelMenu).toBeVisible({ timeout: 10_000 })
+
+  const menuLook = await modelMenu.evaluate(node => {
+    const style = getComputedStyle(node)
+    const values = (style.backgroundColor.match(/-?\d*\.?\d+/g) ?? []).slice(0, 3).map(Number)
+    const scaled = style.backgroundColor.startsWith('color(') ? values.map(value => value * 255) : values
+
+    return { brightest: Math.max(...scaled), radius: parseFloat(style.borderTopLeftRadius) }
+  })
+
+  expect(menuLook.brightest, 'model menu is near-black in dark mode').toBeLessThan(24)
+  expect(menuLook.radius, 'model menu has rounded corners').toBeGreaterThanOrEqual(8)
+  await capture(page, 'model-menu-dark')
+  await page.keyboard.press('Escape')
 
   await expect(
     page.getByText(/^profile$/i).filter({ visible: true }),
@@ -296,4 +349,5 @@ test('bot roster, chat bubbles and profile panel follow the Grok Bot layout', as
     'pane switching returns to the account menu with the sessions tab'
   ).toBeVisible({ timeout: 10_000 })
   await page.keyboard.press('Escape')
+  await capture(page, `${process.env.GROK_LAYOUT_SHOT_NAME ?? 'after'}-sessions`)
 })

@@ -101,7 +101,8 @@ async def test_voice_turn_is_admitted_and_scoped_to_its_own_turn(tmp_path, monke
     rows = {row['request_id']: row for row in list_session_admissions(authority.db, session_id='s', pending_only=False)}
     assert rows['spoken']['payload']['surface_v1'] == {'voice_turn': True}
     assert 'surface_v1' not in rows['typed']['payload'] and 'bad' not in rows
-    assert seen == [('spoken', True, ''), ('typed', False, '')]
+    from tools.tts_streaming import VOICE_REPLY_NOTE
+    assert seen == [('spoken', True, VOICE_REPLY_NOTE), ('typed', False, '')]
 
 def _admissions(home):
     with closing(sqlite3.connect(f'file:{home / "state.db"}?mode=ro', uri=True)) as db:

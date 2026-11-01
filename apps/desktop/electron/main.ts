@@ -1,5 +1,6 @@
 import { type ChildProcess, execFileSync, spawn } from 'node:child_process'
 
+import { registerBotTemplateFilesIpc } from './bot-template-files'
 import type { GatewayEndpoint } from './local-gateway'
 import { configurePythonGatewayTicketClient, createLocalGatewayDials, createStaleGatewayRestarter, ensureLocalGateway, gatewayOwnerProfile, localGatewayDial, nativeGatewayHttpHeaders, redialLocalGateway, runGatewayEnsure, runGatewayOwnerRestart } from './local-gateway'
 import { closeGatewayTicketBridges, createGatewayTicketResolver } from './local-gateway-python'
@@ -548,7 +549,7 @@ import {
   type SecretStoragePolicy,
   writeSecretStoragePolicy
 } from './secret-storage-policy'
-import { selectPathsDialogProperties } from './select-paths-dialog'
+import { selectPathsDefaultPath, selectPathsDialogProperties } from './select-paths-dialog'
 import { selectRunnableBinary } from './select-runnable-binary'
 import {
   buildInstanceWindowUrl,
@@ -16410,21 +16411,7 @@ ipcMain.handle('hermes:readPluginSource', async (_event: unknown, filePath: unkn
 ipcMain.handle('hermes:selectPaths', async (_event, options: any = {}) => {
   const properties = selectPathsDialogProperties(options || {})
 
-  let resolvedDefaultPath
-
-  if (options?.defaultPath) {
-    try {
-      // On a Windows host with a WSL backend the cwd may be a POSIX/WSL path;
-      // bridge it to a UNC/drive form the native dialog can actually open.
-      const bridged = IS_WINDOWS
-        ? resolvePickerDefaultPath(String(options.defaultPath), undefined, options?.profile)
-        : String(options.defaultPath)
-
-      resolvedDefaultPath = bridged ? path.resolve(bridged) : undefined
-    } catch {
-      resolvedDefaultPath = undefined
-    }
-  }
+  const resolvedDefaultPath = selectPathsDefaultPath(options || {}, IS_WINDOWS ? resolvePickerDefaultPath : null)
 
   const result = await dialog.showOpenDialog(mainWindow, {
     title: options?.title || 'Add context',
@@ -16446,6 +16433,12 @@ registerClipboardTextIpc(ipcMain, clipboard)
 // Save dialogs: the path picker (profile export) and /save's main-process write (save-text-file.ts).
 registerSaveDialogIpc(ipcMain, {
   defaultDir: () => app.getPath('documents'),
+  showSaveDialog: options => dialog.showSaveDialog(mainWindow, options)
+})
+
+registerBotTemplateFilesIpc(ipcMain, {
+  defaultDir: () => app.getPath('documents'),
+  showOpenDialog: options => dialog.showOpenDialog(mainWindow, options),
   showSaveDialog: options => dialog.showSaveDialog(mainWindow, options)
 })
 

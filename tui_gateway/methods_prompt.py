@@ -1315,7 +1315,8 @@ def _(rid, params: dict) -> dict:
     if err:
         return err
     return _approval_reply(
-        rid, "approvals", lambda a: a.list_gateway_approvals(session["session_key"]))
+        rid, "approvals",
+        lambda a: [*a.list_gateway_approvals(session["session_key"]), *_held_draft_cards(session)])
 
 
 @method("approval.received")
@@ -1339,11 +1340,17 @@ def _(rid, params: dict) -> dict:
         session = _approval_respond_session_fallback(params)
         if session is None:
             return err
+    if str(params.get("request_id") or "").startswith("draft:"):
+        return _respond_held_draft(rid, session, params)
+    edited = params.get("edited_text")
+    if isinstance(edited, str) and not params.get("request_id"):
+        return _err(rid, 4135, "an edit applies to one draft; name it with request_id")
+    extra = {"edited_text": edited} if isinstance(edited, str) else {}
     return _approval_reply(
         rid, "resolved",
         lambda a: a.resolve_gateway_approval(
             session["session_key"], params.get("choice", "deny"),
-            resolve_all=params.get("all", False), request_id=params.get("request_id")))
+            resolve_all=params.get("all", False), request_id=params.get("request_id"), **extra))
 
 
 # ── attachments ─────────────────────────────────────────────────────────────
@@ -1516,6 +1523,37 @@ def _approval_reply(rid, result_key, call):
         return _err(rid, 5004, str(e))
 
 
+def _held_draft_cards(session: dict) -> list[dict]:
+    if not _is_bot_mode_session(session):
+        return []
+    from tools import bot_mode_draft_store
+    from tools.bot_mode_drafts import profile_is_bot_managed
+    with _session_profile_runtime_scope(session, hydrate_secrets=False):
+        return bot_mode_draft_store.pending_cards() if profile_is_bot_managed() else []
+
+
+def _respond_held_draft(rid, session: dict, params: dict) -> dict:
+    from tools import bot_mode_draft_store
+    from tools.bot_mode_drafts import profile_is_bot_managed
+    if not _is_bot_mode_session(session):
+        return _err(rid, 4132, "drafts are answered in the bot's own chat")
+    choice, draft_id = params.get("choice"), str(params.get("request_id"))[len("draft:"):]
+    if choice not in ("once", "deny"):
+        return _err(rid, 4133, "a draft is either sent or discarded")
+    edited = params.get("edited_text")
+    try:
+        with _session_profile_runtime_scope(session):
+            if not profile_is_bot_managed():
+                return _err(rid, 4132, "drafts are answered in the bot's own chat")
+            if choice == "deny":
+                bot_mode_draft_store.discard(draft_id)
+                return _ok(rid, {"resolved": 1})
+            bot_mode_draft_store.send(draft_id, edited if isinstance(edited, str) else None)
+            return _ok(rid, {"resolved": 1})
+    except bot_mode_draft_store.DraftError as e:
+        return _err(rid, 4134, e.message, data={"reason": e.code})
+
+
 def _approval_respond_session_fallback(params: dict):
     """Durable-identity fallback for a stale live sid (re-minted after a reconnect while
     the prompt stayed on screen): (1) the ``request_id`` against every live session's
@@ -1549,3 +1587,4 @@ def _approval_respond_session_fallback(params: dict):
 def register(server) -> None:
     """Publish this module's helpers + handlers onto ``server``, rebound to its globals."""
     bind_module(globals(), server, skip=("_",))
+    server._LONG_HANDLERS = server._LONG_HANDLERS | {"approval.respond"}
