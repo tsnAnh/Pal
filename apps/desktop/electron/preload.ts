@@ -91,6 +91,9 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     toggleMaximize: () => ipcRenderer.send('hermes:window-control', 'toggle-maximize'),
     close: () => ipcRenderer.send('hermes:window-control', 'close')
   },
+  windowChrome: {
+    setLayout: layout => ipcRenderer.send('hermes:window:chrome-layout', layout)
+  },
   wakeIndicator: {
     getState: () => ipcRenderer.invoke('hermes:wake-indicator:get'),
     setState: state => ipcRenderer.send('hermes:wake-indicator:set', state),

@@ -1,21 +1,17 @@
 import { useStore } from '@nanostores/react'
-import { type ReactNode, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 
 import { useConnectionSwitch } from '@/app/chat/sidebar/connection-switcher'
-import { hudTargetSessionId } from '@/app/hud/handoff'
 import { Codicon } from '@/components/ui/codicon'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
-import { triggerHaptic } from '@/lib/haptics'
 import { profileColorSoft, resolveProfileColor } from '@/lib/profile-color'
 import { profileShortLabel } from '@/lib/profile-short-label'
 import { cn } from '@/lib/utils'
 import { $botChromeless } from '@/store/bot-surface'
 import { $defaultProfileRoute } from '@/store/default-profile'
-import { toggleHud } from '@/store/hud'
-import { $interfaceMode, shownInMode } from '@/store/interface-mode'
 import {
   $profileColors,
   $profiles,
@@ -25,15 +21,11 @@ import {
   refreshProfiles,
   selectProfile
 } from '@/store/profile'
-import { TITLEBAR_FIXED_TOOLS } from '@/store/titlebar-app-actions'
 
 import { CreateProfileDialog } from '../profiles/create-profile-dialog'
 import { CAPABILITIES_ROUTE, navigateToWorkspacePage } from '../routes'
 
 import { AccountMenuRows, MENU_SURFACE_CLASS } from './account-menu'
-
-const PILL_CLASS =
-  'flex h-8 items-center rounded-full border border-(--ui-stroke-secondary) bg-(--bot-control-fill,var(--chrome-action-hover)) text-foreground'
 
 const WORD_BREAK = /[\s._-]+/
 
@@ -54,44 +46,33 @@ function useAccountIdentity() {
   return { color: resolveProfileColor(name, colors), initials: initialsOf(label), label }
 }
 
-function QuickTool({ icon, label, onSelect }: { icon: string; label: string; onSelect: () => void }) {
-  return (
-    <Tip label={label} placement="control">
-      <button
-        aria-label={label}
-        className="grid size-6.5 shrink-0 place-items-center rounded-full text-(--ui-text-secondary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground"
-        onClick={onSelect}
-        type="button"
-      >
-        <Codicon className="leading-none" name={icon} size="1rem" />
-      </button>
-    </Tip>
-  )
+interface AccountPillProps {
+  appsLabel?: string
+  className?: string
+  displayName?: string
+  onOpenApps?: () => void
 }
 
-function QuickPill({ children }: { children: ReactNode }) {
-  return (
-    <div className={cn(PILL_CLASS, 'shrink-0 gap-0.5 px-1.5')} data-slot="account-quick-tools">
-      {children}
-    </div>
-  )
-}
+const CIRCLE_CLASS =
+  'grid size-10 shrink-0 place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) transition-colors hover:text-foreground'
 
-function AccountDock({ className }: { className?: string }) {
+function AccountDock({ appsLabel, className, displayName, onOpenApps }: AccountPillProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const identity = useAccountIdentity()
   const profiles = useStore($profiles)
-  const interfaceMode = useStore($interfaceMode)
   const [createOpen, setCreateOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const connectionSwitch = useConnectionSwitch()
-  const showHud = shownInMode(interfaceMode)(TITLEBAR_FIXED_TOOLS.hud)
+  const accountLabel = displayName?.trim() || identity.label
+  const accountInitials = displayName?.trim() ? initialsOf(accountLabel) : identity.initials
+  const openApps = onOpenApps ?? (() => navigateToWorkspacePage(navigate, `${CAPABILITIES_ROUTE}?tab=connectors`))
+  const appsAria = appsLabel ?? t.connectorsPage.title
 
   return (
     <div
       className={cn(
-        'mt-auto flex shrink-0 items-center gap-1.5 px-2 pb-2 pt-2 [-webkit-app-region:no-drag]',
+        'mt-auto flex shrink-0 items-center gap-2 px-3 pb-3 pt-2 [-webkit-app-region:no-drag]',
         className
       )}
       data-slot="account-dock"
@@ -108,25 +89,23 @@ function AccountDock({ className }: { className?: string }) {
       >
         <DropdownMenuTrigger asChild>
           <button
-            className={cn(
-              PILL_CLASS,
-              'min-w-0 flex-1 gap-2.5 py-0 pl-1 pr-2.5 text-left transition-colors hover:bg-(--bot-row-active,var(--ui-control-hover-background)) data-[state=open]:bg-(--bot-row-active,var(--ui-control-hover-background))'
-            )}
+            className="flex h-12 min-w-0 flex-1 items-center gap-3 rounded-[14px] px-0 text-left text-foreground transition-colors hover:bg-[color-mix(in_srgb,var(--bot-row-active,var(--ui-control-hover-background))_55%,transparent)] data-[state=open]:bg-(--bot-row-active,var(--ui-control-hover-background))"
             data-slot="account-pill"
             type="button"
           >
             <span
               aria-hidden="true"
-              className="grid size-5.5 shrink-0 place-items-center rounded-full bg-(--ui-bg-quaternary) text-[0.6875rem] font-semibold leading-none"
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-(--ui-bg-quaternary) text-[0.9375rem] font-semibold leading-none"
+              data-slot="account-initials"
               style={
                 identity.color
                   ? { backgroundColor: profileColorSoft(identity.color, 26), color: identity.color }
                   : undefined
               }
             >
-              {identity.initials}
+              {accountInitials}
             </span>
-            <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium leading-5">{identity.label}</span>
+            <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-normal leading-5">{accountLabel}</span>
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
@@ -144,23 +123,17 @@ function AccountDock({ className }: { className?: string }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <QuickPill>
-        <QuickTool
-          icon="plug"
-          label={t.connectorsPage.title}
-          onSelect={() => navigateToWorkspacePage(navigate, `${CAPABILITIES_ROUTE}?tab=connectors`)}
-        />
-        {showHud ? (
-          <QuickTool
-            icon="comment-discussion"
-            label={t.titlebar.enterHud}
-            onSelect={() => {
-              triggerHaptic('open')
-              toggleHud(hudTargetSessionId())
-            }}
-          />
-        ) : null}
-      </QuickPill>
+      <Tip label={appsAria} placement="control">
+        <button
+          aria-label={appsAria}
+          className={CIRCLE_CLASS}
+          data-slot="account-apps"
+          onClick={openApps}
+          type="button"
+        >
+          <Codicon className="leading-none" name="extensions" size="1.25rem" />
+        </button>
+      </Tip>
 
       {connectionSwitch.dialog}
 
@@ -177,8 +150,8 @@ function AccountDock({ className }: { className?: string }) {
   )
 }
 
-export function AccountPill({ className }: { className?: string }) {
+export function AccountPill(props: AccountPillProps) {
   const chromeless = useStore($botChromeless)
 
-  return chromeless ? <AccountDock className={className} /> : null
+  return chromeless ? <AccountDock {...props} /> : null
 }

@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/typography';
 @import 'tw-shimmer';
+@import '@fontsource-variable/geist';
 @import 'katex/dist/katex.min.css';
 @import '@vscode/codicons/dist/codicon.css';
 
@@ -474,7 +475,7 @@
     --dt-user-bubble-border: var(--ui-stroke-tertiary);
 
     --dt-font-sans:
-      'Segoe WPC', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif,
+      'Geist Variable', 'Segoe WPC', 'Segoe UI', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif,
       'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji', emoji;
     /* Key caps always use the native UI face — never theme typography overrides. */
     --dt-font-kbd: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
@@ -703,7 +704,7 @@
   }
 
   :root.dark [data-bots-pane] {
-    --bot-row-active: #1f1f1f;
+    --bot-row-active: #1c1c1c;
     --bot-control-fill: #1a1a1a;
   }
 
@@ -2323,6 +2324,16 @@ body.guest-pointer-lock :is(webview, iframe) {
   border-radius: 12px;
   padding: 5px 14px;
   background: var(--bot-reply-card);
+}
+
+[data-bot-chat] [data-bubble='assistant']:has(> [data-bot-pending]:only-child) {
+  border-color: transparent;
+  padding-inline: 0;
+  background: transparent;
+}
+
+[data-bot-chat] [data-slot='bot-reply-row']:has([data-bubble='assistant'] > [data-bot-pending]:only-child) {
+  align-items: center;
 }
 
 [data-bot-chat] [data-slot='aui_assistant-message-root']:has([data-bubble='assistant']:empty) {
@@ -4394,4 +4405,37 @@ html[data-hermes-desktop-host='browser'] [data-slot='sidebar-container'] {
 .aui-error-details .aui-error-details-link:hover {
   background: none;
   color: var(--err-ink);
+}
+
+svg[data-bot-face][data-hb-mood='think'],
+svg[data-bot-face][data-hb-mood='work'] {
+  --hb-blink-period: 1.45s;
+}
+
+svg[data-bot-face] [data-hb-lids] {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+svg[data-bot-face][data-hb-visible] [data-hb-lids] {
+  animation: hb-blink var(--hb-blink-period, 4.2s) ease-in-out infinite;
+  animation-delay: var(--hb-blink-delay, 0s);
+}
+
+@keyframes hb-blink {
+  0%,
+  96%,
+  100% {
+    transform: scaleY(1);
+  }
+
+  98% {
+    transform: scaleY(0.1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  svg[data-bot-face][data-hb-visible] [data-hb-lids] {
+    animation: none;
+  }
 }

@@ -24,6 +24,7 @@ export interface ChatVoiceLabels {
 export interface ChatPersona {
   avatar: (size: number) => ReactNode
   name: string
+  openDetails?: () => void
   stopNowLabel?: () => string
   voice?: () => ChatVoiceLabels
 }

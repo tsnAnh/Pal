@@ -18,6 +18,8 @@
  *  - `ui.*` — the design language, so plugin UI looks native by default.
  */
 
+import { traits as blobatarTraits, type TraitOverrides } from 'blobatar'
+import { layout as blobatarLayout } from 'blobatar/blob'
 import { computed, type ReadableAtom } from 'nanostores'
 import type { ReactNode } from 'react'
 
@@ -1966,6 +1968,9 @@ export { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 /** Deterministic soft-body avatars from any string (name → face). String
  *  renderer for rasterization; React component for live rendering. */
 export { blobatar as blobatarSvg } from 'blobatar/blob'
+/** The silhouette name (`round`, `boxy`, ...) blobatar draws for a seed. */
+export const blobatarSilhouette = (seed: string, overrides?: TraitOverrides): string =>
+  blobatarLayout(blobatarTraits(seed, true, overrides)).shape
 export { Blobatar } from 'blobatar/react'
 /** Plugin-local reactive state (share between a trigger and its panel, poll
  *  loops, cross-component signals) — the same primitive `host.state` uses. */

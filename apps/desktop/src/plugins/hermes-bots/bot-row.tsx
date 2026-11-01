@@ -24,7 +24,6 @@ import {
   host,
   queryClient,
   RowButton,
-  SessionStatusDot,
   Tip,
   useI18n,
   useValue
@@ -67,13 +66,11 @@ import { displayName, stripPreviewMarkdown } from './labels'
 import { duplicateBot } from './profile-ops'
 import { botRecentSession, openBotRecentSession } from './recent-session'
 import { openRosterBot } from './roster-actions'
+import { rosterPreview } from './roster-preview'
 import { botRosterMeta, botWorkspaceOwnerKey, setBotsWorkspaceOwner } from './routing'
 import {
-  A2A_PREFIX_RE,
-  botCanonicalSessionId,
   botRowOwnsWorkspace,
   botWorkingMood,
-  previewKind,
   useTurnBusy,
   workerActiveAt
 } from './row-helpers'
@@ -114,11 +111,40 @@ interface BotRowProps {
   variant?: 'row' | 'tile'
 }
 
-function ActiveStatusDot({ className, storedSessionId }: { className?: string; storedSessionId: null | string }) {
+const CLUSTER_FACES = 3
+const CLUSTER_FACE_SIZE = 30
+
+function GroupFaceCluster({ members, muted }: { members: GroupMember[]; muted: boolean }) {
+  const allMeta = useValue($botMeta)
+  const shown = members.slice(0, CLUSTER_FACES)
+
   return (
-    <span className={cn('flex rounded-full bg-background p-0.5 empty:hidden', className)}>
-      <SessionStatusDot hideIdle storedSessionId={storedSessionId} />
-    </span>
+    <div
+      className={cn('relative size-12', muted && 'grayscale opacity-60')}
+      data-slot="group-face-cluster"
+    >
+      {shown.map((member, index) => {
+        const { shape, color, image } = botAppearance(member.name, botRosterMeta(member, allMeta))
+        const photo = Boolean(image && !isBackfilledFacePng(image))
+        const offset = shown.length === 1 ? 9 : (index * (48 - CLUSTER_FACE_SIZE)) / (shown.length - 1)
+
+        return (
+          <span
+            className="absolute rounded-full bg-(--ui-bg-chrome,var(--background)) p-px"
+            key={`${member.connectionId ?? ''}::${member.name}`}
+            style={{ left: offset, top: index % 2 === 0 ? 0 : 48 - CLUSTER_FACE_SIZE - 2, zIndex: shown.length - index }}
+          >
+            <BotFace
+              color={avatarColor(color, member.name)}
+              image={photo ? image : null}
+              name={member.name}
+              shape={shape}
+              size={CLUSTER_FACE_SIZE - 2}
+            />
+          </span>
+        )
+      })}
+    </div>
   )
 }
 
@@ -173,13 +199,6 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
   // Keep user photos/pets. Drop the 160px SVG backfill so the math face can move.
   const photo = Boolean(image && !isBackfilledFacePng(image))
   const turnBusy = useTurnBusy()
-  // Preview identity must match click identity (#88200): when the backend
-  // resolved the pinned canonical chat, preview THAT session — not the
-  // profile's most recent (but unrelated) activity. Activity signals
-  // (age label, pulse dot) follow the same rule via botActivitySession:
-  // the canonical Bot Chat is hidden from last_session, so keying age off
-  // last_session alone shows "6d ago" on a bot you just messaged.
-  const previewSession = bot.canonical_session || last
   const activitySession = botActivitySession(bot)
   // A live kanban/tool worker gates only the pulse/mood (#90268). The age is
   // the last time the bot did ANYTHING — chat or delegated worker run — so a
@@ -190,9 +209,6 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
 
   const groupKeys = useValue($activeGroupMemberKeys)
   const botMood = botWorkingMood(bot, focusedOwner, turnBusy, activeConnectionId, Date.now(), groupKeys)
-  // Status keys off the canonical Bot Chat — the very session this row opens,
-  // so the dot and the click can never describe different conversations.
-  const canonicalSessionId = botCanonicalSessionId(bot)
   // Needs-attention badge (#93091 item 3): background failures record under
   // the selection key (group turns) or the route key (relay deliveries) —
   // check both. Local/unannotated rows carry no connectionId, so their relay
@@ -207,18 +223,7 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
     attentionByKey[`${bot?.connectionId || activeConnectionId}::${bot?.name || 'default'}`] ||
     null
 
-  // WHO sent the last message (bot-to-bot DM vs human) — the full stored
-  // history lives in the canonical chat, not inline.
-  // Preview identity must match click identity (#88200): when the backend
-  // resolved the pinned canonical chat, preview THAT session — not the
-  // profile's most recent (but unrelated) activity. Liveness checks above
-  // keep last_session semantics: any recent activity means the bot is alive.
-  const { fromBot } = previewKind(previewSession?.preview, $lastRoster.get(), bot.connectionId)
-
-  // DM previews read like DMs: strip the delivery prefix, keep the message.
-  const displayPreview = stripPreviewMarkdown(
-    fromBot ? (previewSession?.preview || '').replace(A2A_PREFIX_RE, '').trim() || '…' : previewSession?.preview || ''
-  )
+  const { fromBot, text: displayPreview } = rosterPreview(bot, meta, $lastRoster.get())
 
   const handle = botHandle(bot.name, bot)
   const gatewayLabel = bot.connectionLabel || (bot.connectionId === 'local' ? b.bot.thisDevice : '')
@@ -278,6 +283,7 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
         'hover:opacity-80',
         dragging && 'opacity-40'
       )}
+      data-bot-gaze-scope
       data-roster-key={rosterKey}
       draggable
       onClick={open}
@@ -296,9 +302,18 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
           mood={botMood}
           name={bot.name}
           shape={shape}
-          size={56}
+          size={72}
         />
-        <ActiveStatusDot className="absolute right-0 top-0" storedSessionId={canonicalSessionId} />
+        {isDefaultBot(bot) ? (
+          <span
+            aria-label={b.roster.mainBot}
+            className="absolute bottom-0 right-0 grid size-[18px] place-items-center rounded-full bg-orange-500 text-white ring-2 ring-(--ui-bg-chrome,var(--background))"
+            data-slot="bot-main-badge"
+            role="img"
+          >
+            <Codicon className="text-[0.625rem] leading-none" name="star-full" />
+          </span>
+        ) : null}
         {attention ? (
           <Codicon
             aria-label={b.roster.needsAttention}
@@ -313,7 +328,9 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
           />
         ) : null}
       </div>
-      <span className="w-full truncate text-[0.8125rem] leading-[18px]">{displayName(bot, meta)}</span>
+      <span className="w-full truncate text-[0.875rem] leading-[18px] text-(--ui-text-secondary)">
+        {displayName(bot, meta)}
+      </span>
       {tileSubtitle ? (
         <span className="-mt-1 w-full truncate text-[0.75rem] leading-4 text-(--ui-text-tertiary)">{tileSubtitle}</span>
       ) : null}
@@ -328,13 +345,14 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
         aria-busy={isOpening || undefined}
         aria-label={rowTooltip}
         className={cn(
-          'flex min-h-12 w-full min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-[10px] px-2.5 py-1.5 text-left transition-colors',
-          'hover:bg-(--bot-row-active,var(--chrome-action-hover))',
-          isActive && 'bg-(--ui-row-active-background)',
+          'flex min-h-14 w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-[14px] px-3 py-1.5 text-left transition-colors',
+          'hover:bg-[color-mix(in_srgb,var(--bot-row-active,var(--chrome-action-hover))_55%,transparent)]',
+          isActive && 'bg-(--ui-row-active-background) hover:bg-(--ui-row-active-background)',
           // The row being dragged fades in place; the browser's drag image is
           // the row itself, so the ghost under the pointer is the full row.
           dragging && 'opacity-40'
         )}
+        data-bot-gaze-scope
         data-roster-key={rosterKey}
         draggable
         onClick={open}
@@ -353,9 +371,8 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
             mood={botMood}
             name={bot.name}
             shape={shape}
-            size={32}
+            size={48}
           />
-          <ActiveStatusDot className="absolute -right-0.5 -top-0.5" storedSessionId={canonicalSessionId} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
@@ -371,13 +388,10 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
                 </Tip>
               ) : null}
               <Tip label={rowTooltip}>
-                <span className="min-w-0 truncate text-[0.875rem] leading-[18px]">{displayName(bot, meta)}</span>
-              </Tip>
-              {meta?.title ? (
-                <span className="min-w-0 shrink truncate text-[0.6875rem] text-(--ui-text-quaternary)">
-                  {meta.title}
+                <span className="min-w-0 truncate text-[0.9375rem] font-medium leading-5 text-foreground">
+                  {displayName(bot, meta)}
                 </span>
-              ) : null}
+              </Tip>
             </div>
             {attention ? (
               <Tip label={botAttentionHint(attention.reason)}>
@@ -612,9 +626,9 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
     <RowButton
       aria-label={`${group}, ${b.group.memberCount(members.length)}, ${availabilityLabel}`}
       className={cn(
-        'flex min-h-12 w-full min-w-0 max-w-full items-center gap-2 overflow-hidden rounded-[10px] px-2.5 py-1.5 text-left transition-colors',
-        'hover:bg-(--bot-row-active,var(--chrome-action-hover))',
-        active && 'bg-(--ui-row-active-background)',
+        'flex min-h-14 w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-[14px] px-3 py-1.5 text-left transition-colors',
+        'hover:bg-[color-mix(in_srgb,var(--bot-row-active,var(--chrome-action-hover))_55%,transparent)]',
+        active && 'bg-(--ui-row-active-background) hover:bg-(--ui-row-active-background)',
         dragging && 'opacity-40'
       )}
       draggable
@@ -629,22 +643,15 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
         $draggingBot.set(dragKey)
       }}
     >
-      <div className="relative flex w-8 shrink-0 items-center justify-center">
+      <div className="relative flex h-12 w-12 shrink-0 items-center justify-center">
         {room.image ? (
           <img
             alt=""
-            className={cn('size-8 rounded-full object-cover', availableMembers === 0 && 'grayscale opacity-60')}
+            className={cn('size-12 rounded-full object-cover', availableMembers === 0 && 'grayscale opacity-60')}
             src={room.image}
           />
         ) : (
-          <span
-            className={cn(
-              'flex size-8 items-center justify-center rounded-full bg-(--chrome-action-hover) text-(--ui-text-tertiary)',
-              availableMembers === 0 && 'opacity-60'
-            )}
-          >
-            <Codicon name="organization" />
-          </span>
+          <GroupFaceCluster members={members} muted={availableMembers === 0} />
         )}
         {members.length > 0 && availableMembers < members.length ? (
           <Tip label={availabilityLabel}>
@@ -659,7 +666,7 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 flex-1 truncate text-[0.875rem] leading-[18px]">{group}</span>
+          <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-medium leading-5 text-foreground">{group}</span>
           {room.pinned ? (
             <Tip label={b.roster.pinned}>
               <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />

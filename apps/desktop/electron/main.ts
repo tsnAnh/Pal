@@ -660,6 +660,7 @@ import { guardedWatch } from './watch-storm-breaker'
 import { windowAcceleratorAction } from './window-accelerator'
 import { enumerateWindowsFrontToBack, enumerationFailed, readWindowBelow } from './window-below'
 import { bindWindowChromeEvents } from './window-chrome-events'
+import { registerWindowChromeLayout, WINDOW_BUTTON_POSITION } from './window-chrome-layout'
 import {
   appliedPrimaryWindowRoute,
   registrySshPoolScopeByConnectionId,
@@ -1395,13 +1396,6 @@ const BOOT_FAKE_STEP_MS = (() => {
 const APP_NAME: string = IDENTITY_APP_NAME || process.env.HERMES_DESKTOP_APP_NAME || 'Hermes'
 const HUD_WINDOW_TITLE = `${APP_NAME} HUD`
 const TITLEBAR_HEIGHT = 34
-const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
-
-const WINDOW_BUTTON_POSITION = {
-  x: 24,
-  y: TITLEBAR_HEIGHT / 2 - MACOS_TRAFFIC_LIGHTS_HEIGHT / 2
-}
-
 // Right-edge window-control reservation lives in titlebar-overlay-width.ts
 // (pure + unit-testable); computeNativeOverlayWidth() applies it per platform.
 // It's only the pre-layout fallback — the renderer measures the exact overlay
@@ -17072,6 +17066,7 @@ ipcMain.on('hermes:logs:renderer-error', (_event, report) => {
 // machine's shared UI preferences (#145213) — see local-skin.ts, ui-preferences.ts.
 registerLocalSkinIpc(ipcMain, HERMES_HOME, id => windowConnectionRoutes.get(id)?.profile, primaryProfileKey)
 registerMachineUiPreferences(HERMES_HOME)
+registerWindowChromeLayout(ipcMain, sender => BrowserWindow.fromWebContents(sender), process.platform)
 
 // Renderer error toasts (notifyError): the toast shows the summarized copy,
 // so the caller posts the full error here for desktop.log. Fire-and-forget,

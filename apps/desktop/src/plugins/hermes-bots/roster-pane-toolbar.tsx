@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  GlyphSpinner,
   SearchField,
   setStripTabHidden,
   Tip,
@@ -21,6 +22,7 @@ import { AboutYouMenuItem } from './about-you-dialog'
 import { openBotSearch } from './bot-search-state'
 import { BotTemplateImportMenuItem } from './bot-template-dialog'
 import { seatableGroupBots, useGroupCapability } from './canonical-group-capabilities'
+import { $canonicalGroupLink, retryCanonicalGroups } from './canonical-group-registry'
 import { ConnectAppsMenuItem } from './connect-apps-dialog'
 import { botSourceStatus } from './data'
 import type { useBots } from './i18n'
@@ -44,7 +46,7 @@ function TitlebarLift({ children, lifted }: { children: ReactNode; lifted: boole
 
   if (lifted && header) {
     return createPortal(
-      <div className="absolute top-0.5 right-[19px] z-10 flex items-center [-webkit-app-region:no-drag]">
+      <div className="absolute top-px right-[19px] z-10 flex items-center [-webkit-app-region:no-drag]">
         {children}
       </div>,
       header
@@ -54,7 +56,7 @@ function TitlebarLift({ children, lifted }: { children: ReactNode; lifted: boole
   if (chromeless) {
     return (
       <div
-        className="flex h-[34px] shrink-0 items-center justify-end px-[19px] [-webkit-app-region:drag]"
+        className="flex h-[52px] shrink-0 items-center justify-end px-4 [-webkit-app-region:drag]"
         data-slot="bots-roster-toolbar"
         ref={anchorRef}
       >
@@ -66,6 +68,52 @@ function TitlebarLift({ children, lifted }: { children: ReactNode; lifted: boole
   return (
     <div className="flex items-center justify-end px-[19px] pt-[15px] pb-3" ref={anchorRef}>
       {children}
+    </div>
+  )
+}
+
+export function GatewayRetryButton({ b }: { b: ReturnType<typeof useBots> }) {
+  const link = useValue($canonicalGroupLink)
+
+  if (link === 'ok') {
+    return null
+  }
+
+  return (
+    <Tip label={b.canonical.retry}>
+      <Button
+        aria-label={b.canonical.retry}
+        className="grid size-8 place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
+        disabled={link === 'retrying'}
+        onClick={retryCanonicalGroups}
+        size="icon-xs"
+        variant="ghost"
+      >
+        {link === 'retrying' ? (
+          <GlyphSpinner spinner="breathe" />
+        ) : (
+          <Codicon className="block leading-none" name="refresh" />
+        )}
+      </Button>
+    </Tip>
+  )
+}
+
+export function GatewayUnreachableNotice({ b }: { b: ReturnType<typeof useBots> }) {
+  const link = useValue($canonicalGroupLink)
+
+  if (link === 'ok') {
+    return null
+  }
+
+  return (
+    <div
+      className="flex flex-col items-center gap-1 px-6 pt-8 pb-4 text-center text-(--ui-text-tertiary)"
+      data-slot="bots-gateway-unreachable"
+    >
+      <Codicon name="debug-disconnect" size="1.25rem" />
+      <p className="text-sm font-medium text-(--ui-text-secondary)">{b.canonical.unreachableTitle}</p>
+      <p className="text-xs leading-relaxed">{b.canonical.unreachableDesc}</p>
     </div>
   )
 }
@@ -168,7 +216,7 @@ export function renderRosterToolbar({
             <Tip label={b.roster.search}>
               <Button
                 aria-label={b.roster.search}
-                className="grid size-[30px] place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
+                className="grid size-8 place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
                 onClick={openBotSearch}
                 size="icon-xs"
                 variant="ghost"
@@ -177,12 +225,13 @@ export function renderRosterToolbar({
               </Button>
             </Tip>
           )}
+          <GatewayRetryButton b={b} />
           <DropdownMenu>
             <Tip label="New…">
               <DropdownMenuTrigger asChild>
                 <Button
                   aria-label={b.roster.newBotOrGroup}
-                  className="grid size-[30px] place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
+                  className="grid size-8 place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
                   size="icon-xs"
                   variant="ghost"
                 >
@@ -214,8 +263,9 @@ export function renderRosterToolbar({
           </DropdownMenu>
         </div>
       </TitlebarLift>
+      <GatewayUnreachableNotice b={b} />
       {showRosterTools || searchOpen ? (
-        <div className="flex min-w-0 items-center gap-1 px-2.5 pb-1.5">
+        <div className="flex min-w-0 items-center gap-1 px-2.5 pt-1 pb-1.5">
           {showRosterSearch || searchOpen ? (
             <SearchField
               aria-label={b.roster.search}

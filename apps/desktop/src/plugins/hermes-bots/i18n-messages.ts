@@ -106,6 +106,7 @@ export type BotsMessages = {
     hiddenFromRoster: string
     pinned: string
     needsAttention: string
+    mainBot: string
     needsInput: string
     /** The kind filter's three options, in menu order. */
     botsAndGroups: string
@@ -282,6 +283,12 @@ export type BotsMessages = {
     savedLocallyDescriptionFailed: string
     generate: string
     generating: string
+    change: string
+    reset: string
+    shapeGroup: string
+    colorGroup: string
+    shapeOption: (position: number) => string
+    colorOption: (position: number) => string
   }
   /** Group chats: the room, its composer, threads and activity feed. */
   group: {

@@ -3,15 +3,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { __resetElapsedTimerRegistryForTests } from '@/components/chat/activity-timer'
 import { I18nProvider } from '@/i18n'
+import { type ChatPersona, ChatPersonaContext } from '@/store/chat-persona'
 import { $providerWaitSessions, setSessionProviderWait } from '@/store/provider-wait'
 import { $activeSessionId, $turnStartedAt } from '@/store/session'
 
 import { ResponseLoadingIndicator } from './status'
 
-function renderIndicator() {
+const PERSONA: ChatPersona = { avatar: () => null, name: 'Bot' }
+
+function renderIndicator(persona: ChatPersona | null = null) {
   return render(
     <I18nProvider configClient={null} initialLocale="en">
-      <ResponseLoadingIndicator />
+      <ChatPersonaContext.Provider value={persona}>
+        <ResponseLoadingIndicator />
+      </ChatPersonaContext.Provider>
     </I18nProvider>
   )
 }
@@ -83,5 +88,43 @@ describe('ResponseLoadingIndicator timer', () => {
 
     expect(status.getAttribute('aria-live')).toBe('polite')
     expect(timer).toBeDefined()
+  })
+
+  it('shows one shimmering working label with no timer or pulse in a bot chat', () => {
+    $activeSessionId.set('session-a')
+    $turnStartedAt.set(Date.now())
+    const { container } = renderIndicator(PERSONA)
+
+    act(() => vi.advanceTimersByTime(5_000))
+
+    const label = screen.getByText('Reviewing your request')
+
+    expect(label.className).toContain('shimmer')
+    expect(screen.getByRole('status').getAttribute('aria-label')).toBe('Reviewing your request')
+    expect(screen.queryByText((_, node) => node?.textContent === '5s')).toBeNull()
+    expect(container.querySelector('.dither')).toBeNull()
+  })
+
+  it('keeps the pulse and timer outside a bot chat', () => {
+    $activeSessionId.set('session-a')
+    $turnStartedAt.set(Date.now())
+    const { container } = renderIndicator()
+
+    act(() => vi.advanceTimersByTime(5_000))
+
+    expect(screen.queryByText('Reviewing your request')).toBeNull()
+    expect(screen.getAllByText((_, node) => node?.textContent === '5s').length).toBeGreaterThan(0)
+    expect(container.querySelector('.dither')).not.toBeNull()
+  })
+
+  it('names a provider wait instead of the generic label in a bot chat', () => {
+    $activeSessionId.set('session-a')
+    $turnStartedAt.set(Date.now())
+    setSessionProviderWait('session-a', '⏳ waiting on local-model — 30s with no output yet')
+
+    renderIndicator(PERSONA)
+
+    expect(screen.getByText('⏳ waiting on local-model — 30s with no output yet')).toBeTruthy()
+    expect(screen.queryByText('Reviewing your request')).toBeNull()
   })
 })

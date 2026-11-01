@@ -4418,6 +4418,7 @@ export const en: Translations = {
       loadingSession: 'Loading session',
       showEarlier: 'Show earlier messages',
       loadingResponse: 'Hermes is loading a response',
+      botWorking: 'Reviewing your request',
       loadingLocalModel: model => `Loading ${model} into memory`,
       processingPrompt: 'Processing prompt',
       peerRun: (count, peer) => (count === 1 ? `1 message with ${peer}` : `${count} messages with ${peer}`),

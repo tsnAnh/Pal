@@ -53,8 +53,8 @@ const StatusRow: FC<{ children: ReactNode; label: string } & React.ComponentProp
 // Fixed label while auto-compaction runs — decoupled from backend status text.
 const COMPACTION_LABEL = 'Summarizing thread'
 
-const HintText: FC<{ children: ReactNode }> = ({ children }) => (
-  <span className={cn(SCAFFOLD_LABEL_CLASS, 'shimmer min-w-0 flex-1 truncate')}>{children}</span>
+const HintText: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => (
+  <span className={cn(SCAFFOLD_LABEL_CLASS, 'shimmer min-w-0 flex-1 truncate', className)}>{children}</span>
 )
 
 // Provider slug of the managed local server (inventory.py's _local_runtime_row).
@@ -247,18 +247,29 @@ export const CenteredThreadSpinner: FC = () => {
   )
 }
 
-export const ResponseLoadingIndicator: FC = () => {
+interface WaitBodyProps {
+  botChat: boolean
+  elapsed: number
+  hint: string
+  localLoad: ReturnType<typeof useLocalModelLoad>
+}
+
+function useBotWaitLabel(hint: string, localLoad: ReturnType<typeof useLocalModelLoad>): string {
   const { t } = useI18n()
-  const { compacting, drafting, providerWait, turnStartedAt } = useThreadSessionStatus()
-  const elapsed = useElapsedSeconds(true, undefined, turnStartedAt)
-  const hint = useStatusHint(compacting, drafting, providerWait)
-  // Renderer-synthesized load bar: covers loads the backend's wait loop
-  // can't narrate (gateway still initializing, or an auxiliary call — not
-  // the main request — triggered the autoload). A real wait frame wins.
-  const localLoad = useLocalModelLoad(!hint)
+
+  return hint || (localLoad ? t.assistant.thread.loadingLocalModel(localLoad.model) : t.assistant.thread.botWorking)
+}
+
+const WaitBody: FC<WaitBodyProps> = ({ botChat, elapsed, hint, localLoad }) => {
+  const { t } = useI18n()
+  const botLabel = useBotWaitLabel(hint, localLoad)
+
+  if (botChat) {
+    return <HintText className="text-(--ui-text-tertiary)">{botLabel}</HintText>
+  }
 
   return (
-    <StatusRow data-slot="aui_response-loading" label={hint || t.assistant.thread.loadingResponse}>
+    <>
       <StatusPulse
         aria-hidden="true"
         className="dither inline-block size-3 rounded-[2px] text-midground/80"
@@ -270,6 +281,29 @@ export const ResponseLoadingIndicator: FC = () => {
         <ProgressHint label={t.assistant.thread.loadingLocalModel(localLoad.model)} percent={localLoad.percent} />
       ) : null}
       <ActivityTimerText aria-hidden={true} seconds={elapsed} />
+    </>
+  )
+}
+
+export const ResponseLoadingIndicator: FC = () => {
+  const { t } = useI18n()
+  const botChat = useSurfacePersona() !== null
+  const { compacting, drafting, providerWait, turnStartedAt } = useThreadSessionStatus()
+  const elapsed = useElapsedSeconds(true, undefined, turnStartedAt)
+  const hint = useStatusHint(compacting, drafting, providerWait)
+  // Renderer-synthesized load bar: covers loads the backend's wait loop
+  // can't narrate (gateway still initializing, or an auxiliary call — not
+  // the main request — triggered the autoload). A real wait frame wins.
+  const localLoad = useLocalModelLoad(!hint)
+  const botLabel = useBotWaitLabel(hint, localLoad)
+
+  return (
+    <StatusRow
+      data-bot-pending={botChat ? '' : undefined}
+      data-slot="aui_response-loading"
+      label={botChat ? botLabel : hint || t.assistant.thread.loadingResponse}
+    >
+      <WaitBody botChat={botChat} elapsed={elapsed} hint={hint} localLoad={localLoad} />
     </StatusRow>
   )
 }
@@ -324,30 +358,18 @@ interface TurnActivityRowProps {
 }
 
 const TurnActivityRow: FC<TurnActivityRowProps> = ({ active, elapsed, hint, localLoad }) => {
-  const { t } = useI18n()
+  const botChat = useSurfacePersona() !== null
+  const botLabel = useBotWaitLabel(hint, localLoad)
 
   return (
     <StatusRow
       className={cn(!active && 'sr-only')}
+      data-bot-pending={botChat && active ? '' : undefined}
       data-slot="aui_turn-activity"
       data-state={active ? 'active' : 'idle'}
-      label={active ? hint || 'Hermes is working' : ''}
+      label={active ? (botChat ? botLabel : hint || 'Hermes is working') : ''}
     >
-      {active && (
-        <>
-          <StatusPulse
-            aria-hidden="true"
-            className="dither inline-block size-3 rounded-[2px] text-midground/80"
-            kind="opacity"
-          />
-          {hint ? (
-            <WaitHint hint={hint} />
-          ) : localLoad ? (
-            <ProgressHint label={t.assistant.thread.loadingLocalModel(localLoad.model)} percent={localLoad.percent} />
-          ) : null}
-          <ActivityTimerText aria-hidden={true} seconds={elapsed} />
-        </>
-      )}
+      {active && <WaitBody botChat={botChat} elapsed={elapsed} hint={hint} localLoad={localLoad} />}
     </StatusRow>
   )
 }

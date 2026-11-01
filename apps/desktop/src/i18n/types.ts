@@ -3873,6 +3873,7 @@ export interface Translations extends NoticeTranslations {
       loadingSession: string
       showEarlier: string
       loadingResponse: string
+      botWorking: string
       loadingLocalModel: (model: string) => string
       processingPrompt: string
       peerRun: (count: number, peer: string) => string

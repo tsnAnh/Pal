@@ -2,6 +2,7 @@ import { atom, Button, Codicon, host, randomUuid, Tip, useValue } from '@hermes/
 import { useEffect, useState } from 'react'
 
 import { useCanonicalGroupLabels } from './canonical-group-labels'
+import { classifyGroupListFailure } from './canonical-group-link'
 import { CanonicalGroupRow } from './canonical-group-row'
 import { canonicalGroupRequest, captureCanonicalGroupRoute, discoverCanonicalGroups } from './canonical-groups'
 import type { CanonicalGroupBinding, CanonicalGroupRoute, CanonicalRoom } from './canonical-groups'
@@ -10,6 +11,14 @@ import { closeGroupChatMainTab } from './group-panes'
 export const $canonicalGroupBindings = atom<Record<string, CanonicalGroupBinding>>({})
 // Bumped when a room leaves outside the list's own Refresh, so the sidebar re-reads `groups.list`.
 const $canonicalGroupListRevision = atom(0)
+
+export type CanonicalGroupLink = 'down' | 'ok' | 'retrying'
+
+export const $canonicalGroupLink = atom<CanonicalGroupLink>('ok')
+
+export function retryCanonicalGroups(): void {
+  $canonicalGroupListRevision.set($canonicalGroupListRevision.get() + 1)
+}
 
 /** Drop a disbanded room's key and every alias to it, then re-read the sidebar list. */
 export function forgetCanonicalGroup({ connectionId, profile, roomId }: CanonicalGroupBinding): void {
@@ -151,18 +160,27 @@ export function CanonicalGroupList({ onOpen }: { onOpen: (key: string, origin: C
   const connectionId = useValue(host.state.connectionId)
   const profile = useValue(host.state.profile)
   const [rooms, setRooms] = useState<ListedRoom[]>([])
-  const [error, setError] = useState('')
   const [refresh, setRefresh] = useState(0)
   const revision = useValue($canonicalGroupListRevision)
+  const gatewayUp = useValue(host.state.gateway) === 'open'
+
+  useEffect(() => {
+    setRooms(listed => (listed.length ? [] : listed))
+  }, [connectionId, profile])
+
   useEffect(() => {
     let cancelled = false
-    setRooms([])
-    setError('')
+
+    if ($canonicalGroupLink.get() === 'down') {
+      $canonicalGroupLink.set('retrying')
+    }
+
     void (async () => {
       const route = captureCanonicalGroupRoute()
       const result = await discoverCanonicalGroups(route)
 
       if (!cancelled) {
+        $canonicalGroupLink.set('ok')
         setRooms(
           result.rooms.map(room => ({
             binding: { ...route, roomId: room.room_id, roomName: room.name },
@@ -172,18 +190,30 @@ export function CanonicalGroupList({ onOpen }: { onOpen: (key: string, origin: C
           }))
         )
       }
-    })().catch(e => {
-      if (!cancelled) {
-        setError(e instanceof Error ? e.message : String(e))
+    })().catch((error: unknown) => {
+      if (cancelled) {
+        return
+      }
+
+      const failure = classifyGroupListFailure(error, host.state.gateway.get())
+
+      $canonicalGroupLink.set(failure === 'down' ? 'down' : 'ok')
+
+      if (failure !== 'quiet') {
+        setRooms([])
+      } else {
+        console.debug('[hermes-bots] groups.list failed', error instanceof Error ? error.message : 'unknown error')
       }
     })
 
     return () => {
       cancelled = true
     }
-  }, [connectionId, profile, refresh, revision])
+  }, [connectionId, profile, refresh, revision, gatewayUp])
 
-  if (!rooms.length && !error) {
+  useEffect(() => () => $canonicalGroupLink.set('ok'), [])
+
+  if (!rooms.length) {
     return null
   }
 
@@ -200,7 +230,6 @@ export function CanonicalGroupList({ onOpen }: { onOpen: (key: string, origin: C
           <Codicon name="refresh" />
         </Button>
       </Tip>
-      {error && <p role="alert">{error}</p>}
       {rooms.map(room => (
         <CanonicalGroupRow
           key={room.key}

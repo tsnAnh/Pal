@@ -3,6 +3,7 @@ import { type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 
 import { ConnectionLabel, type ConnectionSwitch } from '@/app/chat/sidebar/connection-switcher'
+import { hudTargetSessionId } from '@/app/hud/handoff'
 import { toggleLayoutEditMode } from '@/components/pane-shell/edit-mode'
 import { revealTreePane } from '@/components/pane-shell/tree/store'
 import { StatusDot, type StatusTone } from '@/components/status-dot'
@@ -28,6 +29,7 @@ import { cn } from '@/lib/utils'
 import { $botsOnly } from '@/store/bot-surface'
 import { $freeTierSignInOpen, $freeTierStatus, FREE_TIER_MODEL } from '@/store/free-tier'
 import { openFreeTierSignIn } from '@/store/free-tier-sign-in'
+import { toggleHud } from '@/store/hud'
 import { $interfaceMode, shownInMode } from '@/store/interface-mode'
 import { $fileBrowserOpen, $leftSideOpen, toggleLeftSide, togglePanesFlipped, toggleRightSide } from '@/store/layout'
 import {
@@ -43,7 +45,13 @@ import { $gatewayState } from '@/store/session'
 import { toggleStatusbarVisible } from '@/store/statusbar-prefs'
 import { TITLEBAR_FIXED_TOOLS } from '@/store/titlebar-app-actions'
 
-import { COMMAND_CENTER_ROUTE, navigateToWorkspacePage, PROFILES_ROUTE, SETTINGS_ROUTE } from '../routes'
+import {
+  CAPABILITIES_ROUTE,
+  COMMAND_CENTER_ROUTE,
+  navigateToWorkspacePage,
+  PROFILES_ROUTE,
+  SETTINGS_ROUTE
+} from '../routes'
 
 import { GatewayMenuPanel } from './gateway-menu-panel'
 import { useGatewayMenuSnapshot } from './hooks/use-gateway-menu-snapshot'
@@ -133,6 +141,33 @@ function ContributedToolRows() {
       }}
     />
   ))
+}
+
+function QuickToolRows() {
+  const { t } = useI18n()
+  const navigate = useNavigate()
+  const mode = useStore($interfaceMode)
+  const showHud = shownInMode(mode)(TITLEBAR_FIXED_TOOLS.hud)
+
+  return (
+    <>
+      <MenuRow
+        icon="plug"
+        label={t.connectorsPage.title}
+        onSelect={() => navigateToWorkspacePage(navigate, `${CAPABILITIES_ROUTE}?tab=connectors`)}
+      />
+      {showHud ? (
+        <MenuRow
+          icon="comment-discussion"
+          label={t.titlebar.enterHud}
+          onSelect={() => {
+            triggerHaptic('open')
+            toggleHud(hudTargetSessionId())
+          }}
+        />
+      ) : null}
+    </>
+  )
 }
 
 function SidebarRows() {
@@ -426,6 +461,7 @@ export function AccountMenuRows({
       <SidebarRows />
       <StatusbarRow />
       <ContributedToolRows />
+      <QuickToolRows />
       <DropdownMenuSeparator className={MENU_SEPARATOR_CLASS} />
       <ConnectionRows connectionSwitch={connectionSwitch} />
       <GatewayHealthRows onClose={onClose} />

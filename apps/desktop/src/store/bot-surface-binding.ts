@@ -14,6 +14,7 @@ import { $botChromeless, $botsOnly, $botStatusbarShown } from './bot-surface'
 import { $chatPersonas, type ChatPersona } from './chat-persona'
 import { $selectedStoredSessionId } from './session'
 import { isChatPane, TILE_PANE_PREFIX } from './session-focus'
+import { bindWindowChromeLayout } from './window-chrome-layout'
 
 const SESSIONS_PANE = 'sessions'
 const WORKSPACE_PANE = 'workspace'
@@ -80,7 +81,8 @@ export function bindBotSurface(): void {
       if (!chromeless) {
         $botStatusbarShown.set(false)
       }
-    })
+    }),
+    bindWindowChromeLayout()
   ]
 
   unbind = () => {

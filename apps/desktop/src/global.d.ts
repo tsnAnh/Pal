@@ -131,6 +131,9 @@ declare global {
         toggleMaximize: () => void
         close: () => void
       }
+      windowChrome?: {
+        setLayout: (layout: 'default' | 'relaxed') => void
+      }
       wakeIndicator?: {
         getState: () => Promise<WakeIndicatorState>
         setState: (state: WakeIndicatorState) => void

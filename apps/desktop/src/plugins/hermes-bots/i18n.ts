@@ -144,6 +144,7 @@ const en: BotsMessages = {
     hiddenFromRoster: 'Hidden from the roster',
     pinned: 'Pinned',
     needsAttention: 'needs attention',
+    mainBot: 'main bot',
     needsInput: 'Needs your input',
     botsAndGroups: 'Bots and group chats',
     botsOnly: 'Bots only',
@@ -267,7 +268,13 @@ const en: BotsMessages = {
     savedLocally: 'Saved look locally; remote persistence failed',
     savedLocallyDescriptionFailed: 'Saved look locally; description update failed',
     generate: 'Generate',
-    generating: 'Generating…'
+    generating: 'Generating…',
+    change: 'Change avatar',
+    reset: 'Reset',
+    shapeGroup: 'Shape',
+    colorGroup: 'Color',
+    shapeOption: n => `Shape ${n}`,
+    colorOption: n => `Color ${n}`
   },
   group: {
     newTitle: 'New group chat',
@@ -611,6 +618,7 @@ const ja: BotsMessages = {
     hiddenFromRoster: '名簿から非表示',
     pinned: 'ピン留め',
     needsAttention: '要対応',
+    mainBot: 'メインボット',
     needsInput: '入力が必要です',
     botsAndGroups: 'ボットとグループチャット',
     botsOnly: 'ボットのみ',
@@ -733,7 +741,13 @@ const ja: BotsMessages = {
     savedLocally: '見た目はローカルに保存されましたが、リモートへの保存に失敗しました',
     savedLocallyDescriptionFailed: '見た目はローカルに保存されましたが、説明の更新に失敗しました',
     generate: '生成',
-    generating: '生成中…'
+    generating: '生成中…',
+    change: 'アバターを変更',
+    reset: 'リセット',
+    shapeGroup: '形状',
+    colorGroup: '色',
+    shapeOption: n => `形状 ${n}`,
+    colorOption: n => `色 ${n}`
   },
   group: {
     newTitle: '新しいグループチャット',
@@ -1074,6 +1088,7 @@ const zh: BotsMessages = {
     hiddenFromRoster: '已从名单中隐藏',
     pinned: '已置顶',
     needsAttention: '需要处理',
+    mainBot: '主机器人',
     needsInput: '需要你输入',
     botsAndGroups: '机器人和群聊',
     botsOnly: '仅机器人',
@@ -1192,7 +1207,13 @@ const zh: BotsMessages = {
     savedLocally: '外观已保存在本地；远程持久化失败',
     savedLocallyDescriptionFailed: '外观已保存在本地；描述更新失败',
     generate: '生成',
-    generating: '生成中…'
+    generating: '生成中…',
+    change: '更换头像',
+    reset: '重置',
+    shapeGroup: '形状',
+    colorGroup: '颜色',
+    shapeOption: n => `形状 ${n}`,
+    colorOption: n => `颜色 ${n}`
   },
   group: {
     newTitle: '新建群聊',
@@ -1526,6 +1547,7 @@ const zhHant: BotsMessages = {
     hiddenFromRoster: '已從名單中隱藏',
     pinned: '已釘選',
     needsAttention: '需要處理',
+    mainBot: '主機器人',
     needsInput: '需要您的輸入',
     botsAndGroups: '機器人和群組聊天',
     botsOnly: '僅機器人',
@@ -1644,7 +1666,13 @@ const zhHant: BotsMessages = {
     savedLocally: '外觀已儲存在本機；遠端持久化失敗',
     savedLocallyDescriptionFailed: '外觀已儲存在本機；描述更新失敗',
     generate: '生成',
-    generating: '生成中…'
+    generating: '生成中…',
+    change: '更換頭像',
+    reset: '重設',
+    shapeGroup: '形狀',
+    colorGroup: '顏色',
+    shapeOption: n => `形狀 ${n}`,
+    colorOption: n => `顏色 ${n}`
   },
   group: {
     newTitle: '新增群組聊天',

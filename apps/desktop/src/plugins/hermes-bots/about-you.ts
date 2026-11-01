@@ -96,3 +96,31 @@ export function useAboutYouSupport(active: boolean): AboutYouSupport {
 
   return answer?.source === source ? answer.support : 'checking'
 }
+
+export function useAboutYouName(): string {
+  const connectionId = useValue(host.state.connectionId)
+  const profile = useValue(host.state.profile)
+  const gateway = useValue(host.state.gateway)
+  const editing = useValue($aboutYouOpen)
+  const epoch = useGatewayActivationEpoch()
+  const [name, setName] = useState('')
+
+  useEffect(() => {
+    if (gateway !== 'open' || editing) {
+      return
+    }
+
+    let cancelled = false
+
+    loadAboutYou().then(
+      facts => !cancelled && setName(facts.name.trim()),
+      () => !cancelled && setName('')
+    )
+
+    return () => {
+      cancelled = true
+    }
+  }, [connectionId, editing, epoch, gateway, profile])
+
+  return name
+}

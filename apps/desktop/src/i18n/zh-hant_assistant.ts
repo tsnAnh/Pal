@@ -30,6 +30,7 @@ export const zhHantAssistant = {
       loadingSession: '正在載入工作階段',
       showEarlier: '顯示較早的訊息',
       loadingResponse: 'Hermes 正在載入回覆',
+      botWorking: '正在查看你的請求',
       peerRun: (count, peer) => `與 ${peer} 的 ${count} 則訊息`,
       resumeWhenBackgroundDone: count =>
         count === 1 ? '背景工作完成後將自動繼續' : `${count} 個背景工作完成後將自動繼續`,

@@ -3268,6 +3268,7 @@ export const jaOverrides = {
       loadingSession: 'セッションを読み込み中',
       showEarlier: '以前のメッセージを表示',
       loadingResponse: 'Hermes が応答を読み込み中',
+      botWorking: 'リクエストを確認しています',
       peerRun: (count, peer) => `${peer} との ${count} 件のメッセージ`,
       resumeWhenBackgroundDone: count =>
         count === 1

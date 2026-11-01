@@ -163,6 +163,33 @@ describe('rendering a blob face', () => {
   })
 })
 
+describe('the blink and gaze structure of a math face', () => {
+  it('wraps the two eyes in a gaze group and a lids group', async () => {
+    const { BotFace } = await import('./avatar')
+    const { container } = render(<BotFace color="#38bdf8" name="agent" shape="squircle" size={32} />)
+    const rects = container.querySelectorAll('svg[data-hb-math] [data-hb-gaze] > [data-hb-lids] > [data-hb-eye] > rect')
+
+    expect(rects).toHaveLength(2)
+    expect(container.querySelector('svg[data-hb-math]')?.getAttribute('style')).toContain('--hb-blink-delay')
+  })
+
+  it('staggers the blink per bot name', async () => {
+    const { BotFace } = await import('./avatar')
+
+    const delayOf = (name: string) => {
+      const { container, unmount } = render(<BotFace color="#38bdf8" name={name} shape="squircle" size={32} />)
+      const delay = (container.querySelector('svg') as SVGSVGElement).style.getPropertyValue('--hb-blink-delay')
+
+      unmount()
+
+      return delay
+    }
+
+    expect(delayOf('alpha')).toBe(delayOf('alpha'))
+    expect(new Set(['alpha', 'beta', 'gamma', 'delta'].map(delayOf)).size).toBeGreaterThan(1)
+  })
+})
+
 // Last: re-mocking the SDK re-links the whole avatar graph, so anything after
 // this would be running against the swapped module.
 describe('an SDK that predates blobatarSvg', () => {

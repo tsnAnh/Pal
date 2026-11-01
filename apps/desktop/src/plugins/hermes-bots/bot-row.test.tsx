@@ -219,3 +219,23 @@ describe('context-menu mutations hydrate the alias first', () => {
     expect(params).toMatchObject({ name: 'backend-worker', ui_meta: { 'hermes-bots': { pinned: false } } })
   })
 })
+
+describe('roster row copy', () => {
+  it('shows the bot name and a one-line preview of its last message', () => {
+    const bot: RosterRow = {
+      name: 'alpha',
+      canonical_session: { id: 'c', preview: '**Hello** from\n alpha' } as RosterRow['canonical_session']
+    }
+
+    const button = renderRow(bot)
+
+    expect(button.textContent).toContain('alpha')
+    expect(button.textContent).toContain('Hello from alpha')
+  })
+
+  it('falls back to the bot job when there is no chat preview', () => {
+    const button = renderRow({ name: 'alpha', description: 'Triages the inbox' })
+
+    expect(button.textContent).toContain('Triages the inbox')
+  })
+})

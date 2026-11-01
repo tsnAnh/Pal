@@ -8,12 +8,19 @@
 
 import * as sdk from '@hermes/plugin-sdk'
 import { profileColor } from '@hermes/plugin-sdk'
+import type { CSSProperties } from 'react'
 
+import { attributeText, eyeFillFor, safeAvatarColor } from './avatar-color'
+import { grokifyBlob, inscribedBounds } from './blob-style'
 import type { AvatarAppearance, AvatarShape, BotMeta, FaceMood } from './types'
 
 // Deterministic blob avatars (name → face). Feature-detected: older SDKs
 // without the export fall back to the legacy math-face shapes below.
 export const blobatarSvg = typeof sdk === 'undefined' ? undefined : sdk.blobatarSvg
+
+const blobatarSilhouette =
+  typeof sdk === 'undefined' || !('blobatarSilhouette' in sdk) ? undefined : sdk.blobatarSilhouette
+
 // Budgeted render loop (fps cap + observability pause + dormancy + teardown).
 // Feature-detected: older desktops fall back to the hand-rolled clock below.
 const createBudgetedLoop = typeof sdk === 'undefined' ? undefined : sdk.createBudgetedLoop
@@ -87,20 +94,6 @@ function sigilGeometry(name: string, seed: number): SigilGeometry {
   return {
     strokes: strokes.join(' '),
     ring
-  }
-}
-
-/** Perceptual luminance — eyes/pupils flip light on dark bodies (ink, oxblood). */
-function isDarkColor(hex: string) {
-  try {
-    const n = parseInt(hex.slice(1), 16)
-    const r = (n >> 16) & 255
-    const g = (n >> 8) & 255
-    const b = n & 255
-
-    return 0.2126 * r + 0.7152 * g + 0.0722 * b < 110
-  } catch {
-    return false
   }
 }
 
@@ -189,22 +182,49 @@ export function blobShapeString(seedPart: string, kind: string) {
   return seedPart ? `blobatar:${seedPart}` : 'blobatar'
 }
 
-/** *text* as an HTML attribute value: no quote or angle bracket in it ends the attribute or the tag. */
-function attributeText(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+const BLINK_SPREAD_SECONDS = 4
+
+function blinkDelaySeconds(name: string): number {
+  let hash = 0
+
+  for (const char of name) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0
+  }
+
+  return ((hash % 1000) / 1000) * BLINK_SPREAD_SECONDS
+}
+
+function blinkDelayValue(name: string): string {
+  return `${blinkDelaySeconds(name).toFixed(2)}s`
+}
+
+function blinkStyle(name: string) {
+  return { '--hb-blink-delay': blinkDelayValue(name) } as CSSProperties
 }
 
 /** Static SVG markup for a blob face, tagged data-bot-face so the roster's
  *  PNG backfill (pushLocalAvatars → rasterizeSvgToPng) still finds it. */
-function blobMarkup(shape: null | string | undefined, name: string, size: number) {
+function blobMarkup(
+  shape: null | string | undefined,
+  name: string,
+  size: number,
+  color?: string,
+  mood: FaceMood | string = 'idle'
+) {
   if (!blobatarSvg) {
     return null
   }
 
   const { seed, kind } = parseBlobShape(shape, name)
 
-  const opts: { size: number; traits?: Record<string, number> } = {
+  const opts: { palette?: { eye: string; head: string }; size: number; traits?: Record<string, number> } = {
     size
+  }
+
+  const safeColor = safeAvatarColor(color)
+
+  if (safeColor && safeColor !== profileColor(name)) {
+    opts.palette = { head: safeColor, eye: eyeFillFor(safeColor) }
   }
 
   if (kind) {
@@ -213,9 +233,16 @@ function blobMarkup(shape: null | string | undefined, name: string, size: number
     }
   }
 
+  const circle = (kind || blobatarSilhouette?.(seed, opts.traits)) === 'round'
+
   try {
     // The name goes in as escaped text, through a replacer so `$&`-style patterns in it stay literal.
-    return blobatarSvg(seed, opts).replace('<svg ', () => `<svg data-bot-face="${attributeText(name)}" `)
+    return grokifyBlob(blobatarSvg(seed, opts), { circle }).replace(
+      '<svg ',
+      () =>
+        `<svg data-bot-face="${attributeText(name)}" data-bot-gaze="eyes" data-hb-mood="${attributeText(mood)}" ` +
+        `style="--hb-blink-delay:${blinkDelayValue(name)}" `
+    )
   } catch {
     return null
   }
@@ -593,10 +620,9 @@ function ringToPath(pts: FacePoint[]) {
   return d + 'Z'
 }
 
-/** One frame of the face: head orientation, gaze offset, blink, and the three
+/** One frame of the face: head orientation, gaze offset, and the three
  *  working dots' opacities. */
 interface FacePose {
-  blink: boolean
   d0: number
   d1: number
   d2: number
@@ -616,7 +642,6 @@ function facePose(mood: FaceMood | string, t: number): FacePose {
       roll: Math.sin(t * 0.95) * 10,
       gazeX: Math.sin(t * 0.7) * 3.6,
       gazeY: -2.2 + Math.sin(t * 0.4) * 2.2,
-      blink: t % 1.45 > 1.26,
       d0: 0.2 + 0.8 * Math.max(0, Math.sin(t * 2.4)),
       d1: 0.2 + 0.8 * Math.max(0, Math.sin(t * 2.4 - 0.7)),
       d2: 0.2 + 0.8 * Math.max(0, Math.sin(t * 2.4 - 1.4))
@@ -630,7 +655,6 @@ function facePose(mood: FaceMood | string, t: number): FacePose {
       roll: Math.sin(t * 0.75) * 4.2,
       gazeX: Math.sin(t * 0.55) * 3.6,
       gazeY: -1.6 + Math.sin(t * 0.38) * 2,
-      blink: t % 1.45 > 1.26,
       d0: 0.2 + 0.8 * Math.max(0, Math.sin(t * 2.6)),
       d1: 0.2 + 0.8 * Math.max(0, Math.sin(t * 2.6 - 0.7)),
       d2: 0.2 + 0.8 * Math.max(0, Math.sin(t * 2.6 - 1.4))
@@ -643,18 +667,10 @@ function facePose(mood: FaceMood | string, t: number): FacePose {
     roll: Math.sin(t * 0.85) * 1.2,
     gazeX: 0,
     gazeY: 0,
-    blink: t % 3.2 > 3.02,
     d0: 0,
     d1: 0,
     d2: 0
   }
-}
-
-/** The eyes and catchlights are positioned with raw numbers.
- *  `Element.setAttribute` declares a string value and the DOM coerces —
- *  stringifying at each call site would be a behavior change. */
-interface NumericAttrNode {
-  setAttribute(name: string, value: number | string): void
 }
 
 const faceTransitions = new WeakMap<SVGSVGElement, { mood: string; pose: FacePose; from: FacePose; since: number }>()
@@ -688,15 +704,30 @@ function settlePose(svg: SVGSVGElement, mood: string, target: FacePose, t: numbe
   return pose
 }
 
+const MATH_FIGURE_TRANSFORM = 'rotate(-14 20 20) translate(20 22) scale(0.72) translate(-20 -22)'
+const MATH_EYE = { width: 4.8, height: 11.4, gap: 9.4, slant: -11, midX: 23.4, shiftY: -1.6 }
+
+function mathEyeLine(shape: string) {
+  return (shape === 'cloud' ? 22 : 17.2) + MATH_EYE.shiftY
+}
+
+const MATH_STROKE_REACH = 6.5
+const MATH_CLOUD_BOUNDS = '3 5 37 38'
+
+function mathBounds(shape: string, ring: FacePoint[]): string {
+  if (shape === 'cloud') {
+    return MATH_CLOUD_BOUNDS
+  }
+
+  return inscribedBounds(ring, MATH_STROKE_REACH)
+}
+
 function paintMathFace(svg: SVGSVGElement, t: number) {
   const mood = svg.getAttribute('data-hb-mood') || 'idle'
   const shape = svg.getAttribute('data-hb-shape') || 'circle'
   const pose = settlePose(svg, mood, facePose(mood, t), t)
   const body = svg.querySelector('[data-hb-body]')
-  const open = svg.querySelector('[data-hb-open]')
-  const shut = svg.querySelector('[data-hb-shut]')
-  const el: NumericAttrNode | null = svg.querySelector('[data-hb-el]')
-  const er: NumericAttrNode | null = svg.querySelector('[data-hb-er]')
+  const gaze = svg.querySelector('[data-hb-gaze]')
   const dots = svg.querySelectorAll('[data-hb-dot]')
 
   if (body) {
@@ -708,47 +739,7 @@ function paintMathFace(svg: SVGSVGElement, t: number) {
     }
   }
 
-  const eyeY = (shape === 'cloud' ? 22 : 17.2) + pose.gazeY
-  const eyeL = 15.4 + pose.gazeX
-  const eyeR = 24.6 + pose.gazeX
-
-  if (el) {
-    el.setAttribute('cx', eyeL)
-    el.setAttribute('cy', eyeY)
-  }
-
-  if (er) {
-    er.setAttribute('cx', eyeR)
-    er.setAttribute('cy', eyeY)
-  }
-
-  // Catchlights ride the pupils (upper-left offset) — without this they
-  // stay at the circle-face position and drift outside e.g. the cloud's
-  // lower-set eyes.
-  const hl: NumericAttrNode | null = svg.querySelector('[data-hb-hl-l]')
-  const hr: NumericAttrNode | null = svg.querySelector('[data-hb-hl-r]')
-
-  if (hl) {
-    hl.setAttribute('cx', eyeL - 0.6)
-    hl.setAttribute('cy', eyeY - 0.7)
-  }
-
-  if (hr) {
-    hr.setAttribute('cx', eyeR - 0.6)
-    hr.setAttribute('cy', eyeY - 0.7)
-  }
-
-  if (open) {
-    open.setAttribute('opacity', pose.blink ? '0' : '1')
-  }
-
-  if (shut) {
-    shut.setAttribute(
-      'd',
-      `M${eyeL - 2.6} ${eyeY} L${eyeL + 2.6} ${eyeY} M${eyeR - 2.6} ${eyeY} L${eyeR + 2.6} ${eyeY}`
-    )
-    shut.setAttribute('opacity', pose.blink ? '1' : '0')
-  }
+  gaze?.setAttribute('transform', `translate(${pose.gazeX.toFixed(3)} ${pose.gazeY.toFixed(3)})`)
 
   dots.forEach((dot, i) => {
     const o = i === 0 ? pose.d0 : i === 1 ? pose.d1 : pose.d2
@@ -999,8 +990,10 @@ interface BotFaceProps {
  * Live math face. Photos still use <img>. Shape avatars stay SVG so
  * the clock can move them (a baked PNG cannot).
  */
-export function BotFace({ shape, color, image, size = 36, name = 'agent', mood = 'idle' }: BotFaceProps) {
+export function BotFace({ shape, color: rawColor, image, size = 36, name = 'agent', mood = 'idle' }: BotFaceProps) {
   startFaceClock()
+
+  const color = avatarColor(rawColor, name)
 
   if (image) {
     return (
@@ -1025,7 +1018,7 @@ export function BotFace({ shape, color, image, size = 36, name = 'agent', mood =
   // ignores it (no data-hb-math). Falls back to the legacy math face when the
   // SDK predates the export.
   if (isBlobShape(shape)) {
-    const markup = blobMarkup(shape, name, size)
+    const markup = blobMarkup(shape, name, size, color, mood)
 
     if (markup) {
       return (
@@ -1067,19 +1060,25 @@ export function BotFace({ shape, color, image, size = 36, name = 'agent', mood =
     )
   }
 
-  const working = mood === 'work' || mood === 'think'
-  const eyeFill = isDarkColor(color) ? 'rgba(232,220,195,0.95)' : 'rgba(0,0,0,0.85)'
-  // Catchlight contrast follows the pupil, not the body: dark pupils get the
-  // white sparkle, light (cream) pupils on dark bodies get a dark one — a
-  // white dot on a cream pupil is invisible, which read as "no eye dots" on
-  // maroon/ink/oxblood avatars.
-  const hlFill = isDarkColor(color) ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.85)'
   const ring = sampleFaceRing(shape)
   const rest = facePose(mood, 0)
-  // Shape-aware initial eye line — the cloud body sits lower, so its eyes
-  // (and their catchlights) start at the cloud position instead of jumping
-  // there on the first clock paint.
-  const eyeY0 = shape === 'cloud' ? 22 : 17.2
+  const eyeY0 = mathEyeLine(shape)
+  const mathEyeRest = (cx: number) => `translate(${cx} ${eyeY0}) rotate(${MATH_EYE.slant})`
+  const eyeLeft = MATH_EYE.midX - MATH_EYE.gap / 2
+  const eyeRight = MATH_EYE.midX + MATH_EYE.gap / 2
+
+  const eye = (side: 'l' | 'r', cx: number) => (
+    <g data-hb-eye={side} data-hb-rest={mathEyeRest(cx)} transform={mathEyeRest(cx)}>
+      <rect
+        fill={eyeFillFor(color)}
+        height={MATH_EYE.height}
+        rx={MATH_EYE.width / 2}
+        width={MATH_EYE.width}
+        x={-MATH_EYE.width / 2}
+        y={-MATH_EYE.height / 2}
+      />
+    </g>
+  )
 
   return (
     <svg
@@ -1090,33 +1089,30 @@ export function BotFace({ shape, color, image, size = 36, name = 'agent', mood =
       data-hb-mood={mood}
       data-hb-shape={shape || 'circle'}
       height={size}
+      style={blinkStyle(name)}
       viewBox="0 0 40 44"
       width={size}
     >
-      <path
-        d={
-          shape === 'cloud'
-            ? 'M11 32 a7.5 7.5 0 0 1 -1 -14.9 A9.5 9.5 0 0 1 29 12.5 A7 7 0 0 1 30 32 Z'
-            : ringToPath(ring)
-        }
-        data-hb-body="1"
-        fill={color}
-      />
-      <g data-hb-open="1">
-        <ellipse cx={15.4} cy={eyeY0} data-hb-el="1" fill={eyeFill} rx={2.2} ry={working ? 2.6 : 2.3} />
-        <ellipse cx={24.6} cy={eyeY0} data-hb-er="1" fill={eyeFill} rx={2.2} ry={working ? 2.6 : 2.3} />
-        <circle cx={14.8} cy={eyeY0 - 0.7} data-hb-hl-l="1" fill={hlFill} r={0.65} />
-        <circle cx={24} cy={eyeY0 - 0.7} data-hb-hl-r="1" fill={hlFill} r={0.65} />
+      <g transform={MATH_FIGURE_TRANSFORM}>
+        <path
+          d={
+            shape === 'cloud'
+              ? 'M11 32 a7.5 7.5 0 0 1 -1 -14.9 A9.5 9.5 0 0 1 29 12.5 A7 7 0 0 1 30 32 Z'
+              : ringToPath(ring)
+          }
+          data-hb-body="1"
+          fill={color}
+          stroke={color}
+          strokeLinejoin="round"
+          strokeWidth={13}
+        />
+        <g data-hb-bounds={mathBounds(shape, ring)} data-hb-gaze="">
+          <g data-hb-lids="">
+            {eye('l', eyeLeft)}
+            {eye('r', eyeRight)}
+          </g>
+        </g>
       </g>
-      <path
-        d={`M12.8 ${eyeY0} L18 ${eyeY0} M22 ${eyeY0} L27.2 ${eyeY0}`}
-        data-hb-shut="1"
-        fill="none"
-        opacity={0}
-        stroke={eyeFill}
-        strokeLinecap="round"
-        strokeWidth={2}
-      />
       <g>
         <circle cx={16.4} cy={41.2} data-hb-dot="1" fill={color} opacity={rest.d0} r={1.15} />
         <circle cx={20} cy={41.2} data-hb-dot="1" fill={color} opacity={rest.d1} r={1.15} />
@@ -1134,7 +1130,7 @@ const PRIMARY_AVATAR_COLOR = '#8b5cf6'
  *  the same one `botAppearance` seeds — so "no choice" means the app's color
  *  rather than an arbitrary constant. */
 export function avatarColor(color: null | string | undefined, name: string): string {
-  return color || profileColor(name) || PRIMARY_AVATAR_COLOR
+  return safeAvatarColor(color) || profileColor(name) || PRIMARY_AVATAR_COLOR
 }
 
 export function botAppearance(name: string, meta: BotMeta | null | undefined): AvatarAppearance {
@@ -1157,7 +1153,7 @@ export function botAppearance(name: string, meta: BotMeta | null | undefined): A
 
   return {
     shape: meta?.shape || defaultShapeFor(name),
-    color: meta?.color || profileColor(name),
+    color: safeAvatarColor(meta?.color) || profileColor(name),
     image: meta?.image || null
   }
 }

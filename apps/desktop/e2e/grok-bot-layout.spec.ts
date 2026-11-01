@@ -16,10 +16,16 @@ const ARTIFACT_DIR =
 
 let fixture: MockBackendFixture | null = null
 
-async function capture(page: Page, name: string): Promise<void> {
+async function capture(
+  page: Page,
+  name: string,
+  clip?: { height: number; width: number; x: number; y: number }
+): Promise<void> {
   fs.mkdirSync(ARTIFACT_DIR, { recursive: true })
-  await page.screenshot({ path: path.join(ARTIFACT_DIR, `${name}.png`) })
+  await page.screenshot({ clip, path: path.join(ARTIFACT_DIR, `${name}.png`) })
 }
+
+const PENDING_PROBE = 'E2E_PENDING_PROBE'
 
 async function seedBot(hermesHome: string, mockUrl: string, name: string): Promise<void> {
   const dir = path.join(hermesHome, 'profiles', name)
@@ -37,7 +43,7 @@ async function seedBot(hermesHome: string, mockUrl: string, name: string): Promi
 }
 
 test.beforeAll(async () => {
-  const mock = await startMockServer()
+  const mock = await startMockServer({ holdBeforeFirstTokenForPrompt: PENDING_PROBE })
   const sandbox = createSandbox('grok-bot-layout')
   writeMockProviderConfig(sandbox.hermesHome, mock.url)
   writeEnvFile(sandbox.hermesHome)
@@ -99,6 +105,26 @@ test('bot roster, chat bubbles and profile panel follow the Grok Bot layout', as
     .first()
     .waitFor({ state: 'hidden', timeout: 90_000 })
     .catch(() => undefined)
+
+  await expect
+    .poll(async () => (await row.innerText()).split('\n').filter(Boolean).length, {
+      message: 'roster row carries a second preview line',
+      timeout: 30_000
+    })
+    .toBeGreaterThanOrEqual(2)
+  await expect(row, 'preview quotes the last message').toContainText(/Hello/)
+
+  const selectedRowBox = (await row.boundingBox())!
+
+  expect(selectedRowBox.height, 'roster row is at least 52px tall').toBeGreaterThanOrEqual(52)
+  expect(
+    parseFloat(await row.evaluate(el => getComputedStyle(el).borderTopLeftRadius)),
+    'selected roster row is a rounded rectangle'
+  ).toBeGreaterThanOrEqual(12)
+  expect(
+    await row.evaluate(el => getComputedStyle(el).backgroundColor),
+    'selected roster row has a fill'
+  ).not.toBe('rgba(0, 0, 0, 0)')
 
   await row.click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Pin to top' }).click()
@@ -262,6 +288,152 @@ test('bot roster, chat bubbles and profile panel follow the Grok Bot layout', as
   ).toBeLessThan(40)
   await capture(page, `${process.env.GROK_LAYOUT_SHOT_NAME ?? 'after'}-dark`)
 
+  const footerDisc = page.locator('[data-slot="account-initials"]').filter({ visible: true })
+  const appsButton = page.locator('[data-slot="account-apps"]').filter({ visible: true })
+
+  await expect(footerDisc, 'footer shows the initials disc').toBeVisible()
+  expect((await footerDisc.boundingBox())?.width, 'initials disc is 40px').toBe(40)
+  expect((await appsButton.boundingBox())?.width, 'apps button is a 40px circle').toBe(40)
+  await capture(page, 'roster-grok-dark')
+  await appsButton.click()
+  await expect(page.getByRole('dialog'), 'apps button opens Connect apps').toBeVisible({ timeout: 10_000 })
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+
+  const appFont = await page.evaluate(async () => {
+    await document.fonts.ready
+    await document.fonts.load('14px "Geist Variable"', 'chó hóng hớt')
+
+    return {
+      family: getComputedStyle(document.body).fontFamily,
+      loaded: document.fonts.check('14px "Geist Variable"', 'chó hóng hớt')
+    }
+  })
+
+  expect(appFont.family, 'app text uses Geist first').toMatch(/^"?Geist Variable"?,/)
+  expect(appFont.loaded, 'Geist with Vietnamese glyphs is loaded').toBe(true)
+
+  const betaRow = page.locator('[data-slot="bots-roster"] [data-roster-key="local::beta"]').first()
+  const betaFace = betaRow.locator('svg[data-bot-face]').first()
+
+  const leftEye = () =>
+    betaFace.evaluate(svg => {
+      const eye = svg.querySelector('[data-hb-eye="l"]') as SVGGElement | null
+
+      if (!eye) {
+        return { angle: Number.NaN, centreX: Number.NaN, transform: '' }
+      }
+
+      const matrix = eye.getScreenCTM()!
+      const box = eye.getBoundingClientRect()
+
+      return {
+        angle: (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI,
+        centreX: box.x + box.width / 2,
+        transform: eye.getAttribute('transform') ?? ''
+      }
+    })
+
+  expect((await betaFace.boundingBox())?.width ?? 0, 'roster face is 48px').toBeGreaterThanOrEqual(46)
+  await expect
+    .poll(
+      () =>
+        betaFace.evaluate(svg =>
+          Array.from(svg.querySelectorAll('[data-hb-lids]')).some(lids => lids.getAnimations().length > 0)
+        ),
+      { message: 'eyelids of an on-screen face run a CSS blink animation' }
+    )
+    .toBe(true)
+
+  const resting = await leftEye()
+  const faceWidth = (await betaFace.boundingBox())?.width ?? 0
+  const rowBox = await betaRow.boundingBox()
+
+  if (!rowBox) {
+    throw new Error('beta roster row has no box')
+  }
+
+  await page.mouse.move(rowBox.x + rowBox.width / 2, rowBox.y + rowBox.height / 2)
+  await page.mouse.move(rowBox.x + 4, rowBox.y + rowBox.height / 2, { steps: 6 })
+  await expect
+    .poll(async () => resting.centreX - (await leftEye()).centreX, {
+      message: 'left eye travels left toward the pointer',
+      timeout: 1_000
+    })
+    .toBeGreaterThanOrEqual(faceWidth * 0.1)
+  await expect
+    .poll(async () => Math.abs((await leftEye()).angle), { message: 'eyes stand upright on screen', timeout: 1_000 })
+    .toBeLessThanOrEqual(3)
+  await capture(page, 'roster-gaze-dark')
+
+  const settledSamples = await betaFace.evaluate(
+    svg =>
+      new Promise<number[]>(resolve => {
+        const samples: number[] = []
+
+        const sample = () => {
+          samples.push(svg.querySelector('[data-hb-eye="l"]')!.getBoundingClientRect().x)
+
+          if (samples.length === 3) {
+            resolve(samples)
+          } else {
+            requestAnimationFrame(sample)
+          }
+        }
+
+        requestAnimationFrame(() => requestAnimationFrame(sample))
+      })
+  )
+
+  expect(Math.max(...settledSamples) - Math.min(...settledSamples), 'eyes hold still for a still pointer').toBeLessThan(0.3)
+
+  await page.mouse.move(rowBox.x + rowBox.width + 400, rowBox.y + rowBox.height / 2, { steps: 6 })
+  await expect
+    .poll(async () => (await leftEye()).transform, { message: 'eyes return to the baked idle pose', timeout: 1_000 })
+    .toBe(resting.transform)
+
+  const avatarTrigger = profile.getByRole('button', { name: 'Change avatar' })
+  const profileFace = profile.locator('svg[data-bot-face]').first()
+
+  const faceFills = () =>
+    profileFace.evaluate(svg =>
+      Array.from(svg.querySelectorAll('[fill]'))
+        .map(node => node.getAttribute('fill'))
+        .filter(fill => fill && fill !== 'none')
+        .join('|')
+    )
+
+  const avatarBox = (await avatarTrigger.boundingBox())!
+  const fillsBefore = await faceFills()
+
+  await avatarTrigger.click()
+
+  const avatarCard = page.locator('[data-slot="bot-avatar-popover"]')
+
+  await expect(avatarCard, 'avatar card opens').toBeVisible({ timeout: 10_000 })
+
+  const cardBox = (await avatarCard.boundingBox())!
+
+  expect(cardBox.y, 'card sits under the avatar').toBeGreaterThanOrEqual(avatarBox.y + avatarBox.height - 8)
+
+  for (const name of ['Bot', 'Generate', 'Upload']) {
+    await expect(avatarCard.getByRole('tab', { name, exact: true }), `${name} tab`).toBeVisible()
+  }
+
+  await expect(avatarCard.getByRole('button', { name: 'Reset', exact: true })).toBeVisible()
+
+  const shapeOptions = avatarCard.getByRole('radiogroup').first().getByRole('radio')
+  const swatchOptions = avatarCard.getByRole('radiogroup').nth(1).getByRole('radio')
+
+  expect(await shapeOptions.count(), 'card offers at least ten shapes').toBeGreaterThanOrEqual(10)
+  await swatchOptions.nth(4).click()
+  await expect
+    .poll(faceFills, { message: 'header face takes the picked colour', timeout: 10_000 })
+    .not.toBe(fillsBefore)
+  await capture(page, 'avatar-popover-dark')
+  await page.keyboard.press('Escape')
+  await expect(avatarCard, 'Escape closes the avatar card').toHaveCount(0)
+
   const paneTab = (name: string) => page.getByRole('tab', { name }).filter({ visible: true }).first()
 
   await expect(paneTab('Details')).toBeVisible()
@@ -305,6 +477,41 @@ test('bot roster, chat bubbles and profile panel follow the Grok Bot layout', as
   await capture(page, 'model-menu-dark')
   await page.keyboard.press('Escape')
 
+  const editor = page.locator('[data-chat-surface][data-bot-chat] [contenteditable="true"]').filter({ visible: true }).first()
+
+  await editor.click()
+  await editor.fill(PENDING_PROBE)
+  await page.keyboard.press('Enter')
+  await fixture!.mock.waitForHeldStream()
+
+  const pendingRow = page.locator('[data-bot-chat] [data-bot-pending]').filter({ visible: true }).first()
+
+  await expect(pendingRow).toHaveText('Reviewing your request', { timeout: 15_000 })
+  await expect(pendingRow.locator('.dither'), 'no pulse square while a bot is pending').toHaveCount(0)
+
+  const pendingBubble = await pendingRow.evaluate(node => {
+    const bubble = node.closest('[data-bubble="assistant"]')!
+    const style = getComputedStyle(bubble)
+    const row = node.closest('[data-slot="bot-reply-row"]')!
+    const avatar = row.querySelector('[data-slot="bot-reply-avatar"]')!.getBoundingClientRect()
+    const text = node.getBoundingClientRect()
+
+    return {
+      background: style.backgroundColor,
+      borderColor: style.borderTopColor,
+      centreGap: Math.abs(avatar.top + avatar.height / 2 - (text.top + text.height / 2))
+    }
+  })
+
+  expect(pendingBubble.background, 'pending bot reply has no card fill').toBe('rgba(0, 0, 0, 0)')
+  expect(pendingBubble.borderColor, 'pending bot reply has no card border').toBe('rgba(0, 0, 0, 0)')
+  expect(pendingBubble.centreGap, 'avatar and status text share a centre line').toBeLessThanOrEqual(2)
+  await capture(page, 'bot-pending-dark')
+  fixture!.mock.releaseHeldStream()
+  await expect(page.locator('[data-bot-chat] [data-bot-pending]').filter({ visible: true })).toHaveCount(0, {
+    timeout: 30_000
+  })
+
   await expect(
     page.getByText(/^profile$/i).filter({ visible: true }),
     'no tab strip label over the profile panel'
@@ -336,10 +543,25 @@ test('bot roster, chat bubbles and profile panel follow the Grok Bot layout', as
     'bots-only mode has no titlebar row'
   ).toHaveCount(0)
   const plusBox = (await newMenu.boundingBox())!
-  expect(plusBox.y + plusBox.height / 2, '+ sits in the roster top row').toBeLessThanOrEqual(34)
+  const paneBox = (await page.locator('[data-bots-pane]').filter({ visible: true }).first().boundingBox())!
+  expect(Math.abs(plusBox.y + plusBox.height / 2 - 26), '+ centre within tolerance').toBeLessThanOrEqual(1.5)
+  expect(
+    Math.abs(paneBox.x + paneBox.width - (plusBox.x + plusBox.width) - 16),
+    '+ right inset is 16px'
+  ).toBeLessThanOrEqual(2)
+
+  if (process.platform === 'darwin') {
+    const buttons = await fixture!.app.evaluate(({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.getWindowButtonPosition()
+    )
+
+    expect(buttons, 'traffic lights relaxed in Bot Mode').toEqual({ x: 20, y: 19 })
+  }
+
   await expect(page.locator('[data-slot="bots-roster"]').filter({ visible: true })).toBeVisible()
   await expect(sessionsNav, 'sessions surfaces are gone').toHaveCount(0)
   await capture(page, `${process.env.GROK_LAYOUT_SHOT_NAME ?? 'after'}-bots-only`)
+  await capture(page, 'bots-only-toolbar', { x: paneBox.x, y: 0, width: paneBox.width, height: 80 })
 
   await newMenu.click()
   await page.getByRole('menuitem', { name: 'Show sessions' }).click()

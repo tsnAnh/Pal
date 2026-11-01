@@ -56,12 +56,12 @@ export function RosterGroupRowView({
   }
 
   return (
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center">
+    <div className="group/group-row relative grid min-w-0 grid-cols-[minmax(0,1fr)] items-center">
       <GroupRow
         {...rowProps}
         needsYou={Boolean(groupNeedsYou[rowProps.group]) || groupHasPendingClarify(groupClarify, rowProps.group)}
       />
-      <div className="flex flex-col">
+      <div className="absolute right-1 top-1/2 flex -translate-y-1/2 flex-col opacity-0 transition-opacity focus-within:opacity-100 group-hover/group-row:opacity-100">
         {([-1, 1] as const).map(delta => (
           <Tip key={delta} label={delta === -1 ? b.sections.moveUp : b.sections.moveDown}>
             <Button

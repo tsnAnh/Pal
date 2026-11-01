@@ -4250,6 +4250,7 @@ export const zhOverrides = {
       loadingSession: '正在加载会话',
       showEarlier: '显示更早的消息',
       loadingResponse: 'Hermes 正在加载回复',
+      botWorking: '正在查看你的请求',
       loadingLocalModel: model => `正在将 ${model} 载入内存`,
       processingPrompt: '正在处理提示词',
       peerRun: (count, peer) => `与 ${peer} 的 ${count} 条消息`,

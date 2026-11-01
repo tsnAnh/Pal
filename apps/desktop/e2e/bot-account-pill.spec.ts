@@ -118,16 +118,15 @@ async function expectPillBottomLeft(page: Page, label: string): Promise<void> {
 
   expect(box.x, `${label}: pill hugs the left edge`).toBeLessThanOrEqual(40)
   expect(viewport.height - (box.y + box.height), `${label}: pill sits at the bottom`).toBeLessThanOrEqual(28)
-  expect(box.height, `${label}: pill is 32px tall`).toBeGreaterThanOrEqual(31)
-  expect(box.height, `${label}: pill is 32px tall`).toBeLessThanOrEqual(33)
-  expect(radius, `${label}: pill is fully rounded`).toBeGreaterThanOrEqual(box.height / 2)
+  expect(box.height, `${label}: account row is 48px tall`).toBeGreaterThanOrEqual(47)
+  expect(box.height, `${label}: account row is 48px tall`).toBeLessThanOrEqual(49)
+  expect(radius, `${label}: account row is a rounded rectangle`).toBeGreaterThanOrEqual(12)
 
-  const tools = page.locator('[data-slot="account-quick-tools"]').filter({ visible: true })
-  const toolsBox = await boxOf(tools)
+  const apps = page.locator('[data-slot="account-apps"]').filter({ visible: true })
+  const appsBox = await boxOf(apps)
 
-  expect(toolsBox.x, `${label}: quick-tools pill sits right of the name pill`).toBeGreaterThanOrEqual(box.x + box.width)
-  expect(toolsBox.height, `${label}: quick-tools pill matches the pill height`).toBeCloseTo(box.height, 0)
-  expect(toolsBox.width, `${label}: quick-tools pill is the smaller one`).toBeLessThan(box.width)
+  expect(appsBox.x, `${label}: apps button sits right of the account row`).toBeGreaterThanOrEqual(box.x + box.width)
+  expect(appsBox.width, `${label}: apps button is a 40px circle`).toBe(40)
 }
 
 test.beforeAll(async () => {

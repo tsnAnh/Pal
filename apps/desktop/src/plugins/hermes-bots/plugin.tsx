@@ -56,6 +56,8 @@ import {
   primeRoster,
   resolveRosterMentions
 } from './data'
+import { startFaceGaze } from './face-gaze'
+import { startFaceVisibility } from './face-visibility'
 import {
   $groupChats,
   $groupChatWorkspace,
@@ -134,6 +136,8 @@ export default {
     const stopScreenAutoRaise = startScreenAutoRaise()
     const stopBotChatAccent = startBotChatAccent()
     const stopBotChatPersonas = startBotChatPersonas()
+    const stopFaceGaze = startFaceGaze()
+    const stopFaceVisibility = startFaceVisibility()
 
     // Disabling the plugin (or a hot reload) must actually stop the clock —
     // before this, the rAF loop + 1Hz document scan ran until app restart.
@@ -145,6 +149,8 @@ export default {
       ctx.onDispose(stopScreenAutoRaise)
       ctx.onDispose(stopBotChatAccent)
       ctx.onDispose(stopBotChatPersonas)
+      ctx.onDispose(stopFaceGaze)
+      ctx.onDispose(stopFaceVisibility)
     }
 
     // @-mention autocomplete: typing "@rese…" in ANY composer offers the

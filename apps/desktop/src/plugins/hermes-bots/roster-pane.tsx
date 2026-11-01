@@ -1,6 +1,7 @@
 import { $hiddenStripTabs, AccountPill, host, useI18n, useValue } from '@hermes/plugin-sdk'
 import { useEffect, useRef, useState } from 'react'
 
+import { useAboutYouName } from './about-you'
 import { useBotDeleteRequest } from './bot-detail-state'
 import { BotRow } from './bot-row'
 import {
@@ -17,6 +18,7 @@ import {
   saveSelectedRosterBot
 } from './bot-state'
 import { CanonicalGroupList } from './canonical-group-registry'
+import { connectAppsSupported, openConnectApps } from './connect-apps'
 /**
  * The Bots pane itself: the roster's selection reconciliation, the
  * workspace-ownership reads its lifecycle keys off, and the pane that lists
@@ -235,6 +237,7 @@ function useReconcileRosterOwner(
 export function BotsPane() {
   const { t } = useI18n()
   const b = useBots()
+  const aboutYouName = useAboutYouName()
   const { data, error, isLoading, refetch } = useRoster()
   const gatewayState = useValue(host.state.gateway)
   const gatewayUp = gatewayState === 'open'
@@ -573,7 +576,11 @@ export function BotsPane() {
             renderUserSections,
             renderHiddenGatewaySection
           })}
-      <AccountPill />
+      <AccountPill
+        appsLabel={b.connectApps.menu}
+        displayName={aboutYouName}
+        onOpenApps={connectAppsSupported ? () => openConnectApps() : undefined}
+      />
       {renderRosterDialogs({
         b,
         t,

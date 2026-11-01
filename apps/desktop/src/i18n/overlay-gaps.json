@@ -62,6 +62,7 @@
   "assistant.mcpSetup.reloadFailed": ["ar","ja","zh-hant"],
   "assistant.mcpSetup.sendFailed": ["ar","ja","zh-hant"],
   "assistant.mcpSetup.toolCount": ["ar","ja","zh-hant"],
+  "assistant.thread.botWorking": ["ar","de","es","fr","ru"],
   "assistant.thread.errorAuthKinds.api_key.body": ["ru"],
   "assistant.thread.errorAuthKinds.api_key.title": ["ru"],
   "assistant.thread.errorAuthKinds.oauth.title": ["ru"],

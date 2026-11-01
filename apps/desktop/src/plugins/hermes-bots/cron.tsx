@@ -43,7 +43,7 @@ import {
 } from '@hermes/plugin-sdk'
 import { useState } from 'react'
 
-import { avatarColor, botAppearance, BotFace } from './avatar'
+import { AvatarPopover } from './avatar-popover'
 import { botJob } from './bot-detail-model'
 import { BotDetailsSummary, BotHeaderMenu, BotNameEditor, BotRunHistoryPanel } from './bot-detail-panels'
 import { useRoutineOpenRequest } from './bot-detail-state'
@@ -1283,11 +1283,11 @@ interface BotProfileHeaderProps {
 function BotProfileHeader({ bot, meta, onAddLabel, owner, profileLabel, profileName }: BotProfileHeaderProps) {
   const b = useBots()
   const { t } = useI18n()
-  const { shape, color, image } = botAppearance(bot, meta)
 
   return (
     <div
       className="relative flex flex-col items-center gap-1 px-4 pt-5 pb-3 text-center"
+      data-bot-gaze-scope
       data-slot="bot-profile-header"
     >
       {typeof host.closePane === 'function' ? (
@@ -1301,7 +1301,7 @@ function BotProfileHeader({ bot, meta, onAddLabel, owner, profileLabel, profileN
           <Codicon name="close" />
         </Button>
       ) : null}
-      <BotFace color={avatarColor(color, bot)} image={image} name={bot} shape={shape} size={96} />
+      <AvatarPopover bot={bot} meta={meta} owner={owner} />
       <BotHeaderMenu bot={owner} />
       <BotNameEditor bot={owner} name={profileName} />
       {showsHandle(bot, meta, owner) ? (

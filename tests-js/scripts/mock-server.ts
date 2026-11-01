@@ -43,6 +43,9 @@ export interface MockServerOptions {
 
   /** Pause the matching stream after its first token for session-switch E2E coverage. */
   holdFirstStreamForPrompt?: string
+
+  /** Pause the matching stream before its first token, so the pending state stays on screen. */
+  holdBeforeFirstTokenForPrompt?: string
 /** Pause the first completion whose request JSON contains this text. */
 holdFirstCompletionContaining?: string
 /** Absolute sandbox path written by the verify-on-stop scripted tool call. */
@@ -967,6 +970,18 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
           }
 
           const reply = options.replyForPrompt?.(userText) ?? MOCK_REPLY
+
+          if (
+            stream &&
+            options.holdBeforeFirstTokenForPrompt &&
+            typeof lastUserMessage?.content === 'string' &&
+            lastUserMessage.content.includes(options.holdBeforeFirstTokenForPrompt)
+          ) {
+            resolveHeldStreamStarted?.()
+            void heldStreamReleased.then(() => streamTextResponse(res, model, reply))
+
+            return
+          }
 
           if (stream) {
             const holdThisStream = Boolean(

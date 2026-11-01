@@ -100,7 +100,8 @@ test('bot chat header chip shows the bot name alone, with no chevron and no prof
   await expect(chip.locator('xpath=./*'), 'header chip holds only the face and the name').toHaveCount(2)
 
   const chipGroup = chip.locator('xpath=..')
-  await expect(chipGroup.getByRole('button'), 'no button sits beside the header chip').toHaveCount(1)
+  await expect(chipGroup.getByRole('button'), 'only the chip and voice chat sit in the header').toHaveCount(2)
+  await expect(chipGroup.getByRole('button', { name: 'Start voice chat' })).toHaveCount(1)
   await expect(page.locator('[data-slot="bot-profile-reopen"]'), 'circular profile button is gone').toHaveCount(0)
 
   const box = (await chip.boundingBox())!
@@ -115,9 +116,15 @@ test('bot chat header chip shows the bot name alone, with no chevron and no prof
     path: path.join(ARTIFACT_DIR, 'bot-chat-header-chip.png')
   })
 
+  const profileHeader = page.locator('[data-slot="bot-profile-header"]').filter({ visible: true })
+
+  if ((await profileHeader.count()) > 0) {
+    await profileHeader.first().getByRole('button', { name: 'Close' }).click()
+    await expect(profileHeader, 'bot details pane closes').toHaveCount(0, { timeout: 10_000 })
+  }
+
   await chip.click()
-  const menu = page.getByRole('menu').filter({ visible: true }).first()
-  await expect(menu, 'header chip still opens the session actions menu').toBeVisible({ timeout: 10_000 })
-  await page.keyboard.press('Escape')
-  await expect(menu).toBeHidden({ timeout: 10_000 })
+  await expect(profileHeader, 'header chip opens the bot details pane').toHaveCount(1, { timeout: 10_000 })
+  await expect(profileHeader).toContainText(/alpha/i)
+  await expect(page.getByRole('menu').filter({ visible: true }), 'header chip opens no menu').toHaveCount(0)
 })

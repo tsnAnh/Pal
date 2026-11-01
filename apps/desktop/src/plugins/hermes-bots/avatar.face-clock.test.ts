@@ -286,3 +286,50 @@ describe('the SDK budgeted-loop path', () => {
     expect(calls.wake).toBeGreaterThanOrEqual(1)
   })
 })
+
+describe('the painted pill eyes', () => {
+  function mountEyedFace() {
+    const face = mountFace()
+
+    face.innerHTML =
+      '<path data-hb-body="1"/><g data-hb-gaze=""><g data-hb-eye="l" transform="translate(18.7 15.6) rotate(-11)"><rect width="4.8" height="11.4"/></g></g>'
+
+    return {
+      face,
+      eye: face.querySelector('[data-hb-eye]')!,
+      gaze: face.querySelector('[data-hb-gaze]')!,
+      left: face.querySelector('rect')!
+    }
+  }
+
+  async function paintedFace() {
+    const { startFaceClock } = await loadClock()
+    const mounted = mountEyedFace()
+
+    startFaceClock()
+    observer!.emit([{ isIntersecting: true, target: mounted.face }])
+
+    return mounted
+  }
+
+  it('wanders the mood gaze on the gaze group and leaves the eyes to face-gaze', async () => {
+    const { eye, gaze } = await paintedFace()
+
+    pump()
+
+    expect(gaze.getAttribute('transform')).toMatch(/^translate\(-?[\d.]+ -?[\d.]+\)$/)
+    expect(eye.getAttribute('transform')).toBe('translate(18.7 15.6) rotate(-11)')
+  })
+
+  it('leaves the eye height to the CSS blink however long it runs', async () => {
+    const { left } = await paintedFace()
+    const heights = new Set<string>()
+
+    for (let i = 0; i < 45; i++) {
+      pump(100)
+      heights.add(left.getAttribute('height')!)
+    }
+
+    expect([...heights]).toEqual(['11.4'])
+  })
+})

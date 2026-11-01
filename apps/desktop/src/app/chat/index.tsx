@@ -226,23 +226,27 @@ function ChatHeader({
     </SessionActionsMenu>
   )
 
+  const chip = (onClick?: () => void) =>
+    persona && (
+      <button
+        className={cn(
+          botChipClass,
+          'pointer-events-auto hover:bg-(--ui-control-hover-background) data-[state=open]:bg-(--ui-control-active-background) [-webkit-app-region:no-drag]'
+        )}
+        data-slot="bot-title-chip"
+        onClick={onClick}
+        type="button"
+      >
+        <span className="grid shrink-0 place-items-center">{persona.avatar(20)}</span>
+        <span className="truncate">{persona.name}</span>
+      </button>
+    )
+
   if (persona) {
     return (
       <div className="pointer-events-none absolute inset-x-0 top-3 z-3 flex justify-center px-24">
         <div className="flex min-w-0 max-w-full items-center">
-          {actionsMenu(
-            <button
-              className={cn(
-                botChipClass,
-                'pointer-events-auto hover:bg-(--ui-control-hover-background) data-[state=open]:bg-(--ui-control-active-background) [-webkit-app-region:no-drag]'
-              )}
-              data-slot="bot-title-chip"
-              type="button"
-            >
-              <span className="grid shrink-0 place-items-center">{persona.avatar(20)}</span>
-              <span className="truncate">{persona.name}</span>
-            </button>
-          )}
+          {persona.openDetails ? chip(persona.openDetails) : actionsMenu(chip())}
           {busy && persona.stopNowLabel && <BotStopNow label={persona.stopNowLabel()} onStop={onStopNow} />}
           <PersonaVoiceCall persona={persona} />
         </div>
