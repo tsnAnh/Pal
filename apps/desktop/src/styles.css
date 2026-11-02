@@ -2326,6 +2326,10 @@ body.guest-pointer-lock :is(webview, iframe) {
   background: var(--bot-reply-card);
 }
 
+[data-bot-chat] [data-bubble='assistant']:has([data-slot='clarify-inline']) {
+  width: 100%;
+}
+
 [data-bot-chat] [data-bubble='assistant']:has(> [data-bot-pending]:only-child) {
   border-color: transparent;
   padding-inline: 0;

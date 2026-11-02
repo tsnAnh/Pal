@@ -448,6 +448,40 @@ const CARD_CLARIFY_TURN: ScriptedTurn = {
   toolCalls: [{ name: 'clarify', args: { questions: CARD_CLARIFY_QUESTIONS } }],
 }
 
+export const WIDE_CLARIFY_TRIGGER = 'E2E_WIDE_CLARIFY_TRIGGER'
+export const WIDE_CLARIFY_QUESTIONS = [
+  {
+    question: 'How should I handle the vendored plugins?',
+    choices: [
+      'Move vendored plugins to cursor/plugins ae5650f (latest main), fix broken rules, then align docs (Recommended)',
+      "Docs only: keep the pin at 99b609a, just edit the kit's own docs",
+    ],
+  },
+  { question: 'Which branch should carry the change?', choices: ['A new branch off main', 'The current branch'] },
+  { question: 'Should I open a pull request when done?', choices: ['Yes, as a draft', 'No, leave it local'] },
+]
+
+const WIDE_CLARIFY_TURN: ScriptedTurn = {
+  text: '',
+  toolCalls: [{ name: 'clarify', args: { questions: WIDE_CLARIFY_QUESTIONS } }],
+}
+
+function clarifyCardTurnFor(messages: unknown): ScriptedTurn | null {
+  const list = Array.isArray(messages) ? (messages as { role?: string }[]) : []
+
+  if (includesText(messages, CARD_CLARIFY_TRIGGER)) {
+    const answered = list.some(message => message?.role === 'tool' && JSON.stringify(message).includes('set up first'))
+
+    return answered ? null : CARD_CLARIFY_TURN
+  }
+
+  if (includesText(messages, WIDE_CLARIFY_TRIGGER)) {
+    return list.some(message => message?.role === 'tool') ? null : WIDE_CLARIFY_TURN
+  }
+
+  return null
+}
+
 export const IDENTITY_TONE_TRIGGER = 'E2E_IDENTITY_TONE_TRIGGER'
 export const IDENTITY_RULES_TRIGGER = 'E2E_IDENTITY_RULES_TRIGGER'
 export const IDENTITY_TONE_TEXT = 'Short and friendly replies'
@@ -898,18 +932,12 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             return
           }
 
-          if (includesText(parsed.messages, CARD_CLARIFY_TRIGGER)) {
-            const hasOwnToolResult = Array.isArray(parsed.messages)
-              && parsed.messages.some(
-                (message: { role?: string }) =>
-                  message?.role === 'tool' && JSON.stringify(message).includes('set up first'),
-              )
+          const clarifyCardTurn = clarifyCardTurnFor(parsed.messages)
 
-            if (!hasOwnToolResult) {
-              sendScriptedTurn(res, model, stream, CARD_CLARIFY_TURN)
+          if (clarifyCardTurn) {
+            sendScriptedTurn(res, model, stream, clarifyCardTurn)
 
-              return
-            }
+            return
           }
 
           if (includesBlockingClarifyTrigger(parsed.messages)) {
