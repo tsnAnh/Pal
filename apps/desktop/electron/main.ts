@@ -362,11 +362,12 @@ import {
   joinManagedUpdatesForApply,
   ManagedConnectionUpdateGate,
   managedSshDrainBlocker,
+  managedSshRecoveryLogLines,
   managedSshRecoveryScopes,
+  managedSshScopeBelongsToConnection,
   managedSshScopeRole,
   managedSshTokenPersistencePlan,
   managedSshUpdateAllRow,
-  MAX_MANAGED_SSH_RECOVERY_ATTEMPTS,
   recoverManagedSshScopes,
   refusedManagedSshUpdate,
   type RemoteUpdateTarget,
@@ -9195,6 +9196,7 @@ const managedConnectionUpdateGate = new ManagedConnectionUpdateGate(
 const managedConnectionUpdates = new Map<string, Promise<any>>()
 const managedConnectionRecoveries = new Map<string, Promise<void>>()
 const managedPrimaryRestoreOwners = new Map<string, { correlationId: string; profile: string; source: any }>()
+const MANAGED_RECOVERY_QUIT_JOIN_MS = 5_000
 let managedUpdateQuitWait: Promise<unknown> | null = null
 let managedUpdateQuitWaitDone = false
 
@@ -9337,7 +9339,7 @@ function markManagedSshRecoveryLaunching(connectionId, correlationId) {
   writeManagedSshRecoveryRecords(records)
 }
 
-function recordManagedSshRecoveryAttempt(connectionId, correlationId, attempts) {
+function recordManagedSshRecoveryAttempt(connectionId, correlationId, attempts, scopes) {
   const records = readManagedSshRecoveryRecords()
 
   const index = records.findIndex(
@@ -9345,7 +9347,7 @@ function recordManagedSshRecoveryAttempt(connectionId, correlationId, attempts) 
   )
 
   if (index >= 0) {
-    records[index] = { ...records[index], attempts }
+    records[index] = { ...records[index], attempts, scopes }
     writeManagedSshRecoveryRecords(records)
   }
 }
@@ -11326,13 +11328,15 @@ async function recoverManagedSshUpdate(record) {
     try {
       transport = await openManagedSshUpdateTransport(record.source)
 
-      const { attempts, disposition, results } = await recoverManagedSshScopes<any>({
+      const { attempts, disposition, outcomes } = await recoverManagedSshScopes<any>({
         attempts: record.attempts ?? 0,
         scopes: record.scopes,
+        ownsScope: scope => managedSshScopeBelongsToConnection(connectionId, scope),
         awaitClearance: () =>
           waitForManagedRemoteClearance(transport!.target, record.correlationId, {
             requireTerminal: record.phase === 'launching'
           }),
+        openDials: () => managedConnectionUpdateGate.openDials(connectionId, recoveryCorrelation),
         afterClearance: async () => {
           await transport!.close()
           transport = null
@@ -11344,29 +11348,13 @@ async function recoverManagedSshUpdate(record) {
               ? ensureManagedSshBackendAtKey(record.source, scope.profile, scope.key, recoveryCorrelation, 'profile')
               : ensureManagedSshBackend(record.source, scope.profile, recoveryCorrelation),
         completeRecovery: async () => clearManagedSshRecovery(connectionId, record.correlationId),
-        recordFailedAttempt: async next => recordManagedSshRecoveryAttempt(connectionId, record.correlationId, next)
+        recordFailedAttempt: async (next, remaining) =>
+          recordManagedSshRecoveryAttempt(connectionId, record.correlationId, next, remaining)
       })
 
-      const unrestored = record.scopes
-        .filter((_scope, index) => results[index]?.status === 'rejected')
-        .map(scope => scope.profile)
+      const summary = { attempts, connectionId, disposition, outcomes, scopes: record.scopes }
 
-      if (disposition === 'complete') {
-        sshRememberLog(
-          `[ssh-update] restored ${record.scopes.length} scope(s) from durable recovery for ${connectionId}`
-        )
-      } else if (disposition === 'abandon') {
-        sshRememberLog(
-          `[ssh-update] durable recovery for ${connectionId} stopped after ${attempts} attempt(s); ` +
-            `connection released with ${unrestored.length} scope(s) not restored (${unrestored.join(', ')}). ` +
-            'Reconnecting starts them again.'
-        )
-      } else {
-        sshRememberLog(
-          `[ssh-update] durable recovery for ${connectionId} left ${unrestored.length} scope(s) pending ` +
-            `(attempt ${attempts} of ${MAX_MANAGED_SSH_RECOVERY_ATTEMPTS}); will retry next launch`
-        )
-      }
+      managedSshRecoveryLogLines(summary).forEach(line => sshRememberLog(line))
     } catch (error: any) {
       sshRememberLog(
         `[ssh-update] durable recovery for ${connectionId} remains pending: ${String(error?.message || error)}`
@@ -18128,13 +18116,18 @@ app.on('before-quit', event => {
     event.preventDefault()
 
     if (!managedUpdateQuitWait) {
-      managedUpdateQuitWait = waitForManagedUpdateOperations(() => [
-        ...managedConnectionUpdates.values(),
-        ...managedConnectionRecoveries.values()
-      ]).finally(() => {
-        managedUpdateQuitWaitDone = true
-        app.quit()
-      })
+      // A recovery can wait minutes on remote clearance; its durable record already
+      // covers a quit, so only a live update transaction holds the quit open.
+      managedUpdateQuitWait = waitForManagedUpdateOperations(() => managedConnectionUpdates.values())
+        .then(() =>
+          waitForManagedUpdateOperations(() => managedConnectionRecoveries.values(), {
+            timeoutMs: MANAGED_RECOVERY_QUIT_JOIN_MS
+          })
+        )
+        .finally(() => {
+          managedUpdateQuitWaitDone = true
+          app.quit()
+        })
     }
 
     return

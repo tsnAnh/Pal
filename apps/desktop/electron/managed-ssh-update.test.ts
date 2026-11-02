@@ -13,10 +13,12 @@ import {
   buildWindowsManagedUpdateLaunch,
   fenceManagedSshBootstrapPublication,
   joinManagedUpdatesForApply,
+  MANAGED_SSH_RESTORE_CONCURRENCY,
   ManagedConnectionUpdateGate,
   managedSshDrainBlocker,
   managedSshRecoveryDisposition,
   managedSshRecoveryScopes,
+  managedSshScopeBelongsToConnection,
   managedSshScopeRole,
   managedSshTokenPersistencePlan,
   managedSshUpdateAllRow,
@@ -112,6 +114,219 @@ test('inactive SSH crash recovery keeps ordinary dials fenced until positive cle
   assert.equal(restoreCalls, 0)
   assert.equal(journalCleared, true)
   assert.doesNotThrow(() => relaunchedGate.assertCanDial('homelab'))
+})
+
+function profileMissingError(profile: string) {
+  return Object.assign(new Error(`The remote Hermes profile '${profile}' does not exist.`), {
+    isSshBootstrap: true,
+    sshError: 'remote-profile-missing'
+  })
+}
+
+const PROFILES = ['default', 'faker-kit', 'chief', 'dr-eggbot', 'charmeji']
+
+test('scopes whose remote profile is gone are obsolete: recovery completes without recording an attempt', async () => {
+  const gone = new Set(['chief', 'dr-eggbot', 'charmeji'])
+  const restored: string[] = []
+  let recordedAttempts: null | number = null
+  let cleared = false
+
+  const outcome = await recoverManagedSshScopes({
+    scopes: PROFILES.map(profile => ({ profile })),
+    awaitClearance: async () => ({ exitCode: null, receipt: null }),
+    restoreScope: async scope => {
+      if (gone.has(scope.profile)) {
+        throw profileMissingError(scope.profile)
+      }
+
+      restored.push(scope.profile)
+    },
+    recordFailedAttempt: async next => {
+      recordedAttempts = next
+    },
+    completeRecovery: async () => {
+      cleared = true
+    }
+  })
+
+  assert.equal(outcome.disposition, 'complete')
+  assert.equal(outcome.attempts, 0)
+  assert.equal(recordedAttempts, null)
+  assert.equal(cleared, true)
+  assert.deepEqual(restored, ['default', 'faker-kit'])
+  assert.deepEqual(outcome.outcomes, ['restored', 'restored', 'obsolete', 'obsolete', 'obsolete'])
+})
+
+test('a transient restore failure still retries and abandons at the attempt cap, while obsolete scopes drop from the record', async () => {
+  const run = (attempts: number) => {
+    let recorded: null | { attempts: number; scopes: Array<{ profile: string }> } = null
+
+    return recoverManagedSshScopes({
+      attempts,
+      scopes: PROFILES.map(profile => ({ profile })),
+      awaitClearance: async () => ({ exitCode: null, receipt: null }),
+      restoreScope: async scope => {
+        if (scope.profile === 'chief') {
+          throw profileMissingError('chief')
+        }
+
+        if (scope.profile === 'faker-kit') {
+          throw new Error('kex_exchange_identification: Connection reset by peer')
+        }
+      },
+      recordFailedAttempt: async (next, remaining) => {
+        recorded = { attempts: next, scopes: remaining }
+      },
+      completeRecovery: async () => {}
+    }).then(outcome => ({ outcome, recorded }))
+  }
+
+  const first = await run(0)
+
+  assert.equal(first.outcome.disposition, 'retry')
+  assert.equal(first.outcome.attempts, 1)
+  assert.deepEqual(first.recorded, {
+    attempts: 1,
+    scopes: [{ profile: 'default' }, { profile: 'faker-kit' }, { profile: 'dr-eggbot' }, { profile: 'charmeji' }]
+  })
+
+  const last = await run(MAX_MANAGED_SSH_RECOVERY_ATTEMPTS - 1)
+
+  assert.equal(last.outcome.disposition, 'abandon')
+  assert.equal(last.recorded, null)
+})
+
+test('dials are admitted once clearance is proven, before the restores settle', async () => {
+  let durable: string | null = CORRELATION
+  const gate = new ManagedConnectionUpdateGate(id => (id === 'pi' ? durable : null))
+  assert.equal(gate.claim('pi', CORRELATION), true)
+
+  let releaseRestore!: () => void
+  const restoreBlocked = new Promise<void>(resolve => (releaseRestore = resolve))
+  let releaseClearance!: () => void
+  const clearanceBlocked = new Promise<void>(resolve => (releaseClearance = resolve))
+  let restoreStarted!: () => void
+  const started = new Promise<void>(resolve => (restoreStarted = resolve))
+
+  const recovery = recoverManagedSshScopes({
+    scopes: [{ profile: 'default' }],
+    awaitClearance: async () => {
+      await clearanceBlocked
+
+      return { exitCode: null, receipt: null }
+    },
+    openDials: () => gate.openDials('pi', CORRELATION),
+    restoreScope: async () => {
+      restoreStarted()
+      await restoreBlocked
+    },
+    completeRecovery: async () => {
+      durable = null
+    }
+  })
+
+  await Promise.resolve()
+  assert.throws(() => gate.assertCanDial('pi'), /paused/)
+  releaseClearance()
+  await started
+  assert.doesNotThrow(() => gate.assertCanDial('pi'))
+  assert.equal(gate.owner('pi'), CORRELATION)
+  assert.throws(() => gate.assertCanMutate('pi'), /edited or removed/)
+  assert.equal(gate.claim('pi', '22345678-1234-4678-9234-567812345678'), false)
+
+  releaseRestore()
+  await recovery
+  gate.release('pi', CORRELATION)
+  assert.doesNotThrow(() => gate.assertCanMutate('pi'))
+})
+
+test('openDials only honors the claim owner and is reset by release', () => {
+  const gate = new ManagedConnectionUpdateGate(() => CORRELATION)
+
+  gate.claim('pi', CORRELATION)
+  gate.openDials('pi', '22345678-1234-4678-9234-567812345678')
+  assert.throws(() => gate.assertCanDial('pi'), /paused/)
+  gate.openDials('pi', CORRELATION)
+  assert.doesNotThrow(() => gate.assertCanDial('pi'))
+  gate.release('pi', CORRELATION)
+  assert.throws(() => gate.assertCanDial('pi'), /paused/)
+})
+
+test('restore concurrency is capped and results stay in scope order', async () => {
+  const total = MANAGED_SSH_RESTORE_CONCURRENCY * 4 + 1
+  const scopes = Array.from({ length: total }, (_, index) => ({ profile: `p${index}` }))
+  let active = 0
+  let peak = 0
+
+  const outcome = await recoverManagedSshScopes({
+    scopes,
+    awaitClearance: async () => ({ exitCode: null, receipt: null }),
+    restoreScope: async scope => {
+      active += 1
+      peak = Math.max(peak, active)
+      await new Promise(resolve => setTimeout(resolve, (total - Number(scope.profile.slice(1))) % 5))
+      active -= 1
+
+      if (scope.profile === 'p4') {
+        throw new Error('transient')
+      }
+
+      return scope.profile
+    },
+    recordFailedAttempt: async () => {},
+    completeRecovery: async () => {}
+  })
+
+  assert.equal(peak, MANAGED_SSH_RESTORE_CONCURRENCY)
+  assert.equal(outcome.results.length, total)
+
+  outcome.results.forEach((result, index) => {
+    if (index === 4) {
+      assert.equal(result.status, 'rejected')
+    } else {
+      assert.deepEqual(result, { status: 'fulfilled', value: `p${index}` })
+    }
+  })
+})
+
+test('scopes captured from another connection are neither captured nor restored', async () => {
+  assert.equal(managedSshScopeBelongsToConnection('pi', { key: 'conn:pi::chief' }), true)
+  assert.equal(managedSshScopeBelongsToConnection('pi', { key: 'chief' }), true)
+  assert.equal(managedSshScopeBelongsToConnection('pi', { key: '' }), true)
+  assert.equal(managedSshScopeBelongsToConnection('pi', { key: 'conn:local::chief' }), false)
+
+  assert.equal(
+    managedSshScopeRole({
+      connectionId: 'pi',
+      key: 'conn:local::chief',
+      prefix: 'conn:pi::',
+      routeConnectionId: 'pi'
+    }),
+    null
+  )
+
+  const restored: string[] = []
+  let cleared = false
+
+  const outcome = await recoverManagedSshScopes({
+    scopes: [
+      { key: 'conn:pi::default', profile: 'default' },
+      { key: 'conn:local::chief', profile: 'conn:local::chief' }
+    ],
+    ownsScope: scope => managedSshScopeBelongsToConnection('pi', scope),
+    awaitClearance: async () => ({ exitCode: null, receipt: null }),
+    restoreScope: async scope => {
+      restored.push(scope.key)
+    },
+    completeRecovery: async () => {
+      cleared = true
+    }
+  })
+
+  assert.deepEqual(restored, ['conn:pi::default'])
+  assert.deepEqual(outcome.outcomes, ['restored', 'foreign'])
+  assert.equal(outcome.disposition, 'complete')
+  assert.equal(cleared, true)
 })
 
 test('durable recovery disposition is bounded once the remote install is clear', () => {

@@ -14,6 +14,7 @@
  * by main.ts.
  */
 
+import { parseBackendScopeKey } from './connection-registry'
 import { expandRemotePath, shq } from './remote-lifecycle'
 import { REMOTE_MARKER_JUDGE_PY } from './remote-update-marker-programs'
 import { encodedPowerShell, powerShellCommand, psLiteral } from './windows-remote-lifecycle'
@@ -26,6 +27,9 @@ const RECEIPT_GRACE_MS = 15_000
 // Durable recovery retries a scope that failed to restore on each launch, but
 // only this many times: after that the journal stops fencing the connection.
 const MAX_MANAGED_SSH_RECOVERY_ATTEMPTS = 3
+
+// Each restore opens its own SSH control master; an unbounded fan-out trips sshd MaxStartups.
+const MANAGED_SSH_RESTORE_CONCURRENCY = 3
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 
 type ManagedUpdateOutcome = 'updated' | 'update-failed' | 'restore-failed' | 'update-and-restore-failed' | 'refused'
@@ -171,11 +175,54 @@ function managedSshScopeRole(input: {
     return input.state.primaryRegistryScope === true ? 'primary' : 'pool'
   }
 
-  if (input.key.startsWith(input.prefix) || input.routeConnectionId === input.connectionId) {
+  if (input.key.startsWith(input.prefix)) {
     return 'pool'
   }
 
-  return null
+  // A composite key names its owner; a route that falls through to this
+  // connection for an unrelated scope (e.g. `conn:local::x`) does not own it.
+  if (!managedSshScopeBelongsToConnection(input.connectionId, input)) {
+    return null
+  }
+
+  return input.routeConnectionId === input.connectionId ? 'pool' : null
+}
+
+function managedSshScopeBelongsToConnection(connectionId: string, scope: { key: string }): boolean {
+  const owner = parseBackendScopeKey(scope.key).connectionId
+
+  return owner === null || owner === connectionId
+}
+
+function isManagedScopeObsoleteError(error: unknown): boolean {
+  const code = error as { kind?: unknown; sshError?: unknown } | null | undefined
+
+  return code?.sshError === 'remote-profile-missing' || code?.kind === 'remote-profile-missing'
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  run: (item: T, index: number) => Promise<R>
+): Promise<PromiseSettledResult<R>[]> {
+  const results = new Array<PromiseSettledResult<R>>(items.length)
+  let next = 0
+
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++
+
+      try {
+        results[index] = { status: 'fulfilled', value: await run(items[index], index) }
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason }
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+
+  return results
 }
 
 type ManagedSshRecoveryScope = {
@@ -1134,6 +1181,8 @@ async function joinManagedUpdatesForApply(
   }
 }
 
+type ManagedSshScopeRestoreOutcome = 'failed' | 'foreign' | 'obsolete' | 'restored'
+
 async function recoverManagedSshScopes<TScope>(deps: {
   afterClearance?: () => Promise<void>
   // Failed attempts already recorded in the journal, not counting this one.
@@ -1141,18 +1190,49 @@ async function recoverManagedSshScopes<TScope>(deps: {
   awaitClearance: () => Promise<null | Pick<RemoteUpdateObservation, 'exitCode' | 'receipt'> | void>
   completeRecovery: () => Promise<void>
   maxAttempts?: number
-  recordFailedAttempt?: (attempts: number) => Promise<void>
+  // Called once clearance is proven: the mutator is gone, so ordinary dials may proceed.
+  openDials?: () => void
+  // Scopes keyed for another connection were captured in error and are dropped.
+  ownsScope?: (scope: TScope) => boolean
+  // `remaining` is the scope list worth retrying: restored-or-failed, never obsolete or foreign.
+  recordFailedAttempt?: (attempts: number, remaining: TScope[]) => Promise<void>
   restoreScope: (scope: TScope) => Promise<unknown>
   scopes: TScope[]
 }): Promise<{
   attempts: number
   disposition: ManagedSshRecoveryDisposition
+  outcomes: ManagedSshScopeRestoreOutcome[]
   results: PromiseSettledResult<unknown>[]
 }> {
   const clearance = await deps.awaitClearance()
+  deps.openDials?.()
   await deps.afterClearance?.()
-  const results = await Promise.allSettled(deps.scopes.map(scope => deps.restoreScope(scope)))
-  const restoreFailures = results.filter(result => result.status === 'rejected').length
+  const owned = deps.scopes.map(scope => deps.ownsScope?.(scope) ?? true)
+  const restorable = deps.scopes.filter((_scope, index) => owned[index])
+
+  const restored = await mapWithConcurrency(restorable, MANAGED_SSH_RESTORE_CONCURRENCY, scope =>
+    deps.restoreScope(scope)
+  )
+
+  let cursor = 0
+
+  const results: PromiseSettledResult<unknown>[] = owned.map(isOwned =>
+    isOwned ? restored[cursor++] : { status: 'fulfilled', value: undefined }
+  )
+
+  const outcomes = results.map((result, index): ManagedSshScopeRestoreOutcome => {
+    if (!owned[index]) {
+      return 'foreign'
+    }
+
+    if (result.status === 'fulfilled') {
+      return 'restored'
+    }
+
+    return isManagedScopeObsoleteError(result.reason) ? 'obsolete' : 'failed'
+  })
+
+  const restoreFailures = outcomes.filter(outcome => outcome === 'failed').length
   const attempts = (deps.attempts ?? 0) + (restoreFailures > 0 ? 1 : 0)
 
   const disposition = managedSshRecoveryDisposition({
@@ -1163,7 +1243,10 @@ async function recoverManagedSshScopes<TScope>(deps: {
   })
 
   if (disposition === 'retry') {
-    await deps.recordFailedAttempt?.(attempts)
+    await deps.recordFailedAttempt?.(
+      attempts,
+      deps.scopes.filter((_scope, index) => outcomes[index] === 'restored' || outcomes[index] === 'failed')
+    )
   } else {
     // This intentionally runs for an empty scope list. An inactive connection
     // still journals the detached mutator so a crash/relaunch remains fenced;
@@ -1171,7 +1254,58 @@ async function recoverManagedSshScopes<TScope>(deps: {
     await deps.completeRecovery()
   }
 
-  return { attempts, disposition, results }
+  return { attempts, disposition, outcomes, results }
+}
+
+function managedSshRecoveryLogLines(input: {
+  attempts: number
+  connectionId: string
+  disposition: ManagedSshRecoveryDisposition
+  outcomes: ManagedSshScopeRestoreOutcome[]
+  scopes: ManagedSshRecoveryScope[]
+}): string[] {
+  const { attempts, connectionId, disposition, outcomes } = input
+
+  const named = (outcome: ManagedSshScopeRestoreOutcome, label: (scope: ManagedSshRecoveryScope) => string) =>
+    input.scopes.filter((_scope, index) => outcomes[index] === outcome).map(label)
+
+  const obsolete = named('obsolete', scope => scope.key || scope.profile)
+  const foreign = named('foreign', scope => scope.key || scope.profile)
+  const unrestored = named('failed', scope => scope.profile)
+  const lines: string[] = []
+
+  if (obsolete.length > 0) {
+    lines.push(
+      `[ssh-update] dropped ${obsolete.length} obsolete scope(s) for ${connectionId}; ` +
+        `their remote profile no longer exists (${obsolete.join(', ')})`
+    )
+  }
+
+  if (foreign.length > 0) {
+    lines.push(
+      `[ssh-update] dropped ${foreign.length} scope(s) for ${connectionId} that belong to another connection (${foreign.join(', ')})`
+    )
+  }
+
+  if (disposition === 'complete') {
+    lines.push(
+      `[ssh-update] restored ${outcomes.filter(outcome => outcome === 'restored').length} scope(s) ` +
+        `from durable recovery for ${connectionId}`
+    )
+  } else if (disposition === 'abandon') {
+    lines.push(
+      `[ssh-update] durable recovery for ${connectionId} stopped after ${attempts} attempt(s); ` +
+        `connection released with ${unrestored.length} scope(s) not restored (${unrestored.join(', ')}). ` +
+        'Reconnecting starts them again.'
+    )
+  } else {
+    lines.push(
+      `[ssh-update] durable recovery for ${connectionId} left ${unrestored.length} scope(s) pending ` +
+        `(attempt ${attempts} of ${MAX_MANAGED_SSH_RECOVERY_ATTEMPTS}); will retry next launch`
+    )
+  }
+
+  return lines
 }
 
 async function fenceManagedSshBootstrapPublication<T>(deps: {
@@ -1211,6 +1345,7 @@ async function waitForManagedSshBootstrapFence(
 
 class ManagedConnectionUpdateGate {
   private claims = new Map<string, string>()
+  private dialsOpen = new Set<string>()
 
   constructor(private readonly durableOwner: (connectionId: string) => string | null = () => null) {}
 
@@ -1233,11 +1368,27 @@ class ManagedConnectionUpdateGate {
 
     if (this.claims.get(id) === correlationId) {
       this.claims.delete(id)
+      this.dialsOpen.delete(id)
+    }
+  }
+
+  // Positive clearance means the remote mutator is gone, so only the retry of
+  // failed scopes remains fenced. Dials resume; edits and removal stay blocked.
+  openDials(connectionId: string, correlationId: string): void {
+    const id = String(connectionId || '').trim()
+
+    if (this.claims.get(id) === correlationId) {
+      this.dialsOpen.add(id)
     }
   }
 
   assertCanDial(connectionId: string, correlationId = ''): void {
     const id = String(connectionId || '').trim()
+
+    if (this.dialsOpen.has(id)) {
+      return
+    }
+
     const owner = this.claims.get(id) || this.durableOwner(id)
 
     if (owner && owner !== correlationId) {
@@ -1278,15 +1429,19 @@ export {
   DEFAULT_REMOTE_UPDATE_TIMEOUT_MS,
   executeManagedRemoteUpdate,
   fenceManagedSshBootstrapPublication,
+  isManagedScopeObsoleteError,
   joinManagedUpdatesForApply,
   launchManagedRemoteUpdate,
+  MANAGED_SSH_RESTORE_CONCURRENCY,
   ManagedConnectionUpdateGate,
   type ManagedConnectionUpdateResult,
   managedSshDrainBlocker,
   managedSshRecoveryDisposition,
+  managedSshRecoveryLogLines,
   type ManagedSshRecoveryScope,
   managedSshRecoveryScopes,
   type ManagedSshScope,
+  managedSshScopeBelongsToConnection,
   managedSshScopeRole,
   managedSshTokenPersistencePlan,
   managedSshUpdateAllRow,

@@ -51,3 +51,18 @@ test('scrapeReadyPort keeps the generic spawn failure for other exits', async ()
     }
   )
 })
+
+test('scrapeReadyPort reports a missing remote profile without waiting for the ready timeout', async () => {
+  const ssh = logSsh("Error: Profile 'operator' does not exist. Create it with: hermes profile create operator\n")
+  const started = Date.now()
+
+  await assert.rejects(
+    () => scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 60_000 }),
+    (err: any) => {
+      assert.equal(err.kind, 'remote-profile-missing')
+
+      return true
+    }
+  )
+  assert.ok(Date.now() - started < 5_000)
+})

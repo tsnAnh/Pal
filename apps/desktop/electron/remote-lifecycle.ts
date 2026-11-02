@@ -1267,13 +1267,15 @@ async function scrapeReadyPort(ssh, logPath, { timeoutMs = resolveReadyTimeoutMs
       tail = ''
     }
 
+    // The spawn path passes no isAlive (the wrapper pid exits early), so the
+    // CLI's fatal line is what ends a missing-profile boot before the ready timeout.
+    const missingProfile = remoteProfileMissingError(tail)
+
+    if (missingProfile) {
+      throw missingProfile
+    }
+
     if (isAlive && !(await isAlive())) {
-      const cause = remoteProfileMissingError(tail)
-
-      if (cause) {
-        throw cause
-      }
-
       const err: any = new Error('Remote dashboard process exited before announcing its port.')
       err.kind = 'spawn-failed'
       throw err
