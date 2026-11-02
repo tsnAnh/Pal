@@ -22,7 +22,8 @@ test('scrapeReadyPort explains a missing remote profile', async () => {
     () =>
       scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), {
         timeoutMs: 1000,
-        isAlive: async () => false
+        isAlive: async () => false,
+        profile: 'operator'
       }),
     (err: any) => {
       assert.equal(err.kind, 'remote-profile-missing')
@@ -32,6 +33,51 @@ test('scrapeReadyPort explains a missing remote profile', async () => {
 
       return true
     }
+  )
+})
+
+test('scrapeReadyPort normalizes the requested profile the way the CLI does', async () => {
+  const ssh = logSsh("Error: Profile 'default' does not exist. Create it with: hermes profile create default\n")
+
+  await assert.rejects(
+    () => scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 1000, profile: ' Default ' }),
+    (err: any) => err.kind === 'remote-profile-missing' && err.profile === 'default'
+  )
+})
+
+test("scrapeReadyPort ignores another profile's missing line and still reaches READY", async () => {
+  const ssh = logSsh(
+    "Profile 'chief' does not exist\nError: Profile 'chief' does not exist. Create it with: hermes profile create chief\nHERMES_DASHBOARD_READY port=4242\n"
+  )
+
+  assert.equal(await scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 1000, profile: 'default' }), 4242)
+})
+
+test("scrapeReadyPort times out normally when only another profile's missing line is present", async () => {
+  const ssh = logSsh("Error: Profile 'chief' does not exist. Create it with: hermes profile create chief\n")
+
+  await assert.rejects(
+    () => scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 80, profile: 'default' }),
+    (err: any) => err.kind === 'ready-timeout'
+  )
+})
+
+test('scrapeReadyPort prefers READY over a stale line for the requested profile', async () => {
+  const ssh = logSsh(
+    "Error: Profile 'operator' does not exist. Create it with: hermes profile create operator\nHERMES_DASHBOARD_READY port=4243\n"
+  )
+
+  assert.equal(await scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 1000, profile: 'operator' }), 4243)
+})
+
+test.each([
+  ["lowercase", "error: profile 'operator' does not exist. create it with: hermes profile create operator\n"],
+  ["indented", "  Error: Profile 'operator' does not exist. Create it with: hermes profile create operator\n"],
+  ["prefixed", "2026-11-02 gateway: Error: Profile 'operator' does not exist. Create it with: hermes profile create operator\n"]
+])('scrapeReadyPort does not match a %s variant of the missing-profile line', async (_label, log) => {
+  await assert.rejects(
+    () => scrapeReadyPort(logSsh(log), spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 80, profile: 'operator' }),
+    (err: any) => err.kind === 'ready-timeout'
   )
 })
 
@@ -57,7 +103,7 @@ test('scrapeReadyPort reports a missing remote profile without waiting for the r
   const started = Date.now()
 
   await assert.rejects(
-    () => scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 60_000 }),
+    () => scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 60_000, profile: 'operator' }),
     (err: any) => {
       assert.equal(err.kind, 'remote-profile-missing')
 

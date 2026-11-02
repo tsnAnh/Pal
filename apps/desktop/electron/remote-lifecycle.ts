@@ -1229,21 +1229,29 @@ async function remoteSupportsSshOwnership(ssh, hermesPath) {
     .endsWith('YES')
 }
 
-function remoteProfileMissingError(output) {
-  const match = String(output || '').match(
-    /Error: Profile ['"]([^'"]+)['"] does not exist\.?(?: Create it with: ([^\n]+))?/i
-  )
+// hermes_cli/main.py prints `Error: {FileNotFoundError}` whose text comes from
+// profiles._missing_profile_error; anchoring to the whole line keeps a runtime
+// log line about another profile (gateway, profile_identity) from matching.
+const PROFILE_MISSING_LINE_RE =
+  /^Error: Profile '([^']+)' does not exist\. Create it with: (hermes profile create [^\s']+)\r?$/m
+
+function remoteProfileMissingError(output, requestedProfile) {
+  const match = PROFILE_MISSING_LINE_RE.exec(String(output || ''))
 
   if (!match) {
     return null
   }
 
-  const profile = match[1]
-  const createCommand = match[2]?.trim()
+  const profile = backendProfileArg(match[1])
+  const requested = backendProfileArg(requestedProfile)
+
+  if (!profile || profile !== requested) {
+    return null
+  }
 
   const err: any = new Error(
     `The remote Hermes profile '${profile}' does not exist. ` +
-      `Select an existing remote profile${createCommand ? ` or create it with: ${createCommand}` : '.'}`
+      `Select an existing remote profile or create it with: ${match[2].trim()}`
   )
 
   err.kind = 'remote-profile-missing'
@@ -1252,7 +1260,11 @@ function remoteProfileMissingError(output) {
   return err
 }
 
-async function scrapeReadyPort(ssh, logPath, { timeoutMs = resolveReadyTimeoutMs(), isAlive, signal }: any = {}) {
+async function scrapeReadyPort(
+  ssh,
+  logPath,
+  { timeoutMs = resolveReadyTimeoutMs(), isAlive, signal, profile }: any = {}
+) {
   const deadline = Date.now() + timeoutMs
   const remoteLog = expandRemotePath(logPath)
 
@@ -1267,9 +1279,15 @@ async function scrapeReadyPort(ssh, logPath, { timeoutMs = resolveReadyTimeoutMs
       tail = ''
     }
 
+    const m = READY_RE.exec(String(tail || ''))
+
+    if (m) {
+      return parseInt(m[1], 10)
+    }
+
     // The spawn path passes no isAlive (the wrapper pid exits early), so the
-    // CLI's fatal line is what ends a missing-profile boot before the ready timeout.
-    const missingProfile = remoteProfileMissingError(tail)
+    // CLI's fatal line for the requested profile ends the boot before the ready timeout.
+    const missingProfile = remoteProfileMissingError(tail, profile)
 
     if (missingProfile) {
       throw missingProfile
@@ -1279,12 +1297,6 @@ async function scrapeReadyPort(ssh, logPath, { timeoutMs = resolveReadyTimeoutMs
       const err: any = new Error('Remote dashboard process exited before announcing its port.')
       err.kind = 'spawn-failed'
       throw err
-    }
-
-    const m = READY_RE.exec(String(tail || ''))
-
-    if (m) {
-      return parseInt(m[1], 10)
     }
 
     await new Promise(r => setTimeout(r, READY_POLL_INTERVAL_MS))
@@ -1734,6 +1746,7 @@ async function connect(deps) {
     // requests verify the daemon through the established connection.
     remotePort = await scrapeReadyPort(ssh, logPath, {
       timeoutMs: readyTimeoutMs,
+      profile,
       signal
     })
     assertBootstrapNotSuperseded(signal)

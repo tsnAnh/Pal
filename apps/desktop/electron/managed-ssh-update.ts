@@ -220,7 +220,7 @@ async function mapWithConcurrency<T, R>(
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  await Promise.all(Array.from({ length: Math.min(Math.max(1, limit), items.length) }, worker))
 
   return results
 }
@@ -1181,6 +1181,69 @@ async function joinManagedUpdatesForApply(
   }
 }
 
+type ManagedSshRecoveryRecordLike = { connectionId: string; correlationId: string; [key: string]: unknown }
+
+function replaceManagedSshRecoveryRecord<T extends ManagedSshRecoveryRecordLike>(records: T[], record: T): T[] {
+  return [...records.filter(existing => existing.connectionId !== record.connectionId), record]
+}
+
+function markManagedSshRecoveryCleared<T extends ManagedSshRecoveryRecordLike>(
+  records: T[],
+  connectionId: string,
+  correlationId: string,
+  clearedAt: string
+): T[] {
+  return records.map(record =>
+    record.connectionId === connectionId && record.correlationId === correlationId && !record.clearedAt
+      ? { ...record, clearedAt }
+      : record
+  )
+}
+
+function applyManagedSshRecoveryAttempt<T extends ManagedSshRecoveryRecordLike>(
+  records: T[],
+  connectionId: string,
+  correlationId: string,
+  attempts: number,
+  scopes: unknown[]
+): T[] {
+  return records.map(record =>
+    record.connectionId === connectionId && record.correlationId === correlationId
+      ? { ...record, attempts, scopes }
+      : record
+  )
+}
+
+function managedSshRecoveryRecordFor<T extends ManagedSshRecoveryRecordLike>(
+  records: T[],
+  connectionId: string
+): T | undefined {
+  return records.find(record => record.connectionId === connectionId)
+}
+
+function openManagedSshRecoveryDials(
+  gate: ManagedConnectionUpdateGate,
+  connectionId: string,
+  correlationId: string,
+  io: { log: (line: string) => void; read: () => any[]; write: (records: any[]) => void }
+): void {
+  gate.openDials(connectionId, correlationId)
+
+  try {
+    io.write(markManagedSshRecoveryCleared(io.read(), connectionId, correlationId, new Date().toISOString()))
+  } catch (error: any) {
+    io.log(`[ssh-update] could not journal clearance for ${connectionId}: ${String(error?.message || error)}`)
+  }
+}
+
+function managedSshRewrapBootstrapError(error: { kind?: string; message: string }) {
+  const wrapped = new Error(error.message) as Error & { isSshBootstrap: boolean; sshError: string }
+  wrapped.sshError = error.kind || 'unknown'
+  wrapped.isSshBootstrap = true
+
+  return wrapped
+}
+
 type ManagedSshScopeRestoreOutcome = 'failed' | 'foreign' | 'obsolete' | 'restored'
 
 async function recoverManagedSshScopes<TScope>(deps: {
@@ -1190,6 +1253,8 @@ async function recoverManagedSshScopes<TScope>(deps: {
   awaitClearance: () => Promise<null | Pick<RemoteUpdateObservation, 'exitCode' | 'receipt'> | void>
   completeRecovery: () => Promise<void>
   maxAttempts?: number
+  // True while the app is quitting: in-flight restores then reject for shutdown, not for the scope.
+  isAborted?: () => boolean
   // Called once clearance is proven: the mutator is gone, so ordinary dials may proceed.
   openDials?: () => void
   // Scopes keyed for another connection were captured in error and are dropped.
@@ -1199,6 +1264,7 @@ async function recoverManagedSshScopes<TScope>(deps: {
   restoreScope: (scope: TScope) => Promise<unknown>
   scopes: TScope[]
 }): Promise<{
+  aborted: boolean
   attempts: number
   disposition: ManagedSshRecoveryDisposition
   outcomes: ManagedSshScopeRestoreOutcome[]
@@ -1219,6 +1285,16 @@ async function recoverManagedSshScopes<TScope>(deps: {
   const results: PromiseSettledResult<unknown>[] = owned.map(isOwned =>
     isOwned ? restored[cursor++] : { status: 'fulfilled', value: undefined }
   )
+
+  if (deps.isAborted?.()) {
+    return {
+      aborted: true,
+      attempts: deps.attempts ?? 0,
+      disposition: 'retry',
+      outcomes: results.map((_result, index) => (owned[index] ? 'failed' : 'foreign')),
+      results
+    }
+  }
 
   const outcomes = results.map((result, index): ManagedSshScopeRestoreOutcome => {
     if (!owned[index]) {
@@ -1254,10 +1330,11 @@ async function recoverManagedSshScopes<TScope>(deps: {
     await deps.completeRecovery()
   }
 
-  return { attempts, disposition, outcomes, results }
+  return { aborted: false, attempts, disposition, outcomes, results }
 }
 
 function managedSshRecoveryLogLines(input: {
+  aborted?: boolean
   attempts: number
   connectionId: string
   disposition: ManagedSshRecoveryDisposition
@@ -1265,6 +1342,10 @@ function managedSshRecoveryLogLines(input: {
   scopes: ManagedSshRecoveryScope[]
 }): string[] {
   const { attempts, connectionId, disposition, outcomes } = input
+
+  if (input.aborted) {
+    return []
+  }
 
   const named = (outcome: ManagedSshScopeRestoreOutcome, label: (scope: ManagedSshRecoveryScope) => string) =>
     input.scopes.filter((_scope, index) => outcomes[index] === outcome).map(label)
@@ -1347,9 +1428,12 @@ class ManagedConnectionUpdateGate {
   private claims = new Map<string, string>()
   private dialsOpen = new Set<string>()
 
-  constructor(private readonly durableOwner: (connectionId: string) => string | null = () => null) {}
+  constructor(
+    private readonly durableOwner: (connectionId: string) => string | null = () => null,
+    private readonly durableCleared: (connectionId: string) => boolean = () => false
+  ) {}
 
-  claim(connectionId: string, correlationId: string): boolean {
+  claim(connectionId: string, correlationId: string, dialsOpen = false): boolean {
     const id = String(connectionId || '').trim()
     const correlation = validateCorrelationId(correlationId)
     const durable = this.durableOwner(id)
@@ -1359,6 +1443,10 @@ class ManagedConnectionUpdateGate {
     }
 
     this.claims.set(id, correlation)
+
+    if (dialsOpen) {
+      this.dialsOpen.add(id)
+    }
 
     return true
   }
@@ -1389,7 +1477,13 @@ class ManagedConnectionUpdateGate {
       return
     }
 
-    const owner = this.claims.get(id) || this.durableOwner(id)
+    const claimed = this.claims.get(id)
+
+    if (!claimed && this.durableCleared(id)) {
+      return
+    }
+
+    const owner = claimed || this.durableOwner(id)
 
     if (owner && owner !== correlationId) {
       const error: any = new Error(`SSH connection "${id}" is paused while its managed update is in progress.`)
@@ -1420,6 +1514,7 @@ class ManagedConnectionUpdateGate {
 }
 
 export {
+  applyManagedSshRecoveryAttempt,
   assertManagedUpdatePreflightClear,
   buildPosixManagedUpdateLaunch,
   buildRemoteUpdateObservationCommand,
@@ -1438,8 +1533,10 @@ export {
   managedSshDrainBlocker,
   managedSshRecoveryDisposition,
   managedSshRecoveryLogLines,
+  managedSshRecoveryRecordFor,
   type ManagedSshRecoveryScope,
   managedSshRecoveryScopes,
+  managedSshRewrapBootstrapError,
   type ManagedSshScope,
   managedSshScopeBelongsToConnection,
   managedSshScopeRole,
@@ -1450,9 +1547,12 @@ export {
   type ManagedUpdateOwedStep,
   type ManagedUpdateReceiptSummary,
   type ManagedUpdateScopeResult,
+  mapWithConcurrency,
   markerIsClear,
+  markManagedSshRecoveryCleared,
   MAX_MANAGED_SSH_RECOVERY_ATTEMPTS,
   observeManagedRemoteUpdate,
+  openManagedSshRecoveryDials,
   parseRemoteUpdateObservation,
   RECEIPT_GRACE_MS,
   recoverManagedSshScopes,
@@ -1460,6 +1560,7 @@ export {
   type RemoteUpdateObservation,
   type RemoteUpdateProof,
   type RemoteUpdateTarget,
+  replaceManagedSshRecoveryRecord,
   runManagedSshUpdate,
   UPDATE_EXIT_INDEPENDENT_HANDOFF,
   validateCorrelationId,

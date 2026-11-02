@@ -356,6 +356,7 @@ import { registerMachineProfile } from './machine-profile'
 import { createMainProcessLagWatchdog } from './main-process-lag-watchdog'
 import { activateWindow, ensureMainWindow, shouldQuitOnLastChatClosed } from './main-window-lifecycle'
 import {
+  applyManagedSshRecoveryAttempt,
   assertManagedUpdatePreflightClear,
   executeManagedRemoteUpdate,
   fenceManagedSshBootstrapPublication,
@@ -363,14 +364,18 @@ import {
   ManagedConnectionUpdateGate,
   managedSshDrainBlocker,
   managedSshRecoveryLogLines,
+  managedSshRecoveryRecordFor,
   managedSshRecoveryScopes,
+  managedSshRewrapBootstrapError,
   managedSshScopeBelongsToConnection,
   managedSshScopeRole,
   managedSshTokenPersistencePlan,
   managedSshUpdateAllRow,
+  openManagedSshRecoveryDials,
   recoverManagedSshScopes,
   refusedManagedSshUpdate,
   type RemoteUpdateTarget,
+  replaceManagedSshRecoveryRecord,
   runManagedSshUpdate,
   validateCorrelationId,
   waitForManagedRemoteClearance,
@@ -9190,7 +9195,8 @@ const desktopInstallationId = loadOrCreateInstallationId(DESKTOP_INSTALLATION_PA
 // mid-transaction so the next launch can restore every drained scope.
 const managedConnectionUpdateGate = new ManagedConnectionUpdateGate(
   connectionId =>
-    readManagedSshRecoveryRecords().find(record => record.connectionId === connectionId)?.correlationId || null
+    managedSshRecoveryRecordFor(readManagedSshRecoveryRecords(), connectionId)?.correlationId || null,
+  connectionId => Boolean(managedSshRecoveryRecordFor(readManagedSshRecoveryRecords(), connectionId)?.clearedAt)
 )
 
 const managedConnectionUpdates = new Map<string, Promise<any>>()
@@ -9309,8 +9315,7 @@ function persistManagedSshRecovery(source, correlationId, scopes) {
   const prefix = backendScopePrefix(source.id)
   const recoveryScopes = managedSshRecoveryScopes(scopes, prefix)
 
-  const records = readManagedSshRecoveryRecords().filter(record => record.connectionId !== source.id)
-  records.push({
+  const records = replaceManagedSshRecoveryRecord(readManagedSshRecoveryRecords(), {
     connectionId: source.id,
     correlationId: validateCorrelationId(correlationId),
     createdAt: new Date().toISOString(),
@@ -9321,6 +9326,7 @@ function persistManagedSshRecovery(source, correlationId, scopes) {
     // credentials after a Settings edit.
     source
   })
+
   writeManagedSshRecoveryRecords(records)
 }
 
@@ -9340,16 +9346,9 @@ function markManagedSshRecoveryLaunching(connectionId, correlationId) {
 }
 
 function recordManagedSshRecoveryAttempt(connectionId, correlationId, attempts, scopes) {
-  const records = readManagedSshRecoveryRecords()
-
-  const index = records.findIndex(
-    record => record.connectionId === connectionId && record.correlationId === correlationId
+  writeManagedSshRecoveryRecords(
+    applyManagedSshRecoveryAttempt(readManagedSshRecoveryRecords(), connectionId, correlationId, attempts, scopes)
   )
-
-  if (index >= 0) {
-    records[index] = { ...records[index], attempts, scopes }
-    writeManagedSshRecoveryRecords(records)
-  }
 }
 
 function clearManagedSshRecovery(connectionId, correlationId) {
@@ -9812,10 +9811,7 @@ async function bootstrapSshConnectionInner(profile, sshConfig, reuseToken, sourc
       }
     }
 
-    const err = new Error(error.message) as any
-    err.sshError = error.kind || 'unknown'
-    err.isSshBootstrap = true
-    throw err
+    throw managedSshRewrapBootstrapError(error)
   }
 
   try {
@@ -11318,7 +11314,7 @@ async function recoverManagedSshUpdate(record) {
 
   const recoveryCorrelation = record.correlationId
 
-  if (!managedConnectionUpdateGate.claim(connectionId, recoveryCorrelation)) {
+  if (!managedConnectionUpdateGate.claim(connectionId, recoveryCorrelation, Boolean(record.clearedAt))) {
     return
   }
 
@@ -11328,7 +11324,7 @@ async function recoverManagedSshUpdate(record) {
     try {
       transport = await openManagedSshUpdateTransport(record.source)
 
-      const { attempts, disposition, outcomes } = await recoverManagedSshScopes<any>({
+      const { aborted, attempts, disposition, outcomes } = await recoverManagedSshScopes<any>({
         attempts: record.attempts ?? 0,
         scopes: record.scopes,
         ownsScope: scope => managedSshScopeBelongsToConnection(connectionId, scope),
@@ -11336,7 +11332,13 @@ async function recoverManagedSshUpdate(record) {
           waitForManagedRemoteClearance(transport!.target, record.correlationId, {
             requireTerminal: record.phase === 'launching'
           }),
-        openDials: () => managedConnectionUpdateGate.openDials(connectionId, recoveryCorrelation),
+        isAborted: () => appQuitting,
+        openDials: () =>
+          openManagedSshRecoveryDials(managedConnectionUpdateGate, connectionId, recoveryCorrelation, {
+            log: sshRememberLog,
+            read: readManagedSshRecoveryRecords,
+            write: writeManagedSshRecoveryRecords
+          }),
         afterClearance: async () => {
           await transport!.close()
           transport = null
@@ -11352,9 +11354,9 @@ async function recoverManagedSshUpdate(record) {
           recordManagedSshRecoveryAttempt(connectionId, record.correlationId, next, remaining)
       })
 
-      const summary = { attempts, connectionId, disposition, outcomes, scopes: record.scopes }
-
-      managedSshRecoveryLogLines(summary).forEach(line => sshRememberLog(line))
+      managedSshRecoveryLogLines({ aborted, attempts, connectionId, disposition, outcomes, scopes: record.scopes }).forEach(
+        line => sshRememberLog(line)
+      )
     } catch (error: any) {
       sshRememberLog(
         `[ssh-update] durable recovery for ${connectionId} remains pending: ${String(error?.message || error)}`

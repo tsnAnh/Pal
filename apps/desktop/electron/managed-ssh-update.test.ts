@@ -8,25 +8,33 @@ import { promisify } from 'node:util'
 import { test } from 'vitest'
 
 import {
+  applyManagedSshRecoveryAttempt,
   buildPosixManagedUpdateLaunch,
   buildRemoteUpdateObservationCommand,
   buildWindowsManagedUpdateLaunch,
   fenceManagedSshBootstrapPublication,
+  isManagedScopeObsoleteError,
   joinManagedUpdatesForApply,
   MANAGED_SSH_RESTORE_CONCURRENCY,
   ManagedConnectionUpdateGate,
   managedSshDrainBlocker,
   managedSshRecoveryDisposition,
+  managedSshRecoveryRecordFor,
   managedSshRecoveryScopes,
+  managedSshRewrapBootstrapError,
   managedSshScopeBelongsToConnection,
   managedSshScopeRole,
   managedSshTokenPersistencePlan,
   managedSshUpdateAllRow,
+  mapWithConcurrency,
+  markManagedSshRecoveryCleared,
   MAX_MANAGED_SSH_RECOVERY_ATTEMPTS,
+  openManagedSshRecoveryDials,
   parseRemoteUpdateObservation,
   RECEIPT_GRACE_MS,
   recoverManagedSshScopes,
   refusedManagedSshUpdate,
+  replaceManagedSshRecoveryRecord,
   runManagedSshUpdate,
   waitForManagedRemoteClearance,
   waitForManagedRemoteUpdate,
@@ -250,6 +258,192 @@ test('openDials only honors the claim owner and is reset by release', () => {
   assert.doesNotThrow(() => gate.assertCanDial('pi'))
   gate.release('pi', CORRELATION)
   assert.throws(() => gate.assertCanDial('pi'), /paused/)
+})
+
+function journalGate(getRecords: () => Array<Record<string, unknown> & { connectionId: string; correlationId: string }>) {
+  return new ManagedConnectionUpdateGate(
+    id => managedSshRecoveryRecordFor(getRecords(), id)?.correlationId ?? null,
+    id => Boolean(managedSshRecoveryRecordFor(getRecords(), id)?.clearedAt)
+  )
+}
+
+test('dials stay open after retry keeps a cleared record, while edits and claims stay fenced', () => {
+  let records = [{ connectionId: 'pi', correlationId: CORRELATION, scopes: [], attempts: 1 }]
+  const gate = journalGate(() => records)
+
+  assert.equal(gate.claim('pi', CORRELATION), true)
+  gate.openDials('pi', CORRELATION)
+  records = markManagedSshRecoveryCleared(records, 'pi', CORRELATION, '2026-11-02T00:00:00.000Z')
+  gate.release('pi', CORRELATION)
+
+  assert.equal(records.length, 1)
+  assert.doesNotThrow(() => gate.assertCanDial('pi'))
+  assert.doesNotThrow(() => gate.assertCanDial('pi', '22345678-1234-4678-9234-567812345678'))
+  assert.throws(() => gate.assertCanMutate('pi'), /edited or removed/)
+  assert.equal(gate.claim('pi', '22345678-1234-4678-9234-567812345678'), false)
+  assert.equal(gate.claim('pi', CORRELATION), true)
+  assert.throws(() => gate.assertCanDial('pi'), /paused/)
+})
+
+test('a record without clearedAt fences dials, and a new update replaces a cleared record with a fresh one', () => {
+  const next = '22345678-1234-4678-9234-567812345678'
+
+  let records: Array<Record<string, unknown> & { connectionId: string; correlationId: string }> = [
+    { connectionId: 'pi', correlationId: CORRELATION }
+  ]
+
+  const gate = journalGate(() => records)
+
+  assert.throws(() => gate.assertCanDial('pi'), /paused/)
+  records = markManagedSshRecoveryCleared(records, 'pi', CORRELATION, '2026-11-02T00:00:00.000Z')
+  assert.doesNotThrow(() => gate.assertCanDial('pi'))
+
+  records = replaceManagedSshRecoveryRecord(records, { connectionId: 'pi', correlationId: next, phase: 'prepared' })
+  assert.equal(records.length, 1)
+  assert.equal(records[0].clearedAt, undefined)
+  assert.throws(() => gate.assertCanDial('pi'), /paused/)
+  assert.doesNotThrow(() => gate.assertCanDial('pi', next))
+})
+
+test('clearance is stamped once and only on the matching record', () => {
+  const other: { clearedAt?: string; connectionId: string; correlationId: string } = {
+    connectionId: 'nas',
+    correlationId: CORRELATION
+  }
+
+  const records = [{ connectionId: 'pi', correlationId: CORRELATION }, other]
+  const stamped = markManagedSshRecoveryCleared(records, 'pi', CORRELATION, 'first')
+
+  assert.equal(stamped[0].clearedAt, 'first')
+  assert.equal(stamped[1], other)
+  assert.equal(markManagedSshRecoveryCleared(stamped, 'pi', CORRELATION, 'second')[0].clearedAt, 'first')
+})
+
+test('opening recovery dials journals clearance, and a failed journal write only logs', () => {
+  const gate = journalGate(() => records)
+  let records: any[] = [{ connectionId: 'pi', correlationId: CORRELATION }]
+  const logs: string[] = []
+  gate.claim('pi', CORRELATION)
+
+  openManagedSshRecoveryDials(gate, 'pi', CORRELATION, {
+    log: line => logs.push(line),
+    read: () => records,
+    write: next => {
+      records = next
+    }
+  })
+  assert.ok(records[0].clearedAt)
+  assert.deepEqual(logs, [])
+
+  openManagedSshRecoveryDials(gate, 'pi', CORRELATION, {
+    log: line => logs.push(line),
+    read: () => records,
+    write: () => {
+      throw new Error('disk full')
+    }
+  })
+  assert.equal(logs.length, 1)
+  assert.doesNotThrow(() => gate.assertCanDial('pi'))
+})
+
+test('quitting mid-restore leaves the journal untouched: no attempt recorded, no completion', async () => {
+  let recorded = false
+  let completed = false
+
+  const outcome = await recoverManagedSshScopes({
+    attempts: 2,
+    isAborted: () => true,
+    scopes: [{ profile: 'default' }, { profile: 'faker-kit' }],
+    awaitClearance: async () => ({ exitCode: null, receipt: null }),
+    restoreScope: async () => {
+      throw new Error('Backend shutdown in progress')
+    },
+    recordFailedAttempt: async () => {
+      recorded = true
+    },
+    completeRecovery: async () => {
+      completed = true
+    }
+  })
+
+  assert.equal(outcome.aborted, true)
+  assert.equal(outcome.attempts, 2)
+  assert.equal(recorded, false)
+  assert.equal(completed, false)
+})
+
+test('a run that is not aborted still records and completes as before', async () => {
+  let completed = false
+
+  const outcome = await recoverManagedSshScopes({
+    isAborted: () => false,
+    scopes: [{ profile: 'default' }],
+    awaitClearance: async () => ({ exitCode: null, receipt: null }),
+    restoreScope: async () => undefined,
+    completeRecovery: async () => {
+      completed = true
+    }
+  })
+
+  assert.equal(outcome.aborted, false)
+  assert.equal(completed, true)
+})
+
+test('a bootstrap error keeps its ssh error code through the rewrap', () => {
+  const wrapped = managedSshRewrapBootstrapError({ kind: 'remote-profile-missing', message: 'gone' })
+
+  assert.equal(wrapped.message, 'gone')
+  assert.equal(wrapped.sshError, 'remote-profile-missing')
+  assert.equal(wrapped.isSshBootstrap, true)
+  assert.equal(managedSshRewrapBootstrapError({ message: 'x' }).sshError, 'unknown')
+  assert.equal(isManagedScopeObsoleteError(wrapped), true)
+})
+
+test('a failed attempt writes a record with obsolete and foreign scopes pruned', async () => {
+  const scopes = [
+    { kind: 'pool', profile: 'default', key: 'conn:pi::default' },
+    { kind: 'pool', profile: 'chief', key: 'conn:pi::chief' },
+    { kind: 'pool', profile: 'x', key: 'conn:local::x' },
+    { kind: 'pool', profile: 'faker-kit', key: 'conn:pi::faker-kit' }
+  ]
+
+  const other = { connectionId: 'nas', correlationId: CORRELATION, scopes: [] }
+  let records: any[] = [{ connectionId: 'pi', correlationId: CORRELATION, scopes, attempts: 0 }, other]
+
+  await recoverManagedSshScopes({
+    scopes,
+    ownsScope: scope => managedSshScopeBelongsToConnection('pi', scope),
+    awaitClearance: async () => ({ exitCode: null, receipt: null }),
+    restoreScope: async scope => {
+      if (scope.profile === 'chief') {
+        throw managedSshRewrapBootstrapError({ kind: 'remote-profile-missing', message: 'gone' })
+      }
+
+      if (scope.profile === 'faker-kit') {
+        throw new Error('Connection reset by peer')
+      }
+    },
+    recordFailedAttempt: async (attempts, remaining) => {
+      records = applyManagedSshRecoveryAttempt(records, 'pi', CORRELATION, attempts, remaining)
+    },
+    completeRecovery: async () => {}
+  })
+
+  assert.equal(records[0].attempts, 1)
+  assert.deepEqual(
+    records[0].scopes.map((scope: { profile: string }) => scope.profile),
+    ['default', 'faker-kit']
+  )
+  assert.equal(records[1], other)
+})
+
+test('mapWithConcurrency still runs every item when the limit is below one', async () => {
+  const results = await mapWithConcurrency([1, 2, 3], 0, async item => item * 2)
+
+  assert.deepEqual(
+    results.map(result => (result.status === 'fulfilled' ? result.value : null)),
+    [2, 4, 6]
+  )
 })
 
 test('restore concurrency is capped and results stay in scope order', async () => {
