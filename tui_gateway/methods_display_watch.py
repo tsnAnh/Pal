@@ -5,7 +5,7 @@ agent — a ``hermes computer-use screen`` takeover from the CLI, a cron worker'
 ``lease.on_change`` only fires in the writing process, so ``methods_display``'s in-process
 listener never sees those; the Desktop's hero tone and pane state stayed stale until the
 pane was reopened. One daemon thread stats every served home's ``bot-desktop/lease.json`` (launch
-home + ``_served_profile_homes``) every 0.5s and broadcasts the SAME ``display.lease`` payload when
+home + every served home) every 0.5s and broadcasts the SAME ``display.lease`` payload when
 the epoch moves. Bodies are rebound onto server.py's globals (method_ctx.bind_module).
 """
 
@@ -36,7 +36,7 @@ def _lease_event_payload(profile_key: str, lease) -> dict:
 
 
 def _watched_lease_homes() -> list[Path]:
-    return [Path(_hermes_home), *_served_profile_homes]
+    return list(_watched_roots(Path(_hermes_home)))
 
 
 def _mtime(path: Path):

@@ -275,6 +275,16 @@ def _settled_mtime(mtime):
     return mtime
 
 
+def _served_sibling_homes() -> tuple[Path, ...]:
+    """Every served profile home besides the launch one: legacy per-RPC hosting plus the canonical runner's."""
+    from tui_gateway import served_homes  # function-local: bodies are rebound onto server.py's globals
+    return tuple(sorted(dict.fromkeys((*_served_profile_homes, *served_homes.snapshot())), key=str))
+
+
+def _watched_roots(launch_home: Path) -> tuple[Path, ...]:
+    return tuple(dict.fromkeys((launch_home, *_served_sibling_homes())))
+
+
 def _sessions_sig():
     """Session-table content across the active and served profile stores.
 
@@ -285,7 +295,7 @@ def _sessions_sig():
     """
     return tuple(
         _session_db_content_sig(root / "state.db")
-        for root in (_watcher_home(), *_served_profile_homes)
+        for root in _watched_roots(_watcher_home())
     )
 
 
@@ -296,7 +306,7 @@ def _projects_sig():
     signal, exactly like state.db (#53046, #56757)."""
     return _files_sig(
         root / name
-        for root in (_watcher_home(), *_served_profile_homes)
+        for root in _watched_roots(_watcher_home())
         for name in ("projects.db", "projects.db-wal"))
 
 

@@ -1,0 +1,242 @@
+import Foundation
+import HermesDiagnostics
+import HermesProtocol
+import HermesTransport
+
+public struct RosterSnapshot: Sendable, Equatable {
+    public var profiles: [JSONValue]
+    public var live: [String: BotLiveState]
+    public var receivedAt: Date
+
+    public init(profiles: [JSONValue], live: [String: BotLiveState], receivedAt: Date) {
+        self.profiles = profiles
+        self.live = live
+        self.receivedAt = receivedAt
+    }
+}
+
+public enum RosterFeedUpdate: Sendable, Equatable {
+    case link(GatewayLink)
+    case snapshot(RosterSnapshot)
+}
+
+public struct RosterFeedTiming: Sendable {
+    public var backoff: [Duration]
+    public var offlineAfterFailures: Int
+    public var idleRefresh: Duration
+    public var busyRefresh: Duration
+    public var pingInterval: Duration
+
+    public init(
+        backoff: [Duration] = [.milliseconds(500), .seconds(1), .seconds(2), .seconds(4), .seconds(8)],
+        offlineAfterFailures: Int = 2,
+        idleRefresh: Duration = .seconds(60),
+        busyRefresh: Duration = .seconds(3),
+        pingInterval: Duration = .seconds(20)
+    ) {
+        self.backoff = backoff.isEmpty ? [.seconds(1)] : backoff
+        self.offlineAfterFailures = offlineAfterFailures
+        self.idleRefresh = idleRefresh
+        self.busyRefresh = busyRefresh
+        self.pingInterval = pingInterval
+    }
+
+    public static let standard = RosterFeedTiming()
+}
+
+public actor RosterLiveFeed {
+    public nonisolated let updates: AsyncStream<RosterFeedUpdate>
+
+    static let changeEvents: Set<String> = ["sessions.changed", "platforms.changed"]
+
+    private let continuation: AsyncStream<RosterFeedUpdate>.Continuation
+    private let connect: @Sendable () async throws -> GatewayConnection
+    private let timing: RosterFeedTiming
+    private let diagnostics: Diagnostics
+    private let clock = ContinuousClock()
+    private var runTask: Task<Void, Never>?
+    private var activeTrigger: AsyncStream<Void>.Continuation?
+    private var backoffSleep: Task<Void, Never>?
+    private var link: GatewayLink?
+    private var busy = false
+    private var lastRefresh: ContinuousClock.Instant
+
+    public init(
+        connect: @escaping @Sendable () async throws -> GatewayConnection,
+        timing: RosterFeedTiming = .standard,
+        diagnostics: Diagnostics = .silent
+    ) {
+        (updates, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
+        self.connect = connect
+        self.timing = timing
+        self.diagnostics = diagnostics
+        lastRefresh = clock.now
+    }
+
+    public func start() {
+        guard runTask == nil else { return }
+        runTask = Task { await self.run() }
+    }
+
+    public func stop() {
+        runTask?.cancel()
+        runTask = nil
+        backoffSleep?.cancel()
+        continuation.finish()
+    }
+
+    public func nudge() {
+        activeTrigger?.yield()
+        backoffSleep?.cancel()
+    }
+
+    private func run() async {
+        var attempt = 0
+        var consecutiveFailures = 0
+        while !Task.isCancelled {
+            do {
+                let connection = try await connect()
+                attempt = 0
+                consecutiveFailures = 0
+                publish(link: .connected)
+                await serve(connection)
+                await connection.close()
+                if Task.isCancelled { break }
+                publish(link: .reconnecting)
+            } catch is CancellationError {
+                break
+            } catch {
+                consecutiveFailures += 1
+                diagnostics.info("roster", "gateway dial failed: \(Diagnostics.describe(error))")
+                publish(link: consecutiveFailures >= timing.offlineAfterFailures ? .offline : .reconnecting)
+            }
+            if Task.isCancelled { break }
+            let delay = timing.backoff[min(attempt, timing.backoff.count - 1)]
+            attempt += 1
+            let sleeper = Task<Void, Never> { try? await Task.sleep(for: delay) }
+            backoffSleep = sleeper
+            await sleeper.value
+            backoffSleep = nil
+        }
+    }
+
+    private func serve(_ connection: GatewayConnection) async {
+        let (triggers, trigger) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        activeTrigger = trigger
+        busy = false
+        lastRefresh = clock.now
+        trigger.yield()
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await Self.pump(connection.events, into: trigger) }
+            group.addTask { await self.keepAlive(connection) }
+            group.addTask { await self.refreshLoop(connection, triggers) }
+            group.addTask { await self.ticker(trigger) }
+            await group.next()
+            group.cancelAll()
+        }
+        trigger.finish()
+        activeTrigger = nil
+    }
+
+    private static func pump(_ events: AsyncStream<GatewayEvent>, into trigger: AsyncStream<Void>.Continuation) async {
+        for await event in events where changeEvents.contains(event.type) {
+            trigger.yield()
+        }
+    }
+
+    private func keepAlive(_ connection: GatewayConnection) async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: timing.pingInterval)
+            if Task.isCancelled { return }
+            do {
+                try await connection.ping()
+            } catch is CancellationError {
+                return
+            } catch {
+                diagnostics.info("roster", "gateway ping failed: \(Diagnostics.describe(error))")
+                await connection.abort()
+                return
+            }
+        }
+    }
+
+    private func ticker(_ trigger: AsyncStream<Void>.Continuation) async {
+        let tick = min(timing.busyRefresh, .seconds(1))
+        while !Task.isCancelled {
+            do { try await Task.sleep(for: tick) } catch { return }
+            let interval = busy ? timing.busyRefresh : timing.idleRefresh
+            if clock.now - lastRefresh >= interval { trigger.yield() }
+        }
+    }
+
+    private func refreshLoop(_ connection: GatewayConnection, _ triggers: AsyncStream<Void>) async {
+        for await _ in triggers {
+            if Task.isCancelled { return }
+            await refresh(connection)
+        }
+    }
+
+    private func refresh(_ connection: GatewayConnection) async {
+        do {
+            let result = try await connection.call("profiles.list", params: ["include_sessions": true])
+            let rows = result["profiles"]?.arrayValue ?? []
+            let live = await Self.liveStates(for: rows, on: connection)
+            try Task.checkCancellation()
+            busy = live.values.contains { state in
+                state.sessions.contains { $0 == .working || $0 == .starting || $0 == .waiting }
+            }
+            lastRefresh = clock.now
+            continuation.yield(.snapshot(RosterSnapshot(profiles: rows, live: live, receivedAt: Date())))
+        } catch is CancellationError {
+            return
+        } catch GatewayTransportError.rpc(let error) {
+            diagnostics.warning("roster", "profiles.list refused: \(Diagnostics.describe(error))")
+            lastRefresh = clock.now
+        } catch {
+            diagnostics.info("roster", "refresh failed, dropping socket: \(Diagnostics.describe(error))")
+            await connection.abort()
+        }
+    }
+
+    private static func liveStates(for rows: [JSONValue], on connection: GatewayConnection) async -> [String: BotLiveState] {
+        await withTaskGroup(of: (String, BotLiveState).self) { group in
+            for row in rows {
+                guard let name = row["name"]?.stringValue else { continue }
+                let worker = row["worker_session"]?["last_active"]?.timeIntervalValue
+                let onboarding = row["onboarding_pending"]?.boolValue ?? false
+                group.addTask {
+                    let sessions = await activeSessions(of: name, on: connection)
+                    return (name, BotLiveState(sessions: sessions, workerLastActive: worker, onboardingPending: onboarding))
+                }
+            }
+            var states: [String: BotLiveState] = [:]
+            for await (name, state) in group { states[name] = state }
+            return states
+        }
+    }
+
+    private static func activeSessions(of profile: String, on connection: GatewayConnection) async -> [LiveSessionStatus] {
+        guard let result = try? await connection.call("session.active_list", params: ["profile": .string(profile)]),
+              let rows = result["sessions"]?.arrayValue
+        else { return [] }
+        return rows.map { row in
+            row["status"]?.stringValue.flatMap(LiveSessionStatus.init(rawValue:)) ?? .unknown
+        }
+    }
+
+    private func publish(link next: GatewayLink) {
+        guard link != next else { return }
+        link = next
+        continuation.yield(.link(next))
+    }
+}
+
+extension JSONValue {
+    fileprivate var timeIntervalValue: TimeInterval? {
+        switch self {
+        case .int(let value): TimeInterval(value)
+        case .double(let value): value
+        default: nil
+        }
+    }
+}

@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+
+if [ "${1:-}" != "--inner" ]; then
+  exec "$IOS_DIR/Scripts/e2e-gateway" -- "$IOS_DIR/Scripts/run-ui-e2e" --inner
+fi
+
+ART="${HERMES_UI_E2E_ARTIFACTS:-$IOS_DIR/Artifacts/ui-e2e}"
+OWNER="${HERMES_UI_E2E_OWNER:-ios-roster-chat}"
+UDID="${HERMES_IOS_SIM_UDID:-1447BE57-ADEB-41D7-94AC-D106E772CBCD}"
+PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
+LEDGER="$HOME/.claude/hooks/device-ledger.sh"
+BUNDLE_ID="dev.tsnanh.hermes.bot"
+RUNNER_ID="dev.tsnanh.hermes.bot.uitests.xctrunner"
+BASE_URL="$HERMES_IOS_TEST_BASE_URL"
+PORT="${BASE_URL##*:}"
+CTL_DIR="$(mktemp -d /tmp/hermes-ui-e2e-ctl.XXXXXX)"
+PROBE_TEXT="OFFLINE-PING-7731"
+RESTART_PID=""
+RECORD_PID=""
+WATCHER_PID=""
+BOOTED_BY_US=0
+
+disk_report() {
+  du -sh "$HOME/.android/avd" "$HOME/Library/Developer/CoreSimulator/Devices" "$HOME/Library/Developer/XCTestDevices" 2>&1
+}
+
+stop_pid() {
+  local pid="$1"
+  [ -n "$pid" ] || return 0
+  kill "$pid" 2>/dev/null || return 0
+  for _ in $(seq 20); do kill -0 "$pid" 2>/dev/null || return 0; sleep 0.5; done
+  kill -9 "$pid" 2>/dev/null || true
+}
+
+gateway_listener() {
+  lsof -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null | head -1 || true
+}
+
+kill_gateway() {
+  local pid
+  pid="$(gateway_listener)"
+  [ -n "$pid" ] || return 1
+  stop_pid "$pid"
+  for _ in $(seq 40); do [ -z "$(gateway_listener)" ] && return 0; sleep 0.25; done
+  return 1
+}
+
+start_gateway() {
+  [ -z "$(gateway_listener)" ] || return 1
+  ( cd "$REPO" && HERMES_HOME="$HERMES_IOS_E2E_HOME" exec "$PYTHON" -m hermes_cli.main gateway run >>"$ART/gateway-restart.log" 2>&1 ) &
+  RESTART_PID=$!
+  for _ in $(seq 90); do
+    curl -fs "$BASE_URL/api/auth/providers" >/dev/null 2>&1 && return 0
+    kill -0 "$RESTART_PID" 2>/dev/null || return 1
+    sleep 1
+  done
+  return 1
+}
+
+probe_count() {
+  local db count total=0
+  for db in "$HERMES_IOS_E2E_HOME"/profiles/*/state.db; do
+    [ -f "$db" ] || continue
+    count="$(sqlite3 "file:$db?mode=ro" "SELECT COUNT(*) FROM messages WHERE role='user' AND content LIKE '%$PROBE_TEXT%';")"
+    echo "$db user_messages=$count" >>"$ART/db-count.txt"
+    total=$((total + count))
+  done
+  echo "total=$total" >>"$ART/db-count.txt"
+  [ "$total" = 1 ]
+}
+
+external_turn() {
+  local out="$CTL_DIR/external-$RANDOM.out"
+  "$IOS_DIR/Scripts/gateway-client" submit --profile "$1" --text "$2" --hold 90 >"$out" 2>>"$ART/external-client.log" &
+  client_pid=$!
+  echo "$client_pid" >>"$CTL_DIR/external.pids"
+  for _ in $(seq 120); do
+    grep -q '"admitted"' "$out" 2>/dev/null && {
+      cat "$out" >>"$ART/external-client.log"
+      ( while kill -0 "$client_pid" 2>/dev/null; do sleep 0.1; done; grep '"completed"' "$out" >>"$ART/external-complete.log" ) &
+      return 0
+    }
+    sleep 0.25
+  done
+  return 1
+}
+
+stop_external() {
+  local pid
+  [ -f "$CTL_DIR/external.pids" ] || return 0
+  while read -r pid; do stop_pid "$pid"; done <"$CTL_DIR/external.pids"
+  rm -f "$CTL_DIR/external.pids"
+}
+
+control_loop() {
+  while true; do
+    if [ -f "$CTL_DIR/request" ]; then
+      local command
+      command="$(cat "$CTL_DIR/request")"
+      rm -f "$CTL_DIR/request"
+      local status=ok
+      case "$command" in
+        kill-gateway) kill_gateway || status=fail ;;
+        start-gateway) start_gateway || status=fail ;;
+        count-offline-ping) probe_count || status=fail ;;
+        external-slow-alpha) external_turn bot-alpha "SLOW external turn" || status=fail ;;
+        external-clarify-alpha) external_turn bot-alpha "CLARIFY external question" || status=fail ;;
+        stop-external) stop_external || status=fail ;;
+        *) status=fail ;;
+      esac
+      echo "$command -> $status" >>"$ART/control.log"
+      echo "$status" >"$CTL_DIR/ack.tmp"
+      mv "$CTL_DIR/ack.tmp" "$CTL_DIR/ack"
+    fi
+    sleep 0.2
+  done
+}
+
+cleanup() {
+  set +e
+  [ -n "$WATCHER_PID" ] && kill "$WATCHER_PID" 2>/dev/null
+  stop_external
+  [ -n "$RECORD_PID" ] && kill -INT "$RECORD_PID" 2>/dev/null && wait "$RECORD_PID" 2>/dev/null
+  xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null
+  xcrun simctl uninstall "$UDID" "$RUNNER_ID" 2>/dev/null
+  if [ "$BOOTED_BY_US" = 1 ]; then
+    bash "$LEDGER" cleanup --owner "$OWNER"
+    xcrun simctl list devices | grep "$UDID" | grep -q Booted && xcrun simctl shutdown "$UDID"
+  fi
+  stop_pid "$RESTART_PID"
+  rm -rf "$CTL_DIR"
+  echo "== disk after" | tee -a "$ART/disk.txt"
+  disk_report | tee -a "$ART/disk.txt"
+}
+trap cleanup EXIT
+
+mkdir -p "$ART"
+rm -rf "$ART/ui-e2e.xcresult" "$ART/ui-e2e.mov" "$ART"/*.png "$ART"/*.txt "$ART"/*.log
+
+echo "== disk before" | tee "$ART/disk.txt"
+disk_report | tee -a "$ART/disk.txt"
+xcrun simctl list devices | grep -E "Booted|hermes-ios" | tee "$ART/devices-before.txt" || true
+
+echo "== xcodegen + build"
+( cd "$IOS_DIR" && xcodegen generate >/dev/null )
+( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+  -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
+  build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
+
+if ! xcrun simctl list devices | grep "$UDID" | grep -q Booted; then
+  xcrun simctl boot "$UDID"
+  BOOTED_BY_US=1
+  xcrun simctl bootstatus "$UDID" >/dev/null
+  for _ in $(seq 30); do
+    bash "$LEDGER" claim "$UDID" --owner "$OWNER" && break
+    sleep 2
+  done
+fi
+xcrun simctl bootstatus "$UDID" >/dev/null
+xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+
+control_loop &
+WATCHER_PID=$!
+
+echo "== XCUITest"
+xcrun simctl io "$UDID" recordVideo --display=1 --codec h264 --force "$ART/ui-e2e.mov" >"$ART/record.log" 2>&1 &
+RECORD_PID=$!
+sleep 2
+set +e
+( cd "$IOS_DIR" &&
+  TEST_RUNNER_HERMES_UITEST_BASE_URL="$BASE_URL" \
+  TEST_RUNNER_HERMES_UITEST_USERNAME="$HERMES_IOS_TEST_USERNAME" \
+  TEST_RUNNER_HERMES_UITEST_PASSWORD="$HERMES_IOS_TEST_PASSWORD" \
+  TEST_RUNNER_HERMES_UITEST_CTL="$CTL_DIR" \
+  TEST_RUNNER_HERMES_UITEST_SHOTS="$ART" \
+  xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+    -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
+    ${HERMES_UI_E2E_ONLY:+-only-testing:"$HERMES_UI_E2E_ONLY"} \
+    -resultBundlePath "$ART/ui-e2e.xcresult" -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 \
+    test-without-building ) >"$ART/xcodebuild-test.log" 2>&1
+STATUS=$?
+set -e
+kill -INT "$RECORD_PID" 2>/dev/null || true
+wait "$RECORD_PID" 2>/dev/null || true
+RECORD_PID=""
+grep -E "Test Case .*(passed|failed)|Executed|TEST (EXECUTE|BUILD)" "$ART/xcodebuild-test.log" | tail -12
+echo "artifacts: $ART"
+exit "$STATUS"

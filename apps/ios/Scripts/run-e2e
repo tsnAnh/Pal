@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PACKAGE="$IOS_DIR/Packages/HermesKit"
+FIXTURES="$IOS_DIR/Fixtures/ios-client"
+
+mkdir -p "$FIXTURES"
+STAGING="$(mktemp -d /tmp/hermes-ios-fixtures.XXXXXX)"
+trap 'rm -rf "$STAGING"' EXIT
+
+"$IOS_DIR/Scripts/e2e-gateway" -- env HERMES_IOS_FIXTURE_DIR="$STAGING" \
+  swift test --package-path "$PACKAGE" --skip FixtureReplayTests "$@"
+
+compgen -G "$STAGING/*.jsonl" >/dev/null || { echo "no fixtures were recorded; committed fixtures left untouched" >&2; exit 1; }
+rm -f "$FIXTURES"/*.jsonl && cp "$STAGING"/*.jsonl "$FIXTURES"/
+swift test --package-path "$PACKAGE" --filter FixtureReplayTests

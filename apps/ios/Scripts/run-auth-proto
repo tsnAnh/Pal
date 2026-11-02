@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+ART="$IOS_DIR/Artifacts/auth-proto"
+OWNER="ios-auth-proto"
+DEVICE_NAME="${HERMES_IOS_SIM_NAME:-hermes-ios-proto}"
+PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
+LEDGER="$HOME/.claude/hooks/device-ledger.sh"
+
+HOME_DIR="$(mktemp -d /tmp/hermes-ios-proto.XXXXXX)"
+PORT="$("$PYTHON" -I -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
+USERNAME="tester"
+PASSWORD="$("$PYTHON" -I -c 'import secrets;print(secrets.token_urlsafe(18))')"
+SECRET="$("$PYTHON" -I -c 'import secrets;print(secrets.token_hex(32))')"
+BASE_URL="http://127.0.0.1:$PORT"
+GATEWAY_PID=""
+RECORD_PID=""
+UDID=""
+BOOTED_BY_US=0
+
+cleanup() {
+  set +e
+  [ -n "$RECORD_PID" ] && kill -INT "$RECORD_PID" 2>/dev/null && wait "$RECORD_PID" 2>/dev/null
+  if [ -n "$UDID" ]; then
+    xcrun simctl uninstall "$UDID" dev.tsnanh.hermes.bot 2>/dev/null
+    xcrun simctl uninstall "$UDID" dev.tsnanh.hermes.bot.uitests.xctrunner 2>/dev/null
+    [ "$BOOTED_BY_US" = 1 ] && bash "$LEDGER" cleanup --owner "$OWNER"
+  fi
+  if [ -n "$GATEWAY_PID" ]; then
+    kill "$GATEWAY_PID" 2>/dev/null
+    for _ in $(seq 20); do kill -0 "$GATEWAY_PID" 2>/dev/null || break; sleep 0.5; done
+    kill -9 "$GATEWAY_PID" 2>/dev/null
+  fi
+  rm -rf "$HOME_DIR"
+}
+trap cleanup EXIT
+
+mkdir -p "$ART"
+rm -rf "$ART/uitest.xcresult" "$ART/signin.mov"
+
+cat >"$HOME_DIR/config.yaml" <<YAML
+webapp:
+  enabled: true
+  host: 127.0.0.1
+  port: $PORT
+  public_url: https://hermes-ios-proto.example.ts.net
+dashboard:
+  basic_auth:
+    username: $USERNAME
+    password: $PASSWORD
+    secret: $SECRET
+YAML
+chmod 600 "$HOME_DIR/config.yaml"
+
+echo "== gateway on $BASE_URL (HERMES_HOME=$HOME_DIR)"
+( cd "$REPO" && HERMES_HOME="$HOME_DIR" exec "$PYTHON" -m hermes_cli.main gateway run >"$ART/gateway.log" 2>&1 ) &
+GATEWAY_PID=$!
+for _ in $(seq 60); do
+  curl -fs "$BASE_URL/api/auth/providers" >/dev/null 2>&1 && break
+  kill -0 "$GATEWAY_PID" 2>/dev/null || { echo "gateway exited"; tail -20 "$ART/gateway.log"; exit 1; }
+  sleep 1
+done
+curl -fs "$BASE_URL/api/auth/providers" >/dev/null
+
+echo "== swift test (HermesKit, live gateway)"
+( cd "$IOS_DIR/Packages/HermesKit" &&
+  HERMES_IOS_TEST_BASE_URL="$BASE_URL" HERMES_IOS_TEST_USERNAME="$USERNAME" HERMES_IOS_TEST_PASSWORD="$PASSWORD" \
+  swift test ) 2>&1 | tee "$ART/swift-test.log" | grep -E "Test run|error|failed|instance_id" || true
+grep -q "Test run with .* passed" "$ART/swift-test.log"
+
+echo "== xcodegen + build"
+( cd "$IOS_DIR" && xcodegen generate >/dev/null )
+UDID="$(xcrun simctl list devices | awk -v n="$DEVICE_NAME" '$0 ~ n" \\(" {gsub(/[()]/,"",$(NF-1)); print $(NF-1); exit}')"
+[ -n "$UDID" ] || { echo "no simulator named $DEVICE_NAME"; exit 1; }
+( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+  -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
+  build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
+
+if ! xcrun simctl list devices | grep "$UDID" | grep -q Booted; then
+  xcrun simctl boot "$UDID"
+  bash "$LEDGER" claim "$UDID" --owner "$OWNER"
+  BOOTED_BY_US=1
+fi
+xcrun simctl bootstatus "$UDID" >/dev/null
+
+echo "== XCUITest"
+xcrun simctl io "$UDID" recordVideo --display=1 --codec h264 --force "$ART/signin.mov" >"$ART/record.log" 2>&1 &
+RECORD_PID=$!
+sleep 2
+set +e
+( cd "$IOS_DIR" &&
+  TEST_RUNNER_HERMES_UITEST_BASE_URL="$BASE_URL" TEST_RUNNER_HERMES_UITEST_USERNAME="$USERNAME" TEST_RUNNER_HERMES_UITEST_PASSWORD="$PASSWORD" \
+  xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+    -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
+    -resultBundlePath "$ART/uitest.xcresult" -parallel-testing-enabled NO \
+    test-without-building ) >"$ART/xcodebuild-test.log" 2>&1
+STATUS=$?
+set -e
+kill -INT "$RECORD_PID" 2>/dev/null || true
+wait "$RECORD_PID" 2>/dev/null || true
+RECORD_PID=""
+grep -E "Executed|TEST (EXECUTE|BUILD)" "$ART/xcodebuild-test.log" | tail -3
+echo "artifacts: $ART"
+exit "$STATUS"

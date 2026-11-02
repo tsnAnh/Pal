@@ -103,6 +103,8 @@ class GatewayProfileReconcileMixin:
         """Called by ``_record_served_profiles``: remember the served set and each home's signature."""
         homes = {str(name): Path(home) for name, home in profile_homes}
         self._served_profile_homes = homes
+        from tui_gateway import served_homes
+        served_homes.replace(homes)
         sigs = self._served_profile_signatures if isinstance(self._served_profile_signatures, dict) else {}
         self._served_profile_signatures = {name: sigs.get(name) or profile_serve_signature(home)
                                            for name, home in homes.items()}
@@ -496,6 +498,8 @@ class GatewayProfileReconcileMixin:
                     store.pop(name, None)
             if isinstance(self._served_profile_homes, dict):
                 self._served_profile_homes.pop(name, None)
+            from tui_gateway import served_homes
+            served_homes.forget(name)
             if isinstance(self._served_profile_signatures, dict):
                 self._served_profile_signatures.pop(name, None)
             from gateway.session import _session_key_namespace
