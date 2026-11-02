@@ -102,6 +102,8 @@ export interface ScriptedTurn {
   reasoning?: string
   /** Tool calls to emit. Empty array = final turn (finish_reason: stop). */
   toolCalls?: Array<{
+    /** Stable call id; defaults to one derived from the script position. */
+    id?: string
     name: string
     args: Record<string, unknown>
   }>
@@ -426,6 +428,75 @@ export const SINGLE_BATCH_CLARIFY_QUESTIONS = [
 const SINGLE_BATCH_CLARIFY_TURN: ScriptedTurn = {
   text: '',
   toolCalls: [{ name: 'clarify', args: { questions: SINGLE_BATCH_CLARIFY_QUESTIONS } }],
+}
+
+export const CARD_CLARIFY_TRIGGER = 'E2E_CARD_CLARIFY_TRIGGER'
+export const CARD_CLARIFY_QUESTIONS = [
+  {
+    question: 'Which workspace should I set up first?',
+    choices: [
+      'Personal notes',
+      'Team projects',
+      'A long option that keeps going to prove that wrapping works and the letter badge stays aligned with the first line of text',
+      'Something else entirely',
+    ],
+  },
+]
+
+const CARD_CLARIFY_TURN: ScriptedTurn = {
+  text: '',
+  toolCalls: [{ name: 'clarify', args: { questions: CARD_CLARIFY_QUESTIONS } }],
+}
+
+export const IDENTITY_TONE_TRIGGER = 'E2E_IDENTITY_TONE_TRIGGER'
+export const IDENTITY_RULES_TRIGGER = 'E2E_IDENTITY_RULES_TRIGGER'
+export const IDENTITY_TONE_TEXT = 'Short and friendly replies'
+export const IDENTITY_RULES_TEXT = 'Always cite sources'
+
+function identityEditTurn(callId: string, heading: string, content: string): ScriptedTurn {
+  return {
+    text: '',
+    toolCalls: [{ id: callId, name: 'memory', args: { target: 'identity', action: 'add', heading, content } }],
+  }
+}
+
+const IDENTITY_EDIT_SCRIPT = [
+  { trigger: IDENTITY_TONE_TRIGGER, done: IDENTITY_TONE_TEXT, turn: identityEditTurn('call_e2e_identity_tone', 'Tone', IDENTITY_TONE_TEXT) },
+  { trigger: IDENTITY_RULES_TRIGGER, done: IDENTITY_RULES_TEXT, turn: identityEditTurn('call_e2e_identity_rules', 'Rules', IDENTITY_RULES_TEXT) },
+]
+
+function pendingIdentityEdit(messages: unknown): ScriptedTurn | undefined {
+  const toolResults = Array.isArray(messages)
+    ? messages.filter((message: { role?: string }) => message?.role === 'tool').map(message => JSON.stringify(message))
+    : []
+
+  return IDENTITY_EDIT_SCRIPT.find(
+    entry => includesText(messages, entry.trigger) && !toolResults.some(result => result.includes(entry.done)),
+  )?.turn
+}
+
+function sendScriptedTurn(res: ServerResponse, model: string, stream: boolean, turn: ScriptedTurn): void {
+  if (stream) {
+    streamScriptedTurn(res, model, turn)
+  } else {
+    nonStreamingScriptedTurn(res, model, turn)
+  }
+}
+
+function includesText(value: unknown, needle: string): boolean {
+  if (typeof value === 'string') {
+    return value.includes(needle)
+  }
+
+  if (Array.isArray(value)) {
+    return value.some(item => includesText(item, needle))
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.values(value).some(item => includesText(item, needle))
+  }
+
+  return false
 }
 
 function includesBatchClarifyTrigger(value: unknown): boolean {
@@ -760,11 +831,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             _taskPanelResumeIndex++
 
             const respond = () => {
-              if (stream) {
-                streamScriptedTurn(res, model, turn)
-              } else {
-                nonStreamingScriptedTurn(res, model, turn)
-              }
+              sendScriptedTurn(res, model, stream, turn)
             }
 
             if (holdThisCompletion) {
@@ -785,11 +852,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
               && parsed.messages.some((message: { role?: string }) => message?.role === 'tool')
 
             if (!hasToolResult) {
-              if (stream) {
-                streamScriptedTurn(res, model, APPROVAL_COMMAND_TURN)
-              } else {
-                nonStreamingScriptedTurn(res, model, APPROVAL_COMMAND_TURN)
-              }
+              sendScriptedTurn(res, model, stream, APPROVAL_COMMAND_TURN)
 
               return
             }
@@ -804,11 +867,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
               && parsed.messages.some((message: { role?: string }) => message?.role === 'tool')
 
             if (!hasToolResult) {
-              if (stream) {
-                streamScriptedTurn(res, model, BATCH_CLARIFY_TURN)
-              } else {
-                nonStreamingScriptedTurn(res, model, BATCH_CLARIFY_TURN)
-              }
+              sendScriptedTurn(res, model, stream, BATCH_CLARIFY_TURN)
 
               return
             }
@@ -825,32 +884,42 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
               )
 
             if (!hasOwnToolResult) {
-              if (stream) {
-                streamScriptedTurn(res, model, SINGLE_BATCH_CLARIFY_TURN)
-              } else {
-                nonStreamingScriptedTurn(res, model, SINGLE_BATCH_CLARIFY_TURN)
-              }
+              sendScriptedTurn(res, model, stream, SINGLE_BATCH_CLARIFY_TURN)
+
+              return
+            }
+          }
+
+          const identityEdit = pendingIdentityEdit(parsed.messages)
+
+          if (identityEdit) {
+            sendScriptedTurn(res, model, stream, identityEdit)
+
+            return
+          }
+
+          if (includesText(parsed.messages, CARD_CLARIFY_TRIGGER)) {
+            const hasOwnToolResult = Array.isArray(parsed.messages)
+              && parsed.messages.some(
+                (message: { role?: string }) =>
+                  message?.role === 'tool' && JSON.stringify(message).includes('set up first'),
+              )
+
+            if (!hasOwnToolResult) {
+              sendScriptedTurn(res, model, stream, CARD_CLARIFY_TURN)
 
               return
             }
           }
 
           if (includesBlockingClarifyTrigger(parsed.messages)) {
-            if (stream) {
-              streamScriptedTurn(res, model, BLOCKING_CLARIFY_TURN)
-            } else {
-              nonStreamingScriptedTurn(res, model, BLOCKING_CLARIFY_TURN)
-            }
+            sendScriptedTurn(res, model, stream, BLOCKING_CLARIFY_TURN)
 
             return
           }
 
           if (userText.includes(TOOL_THEN_FAILURE_TRIGGER) && !messages.some(message => message?.role === 'tool')) {
-            if (stream) {
-              streamScriptedTurn(res, model, TOOL_THEN_FAILURE_TURN)
-            } else {
-              nonStreamingScriptedTurn(res, model, TOOL_THEN_FAILURE_TURN)
-            }
+            sendScriptedTurn(res, model, stream, TOOL_THEN_FAILURE_TURN)
 
             return
           }
@@ -866,11 +935,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = QUEUE_STOP_SCRIPT[_queueStopIndex] ?? QUEUE_STOP_SCRIPT[QUEUE_STOP_SCRIPT.length - 1]
             _queueStopIndex++
 
-            if (stream) {
-              streamScriptedTurn(res, model, turn)
-            } else {
-              nonStreamingScriptedTurn(res, model, turn)
-            }
+            sendScriptedTurn(res, model, stream, turn)
 
             return
           }
@@ -880,11 +945,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = script[_verificationStopIndex] ?? script[script.length - 1]
             _verificationStopIndex++
 
-            if (stream) {
-              streamScriptedTurn(res, model, turn)
-            } else {
-              nonStreamingScriptedTurn(res, model, turn)
-            }
+            sendScriptedTurn(res, model, stream, turn)
 
             return
           }
@@ -893,11 +954,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = CORRECTION_SWITCH_SCRIPT[_correctionSwitchIndex] ?? CORRECTION_SWITCH_SCRIPT[CORRECTION_SWITCH_SCRIPT.length - 1]
             _correctionSwitchIndex++
 
-            if (stream) {
-              streamScriptedTurn(res, model, turn)
-            } else {
-              nonStreamingScriptedTurn(res, model, turn)
-            }
+            sendScriptedTurn(res, model, stream, turn)
 
             return
           }
@@ -907,11 +964,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = script[_sidebarCrossIndex] ?? script[script.length - 1]
             _sidebarCrossIndex++
 
-            if (stream) {
-              streamScriptedTurn(res, model, turn)
-            } else {
-              nonStreamingScriptedTurn(res, model, turn)
-            }
+            sendScriptedTurn(res, model, stream, turn)
 
             return
           }
@@ -920,11 +973,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = SIDEBAR_SCRIPT[_sidebarScriptIndex] ?? SIDEBAR_SCRIPT[SIDEBAR_SCRIPT.length - 1]
             _sidebarScriptIndex++
 
-            if (stream) {
-              streamScriptedTurn(res, model, turn)
-            } else {
-              nonStreamingScriptedTurn(res, model, turn)
-            }
+            sendScriptedTurn(res, model, stream, turn)
 
             return
           }
@@ -933,11 +982,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = INTERIM_SCRIPT[_scriptIndex] ?? INTERIM_SCRIPT[INTERIM_SCRIPT.length - 1]
             _scriptIndex++
 
-            if (stream) {
-              streamScriptedTurn(res, model, turn)
-            } else {
-              nonStreamingScriptedTurn(res, model, turn)
-            }
+            sendScriptedTurn(res, model, stream, turn)
 
             return
           }
@@ -945,11 +990,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
           const directCall = directToolCallTurn(userText, messages)
 
           if (directCall !== null) {
-            if (stream) {
-              streamScriptedTurn(res, model, directCall)
-            } else {
-              nonStreamingScriptedTurn(res, model, directCall)
-            }
+            sendScriptedTurn(res, model, stream, directCall)
 
             return
           }
@@ -1173,7 +1214,7 @@ function streamScriptedTurn(
         sseChunk(model, {
           tool_calls: turn.toolCalls!.map((tc, idx) => ({
             index: idx,
-            id: `call_e2e_${_scriptIndex}_${idx}`,
+            id: tc.id ?? `call_e2e_${_scriptIndex}_${idx}`,
             type: 'function',
             function: { name: tc.name, arguments: JSON.stringify(tc.args) },
           })),
@@ -1201,7 +1242,7 @@ function streamScriptedTurn(
           sseChunk(model, {
             tool_calls: turn.toolCalls!.map((tc, idx) => ({
               index: idx,
-              id: `call_e2e_${_scriptIndex}_${idx}`,
+              id: tc.id ?? `call_e2e_${_scriptIndex}_${idx}`,
               type: 'function',
               function: { name: tc.name, arguments: JSON.stringify(tc.args) },
             })),
@@ -1247,7 +1288,7 @@ function nonStreamingScriptedTurn(
 
   if (hasToolCalls) {
     message.tool_calls = turn.toolCalls!.map((tc, idx) => ({
-      id: `call_e2e_${_scriptIndex}_${idx}`,
+      id: tc.id ?? `call_e2e_${_scriptIndex}_${idx}`,
       type: 'function',
       function: { name: tc.name, arguments: JSON.stringify(tc.args) },
     }))

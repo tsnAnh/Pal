@@ -15,10 +15,12 @@ import { type MockBackendFixture, setupMockBackend, waitForAppReady } from './fi
 import { expect, test } from './test'
 import { expectVisualSnapshot } from './visual-snapshot'
 
+const BUSY_HOLD_PROMPT = 'hold this turn open while I steer'
+
 let fixture: MockBackendFixture | null = null
 
 test.beforeAll(async () => {
-  fixture = await setupMockBackend()
+  fixture = await setupMockBackend({ mockServer: { holdFirstStreamForPrompt: BUSY_HOLD_PROMPT } })
   await waitForAppReady(fixture!, 120_000)
 })
 
@@ -40,37 +42,67 @@ test.describe('chat interaction with mock backend', () => {
     await expectVisualSnapshot(fixture!.page, { name: 'chat-with-messages', app: fixture!.app })
   })
 
-  test('offers stop, steer, and queue actions while busy', async () => {
+  test('answers a waiting question from the composer', async () => {
     const testInfo = test.info()
     const page = fixture!.page
     const composer = page.locator('[contenteditable="true"]').first()
     const primary = page.locator('[data-slot="composer-root"] button[type="submit"]')
     const queue = page.locator('[data-slot="composer-root"] button[aria-label="Queue message"]')
+    const question = page.getByText(BLOCKING_CLARIFY_QUESTION)
+    const answer = 'yes keep going'
 
     await composer.click()
     await composer.type(BLOCKING_CLARIFY_TRIGGER)
     await page.keyboard.press('Enter')
-    await page.getByText(BLOCKING_CLARIFY_QUESTION).waitFor({ state: 'visible', timeout: 30_000 })
-
+    await question.waitFor({ state: 'visible', timeout: 30_000 })
     await expect(primary).toHaveAttribute('aria-label', 'Stop')
 
     await composer.click()
-    await composer.type('please answer tersely')
-    // Since "running is not busy" (3bc52fb9df) the primary keeps the Send
-    // affordance mid-turn — steer is routed through the submit engine, not a
-    // separate labeled button. Queue remains the explicit secondary action.
+    await composer.type(answer)
     await expect(primary).toHaveAttribute('aria-label', 'Send')
-    await expect(queue).toBeVisible()
-    await page.screenshot({ path: testInfo.outputPath('busy-composer-steer.png') })
-
-    await queue.click()
-    await expect(primary).toHaveAttribute('aria-label', 'Stop')
     await expect(queue).toHaveCount(0)
-    await page.screenshot({ path: testInfo.outputPath('busy-composer-queue.png') })
-    await expect(page.getByText('1 Queued')).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath('waiting-question-composer.png') })
 
-    await primary.click()
-    await expect(page.getByText('1 Queued — paused')).toBeVisible()
-    await page.screenshot({ path: testInfo.outputPath('busy-composer-queue-paused.png') })
+    await page.keyboard.press('Enter')
+    await expect(page.getByText(answer).first()).toBeVisible()
+    await expect(page.getByText('Queued')).toHaveCount(0)
+    await page.screenshot({ path: testInfo.outputPath('waiting-question-answered.png') })
+  })
+
+  test.describe('while a turn is held open', () => {
+    test.afterEach(() => {
+      fixture?.mock.releaseHeldStream()
+    })
+
+    test('offers stop, steer, and queue actions while busy', async () => {
+      const testInfo = test.info()
+      const page = fixture!.page
+      const composer = page.locator('[contenteditable="true"]').first()
+      const primary = page.locator('[data-slot="composer-root"] button[type="submit"]')
+      const queue = page.locator('[data-slot="composer-root"] button[aria-label="Queue message"]')
+
+      await page.getByText('New session', { exact: true }).first().click()
+      await composer.click()
+      await composer.type(BUSY_HOLD_PROMPT)
+      await page.keyboard.press('Enter')
+      await fixture!.mock.waitForHeldStream()
+      await expect(primary).toHaveAttribute('aria-label', 'Stop', { timeout: 30_000 })
+
+      await composer.click()
+      await composer.type('please answer tersely')
+      await expect(primary).toHaveAttribute('aria-label', 'Redirect the current run')
+      await expect(queue).toBeVisible()
+      await page.screenshot({ path: testInfo.outputPath('busy-composer-steer.png') })
+
+      await queue.click()
+      await expect(primary).toHaveAttribute('aria-label', 'Stop')
+      await expect(queue).toHaveCount(0)
+      await page.screenshot({ path: testInfo.outputPath('busy-composer-queue.png') })
+      await expect(page.getByText('1 Queued')).toBeVisible()
+
+      await primary.click()
+      await expect(page.getByText('1 Queued — paused')).toBeVisible()
+      await page.screenshot({ path: testInfo.outputPath('busy-composer-queue-paused.png') })
+    })
   })
 })
