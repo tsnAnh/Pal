@@ -1,4 +1,6 @@
 import { hermesApi } from '@/hermes'
+import { rememberLastConversation } from '@/store/last-conversation'
+import { type BotChatRestorer, registerBotChatRestorer } from '@/store/last-conversation-restore'
 import {
   pinSession,
   setPinnedSessionOrder,
@@ -42,6 +44,11 @@ function liveSessionId(storedSessionId: string): string {
  *  session ids as a sidebar row slot carries them; a live id is resolved to
  *  the same row through the app's lineage matcher. */
 export const sessionsHost = {
+  rememberBotChat: (bot: { connectionId: string; profile: string }): void =>
+    rememberLastConversation({ connectionId: bot.connectionId, kind: 'bot-chat', profile: bot.profile }),
+
+  registerBotChatRestorer: (restorer: BotChatRestorer): (() => void) => registerBotChatRestorer(restorer),
+
   /** Pin or unpin a session — the row's ⇧-click / context-menu action. A
    *  pinned session moves into the Pinned section on the next render.
    *  `index` slots the pin at that position in the Pinned list (a drop

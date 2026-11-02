@@ -97,3 +97,16 @@ export function activateWindow(window: ActivatableWindow | null | undefined): vo
     window.focus()
   }
 }
+
+export function handleAppActivate<T extends MainWindowLike>(
+  window: T | null | undefined,
+  { createWindow, activate }: { createWindow: () => unknown; activate: (window: T) => unknown }
+): void {
+  if (!window || window.isDestroyed()) {
+    createWindow()
+
+    return
+  }
+
+  activate(window)
+}

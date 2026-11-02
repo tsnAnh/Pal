@@ -77,6 +77,7 @@ import { BOTS_LOCALES } from './i18n'
 import { identityNoticeContribution } from './identity-notice'
 import { displayName } from './labels'
 import { startBotRelay, stopBotRelay } from './relay'
+import { registerLastBotChatRestorer } from './restore-last-bot-chat'
 import { $activityToasts } from './roster-actions'
 import {
   botChatOwnsWorkspace,
@@ -151,6 +152,7 @@ export default {
       ctx.onDispose(stopBotChatPersonas)
       ctx.onDispose(stopFaceGaze)
       ctx.onDispose(stopFaceVisibility)
+      ctx.onDispose(registerLastBotChatRestorer())
     }
 
     // @-mention autocomplete: typing "@rese…" in ANY composer offers the

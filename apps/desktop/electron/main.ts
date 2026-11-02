@@ -354,7 +354,7 @@ import { localSkinProfileKey, registerLocalSkinIpc } from './local-skin'
 import { ACTIVE_LOG_POLL_MS, planLogRotation, reclaimActiveLogIfOversized } from './log-rotation'
 import { registerMachineProfile } from './machine-profile'
 import { createMainProcessLagWatchdog } from './main-process-lag-watchdog'
-import { activateWindow, ensureMainWindow, shouldQuitOnLastChatClosed } from './main-window-lifecycle'
+import { activateWindow, ensureMainWindow, handleAppActivate, shouldQuitOnLastChatClosed } from './main-window-lifecycle'
 import {
   applyManagedSshRecoveryAttempt,
   assertManagedUpdatePreflightClear,
@@ -1402,6 +1402,7 @@ const BOOT_FAKE_STEP_MS = (() => {
 const APP_NAME: string = IDENTITY_APP_NAME || process.env.HERMES_DESKTOP_APP_NAME || 'Hermes'
 const HUD_WINDOW_TITLE = `${APP_NAME} HUD`
 const TITLEBAR_HEIGHT = 34
+
 // Right-edge window-control reservation lives in titlebar-overlay-width.ts
 // (pure + unit-testable); computeNativeOverlayWidth() applies it per platform.
 // It's only the pre-layout fallback — the renderer measures the exact overlay
@@ -17907,11 +17908,7 @@ app.whenReady().then(() => {
     // window when only secondary session windows remain open.
     // #130810: a dock/taskbar activate is explicit, so restore with
     // activation (restore + show + focus), not the ambient showInactive path.
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      createWindow()
-    } else {
-      activateWindow(mainWindow)
-    }
+    handleAppActivate(mainWindow, { createWindow, activate: activateWindow })
   })
 })
 

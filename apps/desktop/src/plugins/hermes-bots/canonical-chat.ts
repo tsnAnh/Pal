@@ -356,6 +356,7 @@ interface OpenCanonicalChatOptions {
    *  host.openSession's refreshInPlace; without an SDK that supports it the
    *  open degrades to the old navigating shape. */
   background?: boolean
+  createIfMissing?: boolean
   openingStillCurrent?: (() => boolean) | null
   /** See OpenStoredBotChatOptions.intent. Only honored for an EXISTING Bot
    *  Chat; a freshly minted one always lands in main. */
@@ -626,7 +627,7 @@ export function createCanonicalChat(
  *  bot's chat opens without re-homing Desktop's chrome. */
 export async function openBotCanonicalChat(
   owner: RosterRow | string,
-  { background = false, openingStillCurrent = null, intent = 'in-place' }: OpenCanonicalChatOptions = {}
+  { background = false, createIfMissing = true, openingStillCurrent = null, intent = 'in-place' }: OpenCanonicalChatOptions = {}
 ): Promise<{ openedId: string; registryId: string } | null> {
   const existing = await findExistingCanonicalChat(owner)
 
@@ -651,7 +652,7 @@ export async function openBotCanonicalChat(
   // A background re-resume never MINTS: it fires while nobody asked for this
   // bot, so a resolution miss keeps whatever the user is looking at instead
   // of creating a fresh forever-chat under their feet.
-  if (background) {
+  if (background || !createIfMissing) {
     return null
   }
 

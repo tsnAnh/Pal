@@ -13,7 +13,9 @@ import { resolveDeepLinkAction } from '@/lib/deeplink-routes'
 import { pathFromHermesDeepLink, resolveHermesOpenPath } from '@/lib/hermes-open-target'
 import { storedSessionIdForNotification } from '@/lib/session-ids'
 import { announceNewSessionDraftKey } from '@/store/composer'
+import { $activeConnectionId } from '@/store/connections'
 import { recordAction } from '@/store/desktop-metrics'
+import { recordSessionConversation } from '@/store/last-conversation-restore'
 import { requestMcpInstallFromDeepLink } from '@/store/mcp-deeplink-install'
 import { startMcpHealthChecker, stopMcpHealthChecker } from '@/store/mcp-health'
 import {
@@ -49,6 +51,7 @@ import { requestComposerFocus, requestComposerInsert } from '../../chat/composer
 import { appViewForPath, isOverlayView, NEW_CHAT_ROUTE, routeSessionId, sessionRoute } from '../../routes'
 
 import { resolveRememberedSessionId } from './remembered-session'
+import { useRestoreLastConversation } from './use-restore-last-conversation'
 
 type RememberedSession = Pick<SessionInfo, '_lineage_root_id' | 'id' | 'parent_session_id' | 'profile' | 'source'>
 
@@ -118,6 +121,8 @@ export function useDesktopIntegrations({
 
   const restoredRef = useRef(false)
   const diskPluginsScanPending = useStore($diskPluginsScanPending)
+
+  useRestoreLastConversation({ locationPathname, profileReady, restoredRef, resumeLastSession })
 
   // Wait until boot has adopted the primary profile, then restore that profile's
   // navigation exactly once. The same effect owns subsequent writes so the
@@ -302,6 +307,11 @@ export function useDesktopIntegrations({
           rememberedSessionId === routedSessionId ? locationPathname : sessionRoute(rememberedSessionId),
           activeProfile
         )
+        recordSessionConversation({
+          connectionId: $activeConnectionId.get(),
+          profile: activeProfile,
+          sessionId: rememberedSessionId
+        })
       }
     } else if (!routedSessionId && !isOverlayView(appViewForPath(locationPathname))) {
       setRememberedRoute(locationPathname, activeProfile)
