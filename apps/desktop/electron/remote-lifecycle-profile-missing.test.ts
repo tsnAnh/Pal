@@ -53,6 +53,17 @@ test("scrapeReadyPort ignores another profile's missing line and still reaches R
   assert.equal(await scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 1000, profile: 'default' }), 4242)
 })
 
+test("scrapeReadyPort finds the requested profile's missing line after another profile's", async () => {
+  const ssh = logSsh(
+    "Error: Profile 'chief' does not exist. Create it with: hermes profile create chief\nError: Profile 'operator' does not exist. Create it with: hermes profile create operator\n"
+  )
+
+  await assert.rejects(
+    () => scrapeReadyPort(ssh, spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE), { timeoutMs: 1000, profile: 'operator' }),
+    (err: any) => err.kind === 'remote-profile-missing' && err.profile === 'operator'
+  )
+})
+
 test("scrapeReadyPort times out normally when only another profile's missing line is present", async () => {
   const ssh = logSsh("Error: Profile 'chief' does not exist. Create it with: hermes profile create chief\n")
 

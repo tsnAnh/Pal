@@ -1233,21 +1233,22 @@ async function remoteSupportsSshOwnership(ssh, hermesPath) {
 // profiles._missing_profile_error; anchoring to the whole line keeps a runtime
 // log line about another profile (gateway, profile_identity) from matching.
 const PROFILE_MISSING_LINE_RE =
-  /^Error: Profile '([^']+)' does not exist\. Create it with: (hermes profile create [^\s']+)\r?$/m
+  /^Error: Profile '([^']+)' does not exist\. Create it with: (hermes profile create [^\s']+)\r?$/gm
 
 function remoteProfileMissingError(output, requestedProfile) {
-  const match = PROFILE_MISSING_LINE_RE.exec(String(output || ''))
+  const requested = backendProfileArg(requestedProfile)
+
+  const match = requested
+    ? [...String(output || '').matchAll(PROFILE_MISSING_LINE_RE)].find(
+        found => backendProfileArg(found[1]) === requested
+      )
+    : undefined
 
   if (!match) {
     return null
   }
 
-  const profile = backendProfileArg(match[1])
-  const requested = backendProfileArg(requestedProfile)
-
-  if (!profile || profile !== requested) {
-    return null
-  }
+  const profile = requested
 
   const err: any = new Error(
     `The remote Hermes profile '${profile}' does not exist. ` +
