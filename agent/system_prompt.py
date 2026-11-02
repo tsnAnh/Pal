@@ -27,7 +27,7 @@ from agent.prompt_builder import (
 )
 from agent import prompt_builder as _pb
 from agent.runtime_cwd import resolve_agent_cwd, resolve_context_cwd
-from hermes_constants import get_default_hermes_root, get_hermes_home
+from hermes_constants import get_default_hermes_root, get_hermes_home, get_skills_dir
 from utils import is_truthy_value
 
 logger = logging.getLogger(__name__)
@@ -253,9 +253,9 @@ def _agent_home(agent: Any) -> Optional[Path]:
 
 
 def _agent_skills_dir(agent: Any) -> Optional[Path]:
-    """The agent's own ``<home>/skills`` dir, or None to use ambient home."""
+    """The agent's own skills dir (``<home>/skills``, or the shared catalog once migrated), or None to use ambient home."""
     home = _agent_home(agent)
-    return home / "skills" if home is not None else None
+    return get_skills_dir(home) if home is not None else None
 
 
 def _profile_name_for_home(home: Path) -> str:
@@ -311,7 +311,7 @@ def _skills_prompt(agent: Any) -> str:
     except Exception:
         _compact_cats = frozenset()
     return _pb.build_skills_system_prompt(available_tools=agent.valid_tool_names, available_toolsets=avail_toolsets,
-                                         compact_categories=_compact_cats or None, skills_dir_override=_agent_skills_dir(agent))
+                                         compact_categories=_compact_cats or None, skills_dir_override=_agent_skills_dir(agent), home_override=_agent_home(agent))
 
 
 def _auto_load_parts(agent: Any) -> list[str]:

@@ -754,13 +754,19 @@ def render_launch_skills(params, session_id):
         return None
     from agent.skill_commands import build_preloaded_skills_prompt, format_missing_skills
     prompt, loaded, missing = build_preloaded_skills_prompt(skills, task_id=session_id)
-    if not loaded:
+    from agent.skill_connector_gate import CONNECTOR_BLOCKED_PREFIX, connector_blocked_notice
+    if not loaded and not all(m.startswith(CONNECTOR_BLOCKED_PREFIX) for m in missing):
         raise RuntimeStoreError('unknown_skill')
     if missing:
         import logging
         logging.getLogger(__name__).warning('Skipping %s for session %s; continuing with: %s',
                                             format_missing_skills(missing), session_id, ', '.join(loaded))
-    return prompt or None
+    notices = [notice for m in missing if (notice := connector_blocked_notice(m))]
+    if notices:
+        block = ('[IMPORTANT: Some skills requested for this session could not start. In your first reply, '
+                 'tell the user in plain words:\n' + '\n'.join(f'- {n}' for n in notices) + ']')
+        prompt = f'{prompt}\n\n{block}' if prompt else block
+    return prompt
 
 
 def accept_launch_hooks(policy):

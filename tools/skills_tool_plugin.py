@@ -140,6 +140,9 @@ def _serve_plugin_skill(
     if not _st.skill_matches_platform(parsed_frontmatter):
         return _fail(f"Skill '{qualified_name}' is not supported on this platform.",
                      readiness_status=SkillReadinessStatus.UNSUPPORTED.value)
+    from agent.skill_connector_gate import connector_denial, unmet_connectors
+    if unmet := unmet_connectors(_st._parse_frontmatter(content)[0], blocking=True):
+        return connector_denial(qualified_name, unmet)
     if file_path:
         return _serve_skill_file(skill_md.parent, file_path, qualified_name, read_error_prefix=True)
     if any(p in content.lower() for p in _INJECTION_PATTERNS):

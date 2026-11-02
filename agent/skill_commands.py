@@ -11,7 +11,8 @@ from typing import Any, Dict, Mapping, Optional
 from hermes_constants import display_hermes_home
 from agent.prompt_cache_boundary import register_stable_prefix
 from agent.skill_preprocessing import load_skills_config as _load_skills_config, preprocess_skill_content
-from agent.skill_utils import AMBIGUOUS_SKILL_PREFIX
+from agent.skill_connector_gate import CONNECTOR_BLOCKED_PREFIX, connected_among, connector_blocked_label, refs_from_labels
+from agent.skill_utils import AMBIGUOUS_SKILL_PREFIX, skill_connector_requirements
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +290,10 @@ def ambiguous_skill_label(identifier: str, payload: dict) -> Optional[str]:
     return f"{AMBIGUOUS_SKILL_PREFIX}{identifier}: use one of {', '.join(load_names)}" if load_names else None
 
 
+def blocked_skill_label(identifier: str, payload: dict) -> Optional[str]:
+    return connector_blocked_label(identifier, payload) if isinstance(payload, dict) else None
+
+
 def _missing_skill_label(identifier: str) -> str:
     """Display form of an identifier that failed to load (failure path only: re-asks skill_view)."""
     try:
@@ -297,13 +302,13 @@ def _missing_skill_label(identifier: str) -> str:
         payload = json.loads(skill_view(normalize_skill_lookup_name(identifier), preprocess=False))
     except Exception:
         return identifier
-    return ambiguous_skill_label(identifier, payload) or identifier
+    return ambiguous_skill_label(identifier, payload) or blocked_skill_label(identifier, payload) or identifier
 
 
 def format_missing_skills(missing: list[str]) -> str:
     """One error line for unresolved preload identifiers: ambiguous ones keep their own wording,
     the rest are reported as ``Unknown skill(s): ...``."""
-    ambiguous = [m for m in missing if m.startswith(AMBIGUOUS_SKILL_PREFIX)]
+    ambiguous = [m for m in missing if m.startswith((AMBIGUOUS_SKILL_PREFIX, CONNECTOR_BLOCKED_PREFIX))]
     unknown = [m for m in missing if m not in ambiguous]
     return "; ".join(ambiguous + ([f"Unknown skill(s): {', '.join(unknown)}"] if unknown else []))
 
@@ -510,7 +515,22 @@ def _scan_skill_md(skill_md: Path, disabled: set, seen_names: set, commands: dic
                        name, cmd_key, commands[cmd_key]["name"])
         return
     commands[cmd_key] = {"name": name, "description": description or f"Invoke the {name} skill",
-                         "skill_md_path": str(skill_md), "skill_dir": str(skill_md.parent)}
+                         "skill_md_path": str(skill_md), "skill_dir": str(skill_md.parent),
+                         **_connector_fields(frontmatter)}
+
+
+def _connector_fields(frontmatter: dict[str, Any]) -> dict[str, list[str]]:
+    refs = skill_connector_requirements(frontmatter)
+    return {"connectors": [ref.label for ref in refs]} if refs else {}
+
+
+def _connected_commands(commands: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    refs = {ref for info in commands.values() for ref in refs_from_labels(info.get("connectors") or ())}
+    if not refs:
+        return commands
+    connected = connected_among(refs)
+    return {key: info for key, info in commands.items()
+            if all(ref in connected for ref in refs_from_labels(info.get("connectors") or ()))}
 
 
 def scan_skill_commands() -> dict[str, dict[str, Any]]:
@@ -538,7 +558,7 @@ def scan_skill_commands() -> dict[str, dict[str, Any]]:
         # Only names skill_view resolves to exactly this file get a /command: the shared catalog applies
         # project > local > create_dir > external precedence (live profile dir, #67277) and leaves
         # same-tier duplicates to their exact paths (`/skill a/one`), so a bare slug never guesses.
-        for entry in _skill_catalog():
+        for entry in _skill_catalog(skip_connector_gate=True):
             if entry["status"] == "unique":
                 try:
                     _scan_skill_md(Path(entry["path"]), disabled, seen_names, commands)
@@ -555,7 +575,7 @@ def scan_skill_commands() -> dict[str, dict[str, Any]]:
         # (file I/O, deferred imports) stays outside it.
         _skill_commands_by_key[key] = commands
         _skill_commands_sig_by_key[key] = signature
-    return commands
+    return _connected_commands(commands)
 
 
 # The most scopes the change watcher signs per pass (each is one ~1 ms stat walk).
@@ -625,7 +645,7 @@ def get_skill_commands() -> dict[str, dict[str, Any]]:
         # long-lived gateway's palette and dispatch see it without /reload-skills (CFG-8).
         current = _skill_dirs_signature()
         if current is None or scanned_at is None or current == scanned_at:
-            return cached
+            return _connected_commands(cached)
     # Scan outside the lock — file I/O and deferred imports; concurrent scans
     # are safe since each builds its own map.
     return scan_skill_commands()
@@ -670,6 +690,7 @@ def get_plugin_skill_commands() -> dict[str, dict[str, Any]]:
         cached = _scan_plugin_skill_commands(manager, metadata, tag)
     disabled = get_disabled_skill_names()
     disabled_plugins = _get_disabled_plugins()
+    cached = _connected_commands(cached)
     if not disabled and not disabled_plugins:
         return cached
     return {
@@ -710,7 +731,7 @@ def _scan_plugin_skill_commands(manager, metadata: list, tag: tuple) -> dict[str
             "name": qualified, "description": str(parsed.get("description") or entry.get("description")
                                                   or f"Invoke the {qualified} plugin skill").strip(),
             "skill_identifier": qualified, "skill_md_path": str(skill_md),
-            "skill_dir": str(skill_md.parent), "source": "plugin",
+            "skill_dir": str(skill_md.parent), "source": "plugin", **_connector_fields(parsed),
         }
     with _publish_lock:
         _plugin_skill_commands, _plugin_skill_commands_tag = commands, tag
@@ -770,7 +791,7 @@ def reload_skills() -> dict[str, Any]:
         # Preserve only a previously published view. A first-ever reload has
         # no before-state, so discoveries correctly appear as additions.
         with _publish_lock:
-            before_commands = dict(_skill_commands_by_key.get(key, {}))
+            before_commands = dict(_connected_commands(_skill_commands_by_key.get(key, {})))
             if _plugin_skill_commands_tag and _plugin_skill_commands_tag[0] == key[1]:
                 for command, info in _plugin_skill_commands.items():
                     if command not in before_commands:

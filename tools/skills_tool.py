@@ -13,7 +13,7 @@ from contextlib import contextmanager, suppress
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Dict, List, Optional, Tuple
 
-from hermes_constants import get_hermes_home
+from hermes_constants import get_hermes_home, get_skills_dir
 from tools.registry import registry, tool_error
 from hermes_cli.config import cfg_get
 from agent.skill_utils import (
@@ -94,7 +94,7 @@ def _skills_dir() -> Path:
     """Active profile's skills dir at call time: the patched ``SKILLS_DIR`` when a patcher changed
     it, else live profile-scoped HERMES_HOME (long-lived runtimes may import before profile set)."""
     configured = Path(SKILLS_DIR)
-    return configured if configured != _SKILLS_DIR_AT_IMPORT else get_hermes_home() / "skills"
+    return configured if configured != _SKILLS_DIR_AT_IMPORT else get_skills_dir()
 
 
 _secret_capture_callback = None
@@ -161,6 +161,7 @@ skill_matches_platform = _skill_utils_delegate("skill_matches_platform")
 # Offer-time relevance gate (kanban/docker/s6), NOT hard compatibility; explicit loads bypass it.
 skill_matches_environment = _skill_utils_delegate("skill_matches_environment")
 skill_matches_apps = _skill_utils_delegate("skill_matches_apps")
+skill_connector_requirements = _skill_utils_delegate("skill_connector_requirements")
 _parse_frontmatter = _skill_utils_delegate("parse_frontmatter")
 _get_disabled_skill_names = _skill_utils_delegate("get_disabled_skill_names")
 
@@ -210,7 +211,8 @@ def _is_skill_disabled(*names: str, platform: str | None = None) -> bool:
         platform_disabled = None
         if resolved_platform:
             platform_disabled = cfg_get(skills_cfg, "platform_disabled", resolved_platform)
-        disabled = skills_cfg.get("disabled", [])
+        from hermes_cli.shared_catalog_origins import catalog_disabled_names
+        disabled = set(skills_cfg.get("disabled") or ()) | catalog_disabled_names(skills_cfg)
         return any((platform_disabled is not None and n in platform_disabled) or n in disabled for n in names)
     except Exception:
         return False
@@ -226,11 +228,29 @@ def skill_search_dirs() -> tuple[list[tuple[int, Path]], Path]:
     return roots, active_skills_dir
 
 
-def _skill_catalog(*, skip_disabled: bool = False, include_hidden: bool = False) -> list[dict[str, Any]]:
+def _skill_catalog(
+    *, skip_disabled: bool = False, include_hidden: bool = False, skip_connector_gate: bool = False,
+) -> list[dict[str, Any]]:
     """Every scanned skill resolved by ``agent.skill_utils.resolve_skill_catalog`` (status /
     load_name / tier / path), visible ones only unless *include_hidden*; cached per session.
     Resolution runs over ALL files first — skill_view ignores platform/disabled gates when
     collecting candidates, so it asks for hidden rows too."""
+    skills = _scanned_skill_catalog(skip_disabled=skip_disabled, include_hidden=include_hidden)
+    if include_hidden or skip_connector_gate:
+        return skills
+    return only_connected_skills(skills)
+
+
+def only_connected_skills(skills: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    refs = {ref for s in skills for ref in s.get("connectors", ())}
+    if not refs:
+        return skills
+    from agent.skill_connector_gate import connected_among
+    connected = connected_among(refs)
+    return [s for s in skills if all(ref in connected for ref in s.get("connectors", ()))]
+
+
+def _scanned_skill_catalog(*, skip_disabled: bool, include_hidden: bool) -> list[dict[str, Any]]:
     from agent.skill_utils import (
         TIER_PROJECT, is_disabled_entry, iter_project_skill_files, iter_skill_index_files, resolve_skill_catalog)
     cache_key = ("with_disabled" if skip_disabled else "filtered", include_hidden)
@@ -259,7 +279,8 @@ def _skill_catalog(*, skip_disabled: bool = False, include_hidden: bool = False)
                     "name": frontmatter.get("name", skill_md.parent.name)[:MAX_NAME_LENGTH],
                     "description": _truncate_description(description),
                     "category": _get_category_from_path(skill_md), "tier": tier, "root": scan_dir,
-                    "path": skill_md, "visible": bool(skill_matches_platform(frontmatter)
+                    "path": skill_md, "connectors": skill_connector_requirements(frontmatter),
+                    "visible": bool(skill_matches_platform(frontmatter)
                                                       and skill_matches_environment(frontmatter)
                                                       and skill_matches_apps(frontmatter))})
             except (UnicodeDecodeError, PermissionError) as e:
@@ -298,6 +319,9 @@ def skills_list(category: str | None = None, task_id: str | None = None) -> str:
             for plugin_skill in get_plugin_manager().list_plugin_skill_metadata():
                 frontmatter = plugin_skill.pop("frontmatter", {})
                 if not skill_matches_platform(frontmatter) or _is_skill_disabled(plugin_skill["name"]):
+                    continue
+                from agent.skill_connector_gate import unmet_connectors
+                if unmet_connectors(frontmatter):
                     continue
                 all_skills.append(plugin_skill)
         except Exception:
@@ -583,7 +607,21 @@ def locate_skill(name: str, local_category_name: Optional[str], roots):
         available = [s["name"] for s in sort_skills(find_all_skills())[:20]]
         return _fail(f"Skill '{name}' not found.", available_skills=available,
                      hint="Use skills_list to see all available skills"), None, None
+    if denial := connector_denial_for(skill_md, name):
+        return denial, None, None
     return None, skill_dir, skill_md
+
+
+def connector_denial_for(skill_md: Path, name: str) -> Optional[str]:
+    try:
+        content = _read_skill_text(skill_md)
+    except OSError:
+        return None
+    frontmatter = _parse_frontmatter(content)[0]
+    from agent.skill_connector_gate import connector_denial, unmet_connectors
+    if unmet := unmet_connectors(frontmatter, blocking=True):
+        return connector_denial(str(frontmatter.get("name") or name), unmet)
+    return None
 
 
 def _owned_relative(skill_dir: Optional[Path], skill_md: Path, all_dirs) -> str:

@@ -13,7 +13,7 @@ import sys
 import threading
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, NamedTuple, Optional
 
 from hermes_constants import (
     get_hermes_home, get_scratch_dir, get_skills_dir, is_wsl, reset_hermes_home_override, set_hermes_home_override,
@@ -26,8 +26,10 @@ from agent.skill_utils import (
     TIER_LOCAL, clip_skill_description, extract_skill_conditions, extract_skill_description,
     get_disabled_skill_names, get_skill_search_roots,
     iter_skill_index_files, parse_frontmatter, skill_matches_apps, skill_matches_environment,
-    skill_matches_platform, skill_matches_platform_list,
+    skill_connector_requirements, skill_matches_platform, skill_matches_platform_list,
 )
+from agent.skill_connector_gate import (
+    connected_among, connector_state_key, refs_from_labels, unmet_connectors, warm_hosted_connectors)
 from tools.threat_patterns import scan_for_threats as _scan_for_threats
 from utils import atomic_json_write, file_cache_version
 
@@ -1075,11 +1077,17 @@ def drain_truncation_warnings() -> list:
 # per profile × platform), so the old cap of 8 could thrash on a gateway multiplexing default + several bots
 # (each miss = full os.walk manifest rebuild). ~32 costs low single-digit MB worst case.
 _SKILLS_PROMPT_CACHE_MAX = 32
-_SKILLS_PROMPT_CACHE: OrderedDict[tuple, str] = OrderedDict()
+class _CachedSkillsIndex(NamedTuple):
+    text: str
+    referenced: frozenset
+    connected: tuple
+
+
+_SKILLS_PROMPT_CACHE: OrderedDict[tuple, _CachedSkillsIndex] = OrderedDict()
 _SKILLS_PROMPT_CACHE_LOCK = threading.Lock()
 # v2 added org provenance fields (org_id/org_author); v4 adds ``rel`` (SKILL.md path relative to its root) for
 # duplicate-name resolution; v5 stores descriptions clipped at a word boundary. Older snapshots are rebuilt.
-_SKILLS_SNAPSHOT_VERSION = 5
+_SKILLS_SNAPSHOT_VERSION = 6
 
 
 def _skills_prompt_snapshot_path() -> Path:
@@ -1134,6 +1142,10 @@ def _requires_apps_list(frontmatter: dict) -> list[str]:
     return [str(a).strip() for a in items if str(a).strip()]
 
 
+def _connector_labels(frontmatter: dict) -> list[str]:
+    return [ref.label for ref in skill_connector_requirements(frontmatter)]
+
+
 def _build_snapshot_entry(skill_file: Path, skills_dir: Path, frontmatter: dict, description: str) -> dict:
     """Serialisable metadata dict for one skill."""
     parts = skill_file.relative_to(skills_dir).parts
@@ -1147,6 +1159,7 @@ def _build_snapshot_entry(skill_file: Path, skills_dir: Path, frontmatter: dict,
         "description": description, "platforms": [str(p).strip() for p in platforms if str(p).strip()],
         "conditions": extract_skill_conditions(frontmatter),
         "requires_apps": _requires_apps_list(frontmatter),
+        "connector": _connector_labels(frontmatter),
     }
     return entry
 
@@ -1206,7 +1219,7 @@ def _plugin_skill_prompt_rows(
                 continue
             frontmatter = meta.get("frontmatter") or {}
             if not (skill_matches_platform(frontmatter) and skill_matches_environment(frontmatter)
-                    and skill_matches_apps(frontmatter)):
+                    and skill_matches_apps(frontmatter)) or unmet_connectors(frontmatter):
                 continue
             if not _skill_should_show(extract_skill_conditions(frontmatter), available_tools,
                                       available_toolsets, session_platform):
@@ -1233,6 +1246,7 @@ def _current_session_platform_hint() -> str:
 def build_skills_system_prompt(
     available_tools: set[str] | None = None, available_toolsets: set[str] | None = None,
     compact_categories: frozenset[str] | None = None, skills_dir_override: Path | None = None,
+    home_override: Path | None = None,
 ) -> str:
     """Compact skill index for the system prompt.
 
@@ -1249,7 +1263,7 @@ def build_skills_system_prompt(
     _home_token = None
     if skills_dir_override is not None:
         skills_dir = Path(skills_dir_override)
-        _home_token = set_hermes_home_override(str(skills_dir.parent))
+        _home_token = set_hermes_home_override(str(home_override or skills_dir.parent))
     else:
         skills_dir = get_skills_dir()
     try:
@@ -1393,9 +1407,11 @@ def _build_skills_system_prompt_inner(
     )
     with _SKILLS_PROMPT_CACHE_LOCK:
         cached = _SKILLS_PROMPT_CACHE.get(cache_key)
-        if cached is not None and not app_gated:
-            _SKILLS_PROMPT_CACHE.move_to_end(cache_key)
-            return cached
+    if cached is not None and not app_gated and connector_state_key(cached.referenced) == cached.connected:
+        with _SKILLS_PROMPT_CACHE_LOCK:
+            if _SKILLS_PROMPT_CACHE.get(cache_key) is cached:
+                _SKILLS_PROMPT_CACHE.move_to_end(cache_key)
+        return cached.text
 
     def hides(skill_name: str, conditions: dict) -> bool:
         """Per-build visibility rule shared by every skill source (snapshot, scan, project, external)."""
@@ -1425,9 +1441,13 @@ def _build_skills_system_prompt_inner(
     rows += [({**entry, "tier": TIER_LOCAL, "root": skills_dir}, ok) for entry, ok in candidates]
     for tier, root in ((t, d) for t, d in extra_roots if t != TIER_PROJECT and d.exists()):
         rows += _scan_extra_root(root, iter_skill_index_files(root, "SKILL.md"), tier, "Error reading external skill %s: %s")
+    referenced = frozenset(ref for entry, _ in rows for ref in refs_from_labels(entry.get("connector") or ()))
+    warm_hosted_connectors(referenced)
+    connected = connected_among(referenced)
     resolved = resolve_skill_catalog([
         {**entry, "name": _entry_name(entry), "path": entry["root"] / entry["rel"],
-         "visible": ok and not hides(entry.get("skill_name") or "", entry.get("conditions") or {})}
+         "visible": ok and not hides(entry.get("skill_name") or "", entry.get("conditions") or {})
+         and all(ref in connected for ref in refs_from_labels(entry.get("connector") or ()))}
         for entry, ok in rows])
     visible_entries = [e for e in resolved
                        if e["visible"] and e["status"] != "shadowed" and not is_disabled_entry(e, disabled)]
@@ -1452,7 +1472,8 @@ def _build_skills_system_prompt_inner(
     unloadable = sorted({e["name"] for e in visible_entries if not e["load_name"]})
     result = _render_skills_index(skills_by_category, compact_categories, available_tools, unloadable)
     with _SKILLS_PROMPT_CACHE_LOCK:
-        _SKILLS_PROMPT_CACHE[cache_key] = result
+        _SKILLS_PROMPT_CACHE[cache_key] = _CachedSkillsIndex(
+            result, referenced, tuple(sorted(ref.label for ref in connected)))
         _SKILLS_PROMPT_CACHE.move_to_end(cache_key)
         while len(_SKILLS_PROMPT_CACHE) > _SKILLS_PROMPT_CACHE_MAX:
             _SKILLS_PROMPT_CACHE.popitem(last=False)

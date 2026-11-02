@@ -205,12 +205,13 @@ def _load_cron_skill_parts(job: dict, skill_names: list[str]) -> list[str]:
     from tools.skills_tool import skill_view
     from tools.skill_usage import bump_use
     from agent.skill_bundles import build_bundle_invocation_message, resolve_bundle_command_key
-    from agent.skill_commands import _inject_skill_config, ambiguous_skill_label
+    from agent.skill_commands import _inject_skill_config, ambiguous_skill_label, blocked_skill_label
     from agent.skill_utils import normalize_skill_lookup_name
     job_label = job.get("name", job.get("id"))
     task_id = str(job.get("id") or "") or None
     parts: list[str] = []
     skipped: list[str] = []
+    blocked: list[str] = []
 
     def _skip(msg: str, *args, label: str | None = None) -> None:
         logger.warning("Cron job '%s': " + msg, job_label, *args)
@@ -238,6 +239,10 @@ def _load_cron_skill_parts(job: dict, skill_names: list[str]) -> list[str]:
         if ambiguous := ambiguous_skill_label(skill_name, loaded):
             _skip("%s — skipping", ambiguous, label=ambiguous)
             continue
+        if blocked_label := blocked_skill_label(skill_name, loaded):
+            logger.warning("Cron job '%s': %s — skipping", job_label, blocked_label)
+            blocked.append(blocked_label)
+            continue
         if not loaded.get("success"):
             _skip(
                 "skill not found, skipping — %s",
@@ -257,6 +262,13 @@ def _load_cron_skill_parts(job: dict, skill_names: list[str]) -> list[str]:
             str(loaded.get("content") or "").strip()])
         _inject_skill_config(loaded, parts)
 
+    if blocked:
+        parts.insert(0, (
+            f"[IMPORTANT: The following skill(s) were listed for this job but their connector is not connected "
+            f"for this bot, so they were skipped: {'; '.join(blocked)}. "
+            f"Start your response with a brief notice so the user is aware, e.g.: "
+            f"'⚠️ Skill(s) skipped, connector not connected: {'; '.join(blocked)}']"
+        ))
     if skipped:
         parts.insert(0, (
             f"[IMPORTANT: The following skill(s) were listed for this job but could not be found "

@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import threading
+from dataclasses import dataclass
 from pathlib import Path, PurePath
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
@@ -192,6 +193,53 @@ def skill_matches_apps(frontmatter: dict[str, Any]) -> bool:
     return True
 
 
+CONNECTOR_KIND_HOSTED = "hosted"
+CONNECTOR_KIND_MCP = "mcp"
+CONNECTOR_KIND_INVALID = "invalid"
+_MCP_CONNECTOR_PREFIX = "mcp:"
+_INVALID_CONNECTOR_PREFIX = "invalid:"
+_HOSTED_CONNECTOR_SLUG = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+
+
+@dataclass(frozen=True)
+class ConnectorRef:
+    kind: str
+    name: str
+
+    @property
+    def label(self) -> str:
+        if self.kind == CONNECTOR_KIND_MCP:
+            return f"{_MCP_CONNECTOR_PREFIX}{self.name}"
+        if self.kind == CONNECTOR_KIND_INVALID:
+            return f"{_INVALID_CONNECTOR_PREFIX}{self.name}"
+        return self.name
+
+    @property
+    def display_name(self) -> str:
+        return self.name or "unknown"
+
+
+def _parse_connector_ref(raw: Any) -> ConnectorRef:
+    if not isinstance(raw, str):
+        return ConnectorRef(CONNECTOR_KIND_INVALID, str(raw)[:64])
+    text = raw.strip()
+    if text.startswith(_MCP_CONNECTOR_PREFIX):
+        server = text[len(_MCP_CONNECTOR_PREFIX):].strip()
+        return ConnectorRef(CONNECTOR_KIND_MCP, server) if server else ConnectorRef(CONNECTOR_KIND_INVALID, text[:64])
+    slug = text.lower()
+    if _HOSTED_CONNECTOR_SLUG.fullmatch(slug):
+        return ConnectorRef(CONNECTOR_KIND_HOSTED, slug)
+    return ConnectorRef(CONNECTOR_KIND_INVALID, text[:64])
+
+
+def skill_connector_requirements(frontmatter: dict[str, Any]) -> tuple[ConnectorRef, ...]:
+    raw = frontmatter.get("connector")
+    if raw is None or raw == "" or (isinstance(raw, (list, tuple)) and not raw):
+        return ()
+    items = raw if isinstance(raw, (list, tuple)) else [raw]
+    return tuple(dict.fromkeys(_parse_connector_ref(item) for item in items))
+
+
 _RAW_CONFIG_CACHE: dict[tuple[str, int, int, int, int], dict[str, Any]] = {}
 # A multiplexed watcher rotates through up to ~32 published profile/project scopes plus
 # the ambient one (#141610), so a miss must not drop the whole cache — only a stale
@@ -276,13 +324,16 @@ ESSENTIAL_SKILLS: frozenset = frozenset({"hermes-agent"})
 
 def get_disabled_skill_names(platform: str | None = None) -> set[str]:
     """Disabled skill names from config.yaml: global list ∪ platform list
-    (*platform* defaults to ``HERMES_PLATFORM`` / ``HERMES_SESSION_PLATFORM``)."""
+    (*platform* defaults to ``HERMES_PLATFORM`` / ``HERMES_SESSION_PLATFORM``), plus, with the shared
+    catalog active, every non-bundled catalog skill outside ``skills.enabled``."""
+    from hermes_cli.shared_catalog_origins import catalog_disabled_names
     skills_cfg = _skills_cfg()
+    catalog_off = catalog_disabled_names(skills_cfg)
     if skills_cfg is None:
-        return set()
+        return catalog_off - ESSENTIAL_SKILLS
     from gateway.session_context import get_session_env
     resolved_platform = platform or os.getenv("HERMES_PLATFORM") or get_session_env("HERMES_SESSION_PLATFORM")
-    disabled = _normalize_string_set(skills_cfg.get("disabled"))
+    disabled = _normalize_string_set(skills_cfg.get("disabled")) | catalog_off
     platform_disabled = (skills_cfg.get("platform_disabled") or {}).get(resolved_platform) if resolved_platform else None
     if platform_disabled is not None:
         disabled |= _normalize_string_set(platform_disabled)
