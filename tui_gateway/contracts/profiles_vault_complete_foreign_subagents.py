@@ -166,6 +166,7 @@ class ProfileRow(Result):
     ui_meta_revisions: dict[str, int] = Field(default_factory=dict)
     ui_meta: dict[str, JsonValue] | None = None
     has_avatar: bool = False
+    onboarding_pending: bool = False
 
 
 class ProfilesListParams(ProfileParams):
@@ -174,12 +175,14 @@ class ProfilesListParams(ProfileParams):
 
 class ProfilesListResult(Result):
     """``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself;
-    ``install_id`` (as on ``/api/status``) names the machine that answered."""
+    ``install_id`` (as on ``/api/status``) names the machine that answered; ``bot_onboarding`` says this
+    backend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``."""
 
     profiles: list[ProfileRow] = Field(default_factory=list)
     bot_mode_protocol: bool = True
     bot_birth_notice: bool = False
     bot_about_you: bool = False
+    bot_onboarding: bool = False
     install_id: str = ""
 
 
@@ -225,6 +228,8 @@ class ProfilesCreateParams(ProfileParams):
     provider: str | None = None
     share_auth: bool | str | None = None
     mirror_credentials: bool | str | None = None
+    onboarding: bool | str | None = None
+    display_name: str | None = None
 
 
 class ProfileMirrored(Result):
@@ -243,6 +248,7 @@ class ProfilesCreateResult(Result):
     soul_written: bool = False
     model_set: bool = False
     mirrored: ProfileMirrored
+    onboarding_pending: bool | None = None
 
 
 method("profiles.create", params=ProfilesCreateParams, result=ProfilesCreateResult,
@@ -284,6 +290,7 @@ class ProfilesDescribeResult(Result):
     toolsets: list[ToolsetEntry] = Field(default_factory=list)
     toolsets_pinned: bool = False
     mcp_servers: list[McpServerEntry] = Field(default_factory=list)
+    onboarding_pending: bool = False
 
 
 method("profiles.describe", params=ProfileNameParams, result=ProfilesDescribeResult,
@@ -336,6 +343,40 @@ class ProfilesConfigureResult(Result):
 
 method("profiles.configure", params=ProfilesConfigureParams, result=ProfilesConfigureResult,
        doc="Editor Save: apply any subset of a profile's sections and report each one.")
+
+
+class ProfilesOnboardParams(ProfileParams):
+    """Exactly one of ``purpose`` (answer) or ``dismiss``; a rejected purpose is error 4077 and stays pending."""
+
+    name: str | None = None
+    purpose: str | None = None
+    dismiss: bool | str | None = None
+
+
+class ProfilesOnboardResult(Result):
+    ok: bool = True
+    cleared: bool = False
+    summary: str | None = None
+
+
+method("profiles.onboard", params=ProfilesOnboardParams, result=ProfilesOnboardResult,
+       doc="Answer or dismiss a new bot's first-run question and clear its onboarding_pending flag.")
+
+
+class ProfilesIdentityUndoParams(ProfileParams):
+    """``change_id`` comes from a ``tool.complete`` ``identity_change``; a newer change refuses it (4078)."""
+
+    name: str | None = None
+    change_id: str
+
+
+class ProfilesIdentityUndoResult(Result):
+    ok: bool = True
+    summary: str = ""
+
+
+method("profiles.identity.undo", params=ProfilesIdentityUndoParams, result=ProfilesIdentityUndoResult,
+       doc="Restore the profile's identity to before the named change (newest change only).")
 
 
 class ProfilesSetAssetParams(ProfileParams):

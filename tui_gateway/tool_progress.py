@@ -232,6 +232,10 @@ def _tool_result_needs_user(result: object) -> bool:
     return isinstance(exit_code, int) and exit_code != 0 and not isinstance(exit_code, bool)
 
 
+def _identity_memory_call(name: str, args: dict) -> bool:
+    return name == "memory" and isinstance(args, dict) and args.get("target") == "identity"
+
+
 def _tool_labels(name: str, args: dict) -> list[dict] | None:
     from agent.display import tool_labels_for_call
 
@@ -294,7 +298,7 @@ def _on_tool_start(sid: str, tool_call_id: str, name: str, args: dict):
         # A preview prepared for an earlier call whose completion never fired (failed
         # flush) must not attach to a provider that reuses the same call id.
         session.setdefault("tool_result_metadata", {}).pop(tool_call_id, None)
-    if (_tool_progress_enabled(sid) or _tool_lifecycle_required_for_ui(name)
+    if (_tool_progress_enabled(sid) or _tool_lifecycle_required_for_ui(name) or _identity_memory_call(name, args)
             or _connector_tool_lifecycle(name, args)):
         payload: dict[str, object] = {"tool_id": tool_call_id, "name": name, "context": _tool_ctx(name, args)}
         if (labels := _tool_labels(name, args)) is not None:
@@ -364,7 +368,7 @@ def _on_tool_complete(sid: str, tool_call_id: str, name: str, args: dict, result
             _cache_todo_state(session, todo_state)
     from agent.display import is_neutral_failure
     if (_tool_progress_enabled(sid) or payload.get("inline_diff") or _tool_lifecycle_required_for_ui(name)
-            or is_todo_tool_name(name) or _connector_tool_lifecycle(name, args)
+            or _identity_memory_call(name, args) or is_todo_tool_name(name) or _connector_tool_lifecycle(name, args)
             or (_tool_result_needs_user(result) and not is_neutral_failure(name, result))):
         _emit_tool_lifecycle("tool.complete", sid, name, args, payload)
     # Task state is application data, not tool-progress chrome: a dedicated full-snapshot event lets

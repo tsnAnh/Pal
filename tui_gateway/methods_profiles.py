@@ -267,6 +267,8 @@ def _profile_ui_meta_fields(row: dict, profile_dir) -> None:
             # YAML promotes unquoted timestamps to datetime/date; the handler's contract is JSON, so
             # coerce YAML-only scalars to their ISO string at the boundary (#92506).
             fields["ui_meta"] = json.loads(json.dumps(ui_meta, default=_yaml_scalar_to_json))
+        if _lazy("hermes_cli.bot_onboarding", "is_onboarding_pending")(raw_meta):
+            fields["onboarding_pending"] = True
         return fields
 
     # Second parse of this profile.yaml in the same request (``read_profile_meta`` already read it
@@ -300,7 +302,7 @@ def _(rid, params: dict) -> dict:
     # session, so clients must not append it to SOUL.md. install_id (same value as /api/status)
     # lets a multi-connection client prove WHICH machine answered a routed list.
     from hermes_cli.install_identity import get_install_id
-    return _ok(rid, {"profiles": out, "bot_mode_protocol": True, "bot_birth_notice": True, "bot_about_you": True, "install_id": _try(lambda: get_install_id() or "", "")})
+    return _ok(rid, {"profiles": out, "bot_mode_protocol": True, "bot_birth_notice": True, "bot_about_you": True, "bot_onboarding": True, "install_id": _try(lambda: get_install_id() or "", "")})
 
 
 @method("bot_mode.about_you.get")
@@ -327,7 +329,7 @@ def _(rid, params: dict) -> dict:
 @method("profiles.create")
 def _(rid, params: dict) -> dict:
     """Create a profile (ws twin of POST /api/profiles). Params: ``name``, ``description``,
-    ``clone_from`` (omitted = fresh + bundled skills), ``clone_all``, ``clone_channels`` (opt-in: keep the
+    ``clone_from`` (omitted = fresh + bundled skills), ``display_name`` (presentation name stored in profile.yaml), ``clone_all``, ``clone_channels`` (opt-in: keep the
     source's bot tokens/allowlists — default strips them so two profiles never hold one bot), ``no_skills``, ``soul``,
     ``model`` + ``provider``, ``share_auth``, ``no_alias``, ``mirror_credentials`` (default true: a bare
     ``create_profile()`` seeds a comment-only .env and no auth.json = NO provider headless)."""
@@ -350,12 +352,15 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5062, str(e))
     # CLI/REST create flow: bundled skills for fresh profiles, then the alias wrapper.
     if not clone_from:
-        _best_effort(lambda: profiles_mod.seed_profile_skills(path, quiet=True))
+        _best_effort(lambda: profiles_mod.seed_new_profile_skills(path, quiet=True))
     if not is_truthy_value(params.get("no_alias", False)):
         _best_effort(lambda: profiles_mod.check_alias_collision(name) or profiles_mod.create_wrapper_script(name))
     soul = params.get("soul")
     soul_written = isinstance(soul, str) and bool(soul.strip()) and _best_effort(
         lambda: (path / "SOUL.md").write_text(soul, encoding="utf-8"))
+    display_name = str(params.get("display_name") or "").strip()
+    if display_name:
+        _best_effort(lambda: profiles_mod.write_profile_meta(path, display_name=display_name[:64]))
     mirrored = _mirror_launch_credentials(path, params)
     model, provider = _model_provider_params(params)
     model_set = False
@@ -363,8 +368,13 @@ def _(rid, params: dict) -> dict:
         model_set = _best_effort(lambda: _pin_profile_model(path, provider, model))
     elif is_truthy_value(params.get("mirror_credentials", True)):
         mirrored["model_inherited"] = _try(lambda: _inherit_launch_model(path), False)
+    onboarding = {}
+    if is_truthy_value(params.get("onboarding", False)):
+        with _profile_ui_meta_lock:
+            onboarding["onboarding_pending"] = _best_effort(
+                lambda: _lazy("hermes_cli.bot_onboarding", "mark_onboarding_pending")(path))
     return _ok(rid, {"ok": True, "name": name, "path": str(path), "soul_written": soul_written,
-                     "model_set": model_set, "mirrored": mirrored})
+                     "model_set": model_set, "mirrored": mirrored, **onboarding})
 
 
 @_profile_handler("profiles.describe", 5063)
@@ -380,14 +390,14 @@ def _(rid, params: dict) -> dict:
         from hermes_cli.skills_config import get_disabled_skills
         cfg = load_config() or {}
         disabled = {s.lower() for s in get_disabled_skills(cfg)}
-        skills_root = profile_dir / "skills"
+        skills_root = _lazy("hermes_constants", "get_skills_dir")(profile_dir)
         installed = [
             {"name": md.parent.name, "enabled": md.parent.name.lower() not in disabled}
             for md in (iter_skill_index_files(skills_root, "SKILL.md") if skills_root.is_dir() else ())]
         toolsets_out, pinned_set = _describe_toolsets(cfg)
         soul_path = profile_dir / "SOUL.md"
         soul = _try(lambda: soul_path.read_text(encoding="utf-8", errors="replace") if soul_path.is_file() else "", "")
-        mcp_cfg = cfg.get("mcp_servers")
+        mcp_cfg = _try(lambda: _lazy("hermes_cli.shared_catalog", "visible_mcp_servers")(cfg.get("mcp_servers")), None)
         mcp_out = _try(lambda: [
             {"name": str(srv_name), "enabled": _mcp_entry_enabled(entry),
              "transport": str(entry.get("transport") or "http") if entry.get("url") else "stdio"}
@@ -401,7 +411,14 @@ def _(rid, params: dict) -> dict:
             "model": {"provider": str(model_cfg.get("provider") or ""),
                       "default": str(model_cfg.get("default") or "")},
             "skills": installed, "toolsets": toolsets_out,
-            "toolsets_pinned": pinned_set is not None, "mcp_servers": mcp_out})
+            "toolsets_pinned": pinned_set is not None, "mcp_servers": mcp_out,
+            "onboarding_pending": _try(
+                lambda: _lazy("hermes_cli.bot_onboarding", "read_onboarding_pending")(profile_dir), False)})
+
+
+def _write_soul_locked(profile_dir, soul: str) -> None:
+    with _hermes_home_scope(profile_dir):
+        _lazy("tools.memory_tool_identity", "replace_soul")(profile_dir, soul)
 
 
 @_profile_handler("profiles.configure", 5064)
@@ -416,7 +433,7 @@ def _(rid, params: dict) -> dict:
     if isinstance(params.get("ui_meta"), dict):
         _configure_ui_meta(profile_dir, params, applied)
     if isinstance(params.get("soul"), str):
-        applied["soul"] = _best_effort(lambda: (profile_dir / "SOUL.md").write_text(params["soul"], encoding="utf-8"))
+        applied["soul"] = _best_effort(lambda: _write_soul_locked(profile_dir, params["soul"]))
     if isinstance(params.get("description"), str):
         write_meta = _lazy("hermes_cli.profiles", "write_profile_meta")
         applied["description"] = _best_effort(lambda: write_meta(
@@ -428,6 +445,51 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"ok": all(applied.values()) if applied else True, "applied": applied,
                      **({"confirm_required": True, "confirm_message": confirm_message}
                         if confirm_message is not None else {})})
+
+
+@_profile_handler("profiles.onboard", 5068)
+def _(rid, params: dict) -> dict:
+    _name, profile_dir, err = _resolve_profile(rid, params)
+    if err is not None:
+        return err
+    purpose = params.get("purpose")
+    answered = isinstance(purpose, str) and bool(purpose.strip())
+    dismiss = is_truthy_value(params.get("dismiss", False))
+    if answered == dismiss:
+        return _err(rid, 4077, "Send either a purpose or dismiss, not both or neither.")
+    summary = None
+    with _hermes_home_scope(profile_dir):
+        if answered:
+            identity_error = _lazy("tools.memory_tool_identity", "IdentityError")
+            apply_purpose = _lazy("tools.memory_tool_identity", "apply_onboarding_purpose")
+            try:
+                summary = apply_purpose(profile_dir, purpose).get("summary")
+            except identity_error as e:
+                return _err(rid, 4077, str(e))
+            except OSError:
+                return _err(rid, 5068, "Could not save this right now; nothing was changed.")
+        with _profile_ui_meta_lock:
+            cleared = _lazy("hermes_cli.bot_onboarding", "clear_onboarding_pending")(profile_dir)
+    return _ok(rid, {"ok": True, "cleared": cleared, "summary": summary})
+
+
+@_profile_handler("profiles.identity.undo", 5069)
+def _(rid, params: dict) -> dict:
+    _name, profile_dir, err = _resolve_profile(rid, params)
+    if err is not None:
+        return err
+    change_id = str(params.get("change_id") or "").strip()
+    if not change_id:
+        return _err(rid, 4077, "change_id required")
+    identity_error = _lazy("tools.memory_tool_identity", "IdentityError")
+    with _hermes_home_scope(profile_dir):
+        try:
+            result = _lazy("tools.memory_tool_identity", "undo_identity")(profile_dir, change_id)
+        except identity_error as e:
+            return _err(rid, 4078, str(e))
+        except OSError:
+            return _err(rid, 5069, "Could not restore the earlier version right now; nothing was changed.")
+    return _ok(rid, {"ok": True, "summary": str(result.get("summary") or "")})
 
 
 @_profile_handler("profiles.set_asset", 5065)
@@ -635,7 +697,7 @@ def _configure_ui_meta(profile_dir, params, applied) -> None:
         expected = params.get("ui_meta_expected_revisions")
         if expected is not None and not isinstance(expected, dict):
             raise ValueError("ui_meta_expected_revisions must be an object")
-        with _profile_ui_meta_lock:
+        with _profile_ui_meta_lock, _lazy("hermes_cli.profile_yaml", "profile_yaml_lock")(profile_dir):
             existing = _read_profile_yaml(profile_dir)
             raw_revisions = existing.get("_ui_meta_revisions")
             revisions = _clean_revisions(raw_revisions if isinstance(raw_revisions, dict) else {})
@@ -727,11 +789,17 @@ def _mcp_entry_enabled(entry: dict) -> bool:
 def _save_mcp_toggles(cfg, enabled, launch_mcp, save_config) -> None:
     """Write the ``enabled`` flag every runtime resolver reads (``enabled_mcp_server_names``,
     coding_context, oneshot); the legacy ``disabled`` key is dropped so old configs migrate."""
+    shared = _lazy("hermes_cli.shared_catalog", "shared_mcp_names")()
     wanted = _clean_names(enabled)
     mcp_cfg = cfg.get("mcp_servers") if isinstance(cfg.get("mcp_servers"), dict) else {}
     for srv in wanted:
-        if not isinstance(mcp_cfg.get(srv), dict) and isinstance(launch_mcp.get(srv), dict):
+        if isinstance(mcp_cfg.get(srv), dict):
+            continue
+        if srv in shared:
+            mcp_cfg[srv] = {}
+        elif isinstance(launch_mcp.get(srv), dict):
             mcp_cfg[srv] = dict(launch_mcp[srv])
+    mcp_cfg = _lazy("hermes_cli.shared_catalog", "prune_stale_bot_entries")(mcp_cfg)
     for srv, entry in mcp_cfg.items():
         if isinstance(entry, dict):
             entry["enabled"] = srv in wanted

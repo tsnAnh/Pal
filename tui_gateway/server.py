@@ -192,7 +192,7 @@ _LONG_HANDLERS = frozenset({
     "learning.frames", "plugins.manage", "plugins.catalog.lookup", "reload.mcp", "mcp.servers.test",
     "mcp.servers.oauth.start",
     "process.list", "profiles.configure", "profiles.create", "profiles.describe", "profiles.get_asset",
-    "profiles.list", "profiles.set_asset", "profiles.template.export", "profiles.template.import",
+    "profiles.identity.undo", "profiles.list", "profiles.onboard", "profiles.set_asset", "profiles.template.export", "profiles.template.import",
     "bot_relay.roster.sync", "bot_relay.outbox.drain",
     "bot_relay.deliver", "bot_relay.reply", "image.generate", "projects.discover_repos",
     "projects.record_repos", "projects.for_cwd", "projects.tree", "projects.project_sessions",

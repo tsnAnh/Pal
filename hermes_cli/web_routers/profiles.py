@@ -31,6 +31,7 @@ from fastapi import APIRouter, HTTPException, Query
 from hermes_cli.session_listing import subagent_listing_scope
 from hermes_cli.web_deps import late
 from hermes_cli.config import get_process_hermes_home
+from hermes_constants import get_skills_dir
 from hermes_cli.profiles import ProfileIdentitySettlementPending
 from hermes_cli.web_server_config import (
     _apply_main_model_assignment, _normalize_main_model_assignment, _validated_main_model_selection,
@@ -156,10 +157,12 @@ def _disable_unselected_skills(profile_dir: Path, keep: list[str]) -> int:
     active by default); the builder's skill step has "replace" semantics. Hub skills are
     installed separately via subprocess and are active on install."""
     from hermes_cli.config import load_config
+    from hermes_cli.shared_catalog_config import update_skill_lists
+    from hermes_cli.shared_catalog_origins import default_off_among
     from hermes_cli.skills_config import get_disabled_skills, save_disabled_skills
     keep_set = {s.strip() for s in keep if s and s.strip()}
     with _hermes_home_scope(profile_dir), _CONFIG_MUTATION_LOCK:  # RMW span
-        skills_root = profile_dir / "skills"
+        skills_root = get_skills_dir(profile_dir)
         installed = ([md.parent.name for md in skills_root.rglob("SKILL.md")]
                      if skills_root.is_dir() else [])
         cfg = load_config()
@@ -171,6 +174,8 @@ def _disable_unselected_skills(profile_dir: Path, keep: list[str]) -> int:
                 newly += 1
         if newly:
             save_disabled_skills(cfg, disabled)
+        if kept_off := default_off_among(keep_set):
+            update_skill_lists(profile_dir / "config.yaml", enable=kept_off)
     return newly
 
 # Returned by the offloaded file readers below to mean "the file is not there", which a plain
@@ -835,7 +840,7 @@ async def create_profile_endpoint(body: ProfileCreate):
         # copied the source's; no_skills wrote the opt-out marker so seeding no-ops) and a
         # ~/.local/bin wrapper when the alias is safe.
         if not clone:
-            profiles_mod.seed_profile_skills(path, quiet=True)
+            profiles_mod.seed_new_profile_skills(path, quiet=True)
         if not profiles_mod.check_alias_collision(body.name):
             profiles_mod.create_wrapper_script(body.name)
 

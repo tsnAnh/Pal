@@ -2815,6 +2815,24 @@
       }
     },
     {
+      "name": "profiles.identity.undo",
+      "summary": "Restore the profile's identity to before the named change (newest change only).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfilesIdentityUndoParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ProfilesIdentityUndoResult"
+        }
+      }
+    },
+    {
       "name": "profiles.list",
       "summary": "Roster of profiles with previews so a client paints without N follow-up calls.",
       "params": [
@@ -2829,6 +2847,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ProfilesListResult"
+        }
+      }
+    },
+    {
+      "name": "profiles.onboard",
+      "summary": "Answer or dismiss a new bot's first-run question and clear its onboarding_pending flag.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfilesOnboardParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ProfilesOnboardResult"
         }
       }
     },
@@ -10367,6 +10403,11 @@
             "default": false,
             "title": "Has Avatar",
             "type": "boolean"
+          },
+          "onboarding_pending": {
+            "default": false,
+            "title": "Onboarding Pending",
+            "type": "boolean"
           }
         },
         "required": [
@@ -10423,6 +10464,11 @@
           "bot_about_you": {
             "default": false,
             "title": "Bot About You",
+            "type": "boolean"
+          },
+          "bot_onboarding": {
+            "default": false,
+            "title": "Bot Onboarding",
             "type": "boolean"
           },
           "install_id": {
@@ -30953,6 +30999,11 @@
             "default": false,
             "title": "Has Avatar",
             "type": "boolean"
+          },
+          "onboarding_pending": {
+            "default": false,
+            "title": "Onboarding Pending",
+            "type": "boolean"
           }
         },
         "required": [
@@ -31567,6 +31618,33 @@
             ],
             "default": null,
             "title": "Mirror Credentials"
+          },
+          "onboarding": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Onboarding"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Name"
           }
         },
         "required": [
@@ -31603,6 +31681,18 @@
           },
           "mirrored": {
             "$ref": "#/components/schemas/ProfileMirrored"
+          },
+          "onboarding_pending": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Onboarding Pending"
           }
         },
         "required": [
@@ -31659,6 +31749,11 @@
             },
             "title": "Mcp Servers",
             "type": "array"
+          },
+          "onboarding_pending": {
+            "default": false,
+            "title": "Onboarding Pending",
+            "type": "boolean"
           }
         },
         "required": [
@@ -31762,6 +31857,62 @@
         "title": "ProfilesGetAssetResult",
         "type": "object"
       },
+      "ProfilesIdentityUndoParams": {
+        "additionalProperties": false,
+        "description": "``change_id`` comes from a ``tool.complete`` ``identity_change``; a newer change refuses it (4078).",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "change_id": {
+            "title": "Change Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "change_id"
+        ],
+        "title": "ProfilesIdentityUndoParams",
+        "type": "object"
+      },
+      "ProfilesIdentityUndoResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "summary": {
+            "default": "",
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "title": "ProfilesIdentityUndoResult",
+        "type": "object"
+      },
       "ProfilesListParams": {
         "additionalProperties": false,
         "properties": {
@@ -31798,7 +31949,7 @@
       },
       "ProfilesListResult": {
         "additionalProperties": false,
-        "description": "``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself;\n``install_id`` (as on ``/api/status``) names the machine that answered.",
+        "description": "``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself;\n``install_id`` (as on ``/api/status``) names the machine that answered; ``bot_onboarding`` says this\nbackend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``.",
         "properties": {
           "profiles": {
             "items": {
@@ -31822,6 +31973,11 @@
             "title": "Bot About You",
             "type": "boolean"
           },
+          "bot_onboarding": {
+            "default": false,
+            "title": "Bot Onboarding",
+            "type": "boolean"
+          },
           "install_id": {
             "default": "",
             "title": "Install Id",
@@ -31829,6 +31985,94 @@
           }
         },
         "title": "ProfilesListResult",
+        "type": "object"
+      },
+      "ProfilesOnboardParams": {
+        "additionalProperties": false,
+        "description": "Exactly one of ``purpose`` (answer) or ``dismiss``; a rejected purpose is error 4077 and stays pending.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "purpose": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Purpose"
+          },
+          "dismiss": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Dismiss"
+          }
+        },
+        "title": "ProfilesOnboardParams",
+        "type": "object"
+      },
+      "ProfilesOnboardResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "default": true,
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "cleared": {
+            "default": false,
+            "title": "Cleared",
+            "type": "boolean"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Summary"
+          }
+        },
+        "title": "ProfilesOnboardResult",
         "type": "object"
       },
       "ProfilesSetAssetParams": {

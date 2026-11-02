@@ -2102,12 +2102,13 @@ export interface ProfilesListParams {
   profile?: string | null
   include_sessions?: boolean | string | null
 }
-/** ``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself; ``install_id`` (as on ``/api/status``) names the machine that answered. */
+/** ``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself; ``install_id`` (as on ``/api/status``) names the machine that answered; ``bot_onboarding`` says this backend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``. */
 export interface ProfilesListResult {
   profiles?: ProfileRow[]
   bot_mode_protocol?: boolean
   bot_birth_notice?: boolean
   bot_about_you?: boolean
+  bot_onboarding?: boolean
   install_id?: string
 }
 /** One roster row; the session fields are present only with ``include_sessions``. */
@@ -2127,6 +2128,7 @@ export interface ProfileRow {
   ui_meta_revisions?: Record<string, number>
   ui_meta?: Record<string, unknown> | null
   has_avatar?: boolean
+  onboarding_pending?: boolean
 }
 /** Newest human-facing session of a profile (``_latest_profile_session_rows``). */
 export interface ProfileSessionPreview {
@@ -2185,6 +2187,8 @@ export interface ProfilesCreateParams {
   provider?: string | null
   share_auth?: boolean | string | null
   mirror_credentials?: boolean | string | null
+  onboarding?: boolean | string | null
+  display_name?: string | null
 }
 export interface ProfilesCreateResult {
   ok?: boolean
@@ -2193,6 +2197,7 @@ export interface ProfilesCreateResult {
   soul_written?: boolean
   model_set?: boolean
   mirrored: ProfileMirrored
+  onboarding_pending?: boolean | null
 }
 /** What was copied from the launch profile; ``auth`` is ``"shared"`` under ``share_auth``. */
 export interface ProfileMirrored {
@@ -2215,6 +2220,7 @@ export interface ProfilesDescribeResult {
   toolsets?: ToolsetEntry[]
   toolsets_pinned?: boolean
   mcp_servers?: McpServerEntry[]
+  onboarding_pending?: boolean
 }
 export interface ProfileModelPin {
   provider?: string
@@ -2273,6 +2279,28 @@ export interface ProfilesConfigureApplied {
 export interface UiMetaConflict {
   expected?: unknown
   actual?: number
+}
+/** Exactly one of ``purpose`` (answer) or ``dismiss``; a rejected purpose is error 4077 and stays pending. */
+export interface ProfilesOnboardParams {
+  profile?: string | null
+  name?: string | null
+  purpose?: string | null
+  dismiss?: boolean | string | null
+}
+export interface ProfilesOnboardResult {
+  ok?: boolean
+  cleared?: boolean
+  summary?: string | null
+}
+/** ``change_id`` comes from a ``tool.complete`` ``identity_change``; a newer change refuses it (4078). */
+export interface ProfilesIdentityUndoParams {
+  profile?: string | null
+  name?: string | null
+  change_id: string
+}
+export interface ProfilesIdentityUndoResult {
+  ok?: boolean
+  summary?: string
 }
 /** ``data`` is a data URL or bare base64 (PNG/JPEG/WebP, sniffed); ``clear`` deletes instead. */
 export interface ProfilesSetAssetParams {
@@ -5484,6 +5512,7 @@ export interface CanonicalProfilesResult {
   bot_mode_protocol?: boolean
   bot_birth_notice?: boolean
   bot_about_you?: boolean
+  bot_onboarding?: boolean
   install_id?: string
 }
 export interface CanonicalProfileRow {
@@ -5502,6 +5531,7 @@ export interface CanonicalProfileRow {
   ui_meta_revisions?: Record<string, number>
   ui_meta?: Record<string, unknown> | null
   has_avatar?: boolean
+  onboarding_pending?: boolean
 }
 export interface CanonicalAttachedImageResult {
   name?: string | null
@@ -6584,8 +6614,12 @@ export interface RpcMethods {
   'profiles.describe': { params: ProfileNameParams; result: ProfilesDescribeResult }
   /** A profile asset as a data URL. */
   'profiles.get_asset': { params: ProfilesGetAssetParams; result: ProfilesGetAssetResult }
+  /** Restore the profile's identity to before the named change (newest change only). */
+  'profiles.identity.undo': { params: ProfilesIdentityUndoParams; result: ProfilesIdentityUndoResult }
   /** Roster of profiles with previews so a client paints without N follow-up calls. */
   'profiles.list': { params: ProfilesListParams; result: ProfilesListResult }
+  /** Answer or dismiss a new bot's first-run question and clear its onboarding_pending flag. */
+  'profiles.onboard': { params: ProfilesOnboardParams; result: ProfilesOnboardResult }
   /** Store or clear a profile asset (avatar) atomically. */
   'profiles.set_asset': { params: ProfilesSetAssetParams; result: ProfilesSetAssetResult }
   /** A bot's shareable template (.hermesbot, base64): setup only, never history or secrets. */
@@ -6971,7 +7005,9 @@ export const RPC_METHODS = [
   'profiles.create',
   'profiles.describe',
   'profiles.get_asset',
+  'profiles.identity.undo',
   'profiles.list',
+  'profiles.onboard',
   'profiles.set_asset',
   'profiles.template.export',
   'profiles.template.import',

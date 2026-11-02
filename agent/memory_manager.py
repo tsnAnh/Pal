@@ -788,6 +788,8 @@ class MemoryManager:
             return
         result = json.loads(tool_result) if isinstance(tool_result, str) else tool_result
         target = str(tool_args.get("target") or "memory")
+        if target == "identity":
+            return
         operations = tool_args.get("operations")
         batched = isinstance(operations, list) and bool(operations)
         for index, op in enumerate(operations if batched else [tool_args], start=1):

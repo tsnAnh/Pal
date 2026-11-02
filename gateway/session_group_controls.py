@@ -391,6 +391,7 @@ def _sibling_sessions(authority, reader):
 def _profiles(authority, actor, home, params, siblings=()):
     """The Bots roster: this profile's row, then every profile it can name. ``siblings`` is
     ``_roster_siblings``' snapshot; a sibling with a reader carries the same session fields."""
+    from hermes_cli.bot_onboarding import is_onboarding_pending
     from hermes_cli.profiles import _profile_info
     import hermes_yaml as yaml
     include_sessions = params.get('include_sessions', True)
@@ -412,6 +413,8 @@ def _profiles(authority, actor, home, params, siblings=()):
     if isinstance(meta.get('ui_meta'), dict):
         row['ui_meta'] = meta['ui_meta']
     row['has_avatar'] = any((home / 'assets' / f'avatar.{ext}').is_file() for ext in ('png', 'jpg', 'webp'))
+    if is_onboarding_pending(meta):
+        row['onboarding_pending'] = True
     if include_sessions:
         row.update(_bot_sessions(authority, actor))
     profiles = [row]
@@ -433,6 +436,8 @@ def _profiles(authority, actor, home, params, siblings=()):
             entry['display_name'] = str(meta.get('display_name') or configured)
             if isinstance(meta.get('ui_meta'), dict):
                 entry['ui_meta'] = meta['ui_meta']
+            if is_onboarding_pending(meta):
+                entry['onboarding_pending'] = True
         profiles.append(entry)
 
     # Sibling profiles this process multiplexes: the roster lists them with the same
@@ -461,7 +466,8 @@ def _profiles(authority, actor, home, params, siblings=()):
     # machine answered; the roster trace logged ``answered=-`` without it. It already returns
     # None for an unreadable root.
     from hermes_cli.install_identity import get_install_id
-    return {'profiles': profiles, 'bot_mode_protocol': True, 'install_id': get_install_id() or ''}
+    return {'profiles': profiles, 'bot_mode_protocol': True, 'bot_onboarding': True,
+            'install_id': get_install_id() or ''}
 
 
 # The Bots pane polls ``profiles.list`` every 5 s. Re-listing ``profiles/`` and re-parsing every
