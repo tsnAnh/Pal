@@ -1301,6 +1301,10 @@ export interface DesktopConnectionsRegistry {
   // false drives the plain-text token opt-in on keyring-less Linux.
   secureTokenStorage: boolean
   connections: DesktopRegistryConnection[]
+  // True when connections.json could not be parsed and the main process fell
+  // back to a local-only registry: absent connections are unknown, not gone.
+  degraded?: boolean
+  quarantined?: Array<{ label: string; reason: string }>
 }
 
 export interface DesktopRegistryConnectionInput {

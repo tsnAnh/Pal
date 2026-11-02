@@ -4,7 +4,7 @@ import { readJson, writeJson } from '@/lib/storage'
 
 const LAST_CONVERSATION_KEY = 'hermes.desktop.lastConversation.v1'
 
-interface ConversationScope {
+export interface ConversationScope {
   connectionId: string
   profile: string
 }
@@ -22,9 +22,7 @@ export interface SessionConversation extends ConversationScope {
 
 export type LastConversation = BotChatConversation | SessionConversation
 
-export type LastConversationTarget =
-  | Omit<BotChatConversation, 'updatedAt'>
-  | Omit<SessionConversation, 'updatedAt'>
+export type LastConversationTarget = Omit<BotChatConversation, 'updatedAt'> | Omit<SessionConversation, 'updatedAt'>
 
 function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
@@ -50,7 +48,9 @@ function parseLastConversation(raw: unknown): LastConversation | null {
 
   const sessionId = text(record.sessionId)
 
-  return record.kind === 'session' && sessionId ? { connectionId, kind: 'session', profile, sessionId, updatedAt } : null
+  return record.kind === 'session' && sessionId
+    ? { connectionId, kind: 'session', profile, sessionId, updatedAt }
+    : null
 }
 
 function sameConversation(a: LastConversation | LastConversationTarget, b: LastConversation | LastConversationTarget) {

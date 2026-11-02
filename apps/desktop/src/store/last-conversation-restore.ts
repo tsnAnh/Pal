@@ -1,9 +1,8 @@
 import { atom } from 'nanostores'
 
-import { $workspaceMode } from '@/components/pane-shell/workspace-scope'
 import { SOURCE_SWITCH_DIAL_TIMEOUT_MS } from '@/lib/with-timeout'
 
-import { $connectionsRegistry } from './connection-registry-state'
+import { $connectionsRegistry, registryIsComplete } from './connection-registry-state'
 import {
   $lastConversation,
   clearLastConversation,
@@ -15,14 +14,17 @@ import {
 export type BotChatTarget = { connectionId: string; kind: 'bot'; profile: string } | { kind: 'primary-most-recent' }
 
 export type BotChatRestoreResult =
-  | { connectionId: string; profile: string; status: 'opened' }
-  | { status: 'failed' | 'missing' | 'pending' | 'superseded' }
+  { connectionId: string; profile: string; status: 'opened' } | { status: 'missing' | 'pending' | 'superseded' }
 
 export type BotChatRestorer = (target: BotChatTarget, isCurrent: () => boolean) => Promise<BotChatRestoreResult>
 
 export type RestoreOutcome = 'fallback-opened' | 'home' | 'opened' | 'superseded' | 'timed-out'
 
+export type BootRestorePhase = 'handled' | 'idle' | 'released' | 'restoring'
+
 export const $botChatRestorer = atom<BotChatRestorer | null>(null)
+
+export const $bootRestorePhase = atom<BootRestorePhase>('idle')
 
 export function registerBotChatRestorer(restorer: BotChatRestorer): () => void {
   $botChatRestorer.set(restorer)
@@ -36,6 +38,8 @@ export function registerBotChatRestorer(restorer: BotChatRestorer): () => void {
 
 export const RESTORE_POLL_MS = 1_500
 
+export const RESTORER_REGISTER_GRACE_MS = 5_000
+
 export interface RestorePorts {
   clear: () => void
   connectionIds: () => null | ReadonlySet<string>
@@ -43,6 +47,8 @@ export interface RestorePorts {
   now: () => number
   pointer: () => LastConversation | null
   pollMs: number
+  registerGraceMs: number
+  registryComplete: () => boolean
   remember: (target: LastConversationTarget) => void
   restorer: () => BotChatRestorer | null
   sleep: (ms: number) => Promise<void>
@@ -55,7 +61,14 @@ export function registryConnectionIds(): null | ReadonlySet<string> {
   return registry ? new Set(registry.connections.map(connection => connection.id)) : null
 }
 
-export function claimsBootRestore(pointer: LastConversation | null, connectionIds: null | ReadonlySet<string>): boolean {
+export function trustedRegistryConnectionIds(): null | ReadonlySet<string> {
+  return registryIsComplete($connectionsRegistry.get()) ? registryConnectionIds() : null
+}
+
+export function claimsBootRestore(
+  pointer: LastConversation | null,
+  connectionIds: null | ReadonlySet<string>
+): boolean {
   if (!pointer) {
     return false
   }
@@ -71,6 +84,8 @@ export function browserRestorePorts(isCurrent: () => boolean): RestorePorts {
     now: Date.now,
     pointer: () => $lastConversation.get(),
     pollMs: RESTORE_POLL_MS,
+    registerGraceMs: RESTORER_REGISTER_GRACE_MS,
+    registryComplete: () => registryIsComplete($connectionsRegistry.get()),
     remember: rememberLastConversation,
     restorer: () => $botChatRestorer.get(),
     sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
@@ -106,7 +121,7 @@ async function attempt(restorer: BotChatRestorer, target: BotChatTarget, ports: 
   } catch (error) {
     console.warn('[last-conversation] restore attempt failed', error instanceof Error ? error.message : 'unknown error')
 
-    return { status: 'failed' } as const
+    return { status: 'pending' } as const
   }
 }
 
@@ -116,7 +131,8 @@ async function pursue(
   ports: RestorePorts,
   deadline: number,
   onMissing: () => Promise<RestoreOutcome>,
-  openedOutcome: RestoreOutcome
+  openedOutcome: RestoreOutcome,
+  rememberOpened: boolean
 ): Promise<RestoreOutcome> {
   for (;;) {
     if (!ports.isCurrent()) {
@@ -126,7 +142,9 @@ async function pursue(
     const result = await attempt(restorer, target, ports)
 
     if (result.status === 'opened') {
-      ports.remember({ connectionId: result.connectionId, kind: 'bot-chat', profile: result.profile })
+      if (rememberOpened) {
+        ports.remember({ connectionId: result.connectionId, kind: 'bot-chat', profile: result.profile })
+      }
 
       return openedOutcome
     }
@@ -137,10 +155,6 @@ async function pursue(
 
     if (result.status === 'missing') {
       return onMissing()
-    }
-
-    if (result.status === 'failed') {
-      return 'home'
     }
 
     if (ports.now() >= deadline) {
@@ -159,33 +173,45 @@ export async function restoreLastConversation(ports: RestorePorts): Promise<Rest
   }
 
   const deadline = ports.now() + ports.timeoutMs
-  const registry = await waitFor(ports, deadline, ports.connectionIds)
+
+  const registry = await waitFor(ports, deadline, () => {
+    const ids = ports.connectionIds()
+
+    return ids && (ids.has(pointer.connectionId) || ports.registryComplete()) ? ids : null
+  })
 
   if (typeof registry === 'string') {
     return registry
   }
 
-  const readyRestorer = await waitFor(ports, deadline, ports.restorer)
+  const readyRestorer = await waitFor(ports, Math.min(deadline, ports.now() + ports.registerGraceMs), ports.restorer)
 
   if (typeof readyRestorer === 'string') {
     return readyRestorer
   }
 
   const restorer = readyRestorer.value
+  const connectionKnown = registry.value.has(pointer.connectionId)
 
   const fallback = async (): Promise<RestoreOutcome> => {
-    const outcome = await pursue(restorer, { kind: 'primary-most-recent' }, ports, deadline, async () => 'home', 'fallback-opened')
+    const outcome = await pursue(
+      restorer,
+      { kind: 'primary-most-recent' },
+      ports,
+      deadline,
+      async () => 'home',
+      'fallback-opened',
+      !connectionKnown
+    )
 
-    if (outcome === 'home' || outcome === 'timed-out') {
+    if ((outcome === 'home' || outcome === 'timed-out') && !connectionKnown) {
       ports.clear()
-
-      return 'home'
     }
 
     return outcome
   }
 
-  if (!registry.value.has(pointer.connectionId)) {
+  if (!connectionKnown) {
     return fallback()
   }
 
@@ -199,22 +225,7 @@ export async function restoreLastConversation(ports: RestorePorts): Promise<Rest
     ports,
     deadline,
     fallback,
-    'opened'
+    'opened',
+    true
   )
-}
-
-export function recordSessionConversation({
-  connectionId,
-  profile,
-  sessionId
-}: {
-  connectionId: null | string
-  profile: string
-  sessionId: string
-}): void {
-  if (!connectionId || $workspaceMode.get() === 'bots') {
-    return
-  }
-
-  rememberLastConversation({ connectionId, kind: 'session', profile, sessionId })
 }

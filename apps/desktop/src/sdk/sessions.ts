@@ -1,5 +1,8 @@
 import { hermesApi } from '@/hermes'
-import { rememberLastConversation } from '@/store/last-conversation'
+import {
+  registerFocusedConversationClassifier,
+  rememberBotChatFromMainWindow
+} from '@/store/last-conversation-recorder'
 import { type BotChatRestorer, registerBotChatRestorer } from '@/store/last-conversation-restore'
 import {
   pinSession,
@@ -44,8 +47,9 @@ function liveSessionId(storedSessionId: string): string {
  *  session ids as a sidebar row slot carries them; a live id is resolved to
  *  the same row through the app's lineage matcher. */
 export const sessionsHost = {
-  rememberBotChat: (bot: { connectionId: string; profile: string }): void =>
-    rememberLastConversation({ connectionId: bot.connectionId, kind: 'bot-chat', profile: bot.profile }),
+  rememberBotChat: rememberBotChatFromMainWindow,
+
+  registerFocusedConversationClassifier,
 
   registerBotChatRestorer: (restorer: BotChatRestorer): (() => void) => registerBotChatRestorer(restorer),
 

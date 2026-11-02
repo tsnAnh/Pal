@@ -1,11 +1,20 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { DesktopConnectionsRegistry } from '@/global'
+import type { DesktopConnectionsRegistry, HermesConnection } from '@/global'
 import { $connectionsRegistry } from '@/store/connection-registry-state'
 import { $lastConversation, rememberLastConversation } from '@/store/last-conversation'
 import { type BotChatRestorer, registerBotChatRestorer } from '@/store/last-conversation-restore'
-import { _resetLegacyDiscardForTests, setRememberedRoute, setRememberedSessionId } from '@/store/session'
+import {
+  $connection,
+  _resetLegacyDiscardForTests,
+  _resetSessionOwnerHintsForTests,
+  getRememberedRoute,
+  getSessionOwnerHints,
+  setRememberedRoute,
+  setRememberedSessionId,
+  setSessionOwnerHint
+} from '@/store/session'
 import type * as WindowsStore from '@/store/windows'
 
 import { makeSessionInfo } from '../../../test/session-info'
@@ -30,6 +39,7 @@ const registry = (...ids: string[]) =>
 interface MountOptions {
   locationPathname?: string
   resumeLastSession?: boolean
+  routedSessionId?: null | string
 }
 
 describe('reopen the last conversation on launch', () => {
@@ -37,22 +47,24 @@ describe('reopen the last conversation on launch', () => {
   let restorer: ReturnType<typeof vi.fn<BotChatRestorer>>
   let unregister: () => void
 
-  function mount({ locationPathname = '/', resumeLastSession = true }: MountOptions = {}) {
-    return renderHook(() =>
-      useDesktopIntegrations({
-        activeProfile: 'default',
-        chatOpen: false,
-        hasPreview: false,
-        locationPathname,
-        navigate,
-        profileReady: true,
-        refreshSessions: vi.fn(),
-        resumeExhaustedSessionId: null,
-        resumeLastSession,
-        routedSessionId: null,
-        runtimeIdByStoredSessionId: { current: new Map() },
-        sessions: [makeSessionInfo({ id: 'sess-1' })]
-      })
+  function mount({ locationPathname = '/', resumeLastSession = true, routedSessionId = null }: MountOptions = {}) {
+    return renderHook(
+      ({ sessions }: { sessions: ReturnType<typeof makeSessionInfo>[] }) =>
+        useDesktopIntegrations({
+          activeProfile: 'default',
+          chatOpen: false,
+          hasPreview: false,
+          locationPathname,
+          navigate,
+          profileReady: true,
+          refreshSessions: vi.fn(),
+          resumeExhaustedSessionId: null,
+          resumeLastSession,
+          routedSessionId,
+          runtimeIdByStoredSessionId: { current: new Map() },
+          sessions
+        }),
+      { initialProps: { sessions: [makeSessionInfo({ id: 'sess-1' })] } }
     )
   }
 
@@ -71,6 +83,7 @@ describe('reopen the last conversation on launch', () => {
 
   afterEach(() => {
     unregister()
+    $connection.set(null)
     $connectionsRegistry.set(null)
     vi.restoreAllMocks()
   })
@@ -180,5 +193,92 @@ describe('reopen the last conversation on launch', () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/sess-1', { replace: true }))
     expect(restorer).not.toHaveBeenCalled()
+  })
+
+  it('a sessions refresh with a background routed session never rewrites the pointer', async () => {
+    rememberLastConversation({ connectionId: 'pi', kind: 'bot-chat', profile: 'chief' })
+    unregister()
+    $connection.set({ connectionId: 'pi', mode: 'remote', wsUrl: 'wss://pi.example/api/ws' } as HermesConnection)
+
+    const view = mount({ locationPathname: '/sess-1', routedSessionId: 'sess-1' })
+    const before = $lastConversation.get()
+
+    view.rerender({ sessions: [makeSessionInfo({ id: 'sess-1' }), makeSessionInfo({ id: 'sess-2' })] })
+    view.rerender({ sessions: [makeSessionInfo({ id: 'sess-1' })] })
+
+    expect($lastConversation.get()).toBe(before)
+    expect($lastConversation.get()).toMatchObject({ kind: 'bot-chat', profile: 'chief' })
+  })
+
+  describe('without a Bot Mode restorer', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
+      unregister()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('holds the legacy session restore through the grace period, then releases it and keeps the pointer', async () => {
+      setRememberedSessionId('sess-1', 'default')
+      setRememberedRoute('/sess-1', 'default')
+      rememberLastConversation({ connectionId: 'pi', kind: 'bot-chat', profile: 'chief' })
+
+      mount()
+
+      await vi.advanceTimersByTimeAsync(4_000)
+      expect(navigate).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(2_500)
+      expect(navigate).toHaveBeenCalledWith('/sess-1', { replace: true })
+      expect($lastConversation.get()).toMatchObject({ connectionId: 'pi', kind: 'bot-chat', profile: 'chief' })
+    })
+  })
+
+  it('a restore that opened the bot does not overwrite the remembered route with the home route', async () => {
+    setRememberedRoute('/skills', 'default')
+    rememberLastConversation({ connectionId: 'pi', kind: 'bot-chat', profile: 'chief' })
+
+    mount()
+
+    await waitFor(() => expect(restorer).toHaveBeenCalledTimes(1))
+    await new Promise(resolve => setTimeout(resolve, 20))
+
+    expect(getRememberedRoute('default')).toBe('/skills')
+  })
+
+  describe('owner hints against the connection registry', () => {
+    const degraded = (...ids: string[]) => ({ ...registry(...ids), degraded: true }) as DesktopConnectionsRegistry
+
+    const quarantined = (...ids: string[]) =>
+      ({ ...registry(...ids), quarantined: [{ label: 'broken', reason: 'malformed' }] }) as DesktopConnectionsRegistry
+
+    beforeEach(() => {
+      _resetSessionOwnerHintsForTests({ storage: true })
+      setSessionOwnerHint('remote-session', { connectionId: 'vps', profile: 'chief' })
+    })
+
+    it('prunes hints for a connection a complete registry no longer has', () => {
+      mount()
+
+      expect(getSessionOwnerHints('remote-session')).toEqual([])
+    })
+
+    it('keeps them while the registry is the degraded local-only fallback', () => {
+      $connectionsRegistry.set(degraded('local'))
+
+      mount()
+
+      expect(getSessionOwnerHints('remote-session')).toHaveLength(1)
+    })
+
+    it('keeps them while the registry has quarantined entries', () => {
+      $connectionsRegistry.set(quarantined('local'))
+
+      mount()
+
+      expect(getSessionOwnerHints('remote-session')).toHaveLength(1)
+    })
   })
 })

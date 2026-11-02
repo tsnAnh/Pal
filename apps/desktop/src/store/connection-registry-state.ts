@@ -16,3 +16,10 @@ export function hasRegistryTopology(): boolean {
   // only an older Desktop without the registry capability is truly legacy.
   return $connectionsRegistry.get() !== null || Boolean(window.hermesDesktop?.connections?.list)
 }
+
+/** A registry the main process rebuilt after a read failure (degraded) or that
+ *  quarantined entries is missing connections the owner still has; it can name
+ *  a connection that exists but never prove one is gone. */
+export function registryIsComplete(registry: DesktopConnectionsRegistry | null): boolean {
+  return registry !== null && !registry.degraded && !registry.quarantined?.length
+}

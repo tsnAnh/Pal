@@ -1402,7 +1402,6 @@ const BOOT_FAKE_STEP_MS = (() => {
 const APP_NAME: string = IDENTITY_APP_NAME || process.env.HERMES_DESKTOP_APP_NAME || 'Hermes'
 const HUD_WINDOW_TITLE = `${APP_NAME} HUD`
 const TITLEBAR_HEIGHT = 34
-
 // Right-edge window-control reservation lives in titlebar-overlay-width.ts
 // (pure + unit-testable); computeNativeOverlayWidth() applies it per platform.
 // It's only the pre-layout fallback — the renderer measures the exact overlay
@@ -1990,6 +1989,8 @@ let connectionConfigCache = null
 let connectionConfigCacheMtime = null
 let connectionRegistryCache = null
 let connectionRegistryCacheMtime = null
+// Sticky: a later save rewrites connections.json, yet absence must stay unproven.
+let connectionRegistryDegraded = false
 const remoteHeaderSessions = new WeakSet<object>()
 const remoteWsHeaderStore = createRemoteWsHeaderStore()
 const previewWatchers = new Map()
@@ -8534,6 +8535,7 @@ function readDesktopConnectionsRegistry() {
     // (#94246: recovery must never be data loss).
     preserveCorruptRegistrySidecar()
     registry = normalizeRegistry(null)
+    connectionRegistryDegraded = true
   }
 
   if (registry?.quarantined?.length) {
@@ -8641,6 +8643,7 @@ function sanitizeConnectionsRegistry(registry = readDesktopConnectionsRegistry()
     launchMode: registry.launchMode,
     lastUsed: registry.lastUsed,
     secureTokenStorage,
+    degraded: connectionRegistryDegraded,
     connections: registry.connections.map(sanitizeRegistryConnection),
     // Surface quarantined-entry NOTICES only (reason + best-effort label) —
     // the raw entries can carry token envelopes and stay in the file (#94246).

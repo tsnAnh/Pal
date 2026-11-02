@@ -19,7 +19,9 @@ vi.mock('./canonical-chat', async () => ({
 }))
 
 const { host } = await import('@hermes/plugin-sdk')
+const { $lastRoster } = await import('./data')
 const { openRosterBot } = await import('./roster-actions')
+const { registerBotChatReopen } = await import('./restore-last-bot-chat')
 
 const bot = {
   canonical_session: { id: 'bot-chat', resolved_id: 'bot-chat-tip' },
@@ -29,6 +31,7 @@ const bot = {
 } as RosterRow
 
 let remember: ReturnType<typeof vi.fn>
+let stopTracking: () => void
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -36,14 +39,19 @@ beforeEach(() => {
   openBotCanonicalChat.mockResolvedValue({ openedId: 'tip', registryId: 'reg' })
   remember = vi.fn()
   host.sessions.rememberBotChat = remember as never
+  vi.spyOn(host.sessions, 'registerBotChatRestorer').mockReturnValue(() => undefined)
+  vi.spyOn(host.sessions, 'registerFocusedConversationClassifier').mockReturnValue(() => undefined)
+  $lastRoster.set([bot])
+  stopTracking = registerBotChatReopen()
 })
 
 afterEach(() => {
+  stopTracking()
   // @ts-expect-error — restore the harness default (no focus verb).
   delete host.focusOpenWorkspaceSession
 })
 
-describe('openRosterBot records the reopen pointer', () => {
+describe('an explicit bot open records the reopen pointer', () => {
   it('after a cold registry open', async () => {
     await expect(openRosterBot(bot)).resolves.toBe(true)
 

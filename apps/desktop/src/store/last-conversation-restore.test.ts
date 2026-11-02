@@ -39,6 +39,8 @@ function harness({
     now: () => clock.now,
     pointer: () => pointer,
     pollMs: 1_000,
+    registerGraceMs: 5_000,
+    registryComplete: () => true,
     remember: next => {
       pointer = { ...next, updatedAt: clock.now } as LastConversation
     },
@@ -118,13 +120,67 @@ describe('restoreLastConversation', () => {
     expect(h.clear).not.toHaveBeenCalled()
   })
 
-  it('a failed open lands home without clearing the pointer and without throwing', async () => {
+  it('a transient failure keeps retrying and opens once the backend answers', async () => {
+    const h = harness({ pointer: { ...botPointer, connectionId: 'pi' } })
+
+    h.restorer.mockRejectedValueOnce(new Error('dial failed')).mockRejectedValueOnce(new Error('lookup failed'))
+
+    await expect(restoreLastConversation(h.ports)).resolves.toBe('opened')
+    expect(h.restorer).toHaveBeenCalledTimes(3)
+    expect(h.pointer()).toMatchObject({ connectionId: 'pi', profile: 'chief' })
+  })
+
+  it('a failure that never recovers times out without clearing the pointer', async () => {
     const h = harness({ pointer: { ...botPointer, connectionId: 'pi' } })
 
     h.restorer.mockRejectedValue(new Error('dial failed'))
 
-    await expect(restoreLastConversation(h.ports)).resolves.toBe('home')
+    await expect(restoreLastConversation(h.ports)).resolves.toBe('timed-out')
     expect(h.pointer()).toMatchObject({ connectionId: 'pi' })
+    expect(h.clear).not.toHaveBeenCalled()
+  })
+
+  it('never replaces a Bot Chat pointer whose connection still exists with the fallback bot', async () => {
+    const h = harness({ pointer: { ...botPointer, connectionId: 'pi' } })
+
+    h.restorer.mockResolvedValueOnce({ status: 'missing' }).mockResolvedValueOnce(opened('pi', 'faker-kit'))
+
+    await expect(restoreLastConversation(h.ports)).resolves.toBe('fallback-opened')
+    expect(h.pointer()).toMatchObject({ connectionId: 'pi', profile: 'chief' })
+  })
+
+  it('keeps a live connection pointer when no fallback exists', async () => {
+    const h = harness({ pointer: { ...botPointer, connectionId: 'pi' } })
+
+    h.restorer.mockResolvedValue({ status: 'missing' })
+
+    await expect(restoreLastConversation(h.ports)).resolves.toBe('home')
+    expect(h.pointer()).toMatchObject({ connectionId: 'pi', profile: 'chief' })
+    expect(h.clear).not.toHaveBeenCalled()
+  })
+
+  it('a degraded registry that lacks the saved connection waits instead of declaring it gone', async () => {
+    const h = harness({ connectionIds: () => new Set(['local']), registryComplete: () => false })
+
+    await expect(restoreLastConversation(h.ports)).resolves.toBe('timed-out')
+    expect(h.restorer).not.toHaveBeenCalled()
+    expect(h.pointer()).toEqual(botPointer)
+  })
+
+  it('an incomplete registry that still names the saved connection restores normally', async () => {
+    const h = harness({ pointer: { ...botPointer, connectionId: 'pi' }, registryComplete: () => false })
+
+    await expect(restoreLastConversation(h.ports)).resolves.toBe('opened')
+  })
+
+  it('without a registered restorer it gives up after the grace period and keeps the pointer', async () => {
+    const h = harness({ pointer: { ...botPointer, connectionId: 'pi' }, restorer: () => null })
+
+    await expect(restoreLastConversation(h.ports)).resolves.toBe('timed-out')
+    expect(h.clock.now).toBeGreaterThanOrEqual(5_000)
+    expect(h.clock.now).toBeLessThan(7_000)
+    expect(h.pointer()).toMatchObject({ connectionId: 'pi' })
+    expect(h.clear).not.toHaveBeenCalled()
   })
 
   it('an explicit navigation before the first attempt wins', async () => {

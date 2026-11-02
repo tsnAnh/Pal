@@ -26,7 +26,6 @@ import { openGroupChat } from './group-chat-view'
 import { liveGroupChatNames } from './group-membership'
 import { closeGroupChatMainTab, groupOpenOrigin } from './group-panes'
 import { displayName } from './labels'
-import { rememberBotChat } from './restore-last-bot-chat'
 import { botRosterMeta, botWorkspaceOwnerKey, setBotsWorkspaceOwner } from './routing'
 import { botCanonicalSessionId } from './row-helpers'
 import { bumpBotOpenGeneration, getBotOpenGeneration, getPluginCtx } from './shared'
@@ -232,7 +231,10 @@ export interface OpenRosterBotOptions {
   intent?: BotChatOpenIntent
 }
 
-export async function openRosterBot(bot: RosterRow, { intent = 'in-place' }: OpenRosterBotOptions = {}): Promise<boolean> {
+export async function openRosterBot(
+  bot: RosterRow,
+  { intent = 'in-place' }: OpenRosterBotOptions = {}
+): Promise<boolean> {
   const generation = bumpBotOpenGeneration()
   const key = botRosterKey(bot)
   const meta = botRosterMeta(bot, $botMeta.get())
@@ -293,7 +295,6 @@ export async function openRosterBot(bot: RosterRow, { intent = 'in-place' }: Ope
     // round-trip. Both identities are recorded so the reclaim listener and
     // the roster-activity refresh treat it exactly like a registry open.
     $openBotChat.set({ key, openedRegistryId: fronted.registryId, openedSessionId: fronted.storedSessionId })
-    rememberBotChat(bot)
 
     // Fronting is presentation-only: the pane keeps whatever transcript it
     // last painted, which can predate rows the bot wrote while the user was
@@ -358,7 +359,6 @@ export async function openRosterBot(bot: RosterRow, { intent = 'in-place' }: Ope
         openedRegistryId: opened.registryId,
         openedSessionId: opened.openedId
       })
-      rememberBotChat(bot)
       settlePendingBotOpen(generation)
 
       return true
