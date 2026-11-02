@@ -53,6 +53,7 @@ def save_completed_result(session) -> None:
     with session._lock:
         record = {key: getattr(session, key) for key in _RESULT_FIELDS}
         record["output"] = session.output_buffer[-MAX_OUTPUT_CHARS:]
+        record["internal"] = session.internal
     # Live-output opt-out must not persist raw credentials in durable receipts.
     record["output"] = redact_terminal_output(record["output"], record["command"], force=True)
     record["command"] = redact_sensitive_text(record["command"], code_file=True, force=True)
@@ -110,6 +111,7 @@ def load_completed_results(prefix: str = "") -> dict:
                 continue
             session = ProcessSession(
                 **{key: record[key] for key in _RESULT_FIELDS},
+                internal=bool(record.get("internal", False)),
                 exited=True, output_buffer=record["output"],
             )
             session._completion_event.set()

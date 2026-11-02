@@ -28,15 +28,16 @@ _IS_LINUX = platform.system() == "Linux"
 from tools.environments.local import _append_dropped_path_entries, _find_shell, _resolve_safe_cwd, _sanitize_subprocess_env, _terminal_env
 from hermes_cli._subprocess_compat import windows_hide_flags
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, NamedTuple, Optional
+from typing import Any, Callable, Dict, List, Literal, NamedTuple, Optional
 
 from hermes_cli.config import get_hermes_home
 
 from tools.process_registry_notifications import (
-    format_process_notification, heartbeat_output_tail, is_child_process_notification, should_surface_notification)
+    format_process_notification, is_child_process_notification, should_surface_notification)
 from tools.process_registry_checkpoint import ProcessCheckpointMixin
 from tools.process_registry_output_log import ProcessOutputLogMixin, open_output_log, record_exit_command, worker_output_log
 from tools.process_registry_ownership import ProcessOwnershipMixin
+from tools.process_registry_timers import InternalProcessPolicy, ProcessTimerMixin
 from tools.process_registry_termination import ProcessTerminationMixin
 from tools.process_registry_results import load_completed_results, save_completed_result
 from tools.process_registry_env_log import log_delta_command
@@ -61,6 +62,10 @@ MAX_OUTPUT_CHARS = 200_000      # rolling output buffer
 # output IS the payload (a bot DM's reply) asks for more per process (completion_output_chars).
 COMPLETION_OUTPUT_CHARS = 2000
 FINISHED_TTL_SECONDS = 1800     # keep finished processes 30 minutes
+# A finished process stays in user-facing listings this long after it exited (long enough to read its
+# result; short enough that a tray never shows a dead entry indefinitely). The registry still resolves it
+# by id until FINISHED_TTL_SECONDS.
+FINISHED_LISTING_RETENTION_SECONDS = 300
 MAX_PROCESSES = 64              # max tracked processes (LRU pruning)
 
 # Watch-pattern rate limiting, PER SESSION: one watch-match notification per
@@ -570,6 +575,9 @@ class ProcessSession:
     handoff_note: str = ""                      # why a subagent handed this process to its parent (rides the notice)
     persist_on_release: bool = False           # opt out of agent-lifecycle cleanup (release()/turn-abandon kill
                                                 # sweeps), per terminal(background=true, persist_on_release=true) (#41225)
+    internal: bool = False                      # Hermes plumbing: absent from user-facing listings, not user-killable
+    max_lifetime_seconds: float = 0.0           # >0: reap_overdue() kills it once it has run this long
+    lifetime_expiry_output: str = ""            # appended to the output when reaped for exceeding the lifetime
     output_log: str = ""                        # file the process writes to (worker spawns; no pipe to lose)
     pty_fallback: str = ""                      # why a pty=true local spawn runs in pipe mode instead
     # Watcher/notification routing (persisted for crash recovery)
@@ -611,6 +619,7 @@ class ProcessSession:
     _reader_selectable: bool = field(default=False, repr=False)
     _pty: Any = field(default=None, repr=False)  # ptyprocess handle (use_pty=True)
     _owned_pgid: Optional[int] = field(default=None, repr=False)  # see ProcessOwnershipMixin
+    _scope: Any = field(default=None, repr=False)  # spawning context: the owning profile for timer-driven kills
 
     def __post_init__(self):
         # A session built without an explicit owner is owned by its own task, so ownership checks compare
@@ -659,7 +668,8 @@ _CHECKPOINT_FIELDS = (
     "started_at", "task_id", "owner_task_id", "session_key",
     *(f"watcher_{k}" for k in _WATCHER_ROUTE_KEYS), "watcher_interval",
     "parent_session_id", "notify_on_complete", "completion_output_chars", "watch_patterns",
-    "heartbeat_seconds", "persist_on_release", "output_log")
+    "heartbeat_seconds", "persist_on_release", "internal", "max_lifetime_seconds", "lifetime_expiry_output",
+    "output_log")
 _CHECKPOINT_DEFAULTS = {
     f.name: ([] if f.name == "watch_patterns" else f.default)
     for f in ProcessSession.__dataclass_fields__.values()
@@ -674,7 +684,8 @@ _WSL_CHAIN_NOTE = (
 )
 
 
-class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOutputLogMixin, ProcessOwnershipMixin):
+class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOutputLogMixin, ProcessOwnershipMixin,
+                      ProcessTimerMixin):
     """In-memory registry of running and finished background processes.
     Thread-safe: accessed from executor threads (terminal_tool, process handlers),
     the gateway asyncio loop (watchers, reset checks) and the cleanup thread."""
@@ -686,7 +697,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
     # Class default so registries built via __new__ (tests) still restore on first drain.
     _completions_restored = False
 
-    def __init__(self):
+    def __init__(self, clock: Callable[[], float] = time.time):
+        self._clock = clock
         self._running: dict[str, ProcessSession] = {}
         self._finished: dict[str, ProcessSession] = {}
         self._lock = threading.Lock()
@@ -723,65 +735,6 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         self.on_output = None
         self.on_close = None
         self._heartbeat_thread: Optional[threading.Thread] = None
-
-    # ── heartbeat ───────────────────────────────────────────────────────────
-    def arm_heartbeat(self, session: ProcessSession, seconds: int) -> int:
-        """Enable periodic heartbeat events for ``session``; returns the effective interval."""
-        seconds = max(int(seconds), HEARTBEAT_MIN_SECONDS)
-        session.heartbeat_seconds = seconds
-        session._heartbeat_last = time.time()
-        # The output baseline stays at spawn (field default 0), never here: the spawn call
-        # arms the heartbeat only after its bookkeeping, and a fast-starting process has
-        # already written its first lines by then. Those lines belong to the first heartbeat.
-        self._ensure_heartbeat_thread()
-        return seconds
-
-    def _ensure_heartbeat_thread(self) -> None:
-        with self._lock:
-            if self._heartbeat_thread is not None and self._heartbeat_thread.is_alive():
-                return
-            self._heartbeat_thread = threading.Thread(
-                target=self._heartbeat_loop, name="process-heartbeat", daemon=True)
-            self._heartbeat_thread.start()
-
-    def _heartbeat_loop(self) -> None:
-        """One daemon thread for every heartbeat session: reader threads block on the pipe and
-        cannot keep time, and a per-process timer would leak one thread per job."""
-        while True:
-            time.sleep(HEARTBEAT_TICK_SECONDS)
-            now = time.time()
-            with self._lock:
-                due = [s for s in self._running.values()
-                       if s.heartbeat_seconds > 0 and not s.exited
-                       and now - s._heartbeat_last >= s.heartbeat_seconds]
-            for session in due:
-                self._emit_heartbeat(session, now)
-
-    def _emit_heartbeat(self, session: ProcessSession, now: float) -> None:
-        """Queue a heartbeat carrying the output since the last one. A tick with nothing new is
-        skipped outright: every queued event costs the owner a full model turn, and "still running,
-        no output" is already visible on the process surfaces (status stack, /agents dock)."""
-        session._heartbeat_last = now
-        with session._lock:
-            delta = session.total_output_chars - session._heartbeat_total_at_last
-            output = session.output_buffer[-delta:] if delta > 0 else ""
-            session._heartbeat_total_at_last = session.total_output_chars
-        if not output:
-            return
-        output, omitted = heartbeat_output_tail(output)
-        session._heartbeat_seq += 1
-        notification = {
-            **self._watch_event_base(session),
-            "type": "heartbeat",
-            "seq": session._heartbeat_seq,
-            "interval": session.heartbeat_seconds,
-            "elapsed": int(now - session.started_at) if session.started_at else 0,
-            "output": output,
-            "omitted": omitted,
-            "started_at": session.started_at,
-        }
-        _redact_process_result(notification)
-        self.completion_queue.put(notification)
 
     @staticmethod
     def _clean_shell_noise(text: str) -> str:
@@ -1085,16 +1038,19 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
 
     # ----- Spawn -----
 
-    @staticmethod
-    def _new_session(command, task_id, owner_task_id, session_key, cwd, **extra) -> ProcessSession:
+    def _new_session(self, command, task_id, owner_task_id, session_key, cwd,
+                     internal_policy: Optional[InternalProcessPolicy] = None, **extra) -> ProcessSession:
         from gateway.session_context import get_session_env
 
+        if internal_policy is not None:
+            extra.update(internal=True, max_lifetime_seconds=internal_policy.max_lifetime_seconds,
+                         lifetime_expiry_output=internal_policy.expiry_output)
         return ProcessSession(
             id=f"proc_{uuid.uuid4().hex[:12]}", command=command, task_id=task_id,
             owner_task_id=owner_task_id, session_key=session_key, cwd=cwd,
             parent_session_id=get_session_env("HERMES_SESSION_ID", ""),
             wsl_chain=_is_wsl_launcher_command(command),
-            started_at=time.time(), **extra)
+            started_at=self._clock(), **extra)
 
     @staticmethod
     def _env_temp_dir(env: Any) -> str:
@@ -1143,12 +1099,16 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         reader = threading.Thread(target=copy_context().run, args=(reader_target, session, *extra_args),
                                   daemon=True, name=reader_name)
         session._reader_thread = reader
+        if session.max_lifetime_seconds > 0:
+            session._scope = copy_context()
         with self._lock:
             self._prune_if_needed()
             # Completion takes this lock too. Starting here also leaves no
             # ghost entry if the interpreter cannot start another thread.
             reader.start()
             self._running[session.id] = session
+        if session.max_lifetime_seconds > 0:
+            self._ensure_background_thread()
         self._write_checkpoint()
 
     def _spawn_local_pty(self, session: ProcessSession, safe_command: str, env_vars: dict) -> ProcessSession:
@@ -1178,7 +1138,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
     def spawn_local(
         self, command: str, cwd: str | None = None, task_id: str = "", session_key: str = "",
         env_vars: dict | None = None, use_pty: bool = False, owner_task_id: str = "",
-        persist_on_release: bool = False, restore_login_path: bool = False) -> ProcessSession:
+        persist_on_release: bool = False, restore_login_path: bool = False,
+        internal_policy: Optional[InternalProcessPolicy] = None) -> ProcessSession:
         """Spawn a background process locally (TERMINAL_ENV=local; other backends: spawn_via_env()).
         ``use_pty`` asks ptyprocess/pywinpty for a pseudo-terminal; on failure: pipe + ``pty_fallback``.
         ``persist_on_release``: no agent kill sweeps (#41225); ``restore_login_path``: re-add reset PATH dirs (#56634)."""
@@ -1188,7 +1149,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
 
         safe_command = _append_dropped_path_entries(_rewrite_bg(command), self._spawn_env(env_vars).get("PATH", "") if restore_login_path else "")
         session = self._new_session(command, task_id, owner_task_id, session_key, _resolve_safe_cwd(cwd or os.getcwd()),
-                                    persist_on_release=persist_on_release)
+                                    internal_policy, persist_on_release=persist_on_release)
         pty_scope_attempted = False
         # A worker's pipe or PTY dies with the worker (the child's next write is SIGPIPE): write to a log.
         log = worker_output_log(session.id)
@@ -1269,14 +1230,15 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
 
     def spawn_via_env(
         self, env: Any, command: str, cwd: str | None = None, task_id: str = "", session_key: str = "",
-        timeout: int = 10, owner_task_id: str = "", persist_on_release: bool = False) -> ProcessSession:
+        timeout: int = 10, owner_task_id: str = "", persist_on_release: bool = False,
+        internal_policy: Optional[InternalProcessPolicy] = None) -> ProcessSession:
         """Spawn a background process inside a non-local backend's sandbox.
         The command is wrapped to capture its in-sandbox PID and redirect output to a
         log file that later execute() calls poll. No live pipe or stdin, but it runs in
         the correct sandbox context. ``persist_on_release`` keeps the process out of
         agent-lifecycle kill sweeps (#41225)."""
-        session = self._new_session(command, task_id, owner_task_id, session_key, cwd, env_ref=env, pid_scope="sandbox",
-                                    persist_on_release=persist_on_release)
+        session = self._new_session(command, task_id, owner_task_id, session_key, cwd, internal_policy, env_ref=env,
+                                    pid_scope="sandbox", persist_on_release=persist_on_release)
         temp_dir = self._env_temp_dir(env)
         log_path, pid_path, exit_path = (f"{temp_dir}/hermes_bg_{session.id}.{ext}" for ext in ("log", "pid", "exit"))
         q = shlex.quote
@@ -1555,7 +1517,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
             was_running = session.id in self._running
             if was_running:
                 session._finish_claimed = True
-                session.exited_at = time.time()
+                session.exited_at = self._clock()
                 # Keep the session tracked until its result is durable. A finite
                 # parent must not observe completion and exit during this write.
                 save_completed_result(session)
@@ -2352,7 +2314,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         """O(1) running count for status-bar polling; dict ``len()`` is atomic, no lock."""
         return len(self._running)
 
-    def list_sessions(self, task_id: str | None = None, session_key: str | None = None, *, include_retained: bool = False) -> list:
+    def list_sessions(self, task_id: str | None = None, session_key: str | None = None, *,
+                      include_retained: bool = False, include_internal: bool = False) -> list:
         """Running and recently-finished processes for ``task_id`` and/or ``session_key``;
         cross-task entries sharing the gateway session (a forgotten preview server
         blocking session reset) are flagged ``"session_scoped": true``.
@@ -2361,13 +2324,23 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         ``session_key`` is also given, session-scoped background processes (``background: true``) registered
         under that gateway session are surfaced too, even if they belong to a different task — so the agent
         can discover a forgotten preview server that is blocking session reset (#29177).
+
+        Internal processes (Hermes plumbing such as bot delivery runners) are omitted unless
+        ``include_internal``; ``get()`` still resolves them. Live finished entries older than
+        ``FINISHED_LISTING_RETENTION_SECONDS`` are dropped, and overdue internal processes are reaped.
         """
+        self.reap_overdue()
+        with self._lock:
+            self._prune_if_needed()
         # Only an explicit tool query reads historical receipts. Status bars and
         # gateway liveness scans call this frequently and need the live registry.
         sessions = load_completed_results() if include_retained else {}
+        now = self._clock()
         with self._lock:
-            sessions.update(self._finished)
+            sessions.update({sid: s for sid, s in self._finished.items() if not self._listing_expired(s, now)})
             sessions.update(self._running)
+        if not include_internal:
+            sessions = {sid: s for sid, s in sessions.items() if not s.internal}
         all_sessions = [
             refreshed for refreshed in (
                 self._refresh_detached_session(s) for s in sessions.values()
@@ -2505,7 +2478,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
 
     def kill_all(
         self, task_id: Optional[str] = None, *, exclude_ids: frozenset = frozenset(),
-        source: str = "kill_all", consume_output: bool = False) -> int:
+        source: str = "kill_all", consume_output: bool = False, exclude_internal: bool = False) -> int:
         """Kill all running processes, optionally only those ``task_id`` spawned (its ``owner_task_id``).
         Returns how many it stopped. A session whose systemd scope did not stop is not counted
         (its descendants may live on), and a later sweep retries it even after it finished.
@@ -2523,6 +2496,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
                 if (task_id is None or s.owner_task_id == task_id)
                 and s.id not in exclude_ids and (not s.exited or s._scope_stop_pending)
                 and not (lifecycle and s.persist_on_release)
+                and not (exclude_internal and s.internal)
             ]
         results = [self.kill_process(s.id, source=source, consume_output=consume_output) for s in targets]
         return sum(
@@ -2534,7 +2508,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
     def _prune_if_needed(self):
         """Drop expired, then oldest-over-cap finished sessions (hold _lock); keep pending scope stops and unpublished notices."""
         from tools.process_registry_awaiting import retained_for_delivery
-        now = time.time()
+        now = self._clock()
         prunable = {sid: s for sid, s in self._finished.items()
                     if not getattr(s, "_scope_stop_pending", False) and not retained_for_delivery(s)}
         expired = [sid for sid, s in prunable.items() if (now - s.started_at) > FINISHED_TTL_SECONDS]

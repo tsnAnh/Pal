@@ -52,6 +52,8 @@ _LIVE_WAIT_SECONDS = 300
 # A live owner may run a turn past one wait window, but each waiting runner holds ~46 MB and the
 # sender's notify slot: past this the runner reports pending (do not resend) and exits.
 _LIVE_WAIT_MAX_SECONDS = 30 * 60
+# A runner that outlives its own wait budget by this much is hung (a wedged transport, a stuck lock).
+_RUNNER_LIFETIME_MARGIN_SECONDS = 5 * 60
 
 # '<peer>/<agent>' — peer names are lowercase (``hermes peer`` normalizes them).
 _PEER_TARGET_RE = re.compile(r"^([a-z0-9][a-z0-9_-]{0,63})/([a-zA-Z0-9][a-zA-Z0-9_-]{0,63})$")
@@ -729,6 +731,20 @@ def _start_delivery(argv: list[str], content: str, label: str, *, stdin_file: bo
     return _spawn_delivery(command, label, dm_file=dm_file, task_id=task_id, agent=agent)
 
 
+def _runner_policy(label: str) -> Any:
+    """Delivery runners are plumbing: invisible to the process tray and reaped, as a failed delivery, once
+    past the longest wait budget any lane gives them (live owner wait or relay reply waiter)."""
+    from tools.bot_failure_reasons import DELIVERY_TIMEOUT
+    from tools.bot_relay import REPLY_WAIT_SECONDS
+    from tools.process_registry import InternalProcessPolicy
+
+    lifetime = max(_LIVE_WAIT_MAX_SECONDS, REPLY_WAIT_SECONDS) + _RUNNER_LIFETIME_MARGIN_SECONDS
+    failure = json.dumps({"error": f"Delivery to {label} did not finish within {lifetime}s and was stopped. "
+                                   "The message may still be delivered; do not resend blindly.",
+                          "reason": DELIVERY_TIMEOUT})
+    return InternalProcessPolicy(max_lifetime_seconds=lifetime, expiry_output=failure)
+
+
 def _spawn_delivery(command: str, label: str, *, dm_file: Optional[str] = None, delivery_id: Optional[str] = None,
                     task_id: Optional[str], agent: Any) -> str:
     """Launch the cleanup-owning runner and transfer file ownership on ack. ``dm_file``
@@ -742,7 +758,7 @@ def _spawn_delivery(command: str, label: str, *, dm_file: Optional[str] = None, 
 
         raw = terminal_tool(command, background=True, notify_on_complete=True, task_id=task_id,
                             workdir=str(Path(__file__).resolve().parent.parent), _host_local=True,
-                            _completion_output_chars=REPLY_COMPLETION_CHARS)
+                            _completion_output_chars=REPLY_COMPLETION_CHARS, _internal=_runner_policy(label))
         try:
             parsed = json.loads(raw)
         except (ValueError, TypeError):

@@ -1480,6 +1480,7 @@ def terminal_tool(
     watch_patterns: Optional[list[str]] = None,
     _host_local: bool = False,
     _completion_output_chars: int = 0,
+    _internal: Any = None,
     heartbeat: int = 0,
     persist_on_release: bool = False,
 ) -> str:
@@ -1501,6 +1502,8 @@ def terminal_tool(
     process_manage kill (#41225).
     ``_completion_output_chars`` (internal) sizes the completion notification's output for a
     spawner whose output is the payload (a bot DM's reply); 0 keeps the usual tail.
+    ``_internal`` (internal) marks the spawn as Hermes plumbing: hidden from user-facing process
+    listings, not stoppable from them, and reaped past its policy's lifetime.
     ``_host_local`` forces the local backend for Hermes-owned control-plane
     children (kept in a separate env cache from the configured backend).
     """
@@ -1579,6 +1582,7 @@ def terminal_tool(
                     watch_patterns=watch_patterns, approval_note=verdict.note,
                     pty_disabled_reason=_PTY_DISABLED_REASON if pty_disabled else None,
                     completion_output_chars=_completion_output_chars,
+                    internal_policy=_internal,
                     heartbeat_seconds=heartbeat,
                     persist_on_release=persist_on_release,
                     auto_backgrounded=auto_bg is not None and plan.promoted_from_foreground_timeout is None,

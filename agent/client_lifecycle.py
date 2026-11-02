@@ -109,7 +109,7 @@ class ClientLifecycleMixin:
             # A session can run several task IDs; delegated IDs also differ from session_id.
             # Never match the environment key (e.g. "default"), shared by parent and siblings.
             owners = getattr(self, "_process_owner_task_ids", ())
-            for process in process_registry.list_sessions():
+            for process in process_registry.list_sessions(include_internal=True):
                 if process["owner_task_id"] in owners and process["status"] == "running":
                     # An explicitly persisted job (terminal persist_on_release=true) survives
                     # agent close — session end, compression, error recovery (#41225). The

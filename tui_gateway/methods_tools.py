@@ -262,7 +262,7 @@ def _(rid, params: dict) -> dict:
 # One-expression handlers: name → (fail_code, payload builder(params)).
 _SIMPLE_RPCS = {
     # Session-scoped view of the background process registry (desktop status stack).
-    "process.stop": (5010, lambda params: {"killed": _tools_mod("tools.process_registry").process_registry.kill_all(source="process.stop")}),
+    "process.stop": (5010, lambda params: {"killed": _tools_mod("tools.process_registry").process_registry.kill_all(source="process.stop", exclude_internal=True)}),
     # Re-read ``~/.hermes/.env`` (CLI ``/reload`` parity); built agents keep their pool, ``/new`` resolves fresh.
     "reload.env": (5015, lambda params: {"updated": int(_tools_mod("hermes_cli.config").reload_env())}),
     "plugins.list": (5032, lambda params: {"plugins": [
@@ -290,7 +290,7 @@ def _(rid, params: dict, session) -> dict:
         return _err(rid, 4012, "process_id required")
     registry = _tools_mod("tools.process_registry").process_registry
     proc = registry.get(proc_id)
-    if proc is None or str(getattr(proc, "session_key", "") or "") != str(session.get("session_key") or ""):
+    if proc is None or proc.internal or str(getattr(proc, "session_key", "") or "") != str(session.get("session_key") or ""):
         return _err(rid, 4044, f"no such process: {proc_id}")
     return _ok(rid, registry.kill_process(proc_id))
 
