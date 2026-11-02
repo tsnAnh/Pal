@@ -309,7 +309,7 @@ def _stop_background_work() -> None:
         return _cp(f"  {_t('stop.none_running')}")
     if running:
         _cp(f"  {_t('stop.stopping', count=len(running))}")
-        _cp(f"  {_t('stop.stopped', count=process_registry.kill_all(source='cli.stop'))}")
+        _cp(f"  {_t('stop.stopped', count=process_registry.kill_all(source='cli.stop', exclude_internal=True))}")
     if n_async:
         if view is not None:
             interrupted = view.interrupt_delegations()  # the gateway interrupts this session's own

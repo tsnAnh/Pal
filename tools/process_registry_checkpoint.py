@@ -3,6 +3,7 @@
 import json
 import logging
 import time
+from contextvars import copy_context
 from typing import Any, Dict, List, Optional
 
 from agent.redact import redact_sensitive_text
@@ -141,11 +142,15 @@ class ProcessCheckpointMixin:
             # (and recorded exit) outlives its spawner, so tail it from the start.
             fields["output_log"] = log
             session = ProcessSession(id=entry["session_id"], detached=True, **fields)
+            if session.max_lifetime_seconds > 0:
+                session._scope = copy_context()
             if session.output_log:
                 self._track_started(session, self._log_reader_loop, f"proc-log-reader-{session.id}")
             else:
                 with self._lock:
                     self._running[session.id] = session
+                if session.max_lifetime_seconds > 0:
+                    self._ensure_background_thread()
             recovered += 1
             logger.info("Recovered detached process: %s (pid=%d)", session.command[:60], pid)
             # Re-enqueue watcher so gateway can resume notifications

@@ -485,7 +485,7 @@ class TestGatherBackgroundProcessesOwnership:
         from hermes_cli import goals
 
         class _Reg:
-            def list_sessions(self, task_id=None, session_key=None):
+            def list_sessions(self, task_id=None, session_key=None, *, include_internal=False):
                 return [
                     {"session_id": "proc_mine", "status": "running", "owner_task_id": "root-sid", "task_id": "default"},
                     {"session_id": "proc_child", "status": "running", "owner_task_id": "sa-1-abc", "task_id": "default"},

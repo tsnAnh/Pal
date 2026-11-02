@@ -463,7 +463,7 @@ def _mirror_stop(sid, session, agent, arg) -> None:
     from tools.process_registry import process_registry
     # Deliberate user stop: an explicit source keeps it reaching
     # persist_on_release jobs (#41225).
-    process_registry.kill_all(source="slash.stop")
+    process_registry.kill_all(source="slash.stop", exclude_internal=True)
 
 
 # name → mirror(sid, session, agent, arg); a falsy return means "no warning".

@@ -37,7 +37,7 @@ from tools.process_registry_notifications import (
 from tools.process_registry_checkpoint import ProcessCheckpointMixin
 from tools.process_registry_output_log import ProcessOutputLogMixin, open_output_log, record_exit_command, worker_output_log
 from tools.process_registry_ownership import ProcessOwnershipMixin
-from tools.process_registry_timers import InternalProcessPolicy, ProcessTimerMixin
+from tools.process_registry_timers import LIFETIME_EXCEEDED_SOURCE, InternalProcessPolicy, ProcessTimerMixin
 from tools.process_registry_termination import ProcessTerminationMixin
 from tools.process_registry_results import load_completed_results, save_completed_result
 from tools.process_registry_env_log import log_delta_command
@@ -620,6 +620,8 @@ class ProcessSession:
     _pty: Any = field(default=None, repr=False)  # ptyprocess handle (use_pty=True)
     _owned_pgid: Optional[int] = field(default=None, repr=False)  # see ProcessOwnershipMixin
     _scope: Any = field(default=None, repr=False)  # spawning context: the owning profile for timer-driven kills
+    _lifetime_reaped: bool = field(default=False, repr=False)  # a sweep holds the lifetime kill; guarded by the registry lock
+    _lifetime_kill_active: bool = field(default=False, repr=False)  # a lifetime kill is delivering its signal
 
     def __post_init__(self):
         # A session built without an explicit owner is owned by its own task, so ownership checks compare
@@ -648,9 +650,15 @@ class ProcessSession:
         if len(self.output_buffer) > self.max_output_chars:
             self.output_buffer = self.output_buffer[-self.max_output_chars:]
 
+    def attach_lifetime_failure_locked(self) -> None:
+        if self._lifetime_kill_active and self.lifetime_expiry_output and not self.exited:
+            self._lifetime_kill_active = False
+            self._append_locked(f"\n{self.lifetime_expiry_output}")
+
     def mark_exited(self, exit_code, reason: str = "exited", source: str = "") -> None:
         """Record an exit. A kill that raced the observer already recorded its own
         exit_code/reason; never overwrite it."""
+        self.attach_lifetime_failure_locked()
         self.exited = True
         if self.completion_reason != "killed":
             self.exit_code = exit_code
@@ -696,6 +704,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
 
     # Class default so registries built via __new__ (tests) still restore on first drain.
     _completions_restored = False
+    _clock = staticmethod(time.time)
 
     def __init__(self, clock: Callable[[], float] = time.time):
         self._clock = clock
@@ -2114,6 +2123,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
             if consume_output and not finalizing:
                 self._completion_consumed.add(session_id)
             return result
+        session._lifetime_kill_active = source == LIFETIME_EXCEEDED_SOURCE
         try:
             early = self._signal_kill(session, session_id, consume_output)
             if early is not None:
@@ -2159,6 +2169,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
             # Capture output, mark consumed, THEN expose ``exited`` to watcher tasks —
             # closes the delayed-notification race without losing the transcript.
             with session._lock:
+                session.attach_lifetime_failure_locked()
                 output = _completion_output(session)
                 if consume_output:
                     self._completion_consumed.add(session_id)
@@ -2178,6 +2189,8 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
                 "termination_source": session.termination_source, **output}
         except Exception as e:
             return {"status": "error", "error": str(e)}
+        finally:
+            session._lifetime_kill_active = False
 
     @staticmethod
     def _stop_scope(session: ProcessSession) -> bool:
@@ -2311,8 +2324,9 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
             session_id, lambda pty: pty.sendeof(), lambda stdin: stdin.close(), {"status": "ok", "message": msg})
 
     def count_running(self) -> int:
-        """O(1) running count for status-bar polling; dict ``len()`` is atomic, no lock."""
-        return len(self._running)
+        """Running count for status-bar polling, no lock: what a user can see and stop, so internal
+        processes are excluded and the number matches ``list_sessions()``."""
+        return sum(1 for s in list(self._running.values()) if not s.internal)
 
     def list_sessions(self, task_id: str | None = None, session_key: str | None = None, *,
                       include_retained: bool = False, include_internal: bool = False) -> list:
@@ -2326,12 +2340,10 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         can discover a forgotten preview server that is blocking session reset (#29177).
 
         Internal processes (Hermes plumbing such as bot delivery runners) are omitted unless
-        ``include_internal``; ``get()`` still resolves them. Live finished entries older than
-        ``FINISHED_LISTING_RETENTION_SECONDS`` are dropped, and overdue internal processes are reaped.
+        ``include_internal``; ``get()`` still resolves them. Finished entries older than
+        ``FINISHED_LISTING_RETENTION_SECONDS`` are filtered out. A listing only filters: reaping
+        belongs to the timer thread.
         """
-        self.reap_overdue()
-        with self._lock:
-            self._prune_if_needed()
         # Only an explicit tool query reads historical receipts. Status bars and
         # gateway liveness scans call this frequently and need the live registry.
         sessions = load_completed_results() if include_retained else {}
@@ -2639,7 +2651,7 @@ def _list_processes(task_id) -> dict:
     return {"processes": [
         _redact_process_result(p)
         for p in process_registry.list_sessions(
-            task_id=task_id, session_key=session_key or None, include_retained=True)]}
+            task_id=task_id, session_key=session_key or None, include_retained=True, include_internal=True)]}
 
 
 # action -> (handler(session_id, args) -> dict, redact output?). Output-bearing

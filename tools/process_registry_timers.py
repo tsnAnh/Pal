@@ -10,6 +10,8 @@ from tools.process_registry_notifications import heartbeat_output_tail
 
 logger = logging.getLogger(__name__)
 
+LIFETIME_EXCEEDED_SOURCE = "lifetime_exceeded"
+
 
 @dataclass(frozen=True)
 class InternalProcessPolicy:
@@ -102,20 +104,32 @@ class ProcessTimerMixin:
         return now - (session.exited_at or session.started_at) > facade.FINISHED_LISTING_RETENTION_SECONDS
 
     def reap_overdue(self) -> list[str]:
-        """Kill running processes past their ``max_lifetime_seconds``; their completion carries
-        ``lifetime_expiry_output``. Returns the ids it stopped. The kill runs in the spawning
-        context, so a sweep on the shared timer thread (or any caller's list) still acts as the owning profile."""
+        """Kill running processes past their ``max_lifetime_seconds`` and return the ids it stopped. Runs
+        on the timer thread only; a listing never calls it. A sweep claims each process under the registry
+        lock, so overlapping sweeps never kill one twice, and the claim is released when the kill fails so
+        a later sweep retries. The completion's ``lifetime_expiry_output`` is attached by the kill itself
+        (``kill_process``), once, and only when this kill ends the process."""
         now = self._clock()
         with self._lock:
             overdue = [s for s in self._running.values()
-                       if s.max_lifetime_seconds > 0 and not s.exited
+                       if s.max_lifetime_seconds > 0 and not s.exited and not s._lifetime_reaped
                        and now - s.started_at > s.max_lifetime_seconds]
-        reaped = []
-        for session in overdue:
-            if session.lifetime_expiry_output:
-                session.append_output_if_running(f"\n{session.lifetime_expiry_output}")
-            scope = session._scope.copy() if session._scope is not None else copy_context()
-            result = scope.run(self.kill_process, session.id, source="lifetime_exceeded", consume_output=False)
-            if result.get("status") in {"killed", "already_exited"}:
-                reaped.append(session.id)
-        return reaped
+            for session in overdue:
+                session._lifetime_reaped = True
+        return [session.id for session in overdue if self._kill_overdue(session)]
+
+    def _kill_overdue(self, session) -> bool:
+        scope = session._scope.copy() if session._scope is not None else copy_context()
+        try:
+            result = scope.run(self.kill_process, session.id, source=LIFETIME_EXCEEDED_SOURCE, consume_output=False)
+        except Exception:
+            logger.warning("lifetime kill of %s raised; retrying on the next sweep", session.id, exc_info=True)
+            result = {}
+        if result.get("status") in {"killed", "already_exited"}:
+            return True
+        if result:
+            logger.warning("lifetime kill of %s failed (%s); retrying on the next sweep",
+                           session.id, result.get("error", "unknown error"))
+        with self._lock:
+            session._lifetime_reaped = False
+        return False

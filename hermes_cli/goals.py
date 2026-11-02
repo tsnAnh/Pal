@@ -1031,7 +1031,7 @@ def gather_background_processes(task_id: Optional[str] = None, *, owner_task_id:
     try:
         from tools.process_registry import process_registry
 
-        sessions = process_registry.list_sessions(task_id=task_id) or []
+        sessions = process_registry.list_sessions(task_id=task_id, include_internal=True) or []
     except Exception as exc:
         logger.debug("gather_background_processes failed: %s", exc)
         return []

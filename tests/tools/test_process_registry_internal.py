@@ -2,7 +2,9 @@
 stay resolvable for their owner, and stale or overdue entries clean themselves up."""
 
 import json
+import os
 import sys
+import threading
 from contextvars import ContextVar, copy_context
 from types import SimpleNamespace
 
@@ -78,8 +80,13 @@ def test_running_entry_never_ages_out_of_the_listing():
     assert _ids(registry.list_sessions()) == ["proc_long"]
 
 
+@pytest.fixture()
+def quiet_timer_thread(monkeypatch):
+    monkeypatch.setattr(module, "HEARTBEAT_TICK_SECONDS", 3600)
+
+
 @pytest.mark.platforms("posix")
-def test_runner_past_its_lifetime_is_killed_and_reports_a_failed_delivery():
+def test_runner_past_its_lifetime_is_killed_and_reports_a_failed_delivery(quiet_timer_thread):
     clock = _Clock()
     registry = ProcessRegistry(clock=clock)
     policy = InternalProcessPolicy(
@@ -184,3 +191,176 @@ def test_stop_all_spares_internal_processes(tray_registry, monkeypatch):
                         lambda sid, **kw: killed.append(sid) or {"status": "killed"})
     _rpc("process.stop")
     assert killed == ["proc_user"]
+
+
+EXPIRY_PAYLOAD = json.dumps({"error": "too slow", "reason": "delivery_timeout"})
+
+
+def _spawn_runner(registry, command, lifetime=60):
+    session = registry.spawn_local(
+        command, task_id="t", session_key="chat-key",
+        internal_policy=InternalProcessPolicy(max_lifetime_seconds=lifetime, expiry_output=EXPIRY_PAYLOAD))
+    session.notify_on_complete = True
+    return session
+
+
+def _sleeper() -> str:
+    return f"{sys.executable} -c 'import time; time.sleep(60)'"
+
+
+@pytest.mark.platforms("posix")
+def test_failed_lifetime_kill_adds_no_text_and_is_retried(quiet_timer_thread, monkeypatch):
+    clock = _Clock()
+    registry = ProcessRegistry(clock=clock)
+    session = _spawn_runner(registry, _sleeper())
+    real_signal_kill = registry._signal_kill
+    attempts = []
+
+    def flaky_signal_kill(*args):
+        attempts.append(1)
+        if len(attempts) == 1:
+            return {"status": "error", "error": "transport down", "session_id": session.id}
+        return real_signal_kill(*args)
+
+    monkeypatch.setattr(registry, "_signal_kill", flaky_signal_kill)
+    try:
+        clock.now += 61
+        assert registry.reap_overdue() == []
+        assert not session.exited
+        assert "delivery_timeout" not in session.output_buffer
+
+        assert registry.reap_overdue() == [session.id]
+        assert session._completion_event.wait(10)
+        assert session.output_buffer.count("delivery_timeout") == 1
+        assert json.loads(registry.completion_queue.get_nowait()["output"])["reason"] == "delivery_timeout"
+    finally:
+        registry.kill_all()
+
+
+@pytest.mark.platforms("posix")
+def test_concurrent_lifetime_sweeps_attach_the_failure_once(quiet_timer_thread, monkeypatch):
+    clock = _Clock()
+    registry = ProcessRegistry(clock=clock)
+    session = _spawn_runner(registry, _sleeper())
+    real_terminate = registry._terminate_host_pid
+    first_kill_started, release_first_kill, terminations = threading.Event(), threading.Event(), []
+
+    def gated_terminate(*args, **kwargs):
+        terminations.append(1)
+        if len(terminations) == 1:
+            first_kill_started.set()
+            assert release_first_kill.wait(10)
+        return real_terminate(*args, **kwargs)
+
+    monkeypatch.setattr(registry, "_terminate_host_pid", gated_terminate)
+    first_sweep = []
+    first = threading.Thread(target=lambda: first_sweep.extend(registry.reap_overdue()))
+    try:
+        clock.now += 61
+        first.start()
+        assert first_kill_started.wait(10)
+        registry.reap_overdue()
+        release_first_kill.set()
+        first.join(10)
+
+        assert first_sweep == [session.id]
+        assert session._completion_event.wait(10)
+        assert session.output_buffer.count("delivery_timeout") == 1
+        assert json.loads(registry.completion_queue.get_nowait()["output"])["reason"] == "delivery_timeout"
+    finally:
+        release_first_kill.set()
+        registry.kill_all()
+
+
+@pytest.mark.platforms("posix")
+def test_runner_that_exits_on_its_own_before_the_reap_gets_no_failure_text(quiet_timer_thread, monkeypatch, tmp_path):
+    fifo = tmp_path / "release"
+    os.mkfifo(fifo)
+    clock = _Clock()
+    registry = ProcessRegistry(clock=clock)
+    session = _spawn_runner(registry, f"sh -c 'read line < {fifo}'")
+    real_kill = registry.kill_process
+
+    def kill_after_it_finished(session_id, **kwargs):
+        with open(fifo, "w") as release:
+            release.write("go\n")
+        assert session._completion_event.wait(10)
+        return real_kill(session_id, **kwargs)
+
+    monkeypatch.setattr(registry, "kill_process", kill_after_it_finished)
+    try:
+        clock.now += 61
+        registry.reap_overdue()
+
+        assert (session.exit_code, session.completion_reason) == (0, "exited")
+        assert "delivery_timeout" not in session.output_buffer
+        assert "delivery_timeout" not in registry.completion_queue.get_nowait()["output"]
+    finally:
+        registry.kill_all()
+
+
+def test_listing_never_reaps_an_overdue_runner(monkeypatch):
+    clock = _Clock()
+    registry = ProcessRegistry(clock=clock)
+    registry._running["proc_runner"] = _session("proc_runner", internal=True, max_lifetime_seconds=60)
+    clock.now += 61
+
+    def refuse_kill(*args, **kwargs):
+        pytest.fail("a listing must not kill anything")
+
+    monkeypatch.setattr(registry, "kill_process", refuse_kill)
+
+    assert _ids(registry.list_sessions(include_internal=True)) == ["proc_runner"]
+    assert registry.list_sessions() == []
+
+
+def test_running_count_excludes_internal_runners():
+    registry = ProcessRegistry(clock=_Clock())
+    registry._running["proc_user"] = _session("proc_user")
+    registry._running["proc_runner"] = _session("proc_runner", internal=True)
+
+    assert registry.count_running() == 1
+    assert len(registry.list_sessions()) == registry.count_running()
+
+
+def test_registry_built_without_init_lists_sessions():
+    registry = ProcessRegistry.__new__(ProcessRegistry)
+    registry._running = {"proc_user": _session("proc_user")}
+    registry._finished = {}
+    registry._lock = threading.Lock()
+
+    assert _ids(registry.list_sessions()) == ["proc_user"]
+
+
+def test_agent_tool_listing_includes_pending_runners(monkeypatch):
+    registry = ProcessRegistry(clock=_Clock())
+    registry._running["proc_user"] = _session("proc_user")
+    registry._running["proc_runner"] = _session("proc_runner", internal=True)
+    monkeypatch.setattr(module, "process_registry", registry)
+
+    assert sorted(_ids(module._list_processes("t")["processes"])) == ["proc_runner", "proc_user"]
+
+
+@pytest.mark.platforms("posix")
+def test_agent_close_and_gateway_shutdown_still_kill_runners(monkeypatch):
+    import run_agent
+    import tools.computer_use.tool as computer_use
+    from agent.client_lifecycle import ClientLifecycleMixin
+    from gateway.run_shutdown import GatewayShutdownMixin
+
+    monkeypatch.setattr(run_agent, "cleanup_vm", lambda *a, **k: None)
+    monkeypatch.setattr(run_agent, "cleanup_browser", lambda *a, **k: None)
+    monkeypatch.setattr(computer_use, "release_computer_use_session", lambda *a, **k: None)
+    registry = ProcessRegistry()
+    monkeypatch.setattr(module, "process_registry", registry)
+    policy = InternalProcessPolicy(max_lifetime_seconds=3420)
+    closed = registry.spawn_local(_sleeper(), task_id="turn-1", owner_task_id="turn-1", internal_policy=policy)
+    shut_down = registry.spawn_local(_sleeper(), task_id="turn-2", owner_task_id="turn-2", internal_policy=policy)
+    try:
+        ClientLifecycleMixin._close_task_resources(SimpleNamespace(_process_owner_task_ids=("turn-1",)), "turn-1")
+        assert closed.exited and not shut_down.exited
+
+        GatewayShutdownMixin._stop_kill_tool_subprocesses("final")
+        assert shut_down.exited
+    finally:
+        registry.kill_all()
