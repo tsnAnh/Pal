@@ -24,12 +24,13 @@ from agent.i18n import t
 from tools import approval_bot_chat, approval_context
 from tools.approval_context import (
     _get_session_platform, _is_cron_approval_context,
-    _is_gateway_approval_context, _is_interactive_cli, _is_single_query_approval_context,
+    _is_gateway_approval_context, _is_interactive_cli, _is_single_query_approval_context, _no_user_can_answer,
     _is_unattended_platform_approval_context, _resolve_cli_approval_callback, _should_fall_through_to_cli_approval,
     get_current_session_key,
 )
 from tools.approval_detection import (
     _approval_key_aliases, _check_sudo_stdin_guard, detect_dangerous_command, detect_hardline_command,
+    detect_human_required_code, detect_human_required_command,
 )
 from tools.approval_floors import (
     _command_matches_permanent_allowlist, _hardline_block_result, _match_user_deny_rule, _sudo_stdin_block_result,
@@ -1090,6 +1091,63 @@ def _run_approval_gate(
     )
 
 
+_HUMAN_REQUIRED_DENY_TEMPLATE = (
+    "BLOCKED: {subject} needs your approval in an interactive session. "
+    "The user has NOT consented. Do NOT retry, rephrase, or reach the same outcome another way; "
+    "ask the user to run it themselves or to start an interactive session."
+)
+_HUMAN_REQUIRED_DENY = _HUMAN_REQUIRED_DENY_TEMPLATE.format(subject="This action")
+_HUMAN_REQUIRED_GATE = _GateSpec(
+    noun="action", transport=False, user_approved=True, redact_cli=True, pending_keys=False,
+    notify_failed=_HUMAN_REQUIRED_DENY,
+    gateway_refused="BLOCKED: This action {reason}.{reason_addendum}" + _STOP_ACTION
+                    + "{timeout_addendum}",
+    transport_denied="",
+    cli_timeout="BLOCKED: This action timed out without user response." + _STOP_ACTION
+                + " Silence is not consent.",
+    cli_denied="BLOCKED: User denied this action (matched '{description}')." + _STOP_ACTION,
+    smart_log="", one_shot=True,
+)
+
+
+def _human_required_unattended() -> bool:
+    from agent.delegation_context import is_delegated_child_process_context
+    return (_no_user_can_answer() or is_delegated_child_process_context()
+            or bool((os.environ.get("HERMES_KANBAN_TASK") or "").strip()))
+
+
+def _human_required_gate(command: str, description: str, approval_callback=None) -> dict:
+    pattern_key = f"human_required:{description}"
+    approval_callback, is_cli, is_gateway, is_ask = _presence(approval_callback)
+    session_key = get_current_session_key()
+    answerable = is_cli or ((is_gateway or is_ask) and _gateway_notify_cb(session_key) is not None)
+    if _human_required_unattended() or not answerable:
+        logger.warning("Human-required action blocked (%s): no interactive user to approve it", description)
+        return _blocked(
+            _HUMAN_REQUIRED_DENY_TEMPLATE.format(subject=f"Attempting to {description}"),
+            pattern_key=pattern_key, description=description)
+    decision = _human_decision(
+        _HUMAN_REQUIRED_GATE, command=command, description=description, pattern_key=pattern_key,
+        pattern_keys=[pattern_key], session_key=session_key, approval_callback=approval_callback,
+        is_cli=is_cli, is_gateway=is_gateway, is_ask=is_ask,
+    )
+    return {**decision, "human_required": True} if decision.get("approved") else decision
+
+
+def _with_profile_admin_grant(result: dict, command: str) -> dict:
+    if not (result.get("approved") and result.get("human_required")):
+        return result
+    from agent.terminal_approval_batch import preparing_terminal_approval
+    if preparing_terminal_approval():
+        return result
+    from hermes_cli.profile_admin_guard import mint_grant
+    try:
+        return {**result, "profile_admin_grant": mint_grant(command, result.get("description") or "")}
+    except OSError:
+        logger.warning("Could not record the one-time grant for an approved profile action", exc_info=True)
+        return result
+
+
 def _should_skip_container_guards(env_type: str, has_host_access: bool = False) -> bool:
     """True when the backend is isolated enough to skip dangerous-command prompts. Docker is the
     exception once host paths are bind-mounted: ``rm -rf /workspace`` then reaches host files."""
@@ -1155,6 +1213,9 @@ def check_dangerous_command(command: str, env_type: str,
     blocked = _floor_block(command)
     if blocked is not None:
         return blocked
+    human_required, human_description = detect_human_required_command(command)
+    if human_required:
+        return _with_profile_admin_grant(_human_required_gate(command, human_description, approval_callback), command)
     if _yolo_active():
         return _approved()
     if _command_matches_permanent_allowlist(command):
@@ -1227,7 +1288,11 @@ def check_all_command_guards(command: str, env_type: str,
     from agent.terminal_approval_batch import consume_prepared_guard
     prepared = consume_prepared_guard(command, env_type, has_host_access)
     if prepared is not None:
-        return prepared
+        return _with_profile_admin_grant(prepared, command)
+
+    human_required, human_description = detect_human_required_command(command)
+    if human_required:
+        return _with_profile_admin_grant(_human_required_gate(command, human_description, approval_callback), command)
 
     approval_mode = approval_context._get_approval_mode()
     if _yolo_active() or approval_mode == "off":
@@ -1299,6 +1364,10 @@ def check_execute_code_guard(code: str, env_type: str, has_host_access: bool = F
         return _approved()
     if _should_skip_container_guards(env_type, has_host_access=has_host_access):
         return _approved()
+    human_required, human_description = detect_human_required_code(code)
+    if human_required:
+        return _with_profile_admin_grant(
+            _human_required_gate(f"execute_code <<'PY'\n{code}\nPY", human_description), code)
     approval_mode = approval_context._get_approval_mode()
     if _yolo_active() or approval_mode == "off":
         return _approved()

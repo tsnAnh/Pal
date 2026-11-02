@@ -588,7 +588,9 @@ def install_distribution(
 ) -> InstallPlan:
     """Install a distribution from *source* into a new profile; returns the resolved plan.
     Use :func:`plan_install` first to preview + prompt."""
+    from hermes_cli.profile_admin_guard import require_profile_admin_grant
     from hermes_cli.profiles import check_alias_collision, create_wrapper_script
+    require_profile_admin_grant("install", name or "")
     with tempfile.TemporaryDirectory(prefix="hermes_dist_install_") as tmp:
         plan = plan_install(source, Path(tmp), override_name=name)
         if plan.existing and not force:

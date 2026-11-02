@@ -719,6 +719,8 @@ async def start_gateway(config: Optional[GatewayConfig] = None, replace: bool = 
         os,
         threading,
     )
+    from hermes_cli.profile_admin_guard import leave_agent_context
+    leave_agent_context()
     # Set here (not at import) so incidental gateway.run imports from CLI code don't poison it.
     os.environ["HERMES_EXEC_ASK"] = "1"
     from hermes_cli.update_proxy_env import restore_user_proxy_env

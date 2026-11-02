@@ -691,18 +691,20 @@ def _write_avatar(avatar: tuple[str, bytes], profile_dir: Path) -> None:
 
 
 def _write_profile_meta(parsed: ParsedTemplate, profile_dir: Path, shown: str) -> None:
-    from hermes_cli.profiles import _load_yaml_dict, write_profile_meta
-    from utils import atomic_yaml_write
+    from hermes_cli.profile_yaml import update_profile_yaml
+    from hermes_cli.profiles import write_profile_meta
 
     write_profile_meta(profile_dir, description=parsed.description, description_auto=False, display_name=shown)
     look = dict(parsed.look)
     if "title" in look:
         look["title"] = shown
     look["created"] = int(time.time() * 1000)
-    existing = _load_yaml_dict(profile_dir / "profile.yaml") or {}
-    existing["ui_meta"] = {"hermes-bots": look}
-    existing["_ui_meta_revisions"] = {"hermes-bots": 1}
-    atomic_yaml_write(profile_dir / "profile.yaml", existing, sort_keys=False)
+
+    def mutate(existing: dict) -> None:
+        existing["ui_meta"] = {"hermes-bots": look}
+        existing["_ui_meta_revisions"] = {"hermes-bots": 1}
+
+    update_profile_yaml(profile_dir, mutate, overwrite_unreadable=True)
 
 
 def _write_config(config: dict, profile_dir: Path) -> None:
@@ -752,7 +754,10 @@ def _discard_profile(slug: str) -> None:
 
 
 def _overlay(parsed: ParsedTemplate, profile_dir: Path, shown: str) -> tuple[int, list[str]]:
+    from hermes_cli.shared_catalog_portable import adopt_profile_skills
+
     _write_skills(parsed.skills, profile_dir)
+    adopt_profile_skills(profile_dir, profile_dir.name)
     if parsed.avatar is not None:
         _write_avatar(parsed.avatar, profile_dir)
     _write_profile_meta(parsed, profile_dir, shown)
@@ -787,36 +792,48 @@ def import_template(
     }
 
 
+def _skill_roots(profile_dir: Path) -> list[tuple[Path, tuple[str, ...]]]:
+    from hermes_cli.shared_catalog import catalog_active
+
+    roots = [(profile_dir / SKILLS_DIR, (SKILLS_DIR,))]
+    if catalog_active():
+        from hermes_cli.shared_catalog_portable import enabled_catalog_skills
+
+        roots += [(path, (SKILLS_DIR, *key.split("/")))
+                  for key, path, _ in enabled_catalog_skills(profile_dir, include_bundled=False) if path.is_dir()]
+    return roots
+
+
 def _export_skills(profile_dir: Path) -> dict[str, bytes]:
-    root = profile_dir / SKILLS_DIR
     files: dict[str, bytes] = {}
     folded: dict[str, str] = {}
     total = 0
-    if not root.is_dir():
-        return files
-    for current, dirs, names in os.walk(root, followlinks=False):
-        rel_dir = Path(current).relative_to(profile_dir).parts
-        dirs[:] = sorted(d for d in dirs if _directory_allowed([*rel_dir, d]) and not (Path(current) / d).is_symlink())
-        for entry in sorted(names):
-            parts = [*rel_dir, entry]
-            path = Path(current) / entry
-            if not _skill_path_allowed(parts) or path.is_symlink() or not path.is_file():
-                continue
-            _claim_folded(folded, parts, "This bot has skill files whose names differ only by capital letters. Rename one to share it.")
-            size = path.stat().st_size
-            total += size
-            if size > MAX_MEMBER_BYTES or total > MAX_UNPACKED_BYTES:
-                raise _fail("too_large", "This bot's skills are too large to share as a template.")
-            files["/".join(parts)] = path.read_bytes()
-            if len(files) > MAX_MEMBERS:
-                raise _fail("too_many_members", "This bot has too many skill files to share.")
+    for root, prefix in _skill_roots(profile_dir):
+        if not root.is_dir():
+            continue
+        for current, dirs, names in os.walk(root, followlinks=False):
+            rel_dir = (*prefix, *Path(current).relative_to(root).parts)
+            dirs[:] = sorted(d for d in dirs if _directory_allowed([*rel_dir, d]) and not (Path(current) / d).is_symlink())
+            for entry in sorted(names):
+                parts = [*rel_dir, entry]
+                path = Path(current) / entry
+                if not _skill_path_allowed(parts) or path.is_symlink() or not path.is_file():
+                    continue
+                _claim_folded(folded, parts, "This bot has skill files whose names differ only by capital letters. Rename one to share it.")
+                size = path.stat().st_size
+                total += size
+                if size > MAX_MEMBER_BYTES or total > MAX_UNPACKED_BYTES:
+                    raise _fail("too_large", "This bot's skills are too large to share as a template.")
+                files["/".join(parts)] = path.read_bytes()
+                if len(files) > MAX_MEMBERS:
+                    raise _fail("too_many_members", "This bot has too many skill files to share.")
     return files
 
 
 def _scrub_member(name: str, blob: bytes) -> bytes:
-    from hermes_cli.profiles import _should_redact_export_file
+    from hermes_cli.profile_export_scrub import should_redact_export_file
 
-    if not _should_redact_export_file(Path(name)):
+    if not should_redact_export_file(Path(name)):
         return blob
     try:
         text = blob.decode("utf-8-sig")
@@ -874,7 +891,12 @@ def _export_bot(canon: str, profile_dir: Path) -> dict:
     from hermes_cli.config import read_user_config_raw
     from hermes_cli.profiles import _load_yaml_dict, read_profile_meta
 
+    from hermes_cli.shared_catalog import catalog_active, effective_mcp_servers
+
     meta = read_profile_meta(profile_dir)
+    config = read_user_config_raw(profile_dir / "config.yaml")
+    if catalog_active() and isinstance(config.get("mcp_servers"), dict):
+        config["mcp_servers"] = effective_mcp_servers(config["mcp_servers"])
     document = _load_yaml_dict(profile_dir / "profile.yaml") or {}
     ui_meta = document.get("ui_meta") if isinstance(document.get("ui_meta"), dict) else {}
     look = sanitize_look(ui_meta.get("hermes-bots"))
@@ -882,7 +904,7 @@ def _export_bot(canon: str, profile_dir: Path) -> dict:
         "display_name": meta.get("display_name") or look.get("title") or canon,
         "description": meta.get("description") or "",
         "look": look,
-        "config": sanitize_config(read_user_config_raw(profile_dir / "config.yaml"), importing=False),
+        "config": sanitize_config(config, importing=False),
         "routines": _export_routines(profile_dir),
     }
     return _scrub_strings(bot)

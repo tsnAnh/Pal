@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Callable
 
+from hermes_cli.subcommands.bot import build_bot_parser
+
 
 def build_profile_parser(subparsers, *, cmd_profile: Callable) -> None:
     """Attach the ``profile`` subcommand to ``subparsers``."""
@@ -171,3 +173,4 @@ def build_profile_parser(subparsers, *, cmd_profile: Callable) -> None:
     profile_info.add_argument("profile_name", help="Profile to inspect")
 
     profile_parser.set_defaults(func=cmd_profile)
+    build_bot_parser(subparsers)

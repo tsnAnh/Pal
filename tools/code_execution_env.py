@@ -192,7 +192,8 @@ def _build_child_env(*, rpc_endpoint: str, rpc_token: str, tmpdir: str,
     if _existing_pp:
         _pp_parts.append(_existing_pp)
     child_env["PYTHONPATH"] = os.pathsep.join(_pp_parts)
-    return child_env
+    from hermes_cli.profile_admin_guard import agent_tool_env
+    return agent_tool_env(child_env)
 
 
 # Interpreter-probe caches: success-only dicts (FIFO-evicted at the cap) rather than lru_cache —

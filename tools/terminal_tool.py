@@ -1109,6 +1109,7 @@ class _ApprovalVerdict:
     """
     note: Optional[str] = None
     approved_run: bool = False
+    profile_admin_grant: Optional[str] = None
 
 
 def _run_approval_guards(command: str, env_type: str, config: dict[str, Any], *, force: bool) -> _ApprovalVerdict:
@@ -1141,6 +1142,7 @@ def _run_approval_guards(command: str, env_type: str, config: dict[str, Any], *,
         return _ApprovalVerdict(
             note=f"Command required approval ({desc}) and was approved by the user.",
             approved_run=True,
+            profile_admin_grant=approval.get("profile_admin_grant"),
         )
     if approval.get("smart_approved"):
         return _ApprovalVerdict(note=f"Command was flagged ({desc}) and auto-approved by smart approval.")
@@ -1503,7 +1505,9 @@ def terminal_tool(
     children (kept in a separate env cache from the configured backend).
     """
     from hermes_cli.observability.shared_metrics_loop import record_terminal_backend as _metered
+    from hermes_cli.profile_admin_guard import bind_grant, unbind_grant
     plan = None
+    grant_binding = None
     try:
         plan = _plan_execution(
             command, task_id=task_id, timeout=timeout, background=background, _host_local=_host_local,
@@ -1559,6 +1563,7 @@ def terminal_tool(
             # Pre-exec security checks (floors + dangerous command detection);
             # force=True means the user already confirmed.
             verdict = _run_approval_guards(command, env_type, plan.config, force=force)
+            grant_binding = bind_grant(verdict.profile_admin_grant, command)
 
             pty_disabled = pty and _command_requires_pipe_stdin(command)
             if plan.promoted_from_foreground_timeout is not None:
@@ -1593,6 +1598,8 @@ def terminal_tool(
         return _metered(None if _host_local else plan, _degraded_result(e, task_id), error_class="tool_error")
     except Exception as e:
         return _metered(None if _host_local else plan, _fatal_error_json(e), error_class="exception")
+    finally:
+        unbind_grant(grant_binding)
 
 
 def check_terminal_requirements() -> bool:

@@ -7,9 +7,12 @@ the module attributes.
 from __future__ import annotations
 
 from pathlib import Path
+import logging
 import os
 import sys
 from typing import NoReturn, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def _die(msg: str, code: int = 1, *, err: bool = False) -> NoReturn:
@@ -185,10 +188,36 @@ def _print_channel_clone_notice(name: str, source_label: str, clone_channels: bo
         print(shared_credential_warning(name, shared, source_label))
 
 
+def _clone_honcho_config(name: str) -> None:
+    try:
+        from plugins.memory import import_provider_module
+        honcho_cli = import_provider_module("honcho", "cli")
+    except ImportError:
+        return
+    try:
+        if honcho_cli.clone_honcho_for_profile(name):
+            print(f"Honcho config cloned (peer: {name})")
+    except honcho_cli.ConfigWriteRefused as e:
+        print(f"Honcho config not cloned: {e}")
+    except Exception:
+        logger.debug("Honcho config not cloned for %s", name, exc_info=True)
+
+
+def _print_skill_seed_result(name: str, result: Optional[dict]) -> None:
+    if not result:
+        print(f"⚠ Skills could not be seeded. Run `{name} update` to retry.")
+    elif result.get("shared_catalog"):
+        print("Using the shared skills catalog.")
+    elif result.get("skipped_opt_out"):
+        print("No bundled skills seeded (--no-skills). Delete .no-bundled-skills in the profile to opt back in.")
+    else:
+        print(f"{len(result.get('copied', []))} bundled skills synced.")
+
+
 def _profile_create(args):
     from hermes_cli.profiles import (
         _get_wrapper_dir, _is_wrapper_dir_in_path, check_alias_collision, create_profile,
-        create_wrapper_script, get_active_profile_name, seed_profile_skills,
+        create_wrapper_script, get_active_profile_name, seed_new_profile_skills,
     )
     name = args.profile_name
     clone = getattr(args, "clone", False)
@@ -227,29 +256,10 @@ def _profile_create(args):
             print(f"Import sources carried over — `hermes -p {name} import-agent --sync` "
                   "keeps pulling the same Claude Code / Codex trees.")
         _print_channel_clone_notice(name, source_label, clone_channels, "--clone-all" if clone_all else "--clone")
-        # Auto-clone Honcho config for the new profile (only with clone operations)
-        try:
-            from plugins.memory import import_provider_module
-            honcho_cli = import_provider_module("honcho", "cli")
-        except Exception:
-            honcho_cli = None  # Honcho plugin not installed
-        if honcho_cli is not None:
-            try:
-                if honcho_cli.clone_honcho_for_profile(name):
-                    print(f"Honcho config cloned (peer: {name})")
-            except honcho_cli.ConfigWriteRefused as e:
-                print(f"Honcho config not cloned: {e}")
-            except Exception:
-                pass  # Honcho not configured
+        _clone_honcho_config(name)
     else:
         # Fresh profiles only: clones already carry the source's (user-curated) skills.
-        result = seed_profile_skills(profile_dir)
-        if result and result.get("skipped_opt_out"):
-            print("No bundled skills seeded (--no-skills). Delete .no-bundled-skills in the profile to opt back in.")
-        elif result:
-            print(f"{len(result.get('copied', []))} bundled skills synced.")
-        else:
-            print(f"⚠ Skills could not be seeded. Run `{name} update` to retry.")
+        _print_skill_seed_result(name, seed_new_profile_skills(profile_dir))
     if not no_alias:
         collision = check_alias_collision(name)
         if collision:
@@ -655,4 +665,8 @@ def cmd_profile(args):
     """Profile management — create, delete, list, switch, alias."""
     handler = PROFILE_ACTIONS.get(getattr(args, "profile_action", None))
     if handler is not None:
-        return handler(args)
+        from hermes_cli.profile_admin_guard import ProfileAdminDenied
+        try:
+            return handler(args)
+        except ProfileAdminDenied as exc:
+            _die(f"Error: {exc}", err=True)

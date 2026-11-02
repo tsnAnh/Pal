@@ -789,6 +789,7 @@ def execute_code(
     from tools.interrupt import is_interrupted as _is_interrupted
     # Session kernels are always on locally (one interpreter per conversation); the guards above
     # already ran for this cell, and the kernel path shares env builder, RPC server and redaction.
+    from hermes_cli.profile_admin_guard import verified_grant
     from tools.code_kernel import execute_in_session_kernel
     _cfg = _load_config()
     _mode = _get_execution_mode()
@@ -799,6 +800,7 @@ def execute_code(
         timeout=_cfg.get("timeout", DEFAULT_TIMEOUT),
         max_tool_calls=_cfg.get("max_tool_calls", DEFAULT_MAX_TOOL_CALLS),
         reset=bool(reset), is_interrupted=_is_interrupted,
+        grant=verified_grant(_guard.get("profile_admin_grant"), code),
     ))
 
 

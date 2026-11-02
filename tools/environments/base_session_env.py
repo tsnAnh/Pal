@@ -107,7 +107,7 @@ def _export_dump_excluding_session_vars(tmp_path: str, excluded_names: Iterable[
         # Scope markers stamped onto a delegate_task child's / cron run's subprocess
         # env; a snapshot taken inside that window would re-assert them on every
         # later ``source`` and fence the PARENT session's kanban CLI (#90782).
-        "HERMES_DELEGATED_CHILD_CONTEXT HERMES_CRON_SESSION "
+        "HERMES_DELEGATED_CHILD_CONTEXT HERMES_CRON_SESSION HERMES_PROFILE_ADMIN_GRANT "
         # Remote code-execution channel vars (RPC token, kernel/rpc dirs): a
         # leaked token in the snapshot would re-export into every later command
         # on the backend and outlive the private dir it protects.

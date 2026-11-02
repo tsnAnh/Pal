@@ -357,6 +357,7 @@ from hermes_cli.subcommands.logout import build_logout_parser
 from hermes_cli.subcommands.auth import build_auth_parser
 from hermes_cli.subcommands.status import build_status_parser
 from hermes_cli.subcommands.pause import build_pause_parser
+from hermes_cli.subcommands.catalog import build_catalog_parser
 from hermes_cli.subcommands.webhook import build_webhook_parser
 from hermes_cli.subcommands.hooks import build_hooks_parser
 from hermes_cli.subcommands.doctor import build_doctor_parser
@@ -369,7 +370,7 @@ from hermes_cli.subcommands.backup import build_backup_parser
 from hermes_cli.subcommands.import_cmd import build_import_cmd_parser
 from hermes_cli.subcommands.config import build_config_parser
 from hermes_cli.subcommands.skin import build_skin_parser
-from hermes_cli.subcommands.console import build_console_parser
+from hermes_cli.subcommands.console import build_console_parser, cmd_console
 from hermes_cli.subcommands.update import build_update_parser
 from hermes_cli.subcommands.uninstall import build_uninstall_parser
 from hermes_cli.subcommands.dashboard import build_dashboard_parser, build_serve_parser
@@ -1609,7 +1610,8 @@ def _start_chat_background_prefetch() -> None:
     def _skills_dir_is_unseeded() -> bool:
         try:
             from hermes_cli.config import get_hermes_home
-            skills_dir = Path(get_hermes_home()) / "skills"
+            from hermes_constants import get_skills_dir
+            skills_dir = get_skills_dir(get_hermes_home())
             if not skills_dir.is_dir():
                 return True
             return next(skills_dir.rglob("SKILL.md"), None) is None
@@ -2657,6 +2659,9 @@ def _dashboard_prepare_runtime(args, headless_backend) -> bool:
 
 def cmd_dashboard(args):
     """Start the web UI server, or (with --stop/--status) manage running ones."""
+    from hermes_cli.profile_admin_guard import leave_agent_context
+
+    leave_agent_context()
     _token_file = getattr(args, "ssh_session_token_file", None)
     _dashboard_lifecycle_flags(args, _token_file)
 
@@ -2745,20 +2750,13 @@ def cmd_logs(args):
     )
 
 
-def cmd_console(args):
-    """Open the safe Hermes command console."""
-    from hermes_cli.console_engine import run_console_repl
-
-    return run_console_repl()
-
-
 # Top-level subcommands known WITHOUT plugin discovery (which costs 500ms+ of
 # eager plugin imports). Keep in sync with the add_parser calls in
 # _build_cli_parser: a missing entry only costs a one-time discovery; an extra
 # entry would let a plugin command silently fail to parse.
 _BUILTIN_SUBCOMMANDS = frozenset(
     {
-        "acp", "approvals", "auth", "backup", "bundles", "checkpoints", "codex-runtime", "completion",
+        "acp", "approvals", "auth", "backup", "bot", "bundles", "catalog", "checkpoints", "codex-runtime", "completion",
         "computer-use", "connectors",
         "config", "console", "cron", "curator", "dashboard", "serve", "debug", "doctor",
         "dump", "egress", "fallback", "gateway", "hooks", "import", "insights",
@@ -3327,6 +3325,7 @@ def _build_cli_parser():
     build_auth_parser(subparsers, cmd_auth=cmd_auth)
     build_status_parser(subparsers, cmd_status=cmd_status)
     build_pause_parser(subparsers)
+    build_catalog_parser(subparsers)
     build_cron_parser(subparsers, cmd_cron=cmd_cron)
     build_webhook_parser(subparsers, cmd_webhook=cmd_webhook)
 
