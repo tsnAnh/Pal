@@ -300,6 +300,8 @@ export const arAssistant = {
       other: 'غير ذلك',
       placeholder: 'اكتب إجابتك...',
       skip: 'تخطي',
+      send: 'إرسال',
+      close: 'إغلاق السؤال',
       confirmAndContinueLabel: 'تأكيد ومتابعة',
       singleSelectHint: 'اختر واحدا',
       multiSelectHint: 'حدد كل ما ينطبق',

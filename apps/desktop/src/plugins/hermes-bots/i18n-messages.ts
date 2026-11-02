@@ -3,6 +3,7 @@
  */
 
 import { type BotDetailMessages } from './bot-detail-locales'
+import { type BotOnboardingMessages } from './bot-onboarding-locales'
 import { type BotTemplateMessages } from './bot-template-locales'
 import { type CanonicalGroupMessages } from './canonical-group-locales'
 import { type RoutinesMessages } from './routines-locales'
@@ -16,6 +17,8 @@ export type BotsMessages = {
   voice: VoiceMessages
   /** Bot templates: export a bot as a shareable file, import one after a review step. */
   template: BotTemplateMessages
+  /** First-run onboarding for a new bot, plus the inline identity-change notice. */
+  onboarding: BotOnboardingMessages
   detail: BotDetailMessages
   /** Left rail: the bot + group-chat roster. */
   editor: {

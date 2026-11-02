@@ -1256,8 +1256,9 @@ export interface SkillInfo {
   /** Total observed activity (use + view + patch). Absent on older backends. */
   usage?: number
   /** 'agent' = learned/local (editable), 'bundled' = ships with Hermes, 'hub' = installed,
-   * 'external' = mounted from skills.external_dirs (externally authored, still editable). */
-  provenance?: 'agent' | 'bundled' | 'external' | 'hub'
+   * 'external' = mounted from skills.external_dirs (externally authored, still editable),
+   * 'shared' = a non-bundled skill living in the catalog every bot shares (editable in place). */
+  provenance?: 'agent' | 'bundled' | 'external' | 'hub' | 'shared'
 }
 
 /** One entry of the built-in optional-skills catalog (optional-skills/ in the

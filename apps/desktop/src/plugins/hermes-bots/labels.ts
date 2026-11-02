@@ -116,15 +116,15 @@ export function slugifyProfileName(value: string) {
 }
 
 /** Split the dialog's Name field into the backend id and the display title.
+ *  `shownName` is what the bot is called everywhere: the title, else the name as typed.
  *  A non-ASCII name cannot be the profile id, so the entered string survives
  *  as the title when the user left Title empty. */
 export function botProfileIdentity(name: string, title: string) {
   const enteredName = name.trim()
+  const slug = slugifyProfileName(enteredName)
+  const shownTitle = title.trim() || (/[^\u0020-\u007e]/.test(enteredName) ? enteredName : '')
 
-  return {
-    slug: slugifyProfileName(enteredName),
-    title: title.trim() || (/[^\u0020-\u007e]/.test(enteredName) ? enteredName : '')
-  }
+  return { shownName: shownTitle || enteredName, slug, title: shownTitle }
 }
 
 /** Flatten markdown syntax out of a one-line roster preview so rows read

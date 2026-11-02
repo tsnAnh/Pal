@@ -325,6 +325,8 @@ export const zhHantAssistant = {
       other: '其他（輸入您的答案）',
       placeholder: '輸入您的答案…',
       skip: '略過',
+      send: '傳送',
+      close: '關閉問題',
       skipped: '已略過',
       noAnswer: '未回答',
       confirmAndContinueLabel: '確認並繼續',

@@ -212,7 +212,13 @@ export interface BotRequestOptions {
  *  for foreground dials only, so a write left at the background default
  *  queues behind warm bot backends, times out after 30 s, then backs off —
  *  the write is lost. They dial foreground unless the caller says otherwise. */
-const PROFILE_WRITE_METHODS = new Set(['profiles.configure', 'profiles.create', 'profiles.set_asset'])
+const PROFILE_WRITE_METHODS = new Set([
+  'profiles.configure',
+  'profiles.create',
+  'profiles.identity.undo',
+  'profiles.onboard',
+  'profiles.set_asset'
+])
 
 export async function requestForBot<T = unknown>(
   bot: Partial<RosterRow> | null | undefined,

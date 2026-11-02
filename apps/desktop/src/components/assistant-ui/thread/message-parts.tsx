@@ -145,6 +145,9 @@ const failedCallNeedsUser = (part: TimelineToolCallProps): boolean => {
   return toolCallFailed(part) || (typeof exitCode === 'number' && exitCode !== 0)
 }
 
+const identityChangeCall = ({ args, isError, result, toolName }: TimelineToolCallProps): boolean =>
+  toolName === 'memory' && args?.target === 'identity' && result !== undefined && !isError
+
 const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   const showToolActivity = useStore($showToolActivity)
   const botChat = useSurfacePersona() !== null
@@ -186,6 +189,10 @@ const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   // A reloaded transcript holds the model's own call: set_theme reached through the tool_call bridge.
   if (setThemeCall(props.toolName, props.args)) {
     return <ThemeToolPart {...props} />
+  }
+
+  if (botChat && identityChangeCall(props)) {
+    return <PluginToolCard {...props} />
   }
 
   if (botChat) {

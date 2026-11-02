@@ -8,6 +8,8 @@ export const deClarify: Partial<ClarifyCopy> = {
   other: 'Anderes (Antwort eingeben)',
   placeholder: 'Geben Sie Ihre Antwort ein…',
   skip: 'Überspringen',
+  send: 'Senden',
+  close: 'Frage schließen',
   skipped: 'Übersprungen',
   noAnswer: 'Keine Antwort',
   confirmAndContinueLabel: 'Bestätigen und fortfahren',

@@ -114,6 +114,9 @@ export interface RosterRow {
    *  / `connectionLabel`, which are THIS Desktop's names for the connection. */
   installId?: string
   last_session?: SessionPreview | null
+  /** The backend still owes this bot its first-run "what should I focus on?"
+   *  question (set at creation, cleared by `profiles.onboard`). */
+  onboarding_pending?: boolean
   remoteSource?: boolean
   /** Kept from an earlier paint because its source did not answer this
    *  fetch: shown, but never evidence of what the backend holds now. */

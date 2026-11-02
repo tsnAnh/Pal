@@ -8,7 +8,7 @@ import { $onboardingSession } from './onboarding-session'
 import {
   answerParkedCard,
   parkedCardWaiting,
-  sessionOnboardingCardWaiting,
+  sessionCardWaiting,
   yieldParkedCardsToMessage
 } from './parked-card-answers'
 import { rememberServerRequest, resetServerRequestsForTests } from './server-requests'
@@ -69,7 +69,7 @@ describe('setup_beat card', () => {
   })
 
   it('reports a card waiting on the session while a beat is parked, and none once it settles', () => {
-    const $waiting = sessionOnboardingCardWaiting('rt-1')
+    const $waiting = sessionCardWaiting('rt-1')
     const seen: boolean[] = []
     const off = $waiting.subscribe(value => seen.push(value))
 

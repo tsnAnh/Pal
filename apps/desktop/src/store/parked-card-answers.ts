@@ -102,7 +102,7 @@ export function parkedCardWaiting(sessionId: string): boolean {
   return kindsFor(sessionId).some(kind => kind.waiting(sessionId))
 }
 
-/** Whether a card waits in the onboarding chat, as a store: the composer offers Send for typed
- *  answers only there; every other chat keeps its normal controls. */
-export const sessionOnboardingCardWaiting = (sessionId: null | string) =>
-  computed([$revision, onboardingChatStore(sessionId)], (_, onChat) => onChat && parkedCardWaiting(sessionId ?? ''))
+/** Whether a card that takes typed text waits on `sessionId`, as a store: the composer then offers Send,
+ *  because Enter answers the card instead of steering or queueing. */
+export const sessionCardWaiting = (sessionId: null | string) =>
+  computed([$revision, onboardingChatStore(sessionId)], () => parkedCardWaiting(sessionId ?? ''))

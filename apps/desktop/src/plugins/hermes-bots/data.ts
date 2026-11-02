@@ -699,9 +699,22 @@ export async function migrateBotMeta(storage: BotMetaStorage | undefined = getPl
 export let serverInjectsProtocol = false
 
 const birthNoticeByConnection = new Map<string, boolean>()
+const onboardingByConnection = new Map<string, boolean>()
 
 function recordBirthNotice(connectionId: null | string | undefined, snapshot: null | RosterSnapshot | undefined) {
   birthNoticeByConnection.set(connectionId || '', Boolean(snapshot?.bot_birth_notice))
+  onboardingByConnection.set(connectionId || 'local', Boolean(snapshot?.bot_onboarding))
+}
+
+/** Does the connection's backend mark new bots for first-run onboarding and
+ *  answer `profiles.onboard`? Older backends reject the create param, so the
+ *  dialog only asks when this is true and otherwise keeps the intro turn. */
+export function botServerOnboards(connectionId?: null | string): boolean {
+  const candidates = [connectionId, host.state.connectionId?.get?.(), host.activeConnectionId?.()]
+    .map(id => String(id || ''))
+    .filter(Boolean)
+
+  return onboardingByConnection.get(candidates.find(id => onboardingByConnection.has(id)) ?? 'local') === true
 }
 
 export function botServerGreetsUnprompted(
@@ -721,6 +734,7 @@ interface RosterSnapshot {
   /** Newer backends inject the teammate protocol into the system prompt. */
   bot_mode_protocol?: boolean
   bot_birth_notice?: boolean
+  bot_onboarding?: boolean
   /** Time the request was ISSUED, the conservative bound mergeServerMeta wants. */
   fetchedAt?: number
   primaryConnectionId?: string

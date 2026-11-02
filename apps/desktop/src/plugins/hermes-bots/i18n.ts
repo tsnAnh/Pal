@@ -34,6 +34,7 @@ import { useMemo } from 'react'
 
 import { ABOUTYOU_LOCALES } from './about-you-locales'
 import { BOT_DETAIL_LOCALES } from './bot-detail-locales'
+import { BOT_ONBOARDING_LOCALES } from './bot-onboarding-locales'
 import { BOT_TEMPLATE_LOCALES } from './bot-template-locales'
 import { CANONICAL_GROUP_LOCALES } from './canonical-group-locales'
 import { CONNECT_APPS_LOCALES } from './connect-apps-locales'
@@ -49,6 +50,7 @@ const en: BotsMessages = {
   routines: ROUTINES_LOCALES.en,
   voice: VOICE_LOCALES.en,
   template: BOT_TEMPLATE_LOCALES.en,
+  onboarding: BOT_ONBOARDING_LOCALES.en,
   detail: BOT_DETAIL_LOCALES.en,
   editor: {
     fullConfigHint: 'Full configuration needs a newer gateway (restart it after updating Hermes).',
@@ -521,6 +523,7 @@ const ja: BotsMessages = {
   routines: ROUTINES_LOCALES.ja,
   voice: VOICE_LOCALES.ja,
   template: BOT_TEMPLATE_LOCALES.ja,
+  onboarding: BOT_ONBOARDING_LOCALES.ja,
   detail: BOT_DETAIL_LOCALES.ja,
   editor: {
     fullConfigHint: 'すべての設定を使うには新しいゲートウェイが必要です（Hermes 更新後に再起動してください）。',
@@ -997,6 +1000,7 @@ const zh: BotsMessages = {
   routines: ROUTINES_LOCALES.zh,
   voice: VOICE_LOCALES.zh,
   template: BOT_TEMPLATE_LOCALES.zh,
+  onboarding: BOT_ONBOARDING_LOCALES.zh,
   detail: BOT_DETAIL_LOCALES.zh,
   editor: {
     fullConfigHint: '完整配置需要更新网关（更新 Hermes 后请重启网关）。',
@@ -1456,6 +1460,7 @@ const zhHant: BotsMessages = {
   routines: ROUTINES_LOCALES['zh-hant'],
   voice: VOICE_LOCALES['zh-hant'],
   template: BOT_TEMPLATE_LOCALES['zh-hant'],
+  onboarding: BOT_ONBOARDING_LOCALES['zh-hant'],
   detail: BOT_DETAIL_LOCALES['zh-hant'],
   editor: {
     fullConfigHint: '完整設定需要更新閘道（更新 Hermes 後請重新啟動閘道）。',

@@ -8,6 +8,8 @@ export const esClarify: Partial<ClarifyCopy> = {
   other: 'Otro (escribe tu respuesta)',
   placeholder: 'Escribe tu respuesta…',
   skip: 'Omitir',
+  send: 'Enviar',
+  close: 'Descartar pregunta',
   skipped: 'Omitido',
   noAnswer: 'Sin respuesta',
   confirmAndContinueLabel: 'Confirmar y continuar',

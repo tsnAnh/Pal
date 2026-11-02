@@ -62,7 +62,7 @@ export function useClarifyKeys({
 
       const block = formRef.current?.querySelectorAll<HTMLElement>('[data-clarify-batch-question]')[index]
 
-      block?.querySelector<HTMLTextAreaElement>('textarea')?.focus()
+      block?.querySelector<HTMLInputElement>('[data-clarify-other]')?.focus()
     },
     [formRef, onOtherFocus]
   )

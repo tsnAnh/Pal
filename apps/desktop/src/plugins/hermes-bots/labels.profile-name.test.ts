@@ -10,17 +10,17 @@ describe('profile-name identity', () => {
     expect(slugifyProfileName('u5c0f-u52a9-u624b')).toBe('u5c0f-u52a9-u624b')
     expect(slugifyProfileName('Inbox Triage')).toBe('inbox-triage')
 
-    expect(botProfileIdentity('小助手', '')).toEqual({ slug: 'u5c0f-u52a9-u624b', title: '小助手' })
-    expect(botProfileIdentity('小助手', 'Helper')).toEqual({ slug: 'u5c0f-u52a9-u624b', title: 'Helper' })
-    expect(botProfileIdentity('Test', '')).toEqual({ slug: 'test', title: '' })
+    expect(botProfileIdentity('小助手', '')).toEqual({ shownName: '小助手', slug: 'u5c0f-u52a9-u624b', title: '小助手' })
+    expect(botProfileIdentity('小助手', 'Helper')).toEqual({ shownName: 'Helper', slug: 'u5c0f-u52a9-u624b', title: 'Helper' })
+    expect(botProfileIdentity('Test', '')).toEqual({ shownName: 'Test', slug: 'test', title: '' })
     // Symbols carry no letters or digits: still no id, Create stays disabled.
-    expect(botProfileIdentity('🤖', '')).toEqual({ slug: '', title: '🤖' })
+    expect(botProfileIdentity('🤖', '')).toEqual({ shownName: '🤖', slug: '', title: '🤖' })
   })
 
   it('folds accented Latin to its base letters and keeps the accented name as the title', () => {
     // NFKD alone tokenised the detached accent: 'Résumé' → 're-sume'.
     expect(slugifyProfileName('Café Résumé')).toBe('cafe-resume')
-    expect(botProfileIdentity('Café', '')).toEqual({ slug: 'cafe', title: 'Café' })
+    expect(botProfileIdentity('Café', '')).toEqual({ shownName: 'Café', slug: 'cafe', title: 'Café' })
   })
 
   it('keeps one token per NFC code point and never splits a token at the 64-char cap', () => {

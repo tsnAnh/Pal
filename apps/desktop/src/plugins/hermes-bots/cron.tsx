@@ -1501,7 +1501,7 @@ export function RoutinesPane() {
   // instead of freezing the snapshot that was on screen when it opened.
   const [detailJobId, setDetailJobId] = useState<null | string>(null)
   const profileLabel = (meta?.title || owner?.title || owner?.description || meta?.description || '').trim()
-  const profileName = (meta?.title || owner?.title || owner?.display_name || bot).trim()
+  const profileName = displayName(owner ?? { name: bot }, meta)
   const createTarget = owner ? routineCreateTarget(createOwner, bot) : null
   const ownerKey = owner ? botRosterKey(owner) : null
 

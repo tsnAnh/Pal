@@ -1,4 +1,4 @@
-import { Button, Codicon, host, useValue } from '@hermes/plugin-sdk'
+import { Button, Codicon, host, TOOL_CARD_AREA, useValue } from '@hermes/plugin-sdk'
 import type { ToolCardProps } from '@hermes/plugin-sdk'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
@@ -158,4 +158,13 @@ function HandbackCardBody({ ask, bot, sessionId }: { ask: HandbackAsk; bot: Rost
       ) : null}
     </div>
   )
+}
+
+export const handbackCardContribution = {
+  id: 'handback-card',
+  area: TOOL_CARD_AREA,
+  data: {
+    tools: ['request_handback'],
+    render: (props: ToolCardProps) => <HandbackCard {...props} />
+  }
 }

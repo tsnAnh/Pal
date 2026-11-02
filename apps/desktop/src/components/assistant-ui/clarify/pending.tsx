@@ -6,7 +6,6 @@ import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Loader } from '@/components/ui/loader'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
-import { MessageQuestion } from '@/lib/icons'
 import {
   bareChoice,
   type ClarifyQuestion,
@@ -15,16 +14,18 @@ import {
   skipClarify
 } from '@/store/clarify'
 import { $gateway } from '@/store/gateway'
-import { reconnectAction } from '@/store/gateway-reconnect'
 import { notifyError } from '@/store/notifications'
 import { forgetServerRequest } from '@/store/server-requests'
 import { requestForOwnedSession } from '@/store/session-states'
 
 import { ClarifyConfirmBar } from './core/confirm-bar'
 import { emptyStage, QuestionBlock } from './core/question-block'
-import { CLARIFY_ICON_CLASS, ClarifyShell } from './core/shell'
+import { ClarifyShell } from './core/shell'
 import { useClarifyKeys } from './core/use-clarify-keys'
 import type { ClarifyArgs } from './parse'
+import { ClarifyLoadingStatus, ClarifyProgress, notifyUnavailable } from './pending-parts'
+import { previewQuestionsOf } from './preview-questions'
+import { replayLockedAnswers } from './replay-locks'
 import { handleClarifySubmitShortcut } from './submit-shortcut'
 import { UndeliveredNotice } from './undelivered-notice'
 
@@ -61,21 +62,13 @@ export function ClarifyToolPending({
   // so the user sees the question instead of an endless spinner). ONE form
   // renders both states: every control is disabled while !ready, so nothing
   // is ever staged under a synthetic qid and the swap to live qids is clean.
-  const previewQuestions: ClarifyQuestion[] = useMemo(
-    () =>
-      (fromArgs?.questions ?? []).map((entry, index) => ({
-        choices: entry.choices ?? null,
-        multiSelect: entry.multiSelect ?? false,
-        qid: `args-${index}`,
-        question: entry.question
-      })),
-    [fromArgs]
-  )
+  const previewQuestions = useMemo(() => previewQuestionsOf(fromArgs), [fromArgs])
 
   const questions = ready ? liveQuestions : previewQuestions
 
   const [staged, setStaged] = useState<Record<string, { choices: string[]; draft: string }>>({})
   const [submitting, setSubmitting] = useState(false)
+  const inFlightRequestId = useRef<null | string>(null)
 
   // Locked answers (a reconnect replay, or text typed in the composer) stage
   // their questions. A newly locked answer replaces what the card staged, so
@@ -108,39 +101,7 @@ export function ClarifyToolPending({
 
     setSeenLocks(lockedAnswers)
 
-    setStaged(current => {
-      const next = { ...current }
-
-      for (const question of questions) {
-        const answer = lockedAnswers[question.qid]
-
-        if (answer === undefined || answer === null || seenLocks[question.qid] === answer) {
-          continue
-        }
-
-        const options = question.choices ?? []
-        let replayedAnswers = [answer]
-
-        if (question.multiSelect) {
-          try {
-            const parsed = JSON.parse(answer)
-
-            if (Array.isArray(parsed) && parsed.every(value => typeof value === 'string')) {
-              replayedAnswers = parsed
-            }
-          } catch {
-            // Older/non-JSON replies remain a one-value replay below.
-          }
-        }
-
-        const matchedChoices = options.filter(choice => replayedAnswers.includes(bareChoice(choice)))
-        // Words that name no choice (typed in the composer) go to the free-text field as words, not JSON.
-        const draft = replayedAnswers.filter(value => !options.some(choice => bareChoice(choice) === value)).join(', ')
-        next[question.qid] = { choices: matchedChoices, draft }
-      }
-
-      return next
-    })
+    setStaged(current => replayLockedAnswers(current, questions, lockedAnswers, seenLocks))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed by the replay map only
   }, [request?.lockedAnswers])
 
@@ -171,17 +132,18 @@ export function ClarifyToolPending({
   const answeredCount = questions.filter(q => stagedAnswer(q) !== null).length
   const canConfirm = answeredCount > 0
 
-  const confirmAll = useCallback(async () => {
+  const confirmAll = useCallback(async (picked?: { answer: string; qid: string }) => {
     if (!request || !gateway) {
-      notifyError(
-        new Error(request ? copy.gatewayDisconnected : copy.notReady),
-        copy.sendFailed,
-        request ? { action: reconnectAction() } : {}
-      )
+      notifyUnavailable(copy, Boolean(request))
 
       return
     }
 
+    if (inFlightRequestId.current === request.requestId) {
+      return
+    }
+
+    inFlightRequestId.current = request.requestId
     setSubmitting(true)
 
     try {
@@ -191,7 +153,7 @@ export function ClarifyToolPending({
       // answer. `clarify.lock` is a normal RPC; it rides the session's OWNER
       // socket (a profile / Bot Chat switch re-points ambient elsewhere).
       for (const question of questions) {
-        const answer = stagedAnswer(question)
+        const answer = picked?.qid === question.qid ? picked.answer : stagedAnswer(question)
 
         await requestForOwnedSession<{ remaining?: string[]; status?: string }>(
           request.sessionId,
@@ -213,6 +175,7 @@ export function ClarifyToolPending({
       clearClarifyRequest(request.requestId, request.sessionId)
     } catch (error) {
       notifyError(error, copy.sendFailed)
+      inFlightRequestId.current = null
       setSubmitting(false)
     }
   }, [copy, gateway, onAnswered, questions, request, stagedAnswer])
@@ -232,6 +195,19 @@ export function ClarifyToolPending({
       return { ...current, [question.qid]: { choices: next, draft: question.multiSelect ? stage.draft : '' } }
     })
   }, [])
+
+  const instant = questions.length === 1 && !questions[0]?.multiSelect
+
+  const pickChoice = useCallback(
+    (question: ClarifyQuestion, choice: string) => {
+      toggleChoice(question, choice)
+
+      if (instant) {
+        void confirmAll({ answer: bareChoice(choice), qid: question.qid })
+      }
+    },
+    [confirmAll, instant, toggleChoice]
+  )
 
   const draftFor = useCallback((question: ClarifyQuestion, value: string) => {
     setStaged(current => {
@@ -278,7 +254,7 @@ export function ClarifyToolPending({
     isStaged,
     onClear: clearStage,
     onConfirm: () => void confirmAll(),
-    onToggle: toggleChoice,
+    onToggle: pickChoice,
     questions
   })
 
@@ -303,18 +279,9 @@ export function ClarifyToolPending({
       onSubmit={handleSubmit}
       ref={formRef}
     >
-      {ready || undelivered ? null : (
-        <span className="sr-only" role="status">
-          {copy.loadingQuestion}
-        </span>
-      )}
+      <ClarifyLoadingStatus ready={ready} undelivered={undelivered} />
       <ClarifyShell className="grid gap-3">
-        <div className="flex items-start gap-2">
-          <span className="flex-1 text-[0.6875rem] leading-4 text-(--ui-text-tertiary)">
-            {questions.length === 1 ? copy.oneQuestion : copy.questionProgress(answeredCount, questions.length)}
-          </span>
-          <MessageQuestion aria-hidden className={CLARIFY_ICON_CLASS} />
-        </div>
+        {instant ? null : <ClarifyProgress answered={answeredCount} total={questions.length} />}
         {undelivered ? <UndeliveredNotice /> : null}
         {questions.map((question, index) => (
           <QuestionBlock
@@ -322,16 +289,18 @@ export function ClarifyToolPending({
             disabled={disabled}
             key={question.qid}
             onActivate={() => keys.focusQuestion(index)}
+            onClose={instant && !undelivered ? () => void cancelAll() : undefined}
             onDraft={value => draftFor(question, value)}
             onOtherFocus={() => keys.onOtherFocus(index)}
             onPick={choiceIndex => keys.pick(index, choiceIndex)}
             question={question}
+            send={instant ? { enabled: Boolean(stageFor(question.qid).draft.trim()), submitting } : undefined}
             staged={stageFor(question.qid)}
           />
         ))}
       </ClarifyShell>
 
-      {undelivered ? null : (
+      {undelivered || instant ? null : (
         <ClarifyConfirmBar
           canConfirm={canConfirm}
           disabled={disabled}

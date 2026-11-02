@@ -108,7 +108,7 @@ function ScopedSkillCatalog({
         name: skill.name,
         description: skill.description,
         category: skill.category,
-        source: skill.provenance === 'bundled' ? 'built-in' : skill.provenance === 'hub' ? 'hub' : 'local'
+        source: skill.provenance === 'bundled' ? 'built-in' : skill.provenance === 'hub' ? 'hub' : skill.provenance === 'shared' ? 'shared' : 'local'
       }))
     ).map(entry => {
       const skill = skillsByName.get(entry.name)!

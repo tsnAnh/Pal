@@ -7,7 +7,7 @@ import {
   answerParkedCard,
   type ParkedCardAnswer,
   registerParkedCardAnswer,
-  sessionOnboardingCardWaiting
+  sessionCardWaiting
 } from './parked-card-answers'
 
 const kind = (answer: ParkedCardAnswer) => ({ $requests: atom({}), answer, waiting: () => false })
@@ -59,7 +59,7 @@ describe('parked card answers', () => {
     unregister.push(
       registerParkedCardAnswer('test-onboarding', { ...kind(takes), onboardingOnly: true, waiting: () => true })
     )
-    const $waiting = sessionOnboardingCardWaiting('session-a')
+    const $waiting = sessionCardWaiting('session-a')
 
     expect(answerParkedCard('session-a', 'hello')).toBe(false)
     expect($waiting.get()).toBe(false)

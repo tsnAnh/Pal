@@ -22,10 +22,9 @@ import {
   LocalizedTabTitle,
   PALETTE_AREA,
   SIDEBAR_PROFILE_GROUP_HEADER_AREA,
-  TOOL_CARD_AREA,
   translateNow
 } from '@hermes/plugin-sdk'
-import type { ChatEmptyProps, PluginContext, ProfileGroupRoute, ToolCardProps } from '@hermes/plugin-sdk'
+import type { ChatEmptyProps, PluginContext, ProfileGroupRoute } from '@hermes/plugin-sdk'
 
 import { startFaceClock, stopFaceClock } from './avatar'
 import { startBotChatAccent } from './bot-accent'
@@ -72,9 +71,10 @@ import {
   updateGroupChat
 } from './group-chat'
 import { groupWorkspaceOwnerKey } from './group-membership'
-import { HandbackCard } from './handback-card'
+import { handbackCardContribution } from './handback-card'
 import { annotateOrphanedGroupChatMembers } from './hygiene'
 import { BOTS_LOCALES } from './i18n'
+import { identityNoticeContribution } from './identity-notice'
 import { displayName } from './labels'
 import { startBotRelay, stopBotRelay } from './relay'
 import { $activityToasts } from './roster-actions'
@@ -733,14 +733,8 @@ export default {
 
     // A bot's chat before it has spoken: core's splash is Hermes' wordmark and
     // stands down for any session that exists, so the bot titles its own.
-    ctx.register({
-      id: 'handback-card',
-      area: TOOL_CARD_AREA,
-      data: {
-        tools: ['request_handback'],
-        render: (props: ToolCardProps) => <HandbackCard {...props} />
-      }
-    })
+    ctx.register(handbackCardContribution)
+    ctx.register(identityNoticeContribution)
 
     ctx.register({
       id: 'chat-empty',

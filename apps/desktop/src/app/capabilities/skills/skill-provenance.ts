@@ -7,7 +7,7 @@ import type { SkillInfo } from '@/types/hermes'
  * duplicates — commit 8c8fc6c1ec / PR #17512).
  */
 
-export function catalogSourceFor(provenance: SkillInfo['provenance']): 'built-in' | 'hub' | 'external' | 'local' {
+export function catalogSourceFor(provenance: SkillInfo['provenance']): 'built-in' | 'hub' | 'external' | 'shared' | 'local' {
   if (provenance === 'bundled') {
     return 'built-in'
   }
@@ -20,6 +20,10 @@ export function catalogSourceFor(provenance: SkillInfo['provenance']): 'built-in
     return 'external'
   }
 
+  if (provenance === 'shared') {
+    return 'shared'
+  }
+
   return 'local'
 }
 
@@ -27,5 +31,5 @@ export function isEditableProvenance(provenance: SkillInfo['provenance']): boole
   // Only learned/local skills are the user's to rewrite or archive — bundled and
   // hub skills are managed by their sources. External mounts stay editable in
   // place (the user pointed skills.external_dirs at them).
-  return provenance === 'agent' || provenance === 'external'
+  return provenance === 'agent' || provenance === 'external' || provenance === 'shared'
 }

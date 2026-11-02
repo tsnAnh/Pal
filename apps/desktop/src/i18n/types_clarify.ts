@@ -7,6 +7,8 @@ export interface ClarifyCopy {
   other: string
   placeholder: string
   skip: string
+  send: string
+  close: string
   skipped: string
   noAnswer: string
   confirmAndContinueLabel: string

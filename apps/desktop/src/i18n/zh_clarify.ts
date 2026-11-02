@@ -8,6 +8,8 @@ export const zhClarify: Partial<ClarifyCopy> = {
   other: '其他 (输入你的答案)',
   placeholder: '输入你的答案…',
   skip: '跳过',
+  send: '发送',
+  close: '关闭问题',
   skipped: '已跳过',
   noAnswer: '未回答',
   confirmAndContinueLabel: '确认并继续',

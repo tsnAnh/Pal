@@ -1659,6 +1659,12 @@ export {
 } from '@/app/shell/model-menu-row-decorations'
 export type { StatusbarItem } from '@/app/shell/statusbar-controls'
 export type { TitlebarTool } from '@/app/shell/titlebar-controls'
+/** The card core asks a question with: one rounded shell, a bold question with
+ *  its close button, lettered option rows, and a free-text field with Send.
+ *  A plugin that asks the user something inline renders THESE, so it can never
+ *  drift from the clarify card — never fork a copy. */
+export { emptyStage as clarifyEmptyStage, QuestionBlock as ClarifyQuestionBlock } from '@/components/assistant-ui/clarify/core/question-block'
+export { ClarifyShell } from '@/components/assistant-ui/clarify/core/shell'
 /** Canonical raw message renderer: applies Desktop message transforms (including
  * `MEDIA:` delivery directives) and the same rich Markdown/media components as
  * core chat. Prefer this over raw Streamdown for transcript-style messages. */
@@ -1749,10 +1755,10 @@ export { Switch } from '@/components/ui/switch'
 export { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 export { Textarea } from '@/components/ui/textarea'
 export { Tip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+export type { GatewayEventListener } from '@/contrib/events'
 
 // -- contracts ----------------------------------------------------------------
 
-export type { GatewayEventListener } from '@/contrib/events'
 /** Mount-scoped contribution: while the rendering component is mounted, its
  *  children render in the target area's slot; unmount disposes it. Use for
  *  page-owned chrome (a page's titlebar control leaves with the page) —
@@ -1834,7 +1840,6 @@ export { captureGatewayFileDownload } from '@/lib/media'
 /** True when a saved provider id names this `model.options` row: its slug,
  *  display name, or a custom-provider alias (`custom:<key>` vs the bare key). */
 export { catalogProviderMatches } from '@/lib/model-options'
-
 /** The app's deterministic identity color for a name (profiles, assignees,
  *  authors), its translucent tag fill, and the curated picker swatches — so
  *  plugin-rendered identities read the same hue as everywhere else. The
@@ -1847,6 +1852,7 @@ export { PROFILE_SWATCHES, profileColor, profileColorSoft } from '@/lib/profile-
  *  `ctx.socket` frame invalidating a query). Inside components keep using
  *  `useQueryClient`. */
 export { queryClient } from '@/lib/query-client'
+
 /** Compact labels for the reasoning levels exported from @hermes/shared, so a
  *  plugin surfacing a thinking depth uses the same spelling as the app. */
 export { reasoningEffortLabel } from '@/lib/reasoning-effort'
@@ -1878,6 +1884,7 @@ export {
 export { cn } from '@/lib/utils'
 export { $botChromeless } from '@/store/bot-surface'
 export { type ChatPersona, type ChatVoiceLabels, setChatPersonas, setHandlePersonas } from '@/store/chat-persona'
+export type { ClarifyQuestion } from '@/store/clarify'
 export { gatewayActivationEpoch, useGatewayActivationEpoch } from '@/store/gateway'
 /** THE unread store behind `SessionStatusDot`'s emerald dot. A plugin that
  *  learns out-of-band that a session produced something the user hasn't seen

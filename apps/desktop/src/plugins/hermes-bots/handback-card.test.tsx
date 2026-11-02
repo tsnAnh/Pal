@@ -19,6 +19,7 @@ vi.mock('@hermes/plugin-sdk', async () => {
       <button {...props}>{children}</button>
     ),
     Codicon: () => null,
+    TOOL_CARD_AREA: 'tool-card',
     useValue: useStore,
     host: {
       composer: { submit },

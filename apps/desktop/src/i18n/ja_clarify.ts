@@ -8,6 +8,8 @@ export const jaClarify: Partial<ClarifyCopy> = {
   other: 'その他（回答を入力）',
   placeholder: '回答を入力…',
   skip: 'スキップ',
+  send: '送信',
+  close: '質問を閉じる',
   skipped: 'スキップ済み',
   noAnswer: '回答なし',
   confirmAndContinueLabel: '確定して続行',

@@ -42,6 +42,8 @@ import { useEffect, useRef, useState } from 'react'
 import { avatarColor, blobatarSvg, botAppearance, BotFace } from './avatar'
 import { isBackfilledFacePng } from './avatar-image'
 import { AvatarPicker } from './avatar-picker'
+import { randomAvatarLook } from './avatar-random'
+import { freshOnboarding } from './bot-onboarding'
 import { $selectedBot } from './bot-state'
 import { createCanonicalChat } from './canonical-chat'
 import {
@@ -55,7 +57,7 @@ import { registerCanonicalGroup } from './canonical-group-registry'
 import type { CanonicalGroupOrigin } from './canonical-group-registry'
 import { canonicalGroupRequest, createCanonicalGroup } from './canonical-groups'
 import type { CanonicalGroupRoute } from './canonical-groups'
-import { $botMeta, botHandle, botRosterKey, filterBots, ROSTER_KEY, saveBotMeta } from './data'
+import { $botMeta, $lastRoster, botHandle, botRosterKey, botServerOnboards, filterBots, ROSTER_KEY, saveBotMeta } from './data'
 import { labeled, ResizableFrame } from './dialog-parts'
 import { GROUP_CHAT_MAX_MEMBERS, mintGroupRoomId, uniqueGroupChatName, updateGroupChat } from './group-chat'
 import type { GroupChatRoom } from './group-chat'
@@ -80,6 +82,7 @@ import type {
 } from './profile-config'
 import { CapabilitiesView, capabilitiesViewRoutesConnections, CheckList } from './profile-config'
 import { deleteBot } from './profile-ops'
+import { openRosterBot } from './roster-actions'
 import { botRosterMeta } from './routing'
 import { HubSkillsSection } from './skills-hub'
 import { composeSoul } from './soul'
@@ -246,6 +249,95 @@ function slugTaken(roster: RosterRow[], slug: string, target: string, draft: nul
   )
 }
 
+function freshBotName(base: string, roster: RosterRow[]): string {
+  for (let n = 1; n < 100; n++) {
+    const candidate = n === 1 ? base : `${base} ${n}`
+
+    if (!slugTaken(roster, botProfileIdentity(candidate, '').slug, '', null)) {
+      return candidate
+    }
+  }
+
+  return base
+}
+
+function useFreshDraft(
+  open: boolean,
+  roster: RosterRow[],
+  baseName: string,
+  setters: {
+    setColor: (color: string) => void
+    setName: (name: string) => void
+    setShape: (shape: string) => void
+  }
+) {
+  const latest = useRef({ baseName, roster, setters })
+  latest.current = { baseName, roster, setters }
+
+  useEffect(() => {
+    if (open) {
+      const { baseName, roster, setters } = latest.current
+      const look = randomAvatarLook()
+      setters.setShape(look.shape)
+      setters.setColor(look.color)
+      setters.setName(freshBotName(baseName, roster))
+    }
+  }, [open])
+}
+
+function createIdentityParams({ onboard, shownName, slug }: { onboard: boolean; shownName: string; slug: string }) {
+  if (!onboard) {
+    return {}
+  }
+
+  return { onboarding: true, ...(shownName && shownName !== slug ? { display_name: shownName } : {}) }
+}
+
+function writeRemoteBotLook(
+  request: <T>(method: string, params?: Record<string, unknown>) => Promise<T>,
+  slug: string,
+  fullLook: Record<string, unknown> & { image?: null | string }
+) {
+  const { image: avatarImage, ...look } = fullLook
+
+  try {
+    void request('profiles.configure', { name: slug, ui_meta: { 'hermes-bots': look } }).catch(() => undefined)
+
+    if (avatarImage) {
+      void request('profiles.set_asset', { name: slug, asset: 'avatar', data: avatarImage }).catch(() => undefined)
+    }
+  } catch {
+    /* older remote gateway */
+  }
+}
+
+async function birthBotChat(slug: string, { kickoff, onboarded }: { kickoff: boolean; onboarded: boolean }) {
+  await queryClient.refetchQueries({ queryKey: ROSTER_KEY }).catch(() => undefined)
+  $selectedBot.set(slug)
+
+  try {
+    // Creates, pins, opens, and kicks off the intro in one flow. This is
+    // the ONE caller allowed to request the intro turn — genuine New
+    // Agent creation. Click-path resolution (openBotCanonicalChat) mints
+    // silently so a resolution miss never burns a turn (ScottFive).
+    const sid = await createCanonicalChat(slug, { kickoff })
+
+    void queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
+
+    if (sid && onboarded) {
+      await openRosterBot($lastRoster.get().find(row => row.name === slug && !row.remoteSource) ?? { name: slug })
+    }
+
+    if (!sid && typeof host.newChat === 'function') {
+      host.newChat(slug)
+    }
+  } catch {
+    if (typeof host.newChat === 'function') {
+      host.newChat(slug)
+    }
+  }
+}
+
 /** Draft-profile ledger for the New Agent dialog. Opening Capabilities (or MCP
  *  setup) materializes a DRAFT profile so the live config surfaces have a
  *  backend; discarding deletes it on the machine it was CREATED on
@@ -259,6 +351,7 @@ function useDraftProfile(
 ) {
   const draftGenRef = useRef(0)
   const draftTargetRef = useRef('')
+  const onboardedRef = useRef(false)
 
   const discardDraft = () => {
     const draft = createdRef.current
@@ -277,7 +370,7 @@ function useDraftProfile(
     []
   )
 
-  return { discardDraft, draftGenRef, draftTargetRef }
+  return { discardDraft, draftGenRef, draftTargetRef, onboardedRef }
 }
 
 export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: CreateAgentDialogProps) {
@@ -293,7 +386,7 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
   // button + MCP setup buttons). Distinct from createdRef on purpose:
   // createdRef must stay a slug string for its sibling consumers.
   const flightRef = useRef<Promise<null | string> | null>(null)
-  const { discardDraft, draftGenRef, draftTargetRef } = useDraftProfile(createdRef, flightRef)
+  const { discardDraft, draftGenRef, draftTargetRef, onboardedRef } = useDraftProfile(createdRef, flightRef)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   // Default shapes mode: deterministic blob face drawn from the agent's name
@@ -360,16 +453,13 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
   const [caps, setCaps] = useState<CapabilityCatalog | null>(null)
   const [capsFailed, setCapsFailed] = useState(false)
 
-  const [dirtyCaps, setDirtyCaps] = useState({
-    skills: false,
-    toolsets: false,
-    mcp: false
-  })
+  const [dirtyCaps, setDirtyCaps] = useState({ skills: false, toolsets: false, mcp: false })
 
   const [capFilter, setCapFilter] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<null | string>(null)
-  const { slug, title: botTitle } = botProfileIdentity(name, title)
+  useFreshDraft(open, roster, b.onboarding.newBotName, { setColor, setName, setShape })
+  const { shownName, slug, title: botTitle } = botProfileIdentity(name, title)
   const descriptionText = [botTitle, description].filter(Boolean).join(' — ')
   const valid = slug.length > 0 && NAME_RE.test(slug)
 
@@ -515,9 +605,12 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
     const generation = draftGenRef.current
     const target = createTarget
 
+    const onboard = !remoteTarget && botServerOnboards()
+
     const flight = singleFlight(flightRef, async () => {
-      await requestForTarget('profiles.create', {
+      const created = await requestForTarget<{ onboarding_pending?: boolean }>('profiles.create', {
         name: slug,
+        ...createIdentityParams({ onboard, shownName, slug }),
         description: descriptionText,
         // Clone sources are profiles of the TARGET backend. The picker's
         // roster is the local one, so a remote create always starts from the
@@ -559,6 +652,8 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
 
       createdRef.current = slug
       draftTargetRef.current = target
+      onboardedRef.current = onboard && created?.onboarding_pending === true
+      freshOnboarding(slug)
 
       // Apply capability picks from the Advanced tabs (best-effort; the
       // profile exists either way and Edit Profile can finish the job).
@@ -586,33 +681,14 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
         // active gateway, so write appearance/title into the remote
         // profile's ui_meta (and asset store) directly. Best-effort: the
         // profile exists either way.
-        const { image: avatarImage, ...look } = {
+        writeRemoteBotLook(requestForTarget, slug, {
           shape,
           color,
           image,
           imageKind: image ? 'photo' : 'shape',
           title: botTitle,
           created: Date.now()
-        }
-
-        try {
-          void requestForTarget('profiles.configure', {
-            name: slug,
-            ui_meta: {
-              'hermes-bots': look
-            }
-          }).catch(() => undefined)
-
-          if (avatarImage) {
-            void requestForTarget('profiles.set_asset', {
-              name: slug,
-              asset: 'avatar',
-              data: avatarImage
-            }).catch(() => undefined)
-          }
-        } catch {
-          /* older remote gateway */
-        }
+        })
       } else {
         saveBotMeta(slug, {
           shape,
@@ -699,27 +775,9 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
         return
       }
 
-      $selectedBot.set(slug)
-
       // Birth the bot's forever chat right away: it introduces itself as
       // the first thing the user sees, and the pin exists from minute one.
-      try {
-        // Creates, pins, opens, and kicks off the intro in one flow. This is
-        // the ONE caller allowed to request the intro turn — genuine New
-        // Agent creation. Click-path resolution (openBotCanonicalChat) mints
-        // silently so a resolution miss never burns a turn (ScottFive).
-        const sid = await createCanonicalChat(slug, {
-          kickoff: !needsModel
-        })
-
-        if (!sid && typeof host.newChat === 'function') {
-          host.newChat(slug)
-        }
-      } catch {
-        if (typeof host.newChat === 'function') {
-          host.newChat(slug)
-        }
-      }
+      await birthBotChat(slug, { kickoff: !needsModel && !onboardedRef.current, onboarded: onboardedRef.current })
     } catch (err) {
       setBusy(false)
       setError(err instanceof Error ? err.message : String(err))
