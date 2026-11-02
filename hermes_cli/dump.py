@@ -9,7 +9,7 @@ from pathlib import Path
 
 from hermes_cli.config import get_hermes_home, get_env_path, get_project_root, load_config
 from hermes_cli.env_loader import load_hermes_dotenv
-from hermes_constants import display_hermes_home
+from hermes_constants import display_hermes_home, get_skills_dir
 from agent.skill_utils import is_excluded_skill_path
 from datetime import UTC
 
@@ -116,7 +116,7 @@ def _gateway_status() -> str:
 
 def _count_skills(hermes_home: Path) -> int:
     """Count installed skills."""
-    skills_dir = hermes_home / "skills"
+    skills_dir = get_skills_dir(hermes_home)
     return sum(1 for item in skills_dir.rglob("SKILL.md") if not is_excluded_skill_path(item)) if skills_dir.is_dir() else 0
 
 

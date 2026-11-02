@@ -199,6 +199,8 @@ _HERMES_BEHAVIORAL_VARS = frozenset({
     # lineage marker must not make parent-state tests run as delegated
     # children; tests that exercise child behavior set it explicitly.
     "HERMES_DELEGATED_CHILD_CONTEXT",
+    "HERMES_AGENT_TOOL_CONTEXT",
+    "HERMES_PROFILE_ADMIN_GRANT",
     "HERMES_TENANT",
     # Honcho host selection changes which nested config block wins. A local
     # shell override leaked "myhost" into the full suite and flipped 20

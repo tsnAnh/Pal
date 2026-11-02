@@ -157,12 +157,53 @@ async def add_mcp_server(body: MCPServerCreate, profile: Optional[str] = None):
     return _mcp_server_summary(name, server_config)
 
 
+def _shared_conflict(names: list[str]) -> HTTPException:
+    return HTTPException(status_code=409, detail=(
+        f"{', '.join(names)} {'is' if len(names) == 1 else 'are'} shared with other "
+        "bots. Saving would change them for every bot that uses them. Confirm to replace them everywhere."))
+
+
+def _save_editor_servers(body: MCPServersReplace) -> tuple[bool, list[str]]:
+    from hermes_cli.mcp_config import _replace_mcp_servers
+    from hermes_cli.shared_catalog import (
+        SharedDefinitionConflict, catalog_active, read_mcp_definitions, remove_server, replace_servers,
+    )
+    from hermes_cli.shared_catalog_editor import plan_editor_save
+
+    if not catalog_active():
+        return _replace_mcp_servers(body.servers)
+    from hermes_cli.mcp_security import validate_mcp_server_entry
+
+    issues = [issue for name, cfg in body.servers.items()
+              for issue in (validate_mcp_server_entry(name, cfg) if isinstance(cfg, dict)
+                            else [f"Server '{name}': expected an object"])]
+    if issues:
+        return False, issues
+    config = load_config()
+    plan = plan_editor_save(body.servers, config.get("mcp_servers"), read_mcp_definitions())
+    if plan.changed_shared and not body.replace_shared:
+        raise _shared_conflict(plan.changed_shared)
+    try:
+        published = replace_servers(plan.publish, force_shared=body.replace_shared) if plan.publish else {}
+    except SharedDefinitionConflict:
+        raise _shared_conflict(sorted(plan.publish))
+    if body.everywhere:
+        for name in plan.dropped_shared:
+            remove_server({}, name, everywhere=True)
+    saved = {**plan.bot_entries, **published}
+    if saved:
+        config["mcp_servers"] = saved
+    else:
+        config.pop("mcp_servers", None)
+    save_config(config)
+    return True, []
+
+
 @router.put("/api/mcp/servers")
 async def replace_mcp_servers(body: MCPServersReplace, profile: Optional[str] = None):
     """Replace the entire ``mcp_servers`` map (the mcp.json editor's save) —
     the deep-merging ``/api/config`` can never delete a key or drop an
     ``enabled: false``, so removals wouldn't persist through it."""
-    from hermes_cli.mcp_config import _replace_mcp_servers
 
     def _run():
         with config_write_scope(body.profile or profile):
@@ -172,7 +213,7 @@ async def replace_mcp_servers(body: MCPServersReplace, profile: Optional[str] = 
             for name in body.servers:
                 if plugin := plugins.get(name):
                     return False, [f"Server '{name}' is provided by plugin '{plugin}' and cannot be modified"]
-            return _replace_mcp_servers(body.servers)
+            return _save_editor_servers(body)
 
     ok, issues = await asyncio.to_thread(_run)
     if not ok:
@@ -181,7 +222,7 @@ async def replace_mcp_servers(body: MCPServersReplace, profile: Optional[str] = 
 
 
 @router.delete("/api/mcp/servers/{name}")
-async def remove_mcp_server(name: str, profile: Optional[str] = None):
+async def remove_mcp_server(name: str, profile: Optional[str] = None, everywhere: bool = False):
     from hermes_cli.mcp_config import _get_mcp_servers, _remove_mcp_server
 
     def _run():
@@ -194,7 +235,7 @@ async def remove_mcp_server(name: str, profile: Optional[str] = None):
                 raise HTTPException(
                     status_code=409, detail=f"Server '{name}' is provided by plugin '{plugin}' and cannot be modified",
                 )
-            return _remove_mcp_server(name)
+            return _remove_mcp_server(name, everywhere=everywhere)
 
     if not await asyncio.to_thread(_run):
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")

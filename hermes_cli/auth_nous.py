@@ -357,8 +357,8 @@ def _nous_shared_auth_dir() -> Path:
     override = os.getenv("HERMES_SHARED_AUTH_DIR", "").strip()
     if override:
         return Path(override).expanduser()
-    from hermes_constants import get_default_hermes_root
-    return get_default_hermes_root() / "shared"
+    from hermes_constants import get_shared_root
+    return get_shared_root()
 
 
 def _nous_shared_store_path() -> Path:

@@ -1271,9 +1271,23 @@ def get_config_path() -> Path:
     return get_hermes_home() / "config.yaml"
 
 
-def get_skills_dir() -> Path:
-    """Return the path to the skills directory under HERMES_HOME."""
-    return get_hermes_home() / "skills"
+CATALOG_MIGRATED_MARKER = ".migrated"
+
+
+def get_shared_root(*, home: str | Path | None = None) -> Path:
+    root = get_default_hermes_root() if home is None else get_default_hermes_root(home=home)
+    return root / "shared"
+
+
+def get_shared_catalog_dir(*, home: str | Path | None = None) -> Path:
+    return get_shared_root(home=home) / "catalog"
+
+
+def get_skills_dir(home: str | Path | None = None) -> Path:
+    catalog = get_shared_catalog_dir(home=home)
+    if (catalog / CATALOG_MIGRATED_MARKER).is_file():
+        return catalog / "skills"
+    return (get_hermes_home() if home is None else Path(home)) / "skills"
 
 
 def get_env_path() -> Path:

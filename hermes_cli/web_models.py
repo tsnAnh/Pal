@@ -371,6 +371,8 @@ class MCPServersReplace(BaseModel):
     # Whole-map replace (name → raw config) for the GUI mcp.json editor.
     servers: dict[str, dict[str, Any]] = {}
     profile: Optional[str] = None
+    replace_shared: bool = False
+    everywhere: bool = False
 
 class MCPEnabledToggle(BaseModel):
     enabled: bool

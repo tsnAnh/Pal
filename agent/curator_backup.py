@@ -20,7 +20,7 @@ from itertools import chain, count
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from hermes_constants import get_hermes_home
+from hermes_constants import get_hermes_home, get_skills_dir
 from agent.skill_utils import is_excluded_skill_path
 from agent.curator import _read_config_section
 from hermes_cli.sizefmt import format_bytes
@@ -61,7 +61,7 @@ _UNRESTORED_PREFIX = ".rollback-unrestored-"  # retained staging; outside _STAGI
 
 
 def _skills_dir() -> Path:
-    return get_hermes_home() / "skills"
+    return get_skills_dir(get_hermes_home())
 
 
 def _backups_dir() -> Path:

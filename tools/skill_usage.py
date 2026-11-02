@@ -16,7 +16,7 @@ from datetime import datetime, timezone, UTC
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, Iterator, List, Optional, Set, Tuple
 
-from hermes_constants import get_hermes_home
+from hermes_constants import get_hermes_home, get_skills_dir
 from agent.skill_utils import is_excluded_skill_path, is_external_skill_path
 from utils import atomic_write_text
 
@@ -45,7 +45,7 @@ def is_protected_builtin(skill_name: str) -> bool:
 
 
 def _skills_dir() -> Path:
-    return get_hermes_home() / "skills"
+    return get_skills_dir(get_hermes_home())
 
 
 def _usage_file() -> Path:
@@ -226,7 +226,8 @@ def _scan_local_skills(keep: Callable[[str, Path, set[str], dict[str, Any]], boo
         return []
     hub, bundled, usage = _read_hub_installed_names(), _read_bundled_names(), load_usage()
     return sorted({name for name, skill_md in _iter_skill_mds(base, local_only=True)
-                   if name not in hub and not is_protected_builtin(name) and keep(name, skill_md, bundled, usage)})
+                   if name not in hub and not is_protected_builtin(name) and _in_curator_scope(name)
+                   and keep(name, skill_md, bundled, usage)})
 
 
 def list_agent_created_skill_names() -> list[str]:
@@ -275,11 +276,16 @@ def _external_read_only_message(skill_name: str) -> str:
     return f"skill '{skill_name}' lives in skills.external_dirs; external skills are read-only to the curator"
 
 
+def _in_curator_scope(skill_name: str) -> bool:
+    from hermes_cli.shared_catalog_origins import curator_scope_allows
+    return curator_scope_allows(skill_name)
+
+
 def is_curation_eligible(skill_name: str, skill_path: Optional[Path] = None) -> bool:
     """Agent-created: yes. Bundled: only with ``curator.prune_builtins``. Hub / external-dir / protected built-ins:
     never (external owner)."""
     if ((skill_path is not None and is_external_skill_path(skill_path)) or is_protected_builtin(skill_name)
-            or is_hub_installed(skill_name)):
+            or is_hub_installed(skill_name) or not _in_curator_scope(skill_name)):
         return False
     if is_bundled(skill_name):
         return _prune_builtins_enabled()

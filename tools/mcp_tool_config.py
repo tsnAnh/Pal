@@ -687,8 +687,10 @@ def _portable_mcp_servers(safe_servers: dict[str, dict], rejected: frozenset[str
         logger.debug("Failed to load portable MCP servers", exc_info=True)
 
 
-def _load_mcp_config() -> dict[str, dict]:
-    """``mcp_servers`` from config.yaml as ``{name: config}`` (empty on error / safe mode), ``${VAR}`` interpolated."""
+def _load_mcp_config(*, interpolate: bool = True) -> dict[str, dict]:
+    """``mcp_servers`` from config.yaml as ``{name: config}`` (empty on error / safe mode), ``${VAR}`` interpolated.
+    ``interpolate=False`` is the read-only view for status checks: it neither loads dotenv into ``os.environ`` nor
+    resolves ``${VAR}`` refs, so it is safe on listing paths in any profile scope."""
     from agent.safe_worker_policy import safe_worker_enabled
     if safe_worker_enabled():
         return {}
@@ -698,16 +700,18 @@ def _load_mcp_config() -> dict[str, dict]:
         if _env_enabled("HERMES_SAFE_MODE"):
             return {}
         servers = load_config().get("mcp_servers")
-        try:  # ensure .env vars are available for interpolation
-            from hermes_cli.env_loader import load_hermes_dotenv
-            load_hermes_dotenv()
-        except Exception:
-            pass
+        if interpolate:
+            try:  # ensure .env vars are available for interpolation
+                from hermes_cli.env_loader import load_hermes_dotenv
+                load_hermes_dotenv()
+            except Exception:
+                pass
         safe_servers: dict[str, dict] = {}
-        servers = servers if isinstance(servers, dict) else {}
+        from hermes_cli.shared_catalog import effective_mcp_servers
+        servers = effective_mcp_servers(servers)
         kept = _filter_suspicious_mcp_servers(servers)
         for name, cfg in kept.items():
-            interpolated = _interpolate_env_vars(cfg)
+            interpolated = _interpolate_env_vars(cfg) if interpolate else cfg
             if isinstance(interpolated, dict):
                 _warn_hidden_whitespace(name, interpolated)
                 safe_servers[name] = interpolated

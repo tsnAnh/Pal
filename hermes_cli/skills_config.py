@@ -27,12 +27,14 @@ def _normalize_skill_names(values) -> set[str]:
 
 def get_disabled_skills(config: dict, platform: Optional[str] = None) -> set[str]:
     """Disabled skill names: the global list unioned with the platform list when given (globally
-    disabled stays disabled everywhere; mirrors ``agent.skill_utils.get_disabled_skill_names``)."""
+    disabled stays disabled everywhere; mirrors ``agent.skill_utils.get_disabled_skill_names``), plus the
+    shared catalog's non-bundled skills the profile has not enabled."""
     skills_cfg = config.get("skills") or {}
     if not isinstance(skills_cfg, dict):
         return set()
     from agent.skill_utils import ESSENTIAL_SKILLS
-    disabled = _normalize_skill_names(skills_cfg.get("disabled"))
+    from hermes_cli.shared_catalog_origins import catalog_disabled_names
+    disabled = _normalize_skill_names(skills_cfg.get("disabled")) | catalog_disabled_names(skills_cfg)
     if platform is not None:
         platform_disabled = cfg_get(skills_cfg, "platform_disabled", platform)
         if platform_disabled is not None:
@@ -40,17 +42,38 @@ def get_disabled_skills(config: dict, platform: Optional[str] = None) -> set[str
     return disabled - ESSENTIAL_SKILLS
 
 
+def _catalog_selection(config: dict, disabled: set[str]) -> dict[str, list[str]]:
+    from hermes_cli.shared_catalog_origins import default_off_names
+    skills_cfg = config.get("skills") if isinstance(config.get("skills"), dict) else {}
+    default_off = default_off_names()
+    listed = _normalize_skill_names(skills_cfg.get("disabled"))
+    enabled = _normalize_skill_names(skills_cfg.get("enabled"))
+    before = get_disabled_skills(config)
+    enabled = (enabled | ((before - disabled) & default_off)) - ((disabled - before) & default_off)
+    return {"disabled": sorted(d for d in disabled if d not in default_off or d in listed), "enabled": sorted(enabled)}
+
+
 def save_disabled_skills(config: dict, disabled: set[str], platform: Optional[str] = None):
     """Persist disabled skill names to config; essential skills (e.g. ``hermes-agent``) are
-    silently dropped — they cannot be disabled from any surface."""
+    silently dropped — they cannot be disabled from any surface. With the shared catalog active, a
+    non-bundled catalog skill is turned on by listing it under ``skills.enabled`` and off by unlisting it."""
     from agent.skill_utils import ESSENTIAL_SKILLS
+    from hermes_cli.shared_catalog import catalog_active
     disabled = set(disabled) - ESSENTIAL_SKILLS
     config.setdefault("skills", {})
-    if platform is None:
-        config["skills"]["disabled"] = sorted(disabled)
-    else:
+    if platform is not None:
         config["skills"].setdefault("platform_disabled", {})
+        if catalog_active():
+            from hermes_cli.shared_catalog_origins import catalog_disabled_names
+            disabled -= catalog_disabled_names(config["skills"])
         config["skills"]["platform_disabled"][platform] = sorted(disabled)
+    elif catalog_active():
+        selection = _catalog_selection(config, disabled)
+        config["skills"]["disabled"] = selection["disabled"]
+        if selection["enabled"] or "enabled" in config["skills"]:
+            config["skills"]["enabled"] = selection["enabled"]
+    else:
+        config["skills"]["disabled"] = sorted(disabled)
     save_config(config)
 
 

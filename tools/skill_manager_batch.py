@@ -85,7 +85,7 @@ def _op_shape_error(action: str, args: dict):
 
 def _validate_batch_ops(operations, default_name, tool_error):
     """Shape checks with no side effects. Returns (names, None) or (None, error_json)."""
-    from tools.skill_manager_guards import _background_review_preflight
+    from tools.skill_manager_guards import _background_review_preflight, _shared_skill_guard
     from tools.skill_manager_tool import _validate_category
     def fail(i, msg):
         return None, tool_error(f"operations[{i}]{msg}", success=False)
@@ -113,6 +113,8 @@ def _validate_batch_ops(operations, default_name, tool_error):
             return fail(i, f": create for '{nm}' must precede that skill's other ops.")
         if (preflight := _background_review_preflight(act, nm)) is not None:
             return None, json.dumps(preflight, ensure_ascii=False)
+        if (shared := _shared_skill_guard(act, nm)) is not None:
+            return None, json.dumps(shared, ensure_ascii=False)
     # Clobber guard: a DESTRUCTIVE op (create/write_file/remove_file/full rewrite) on
     # a file an earlier op touched would SILENTLY discard its work — reject it.
     # Additive patches are always legal. Paths are normalized against spelling variants.

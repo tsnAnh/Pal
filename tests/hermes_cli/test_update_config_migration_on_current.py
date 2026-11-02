@@ -93,8 +93,9 @@ def test_update_copies_bundled_skill_bytes_to_default_active_and_sibling(tmp_pat
     update_cmd_maint._sync_profiles_after_update()
     bundled = Path(__file__).resolve().parents[2] / 'skills'
     witness = next(bundled.rglob('SKILL.md'))
+    from hermes_constants import get_skills_dir
     for profile in homes:
-        assert (profile / 'skills' / witness.relative_to(bundled)).read_bytes() == witness.read_bytes()
+        assert (get_skills_dir(home=profile) / witness.relative_to(bundled)).read_bytes() == witness.read_bytes()
 
 
 def test_active_config_write_failure_still_migrates_siblings_and_restores_snapshots(tmp_path, monkeypatch):

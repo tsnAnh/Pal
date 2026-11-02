@@ -15,7 +15,7 @@ from itertools import islice
 from pathlib import Path
 from typing import Any
 
-from hermes_constants import get_hermes_home
+from hermes_constants import get_hermes_home, get_skills_dir
 
 from . import shared_metrics_contract as contract
 
@@ -52,7 +52,7 @@ def _cron_job_count() -> int:
 def _skill_count() -> int:
     from agent.skill_utils import iter_skill_index_files
 
-    skills_dir = get_hermes_home() / "skills"
+    skills_dir = get_skills_dir(get_hermes_home())
     if not skills_dir.is_dir():
         return 0
     return sum(1 for _ in islice(iter_skill_index_files(skills_dir, "SKILL.md"), _COUNT_CAP))

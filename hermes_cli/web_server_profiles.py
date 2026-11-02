@@ -256,7 +256,7 @@ def _profile_scope(profile: Optional[str]):
     since #65828 its directory lookups resolve at call time through the same contextvar override set in step
     1.
     """
-    from hermes_constants import get_hermes_home
+    from hermes_constants import get_hermes_home, get_skills_dir
     from tools import skills_tool as _skills_tool
     from tools import skill_manager_tool as _skill_mgr
     with _config_profile_scope(profile) as scoped:
@@ -265,7 +265,7 @@ def _profile_scope(profile: Optional[str]):
         with _SKILLS_PROFILE_LOCK:
             saved = [(m.HERMES_HOME, m.SKILLS_DIR) for m in modules]
             for m in modules:
-                m.HERMES_HOME, m.SKILLS_DIR = profile_dir, profile_dir / "skills"
+                m.HERMES_HOME, m.SKILLS_DIR = profile_dir, get_skills_dir(profile_dir)
             try:
                 yield scoped
             finally:
@@ -478,7 +478,8 @@ def _installed_hub_identifiers(profile: Optional[str] = None) -> dict:
             lock = HubLockFile()
         else:
             profile_dir = _resolve_profile_dir(profile.strip())
-            lock = HubLockFile(profile_dir / "skills" / ".hub" / "lock.json")
+            from hermes_constants import get_skills_dir
+            lock = HubLockFile(get_skills_dir(profile_dir) / ".hub" / "lock.json")
         keys = ("name", "trust_level", "scan_verdict")
         return {identifier: {k: entry.get(k) for k in keys}
                 for identifier, entry in lock.by_identifier().items()}

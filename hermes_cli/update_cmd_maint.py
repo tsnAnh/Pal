@@ -834,15 +834,35 @@ def _sync_profiles_after_update() -> None:
     """Best-effort per-profile syncs: bundled skills, ``.env`` backfill, Honcho profiles."""
     # All profiles incl. the active one: seed_profile_skills() subprocesses with an explicit
     # HERMES_HOME, so sync_skills()'s module-level HERMES_HOME cache can't skew it.
+    from hermes_cli.config_backend import ConfigBackendUnavailable
+    try:
+        from hermes_cli.shared_catalog_migrate import migrate
+        print()
+        print("→ Migrating skills and MCP servers to the shared catalog...")
+        migrate(say=lambda line: print(f"  {line}"))
+    except (Exception, ConfigBackendUnavailable) as exc:
+        logger.warning("Shared catalog migration failed", exc_info=True)
+        print(f"  ⚠ Shared catalog migration failed (state left resumable; retry: hermes catalog migrate): {exc}")
+
     with suppress(Exception):
         from hermes_cli.profiles import list_profiles, seed_profile_skills
+        from hermes_cli.shared_catalog import apply_bundled_opt_out, catalog_active
         all_profiles = list_profiles()
+        shared = catalog_active()
         if all_profiles:
             print()
-            print("→ Syncing bundled skills to all profiles...")
-            for p in all_profiles:
+            print("→ Syncing bundled skills to all profiles..." if not shared
+                  else "→ Syncing bundled skills to the shared catalog...")
+            for index, p in enumerate(all_profiles):
                 try:
+                    if shared and index:
+                        from tools.skills_sync import bundled_skill_names
+                        opted_out = apply_bundled_opt_out(p.path, bundled_skill_names())
+                        print(f"  {p.name}: shared ({len(opted_out)} newly disabled)")
+                        continue
                     print(f"  {p.name}: {_profile_skill_sync_status(seed_profile_skills(p.path, quiet=True))}")
+                except ConfigBackendUnavailable as pe:
+                    print(f"  {p.name}: {pe}")
                 except Exception as pe:
                     print(f"  {p.name}: error ({pe})")
 

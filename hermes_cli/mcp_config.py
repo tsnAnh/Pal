@@ -19,6 +19,7 @@ from hermes_cli.config import (
 from hermes_cli.colors import Colors, color
 from hermes_constants import display_hermes_home
 from hermes_cli.mcp_security import validate_mcp_server_entry
+from hermes_cli.profile_admin_guard import ProfileAdminDenied
 from tools.mcp_tool_config import _ENV_VAR_PATTERN
 from tools.mcp_tool_common import _env_ref_name, mcp_server_enabled
 
@@ -211,8 +212,8 @@ def _get_mcp_servers(config: Optional[dict] = None) -> dict[str, dict]:
     """Return the ``mcp_servers`` dict from config, or empty dict."""
     if config is None:
         config = load_config()
-    servers = config.get("mcp_servers")
-    return servers if servers and isinstance(servers, dict) else {}
+    from hermes_cli.shared_catalog import visible_mcp_servers
+    return visible_mcp_servers(config.get("mcp_servers"))
 
 
 def _tool_filters(cfg: dict) -> tuple[Optional[list], Optional[list]]:
@@ -230,7 +231,7 @@ def _tool_filters(cfg: dict) -> tuple[Optional[list], Optional[list]]:
         exclude if isinstance(exclude, list) else None)
 
 
-def _save_mcp_server(name: str, server_config: dict) -> bool:
+def _save_mcp_server(name: str, server_config: dict, *, force_shared: bool = False) -> bool:
     """Add or update a server entry in config.yaml.
 
     Returns False when a high-signal exfiltration-shaped stdio command is rejected (shell+egress
@@ -239,7 +240,20 @@ def _save_mcp_server(name: str, server_config: dict) -> bool:
     if not _validate_or_warn(name, server_config):
         return False
     config = load_config()
-    config.setdefault("mcp_servers", {})[name] = server_config
+    from hermes_cli.shared_catalog import SharedDefinitionConflict, catalog_active, save_server
+    if catalog_active():
+        try:
+            config["mcp_servers"] = save_server(
+                dict(config.get("mcp_servers") or {}), name, server_config, force_shared=force_shared)
+        except SharedDefinitionConflict as exc:
+            _error(str(exc))
+            _info("To change it for every bot that uses it, re-run with --replace-shared.")
+            return False
+        except ProfileAdminDenied as exc:
+            _error(str(exc))
+            return False
+    else:
+        config.setdefault("mcp_servers", {})[name] = server_config
     save_config(config)
     return True
 
@@ -266,20 +280,27 @@ def _lookup_server(
     return None
 
 
-def _remove_mcp_server(name: str) -> bool:
+def _remove_mcp_server(name: str, *, everywhere: bool = False) -> bool:
     """Remove a server from config.yaml.  Returns True if it existed."""
     config = load_config()
     servers = config.get("mcp_servers") or {}
-    if name not in servers:
+    from hermes_cli.shared_catalog import catalog_active, remove_server
+    if catalog_active():
+        servers, existed = remove_server(dict(servers), name, everywhere=everywhere)
+        if not existed:
+            return False
+        config["mcp_servers"] = servers
+    elif name not in servers:
         return False
-    del servers[name]
-    if not servers:
+    else:
+        del servers[name]
+    if not config.get("mcp_servers"):
         config.pop("mcp_servers", None)
     save_config(config)
     return True
 
 
-def _replace_mcp_servers(servers: dict[str, dict]) -> tuple[bool, list[str]]:
+def _replace_mcp_servers(servers: dict[str, dict], *, force_shared: bool = False) -> tuple[bool, list[str]]:
     """Replace the WHOLE ``mcp_servers`` map in config.yaml.
 
     Every entry is validated up front; any suspicious entry rejects the whole save (``(False,
@@ -294,7 +315,13 @@ def _replace_mcp_servers(servers: dict[str, dict]) -> tuple[bool, list[str]]:
     if issues:
         return False, issues
     config = load_config()
-    if servers:
+    from hermes_cli.shared_catalog import SharedDefinitionConflict, catalog_active, replace_servers
+    if servers and catalog_active():
+        try:
+            config["mcp_servers"] = replace_servers(servers, force_shared=force_shared)
+        except (SharedDefinitionConflict, ProfileAdminDenied) as exc:
+            return False, [str(exc)]
+    elif servers:
         config["mcp_servers"] = dict(servers)
     else:
         config.pop("mcp_servers", None)
@@ -625,6 +652,7 @@ def cmd_mcp_add(args):
     if cmd_args and cmd_args[0] == "--":
         cmd_args = cmd_args[1:]
     auth_type = getattr(args, "auth", None)
+    force_shared = bool(getattr(args, "replace_shared", False))
     raw_connect_timeout = getattr(args, "connect_timeout", None)
 
     server_config: dict[str, Any] = {}
@@ -691,7 +719,7 @@ def cmd_mcp_add(args):
         saved = False
         if _confirm("Save config anyway (you can test later)?", default=False):
             server_config["enabled"] = False
-            saved = _save_mcp_server(name, server_config)
+            saved = _save_mcp_server(name, server_config, force_shared=force_shared)
             if saved:
                 _success(f"Saved '{name}' to config (disabled)")
                 _info("Fix the issue, then: hermes mcp test " + name)
@@ -701,7 +729,7 @@ def cmd_mcp_add(args):
     if not tools:
         _warning("Server connected but reported no tools.")
         if _confirm("Save config anyway?", default=True):
-            saved = _save_mcp_server(name, server_config)
+            saved = _save_mcp_server(name, server_config, force_shared=force_shared)
             _record(saved)
             if saved:
                 _success(f"Saved '{name}' to config")
@@ -711,7 +739,7 @@ def cmd_mcp_add(args):
     if tool_count is None:
         return
     server_config["enabled"] = True
-    saved = _save_mcp_server(name, server_config)
+    saved = _save_mcp_server(name, server_config, force_shared=force_shared)
     _record(saved)
     if saved:
         print()
@@ -729,8 +757,18 @@ def cmd_mcp_remove(args):
     if not _confirm(f"Remove server '{name}'?", default=True):
         _info("Cancelled.")
         return
-    _remove_mcp_server(name)
-    _success(f"Removed '{name}' from config")
+    everywhere = bool(getattr(args, "everywhere", False))
+    try:
+        _remove_mcp_server(name, everywhere=everywhere)
+    except ProfileAdminDenied as exc:
+        _error(str(exc))
+        return
+    from hermes_cli.shared_catalog import shared_mcp_names
+    if name in shared_mcp_names():
+        _success(f"Removed '{name}' from this bot; the shared definition stays for other bots")
+        _info(f"To delete it for every bot: hermes mcp remove {name} --everywhere")
+    else:
+        _success(f"Removed '{name}' from config")
     # Route OAuth cleanup through MCPOAuthManager so any provider cached in this process (e.g. from
     # an earlier `hermes mcp test`) is evicted too.
     try:

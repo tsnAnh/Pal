@@ -21,9 +21,13 @@ from hermes_cli.archive_safe import archive_root_dirs, make_targz, normalize_arc
 from hermes_cli import config_backend as _config_backend
 from hermes_cli.profiles_config import _migrate_profile_config_if_outdated
 from hermes_cli.home_data_layout import PM_RUNTIME_ROOT_DIRS, SECRET_CACHE_STORES
-from hermes_cli.profiles_remove import _rmtree_make_writable, _rmtree_with_retry, wait_profile_unowned
+from hermes_cli.profiles_remove import (
+    _rmtree_make_writable, _rmtree_with_retry, print_delete_summary as _print_delete_summary, wait_profile_unowned)
+from hermes_cli.profile_admin_guard import require_profile_admin_grant
+from hermes_cli.profile_export_scrub import scrub_export_secrets
+from hermes_cli.shared_catalog_portable import adopt_profile_skills, materialize_catalog
 from hermes_constants import (
-    LOCAL_RUNTIME_ROOT_DIRS, PROFILE_ID_RE, clear_named_profile_deleted, mark_named_profile_deleted,
+    LOCAL_RUNTIME_ROOT_DIRS, PROFILE_ID_RE, clear_named_profile_deleted, get_skills_dir, mark_named_profile_deleted,
     named_profile_has_identity, named_profile_is_deleted, named_profile_is_live,
 )
 from hermes_cli.config_backend import (
@@ -243,6 +247,7 @@ _DEFAULT_EXPORT_EXCLUDE_ROOT = DEFAULT_EXPORT_EXCLUDE_ROOT = frozenset({
     "auth.lock", "active_profile", ".update_check", "source-checks",
     "errors.log",
     ".hermes_history",
+    "identity-history",
     # Caches (regenerated on use)
     "image_cache", "audio_cache", "document_cache",
     "browser_screenshots", "checkpoints",
@@ -270,6 +275,8 @@ _DEFAULT_EXPORT_INCLUDE_ROOT = frozenset({
     # Plugin / memory surfaces (per-profile overrides live here)
     "plugins", "memories", "knowledge", "preferences",
 })
+
+_BOT_PRIVATE_ROOT_DIRS = frozenset({"identity-history"})
 
 # Names that cannot be used as profile aliases
 _RESERVED_NAMES = frozenset({"hermes", "default", "test", "tmp", "root", "sudo"})
@@ -817,7 +824,7 @@ def _count_skills(profile_dir: Path) -> int:
     """Count installed skills in a profile (cached by skills-dir signature + TTL). Walks
     synchronously when stale — detail surfaces (``hermes profile info``, ``profiles.describe``)
     want the fresh number; polled lists go through :func:`_cached_skill_count`."""
-    skills_dir = profile_dir / "skills"
+    skills_dir = get_skills_dir(profile_dir)
     if not skills_dir.is_dir():
         return 0
     key = str(skills_dir)
@@ -844,7 +851,7 @@ def _cached_skill_count(profile_dir: Path) -> int:
     or aged entry schedules one background :func:`_count_skills` per profile per recheck
     window (which itself re-walks only on signature change / TTL); the next poll picks the
     result up. ``0`` until the first refresh lands."""
-    key = str(profile_dir / "skills")
+    key = str(get_skills_dir(profile_dir))
     now = time.time()
     with _SKILL_COUNT_LOCK:
         due = _SKILL_COUNT_NEXT_CHECK.get(key, 0.0) <= now
@@ -913,31 +920,31 @@ def write_profile_meta(
     created if missing. The profile directory itself must exist."""
     if not profile_dir.is_dir():
         raise FileNotFoundError(f"profile directory does not exist: {profile_dir}")
-    path = profile_dir / "profile.yaml"
-    existing: dict = _load_yaml_dict(path) or {}
-    if description is not None:
-        existing["description"] = description.strip()
-    if description_auto is not None:
-        existing["description_auto"] = bool(description_auto)
-    if display_name is not None:
-        # Empty string clears the key (falls back to the canonical id).
-        if display_name.strip():
-            existing["display_name"] = display_name.strip()
-        else:
-            existing.pop("display_name", None)
-    if previous_names is not None:
-        # Rename history for group-chat member sync (#110200): consumers match
-        # stale persisted handles against the live roster via these names.
-        cleaned = _clean_previous_names(previous_names)
-        if cleaned:
-            existing["previous_names"] = cleaned
-        else:
-            existing.pop("previous_names", None)
+    def mutate(existing: dict) -> None:
+        if description is not None:
+            existing["description"] = description.strip()
+        if description_auto is not None:
+            existing["description_auto"] = bool(description_auto)
+        if display_name is not None:
+            # Empty string clears the key (falls back to the canonical id).
+            if display_name.strip():
+                existing["display_name"] = display_name.strip()
+            else:
+                existing.pop("display_name", None)
+        if previous_names is not None:
+            # Rename history for group-chat member sync (#110200): consumers match
+            # stale persisted handles against the live roster via these names.
+            cleaned = _clean_previous_names(previous_names)
+            if cleaned:
+                existing["previous_names"] = cleaned
+            else:
+                existing.pop("previous_names", None)
+
     # Atomic write: bare open("w") truncates before the dump, and the read path swallows
     # parse errors as {}, so a crashed write would silently drop unspecified fields.
     # See #51356.
-    from utils import atomic_yaml_write
-    atomic_yaml_write(path, existing, sort_keys=False)
+    from hermes_cli.profile_yaml import update_profile_yaml
+    update_profile_yaml(profile_dir, mutate, overwrite_unreadable=True)
 
 
 def format_profile_label(name: str, display_name: Optional[str]) -> str:
@@ -1350,6 +1357,7 @@ def create_profile(
     re-seeding its skills; it is mutually exclusive with the clone options, which copy skills.
     ``sync_imports`` (``--clone`` only; ``--clone-all`` copies the file anyway) also copies the
     ``import-agent`` sync manifest so the clone can keep pulling the same external agent trees."""
+    require_profile_admin_grant("create", name)
     if no_skills and (clone_from is not None or clone_config or clone_all):
         raise ValueError(
             "--no-skills is mutually exclusive with --clone / --clone-from / --clone-all "
@@ -1476,6 +1484,21 @@ def seed_profile_skills(profile_dir: Path, quiet: bool = False) -> Optional[dict
         if not quiet:
             print(f"⚠ Skill seeding failed: {e}")
         return None
+
+
+def seed_new_profile_skills(profile_dir: Path, quiet: bool = False) -> Optional[dict]:
+    from hermes_cli.shared_catalog import apply_bundled_opt_out, catalog_active
+    if not catalog_active(profile_dir):
+        return seed_profile_skills(profile_dir, quiet=quiet)
+    try:
+        from tools.skills_sync import bundled_skill_names
+        newly_disabled = apply_bundled_opt_out(profile_dir, bundled_skill_names())
+    except (OSError, RuntimeError, ValueError) as e:
+        if not quiet:
+            print(f"⚠ Skill opt-out failed: {e}")
+        return None
+    return {"copied": [], "updated": [], "user_modified": [], "skipped_opt_out": False,
+            "shared_catalog": True, "newly_disabled": newly_disabled}
 
 
 def backfill_profile_envs(quiet: bool = False) -> list[str]:
@@ -1657,29 +1680,6 @@ def _stop_bot_desktop(profile_dir: Path) -> None:
         reset_hermes_home_override(token)
 
 
-def _print_delete_summary(canon: str, profile_dir: Path, gw_running: bool, wrapper_path: Optional[Path]) -> None:
-    """Show what ``delete_profile`` is about to remove."""
-    model, provider = _read_config_model(profile_dir)
-    skill_count = _count_skills(profile_dir)
-    dist_name, dist_version, dist_source = _read_distribution_meta(profile_dir)
-    print(f"\nProfile: {canon}")
-    print(f"Path:    {profile_dir}")
-    if model:
-        print(f"Model:   {model}" + (f" ({provider})" if provider else ""))
-    if skill_count:
-        print(f"Skills:  {skill_count}")
-    if dist_name:
-        print(f"Distribution: {dist_name}@{dist_version or '?'}")
-        if dist_source:
-            print(f"Installed from: {dist_source}")
-    print("\nThis will permanently delete:")
-    print("  • All config, API keys, memories, sessions, skills, cron jobs")
-    if wrapper_path is not None:
-        print(f"  • Command alias ({wrapper_path})")
-    if gw_running:
-        print("  ⚠ Gateway is running — it will be stopped.")
-
-
 class ProfileIdentitySettlementPending(RuntimeError):
     """The profile's directory was deleted, but its durable session/routing identity was not
     settled (``hermes_cli.profile_identity.purge_profile_identity`` returned False).
@@ -1702,6 +1702,7 @@ class ProfileIdentitySettlementPending(RuntimeError):
 def delete_profile(name: str, yes: bool = False) -> Path:
     """Delete a profile, its wrapper script, and its gateway service (service disabled first
     to prevent auto-restart, gateway stopped if running)."""
+    require_profile_admin_grant("delete", name)
     canon = normalize_profile_name(name)
     if canon == "default":
         raise ValueError("Cannot delete the default profile (~/.hermes).\nTo remove everything, use: hermes uninstall")
@@ -1788,6 +1789,11 @@ def delete_profile(name: str, yes: bool = False) -> Path:
     except Exception as e:
         print(f"⚠ Could not remove {profile_dir}: {e}")
         remove_error = e
+
+    if remove_error is None:
+        from hermes_cli.shared_catalog_origins import reassign_owner
+        if orphaned := reassign_owner(canon, None):
+            print(f"✓ {len(orphaned)} shared skill(s) are now unowned and off for every bot until re-enabled")
 
     # 5. Clear active_profile if it pointed to this profile
     _retarget_active_profile(canon, "default", "✓ Active profile reset to default")
@@ -2080,7 +2086,7 @@ def get_profile_export_path(name: str, *, timestamp: Optional[str] = None) -> Pa
 def _default_export_ignore(root_dir: Path):
     """copytree ignore for the default-profile export: root-level allow-list
     (``_DEFAULT_EXPORT_INCLUDE_ROOT``) plus universal exclusions. Surviving text files are
-    then force-redacted by :func:`_scrub_export_secrets`.
+    then force-redacted by ``profile_export_scrub.scrub_export_secrets``.
 
     * **Root-level allow-list** — only entries whose name appears in ``_DEFAULT_EXPORT_INCLUDE_ROOT``
     survive. Everything else (such as an unrelated ``x11-dev/`` directory in a Docker deployment where
@@ -2117,52 +2123,6 @@ def _export_credential_entries(directory: str, contents: list) -> set:
     return {entry for entry in contents for store in _EXPORT_CREDENTIAL_PARTS
             if entry == store[-1] and parts[len(parts) + 1 - len(store):] == store[:-1]}
 
-# Text/config suffixes secret-scrubbed on export; binary DBs, images etc. are left alone.
-_EXPORT_REDACT_SUFFIXES = frozenset({
-    ".md", ".txt", ".yaml", ".yml", ".json", ".jsonl", ".toml", ".ini", ".cfg", ".conf", ".py", ".sh",
-    ".bash", ".zsh", ".js", ".ts", ".tsx", ".jsx", ".css", ".html", ".xml", ".csv",
-})
-# ``Path(".cursorrules").suffix`` is "" — name-match; ``*.env.example`` uses endswith; a hand-named
-# config copy (``config.yaml.bak-my-note``) holds config.yaml's secrets under a suffix of its own.
-_EXPORT_REDACT_NAMES = frozenset({".cursorrules"})
-
-
-def _should_redact_export_file(path: Path) -> bool:
-    name = path.name
-    return (
-        name in _EXPORT_REDACT_NAMES
-        or name.lower().endswith(".env.example")
-        or name.lower().startswith("config.yaml.")
-        or path.suffix.lower() in _EXPORT_REDACT_SUFFIXES
-    )
-
-
-def _scrub_export_secrets(staged: Path) -> None:
-    """Force-redact secret-shaped strings in a staged export tree (same pass as ``hermes
-    sessions export --redact``). Runs on the staged copy only; symlinks to text files are
-    materialized when content changes so redaction never follows a link back into the source."""
-    from agent.redact import redact_sensitive_text
-    for path in staged.rglob("*"):
-        try:
-            is_link = path.is_symlink()
-            if not path.is_file():  # broken links, symlinked dirs, non-files
-                continue
-        except OSError:
-            continue
-        if not _should_redact_export_file(path):
-            continue
-        try:
-            text = path.read_text(encoding="utf-8-sig")
-        except (UnicodeDecodeError, OSError):
-            continue
-        redacted = redact_sensitive_text(text, force=True)
-        if redacted == text:
-            continue
-        if is_link:
-            path.unlink()
-        path.write_text(redacted, encoding="utf-8")
-
-
 def export_profile(name: str, output_path: str, extra_files: Optional[dict[str, str]] = None) -> Path:
     """Export a profile to a tar.gz archive; credential files are excluded and staged text is
     force-redacted first. Returns the output file path."""
@@ -2180,7 +2140,7 @@ def export_profile(name: str, output_path: str, extra_files: Optional[dict[str, 
         rel = Path(directory).relative_to(profile_dir).parts
         ignored.update(e for e in contents if profile_path_is_private((*rel, e)))
         if Path(directory) == profile_dir:
-            ignored |= PM_RUNTIME_ROOT_DIRS & set(contents)
+            ignored |= (PM_RUNTIME_ROOT_DIRS | _BOT_PRIVATE_ROOT_DIRS) & set(contents)
         return ignored
 
     ignore = _default_export_ignore(profile_dir) if canon == "default" else _ignore_credentials
@@ -2191,13 +2151,15 @@ def export_profile(name: str, output_path: str, extra_files: Optional[dict[str, 
             target = staged.joinpath(*normalize_archive_parts(rel))
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(content, encoding="utf-8")
-        _scrub_export_secrets(staged)
+        materialize_catalog(profile_dir, staged)
+        scrub_export_secrets(staged)
         return Path(make_targz(base, tmpdir, canon))
 
 
 def import_profile(archive_path: str, name: Optional[str] = None) -> Path:
     """Import a profile from a tar.gz archive."""
     import tempfile
+    require_profile_admin_grant("import", name or "")
     archive = Path(archive_path)
     if not archive.exists():
         raise FileNotFoundError(f"Archive not found: {archive}")
@@ -2243,6 +2205,7 @@ def import_profile(archive_path: str, name: Optional[str] = None) -> Path:
                 else:
                     child.unlink()
         shutil.move(str(final_source), str(profile_dir))
+    adopt_profile_skills(profile_dir, canon)
     return profile_dir
 
 
@@ -2349,6 +2312,9 @@ def rename_profile(old_name: str, new_name: str) -> Path:
     # member descriptors to the new slug (#110200). Best-effort: a metadata
     # write failure must never fail the rename itself.
     _record_profile_rename(new_dir, old_canon)
+
+    from hermes_cli.shared_catalog_origins import reassign_owner
+    reassign_owner(old_canon, new_canon)
 
     # 3. Update profile-scoped Honcho host blocks, preserving aiPeer identity
     from hermes_cli.profiles_honcho import migrate_honcho_profile_host

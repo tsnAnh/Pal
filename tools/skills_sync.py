@@ -23,7 +23,7 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         with suppress(ValueError, TypeError):
             _stream.reconfigure(encoding="utf-8", errors="replace")
-from hermes_constants import get_bundled_skills_dir, get_hermes_home, get_optional_skills_dir
+from hermes_constants import get_bundled_skills_dir, get_hermes_home, get_optional_skills_dir, get_skills_dir
 from agent.skill_utils import ESSENTIAL_SKILLS, is_excluded_skill_path
 from tools.skill_usage import read_skill_name
 from tools.skills_sync_optional import (
@@ -60,7 +60,7 @@ def _hermes_home() -> Path:
 
 
 def _skills_dir() -> Path:
-    return _live(SKILLS_DIR, _SKILLS_DIR_AT_IMPORT, lambda: _hermes_home() / "skills")
+    return _live(SKILLS_DIR, _SKILLS_DIR_AT_IMPORT, lambda: get_skills_dir(_hermes_home()))
 
 
 def _manifest_file() -> Path:
@@ -393,11 +393,26 @@ def _seed_category_descriptions(bundled_dir: Path, only_dirs: Optional[set[Path]
             logger.debug("Could not copy %s: %s", desc_md, e)
 
 
+def bundled_skill_names() -> set[str]:
+    return {name for name, _ in _discover_bundled_skills(_get_bundled_dir())}
+
+
 def sync_skills(quiet: bool = False) -> dict:
-    """Sync bundled skills into ~/.hermes/skills/ using the manifest; returns the per-category
-    result dict. Opted-out profiles seed ONLY ESSENTIAL_SKILLS (the system prompt always
-    points at ``hermes-agent``)."""
-    essential_only = (_hermes_home() / NO_BUNDLED_SKILLS_MARKER).exists()
+    """Sync bundled skills into the active skills dir using the manifest; returns the per-category
+    result dict. With the shared catalog active the sync runs under the catalog lock into the one
+    shared dir, and an opted-out profile disables the bundled skills instead of withholding them."""
+    from hermes_cli.shared_catalog import apply_bundled_opt_out, catalog_active, catalog_lock
+
+    home = _hermes_home()
+    if not catalog_active(home):
+        return _sync_skills(quiet, essential_only=(home / NO_BUNDLED_SKILLS_MARKER).exists())
+    with catalog_lock():
+        result = _sync_skills(quiet, essential_only=False)
+        apply_bundled_opt_out(home, bundled_skill_names())
+    return result
+
+
+def _sync_skills(quiet: bool, *, essential_only: bool) -> dict:
     if essential_only and not quiet:
         print("  (profile opted out of bundled skills via .no-bundled-skills — seeding essential skills only)")
     bundled_dir = _get_bundled_dir()

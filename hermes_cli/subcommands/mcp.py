@@ -32,9 +32,15 @@ def build_mcp_parser(subparsers, *, cmd_mcp: Callable) -> None:
         help="Timeout in seconds for initial connection and tool discovery")
     mcp_add_p.add_argument(
         "--env", nargs="*", default=[], help="Environment variables for stdio servers (KEY=VALUE)")
+    mcp_add_p.add_argument(
+        "--replace-shared", action="store_true",
+        help="Overwrite a shared definition that other bots use (affects every bot opted into it)")
 
     mcp_rm_p = mcp_sub.add_parser("remove", aliases=["rm"], help="Remove an MCP server")
     mcp_rm_p.add_argument("name", help="Server name to remove")
+    mcp_rm_p.add_argument(
+        "--everywhere", action="store_true",
+        help="Also delete the shared definition so every bot loses it (default: only this bot's opt-in)")
 
     mcp_sub.add_parser("list", aliases=["ls"], help="List configured MCP servers")
 

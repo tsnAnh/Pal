@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import hermes_yaml as yaml
 
-from hermes_constants import get_hermes_home
+from hermes_constants import get_hermes_home, get_skills_dir
 from utils import atomic_write_text, is_truthy_value
 from hermes_cli.config import cfg_get
 from agent.skill_utils import (
@@ -30,6 +30,7 @@ from agent.skill_utils import (
 from tools.skill_manager_guards import (
     _background_review_delete_guard, _background_review_preflight, _background_review_read_before_write_guard,
     _containing_skills_root, _curator_consolidation_delete_guard, _is_path_redirect, _pinned_guard,
+    _shared_skill_guard,
     _validate_delete_target, _is_background_review, _refusal as _err)
 from tools.skill_manager_batch import (
     _PATCH_EITHER_OR, _PATCH_NEEDS_NEW_STRING, _PATCH_NEEDS_OLD_STRING, _op_shape_error, _skill_manage_batch)
@@ -78,7 +79,7 @@ def _skills_dir() -> Path:
     module once under the launch HERMES_HOME and later bind a different profile per session (#40677).
     """
     configured = Path(SKILLS_DIR)
-    return configured if configured != _SKILLS_DIR_AT_IMPORT else get_hermes_home() / "skills"
+    return configured if configured != _SKILLS_DIR_AT_IMPORT else get_skills_dir()
 
 
 def _skill_lock_path(name: str) -> Path:
@@ -465,6 +466,13 @@ def _clip(text: str, n: int, ellipsis: str) -> str:
 
 # --- Core actions -------------------------------------------------------------
 
+def _grant_catalog_skill(skill_dir: Path, name: str) -> None:
+    from hermes_cli.shared_catalog import catalog_active, catalog_skills_dir
+    if catalog_active() and skill_dir.resolve().is_relative_to(catalog_skills_dir().resolve()):
+        from hermes_cli.shared_catalog_origins import ORIGIN_BOT, grant_new_skill
+        grant_new_skill(name, ORIGIN_BOT)
+
+
 def _create_skill(name: str, content: str, category: str | None = None) -> dict[str, Any]:
     if err := (_validate_name(name) or _validate_category(category)
                or _validate_frontmatter(content) or _validate_content_size(content)):
@@ -493,6 +501,7 @@ def _create_skill(name: str, content: str, category: str | None = None) -> dict[
         with suppress(OSError):  # rmdir, not rmtree: only an empty dir goes, anything foreign stays
             skill_dir.rmdir()
         return guard
+    _grant_catalog_skill(skill_dir, name)
     root = _skills_dir()  # display relative under the profile dir; absolute under skills.create_dir
     display = skill_dir.relative_to(root) if skill_dir.is_relative_to(root) else skill_dir
     result = {
@@ -792,6 +801,8 @@ def skill_manage(
             operations, default_name=name or None, task_id=task_id, session_id=session_id)
     if (preflight := _background_review_preflight(action, name)) is not None:
         return json.dumps(preflight, ensure_ascii=False)
+    if (shared := _shared_skill_guard(action, name)) is not None:
+        return json.dumps(shared, ensure_ascii=False)
     # Approval gate: skills are too large to review inline, so they always stage regardless
     # of origin; bypassed when replaying an approved staged write.
     args = dict(content=content, category=category, file_path=file_path, file_content=file_content,

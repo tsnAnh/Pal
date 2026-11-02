@@ -17,7 +17,7 @@ from datetime import datetime, timezone, UTC
 from pathlib import Path
 from typing import Any, Optional
 
-from hermes_constants import get_hermes_home
+from hermes_constants import get_hermes_home, get_skills_dir
 
 _SKIP_PARTS = {".archive", ".hub", ".locks", "node_modules", ".git"}
 _USAGE_TS_KEYS = ("last_activity_at", "last_used_at", "last_viewed_at", "last_patched_at", "created_at")
@@ -58,7 +58,7 @@ def _load_usage() -> dict[str, dict[str, Any]]:
         return load_usage()
     except Exception:
         try:
-            return json.loads((get_hermes_home() / "skills" / ".usage.json").read_text(encoding="utf-8-sig"))
+            return json.loads((get_skills_dir(get_hermes_home()) / ".usage.json").read_text(encoding="utf-8-sig"))
         except Exception:
             return {}
 
@@ -218,7 +218,7 @@ def _has_learning_signal(node: SkillNode) -> bool:
 def build_learning_graph() -> dict[str, Any]:
     """Full payload for the desktop learning panel: non-base skills with real
     learning signal (agent-created or used) plus memory chunks as graph nodes."""
-    roots = [("base", Path(__file__).resolve().parent.parent / "skills"), ("profile", get_hermes_home() / "skills")]
+    roots = [("base", Path(__file__).resolve().parent.parent / "skills"), ("profile", get_skills_dir(get_hermes_home()))]
     learned_skills = {
         name: node for name, node in build_skill_nodes(roots).items()
         if node.source != "base" and _has_learning_signal(node)

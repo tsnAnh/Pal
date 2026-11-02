@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import time
 from collections.abc import Collection
 from pathlib import Path
 
@@ -444,10 +445,44 @@ def _model_prompt_capability_surface(model_cfg: object) -> dict:
     }
 
 
+_SKILLS_SURFACE_TTL_SECONDS = 30.0
+_SKILLS_SURFACE_MAX = 64
+_skills_surface_lock = threading.Lock()
+_skills_surface_cache: dict[str, tuple[tuple, float, list[str]]] = {}
+
+
+def _skills_surface(resolved: Path) -> list[str]:
+    import hashlib
+
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    from tools.skills_tool import _get_disabled_skill_names, _skill_catalog, _skills_scan_signature, skill_search_dirs
+
+    token = set_hermes_home_override(str(resolved))
+    try:
+        roots, _ = skill_search_dirs()
+        signature = _skills_scan_signature([d for _tier, d in roots], _get_disabled_skill_names())
+        key = str(resolved)
+        with _skills_surface_lock:
+            hit = _skills_surface_cache.get(key)
+        if hit is not None and hit[0] == signature and time.monotonic() - hit[1] < _SKILLS_SURFACE_TTL_SECONDS:
+            return hit[2]
+        rows = sorted(
+            f"{s.get('category') or ''}/{s['load_name']}:"
+            + hashlib.sha256(str(s.get("description") or "").encode("utf-8")).hexdigest()[:16]
+            for s in _skill_catalog(skip_connector_gate=True) if s.get("load_name"))
+    finally:
+        reset_hermes_home_override(token)
+    with _skills_surface_lock:
+        if key not in _skills_surface_cache and len(_skills_surface_cache) >= _SKILLS_SURFACE_MAX:
+            _skills_surface_cache.clear()
+        _skills_surface_cache[key] = (signature, time.monotonic(), rows)
+    return rows
+
+
 def capability_fingerprint(home: str | os.PathLike | None = None) -> str:
     """12-hex digest of the capability surface for ``home``'s profile: disabled skills +
     enabled toolsets + MCP config, model capability overrides that change the prompt
-    (``supports_vision``, ``context_length``), SOUL.md bytes, installed skill names, the
+    (``supports_vision``, ``context_length``), SOUL.md bytes, the listed skills (name + description, effective disabled set), the
     Bot-Mode roster (+ roles), peers and the relay roster. Deliberately NOT cached — the
     point is detecting on-disk drift against a stored prompt's epoch. Never raises
     ("unavailable" on failure)."""
@@ -473,6 +508,8 @@ def capability_fingerprint(home: str | os.PathLike | None = None) -> str:
         model_cfg = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
         surface["model_capabilities"] = _model_prompt_capability_surface(model_cfg)
         surface["disabled_skills"] = sorted(str(s).lower() for s in (skills_cfg.get("disabled") or []))
+        if skills_cfg.get("enabled"):
+            surface["enabled_skills"] = sorted(str(s).lower() for s in skills_cfg["enabled"])
         # The live selection is platform_toolsets.<platform> minus agent.disabled_toolsets;
         # tools.enabled_toolsets is written by no surface, so watching it left Bot Chats
         # blind to `hermes tools enable/disable` (#124211). Raw slices: an edit that leaves
@@ -489,24 +526,8 @@ def capability_fingerprint(home: str | os.PathLike | None = None) -> str:
         soul = resolved / "SOUL.md"
         return hashlib.sha256(soul.read_bytes()).hexdigest() if soul.is_file() else ""
 
-    def _skills() -> list[str]:
-        skills_root = resolved / "skills"
-        if not skills_root.is_dir():
-            return []
-        # The same walk every other reader of this tree uses (skills_list/skill_view, the prompt's
-        # skills index, skill_count): it prunes EXCLUDED_SKILL_DIRS — ``.archive``, ``.curator_backups``,
-        # ``node_modules`` … — and each skill's support dirs. A raw ``**/SKILL.md`` glob counted files
-        # the model can never invoke, so archiving a skill, or the curator writing a backup, flipped the
-        # epoch and forced every Bot Chat to rebuild a system prompt whose skills index had not changed.
-        # iter_skill_index_files is also org-token-gated, so the epoch moves on an org switch as well —
-        # intended: a different org sees a different skills index, so it needs a different prompt.
-        from agent.skill_utils import iter_skill_index_files
-
-        return sorted(str(p.parent.relative_to(skills_root))
-                      for p in iter_skill_index_files(skills_root, "SKILL.md"))
-
     surface["soul"] = _swallow(_soul, "")
-    surface["skills"] = _swallow(_skills, [])
+    surface["skills"] = _swallow(lambda: _skills_surface(resolved), [])
     try:
         roster = _roster(root)
         surface["roster"] = sorted(n for n, d in roster if _is_bot_managed(d))
@@ -563,3 +584,5 @@ def stored_bot_chat_prompt_needs_upgrade(stored_prompt: str, home: str | os.Path
 def _reset_cache_for_tests() -> None:
     with _lock:
         _cached.clear()
+    with _skills_surface_lock:
+        _skills_surface_cache.clear()

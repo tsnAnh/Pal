@@ -229,6 +229,22 @@ def _background_review_preflight(action: str, name: str) -> Optional[dict[str, A
     return _background_review_delete_guard(name, existing["path"]) if existing else None
 
 
+SHARED_SKILL_REFUSAL = (
+    "This skill is shared with other bots, so I can't change it. I can create my own copy under a new name.")
+_SHARED_GUARDED_ACTIONS = frozenset({"edit", "patch", "write_file", "remove_file", "delete"})
+
+
+def _shared_skill_guard(action: str, name: str) -> Optional[dict[str, Any]]:
+    if action not in _SHARED_GUARDED_ACTIONS or not name:
+        return None
+    from hermes_cli.shared_catalog_origins import bot_may_write_skill
+    from tools import skill_manager_tool as _smt
+    existing = _smt._find_skill(name)
+    if existing is None or bot_may_write_skill(existing["path"]):
+        return None
+    return _refusal(SHARED_SKILL_REFUSAL)
+
+
 def _curator_consolidation_delete_guard(
     name: str, absorbed_into: Optional[str]) -> Optional[dict[str, Any]]:
     """Fail closed on unverified deletes during the curator consolidation pass. The fork's only

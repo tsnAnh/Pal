@@ -15,6 +15,7 @@ from typing import Optional
 
 from hermes_cli import profiles as profiles_mod
 from agent.skill_utils import is_excluded_skill_path
+from hermes_constants import get_skills_dir
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ class DescribeOutcome:
 def _collect_skills(profile_dir: Path) -> list[str]:
     """Sorted non-excluded skill names: ``category/skill_name`` (category = immediate subdir
     under ``skills/``), or bare ``skill_name`` for skills directly under ``skills/``."""
-    skills_dir = profile_dir / "skills"
+    skills_dir = get_skills_dir(profile_dir)
     if not skills_dir.is_dir():
         return []
     names: list[str] = []

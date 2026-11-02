@@ -199,7 +199,15 @@ def install_from_quarantine(
         record_installed(safe_skill_name)
     except Exception:
         logger.debug("Unable to record skill install lifecycle for %s", safe_skill_name, exc_info=True)
+    _grant_catalog_install(install_dir, safe_skill_name)
     return install_dir
+
+
+def _grant_catalog_install(install_dir: Path, skill_name: str) -> None:
+    from hermes_cli.shared_catalog import catalog_active, catalog_skills_dir
+    if catalog_active() and install_dir.resolve().is_relative_to(catalog_skills_dir().resolve()):
+        from hermes_cli.shared_catalog_origins import ORIGIN_HUB, grant_new_skill
+        grant_new_skill(skill_name, ORIGIN_HUB)
 
 
 def uninstall_skill(skill_name: str) -> tuple[bool, str]:

@@ -24,7 +24,7 @@ from urllib.parse import urljoin
 
 import httpx
 
-from hermes_constants import get_hermes_home
+from hermes_constants import get_hermes_home, get_skills_dir
 from tools.url_safety import is_safe_url
 from tools.url_safety import create_ssrf_safe_client
 from tools.website_policy import check_website_access
@@ -58,7 +58,11 @@ def _hermes_home() -> Path:
     return get_hermes_home()
 
 
-_skills_dir = _path_resolver("SKILLS_DIR", "HERMES_HOME", "skills")
+def _skills_dir() -> Path:
+    forced = globals().get("SKILLS_DIR")
+    return Path(forced) if forced is not None else get_skills_dir()
+
+
 _hub_dir = _path_resolver("HUB_DIR", "SKILLS_DIR", ".hub")
 _lock_file = _path_resolver("LOCK_FILE", "HUB_DIR", "lock.json")
 _quarantine_dir = _path_resolver("QUARANTINE_DIR", "HUB_DIR", "quarantine")

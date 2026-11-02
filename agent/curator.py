@@ -21,7 +21,7 @@ from datetime import datetime, timedelta, timezone, UTC
 from pathlib import Path
 from typing import Any, Callable, Dict, List, NamedTuple, Optional, Set
 
-from hermes_constants import get_hermes_home
+from hermes_constants import get_hermes_home, get_skills_dir
 from agent.skill_utils import get_disabled_skill_names
 from tools import skill_usage
 from utils import atomic_json_write
@@ -38,7 +38,7 @@ DEFAULT_CONSOLIDATE = False
 # --- .curator_state — persistent scheduler + status ---
 
 def _state_file() -> Path:
-    return get_hermes_home() / "skills" / ".curator_state"
+    return get_skills_dir(get_hermes_home()) / ".curator_state"
 
 
 def load_state() -> dict[str, Any]:
@@ -1163,7 +1163,7 @@ _CLAIM_STALE_SECONDS = 3600.0
 
 
 def _run_claim_path() -> Path:
-    return get_hermes_home() / "skills" / ".locks" / "curator-run"
+    return get_skills_dir(get_hermes_home()) / ".locks" / "curator-run"
 
 
 def _claim_run() -> bool:

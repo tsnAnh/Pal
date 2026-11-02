@@ -579,7 +579,8 @@ def _gh_authenticated() -> bool:
 @doctor_check()
 def _check_skills_hub(should_fix: bool, f: Finding) -> None:
     from hermes_cli.doctor import HERMES_HOME, _DHH
-    hub_dir = HERMES_HOME / "skills" / ".hub"
+    from hermes_constants import get_skills_dir
+    hub_dir = get_skills_dir(HERMES_HOME) / ".hub"
     if check_bool(hub_dir.exists(), "Skills Hub directory exists", ("Skills Hub directory not initialized", "(run: hermes skills list)")):
         lock_file = hub_dir / "lock.json"
         if lock_file.exists():

@@ -24,7 +24,7 @@ from datetime import datetime, timezone, UTC
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from hermes_constants import get_hermes_home
+from hermes_constants import get_hermes_home, get_skills_dir
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def derive_actor() -> str:
 
 
 def _skills_dir() -> Path:
-    return get_hermes_home() / "skills"
+    return get_skills_dir(get_hermes_home())
 
 
 def ledger_path() -> Path:

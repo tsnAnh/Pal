@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable, Dict, Iterator, List, Optional, Tuple
 
 from hermes_cli.config import cfg_get
-from hermes_constants import get_hermes_dir, get_hermes_home
+from hermes_constants import get_hermes_dir, get_hermes_home, get_skills_dir
 
 from agent.provider_media import GENERATED_SUBDIR, MEDIA_CACHE_MAX_AGE_HOURS
 from agent.skill_utils import EXCLUDED_SKILL_DIRS
@@ -35,7 +35,7 @@ _registered_files_var: ContextVar[dict[str, str]] = ContextVar("_registered_file
 # Cache for config-based file list, one entry per profile home (tests reset it).
 _config_files: dict[str, list[dict[str, str]]] = {}
 # Reused across calls so sanitized skill copies don't accumulate.
-_safe_skills_tempdir: Path | None = None
+_safe_skills_tempdirs: dict[str, Path] = {}
 
 
 def _get_registered() -> dict[str, str]:
@@ -164,6 +164,19 @@ def get_credential_file_mounts() -> list[dict[str, str]]:
 
 # --- Skills directory mounts ---
 
+def _local_skill_roots(home: Path, skills_dir: Path, base: str) -> Iterator[tuple[Path, str]]:
+    from hermes_cli.shared_catalog import catalog_active
+    if not catalog_active(home):
+        yield skills_dir, f"{base}/skills"
+        return
+    from agent.skill_utils import get_disabled_skill_names
+    from hermes_cli.shared_catalog_origins import iter_catalog_skills
+    disabled = get_disabled_skill_names()
+    for item, name in iter_catalog_skills():
+        if name not in disabled and not item.path.is_symlink():
+            yield item.path, f"{base}/skills/{item.key}"
+
+
 def _skill_dir_roots(container_base: str) -> Iterator[tuple[Path, str]]:
     """Yield ``(host_dir, container_root)`` for every existing skills directory.
 
@@ -171,9 +184,10 @@ def _skill_dir_roots(container_base: str) -> Iterator[tuple[Path, str]]:
     project-local at ``<base>/project_skills/<i>`` (own namespace so paths stay stable if external_dirs change).
     """
     base = container_base.rstrip("/")
-    skills_dir = get_hermes_home() / "skills"
+    home = get_hermes_home()
+    skills_dir = get_skills_dir(home)
     if skills_dir.is_dir():
-        yield skills_dir, f"{base}/skills"
+        yield from _local_skill_roots(home, skills_dir, base)
     try:
         from agent.skill_utils import get_external_skills_dirs, get_project_skills_dirs
     except ImportError:
@@ -203,13 +217,12 @@ def get_skills_directory_mount(container_base: str = "/root/.hermes") -> list[di
     Bind mounts follow symlinks, so a dir containing any symlink is replaced by a sanitized
     temp copy (regular files only); symlink-free dirs are returned directly, zero overhead.
     """
-    return [_mount(_safe_skills_path(d), cp) for d, cp in _skill_dir_roots(container_base)]
+    return [_mount(str(d) if d.is_file() else _safe_skills_path(d), cp)
+            for d, cp in _skill_dir_roots(container_base) if d.is_file() or d.is_dir()]
 
 
 def _safe_skills_path(skills_dir: Path) -> str:
     """Return *skills_dir* if symlink-free, else a sanitized temp copy (same exclusions as sync)."""
-    global _safe_skills_tempdir
-
     symlinks = [p for p in skills_dir.rglob("*") if p.is_symlink()]
     if not symlinks:
         return str(skills_dir)
@@ -220,9 +233,10 @@ def _safe_skills_path(skills_dir: Path) -> str:
     import shutil
     import tempfile
 
-    if _safe_skills_tempdir and _safe_skills_tempdir.is_dir():
-        shutil.rmtree(_safe_skills_tempdir, ignore_errors=True)
-    safe_dir = _safe_skills_tempdir = Path(tempfile.mkdtemp(prefix="hermes-skills-safe-"))
+    stale = _safe_skills_tempdirs.get(str(skills_dir))
+    if stale and stale.is_dir():
+        shutil.rmtree(stale, ignore_errors=True)
+    safe_dir = _safe_skills_tempdirs[str(skills_dir)] = Path(tempfile.mkdtemp(prefix="hermes-skills-safe-"))
 
     for base, files in _walk_skill_tree(skills_dir):
         (safe_dir / base.relative_to(skills_dir)).mkdir(parents=True, exist_ok=True)
@@ -236,9 +250,14 @@ def _safe_skills_path(skills_dir: Path) -> str:
 
 def iter_skills_files(container_base: str = "/root/.hermes") -> list[dict[str, str]]:
     """Per-file entries for all skills files (for backends that upload individually)."""
-    return [_mount(item, f"{container_root}/{item.relative_to(host_dir).as_posix()}")
-            for host_dir, container_root in _skill_dir_roots(container_base)
-            for _base, files in _walk_skill_tree(host_dir) for item in files]
+    entries = []
+    for host_dir, container_root in _skill_dir_roots(container_base):
+        if host_dir.is_file():
+            entries.append(_mount(host_dir, container_root))
+            continue
+        entries.extend(_mount(item, f"{container_root}/{item.relative_to(host_dir).as_posix()}")
+                       for _base, files in _walk_skill_tree(host_dir) for item in files)
+    return entries
 
 
 # --- Cache directory mounts (documents, images, audio, videos, screenshots) ---
