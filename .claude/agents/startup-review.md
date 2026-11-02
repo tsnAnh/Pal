@@ -1,0 +1,1 @@
+../../.agents/faker-kit/plugins/agent-compatibility/agents/startup-review.md

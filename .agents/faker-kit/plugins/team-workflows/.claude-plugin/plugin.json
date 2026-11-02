@@ -1,0 +1,18 @@
+{
+  "name": "team-workflows",
+  "version": "1.2.0",
+  "description": "Internal engineering team workflows for CI, code review, shipping, control-cli, control-ui, verify-this, test reliability, code cleanup, and work summaries. Designed to work without requiring third-party service integrations.",
+  "author": {
+    "name": "Eric Zakariasson"
+  },
+  "license": "MIT",
+  "keywords": [
+    "team-workflows",
+    "ci",
+    "code-review",
+    "shipping",
+    "testing",
+    "verification",
+    "local-automation"
+  ]
+}

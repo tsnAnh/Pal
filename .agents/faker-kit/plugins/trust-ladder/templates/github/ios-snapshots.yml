@@ -1,0 +1,57 @@
+# Screenshots of the iOS app for every pull request that changes it.
+# Cloud agent sessions run on Linux and cannot start the iOS Simulator, so this
+# macOS job captures the images and posts a link on the pull request. An agent
+# then downloads the artifact and embeds the images (references/evidence-in-prs.md).
+#
+# Copy to .github/workflows/ios-snapshots.yml. Replace App, AppSnapshotTests, and
+# the paths below with the repository's own scheme, test target, and app folders.
+# The test target writes one PNG per screen state to $SNAPSHOT_DIR, for example
+# with XCUIScreen.main.screenshot().pngRepresentation or swift-snapshot-testing.
+#
+# macOS minutes cost several times Linux minutes, so the job runs only when the
+# iOS app changes or the pull request carries the requested-change label.
+
+name: ios-snapshots
+
+on:
+  pull_request:
+    types: [opened, synchronize, labeled]
+    paths:
+      - "ios/**"
+      - "Packages/**"
+      - "*.xcodeproj/**"
+
+jobs:
+  snapshots:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      SNAPSHOT_DIR: ${{ github.workspace }}/snapshots
+    steps:
+      - uses: actions/checkout@v6
+      - run: mkdir -p "$SNAPSHOT_DIR"
+      - name: Capture screens
+        run: |
+          xcodebuild test \
+            -scheme App \
+            -only-testing:AppSnapshotTests \
+            -destination 'platform=iOS Simulator,name=iPhone 16' \
+            SNAPSHOT_DIR="$SNAPSHOT_DIR" | xcpretty
+      - id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-snapshots-${{ github.event.pull_request.head.sha }}
+          path: snapshots/
+          retention-days: 30
+      - name: Link the screenshots on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+        run: |
+          files=$(cd snapshots && ls -1 | sed 's/^/- /')
+          gh pr comment ${{ github.event.pull_request.number }} --body "iOS screenshots for ${{ github.event.pull_request.head.sha }}: [download]($ARTIFACT_URL)
+
+          $files"

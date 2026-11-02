@@ -1,0 +1,1 @@
+../../.agents/faker-kit/plugins/team-workflows/agents/ci-watcher.md

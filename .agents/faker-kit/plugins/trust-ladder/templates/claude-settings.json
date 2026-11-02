@@ -1,0 +1,43 @@
+{
+  "extraKnownMarketplaces": {
+    "faker-kit": {
+      "source": {
+        "source": "github",
+        "repo": "tsnAnh/faker-kit"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "trust-ladder@faker-kit": true,
+    "pstack@faker-kit": true,
+    "team-workflows@faker-kit": true,
+    "thermos@faker-kit": true,
+    "continual-learning@faker-kit": true,
+    "cli-for-agent@faker-kit": true,
+    "agent-compatibility@faker-kit": true,
+    "advisor@faker-kit": true,
+    "teaching@faker-kit": true
+  },
+  "permissions": {
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push origin main)",
+      "Bash(git push origin main *)",
+      "Bash(git push origin HEAD:main *)",
+      "Bash(git push origin master)",
+      "Bash(git push origin master *)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/*.pem)",
+      "Read(./**/*.p12)",
+      "Read(./**/*.jks)",
+      "Read(./**/*.keystore)",
+      "Read(./secrets/**)"
+    ],
+    "ask": [
+      "Bash(git reset --hard *)",
+      "Bash(git clean *)"
+    ]
+  }
+}

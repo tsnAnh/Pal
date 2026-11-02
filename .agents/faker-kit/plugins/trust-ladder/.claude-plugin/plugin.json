@@ -1,0 +1,30 @@
+{
+  "name": "trust-ladder",
+  "version": "0.4.2",
+  "description": "Route every agent correction to the strongest layer (codebase, lint/CI, rules and review bots, skills, style guide), set up repos for agents, and connect them to Hermes dispatch. Installs the vendored upstream plugins as dependencies.",
+  "author": {
+    "name": "tsnAnh"
+  },
+  "homepage": "https://github.com/tsnAnh/faker-kit",
+  "repository": "https://github.com/tsnAnh/faker-kit",
+  "license": "MIT",
+  "keywords": [
+    "trust-ladder",
+    "agents",
+    "verification",
+    "lint",
+    "code-review",
+    "style-guide",
+    "pstack"
+  ],
+  "dependencies": [
+    "pstack",
+    "team-workflows",
+    "thermos",
+    "continual-learning",
+    "cli-for-agent",
+    "agent-compatibility",
+    "advisor",
+    "teaching"
+  ]
+}

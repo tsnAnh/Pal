@@ -1,0 +1,17 @@
+{
+  "name": "agent-compatibility",
+  "version": "1.0.0",
+  "description": "CLI-backed repo compatibility scans plus agents that audit startup, validation, and docs against reality.",
+  "license": "MIT",
+  "author": {
+    "name": "The upstream plugin team (see LICENSE)"
+  },
+  "keywords": [
+    "agent-compatibility",
+    "agents",
+    "compatibility",
+    "repo-audit",
+    "startup",
+    "validation"
+  ]
+}

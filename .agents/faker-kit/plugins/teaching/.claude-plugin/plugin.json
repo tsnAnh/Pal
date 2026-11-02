@@ -1,0 +1,16 @@
+{
+  "name": "teaching",
+  "version": "1.0.0",
+  "description": "Skill mapping, practice plans, and learning retrospectives. Builds personalized roadmaps with milestones and practice checkpoints, and runs periodic reviews to adjust based on progress.",
+  "license": "MIT",
+  "author": {
+    "name": "The upstream plugin team (see LICENSE)"
+  },
+  "keywords": [
+    "teaching",
+    "study-plan",
+    "practice",
+    "feedback",
+    "mentorship"
+  ]
+}

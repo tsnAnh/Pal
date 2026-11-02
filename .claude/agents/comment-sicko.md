@@ -1,0 +1,1 @@
+../../.agents/faker-kit/plugins/pstack/agents/comment-sicko.md

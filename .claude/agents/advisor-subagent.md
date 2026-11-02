@@ -1,0 +1,1 @@
+../../.agents/faker-kit/plugins/advisor/agents/advisor-subagent.md
