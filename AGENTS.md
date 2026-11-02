@@ -88,8 +88,6 @@ hermes-agent/
 ├── skills/               # Built-in skills (by category)   optional-skills/: shipped, not active
 ├── ui-tui/, tui_gateway/ # Ink terminal UI + its Python JSON-RPC backend (also serves Desktop)
 ├── apps/desktop/         # Electron desktop app (+ apps/shared)   web/: dashboard SPA
-├── cron/                 # jobs.py + scheduler.py (+ scheduler_*.py)
-├── pm/, hermes_platform/ # dependency/environment manager; machine facts + executable lookup
 ├── scripts/              # check, run_tests.sh, code_health/, ci/
 ├── website/              # Docusaurus docs (developer-guide/ holds the long-form area docs)
 └── tests/                # Pytest suite, mirrors the source tree
@@ -167,3 +165,7 @@ Every former god file is a **facade** (public entry points + the names other pac
 
 Long-form background: `website/docs/developer-guide/`. Workflow rules (PR/issue/review/salvage
 process) live in the `hermes-agent-dev` skill, not here.
+
+## Review guidelines
+
+Per `REVIEW.md`: its Blocking rules are P1. Mark findings `[blocking]` or `[nit]`. Skip what CI enforces.

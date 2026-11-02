@@ -1,0 +1,45 @@
+{
+  "backend": "claude",
+  "kit_ref": "d5082f6927fc8c26d624241cd5d1fe988d9ede4e",
+  "max_in_flight": 1,
+  "forbidden_paths": [
+    ".github/workflows/",
+    "infra/",
+    "*.lock",
+    "package-lock.json",
+    "tests/fixtures/prompt_surface/",
+    ".agents/faker-kit/"
+  ],
+  "trusted_dispatchers": [
+    "tsnAnh"
+  ],
+  "risk_paths_high": [
+    ".github/",
+    "scripts/ci/",
+    "scripts/code_health/",
+    "scripts/check",
+    "SECURITY.md",
+    "pm/",
+    "tools/approval",
+    "tools/path_security.py",
+    "tools/credential_files.py",
+    "gateway/pairing.py",
+    "gateway/authz_mixin.py"
+  ],
+  "risk_paths_medium": [
+    "gateway/",
+    "tools/",
+    "agent/",
+    "hermes_cli/",
+    "pyproject.toml",
+    "toolsets.py",
+    "model_tools.py",
+    "cron/",
+    "apps/desktop/"
+  ],
+  "incidents": {
+    "main_checks": true,
+    "health": [],
+    "andon_on_red": false
+  }
+}

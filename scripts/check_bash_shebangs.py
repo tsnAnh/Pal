@@ -13,6 +13,7 @@ import subprocess
 
 
 FIXED_BASH = re.compile(rb"#![ \t]*/(?:usr/)?bin/bash\b")
+VENDORED_PREFIX = ".agents/faker-kit/"
 
 
 def check(root: Path) -> list[str]:
@@ -24,6 +25,8 @@ def check(root: Path) -> list[str]:
         if not name:
             continue
         relative = name.decode("utf-8", errors="surrogateescape")
+        if relative.startswith(VENDORED_PREFIX):
+            continue
         path = root / relative
         if path.is_symlink() or not path.is_file():
             continue
