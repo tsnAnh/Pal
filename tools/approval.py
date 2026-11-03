@@ -32,6 +32,7 @@ from tools.approval_detection import (
     _approval_key_aliases, _check_sudo_stdin_guard, detect_dangerous_command, detect_hardline_command,
     detect_human_required_code, detect_human_required_command,
 )
+from tools.approval_detection_grant import human_required_grant_scope
 from tools.approval_floors import (
     _command_matches_permanent_allowlist, _hardline_block_result, _match_user_deny_rule, _sudo_stdin_block_result,
     _user_deny_block_result,
@@ -1134,7 +1135,7 @@ def _human_required_gate(command: str, description: str, approval_callback=None)
     return {**decision, "human_required": True} if decision.get("approved") else decision
 
 
-def _with_profile_admin_grant(result: dict, command: str) -> dict:
+def _with_profile_admin_grant(result: dict, command: str, *, is_code: bool = False) -> dict:
     if not (result.get("approved") and result.get("human_required")):
         return result
     from agent.terminal_approval_batch import preparing_terminal_approval
@@ -1142,7 +1143,8 @@ def _with_profile_admin_grant(result: dict, command: str) -> dict:
         return result
     from hermes_cli.profile_admin_guard import mint_grant
     try:
-        return {**result, "profile_admin_grant": mint_grant(command, result.get("description") or "")}
+        scope = human_required_grant_scope(command, code=is_code)
+        return {**result, "profile_admin_grant": mint_grant(command, result.get("description") or "", scope)}
     except OSError:
         logger.warning("Could not record the one-time grant for an approved profile action", exc_info=True)
         return result
@@ -1367,7 +1369,7 @@ def check_execute_code_guard(code: str, env_type: str, has_host_access: bool = F
     human_required, human_description = detect_human_required_code(code)
     if human_required:
         return _with_profile_admin_grant(
-            _human_required_gate(f"execute_code <<'PY'\n{code}\nPY", human_description), code)
+            _human_required_gate(f"execute_code <<'PY'\n{code}\nPY", human_description), code, is_code=True)
     approval_mode = approval_context._get_approval_mode()
     if _yolo_active() or approval_mode == "off":
         return _approved()

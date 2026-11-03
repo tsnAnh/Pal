@@ -26,7 +26,7 @@ HUMAN_REQUIRED_FLAGGED_VERBS: dict[tuple[str, str], FlaggedVerb] = {
 }
 
 
-def _is_flag(token: str, flag: str) -> bool:
+def is_flag(token: str, flag: str) -> bool:
     name = token.lower().partition("=")[0]
     return name == flag or (len(name) > _MIN_ABBREVIATION and name.startswith("--") and flag.startswith(name))
 
@@ -36,7 +36,7 @@ def flagged_verb_description(verb: tuple[str, str], later_args: list[str]) -> st
     if entry is None:
         return None
     if entry.flag is not None:
-        return entry.description if any(_is_flag(token, entry.flag) for token in later_args) else None
-    if entry.exempt_flag is not None and any(_is_flag(token, entry.exempt_flag) for token in later_args):
+        return entry.description if any(is_flag(token, entry.flag) for token in later_args) else None
+    if entry.exempt_flag is not None and any(is_flag(token, entry.exempt_flag) for token in later_args):
         return None
     return entry.description

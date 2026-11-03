@@ -14,6 +14,7 @@ import tempfile
 import unicodedata
 
 from hermes_cli.shared_catalog_guard_patterns import flagged_verb_description
+from tools.approval_detection_grant import GRANT_BINDINGS, bound_name
 
 logger = logging.getLogger("tools.approval")
 
@@ -1715,7 +1716,7 @@ def _hermes_entries(argv: list[str]) -> list[int]:
     return [] if entry is None else [entry]
 
 
-def _human_required_description(argv: list[str]) -> str | None:
+def _human_required_hit(argv: list[str]) -> tuple[str, str | None, str | None] | None:
     pending, seen = [entry + 1 for entry in _hermes_entries(argv)], set()
     while pending:
         position = pending.pop()
@@ -1723,14 +1724,21 @@ def _human_required_description(argv: list[str]) -> str | None:
             continue
         seen.add(position)
         verb = tuple(token.lower() for token in argv[position:position + 2])
-        if verb in _HUMAN_REQUIRED_DESCRIPTIONS:
-            return _HUMAN_REQUIRED_DESCRIPTIONS[verb]
-        flagged = flagged_verb_description(verb, argv[position + 2:])
-        if flagged:
-            return flagged
+        later_args = argv[position + 2:]
+        description = _HUMAN_REQUIRED_DESCRIPTIONS.get(verb) or flagged_verb_description(verb, later_args)
+        if description:
+            binding = GRANT_BINDINGS.get(verb)
+            if binding is None:
+                return description, None, None
+            return description, binding.action, bound_name(binding, later_args)
         if argv[position].startswith("-"):
             pending.extend((position + 1, position + 2))
     return None
+
+
+def _human_required_description(argv: list[str]) -> str | None:
+    hit = _human_required_hit(argv)
+    return hit[0] if hit else None
 
 
 @functools.lru_cache(maxsize=1)

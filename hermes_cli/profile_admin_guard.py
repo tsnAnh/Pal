@@ -11,7 +11,7 @@ import secrets
 import threading
 import time
 from pathlib import Path
-from typing import MutableMapping
+from typing import Iterable, MutableMapping
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +138,29 @@ def _purge_stale(directory: Path) -> None:
                 entry.unlink()
 
 
-def mint_grant(command: str, description: str) -> str:
+def _subject(name: str | None) -> str:
+    return (name or "").strip().lower()
+
+
+def _grant_bindings(scope: Iterable[tuple[str, str | None]]) -> list[dict]:
+    return sorted(
+        ({"action": action, "name": None if name is None else _subject(name)} for action, name in scope),
+        key=lambda binding: (binding["action"], binding["name"] or ""))
+
+
+def _grant_covers(bindings: object, action: str, subject: str) -> bool:
+    if not isinstance(bindings, list):
+        return False
+    for binding in bindings:
+        if not isinstance(binding, dict) or binding.get("action") != action or "name" not in binding:
+            continue
+        bound_name = binding["name"]
+        if bound_name is None or (isinstance(bound_name, str) and _subject(bound_name) == subject):
+            return True
+    return False
+
+
+def mint_grant(command: str, description: str, scope: Iterable[tuple[str, str | None]]) -> str:
     directory = _grants_dir()
     directory.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(OSError):
@@ -150,6 +172,7 @@ def mint_grant(command: str, description: str) -> str:
         "description": description,
         "root": _root_key(),
         "expires_at": time.time() + GRANT_TTL_SECONDS,
+        "bindings": _grant_bindings(scope),
     }
     fd = os.open(directory / token, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
@@ -157,7 +180,7 @@ def mint_grant(command: str, description: str) -> str:
     return token
 
 
-def _claim_grant(token: str) -> bool:
+def _claim_grant(token: str, action: str, subject: str) -> bool:
     if not _TOKEN_RE.fullmatch(token):
         return False
     directory = _grants_dir()
@@ -178,22 +201,33 @@ def _claim_grant(token: str) -> bool:
             claimed.unlink()
     expires_at = data.get("expires_at") if isinstance(data, dict) else None
     return (isinstance(expires_at, (int, float)) and time.time() < expires_at
-            and data.get("root") == _root_key())
+            and data.get("root") == _root_key()
+            and _grant_covers(data.get("bindings"), action, subject))
+
+
+def _rollback_subject(action: str, subject: str) -> str:
+    if action not in _CREATING_ACTIONS or not subject:
+        return ""
+    from hermes_cli.profiles import get_profile_dir
+    try:
+        return "" if get_profile_dir(subject).exists() else subject
+    except ValueError:
+        return ""
 
 
 def require_profile_admin_grant(action: str, name: str = "") -> None:
     if not in_agent_context():
         return
     token = (os.environ.get(GRANT_ENV) or "").strip()
-    subject = (name or "").strip().lower()
+    subject = _subject(name)
     with _spent_lock:
         if token in _spent_tokens:
             if action == "delete" and subject and _spent_tokens[token] == subject:
                 return
             raise ProfileAdminDenied(_DENIED_MESSAGES.get(action, DENIED_MESSAGE))
-        if token and _claim_grant(token):
+        if token and _claim_grant(token, action, subject):
             if len(_spent_tokens) >= _MAX_SPENT_TOKENS:
                 _spent_tokens.pop(next(iter(_spent_tokens)))
-            _spent_tokens[token] = subject if action in _CREATING_ACTIONS else ""
+            _spent_tokens[token] = _rollback_subject(action, subject)
             return
     raise ProfileAdminDenied(_DENIED_MESSAGES.get(action, DENIED_MESSAGE))
