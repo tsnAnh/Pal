@@ -1,0 +1,573 @@
+{
+  "sync_commit": "48058f84b39fc81de234f815c2be9a480196933f",
+  "runs": [
+    {
+      "cfg": "envelope",
+      "kind": "baseline",
+      "expect": "pass",
+      "why": "the protocol holds under the stated assumptions; a failure here means a change broke the normal case"
+    },
+    {
+      "cfg": "finding_lease_expiry",
+      "kind": "finding",
+      "expect": "violates:AtMostOnce",
+      "why": "a live owner's queued dispatch outlives the pending_slot lease and a second ticker restores the same occurrence",
+      "finding": "F-A"
+    },
+    {
+      "cfg": "finding_stamp_erased",
+      "kind": "finding",
+      "expect": "violates:NoSilentLoss",
+      "why": "a run that overlaps the next slot completes while the next tick holds its dispatch, and the completion erases that tick's pending_slot",
+      "finding": "F-B"
+    },
+    {
+      "cfg": "finding_headless_refusal",
+      "kind": "finding",
+      "expect": "violates:NoSilentLoss",
+      "why": "a headless tick scans a stale occurrence, the scan fast-forwards next_run_at, and the gateway-down refusal then erases pending_slot",
+      "finding": "F-C"
+    },
+    {
+      "cfg": "finding_silent_collapse",
+      "kind": "finding",
+      "expect": "violates:NoSilentLoss",
+      "why": "an occurrence that comes due while a dispatch waits for its claim is dropped by the claim's re-anchor with no log and no ledger row",
+      "finding": "F-D"
+    },
+    {
+      "cfg": "mutant_no_stamp",
+      "kind": "mutant",
+      "expect": "violates:NoSilentLoss",
+      "why": "without the pending_slot stamp a death between advance and claim loses the occurrence"
+    },
+    {
+      "cfg": "mutant_claim_keeps_stamp",
+      "kind": "mutant",
+      "expect": "violates:AtMostOnce",
+      "why": "a claim that keeps pending_slot lets a restart restore and fire an occurrence that already ran"
+    },
+    {
+      "cfg": "mutant_no_advance",
+      "kind": "mutant",
+      "expect": "violates:AtMostOnce",
+      "why": "without the tick-time advance the same occurrence is dispatched again"
+    },
+    {
+      "cfg": "mutant_restore_ignores_lease",
+      "kind": "mutant",
+      "expect": "violates:AtMostOnce",
+      "why": "restoring a live owner's pending_slot dispatches the occurrence twice"
+    },
+    {
+      "cfg": "witness_restore",
+      "kind": "witness",
+      "expect": "violates:WitnessRestore",
+      "why": "a scan restores an orphaned pending_slot"
+    },
+    {
+      "cfg": "witness_claim_lost",
+      "kind": "witness",
+      "expect": "violates:WitnessClaimLost",
+      "why": "the claim-lost branch of claim_job_for_fire is reachable"
+    },
+    {
+      "cfg": "witness_dispatch_refused",
+      "kind": "witness",
+      "expect": "violates:WitnessDispatchRefused",
+      "why": "the already-running refusal in _submit_with_guard is reachable"
+    }
+  ],
+  "covered": [
+    {
+      "file": "cron/scheduler_tick.py",
+      "name": "_tick_admitted",
+      "actions": [
+        "AcquireTickLock",
+        "GetDueJobs",
+        "RefuseHeadless",
+        "AdvanceNextRuns",
+        "SubmitWithGuard"
+      ],
+      "sha256": "9e71995b604653b434094ff073a622858b7fb98c4fbd7d3832e33696f397e215",
+      "facts": [
+        {
+          "order": [
+            "_acquire_tick_lock_or_degrade",
+            "get_due_jobs",
+            "refuse_agent_jobs_without_gateway",
+            "_advance_or_drop_recurring",
+            "_submit_with_guard",
+            "_release_tick_lock"
+          ],
+          "mirrors": "mutant_no_advance",
+          "why": "the headless refusal and the advance both sit between the scan and the submit, under the tick lock"
+        }
+      ]
+    },
+    {
+      "file": "cron/scheduler_tick.py",
+      "name": "_acquire_tick_lock_or_degrade",
+      "actions": [
+        "AcquireTickLock"
+      ],
+      "sha256": "300a787c3265044c0c0e9d365ea7e278108e6917f48e1203f9e25df429c145a6"
+    },
+    {
+      "file": "cron/scheduler_tick.py",
+      "name": "_advance_or_drop_recurring",
+      "actions": [
+        "AdvanceNextRuns"
+      ],
+      "sha256": "63ad2f19cb6693a5d91b1dde325fd8bae229209f128bcb59754df1fe57997f8e",
+      "facts": [
+        {
+          "order": [
+            "advance_next_runs"
+          ],
+          "mirrors": "mutant_no_advance",
+          "why": "recurring jobs are advanced before any dispatch"
+        }
+      ]
+    },
+    {
+      "file": "cron/scheduler.py",
+      "name": "_acquire_tick_lock",
+      "actions": [
+        "AcquireTickLock"
+      ],
+      "sha256": "8268485b418cde6f2146529dc9c06d09422795918ce688cf53d968d10708d067"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "get_due_jobs",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "99156a3199e6f18e424c7a35058aa3b532b267a727b20b7f38701a9bcb567b19",
+      "facts": [
+        {
+          "order": [
+            "_jobs_lock",
+            "_get_due_jobs_locked"
+          ],
+          "mirrors": "GetDueJobs atomicity",
+          "why": "the scan runs under the cross-process jobs lock"
+        }
+      ]
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_get_due_jobs_locked",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "1d6fe74f5ac082329470d41751e6cacab5bb6f5c7e322baad2b507f05e419744",
+      "facts": [
+        {
+          "order": [
+            "load_jobs",
+            "_evaluate_due_job",
+            "save_jobs"
+          ],
+          "mirrors": "GetDueJobs atomicity",
+          "why": "restore, fast-forward and stamp persist in one save at the end of the scan"
+        }
+      ]
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_evaluate_due_job",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "dc8d350f2cdeed848e0b48b7c23e81847efc6dae0ab99c39222110e182cdb89f",
+      "facts": [
+        {
+          "order": [
+            "_restore_unclaimed_slot",
+            "completed_occurrence",
+            "fast_forward_missed_recurring",
+            "persist(pending_slot=)"
+          ],
+          "mirrors": "mutant_no_stamp",
+          "why": "the scan restores an orphan first and stamps pending_slot for every dispatched recurring occurrence"
+        }
+      ]
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_DueScan.persist",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "982751021a68d54cc3a3e10be95465d06380e62a74ee630a830d8746e088aea8"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_DueJob.recompute_next",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "d973646084c1b3e76f16d04d45cd0e48fe633609957ce2631c1473397af2f8d6"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_compute_grace_seconds",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "ff73ca4f66193a7bc2076c76b3221b0154f89f3b22d85b027da34e4b72147bf3"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_restore_unclaimed_slot",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "8a061a672e73eb499a0025b5219a2055d10996b04abbbd575ca8274679e6211a",
+      "facts": [
+        {
+          "order": [
+            "unclaimed_pending_slot",
+            "job.pop('pending_slot')",
+            "rj.pop('pending_slot')",
+            "persist(next_run_at=)"
+          ],
+          "mirrors": "restore once",
+          "why": "a restored slot drops its stamp from the working copy and the stored record, so it is never replayed twice"
+        }
+      ]
+    },
+    {
+      "file": "cron/occurrences.py",
+      "name": "unclaimed_pending_slot",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "efd05c4d01613cae49c630551c1567b5d2bf45fc630a1d2adf1a7c458ca07df6",
+      "facts": [
+        {
+          "order": [
+            "_job_running_in_this_process",
+            "_claim_is_live"
+          ],
+          "mirrors": "mutant_restore_ignores_lease",
+          "why": "a stamp is restored only when its owner is not running here and its lease is dead or expired"
+        }
+      ]
+    },
+    {
+      "file": "cron/occurrences.py",
+      "name": "pending_slot_stamp",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "378ce7530bd8b8f940c529d59ccf803c41e00b4d792ba9521e977fe5df33d67f"
+    },
+    {
+      "file": "cron/missed_runs.py",
+      "name": "fast_forward_missed_recurring",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "c3671c51311571deb2e92e4cd1fd6af9ea2c9764e19cd13261b7e4cc6144075d"
+    },
+    {
+      "file": "cron/missed_runs.py",
+      "name": "job_catches_up",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "ea79cec2e3ed0f47117879b87b408a41ec7b5e16b902e17f9e96632079d135e5"
+    },
+    {
+      "file": "cron/missed_runs.py",
+      "name": "count_missed_slots",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "addfb3905d3d5d4cc73feaa1870e03d58f85d37706352a2aa77d1870ac881a42"
+    },
+    {
+      "file": "cron/missed_runs.py",
+      "name": "_book_missed",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "51d98ed9e87383e0349df856f29d6596652f5138798860b951e8be0b237724b6"
+    },
+    {
+      "file": "cron/scheduler_gateway_gate.py",
+      "name": "refuse_agent_jobs_without_gateway",
+      "actions": [
+        "RefuseHeadless"
+      ],
+      "sha256": "c608fbe28c34435e4e55657ed71990fdc6643cb435e898db33ba741521fb2f5e",
+      "facts": [
+        {
+          "order": [
+            "_gateway_unavailable",
+            "_note_fire_refused"
+          ],
+          "mirrors": "finding_headless_refusal",
+          "why": "a refused agent job has its stamp erased after the scan may already have moved next_run_at (finding F-C)"
+        }
+      ]
+    },
+    {
+      "file": "cron/scheduler_gateway_gate.py",
+      "name": "_gateway_unavailable",
+      "actions": [
+        "RefuseHeadless"
+      ],
+      "sha256": "966514fe76530272eeb5601c4625a714dc9ec908b0f8d12997715e6a103c8acb"
+    },
+    {
+      "file": "cron/scheduler_gateway_gate.py",
+      "name": "_note_fire_refused",
+      "actions": [
+        "RefuseHeadless"
+      ],
+      "sha256": "c8ac742bd818a04ec20793b0e28584bb583e75e4e12b0f5d754e757c543e37f7",
+      "facts": [
+        {
+          "order": [
+            "job.pop('pending_slot')"
+          ],
+          "mirrors": "finding_headless_refusal",
+          "why": "the refusal erases pending_slot and leaves next_run_at where the scan put it (finding F-C)"
+        }
+      ]
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "advance_next_runs",
+      "actions": [
+        "AdvanceNextRuns"
+      ],
+      "sha256": "ca39053d889d8976cc1d1c93698e515d221d6b2e2142c04860fa96e9d15bc7b8",
+      "facts": [
+        {
+          "order": [
+            "_jobs_lock",
+            "load_jobs",
+            "compute_next_run",
+            "save_jobs"
+          ],
+          "mirrors": "AdvanceNextRuns atomicity",
+          "why": "the advance is one locked load-modify-save"
+        }
+      ]
+    },
+    {
+      "file": "cron/scheduler.py",
+      "name": "_submit_with_guard",
+      "actions": [
+        "SubmitWithGuard"
+      ],
+      "sha256": "b56bb38dd1903e04953ca25708704a5ae1809d2436ce39abefab408e029dc8fe",
+      "facts": [
+        {
+          "order": [
+            "try_register_running_job",
+            "create_execution",
+            "submit"
+          ],
+          "mirrors": "SubmitWithGuard",
+          "why": "an occurrence is registered in the running set before the worker is queued"
+        }
+      ]
+    },
+    {
+      "file": "cron/scheduler.py",
+      "name": "try_register_running_job",
+      "actions": [
+        "SubmitWithGuard"
+      ],
+      "sha256": "d632fd22bb294fcdeffe111c4817ab227943a5116411e58a8a39e79b7b3839ce"
+    },
+    {
+      "file": "cron/scheduler.py",
+      "name": "release_running_job",
+      "actions": [
+        "ClaimJobForFire",
+        "MarkJobRun"
+      ],
+      "sha256": "faebea95e4a9ad983547977fc836072d00ccd720efe3b794ddf1ff5a8db8c894"
+    },
+    {
+      "file": "cron/scheduler.py",
+      "name": "is_job_running",
+      "actions": [
+        "GetDueJobs",
+        "SubmitWithGuard"
+      ],
+      "sha256": "f9871b84f904948e841777dbba02e9c30d11774d4779b8c97c6b94ad8aa7e45c"
+    },
+    {
+      "file": "cron/scheduler.py",
+      "name": "_process_due_job",
+      "actions": [
+        "ClaimJobForFire"
+      ],
+      "sha256": "516a4d433946bcb7df1bc8088f1747d94206acba27c8c190d565ff792d77d067",
+      "facts": [
+        {
+          "order": [
+            "claim_job_for_fire",
+            "finish_execution",
+            "run_one_job"
+          ],
+          "mirrors": "ClaimJobForFire",
+          "why": "the worker claims before it runs and records a lost claim without running"
+        }
+      ]
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "claim_job_for_fire",
+      "actions": [
+        "ClaimJobForFire"
+      ],
+      "sha256": "1deb4579ab72f28e3e631fac31a02aca0fcf04d3f8fcb0b87089995bf3bd2920",
+      "facts": [
+        {
+          "order": [
+            "_claim_is_live",
+            "job.pop('pending_slot')",
+            "compute_next_run",
+            "save_jobs"
+          ],
+          "mirrors": "mutant_claim_keeps_stamp",
+          "why": "the claim checks for a live claim, then clears pending_slot and advances next_run_at in one save (finding F-D: the advance is not logged)"
+        }
+      ]
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "heartbeat_fire_claim",
+      "actions": [
+        "ClaimJobForFire"
+      ],
+      "sha256": "a9f565b3083cdaf8d47e4b220f0ef9f5965ccb8ac20f3b2b60ac01a9f2bbcaab"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "mark_job_run",
+      "actions": [
+        "MarkJobRun"
+      ],
+      "sha256": "04de45c1bcf3713fd16878748d65c67a542cb3cddc18c2638f9630db9f1f37d1",
+      "facts": [
+        {
+          "order": [
+            "_record_run_outcome",
+            "_advance_after_run",
+            "save_jobs"
+          ],
+          "mirrors": "MarkJobRun",
+          "why": "completion clears the claim and re-anchors in one save"
+        }
+      ]
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_record_run_outcome",
+      "actions": [
+        "MarkJobRun"
+      ],
+      "sha256": "def0ce25007cfc01b32c5e8bf6a38c246bc756545e36d2b6c78b265686351cc0",
+      "facts": [
+        {
+          "order": [
+            "job.pop('pending_slot')"
+          ],
+          "mirrors": "finding_stamp_erased",
+          "why": "completion clears pending_slot whatever dispatch wrote it (finding F-B)"
+        }
+      ]
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_advance_after_run",
+      "actions": [
+        "MarkJobRun"
+      ],
+      "sha256": "5cbd53d74648e04008db8996c75cef3884abe06fdbd1bf1064530c848e6f7598"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_claim_is_live",
+      "actions": [
+        "ExpireStamp",
+        "ClaimJobForFire",
+        "GetDueJobs"
+      ],
+      "sha256": "a1cdbfd89dfc4a9f9eca261efc71c7b5b6f368d67ea355681188be08d1f2aff8"
+    },
+    {
+      "file": "cron/scheduler_ownership.py",
+      "name": "_claim_owner_is_dead",
+      "actions": [
+        "GetDueJobs",
+        "ClaimJobForFire"
+      ],
+      "sha256": "415545e56e4100772202bfb56eed387357a8d75c4ad7416779b435b015495bff"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_machine_id",
+      "actions": [
+        "GetDueJobs",
+        "ClaimJobForFire"
+      ],
+      "sha256": "5f6bc234a6d4004db9923a9eb0fcb1e4eefcc410a4d7172d5ebb9ac9732926db"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_job_running_in_this_process",
+      "actions": [
+        "GetDueJobs"
+      ],
+      "sha256": "58c265bc8623deec9aa40bd07930d72adefe9d84c834ef93bc936b2a8658103f"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_jobs_lock",
+      "actions": [
+        "GetDueJobs",
+        "AdvanceNextRuns",
+        "ClaimJobForFire",
+        "MarkJobRun"
+      ],
+      "sha256": "9eb28fab47700f6a213fc9f4de21369d9a2316128d0b3c49af6c7a1fc42bd6c3"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_with_job",
+      "actions": [
+        "ClaimJobForFire",
+        "MarkJobRun"
+      ],
+      "sha256": "2a3362c32783ffa666059afa61d4f679e3f5e6d392caaae179c16637c89c1afd"
+    },
+    {
+      "file": "cron/jobs.py",
+      "name": "_under_fire_fence",
+      "actions": [
+        "ClaimJobForFire",
+        "MarkJobRun"
+      ],
+      "sha256": "890f7dfbbb5e9186a1cf48c6e94fd1b8735a10da763cf390ccbba0c94cb16514"
+    },
+    {
+      "file": "cron/constants.py",
+      "name": "FIRE_CLAIM_TTL_SECONDS",
+      "actions": [
+        "ExpireStamp"
+      ],
+      "sha256": "f1a26b58556edcae1cf444a05dc92a33c365e84d540c62f54824b2df6e5774d3"
+    }
+  ]
+}
