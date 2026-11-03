@@ -1208,6 +1208,7 @@ def _run_review_fork(
                     "at runtime — do not attempt them." + prompt_extra
                 ),
                 conversation_history=_digest_history(messages_snapshot) if _routed else messages_snapshot,
+                synthetic_turn=True,
             )
     finally:
         clear_thread_tool_whitelist()

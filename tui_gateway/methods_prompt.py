@@ -875,6 +875,7 @@ def _(rid, params: dict) -> dict:
         # A rewind replays what the transcript shows: re-expand a skill invocation or
         # `/work fix it` sends nine literal chars.
         text = _expand_skill_invocation_for_replay(text, str(session.get("session_key") or ""))
+        _note_expanded_send(session, text)
     turn_isolation = _session_uses_compute_host(session, _load_dashboard_process_isolation_config())
     if internal_hosted_submit and turn_isolation:
         return _err(rid, 4121, "hosted room turns do not support isolated compute workers yet")
@@ -920,9 +921,6 @@ def _(rid, params: dict) -> dict:
     if err is not None:
         return err
     if turn_isolation:
-        if turn_author:
-            logger.debug("isolated compute turns carry no author yet; the turn from %s runs unattributed",
-                         turn_author.get("id"))
         # The isolated dispatch returns BELOW before the inline persist, so the reopen
         # cannot live only in _persist_session_row_for_submit: the turn is already
         # admitted here (running, in flight, active-slot lease claimed, truncation
@@ -937,7 +935,8 @@ def _(rid, params: dict) -> dict:
             logger.debug("finalized-session reopen before isolated dispatch failed for %s",
                          sid, exc_info=True)
         isolated_response = _submit_prompt_to_compute_host(
-            rid, sid, session, text, display_kind=display_kind, display_metadata=display_metadata)
+            rid, sid, session, text, display_kind=display_kind, display_metadata=display_metadata,
+            turn_author=turn_author, synthetic_turn=bool(display_kind))
         if not isolated_response.get("error"):
             # The truncation already happened inline above (memory + DB).
             isolated_response["result"].update(survivor_fields)
@@ -1257,7 +1256,7 @@ def _(rid, params: dict) -> dict:
             **_ephemeral_preview_agent_kwargs(session["agent"], task_id),
             **_preview_restart_callbacks(parent, task_id),
         ).run_conversation(
-            user_message=prompt, task_id=task_id, conversation_history=parent_history or None)
+            user_message=prompt, task_id=task_id, conversation_history=parent_history or None, synthetic_turn=True)
         return _final_response_text(result)
 
     def cleanup():

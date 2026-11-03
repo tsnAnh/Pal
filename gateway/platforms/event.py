@@ -137,6 +137,7 @@ class MessageEvent:
     # unknown). For adapters whose ``media_urls`` are random cache names (relay); the name is
     # display data only, never a path. Appended for positional compat.
     media_filenames: list[str] = field(default_factory=list)
+    typed_text: Optional[str] = field(default=None, repr=False, compare=False)
 
     # Process-local admission receipt, never routing metadata or execution acknowledgement.
     _gateway_accepted: bool = field(default=False, init=False, repr=False, compare=False)
@@ -146,6 +147,15 @@ class MessageEvent:
     _admitted_before_drain: bool = field(default=False, init=False, repr=False, compare=False)
     # Run-owned final presentation snapshot; never deserialized from ingress metadata.
     _notification_reply_muted: Optional[bool] = field(default=None, init=False, repr=False, compare=False)
+
+    def stamp_typed_text(self) -> None:
+        if self.typed_text is None and isinstance(self.text, str):
+            self.typed_text = self.text
+
+    def typed_message(self) -> Optional[str]:
+        if self.internal or self.media_urls or not isinstance(self.typed_text, str):
+            return None
+        return self.typed_text
 
     def absorb_reply_expected(self, other: "MessageEvent") -> None:
         """One turn now answers *other* too: an addressed message wins, then an unknown one."""

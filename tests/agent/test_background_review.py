@@ -223,6 +223,33 @@ def test_background_review_releases_clients_without_closing_shared_session(monke
     ]
 
 
+def test_background_review_fork_runs_a_synthetic_turn(monkeypatch):
+    """The fork replays the owner's transcript with the reviewer prompt as its user message; a plugin must not take
+    that message for something the owner typed."""
+    seen = {}
+
+    class FakeReviewAgent:
+        def __init__(self, **kwargs):
+            self._session_messages = []
+
+        def run_conversation(self, **kwargs):
+            seen.update(kwargs)
+
+        def close(self):
+            pass
+
+        def release_clients(self):
+            pass
+
+    monkeypatch.setattr(run_agent_module, "AIAgent", FakeReviewAgent)
+    monkeypatch.setattr(run_agent_module.threading, "Thread", ImmediateThread)
+
+    AIAgent._spawn_background_review(
+        _bare_agent(), messages_snapshot=[{"role": "user", "content": "hello"}], review_memory=True)
+
+    assert seen["synthetic_turn"] is True
+
+
 def test_background_review_fork_opts_out_of_session_finalization(monkeypatch):
     """The review fork shares the parent's live session_id, so it must set
     ``_end_session_on_close = False``. Otherwise close() (now finalizing owned

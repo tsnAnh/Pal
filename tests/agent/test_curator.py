@@ -1020,6 +1020,32 @@ def test_review_fork_restricts_toolsets_to_skills_only(curator_env, monkeypatch)
     )
 
 
+def test_curator_review_fork_runs_a_synthetic_turn(curator_env, monkeypatch):
+    curator = curator_env["curator"]
+    import importlib
+    importlib.reload(curator)
+    seen = {}
+
+    class _StubAgent:
+        def __init__(self, *args, **kwargs):
+            self._memory_write_origin = "assistant_tool"
+            self._memory_nudge_interval = 0
+            self._skill_nudge_interval = 0
+            self._session_messages = []
+
+        def run_conversation(self, user_message=None, **kwargs):
+            seen.update(kwargs)
+            return {"final_response": "no change"}
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("run_agent.AIAgent", _StubAgent)
+
+    assert curator._run_llm_review("review prompt").get("error") is None
+    assert seen["synthetic_turn"] is True
+
+
 def test_review_fork_toolset_surface_excludes_execution_tools():
     """The fork's toolset kwarg must resolve to a surface with no shell access.
 

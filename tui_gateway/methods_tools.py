@@ -1004,6 +1004,12 @@ _SLASH_BUILTINS = {
     "compress": _cmd_compress, "compact": _cmd_compress,
     "memory": _cmd_memory, "skills": _cmd_skills}
 
+def _note_dispatch_sends(session, res):
+    result = res.get("result") if isinstance(res, dict) else None
+    if isinstance(result, dict) and result.get("type") in ("send", "skill"):
+        _note_expanded_send(session, result.get("message"))
+
+
 @method("command.dispatch")
 def _(rid, params: dict) -> dict:
     name, arg = _resolve_name(params.get("name", "").lstrip("/")), params.get("arg", "")
@@ -1018,6 +1024,7 @@ def _(rid, params: dict) -> dict:
         for stage in filter(None, stages):
             res = stage(rid, params, session, name, arg)
             if res is not None:
+                _note_dispatch_sends(session, res)
                 if name in _SESSION_CONTROL_SLASHES and "error" not in res:
                     _publish_session_control_snapshot(params.get("session_id", ""), session)
                 return res

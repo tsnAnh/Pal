@@ -159,7 +159,8 @@ class TestForkPath:
         calls = {}
 
         class FakeFork:
-            def run_conversation(self, user_message, conversation_history):
+            def run_conversation(self, user_message, conversation_history, synthetic_turn=False):
+                calls["synthetic_turn"] = synthetic_turn
                 calls["user_message"] = user_message
                 calls["history"] = conversation_history
                 return {"final_response": "it was foo.py"}
@@ -193,6 +194,7 @@ class TestForkPath:
         assert calls["history"] == history  # full snapshot replayed verbatim
         assert "which file?" in calls["user_message"]
         assert calls["write_origin"] == "side_question"
+        assert calls["synthetic_turn"] is True
 
     def test_fork_teardown_leaves_the_sessions_terminal_environment(self):
         """The /btw fork shares the live session's id, which keys its terminal sandbox: a real

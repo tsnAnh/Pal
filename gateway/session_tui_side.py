@@ -287,7 +287,7 @@ async def preview_restart(connection, ref, params):
                                     tool_start_callback=lambda _id, name, _args: progress(f'Running {name}'))
                 holder[0] = agent
                 result = agent.run_conversation(user_message=prompt, task_id=task_id,
-                                                conversation_history=history or None)
+                                                conversation_history=history or None, synthetic_turn=True)
             finally:
                 with contextlib.suppress(Exception):
                     from tools.terminal_tool import clear_task_env_overrides

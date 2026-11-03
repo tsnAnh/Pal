@@ -77,6 +77,7 @@ class GatewayInboundHooksMixin:
         from gateway.session_ingress import executing_admission
         if executing_admission.get():
             return event
+        event.stamp_typed_text()
         try:
             from hermes_cli.lifecycle import ainvoke_hook as _ainvoke_hook
             _hook_results = await _ainvoke_hook(

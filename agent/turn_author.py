@@ -16,6 +16,8 @@ TURN_AUTHOR_ENV = "HERMES_TURN_AUTHOR"
 
 _MAX_FIELD_LEN = 200
 
+SYNTHETIC_PLATFORMS = frozenset({"cron", "webhook"})
+
 
 _DROPPED_CATEGORIES = frozenset({"Cc", "Cs", "Cn", "Co"})
 _TRUTHY = frozenset({"true", "1", "yes"})
@@ -53,6 +55,22 @@ def local_origin() -> str:
         return ""
     # A slash would split the id into a different origin and profile at parse time.
     return (_clean_text(host) or "").replace("/", "")
+
+
+def is_synthetic_turn(explicit: bool, platform: Any) -> bool:
+    """A turn Hermes injected itself: the dispatcher said so (``explicit``), the agent runs on a platform
+    whose turns are never typed by a person (cron jobs, webhook deliveries), or it is a delegate_task child
+    whose user message is the parent model's goal."""
+    from agent.delegation_context import is_delegated_child_context
+
+    return (bool(explicit) or str(platform or "").strip().lower() in SYNTHETIC_PLATFORMS
+            or is_delegated_child_context())
+
+
+def parse_turn_origin(typed_message: Any, context_expanded: Any) -> tuple[Optional[str], bool]:
+    if not isinstance(typed_message, str):
+        return None, True
+    return typed_message, context_expanded is not False
 
 
 def parse_turn_author(raw: Any) -> Optional[dict[str, Any]]:

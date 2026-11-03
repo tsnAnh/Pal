@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 AGENT_TOOL_MARKER_ENV = "HERMES_AGENT_TOOL_CONTEXT"
 GRANT_ENV = "HERMES_PROFILE_ADMIN_GRANT"
+TURN_ID_ENV = "HERMES_TURN_ID"
 GRANT_TTL_SECONDS = 120
 DENIED_MESSAGE = "Creating or deleting bots needs your approval in an interactive session."
 SHARED_MCP_DENIED_MESSAGE = (
@@ -57,12 +58,26 @@ def agent_tool_env(env: MutableMapping[str, str]) -> MutableMapping[str, str]:
     token = _scoped_grant.get()
     if token:
         env[GRANT_ENV] = token
+    env.pop(TURN_ID_ENV, None)
+    turn_id = tool_turn_id()
+    if turn_id:
+        env[TURN_ID_ENV] = turn_id
     return env
+
+
+def tool_turn_id() -> str:
+    from agent.delegation_context import is_delegated_child_context
+    from tools.approval_context import get_current_turn_id
+
+    if is_delegated_child_context():
+        return ""
+    return get_current_turn_id()
 
 
 def leave_agent_context() -> None:
     os.environ.pop(AGENT_TOOL_MARKER_ENV, None)
     os.environ.pop(GRANT_ENV, None)
+    os.environ.pop(TURN_ID_ENV, None)
 
 
 def verified_grant(token: str | None, command: str) -> str:
