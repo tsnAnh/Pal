@@ -1539,7 +1539,7 @@ export interface ConnectorPolicySetResult {
   revision: string
   effective: ConnectorPolicyEffectiveUnrestricted | ConnectorPolicyEffectiveDenyAll | ConnectorPolicyEffectiveAllow | ConnectorPolicyEffectiveDeny
 }
-/** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. */
+/** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. Each bot has its own screen and its own Chrome, which runs on a copy of the machine's one master Chrome profile: refreshed from master when that Chrome starts, written back when it exits. ``profile_copy_synced_at`` is the last refresh or write-back (epoch seconds, null before the first). ``chrome`` is null when the screen runs inside a sandbox the gateway cannot see into. ``shared_files_path`` is the one files folder every bot on this machine shares (``~``-relative), null for a sandboxed screen. */
 export interface DisplayStatus {
   profile: string
   supported: boolean
@@ -1557,6 +1557,10 @@ export interface DisplayStatus {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
   disk?: DisplayDisk | null
@@ -1567,6 +1571,8 @@ export interface DisplayImageSwitch {
   target_image: string
   containers: number
 }
+export type DisplayScreenState = 'running' | 'stopped' | 'starting'
+export type DisplayChromeState = 'running' | 'stopped'
 /** ``tools/bot_desktop/lease.py::Lease`` as clients may see it: the holder's viewer id is a capability and never leaves the gateway; ``viewer_hash`` lets the holder recognise itself. */
 export interface DisplayLease {
   holder: LeaseHolder
@@ -1613,6 +1619,10 @@ export interface DisplayStopResult {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
   disk?: DisplayDisk | null
@@ -1622,7 +1632,7 @@ export interface DisplayResetParams {
   profile?: string | null
   force?: boolean | null
 }
-/** ``reset`` names what was wiped (the desktop settings ``xdg`` and the ``browser-profile`` with its logins); an already-clean screen answers an empty list. */
+/** ``reset`` names what was wiped (the desktop settings ``xdg`` and this bot's ``browser-profile`` copy); an already-clean screen answers an empty list. The master Chrome profile, the shared files folder and other bots are never touched; unsynced changes in this bot's copy are discarded, and its next Chrome start is seeded from master again. */
 export interface DisplayResetResult {
   profile: string
   supported: boolean
@@ -1640,6 +1650,10 @@ export interface DisplayResetResult {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
   disk?: DisplayDisk | null
@@ -1666,6 +1680,10 @@ export interface DisplayObserveResult {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
   disk?: DisplayDisk | null
@@ -1694,6 +1712,10 @@ export interface DisplaySwitchSandboxImageResult {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
   disk?: DisplayDisk | null
@@ -6202,6 +6224,10 @@ export interface DisplayStatusPayload {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
   disk?: DisplayDisk | null
@@ -6806,7 +6832,7 @@ export interface RpcMethods {
   'display.lease.resolve': { params: DisplayLeaseResolveParams; result: DisplayLeaseResult }
   /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
   'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
-  /** Stop the screen and wipe its desktop settings and browser data. Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen. */
+  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen. */
   'display.reset': { params: DisplayResetParams; result: DisplayResetResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }
@@ -7619,7 +7645,7 @@ export interface CanonicalRpcMethods {
   'display.lease.release': { params: DisplayLeaseReleaseParams; result: DisplayLeaseResult }
   /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
   'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
-  /** Stop the screen and wipe its desktop settings and browser data. Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen. */
+  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen. */
   'display.reset': { params: DisplayResetParams; result: DisplayResetResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }

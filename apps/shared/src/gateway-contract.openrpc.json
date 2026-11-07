@@ -1088,7 +1088,7 @@
     },
     {
       "name": "display.reset",
-      "summary": "Stop the screen and wipe its desktop settings and browser data. Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen.",
+      "summary": "Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen.",
       "params": [
         {
           "name": "params",
@@ -19295,6 +19295,14 @@
         "title": "DispatchType",
         "type": "string"
       },
+      "DisplayChromeState": {
+        "enum": [
+          "running",
+          "stopped"
+        ],
+        "title": "DisplayChromeState",
+        "type": "string"
+      },
       "DisplayDisk": {
         "additionalProperties": false,
         "description": "The disk the bot's screen and browser data live on: ``critical`` below 512 MB free or 97% used,\n``low`` below 2 GB free or 90% used.",
@@ -19822,6 +19830,45 @@
             ],
             "default": null
           },
+          "screen": {
+            "$ref": "#/components/schemas/DisplayScreenState",
+            "default": "stopped"
+          },
+          "chrome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayChromeState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "profile_copy_synced_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Copy Synced At"
+          },
+          "shared_files_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Shared Files Path"
+          },
           "lease": {
             "$ref": "#/components/schemas/DisplayLease"
           },
@@ -19902,7 +19949,7 @@
       },
       "DisplayResetResult": {
         "additionalProperties": false,
-        "description": "``reset`` names what was wiped (the desktop settings ``xdg`` and the ``browser-profile`` with its\nlogins); an already-clean screen answers an empty list.",
+        "description": "``reset`` names what was wiped (the desktop settings ``xdg`` and this bot's ``browser-profile`` copy);\nan already-clean screen answers an empty list. The master Chrome profile, the shared files folder and\nother bots are never touched; unsynced changes in this bot's copy are discarded, and its next Chrome\nstart is seeded from master again.",
         "properties": {
           "profile": {
             "title": "Profile",
@@ -20042,6 +20089,45 @@
               }
             ],
             "default": null
+          },
+          "screen": {
+            "$ref": "#/components/schemas/DisplayScreenState",
+            "default": "stopped"
+          },
+          "chrome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayChromeState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "profile_copy_synced_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Copy Synced At"
+          },
+          "shared_files_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Shared Files Path"
           },
           "lease": {
             "$ref": "#/components/schemas/DisplayLease"
@@ -20083,9 +20169,18 @@
         "title": "DisplayResetResult",
         "type": "object"
       },
+      "DisplayScreenState": {
+        "enum": [
+          "running",
+          "stopped",
+          "starting"
+        ],
+        "title": "DisplayScreenState",
+        "type": "string"
+      },
       "DisplayStatus": {
         "additionalProperties": false,
-        "description": "``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for.",
+        "description": "``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for.\n\nEach bot has its own screen and its own Chrome, which runs on a copy of the machine's one master Chrome\nprofile: refreshed from master when that Chrome starts, written back when it exits.\n``profile_copy_synced_at`` is the last refresh or write-back (epoch seconds, null before the first).\n``chrome`` is null when the screen runs inside a sandbox the gateway cannot see into.\n``shared_files_path`` is the one files folder every bot on this machine shares (``~``-relative),\nnull for a sandboxed screen.",
         "properties": {
           "profile": {
             "title": "Profile",
@@ -20225,6 +20320,45 @@
               }
             ],
             "default": null
+          },
+          "screen": {
+            "$ref": "#/components/schemas/DisplayScreenState",
+            "default": "stopped"
+          },
+          "chrome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayChromeState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "profile_copy_synced_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Copy Synced At"
+          },
+          "shared_files_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Shared Files Path"
           },
           "lease": {
             "$ref": "#/components/schemas/DisplayLease"
@@ -20399,6 +20533,45 @@
               }
             ],
             "default": null
+          },
+          "screen": {
+            "$ref": "#/components/schemas/DisplayScreenState",
+            "default": "stopped"
+          },
+          "chrome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayChromeState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "profile_copy_synced_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Copy Synced At"
+          },
+          "shared_files_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Shared Files Path"
           },
           "lease": {
             "$ref": "#/components/schemas/DisplayLease"
@@ -20605,6 +20778,45 @@
             ],
             "default": null
           },
+          "screen": {
+            "$ref": "#/components/schemas/DisplayScreenState",
+            "default": "stopped"
+          },
+          "chrome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayChromeState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "profile_copy_synced_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Copy Synced At"
+          },
+          "shared_files_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Shared Files Path"
+          },
           "lease": {
             "$ref": "#/components/schemas/DisplayLease"
           },
@@ -20807,6 +21019,45 @@
               }
             ],
             "default": null
+          },
+          "screen": {
+            "$ref": "#/components/schemas/DisplayScreenState",
+            "default": "stopped"
+          },
+          "chrome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DisplayChromeState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "profile_copy_synced_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Copy Synced At"
+          },
+          "shared_files_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Shared Files Path"
           },
           "lease": {
             "$ref": "#/components/schemas/DisplayLease"
@@ -53218,7 +53469,7 @@
     },
     {
       "name": "display.reset",
-      "summary": "Stop the screen and wipe its desktop settings and browser data. Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen.",
+      "summary": "Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen.",
       "params": [
         {
           "name": "params",
