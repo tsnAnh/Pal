@@ -10,4 +10,5 @@ BOT_MODE_DEFAULTS = {
     # profile with a cross-process file lock.
     "turn_wait_seconds": 120,
     "notifications": False,
+    "primary_profile": "default",
 }

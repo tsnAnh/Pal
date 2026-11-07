@@ -154,6 +154,7 @@ class ProfileRow(Result):
     name: str
     path: str
     is_default: bool = False
+    is_primary: bool = False
     model: str | None = None
     provider: str | None = None
     description: str = ""

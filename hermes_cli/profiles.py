@@ -1706,6 +1706,9 @@ def delete_profile(name: str, yes: bool = False) -> Path:
     canon = normalize_profile_name(name)
     if canon == "default":
         raise ValueError("Cannot delete the default profile (~/.hermes).\nTo remove everything, use: hermes uninstall")
+    from hermes_cli.primary_profile import primary_profile_name
+    if canon == primary_profile_name():
+        raise ValueError(f"Cannot delete '{canon}': it is the primary bot. Make another bot primary first.")
     canon, profile_dir = _existing_profile_dir(canon)
     gw_running = _check_gateway_running(profile_dir)
     wrapper_path = _find_our_wrapper(canon)
@@ -2258,6 +2261,8 @@ def rename_profile(old_name: str, new_name: str) -> Path:
         raise _unknown_profile_error(old_canon)
     if new_dir.exists():
         raise _profile_exists_error(new_canon)
+    from hermes_cli.primary_profile import primary_profile_name
+    was_primary = primary_profile_name() == old_canon
 
     # 1. Remove the old name's service even when its gateway is stopped: the unit is named after
     # the old profile and runs ``--profile <old>``, so the service manager would crash-loop it on
@@ -2307,6 +2312,12 @@ def rename_profile(old_name: str, new_name: str) -> Path:
     # resurrect it, and a future profile reusing the old name must not read as deleted.
     if live_mux:
         clear_named_profile_deleted(old_dir)
+    if was_primary:
+        from hermes_cli.primary_profile import set_primary_profile
+        try:
+            set_primary_profile(new_canon)
+        except OSError:
+            logger.warning("Renamed the primary bot but could not move the primary pointer", exc_info=True)
 
     # 2b. Record the rename so Bot Mode group chats can re-link persisted
     # member descriptors to the new slug (#110200). Best-effort: a metadata

@@ -285,13 +285,15 @@ def _profile_ui_meta_fields(row: dict, profile_dir) -> None:
 def _(rid, params: dict) -> dict:
     """List Hermes profiles. ``include_sessions`` (default true) adds ``last_session`` /
     ``worker_session`` / ``canonical_session`` so a roster paints previews without N calls."""
+    from hermes_cli.primary_profile import primary_profile_name
     from hermes_cli.profiles import list_profiles
+    primary = primary_profile_name()
     include_sessions = is_truthy_value(params.get("include_sessions", True))
     include_routines = is_truthy_value(params.get("include_routines", False))
     out = []
     # Roster polls this every 5s: ``skill_count`` is the last known value, refreshed off-request.
     for p in list_profiles(lazy_skill_count=True):
-        row = {"name": p.name, "path": str(p.path), "is_default": bool(p.is_default), "model": p.model,
+        row = {"name": p.name, "path": str(p.path), "is_default": bool(p.is_default), "is_primary": p.name == primary, "model": p.model,
                "provider": p.provider, "description": p.description or "",
                "display_name": p.display_name or "", "skill_count": p.skill_count or 0,
                "previous_names": list(p.previous_names or [])}
