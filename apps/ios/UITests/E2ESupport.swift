@@ -54,14 +54,16 @@ class E2ETestCase: XCTestCase {
         XCTAssertTrue(web.waitForExistence(timeout: 20), app.debugDescription)
         let userField = web.textFields.firstMatch
         XCTAssertTrue(userField.waitForExistence(timeout: 20), app.debugDescription)
-        userField.tap()
-        userField.typeText(env.username)
         let passwordField = web.secureTextFields.firstMatch
-        let done = app.buttons["Done"]
-        if done.waitForExistence(timeout: 3) { done.tap() }
+        XCTAssertTrue(passwordField.waitForExistence(timeout: 20), app.debugDescription)
         passwordField.tap()
         passwordField.typeText(env.password)
-        web.buttons.matching(NSPredicate(format: "label ==[c] %@", "Sign in")).firstMatch.tap()
+        userField.tap()
+        userField.typeText(env.username + "\n")
+        if !roster(app).waitForExistence(timeout: 8) {
+            let submit = web.buttons.matching(NSPredicate(format: "label ==[c] %@", "Sign in")).firstMatch
+            if submit.exists, submit.isHittable { submit.tap() }
+        }
         XCTAssertTrue(roster(app).waitForExistence(timeout: 40), app.debugDescription)
     }
 
@@ -99,7 +101,14 @@ class E2ETestCase: XCTestCase {
     }
 
     func shot(_ app: XCUIApplication, _ name: String) {
-        let screenshot = app.screenshot()
+        store(app.screenshot(), named: name)
+    }
+
+    func screenShot(_ name: String) {
+        store(XCUIScreen.main.screenshot(), named: name)
+    }
+
+    private func store(_ screenshot: XCUIScreenshot, named name: String) {
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
