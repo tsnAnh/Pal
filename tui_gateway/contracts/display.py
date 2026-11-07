@@ -44,6 +44,22 @@ class DisplayImageSwitch(Result):
     containers: int
 
 
+class DisplayDiskLevel(WireEnum):
+    normal = "normal"
+    low = "low"
+    critical = "critical"
+
+
+class DisplayDisk(Result):
+    """The disk the bot's screen and browser data live on: ``critical`` below 512 MB free or 97% used,
+    ``low`` below 2 GB free or 90% used."""
+
+    level: DisplayDiskLevel
+    free_mb: int
+    total_mb: int
+    used_pct: int
+
+
 class DisplayStatus(Result):
     """``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for."""
 
@@ -65,6 +81,7 @@ class DisplayStatus(Result):
     image_switch: DisplayImageSwitch | None = None  # a default-image switch the pane may approve (docker placement)
     lease: DisplayLease
     profile_key: str
+    disk: DisplayDisk | None = None
 
 
 # ── methods ───────────────────────────────────────────────────────────────────────────────────
@@ -99,6 +116,21 @@ class DisplayStopResult(DisplayStatus):
 
 method("display.stop", params=DisplayStopParams, result=DisplayStopResult,
        doc="Stop the screen. Refused (5300, code viewer_mismatch) while a human holds unless force.")
+
+
+class DisplayResetParams(ProfileParams):
+    force: bool | None = None  # reset even while a human holds control
+
+
+class DisplayResetResult(DisplayStatus):
+    """``reset`` names what was wiped (the desktop settings ``xdg`` and the ``browser-profile`` with its
+    logins); an already-clean screen answers an empty list."""
+
+    reset: list[str]
+
+
+method("display.reset", params=DisplayResetParams, result=DisplayResetResult,
+       doc="Stop the screen and wipe its desktop settings and browser data. Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen.")
 
 
 class DisplayObserveParams(ProfileParams):

@@ -155,6 +155,15 @@ def gave_native_app(request: Request, session) -> None:
             _write(home / RECORD_PATH, records)
 
 
+def forget_native_tokens(home: Optional[Path], *tokens: str) -> int:
+    with _records_lock:
+        records = _loaded(home)
+        forgotten = sum(1 for token in tokens if token and records.pop(_digest(token), None) is not None)
+        if forgotten and home is not None:
+            _write(home / RECORD_PATH, records)
+    return forgotten
+
+
 def _digest(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 

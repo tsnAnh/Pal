@@ -915,6 +915,36 @@ def stop(still_due: Optional[Callable[[], bool]] = None) -> bool:
         return _stop_locked(sd)
 
 
+RESETTABLE_STATE = ("xdg", "browser-profile")
+
+
+class ResetRefused(RuntimeError):
+    pass
+
+
+def reset() -> list[str]:
+    from tools.bot_desktop import sandbox_host
+    if sandbox_host._read_marker() or placement.resolve().where == placement.TERMINAL:
+        raise ResetRefused("This bot's screen runs in a sandbox; reset it from there.")
+    stop()
+    if is_running():
+        raise ResetRefused("The screen is still shutting down. Try again in a moment.")
+    sd = state_dir()
+    sd.mkdir(parents=True, exist_ok=True)
+    removed = []
+    with _flocked(sd / "start.lock"):
+        for name in RESETTABLE_STATE:
+            target = sd / name
+            if target.is_symlink():
+                target.unlink()
+            elif target.is_dir():
+                shutil.rmtree(target)
+            else:
+                continue
+            removed.append(name)
+    return removed
+
+
 def _stop_locked(sd: Path) -> bool:
     pid = _launcher_pid()
     if pid is None:

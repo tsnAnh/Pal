@@ -140,3 +140,23 @@ class MemoryImportResult(Result):
 
 method("memory.import", params=MemoryImportParams, result=MemoryImportResult,
        doc="Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned.")
+
+
+class AuthRevokeSelfParams(Params):
+    """The caller's own native sign-in tokens: holding the refresh token is the proof of ownership."""
+
+    refresh_token: str
+    access_token: str | None = None
+
+
+class AuthRevokeSelfResult(Result):
+    """``providers_revoked`` counts the sign-in providers that accepted the revocation; ``forgotten`` the
+    recorded native tokens (refresh and access) the gateway stopped honouring at once."""
+
+    ok: bool
+    providers_revoked: int
+    forgotten: int
+
+
+method("auth.revoke_self", params=AuthRevokeSelfParams, result=AuthRevokeSelfResult,
+       doc="Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record.")

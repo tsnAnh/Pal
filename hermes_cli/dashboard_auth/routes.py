@@ -33,7 +33,7 @@ from starlette.concurrency import run_in_threadpool
 
 from hermes_cli import webapp_sign_in
 from hermes_cli.dashboard_auth import (
-    get_provider, list_interactive_providers, list_providers, list_session_providers,
+    get_provider, list_interactive_providers, list_session_providers,
     native_flow)
 from hermes_cli.dashboard_auth import prefix as _prefix_mod
 from hermes_cli.dashboard_auth.audit import AuditEvent, audit_log
@@ -46,6 +46,7 @@ from hermes_cli.dashboard_auth.cookies import (
 from hermes_cli.dashboard_auth.login_page import (
     render_login_html, render_native_provider_choice_html)
 from hermes_cli.dashboard_auth.refresh_singleflight import refresh_session_coalesced
+from hermes_cli.dashboard_auth.revoke import revoke_refresh_token
 from hermes_cli.dashboard_auth.request_utils import (
     access_token_max_age, client_ip as _client_ip, is_safe_next_path)
 
@@ -514,12 +515,8 @@ async def auth_password_login(request: Request, body: _PasswordLoginBody):
 @router.post("/auth/logout", name="auth_logout")
 async def auth_logout(request: Request):
     _at, rt = read_session_cookies(request, webapp_sign_in.cookie_gateway(request))
-    # Best-effort revoke on every provider; failures logged, never raised.
-    for provider in list_providers() if rt else ():
-        try:
-            provider.revoke_session(refresh_token=rt)
-        except Exception as e:
-            _log.warning("dashboard-auth: revoke on %r failed: %s", provider.name, e)
+    if rt:
+        revoke_refresh_token(rt)
     sess = getattr(request.state, "session", None)
     _audit(request, AuditEvent.LOGOUT, provider=(sess.provider if sess else "unknown"),
            user_id=(sess.user_id if sess else ""))

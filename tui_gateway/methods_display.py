@@ -31,8 +31,10 @@ _lease_listener_installed = threading.Event()
 def _display_snapshot() -> dict:
     from hermes_constants import hermes_home_key
     from tools.bot_desktop import lease as _bd_lease, runtime as _bd_runtime
+    from tools.bot_desktop.disk import disk_status
     st = _bd_runtime.status()
-    return {**st.as_dict(), "lease": _bd_lease.public_view(_bd_lease.get()), "profile_key": hermes_home_key()}
+    return {**st.as_dict(), "lease": _bd_lease.public_view(_bd_lease.get()), "profile_key": hermes_home_key(),
+            "disk": disk_status()}
 
 
 def _install_lease_listener() -> None:
@@ -105,6 +107,22 @@ def _(rid, params: dict) -> dict:
     try:
         stopped = _bd_runtime.stop()
         return _ok(rid, {**_display_snapshot(), "stopped": stopped})
+    except Exception as e:
+        return _err(rid, _DISPLAY_ERR, str(e))
+
+
+@method("display.reset")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    from tools.bot_desktop import lease as _bd_lease, runtime as _bd_runtime
+    if _bd_lease.release(unless_human=not bool(params.get("force"))).holder == _bd_lease.HUMAN:
+        return _err(rid, _DISPLAY_ERR, "a human holds this screen; pass force: true to reset it anyway",
+                    data={"code": "viewer_mismatch"})
+    try:
+        removed = _bd_runtime.reset()
+        return _ok(rid, {**_display_snapshot(), "reset": removed})
+    except _bd_runtime.ResetRefused as e:
+        return _err(rid, _DISPLAY_ERR, str(e))
     except Exception as e:
         return _err(rid, _DISPLAY_ERR, str(e))
 
