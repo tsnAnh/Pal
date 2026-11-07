@@ -287,6 +287,7 @@ def _(rid, params: dict) -> dict:
     ``worker_session`` / ``canonical_session`` so a roster paints previews without N calls."""
     from hermes_cli.profiles import list_profiles
     include_sessions = is_truthy_value(params.get("include_sessions", True))
+    include_routines = is_truthy_value(params.get("include_routines", False))
     out = []
     # Roster polls this every 5s: ``skill_count`` is the last known value, refreshed off-request.
     for p in list_profiles(lazy_skill_count=True):
@@ -297,6 +298,9 @@ def _(rid, params: dict) -> dict:
         if include_sessions:
             _profile_session_fields(row, p.path)
         _profile_ui_meta_fields(row, Path(str(p.path)))
+        if include_routines:
+            row["routines_enabled"] = _try(
+                lambda: _lazy("tui_gateway.cron_routine_actions", "enabled_routine_count")(p.path), None)
         out.append(row)
     # bot_mode_protocol: this backend injects the Bot Mode teammate-messaging protocol into every
     # session, so clients must not append it to SOUL.md. install_id (same value as /api/status)

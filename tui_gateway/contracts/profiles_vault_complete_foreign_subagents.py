@@ -167,10 +167,12 @@ class ProfileRow(Result):
     ui_meta: dict[str, JsonValue] | None = None
     has_avatar: bool = False
     onboarding_pending: bool = False
+    routines_enabled: int | None = None
 
 
 class ProfilesListParams(ProfileParams):
     include_sessions: bool | str | None = None
+    include_routines: bool | str | None = None
 
 
 class ProfilesListResult(Result):
