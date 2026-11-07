@@ -260,6 +260,8 @@ class AuthorityConnection:
         handlers.update(device_handlers(self))
         from gateway.session_reach_controls import handlers as reach_handlers
         handlers.update(reach_handlers(self))
+        from gateway.session_device_controls import handlers as device_connector_handlers
+        handlers.update(device_connector_handlers(self))
         from gateway.session_images import attach_bytes
         from functools import partial
         handlers['image.attach_bytes'] = partial(attach_bytes, self)
@@ -968,3 +970,5 @@ class AuthorityConnection:
         self.authority.events.pop(self.actor.transport_id, None)
         from gateway.session_presence_controls import departed
         await departed(self)
+        from gateway.device_tools import forget_transport
+        forget_transport(self.transport)

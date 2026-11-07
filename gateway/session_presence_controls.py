@@ -5,6 +5,7 @@ import logging
 import sqlite3
 import time
 from functools import partial
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -13,6 +14,10 @@ from gateway.reach_presence import AttentionState, ClientKind, Device, declare, 
 from hermes_state_runtime import RuntimeStoreError
 
 logger = logging.getLogger(__name__)
+
+
+def _authority_home(authority) -> Path:
+    return Path(authority.db.db_path).resolve().parent
 
 
 def _same_host(connection) -> bool:
@@ -52,10 +57,18 @@ async def hello(connection, ref, params):
     device = Device(kind=ClientKind(parsed.kind), device_id=parsed.device_id, label=label,
                     app_version=parsed.app_version.strip(), model=model, os_name=os_name)
     slot = declare(connection.transport, device, accepts_offers=parsed.accepts_offers,
-                   same_host=_same_host(connection), attention=AttentionState(parsed.attention))
+                   same_host=_same_host(connection), attention=AttentionState(parsed.attention),
+                   device_tools=parsed.device_tools and device.kind is ClientKind.IOS)
     await _persist(connection, device_registry.record_hello, device_id=device.device_id, kind=device.kind.value,
                    label=device.label, model=device.model, os_name=device.os_name,
                    app_version=device.app_version, now=time.time())
+    if slot.device_tools:
+        from gateway import device_connectors
+        try:
+            await asyncio.to_thread(device_connectors.register_device, _authority_home(connection.authority),
+                                    device.device_id, device.label)
+        except device_connectors.StoreUnreadable as exc:
+            raise RuntimeStoreError('storage_unavailable', detail=str(exc)) from exc
     return {'recorded': True, 'same_host': slot.same_host}
 
 

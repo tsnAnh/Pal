@@ -19,6 +19,7 @@ class ClientHelloParams(Params):
     model: str = Field(default="", max_length=40)
     os: str = Field(default="", max_length=40)
     accepts_offers: bool = False
+    device_tools: bool = False
     attention: AttentionState = "foreground"
 
 

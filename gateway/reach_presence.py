@@ -47,6 +47,7 @@ class ReachSlot:
     attention: AttentionState
     attention_at: float
     last_input_at: float | None
+    device_tools: bool = False
 
 
 _SLOT_ATTR = "reach_slot"
@@ -59,12 +60,12 @@ def slot_of(transport) -> ReachSlot | None:
 
 
 def declare(transport, device: Device, *, accepts_offers: bool, same_host: bool,
-            attention: AttentionState, now: float | None = None) -> ReachSlot:
+            attention: AttentionState, device_tools: bool = False, now: float | None = None) -> ReachSlot:
     previous = slot_of(transport)
     stamp = time.time() if now is None else now
     slot = ReachSlot(device=device, accepts_offers=accepts_offers, same_host=same_host,
                      attention=attention, attention_at=stamp,
-                     last_input_at=previous.last_input_at if previous else None)
+                     last_input_at=previous.last_input_at if previous else None, device_tools=device_tools)
     setattr(transport, _SLOT_ATTR, slot)
     return slot
 
