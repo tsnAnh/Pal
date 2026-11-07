@@ -32,6 +32,8 @@ def _refusal_data(exc: RuntimeStoreError) -> dict:
             data[key] = getattr(exc, key)
     if getattr(exc, 'admitted', None) is False:
         data['admitted'] = False  # nothing admitted yet: the sender may finalize with ``bot_relay.settle``
+    for key, value in (getattr(exc, 'wire_data', None) or {}).items():
+        data.setdefault(key, value)
     return data
 
 
@@ -285,6 +287,8 @@ class AuthorityConnection:
         handlers['session.control'] = partial(control, self)
         from gateway.session_onboarding import handlers as onboarding_handlers
         handlers.update(onboarding_handlers(self))
+        from gateway.session_legacy_bridge import handlers as bridge_handlers
+        handlers.update(bridge_handlers(self))
         return handlers
 
     async def dispatch(self, request):
@@ -353,14 +357,12 @@ class AuthorityConnection:
             # launch profile's config into a served secondary's session. Under a single profile
             # the scope is that profile's own home, so behaviour is unchanged.
             from gateway.session_authorities import async_owner_scope
-            from gateway.session_connections import METHODS as CONNECTION_METHODS, session_owned
             async with async_owner_scope(self.authority):
                 if method in GROUP_METHODS or method == 'profiles.list':
                     result = await dispatch_group_control(self, method, params)
-                elif method not in handlers or (method in CONNECTION_METHODS and not session_owned(params)):
+                elif method not in handlers:
                     # JSON-RPC's own verdict: clients key compat fallbacks on -32601, and a
                     # 4001 'invalid_params' would read as a bad argument on a method that exists.
-                    # An account-owned connector call (the Connectors page) keeps its legacy handler.
                     return {'jsonrpc': '2.0', 'id': rid, 'error': {
                         'code': -32601, 'message': unknown_method_message(method),
                         'data': {'reason': 'unknown_method'}}}

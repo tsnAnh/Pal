@@ -20,8 +20,8 @@ def _authority_home(authority) -> Path:
     return Path(authority.db.db_path).resolve().parent
 
 
-def _require_actor(connection) -> None:
-    if not connection.actor.capabilities:
+def _require(connection, capability) -> None:
+    if capability not in connection.actor.capabilities:
         raise RuntimeStoreError('permission_denied')
 
 
@@ -48,7 +48,7 @@ def _unreadable(exc: device_connectors.StoreUnreadable) -> RuntimeStoreError:
 
 
 async def list_connectors(connection, ref, params):
-    _require_actor(connection)
+    _require(connection, 'session:read')
     parsed = _parse(DeviceConnectorsListParams, params)
     device_id = parsed.device_id or _own_device_id(connection)
     if device_id is None:
@@ -63,7 +63,7 @@ async def list_connectors(connection, ref, params):
 
 
 async def set_connector(connection, ref, params):
-    _require_actor(connection)
+    _require(connection, 'session:control')
     parsed = _parse(DeviceConnectorsSetParams, params)
     if parsed.state is None and parsed.os_permission is None:
         raise RuntimeStoreError('invalid_params', detail='state or os_permission is required')
@@ -86,7 +86,7 @@ async def set_connector(connection, ref, params):
 
 
 async def respond(connection, ref, params):
-    _require_actor(connection)
+    _require(connection, 'session:control')
     parsed = _parse(DeviceToolRespondParams, params)
     if parsed.ok == (parsed.error is not None) or (parsed.ok and parsed.result is None):
         raise RuntimeStoreError('invalid_params', detail='ok carries result, not ok carries error')

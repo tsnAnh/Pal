@@ -1,6 +1,6 @@
 """The ``manage_connections`` card on the session authority: ``connection.respond``, the operation's ``status``/``wake`` and the card's Try again (``connectors.connect`` with ``reconnect``), plus the open card a resume restores (``pending_connection``).
 
-The operation lives in ``tools/connectors/live.py`` under the turn's session key (the live session's route) and profile, so a card can only drive its own session's operation. Account-owned calls (the Connectors page) are not the session's and stay on the legacy handlers (``tui_gateway/methods_connectors.py``). Answers and refusals share that file's code (``tools.connectors.run.respond``, ``tui_gateway/connector_refusals.py``); ``ConnectorRefusal`` carries a refusal through the authority's error path.
+The operation lives in ``tools/connectors/live.py`` under the turn's session key (the live session's route) and profile, so a card can only drive its own session's operation. Account-owned calls (the Connectors page) are not the session's: they run the legacy handlers (``tui_gateway/methods_connectors.py``) through ``gateway/session_connectors_controls.py``. Answers and refusals share that file's code (``tools.connectors.run.respond``, ``tui_gateway/connector_refusals.py``); ``ConnectorRefusal`` carries a refusal through the authority's error path.
 """
 import asyncio
 from functools import partial
@@ -61,6 +61,9 @@ def _view(operation):
 
 
 async def _handle(connection, method, _ref, params):
+    if not session_owned(params):
+        from gateway.session_connectors_controls import serve_account_owned
+        return await serve_account_owned(connection, method, params)
     from gateway.session_busy_controls import authorize
     from gateway.session_contract import SessionRef
     from tools.connectors import live
