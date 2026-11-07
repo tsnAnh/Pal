@@ -7,11 +7,13 @@ public struct RosterSnapshot: Sendable, Equatable {
     public var profiles: [JSONValue]
     public var live: [String: BotLiveState]
     public var receivedAt: Date
+    public var capabilities: RosterCapabilities
 
-    public init(profiles: [JSONValue], live: [String: BotLiveState], receivedAt: Date) {
+    public init(profiles: [JSONValue], live: [String: BotLiveState], receivedAt: Date, capabilities: RosterCapabilities = RosterCapabilities()) {
         self.profiles = profiles
         self.live = live
         self.receivedAt = receivedAt
+        self.capabilities = capabilities
     }
 }
 
@@ -194,7 +196,9 @@ public actor RosterLiveFeed {
                 state.sessions.contains { $0 == .working || $0 == .starting || $0 == .waiting }
             }
             lastRefresh = clock.now
-            continuation.yield(.snapshot(RosterSnapshot(profiles: rows, live: live, receivedAt: Date())))
+            continuation.yield(.snapshot(RosterSnapshot(
+                profiles: rows, live: live, receivedAt: Date(), capabilities: RosterCapabilities(listResult: result)
+            )))
         } catch is CancellationError {
             return
         } catch GatewayTransportError.rpc(let error) {
