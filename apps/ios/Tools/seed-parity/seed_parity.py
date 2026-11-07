@@ -111,7 +111,7 @@ BOTS = (
         slug="cho-research-app",
         title="chó research app",
         look=Look(shape="hexagon", color="#ff2d95"),
-        last_message=Recency(days_back=4, clock="16:05"),
+        last_message=Recency(days_back=2, clock="16:05"),
         conversation=(
             ("user", "Nghiên cứu giúp anh các app journaling đang top ở App Store Việt Nam."),
             ("assistant", "Em đã xem top 20 mục Lifestyle, các app journaling nổi bật:\n\n- [Day One](https://dayoneapp.com/): nhật ký đa phương tiện, đồng bộ tốt\n- [Reflectly](https://reflectly.app/): trò chuyện hỏi đáp hằng ngày\n- Journey: tối giản, hỗ trợ nhiều nền tảng\n\nPhần lớn đều thu phí theo năm, giá khoảng $25 đến $35."),
@@ -127,7 +127,7 @@ BOTS = (
         slug="cho-hong-hot",
         title="chó hóng hớt",
         look=Look(shape="blobatar:hong-hot:cloud", color="#f97316"),
-        last_message=Recency(days_back=4, clock="08:12"),
+        last_message=Recency(days_back=2, clock="08:12"),
         conversation=(
             ("user", "Mỗi sáng 8 giờ gửi anh bản tin AI, tối đa 5 ý, có link nguồn."),
             ("assistant", "Dạ anh. Em đặt lịch 8:00 hằng ngày, 5 ý, kèm link nguồn gốc. Anh muốn thêm mục nào không ạ?"),
@@ -141,7 +141,7 @@ BOTS = (
         slug="market-researcher",
         title="Market Researcher",
         look=Look(shape="blobatar:market:droplet", color="#9333ea"),
-        last_message=Recency(days_back=5, clock="11:40"),
+        last_message=Recency(days_back=3, clock="11:40"),
         conversation=(
             ("user", "Chốt cho anh định vị Soully, đừng lan man."),
             ("assistant", "Em đề xuất 2 hướng:\n\n- **Journal-first**: nhật ký là lõi, bạn bè phản hồi\n- **Companion-first**: trợ lý trò chuyện là lõi, nhật ký là phụ\n\nHướng đầu ít đối thủ trực diện hơn."),
@@ -155,7 +155,7 @@ BOTS = (
         slug="cho-dinh",
         title="chó Định",
         look=Look(shape="blobatar:dinh:capsule", color="#14b8a6"),
-        last_message=Recency(days_back=6, clock="09:25"),
+        last_message=Recency(days_back=4, clock="09:25"),
         conversation=(
             ("user", "Định ơi, gộp việc check crash Crashlytics vào routine sáng của em."),
             ("assistant", "Dạ anh Anh. Em đề xuất routine 8:30: kéo tỉ lệ crash-free, liệt kê 3 crash nhiều nhất, gắn link issue tương ứng. Anh đồng ý không ạ?"),
