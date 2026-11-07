@@ -266,6 +266,8 @@ class AuthorityConnection:
         handlers.update(device_connector_handlers(self))
         from gateway.session_bot_thread_controls import handlers as bot_thread_handlers
         handlers.update(bot_thread_handlers(self))
+        from gateway.session_search_controls import handlers as search_handlers
+        handlers.update(search_handlers(self))
         from gateway.session_images import attach_bytes
         from functools import partial
         handlers['image.attach_bytes'] = partial(attach_bytes, self)

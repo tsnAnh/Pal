@@ -27,7 +27,7 @@ from . import (
     tools_mcp_plugins,
     account,
 )
-from . import canonical, canonical_bot_threads, canonical_bridge, canonical_device, canonical_devices, canonical_reach
+from . import canonical, canonical_bot_threads, canonical_bridge, canonical_device, canonical_devices, canonical_reach, canonical_search
 from .base import JsonValue, Params, Payload, Result, WireEnum
 from .registry import CANONICAL_METHODS, EVENTS, METHODS, SERVER_REQUESTS
 
