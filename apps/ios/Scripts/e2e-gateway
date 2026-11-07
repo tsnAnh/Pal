@@ -6,18 +6,41 @@ REPO="$(cd "$IOS_DIR/../.." && pwd)"
 PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
 GATEWAY_REPO="${HERMES_IOS_GATEWAY_REPO:-$REPO}"
 PROFILES=(bot-alpha bot-beta)
+SEED=""
 
-case "${1:-}" in
-  -h|--help)
-    cat <<USAGE
-usage: e2e-gateway [-- command...]
+usage() {
+  cat <<USAGE
+usage: e2e-gateway [--seed parity] [-- command...]
 Starts a stub LLM and an isolated, auth-gated gateway in a temp HERMES_HOME with two bot
 profiles, then runs the command with HERMES_IOS_E2E_* exported (or prints them and waits
 for SIGINT when no command is given). Everything is torn down on exit.
+
+  --seed parity   instead of bot-alpha and bot-beta, create the 8-bot parity roster (default
+                  plus 7 bots, Vietnamese bot chats, avatar looks and recency spread) through
+                  the real profile and session stores; HERMES_IOS_E2E_PROFILES lists its slugs,
+                  default first. See Tools/seed-parity/seed_parity.py.
 USAGE
-    exit 0 ;;
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --seed)
+      [ "$#" -ge 2 ] || { echo "--seed needs a value (parity)" >&2; exit 2; }
+      SEED="$2"; shift 2 ;;
+    --) shift; break ;;
+    *) break ;;
+  esac
+done
+
+case "$SEED" in
+  "") ;;
+  parity)
+    SEED_TOOL="$IOS_DIR/Tools/seed-parity/seed_parity.py"
+    SEED_SLUGS="$("$PYTHON" -I "$SEED_TOOL" slugs)"
+    IFS=, read -r -a PROFILES <<<"$SEED_SLUGS" ;;
+  *) echo "unknown seed: $SEED (supported: parity)" >&2; exit 2 ;;
 esac
-[ "${1:-}" = "--" ] && shift
 
 WORK_DIR="$(mktemp -d /tmp/hermes-ios-e2e.XXXXXX)"
 HOME_DIR="$WORK_DIR/home"
@@ -90,6 +113,7 @@ hermes() {
 }
 
 for name in "${PROFILES[@]}"; do
+  [ "$name" = "default" ] && continue
   hermes profile create "$name" --no-alias --no-skills >"$WORK_DIR/profile-$name.log" 2>&1 \
     || { echo "profile create $name failed" >&2; cat "$WORK_DIR/profile-$name.log" >&2; exit 1; }
   cat >"$HOME_DIR/profiles/$name/config.yaml" <<YAML
@@ -118,6 +142,11 @@ export HERMES_IOS_E2E_PROFILES="$(IFS=,; echo "${PROFILES[*]}")"
 export HERMES_IOS_E2E_STUB_LOG="$STUB_LOG"
 export HERMES_IOS_E2E_STUB_URL="$STUB_URL"
 export HERMES_IOS_E2E_GATEWAY_LOG="$GATEWAY_LOG"
+
+if [ "$SEED" = "parity" ]; then
+  "$PYTHON" -I "$SEED_TOOL" seed --home "$HOME_DIR" --repo "$GATEWAY_REPO" >"$WORK_DIR/seed.log" 2>&1 \
+    || { echo "seed parity failed" >&2; cat "$WORK_DIR/seed.log" >&2; exit 1; }
+fi
 
 if [ "$#" -eq 0 ]; then
   env | grep '^HERMES_IOS_' | sed 's/^/export /'
