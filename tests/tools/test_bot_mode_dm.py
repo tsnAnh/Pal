@@ -297,10 +297,10 @@ def _runner_parts(command):
     if parts[marker + 1] == "--author":
         marker += 2
     argv = parts[marker + 3 :]
-    profile_home = None
-    if argv[:1] == ["--profile-home"]:
-        profile_home, argv = argv[1], argv[2:]
-    return parts[marker + 1], parts[marker + 2], argv, profile_home
+    homes = {}
+    while argv[:1] in (["--profile-home"], ["--ledger-home"]):
+        homes[argv[0]], argv = argv[1], argv[2:]
+    return parts[marker + 1], parts[marker + 2], argv, homes.get("--profile-home")
 
 
 def _runner_author(command):

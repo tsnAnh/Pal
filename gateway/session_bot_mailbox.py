@@ -73,6 +73,8 @@ def _write_receipt(home, record, expect=_UNCHECKED):
         merged = {**(current or {}), **record}
         if merged != current:
             _write(path, merged)
+            from gateway.session_bot_threads import mirror_receipt
+            mirror_receipt(home, current, merged)
         return True
 
 
