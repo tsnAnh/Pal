@@ -5873,6 +5873,86 @@ export interface CanonicalBotStopResult {
   stopped: boolean
   handoffs: number
 }
+export interface BotThreadListParams {
+  profile?: string | null
+}
+export interface BotThreadListResult {
+  threads: BotThreadSummary[]
+}
+export interface BotThreadSummary {
+  thread_id: string
+  counterpart: BotThreadParticipant
+  last_at: string
+  last_preview: string
+  last_sender_key: string
+  message_count: number
+}
+/** ``local_profile`` names a bot on this install (its avatar asset is ``profiles.get_asset`` of that profile); a remote bot has none and is drawn from its ``key``. */
+export interface BotThreadParticipant {
+  key: string
+  is_self: boolean
+  local_profile?: string | null
+  display_name: string
+  handle: string
+  avatar: BotThreadAvatar
+}
+export interface BotThreadAvatar {
+  has_asset: boolean
+  ui_meta?: unknown | null
+}
+/** At most one of ``focus`` (an exchange a main-chat link opens), ``before`` / ``after`` (a message ``seq`` cursor from a previous page) or ``since_rev`` (catch-up after ``bot_threads.changed``: new messages and status changes). None reads the newest page. */
+export interface BotThreadReadParams {
+  profile?: string | null
+  thread_id: string
+  focus?: string | null
+  before?: number | null
+  after?: number | null
+  since_rev?: number | null
+  limit?: number
+}
+/** Oldest first. ``before`` / ``after`` are the cursors for the next older / newer page (null at either end); ``coverage`` is ``own_side`` when the counterpart may answer where this profile cannot see it (a peer gateway's open chat). There is no write verb: threads are read-only. */
+export interface BotThreadReadResult {
+  thread_id: string
+  participants: BotThreadParticipant[]
+  messages: BotThreadMessage[]
+  focus_index?: number | null
+  before?: number | null
+  after?: number | null
+  rev: number
+  coverage: 'both_sides' | 'own_side'
+  history_since?: string | null
+  read_only?: true
+}
+export interface BotThreadMessage {
+  id: string
+  exchange_id: string
+  sender_key: string
+  text: string
+  at: string
+  part: 'message' | 'reply'
+  status: BotThreadStatus
+  status_text?: string | null
+}
+export type BotThreadStatus = 'pending' | 'delivered' | 'unknown' | 'answered' | 'failed'
+export interface BotThreadLinksParams {
+  profile?: string | null
+  session_id: string
+  limit?: number
+}
+export interface BotThreadLinksResult {
+  links: BotThreadLink[]
+  truncated: boolean
+}
+/** One compact main-chat row at ``anchor_uid`` (a row's ``message_uid``) replacing ``covered_uids``. ``count`` 1 renders "Messaged X" / "Message from X"; more renders "N messages with X". Tapping opens ``bot.thread.read`` with ``focus=exchange_id``. */
+export interface BotThreadLink {
+  anchor_uid: string
+  thread_id: string
+  exchange_id: string
+  kind: 'messaged' | 'message_from'
+  counterpart: BotThreadParticipant
+  covered_uids: string[]
+  count: number
+}
 export interface ProfilesSetPrimaryParams {
   name: string
 }
@@ -7590,6 +7670,12 @@ export interface CanonicalRpcMethods {
   'approval.respond': { params: CanonicalApprovalParams; result: PromptResponseResult }
   /** Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record. */
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
+  /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
+  'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
+  /** This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat. */
+  'bot.thread.list': { params: BotThreadListParams; result: BotThreadListResult }
+  /** Read one bot-to-bot thread from this profile's own ledger. not_found when the profile has no exchange in it. Requires session:read on the profile's Bot Chat. */
+  'bot.thread.read': { params: BotThreadReadParams; result: BotThreadReadResult }
   /** Owner facts (name, time zone) shared by every Bot Mode bot on this install. */
   'bot_mode.about_you.get': { params: BotAboutYouGetParams; result: BotAboutYouFacts }
   /** Save owner facts install-wide; validates the time zone and answers the normalized values. */
@@ -7789,6 +7875,9 @@ export const CANONICAL_RPC_METHODS = [
   'account.subscriptions',
   'approval.respond',
   'auth.revoke_self',
+  'bot.thread.links',
+  'bot.thread.list',
+  'bot.thread.read',
   'bot_mode.about_you.get',
   'bot_mode.about_you.set',
   'bot_relay.deliver',
@@ -7965,6 +8054,8 @@ export interface BackendGatewayEventMap {
   'billing.step_up.verification': BillingStepUpVerificationPayload
   /** A bot-relay outbox envelope is queued; drain it. */
   'bot_relay.outbox.pending': ChangeSignalPayload
+  /** A served profile's bot thread ledger moved (any process). Re-read open threads with since_rev and the open Bot Chat's bot.thread.links. */
+  'bot_threads.changed': Record<string, never>
   /** Browser (CDP) connect / install progress line. */
   'browser.progress': BrowserProgressPayload
   /** A /btw side question was answered. */
@@ -8124,6 +8215,7 @@ export const GATEWAY_EVENT_TYPES = [
   'background.complete',
   'billing.step_up.verification',
   'bot_relay.outbox.pending',
+  'bot_threads.changed',
   'browser.progress',
   'btw.complete',
   'connection.request',

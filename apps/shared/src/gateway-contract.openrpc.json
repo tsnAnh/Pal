@@ -9155,6 +9155,513 @@
         "title": "BotTemplateReview",
         "type": "object"
       },
+      "BotThreadAvatar": {
+        "additionalProperties": false,
+        "properties": {
+          "has_asset": {
+            "title": "Has Asset",
+            "type": "boolean"
+          },
+          "ui_meta": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ui Meta"
+          }
+        },
+        "required": [
+          "has_asset"
+        ],
+        "title": "BotThreadAvatar",
+        "type": "object"
+      },
+      "BotThreadLink": {
+        "additionalProperties": false,
+        "description": "One compact main-chat row at ``anchor_uid`` (a row's ``message_uid``) replacing\n``covered_uids``. ``count`` 1 renders \"Messaged X\" / \"Message from X\"; more renders \"N messages\nwith X\". Tapping opens ``bot.thread.read`` with ``focus=exchange_id``.",
+        "properties": {
+          "anchor_uid": {
+            "title": "Anchor Uid",
+            "type": "string"
+          },
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "exchange_id": {
+            "title": "Exchange Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "messaged",
+              "message_from"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "counterpart": {
+            "$ref": "#/components/schemas/BotThreadParticipant"
+          },
+          "covered_uids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Covered Uids",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "anchor_uid",
+          "thread_id",
+          "exchange_id",
+          "kind",
+          "counterpart",
+          "covered_uids",
+          "count"
+        ],
+        "title": "BotThreadLink",
+        "type": "object"
+      },
+      "BotThreadLinksParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "session_id": {
+            "minLength": 1,
+            "title": "Session Id",
+            "type": "string"
+          },
+          "limit": {
+            "default": 200,
+            "maximum": 500,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "BotThreadLinksParams",
+        "type": "object"
+      },
+      "BotThreadLinksResult": {
+        "additionalProperties": false,
+        "properties": {
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/BotThreadLink"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "links",
+          "truncated"
+        ],
+        "title": "BotThreadLinksResult",
+        "type": "object"
+      },
+      "BotThreadListParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          }
+        },
+        "title": "BotThreadListParams",
+        "type": "object"
+      },
+      "BotThreadListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "threads": {
+            "items": {
+              "$ref": "#/components/schemas/BotThreadSummary"
+            },
+            "title": "Threads",
+            "type": "array"
+          }
+        },
+        "required": [
+          "threads"
+        ],
+        "title": "BotThreadListResult",
+        "type": "object"
+      },
+      "BotThreadMessage": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "exchange_id": {
+            "title": "Exchange Id",
+            "type": "string"
+          },
+          "sender_key": {
+            "title": "Sender Key",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "at": {
+            "title": "At",
+            "type": "string"
+          },
+          "part": {
+            "enum": [
+              "message",
+              "reply"
+            ],
+            "title": "Part",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/BotThreadStatus"
+          },
+          "status_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status Text"
+          }
+        },
+        "required": [
+          "id",
+          "exchange_id",
+          "sender_key",
+          "text",
+          "at",
+          "part",
+          "status"
+        ],
+        "title": "BotThreadMessage",
+        "type": "object"
+      },
+      "BotThreadParticipant": {
+        "additionalProperties": false,
+        "description": "``local_profile`` names a bot on this install (its avatar asset is ``profiles.get_asset`` of\nthat profile); a remote bot has none and is drawn from its ``key``.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "is_self": {
+            "title": "Is Self",
+            "type": "boolean"
+          },
+          "local_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Local Profile"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "handle": {
+            "title": "Handle",
+            "type": "string"
+          },
+          "avatar": {
+            "$ref": "#/components/schemas/BotThreadAvatar"
+          }
+        },
+        "required": [
+          "key",
+          "is_self",
+          "display_name",
+          "handle",
+          "avatar"
+        ],
+        "title": "BotThreadParticipant",
+        "type": "object"
+      },
+      "BotThreadReadParams": {
+        "additionalProperties": false,
+        "description": "At most one of ``focus`` (an exchange a main-chat link opens), ``before`` / ``after`` (a\nmessage ``seq`` cursor from a previous page) or ``since_rev`` (catch-up after\n``bot_threads.changed``: new messages and status changes). None reads the newest page.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "thread_id": {
+            "pattern": "^bt_[0-9a-f]{20}$",
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "focus": {
+            "anyOf": [
+              {
+                "pattern": "^(out|in):[0-9a-f]{32,64}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Focus"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Before"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "After"
+          },
+          "since_rev": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Since Rev"
+          },
+          "limit": {
+            "default": 50,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "thread_id"
+        ],
+        "title": "BotThreadReadParams",
+        "type": "object"
+      },
+      "BotThreadReadResult": {
+        "additionalProperties": false,
+        "description": "Oldest first. ``before`` / ``after`` are the cursors for the next older / newer page (null at\neither end); ``coverage`` is ``own_side`` when the counterpart may answer where this profile\ncannot see it (a peer gateway's open chat). There is no write verb: threads are read-only.",
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/BotThreadParticipant"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/BotThreadMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "focus_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Focus Index"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Before"
+          },
+          "after": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "After"
+          },
+          "rev": {
+            "title": "Rev",
+            "type": "integer"
+          },
+          "coverage": {
+            "enum": [
+              "both_sides",
+              "own_side"
+            ],
+            "title": "Coverage",
+            "type": "string"
+          },
+          "history_since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "History Since"
+          },
+          "read_only": {
+            "const": true,
+            "default": true,
+            "title": "Read Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "thread_id",
+          "participants",
+          "messages",
+          "rev",
+          "coverage"
+        ],
+        "title": "BotThreadReadResult",
+        "type": "object"
+      },
+      "BotThreadStatus": {
+        "enum": [
+          "pending",
+          "delivered",
+          "unknown",
+          "answered",
+          "failed"
+        ],
+        "title": "BotThreadStatus",
+        "type": "string"
+      },
+      "BotThreadSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "thread_id": {
+            "title": "Thread Id",
+            "type": "string"
+          },
+          "counterpart": {
+            "$ref": "#/components/schemas/BotThreadParticipant"
+          },
+          "last_at": {
+            "title": "Last At",
+            "type": "string"
+          },
+          "last_preview": {
+            "title": "Last Preview",
+            "type": "string"
+          },
+          "last_sender_key": {
+            "title": "Last Sender Key",
+            "type": "string"
+          },
+          "message_count": {
+            "title": "Message Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "thread_id",
+          "counterpart",
+          "last_at",
+          "last_preview",
+          "last_sender_key",
+          "message_count"
+        ],
+        "title": "BotThreadSummary",
+        "type": "object"
+      },
       "BrowserAction": {
         "enum": [
           "status",
@@ -52928,6 +53435,60 @@
       }
     },
     {
+      "name": "bot.thread.links",
+      "summary": "Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotThreadLinksParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotThreadLinksResult"
+        }
+      }
+    },
+    {
+      "name": "bot.thread.list",
+      "summary": "This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotThreadListParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotThreadListResult"
+        }
+      }
+    },
+    {
+      "name": "bot.thread.read",
+      "summary": "Read one bot-to-bot thread from this profile's own ledger. not_found when the profile has no exchange in it. Requires session:read on the profile's Bot Chat.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotThreadReadParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotThreadReadResult"
+        }
+      }
+    },
+    {
       "name": "bot_mode.about_you.get",
       "summary": "Owner facts (name, time zone) shared by every Bot Mode bot on this install.",
       "params": [
@@ -55177,6 +55738,19 @@
           "name": "payload",
           "schema": {
             "$ref": "#/components/schemas/ChangeSignalPayload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "bot_threads.changed",
+      "summary": "A served profile's bot thread ledger moved (any process). Re-read open threads with since_rev and the open Bot Chat's bot.thread.links.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "type": "object",
+            "additionalProperties": false
           }
         }
       ]
