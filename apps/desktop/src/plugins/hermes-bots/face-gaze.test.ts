@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   ATTENTION_GAP,
   composeEyes,
+  type EyePose,
   type EyeRig,
   FIGURE_TILT_DEGREES,
   GAZE_REACH,
@@ -20,6 +21,19 @@ const origin = { x: 120, y: 120 }
 const faceWidth = 40
 const noGaze = { x: 0, y: 0 }
 const mid = (eyes: ReturnType<typeof composeEyes>) => (eyes[0].x + eyes[1].x) / 2
+
+const extent = ({ angle, surface }: Pick<EyePose, 'angle' | 'surface'>, width = 9, height = 21) => {
+  const radians = (angle * Math.PI) / 180
+  const cos = Math.cos(radians)
+  const sin = Math.sin(radians)
+  const [a, b, c, d] = surface
+  const shape = [cos * a - sin * b, sin * a + cos * b, cos * c - sin * d, sin * c + cos * d]
+
+  return {
+    x: (Math.abs(shape[0]) * width + Math.abs(shape[2]) * height) / 2,
+    y: (Math.abs(shape[1]) * width + Math.abs(shape[3]) * height) / 2
+  }
+}
 
 describe('gazeOffset', () => {
   it('saturates at the unit disc when the pointer is far to the right', () => {
@@ -50,8 +64,8 @@ describe('composeEyes', () => {
   it('holds the baked idle pose at zero attention whatever the gaze', () => {
     const eyes = composeEyes(rig, 0, { x: 1, y: -1 })
 
-    expect(eyes[0]).toEqual({ angle: -11, x: 55, y: 42 })
-    expect(eyes[1]).toEqual({ angle: -11, x: 74, y: 42 })
+    expect(eyes[0]).toEqual({ angle: -11, surface: [1, 0, 0, 1], x: 55, y: 42 })
+    expect(eyes[1]).toEqual({ angle: -11, surface: [1, 0, 0, 1], x: 74, y: 42 })
   })
 
   const pairSpan = (eyes: { x: number; y: number }[]) => Math.hypot(eyes[1].x - eyes[0].x, eyes[1].y - eyes[0].y)
@@ -72,6 +86,32 @@ describe('composeEyes', () => {
     expect(pairSpan(eyes)).toBeCloseTo(19 * ATTENTION_GAP)
     expect(screenSlope(eyes)).toBeCloseTo(0)
     expect(mid(eyes)).toBeCloseTo(50)
+    expect(eyes[0].surface).toEqual([1, 0, 0, 1])
+  })
+
+  it('turns the eyes around a ball when looking sideways', () => {
+    const level = pairSpan(composeEyes(rig, 1, noGaze))
+    const right = composeEyes(rig, 1, { x: 1, y: 0 })
+    const left = composeEyes(rig, 1, { x: -1, y: 0 })
+
+    expect(right[1].surface[0]).toBeLessThan(0.8)
+    expect(right[0].surface[0]).toBeGreaterThan(1)
+    expect(left[0].surface[0]).toBeCloseTo(right[1].surface[0])
+    expect(left[1].surface[0]).toBeCloseTo(right[0].surface[0])
+    expect(pairSpan(right)).toBeLessThan(level * 0.9)
+    expect(screenSlope(right)).toBeCloseTo(0)
+  })
+
+  it('squashes both eyes vertically when looking up or down', () => {
+    for (const y of [-1, 1]) {
+      const eyes = composeEyes(rig, 1, { x: 0, y })
+
+      for (const eye of eyes) {
+        expect(eye.surface[3]).toBeLessThan(0.95)
+      }
+
+      expect(eyes[0].surface[1]).toBeCloseTo(-eyes[1].surface[1])
+    }
   })
 
   it('scales the gaze travel with attention', () => {
@@ -79,13 +119,15 @@ describe('composeEyes', () => {
       const looking = composeEyes(rig, attention, { x: 1, y: 0 })
       const level = composeEyes(rig, attention, noGaze)
 
-      return Math.hypot(looking[0].x - level[0].x, looking[0].y - level[0].y)
+      return Math.hypot(mid(looking) - mid(level), (looking[0].y + looking[1].y - level[0].y - level[1].y) / 2)
     }
 
     const full = travel(1)
 
-    expect(full).toBeCloseTo(GAZE_REACH.x * 80)
-    expect(travel(0.5)).toBeCloseTo(full / 2)
+    expect(full).toBeGreaterThan(GAZE_REACH.x * 80 * 0.8)
+    expect(full).toBeLessThanOrEqual(GAZE_REACH.x * 80 + 1e-6)
+    expect(travel(0.5)).toBeGreaterThan(full * 0.4)
+    expect(travel(0.5)).toBeLessThan(full * 0.6)
     expect(travel(0)).toBeCloseTo(0)
   })
 
@@ -98,9 +140,7 @@ describe('composeEyes', () => {
       { x: 0.7, y: 0.7 }
     ]) {
       for (const eye of composeEyes(rig, 1, gaze)) {
-        const radians = (eye.angle * Math.PI) / 180
-        const hx = (Math.abs(Math.cos(radians)) * 9 + Math.abs(Math.sin(radians)) * 21) / 2
-        const hy = (Math.abs(Math.sin(radians)) * 9 + Math.abs(Math.cos(radians)) * 21) / 2
+        const { x: hx, y: hy } = extent(eye)
 
         expect(eye.x - hx).toBeGreaterThanOrEqual(10 - 1e-6)
         expect(eye.x + hx).toBeLessThanOrEqual(90 + 1e-6)
@@ -114,9 +154,10 @@ describe('composeEyes', () => {
     const narrow: EyeRig = { ...rig, bounds: { maxX: 80, maxY: 90, minX: 40, minY: 10 } }
     const eyes = composeEyes(narrow, 1, { x: 1, y: 0 })
 
-    expect(pairSpan(eyes)).toBeCloseTo(19 * ATTENTION_GAP)
+    expect(pairSpan(eyes)).toBeGreaterThan(19 * ATTENTION_GAP * 0.7)
+    expect(pairSpan(eyes)).toBeLessThan(19 * ATTENTION_GAP)
     expect(screenSlope(eyes)).toBeCloseTo(0)
-    expect(eyes[1].x + 4.5).toBeLessThanOrEqual(80 + 1e-6)
+    expect(eyes[1].x + extent(eyes[1]).x).toBeLessThanOrEqual(80 + 1e-6)
   })
 })
 
@@ -159,9 +200,19 @@ describe('startFaceGaze', () => {
   }
 
   const parse = (eye: Element) => {
-    const match = /translate\(([-\d.]+) ([-\d.]+)\) rotate\(([-\d.]+)\)/.exec(eye.getAttribute('transform') ?? '')
+    const match =
+      /translate\(([-\d.]+) ([-\d.]+)\) rotate\(([-\d.]+)\)(?: matrix\(([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+) 0 0\))?/.exec(
+        eye.getAttribute('transform') ?? ''
+      )
 
-    return { angle: Number(match?.[3]), x: Number(match?.[1]), y: Number(match?.[2]) }
+    const surface = match?.[4] ? ([4, 5, 6, 7].map(i => Number(match[i])) as [number, number, number, number]) : null
+
+    return {
+      angle: Number(match?.[3]),
+      surface: surface ?? ([1, 0, 0, 1] as const),
+      x: Number(match?.[1]),
+      y: Number(match?.[2])
+    }
   }
 
   const attentionOf = (eye: Element) => (parse(eye).angle + 11) / (FIGURE_TILT_DEGREES + 11)
@@ -225,9 +276,11 @@ describe('startFaceGaze', () => {
     move(scope, 5000, 120)
     frames(120)
     expect((parse(left).x + parse(right).x) / 2).toBeGreaterThan(50 + 12)
+    expect(parse(right).surface[0]).toBeLessThan(0.8)
     move(scope, -5000, 120)
     frames(120)
     expect((parse(left).x + parse(right).x) / 2).toBeLessThan(50 - 12)
+    expect(parse(left).surface[0]).toBeLessThan(0.8)
   })
 
   it('drives math faces through the same eyes', () => {
@@ -272,10 +325,9 @@ describe('startFaceGaze', () => {
       frames(120)
 
       for (const eye of [left, right]) {
-        const { angle, x, y } = parse(eye)
-        const radians = (angle * Math.PI) / 180
-        const hx = (Math.abs(Math.cos(radians)) * 9 + Math.abs(Math.sin(radians)) * 21) / 2
-        const hy = (Math.abs(Math.sin(radians)) * 9 + Math.abs(Math.cos(radians)) * 21) / 2
+        const pose = parse(eye)
+        const { x, y } = pose
+        const { x: hx, y: hy } = extent(pose)
 
         expect(x + 3.6 - hx).toBeGreaterThanOrEqual(10 - 1e-6)
         expect(x + 3.6 + hx).toBeLessThanOrEqual(90 + 1e-6)
