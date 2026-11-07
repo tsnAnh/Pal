@@ -1,4 +1,5 @@
 import HermesClient
+import HermesDesign
 import SwiftUI
 
 @main
@@ -6,6 +7,8 @@ struct HermesBotsApp: App {
     @State private var model: ConnectionModel
     @State private var roster: RosterModel
     @State private var offers: ReachOfferModel
+    @State private var router: AppRouter
+    @State private var appearance: AppearanceStore
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -13,14 +16,19 @@ struct HermesBotsApp: App {
         _model = State(initialValue: model)
         let roster = RosterModel(connection: model)
         _roster = State(initialValue: roster)
-        _offers = State(initialValue: ReachOfferModel(presence: model.presence) { sessionID in roster.open(sessionID: sessionID) })
+        let router = AppRouter()
+        _router = State(initialValue: router)
+        _appearance = State(initialValue: AppearanceStore())
+        _offers = State(initialValue: ReachOfferModel(presence: model.presence) { sessionID in
+            router.openChat(sessionID: sessionID, in: roster)
+        })
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(model: model, roster: roster)
+            RootView(model: model, roster: roster, router: router)
                 .overlay { ReachOfferOverlay(model: offers) }
-                .preferredColorScheme(.dark)
+                .hermesTheme(mode: appearance.mode, botAccent: roster.hero?.accent)
                 .task { await model.restore() }
                 .task { await offers.listen() }
                 .onChange(of: scenePhase) { _, phase in
@@ -35,30 +43,35 @@ struct HermesBotsApp: App {
 
 struct RootView: View {
     let model: ConnectionModel
-    @Bindable var roster: RosterModel
-
-    @State private var showsSettings = false
+    let roster: RosterModel
+    @Bindable var router: AppRouter
 
     var body: some View {
         switch model.phase {
         case .connected:
-            NavigationStack(path: $roster.path) {
-                RosterView(roster: roster, connection: model) { showsSettings = true }
-                    .navigationDestination(for: String.self) { name in
-                        if let bot = roster.bot(named: name) {
-                            ChatView(model: ChatModel(bot: bot, connection: model, roster: roster))
+            NavigationStack(path: $router.path) {
+                RosterView(roster: roster, connection: model) { router.present(.settings) }
+                    .navigationDestination(for: AppRoute.self) { route in
+                        switch route {
+                        case .chat(let name):
+                            if let bot = roster.bot(named: name) {
+                                ChatView(model: ChatModel(bot: bot, connection: model, roster: roster))
+                            }
                         }
                     }
             }
             .task { await roster.runLive() }
-            .sheet(isPresented: $showsSettings) {
-                ConnectionView(model: model) { showsSettings = false }
+            .sheet(item: $router.sheet) { sheet in
+                switch sheet {
+                case .settings:
+                    SettingsSheet(model: model) { router.dismissSheet() }
+                }
             }
         case .connecting:
             ProgressView("Connecting")
                 .accessibilityIdentifier("connectingIndicator")
         default:
-            ConnectionView(model: model, onDone: nil)
+            ConnectionView(model: model)
         }
     }
 }

@@ -8,6 +8,8 @@ struct ChatView: View {
     @State private var draft = ""
     @FocusState private var composerFocused: Bool
 
+    @Environment(\.hermesTheme) private var theme
+
     init(model: ChatModel) {
         _model = State(initialValue: model)
     }
@@ -52,7 +54,7 @@ struct ChatView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         .toolbarTitleDisplayMode(.inline)
-        .background(Color(white: 0.07))
+        .background(Color(theme.palette.canvas))
         .task { model.start() }
         .onDisappear { model.stop() }
         .alert(
@@ -67,6 +69,8 @@ struct ChatView: View {
 }
 
 private struct BotCapsule: View {
+    @Environment(\.hermesTheme) private var theme
+
     let bot: BotRow
     let activity: BotActivity
     let mood: AvatarMood
@@ -77,6 +81,7 @@ private struct BotCapsule: View {
                 .opacity(activity.avatarOpacity)
             Text(bot.displayName)
                 .font(.headline)
+                .foregroundStyle(Color(theme.palette.textPrimary))
                 .lineLimit(1)
         }
         .padding(.horizontal, 14)
@@ -90,6 +95,8 @@ private struct BotCapsule: View {
 }
 
 private struct Composer: View {
+    @Environment(\.hermesTheme) private var theme
+
     let botName: String
     @Binding var draft: String
     var focused: FocusState<Bool>.Binding
@@ -104,7 +111,7 @@ private struct Composer: View {
             Button {} label: {
                 Image(systemName: "plus")
                     .font(.system(size: 22, weight: .regular))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color(theme.palette.textPrimary))
                     .frame(width: 52, height: 52)
                     .glassEffect(.regular.interactive(), in: .circle)
             }
@@ -124,15 +131,15 @@ private struct Composer: View {
                     .accessibilityIdentifier("composerField")
                 Image(systemName: "mic")
                     .font(.system(size: 18))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(theme.palette.textSecondary))
                     .frame(width: 32, height: 52)
                     .accessibilityHidden(true)
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(Color(theme.palette.chipSelectedText))
                         .frame(width: 42, height: 42)
-                        .background(.white, in: Circle())
+                        .background(Color(theme.palette.chipSelectedFill), in: Circle())
                 }
                 .disabled(!canSend)
                 .opacity(canSend ? 1 : 0.4)
@@ -150,6 +157,8 @@ private struct Composer: View {
 }
 
 private struct ChatRowView: View {
+    @Environment(\.hermesTheme) private var theme
+
     let row: ChatRow
     let model: ChatModel
 
@@ -158,7 +167,7 @@ private struct ChatRowView: View {
             if let separator = row.separator {
                 Text(ChatTimestamp.label(for: separator))
                     .font(.footnote)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color(theme.palette.textSecondary))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 8)
                     .accessibilityIdentifier("timeSeparator")
@@ -191,6 +200,7 @@ private struct AssistantBubble: View {
     let isStreaming: Bool
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.hermesTheme) private var theme
 
     var body: some View {
         HStack(spacing: 0) {
@@ -200,13 +210,13 @@ private struct AssistantBubble: View {
                 } else {
                     Text(Markdown.attributed(text))
                         .font(.body)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color(theme.palette.textPrimary))
                         .textSelection(.enabled)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 11)
-            .background(Color(white: 0.14), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(Color(theme.palette.assistantBubble), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .containerRelativeFrame(.horizontal, alignment: .leading) { width, _ in width * 0.85 }
             Spacer(minLength: 0)
         }
@@ -222,14 +232,16 @@ private struct UserBubble: View {
     let accent: BotAccent?
     let retry: (String) -> Void
 
+    @Environment(\.hermesTheme) private var theme
+
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             Text(Markdown.attributed(text))
                 .font(.body)
-                .foregroundStyle(accent?.foreground ?? .white)
+                .foregroundStyle(accent?.foreground ?? Color(theme.palette.userBubbleText))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
-                .background(accent?.accent ?? Color.blue, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(accent?.accent ?? Color(theme.palette.userBubble), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .opacity(delivery == .sent ? 1 : 0.75)
                 .accessibilityIdentifier("userBubble")
             status
@@ -246,18 +258,18 @@ private struct UserBubble: View {
         case .sending:
             Label("Sending", systemImage: "arrow.up.circle")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("deliverySending")
         case .queued:
             Label("Queued, will send when online", systemImage: "clock")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("deliveryQueued")
         case .failed(let id):
             Button { retry(id) } label: {
                 Label("Not sent. Tap to retry", systemImage: "exclamationmark.circle.fill")
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color(theme.palette.destructive))
             }
             .accessibilityIdentifier("deliveryFailed")
         }
@@ -265,6 +277,8 @@ private struct UserBubble: View {
 }
 
 private struct ToolLine: View {
+    @Environment(\.hermesTheme) private var theme
+
     let name: String
     let summary: String?
     let isRunning: Bool
@@ -280,7 +294,7 @@ private struct ToolLine: View {
                 .font(.footnote)
                 .lineLimit(1)
         }
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Color(theme.palette.textSecondary))
         .padding(.leading, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(isRunning ? "Running \(name)" : "Used \(name)"))
@@ -293,6 +307,8 @@ private struct ClarifyCard: View {
 
     @State private var selection: Set<Int> = []
 
+    @Environment(\.hermesTheme) private var theme
+
     private var isMulti: Bool { prompt.multiSelect == true }
 
     var body: some View {
@@ -301,12 +317,12 @@ private struct ClarifyCard: View {
                 HStack(alignment: .top) {
                     Text(prompt.question ?? String(localized: "Question"))
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color(theme.palette.textPrimary))
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button { answer("") } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color(theme.palette.textSecondary))
                             .frame(width: 32, height: 32)
                             .contentShape(Rectangle())
                     }
@@ -319,16 +335,16 @@ private struct ClarifyCard: View {
                         HStack(spacing: 14) {
                             Text(Self.letter(index))
                                 .font(.footnote)
-                                .foregroundStyle(selection.contains(index) ? Color.black : Color.secondary)
+                                .foregroundStyle(Color(selection.contains(index) ? theme.palette.chipSelectedText : theme.palette.textSecondary))
                                 .frame(width: 30, height: 30)
                                 .background(
-                                    selection.contains(index) ? Color.white : Color(white: 0.22),
+                                    Color(selection.contains(index) ? theme.palette.chipSelectedFill : theme.palette.circleButtonFill),
                                     in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 )
-                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color(white: 0.32), lineWidth: 1))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color(theme.palette.circleButtonStroke), lineWidth: 1))
                             Text(choice)
                                 .font(.body)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Color(theme.palette.textPrimary))
                                 .multilineTextAlignment(.leading)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -348,13 +364,13 @@ private struct ClarifyCard: View {
                 }
             }
             .padding(16)
-            .background(Color(white: 0.14), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(white: 0.24), lineWidth: 1))
+            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(theme.palette.cardStroke), lineWidth: 1))
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("clarifyCard")
             Text("Or answer in the chat below")
                 .font(.footnote)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color(theme.palette.textSecondary))
                 .padding(.leading, 6)
         }
     }
@@ -377,6 +393,8 @@ private struct ClarifyCard: View {
 }
 
 private struct ApprovalCard: View {
+    @Environment(\.hermesTheme) private var theme
+
     let prompt: PendingPrompt
     let choose: (String) -> Void
 
@@ -384,11 +402,11 @@ private struct ApprovalCard: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(prompt.description ?? String(localized: "Approval needed"))
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color(theme.palette.textPrimary))
             if let command = prompt.command {
                 Text(command)
                     .font(.footnote.monospaced())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(theme.palette.textSecondary))
             }
             ForEach(Array(prompt.choices.enumerated()), id: \.offset) { index, choice in
                 Button(choice) { choose(choice) }
@@ -398,8 +416,8 @@ private struct ApprovalCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(white: 0.14), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(white: 0.24), lineWidth: 1))
+        .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(theme.palette.cardStroke), lineWidth: 1))
     }
 }
 

@@ -79,6 +79,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: HermesBots
+      - package: HermesDesign
+        product: HermesDesign
 schemes:
   HermesBots:
     build:

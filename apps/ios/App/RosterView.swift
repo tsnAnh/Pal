@@ -8,12 +8,13 @@ struct RosterView: View {
     let openSettings: () -> Void
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.hermesTheme) private var theme
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 if let hero = roster.hero {
-                    NavigationLink(value: hero.name) {
+                    NavigationLink(value: AppRoute.chat(botName: hero.name)) {
                         HeroView(bot: hero, activity: roster.activity(for: hero.name), mood: roster.avatarMood(for: hero.name))
                     }
                     .buttonStyle(.plain)
@@ -21,7 +22,7 @@ struct RosterView: View {
                     .accessibilityValue(Text(roster.activity(for: hero.name).accessibilityValue))
                 }
                 ForEach(roster.rows) { bot in
-                    NavigationLink(value: bot.name) {
+                    NavigationLink(value: AppRoute.chat(botName: bot.name)) {
                         RosterRowView(bot: bot, activity: roster.activity(for: bot.name), mood: roster.avatarMood(for: bot.name))
                     }
                     .buttonStyle(.plain)
@@ -44,9 +45,13 @@ struct RosterView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         .toolbarTitleDisplayMode(.inline)
-        .background(Color(white: 0.07))
+        .background(Color(theme.palette.canvas))
         .safeAreaBar(edge: .bottom) {
-            SearchField(text: $roster.query)
+            FloatingSearchBar(
+                text: $roster.query,
+                accessibilityLabel: "Search bots",
+                accessibilityIdentifier: "rosterSearchField"
+            )
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { roster.nudge() }
@@ -63,11 +68,13 @@ private struct UserAvatarView: View {
     let initial: String
     let link: GatewayLink
 
+    @Environment(\.hermesTheme) private var theme
+
     private var presenceColor: Color {
         switch link {
-        case .connected: .blue
+        case .connected: Color(theme.palette.accentBlue)
         case .reconnecting: .orange
-        case .offline: .gray
+        case .offline: Color(theme.palette.textTertiary)
         }
     }
 
@@ -82,14 +89,14 @@ private struct UserAvatarView: View {
     var body: some View {
         Text(initial)
             .font(.headline)
-            .foregroundStyle(.white)
+            .foregroundStyle(Color(theme.palette.textPrimary))
             .frame(width: 44, height: 44)
-            .background(Color(white: 0.28), in: Circle())
+            .background(Color(theme.palette.circleButtonFill), in: Circle())
             .overlay(alignment: .bottomTrailing) {
                 Circle()
                     .fill(presenceColor)
                     .frame(width: 12, height: 12)
-                    .overlay(Circle().stroke(Color.black, lineWidth: 2))
+                    .overlay(Circle().stroke(Color(theme.palette.canvas), lineWidth: 2))
             }
             .accessibilityElement(children: .ignore)
             .accessibilityValue(Text(presenceLabel))
@@ -101,22 +108,17 @@ private struct HeroView: View {
     let activity: BotActivity
     let mood: AvatarMood
 
+    @Environment(\.hermesTheme) private var theme
+
     var body: some View {
         VStack(spacing: 12) {
-            BotAvatarView(spec: bot.spec, size: 136, mood: mood)
-                .opacity(activity.avatarOpacity)
-                .overlay(alignment: .bottomTrailing) {
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 32, height: 32)
-                        .background(Color.orange, in: Circle())
-                        .overlay(Circle().stroke(Color.black, lineWidth: 3))
-                        .offset(x: 4, y: 4)
-                }
+            AvatarBadge(diameter: 136, showsPrimaryBadge: true, accessibilityIdentifier: "heroAvatar") {
+                BotAvatarView(spec: bot.spec, size: 136, mood: mood)
+                    .opacity(activity.avatarOpacity)
+            }
             Text(bot.displayName)
                 .font(.title3)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color(theme.palette.textSecondary))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
@@ -131,6 +133,8 @@ private struct RosterRowView: View {
     let activity: BotActivity
     let mood: AvatarMood
 
+    @Environment(\.hermesTheme) private var theme
+
     var body: some View {
         HStack(spacing: 14) {
             BotAvatarView(spec: bot.spec, size: 56, mood: mood)
@@ -139,13 +143,13 @@ private struct RosterRowView: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(bot.displayName)
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color(theme.palette.textPrimary))
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     if let lastActive = bot.lastActive {
                         Text(RosterTimestamp.label(for: lastActive))
                             .font(.subheadline)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color(theme.palette.textTertiary))
                     }
                 }
                 HStack(spacing: 6) {
@@ -156,7 +160,7 @@ private struct RosterRowView: View {
                     }
                     Text(bot.preview.isEmpty ? " " : bot.preview)
                         .font(.body)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color(theme.palette.textSecondary))
                         .lineLimit(1)
                 }
             }
@@ -165,35 +169,5 @@ private struct RosterRowView: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
-    }
-}
-
-private struct SearchField: View {
-    @Binding var text: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
-            TextField("", text: $text, prompt: Text("Search"))
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .submitLabel(.search)
-                .accessibilityLabel(Text("Search bots"))
-                .accessibilityIdentifier("rosterSearchField")
-            if !text.isEmpty {
-                Button { text = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Clear search"))
-            }
-        }
-        .padding(.horizontal, 18)
-        .frame(minHeight: 52)
-        .glassEffect(.regular, in: .capsule)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
     }
 }

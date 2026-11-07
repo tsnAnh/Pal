@@ -50,7 +50,6 @@ final class RosterModel {
     private(set) var live: [String: BotLiveState] = [:]
     private(set) var celebrating: Set<String> = []
     var query = ""
-    var path: [String] = []
 
     private let connection: ConnectionModel
     private var photos: [String: Data] = [:]
@@ -73,11 +72,8 @@ final class RosterModel {
         bots.first { $0.name == name }
     }
 
-    @discardableResult
-    func open(sessionID: String) -> Bool {
-        guard let bot = bots.first(where: { $0.sessionIDs.contains(sessionID) }) else { return false }
-        if path.last != bot.name { path = [bot.name] }
-        return true
+    func botName(forSessionID sessionID: String) -> String? {
+        bots.first { $0.sessionIDs.contains(sessionID) }?.name
     }
 
     func activity(for name: String) -> BotActivity {
