@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+MAIN_CHECKOUT="$(cd "$(git -C "$REPO" rev-parse --git-common-dir)/.." && pwd)"
+PYTHON="${HERMES_IOS_PYTHON:-}"
+for candidate in "$REPO/.venv/bin/python" "$MAIN_CHECKOUT/.venv/bin/python"; do
+  [ -n "$PYTHON" ] && break
+  [ -x "$candidate" ] && PYTHON="$candidate"
+done
+[ -n "$PYTHON" ] || { echo "ref-palette: no Python with Pillow; set HERMES_IOS_PYTHON" >&2; exit 1; }
+exec "$PYTHON" -I "$IOS_DIR/Tools/ref-palette/ref_palette.py" "$@"
