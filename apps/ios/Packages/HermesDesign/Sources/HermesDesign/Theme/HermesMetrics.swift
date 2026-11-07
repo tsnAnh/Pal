@@ -88,6 +88,11 @@ public enum HermesTextStyle: CaseIterable, Sendable {
     case searchPrompt
     case version
     case nameField
+    case chatBody
+    case chatStatus
+    case unreadLabel
+    case composerField
+    case chatCode
 
     public var size: CGFloat {
         switch self {
@@ -102,21 +107,27 @@ public enum HermesTextStyle: CaseIterable, Sendable {
         case .largePill: 16
         case .nameField: 20
         case .searchPrompt: 17.5
+        case .chatBody: 15
+        case .chatStatus, .composerField: 16
+        case .unreadLabel: 11
+        case .chatCode: 13.5
         }
     }
 
     public var weight: Font.Weight {
         switch self {
         case .largePill, .nameField: .medium
+        case .unreadLabel: .semibold
         default: .regular
         }
     }
 
     var relativeTextStyle: Font.TextStyle {
         switch self {
-        case .rowTitle, .rowValue, .sheetTitle, .botName, .searchPrompt, .largePill, .nameField: .body
+        case .rowTitle, .rowValue, .sheetTitle, .botName, .searchPrompt, .largePill, .nameField, .chatBody, .chatStatus, .composerField: .body
         case .rowSubtitle, .botPreview, .heroName, .chip, .pill, .version: .footnote
-        case .sectionCaption, .footnoteCaption, .timestamp: .caption
+        case .sectionCaption, .footnoteCaption, .timestamp, .unreadLabel: .caption
+        case .chatCode: .footnote
         }
     }
 }
@@ -139,4 +150,31 @@ extension View {
     public func hermesText(_ style: HermesTextStyle) -> some View {
         modifier(HermesTextModifier(style: style))
     }
+}
+
+public enum ChatMetrics {
+    public static let edgeMargin: CGFloat = 16
+    public static let bubbleHorizontalPadding: CGFloat = 14
+    public static let bubbleVerticalPadding: CGFloat = 7
+    public static let bubbleRadius: CGFloat = 19
+    public static let bubbleTrailingGap: CGFloat = 60
+    public static let rowSpacing: CGFloat = 12
+    public static let bodyLineHeight: CGFloat = 20.3
+    public static let separatorTopPadding: CGFloat = 14
+    public static let separatorBottomPadding: CGFloat = 6
+    public static let unreadTopPadding: CGFloat = 2
+    public static let unreadBottomPadding: CGFloat = 9
+    public static let unreadLabelGap: CGFloat = 11.5
+    public static let unreadLineThickness: CGFloat = 1
+    public static let statusDotDiameter: CGFloat = 7.5
+    public static let statusDotSpacing: CGFloat = 3.3
+    public static let statusLeadingInset: CGFloat = 23
+    public static let statusTextGap: CGFloat = 11
+    public static let composerHeight: CGFloat = 50
+    public static let composerHorizontalMargin: CGFloat = 30
+    public static let composerButtonDiameter: CGFloat = 34
+    public static let composerInset: CGFloat = 8
+    public static let headerButtonDiameter: CGFloat = 44
+    public static let headerAvatarSize: CGFloat = 26
+    public static let scrollButtonDiameter: CGFloat = 34
 }
