@@ -161,6 +161,7 @@ public struct WireMessage: Codable, Sendable, Hashable {
     public var timestamp: Double?
     public var rowID: Int?
     public var displayKind: String?
+    public var displayMetadata: JSONValue?
     public var name: String?
     public var reasoning: String?
 
@@ -172,6 +173,7 @@ public struct WireMessage: Codable, Sendable, Hashable {
         case timestamp
         case rowID = "row_id"
         case displayKind = "display_kind"
+        case displayMetadata = "display_metadata"
         case name
         case reasoning
     }

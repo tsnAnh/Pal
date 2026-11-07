@@ -45,6 +45,8 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
     public var id: String
     public var content: Content
     public var deliveryFailure: String?
+    public var timestamp: Date?
+    public var inbound: InboundKind = .person
 }
 
 public enum ApplyOutcome: Sendable, Hashable {
@@ -129,7 +131,8 @@ public struct Transcript: Sendable, Equatable {
             guard let text = admission.text, !text.isEmpty else { continue }
             items.append(TranscriptItem(
                 id: Self.echoID(admission.inputID ?? admission.admissionID),
-                content: .user(text: text, delivery: .queued)
+                content: .user(text: text, delivery: .queued),
+                inbound: InboundKind.classify(text: text, displayKind: nil)
             ))
         }
         for prompt in snapshot.prompts { addCard(prompt) }
@@ -195,21 +198,37 @@ public struct Transcript: Sendable, Equatable {
         currentSegment = nil
     }
 
+    private static func serverDate(_ timestamp: Double?) -> Date? {
+        timestamp.flatMap { $0.isFinite && $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+    }
+
     private static func item(from message: WireMessage) -> TranscriptItem? {
         let id = message.rowID.map { "row:\($0)" } ?? UUID().uuidString
         switch message.role {
         case "user":
             guard message.displayKind != "hidden" else { return nil }
-            return TranscriptItem(id: id, content: .user(text: message.plainText, delivery: .sent))
+            let text = message.plainText
+            return TranscriptItem(
+                id: id,
+                content: .user(text: text, delivery: .sent),
+                timestamp: serverDate(message.timestamp),
+                inbound: InboundKind.classify(text: text, displayKind: message.displayKind)
+            )
         case "assistant":
             let text = message.plainText
             guard !text.isEmpty else { return nil }
-            return TranscriptItem(id: id, content: .assistant(text: text, reasoning: message.reasoning ?? "", isStreaming: false))
+            return TranscriptItem(
+                id: id,
+                content: .assistant(text: text, reasoning: message.reasoning ?? "", isStreaming: false),
+                timestamp: serverDate(message.timestamp)
+            )
         case "tool":
             let toolID = message.toolCallID ?? id
-            return TranscriptItem(id: "tool:\(toolID)", content: .tool(ToolCall(
-                toolID: toolID, name: message.name ?? "tool", status: .finished, summary: nil
-            )))
+            return TranscriptItem(
+                id: "tool:\(toolID)",
+                content: .tool(ToolCall(toolID: toolID, name: message.name ?? "tool", status: .finished, summary: nil)),
+                timestamp: serverDate(message.timestamp)
+            )
         default:
             return nil
         }
@@ -277,7 +296,8 @@ public struct Transcript: Sendable, Equatable {
         if admission.status != .queued, lastUserTurnIsUnanswered(text: text) { return }
         items.append(TranscriptItem(
             id: id,
-            content: .user(text: text, delivery: admission.status == .queued ? .queued : .sent)
+            content: .user(text: text, delivery: admission.status == .queued ? .queued : .sent),
+            inbound: InboundKind.classify(text: text, displayKind: nil)
         ))
     }
 
