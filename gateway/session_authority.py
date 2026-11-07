@@ -70,6 +70,7 @@ class LiveSession:
     context_breakdown: tuple | None = None
     # A viewer attached while a guarded deferred pick awaits consent: the next boundary asks again.
     reask_pick: bool = False
+    iphone_toolset: bool | None = None
     # (principal, effort) of a ``/reasoning`` command that arrived while a turn ran: applied in memory at
     # once, committed to the policy at the next boundary (gateway/session_setting_commands.py).
     pending_reasoning: tuple | None = None

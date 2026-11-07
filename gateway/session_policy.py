@@ -1032,7 +1032,9 @@ def policy_turn_toolsets(authority, policy, config, session_id):
     """A local turn's toolsets: the policy's current set, plus ``onboarding`` for an onboarding chat
     (``agent.onboarding_session.onboarding_chat_toolsets``)."""
     from agent.onboarding_session import onboarding_chat_toolsets
-    return onboarding_chat_toolsets(list(policy.current_toolsets(config)), getattr(authority, 'db', None), session_id)
+    from gateway.session_iphone_toolset import with_iphone
+    enabled = onboarding_chat_toolsets(list(policy.current_toolsets(config)), getattr(authority, 'db', None), session_id)
+    return with_iphone(authority, policy, config, enabled, session_id)
 
 
 def local_desktop_turn(runner, source, scope):
