@@ -79,6 +79,7 @@ async def config_get(connection, ref, params):
     agent = connection.authority.agent(ref) if ref.session_id else None
 
     def read():
+        from gateway.push_notify import notifications_flag
         from gateway.run import _profile_runtime_scope
         from hermes_cli.config import load_config
         from hermes_cli.config_backend import config_version_or_none, version_token
@@ -102,6 +103,7 @@ async def config_get(connection, ref, params):
                 'theme': lambda: {'value': display.get('tui_theme', 'auto')},
                 'indicator': lambda: {'value': display.get('tui_status_indicator', DEFAULT_INDICATOR_STYLE)},
                 'details_mode': lambda: {'value': display.get('details_mode', 'collapsed')},
+                'bot_mode.notifications': lambda: {'value': 'on' if notifications_flag(cfg) else 'off'},
                 'approvals.mode': lambda: {'value': _get_approval_mode()},
                 'approval_mode': lambda: {'value': _get_approval_mode()},
                 'project': lambda: _project(params, policy, cfg),
