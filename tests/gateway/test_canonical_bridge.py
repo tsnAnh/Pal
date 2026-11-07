@@ -1,12 +1,16 @@
 import pytest
+import pytest_asyncio
 
 from gateway.session_connectors_controls import ACCOUNT_OWNED_VERBS
 from gateway.session_legacy_bridge import handlers as bridge_handlers
 from hermes_cli.primary_profile import primary_profile_name
 from hermes_cli.profiles import get_profile_dir
-from tests.gateway.bots_harness import FULL, READ, bots, call, config_of, failure, install
+from tests.gateway.bots_harness import FULL, READ, bots_state, call, config_of, failure, install_state
 from tui_gateway.contracts.canonical_bridge import BRIDGED
 from tui_gateway.contracts.registry import CANONICAL_METHODS, METHODS
+
+install = pytest.fixture(install_state)
+bots = pytest_asyncio.fixture(bots_state)
 
 
 def test_every_bridged_verb_reuses_the_sidecar_wire_on_the_canonical_catalog():

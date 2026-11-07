@@ -1,12 +1,16 @@
 import shutil
 
 import pytest
+import pytest_asyncio
 
 from hermes_cli.primary_profile import primary_profile_name, set_primary_profile
 from hermes_cli.profiles import create_profile, get_profile_dir
-from tests.gateway.bots_harness import bots, call, config_of, install
+from tests.gateway.bots_harness import bots_state, call, config_of, install_state
 from tui_gateway import server
 from tui_gateway.contracts.registry import CANONICAL_METHODS
+
+install = pytest.fixture(install_state)
+bots = pytest_asyncio.fixture(bots_state)
 
 
 def legacy(method, **params):

@@ -1,9 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-import pytest_asyncio
-
 import hermes_cli.config as hermes_config
 import hermes_yaml as yaml
 from gateway.session_authorities import SessionAuthorities
@@ -17,8 +14,7 @@ READ = ['session:read']
 FULL = ['session:read', 'session:control', 'session:submit', 'session:create']
 
 
-@pytest.fixture
-def install(tmp_path, monkeypatch):
+def install_state(tmp_path, monkeypatch):
     root = tmp_path / 'state'
     root.mkdir()
     monkeypatch.setenv('HERMES_HOME', str(root))
@@ -33,8 +29,7 @@ def install(tmp_path, monkeypatch):
     hermes_config._LOAD_CONFIG_CACHE.clear()
 
 
-@pytest_asyncio.fixture
-async def bots(install):
+async def bots_state(install):
     runner = SimpleNamespace(config=SimpleNamespace(multiplex_profiles=False),
                              session_authorities=SessionAuthorities(install, multiplexed=True))
     authorities = {}

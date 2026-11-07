@@ -19,6 +19,7 @@ from typing import Dict, List, Optional, Tuple
 from agent.file_safety import HOME_CREDENTIAL_DIRS
 from hermes_cli.archive_safe import archive_root_dirs, make_targz, normalize_archive_parts, safe_extract_targz
 from hermes_cli import config_backend as _config_backend
+from hermes_cli.primary_profile import follow_rename, refuse_deleting_primary
 from hermes_cli.profiles_config import _migrate_profile_config_if_outdated
 from hermes_cli.home_data_layout import PM_RUNTIME_ROOT_DIRS, SECRET_CACHE_STORES
 from hermes_cli.profiles_remove import (
@@ -1300,15 +1301,6 @@ def _clone_plugins(source_dir: Path, profile_dir: Path) -> None:
                                  _clone_plugins_ignore(source_plugins), dirs_exist_ok=True)
 
 
-def cloned_plugin_names(profile_dir: Path) -> list[str]:
-    """Plugins a clone now carries in ``plugins/``, for the CLI notice."""
-    try:
-        return sorted(p.name for p in (profile_dir / "plugins").iterdir()
-                      if not p.name.startswith(".") and (p.is_dir() or p.is_symlink()))
-    except OSError:
-        return []
-
-
 def _bootstrap_profile_dir(profile_dir: Path, source_dir: Optional[Path],
                            sync_imports: bool = False) -> None:
     """Fresh layout: bootstrap dirs, then either seed a model block (no source) or clone
@@ -1703,12 +1695,9 @@ def delete_profile(name: str, yes: bool = False) -> Path:
     """Delete a profile, its wrapper script, and its gateway service (service disabled first
     to prevent auto-restart, gateway stopped if running)."""
     require_profile_admin_grant("delete", name)
-    canon = normalize_profile_name(name)
+    canon = refuse_deleting_primary(normalize_profile_name(name))
     if canon == "default":
         raise ValueError("Cannot delete the default profile (~/.hermes).\nTo remove everything, use: hermes uninstall")
-    from hermes_cli.primary_profile import primary_profile_name
-    if canon == primary_profile_name():
-        raise ValueError(f"Cannot delete '{canon}': it is the primary bot. Make another bot primary first.")
     canon, profile_dir = _existing_profile_dir(canon)
     gw_running = _check_gateway_running(profile_dir)
     wrapper_path = _find_our_wrapper(canon)
@@ -2261,8 +2250,6 @@ def rename_profile(old_name: str, new_name: str) -> Path:
         raise _unknown_profile_error(old_canon)
     if new_dir.exists():
         raise _profile_exists_error(new_canon)
-    from hermes_cli.primary_profile import primary_profile_name
-    was_primary = primary_profile_name() == old_canon
 
     # 1. Remove the old name's service even when its gateway is stopped: the unit is named after
     # the old profile and runs ``--profile <old>``, so the service manager would crash-loop it on
@@ -2312,12 +2299,7 @@ def rename_profile(old_name: str, new_name: str) -> Path:
     # resurrect it, and a future profile reusing the old name must not read as deleted.
     if live_mux:
         clear_named_profile_deleted(old_dir)
-    if was_primary:
-        from hermes_cli.primary_profile import set_primary_profile
-        try:
-            set_primary_profile(new_canon)
-        except OSError:
-            logger.warning("Renamed the primary bot but could not move the primary pointer", exc_info=True)
+    follow_rename(old_canon, new_canon)
 
     # 2b. Record the rename so Bot Mode group chats can re-link persisted
     # member descriptors to the new slug (#110200). Best-effort: a metadata
