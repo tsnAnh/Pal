@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .base import JsonValue, Params, Result
+from .base import JsonValue, Params, Result, WireEnum
 from .common import ProfileParams
 from .registry import method
 
@@ -106,3 +106,37 @@ class MessagingSlackManifestResult(Result):
 
 method("messaging.slack.manifest", params=MessagingSlackManifestParams, result=MessagingSlackManifestResult,
        doc="Slack app manifest named after the bot, plus the api.slack.com link that creates the app from it.")
+
+
+class MemoryImportTarget(WireEnum):
+    user = "user"
+    memory = "memory"
+
+
+class MemoryImportParams(ProfileParams):
+    """``text`` is pasted free text, one fact per line (bullets, numbering and dates are stripped); ``target``
+    is the profile notes (``user``, the default) or the agent's own notes (``memory``)."""
+
+    text: str
+    target: MemoryImportTarget | None = None
+
+
+class MemoryImportResult(Result):
+    """Counts of the pasted lines: ``added`` landed; ``duplicates`` were already remembered (or repeated),
+    ``too_long`` exceeded one entry, ``blocked`` failed the memory safety scan, ``over_budget`` no longer fit
+    the store's size cap (the first that did not fit and every one after it). ``usage`` is the store's fill."""
+
+    profile: str
+    target: MemoryImportTarget
+    candidates: int
+    added: int
+    duplicates: int
+    too_long: int
+    blocked: int
+    over_budget: int
+    usage: str
+    entry_count: int
+
+
+method("memory.import", params=MemoryImportParams, result=MemoryImportResult,
+       doc="Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned.")

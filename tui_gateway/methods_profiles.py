@@ -312,18 +312,21 @@ def _(rid, params: dict) -> dict:
 @method("bot_mode.about_you.get")
 def _(rid, params: dict) -> dict:
     """The owner facts every Bot Mode bot shares (install-wide, not per profile) → ``{name, timezone}``."""
-    from tools.bot_mode_about_you import read_about_you
-    return _ok(rid, read_about_you())
+    from tools.bot_mode_about_you import read_about_you, read_timezone_auto
+    return _ok(rid, {**read_about_you(), "timezone_auto": read_timezone_auto()})
 
 
 @method("bot_mode.about_you.set")
 def _(rid, params: dict) -> dict:
     """Save owner facts (install-wide). A field left out is unchanged; ``null`` or blank clears it.
     Validates server-side (4065 on an unknown time zone) and returns the normalized ``{name, timezone}``."""
-    from tools.bot_mode_about_you import write_about_you
+    from tools.bot_mode_about_you import read_timezone_auto, write_about_you
     fields = {key: params[key] for key in ("name", "timezone") if key in params}
+    if "timezone_auto" in params:
+        fields["timezone_auto"] = params["timezone_auto"] is True
     try:
-        return _ok(rid, write_about_you(**fields))
+        facts = write_about_you(**fields)
+        return _ok(rid, {**facts, "timezone_auto": read_timezone_auto()})
     except ValueError as e:
         return _err(rid, 4065, str(e))
     except OSError as e:

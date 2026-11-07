@@ -193,8 +193,11 @@ method("profiles.list", params=ProfilesListParams, result=ProfilesListResult,
 
 
 class BotAboutYouFacts(Result):
+    """``timezone_auto``: the client keeps ``timezone`` in step with its device and pushes it on change."""
+
     name: str = ""
     timezone: str = ""
+    timezone_auto: bool = False
 
 
 class BotAboutYouGetParams(ProfileParams):
@@ -202,10 +205,11 @@ class BotAboutYouGetParams(ProfileParams):
 
 
 class BotAboutYouSetParams(ProfileParams):
-    """A key left out is unchanged; ``null`` or blank clears it."""
+    """A key left out is unchanged; ``null`` or blank clears it (``timezone_auto`` null reads as off)."""
 
     name: str | None = None
     timezone: str | None = None
+    timezone_auto: bool | None = None
 
 
 method("bot_mode.about_you.get", params=BotAboutYouGetParams, result=BotAboutYouFacts,

@@ -34,19 +34,13 @@ def _slack_scope_dir(params):
     return Path(home) if home else None
 
 
-def _slack_profile_name(params):
-    from hermes_constants import get_hermes_home, profile_name_for_home
-    return _canonical_profile_request(str(params.get("profile") or "").strip()) or profile_name_for_home(
-        get_hermes_home()) or "default"
-
-
 def _slack_status_payload(params):
     messaging = _slack_messaging()
     entry = messaging._require_platform("slack")
     payload = messaging._platform_payloads(_slack_scope_dir(params), [entry])[0]
     fields = {item["key"]: item["is_set"] for item in payload["env_vars"]}
     return {
-        "profile": _slack_profile_name(params), "enabled": payload["enabled"], "configured": payload["configured"],
+        "profile": _bot_settings_profile_name(params), "enabled": payload["enabled"], "configured": payload["configured"],
         "gateway_running": payload["gateway_running"], "state": payload["state"],
         "error_code": payload["error_code"], "error_message": payload["error_message"],
         "bot_token_set": bool(fields.get("SLACK_BOT_TOKEN")), "app_token_set": bool(fields.get("SLACK_APP_TOKEN")),
@@ -134,7 +128,7 @@ def _(rid, params: dict) -> dict:
     from urllib.parse import quote
     from hermes_cli.profiles import get_profile_dir, read_profile_meta
     from hermes_cli.slack_cli import _build_full_manifest
-    name = _slack_profile_name(params)
+    name = _bot_settings_profile_name(params)
     try:
         meta = read_profile_meta(get_profile_dir(name))
         bot_name = str(params.get("display_name") or "").strip() or meta.get("display_name") or name

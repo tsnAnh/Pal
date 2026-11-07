@@ -11,6 +11,12 @@ _PROFILE_ADMIN_REFUSED = 4102
 _PROFILE_ADMIN_FAILED = 5101
 
 
+def _bot_settings_profile_name(params):
+    from hermes_constants import get_hermes_home, profile_name_for_home
+    requested = _canonical_profile_request(str(params.get("profile") or "").strip())
+    return requested or profile_name_for_home(get_hermes_home()) or "default"
+
+
 def _profile_admin_hosting_refusal(name, profile_dir, action):
     from hermes_cli.profiles import normalize_profile_name
     if normalize_profile_name(name) == "default":
