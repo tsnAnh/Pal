@@ -14,7 +14,7 @@ from gateway.session_context import get_session_env
 # in the TUI/WebUI pickers as a resumable chat and lets ``hermes -c`` in the TUI continue it (#112550).
 # Automation sources (tool, a2a, ...) are inherited on purpose; a Kanban worker's descendants drop its
 # gateway-only ``kanban`` label (delegation_context.scrub_kanban_env).
-UI_TRANSPORT_SOURCES = frozenset({"tui", "desktop"})
+UI_TRANSPORT_SOURCES = frozenset({"tui", "desktop", "ios"})
 
 # Finite non-interactive CLI runs (``hermes chat -q``/``--oneshot``, ``hermes -z``) get their own source so human
 # pickers hide them without title/cwd heuristics; ``hermes -c`` still treats them as CLI history.

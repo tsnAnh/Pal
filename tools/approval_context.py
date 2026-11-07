@@ -82,7 +82,7 @@ def gateway_approval_surface() -> str:
 
 
 # Launch sources of a local session whose viewer answers per-command prompts (classic CLI, TUI, Desktop, ACP editor).
-_LOCAL_INTERACTIVE_SOURCES = frozenset({"cli", "tui", "gui", "acp"})
+_LOCAL_INTERACTIVE_SOURCES = frozenset({"cli", "tui", "gui", "ios", "acp"})
 
 
 def is_local_interactive_session() -> bool:

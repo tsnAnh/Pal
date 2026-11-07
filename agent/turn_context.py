@@ -24,6 +24,7 @@ from agent.memory_provider import is_trivial_prompt
 from agent.message_content import flatten_message_text
 from agent.lsp.deferred import forward_to_agent as forward_lsp_verdicts
 from agent.plugin_live_notes import pop_plugin_notices
+from agent.origin_note import stage_origin_note
 from agent.skills_index_delta import stage_skills_index_note
 from agent.prompt_refresh import refresh_warm_prompt
 from agent.message_metadata import PERSISTENCE_ONLY_MESSAGE_FIELDS, append_message, stamp_message_timestamp
@@ -178,6 +179,10 @@ def consume_surface_switch_note(agent: Any) -> str:
 def consume_skills_index_note(agent: Any) -> str:
     """Pop the skills-index delta staged by the system-prompt restore; same channel as above."""
     return _pop_turn_note(agent, "_skills_index_note")
+
+
+def consume_origin_note(agent: Any) -> str:
+    return _pop_turn_note(agent, "_origin_note")
 
 
 def append_notes_to_multimodal_content(content: Any, notes: Optional[str]) -> bool:
@@ -872,7 +877,8 @@ def _merge_gateway_notes(
     _turn_notes = "\n\n".join(
         part for part in (consume_gateway_turn_context_notes(agent), pop_plugin_notices(agent),
                           consume_surface_switch_note(agent),
-                          consume_skills_index_note(agent)) if part
+                          consume_skills_index_note(agent),
+                          consume_origin_note(agent)) if part
     )
     if not _turn_notes:
         return plugin_user_context
@@ -1201,6 +1207,7 @@ def build_turn_context(
     # Every turn, not only on a prompt restore: a long-lived agent (CLI, TUI, Desktop) keeps its
     # prompt in memory for the whole conversation and would never re-check its skills index.
     stage_skills_index_note(agent, active_system_prompt, messages)
+    stage_origin_note(agent, active_system_prompt, messages)
     plugin_user_context = _merge_gateway_notes(
         agent, messages, current_turn_user_idx, plugin_user_context
     )

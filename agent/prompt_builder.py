@@ -703,6 +703,13 @@ PLATFORM_HINTS = {
         "window.hermes.send(\"prompt\")) sends that prompt as a hidden user turn — answer it by updating the widget's "
         "file, not with prose."
     ),
+    "ios": (
+        "You are chatting inside the Hermes iOS app on an iPhone. Only inline Markdown renders (bold, italics, "
+        "`inline code`, links): headings, tables, fenced code blocks and ::preview widgets show as literal text, and "
+        "MEDIA:/path cards, panes and desktop-app UI do not exist here. Keep replies compact for a small screen: short "
+        "paragraphs, simple dashes for lists, no wide tables or long code lines. Deliver a file by stating its absolute "
+        "path or URL in plain text; the phone cannot open files on the machine your tools run on."
+    ),
     "api_server": (
         "You're responding through an API server. The rendering layer is unknown — assume plain text. No markdown "
         "formatting (no asterisks, bullets, headers, code fences). Treat this like a conversation, not a document. "
@@ -914,7 +921,8 @@ def _local_host_hints() -> list[str]:
         else f"macOS ({platform.mac_ver()[0] or platform.release()})" if sys.platform == "darwin"
         else f"{platform.system()} ({platform.release()})"
     )
-    host_lines = [f"Host: {host}", f"User home directory: {os.path.expanduser('~')}"]
+    from agent.machine_hint import machine_line
+    host_lines = [f"Host: {host}", *filter(None, [machine_line()]), f"User home directory: {os.path.expanduser('~')}"]
     try:
         host_lines.append(f"Current working directory: {resolve_agent_cwd()}")
     except OSError:
