@@ -44,7 +44,9 @@ def build_cron_parser(subparsers, *, cmd_cron: Callable) -> None:
     cron_create.add_argument("--deliver",
         help="Delivery target: origin, local, telegram, discord, signal, "
             "platform:chat_id, or bot-chat[:profile] (inject output into a "
-            "local profile's canonical Bot Chat as a message the bot responds to)")
+            "local profile's canonical Bot Chat as a message the bot responds to), "
+            "or active (alert the device you are using, falling back to your recent "
+            "messaging chat or home channel)")
     cron_create.add_argument("--failure-deliver", dest="failure_deliver",
         help="Override target for FAILURE notices only (same grammar as "
             "--deliver). 'local' suppresses failure notices entirely; run "
@@ -240,3 +242,6 @@ def build_cron_parser(subparsers, *, cmd_cron: Callable) -> None:
     add_accept_hooks_flag(cron_tick)
     add_accept_hooks_flag(cron_parser)
     cron_parser.set_defaults(func=cmd_cron)
+
+    from hermes_cli.proactive_cmd import build_parser as build_proactive_parser
+    build_proactive_parser(subparsers)

@@ -5206,7 +5206,7 @@ export type WorkerPersistResult = Record<string, unknown>
 export interface CanonicalCreateParams {
   profile?: string | null
   request_id?: string | null
-  source?: 'cli' | 'tui' | 'gui' | 'acp' | 'tool' | 'oneshot'
+  source?: 'cli' | 'tui' | 'gui' | 'ios' | 'acp' | 'tool' | 'oneshot'
   cwd?: string | null
   row_cwd?: string | null
   model?: string | null
@@ -5600,6 +5600,28 @@ export interface CanonicalBotStopResult {
   status: string
   stopped: boolean
   handoffs: number
+}
+export interface ClientHelloParams {
+  kind: 'desktop' | 'ios' | 'tui' | 'cli' | 'web'
+  device_id: string
+  label: string
+  app_version?: string
+  accepts_offers?: boolean
+  attention?: 'foreground' | 'background' | 'idle'
+}
+export interface ClientHelloResult {
+  recorded: boolean
+  same_host: boolean
+}
+export interface ClientAttentionParams {
+  state: 'foreground' | 'background' | 'idle'
+}
+export interface RecordedResult {
+  recorded: boolean
+}
+export interface ReachOutcomeParams {
+  offer_id: string
+  outcome: 'shown' | 'acted' | 'dismissed'
 }
 /** ``answers`` rides only on a reconnect replay (locks the server already accepted; null = skipped). */
 export interface ClarifyRequestParams {
@@ -6298,6 +6320,14 @@ export interface PetHatchProgressPayload {
 }
 /** ``change_watcher._CHANGE_WATCHES`` payload fn — ``{}`` for every watch except pet.changed. */
 export type ChangeSignalPayload = Record<string, unknown>
+export interface ReachOfferPayload {
+  offer_id: string
+  kind: 'notify' | 'suggest'
+  domain: string
+  title: string
+  body: string
+  session_id?: string | null
+}
 export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN'
 
 // ── Client→server methods ──
@@ -7135,6 +7165,10 @@ export interface CanonicalRpcMethods {
   'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }
   /** Generation-fenced answer to a pending clarify prompt (empty answer = skipped). */
   'clarify.respond': { params: ClarifyRespondParams; result: PromptResponseResult }
+  /** Report a foreground/background/idle change; recorded is false before client.hello. */
+  'client.attention': { params: ClientAttentionParams; result: RecordedResult }
+  /** Declare this connection's client device; resent on every reconnect, replaces the previous declaration. same_host is derived by the server, never claimed. */
+  'client.hello': { params: ClientHelloParams; result: ClientHelloResult }
   /** Fire-only: a recognized command the classic CLI or the TUI runs itself; the gateway fires `pre_command` for it in the session's profile after replying (`queued` false: not fired). */
   'command.observe': { params: CommandObserveParams; result: CommandObserveResult }
   'config.get': { params: ConfigGetParams; result: CanonicalConfigGetResult }
@@ -7171,6 +7205,8 @@ export interface CanonicalRpcMethods {
   /** Hand a still-queued admission's text to the running turn's agent as a steer. The admission reads 'started' with that turn (pending snapshots mark it 'steering') and never runs on its own; it settles terminal 'steered' when the turn completes with its text, else 'interrupted' (its completion frame says 'cancelled', as an interrupted turn's does); a text the turn never consumed goes back to its queue place. Refusals: admission_started, session_idle, steer_unavailable (no agent to take it: the admission stays queued), unsupported_control, not_found. */
   'prompt.steer_queued': { params: CanonicalSteerQueuedParams; result: AdmissionStatus }
   'prompt.submit': { params: CanonicalSubmitParams; result: CanonicalSubmitResult }
+  /** Report what the user did with a reach.offer; outcomes only move forward, an unknown offer answers recorded false. */
+  'reach.outcome': { params: ReachOutcomeParams; result: RecordedResult }
   /** The classic CLI's /diff session: everything changed since the session's earliest retained checkpoint, as data for its terminal renderer. */
   'rollback.session_diff': { params: RollbackSessionDiffParams; result: RollbackSessionDiffResult }
   /** Owner identity and the canonical capabilities a client may rely on. */
@@ -7214,6 +7250,8 @@ export const CANONICAL_RPC_METHODS = [
   'bot_relay.stop',
   'clarify.lock',
   'clarify.respond',
+  'client.attention',
+  'client.hello',
   'command.observe',
   'config.get',
   'config.set',
@@ -7236,6 +7274,7 @@ export const CANONICAL_RPC_METHODS = [
   'prompt.resolve_unknown',
   'prompt.steer_queued',
   'prompt.submit',
+  'reach.outcome',
   'rollback.session_diff',
   'runtime.describe',
   'session.automation',
@@ -7399,6 +7438,8 @@ export interface BackendGatewayEventMap {
   'preview.restart.progress': PreviewRestartProgressPayload
   /** projects.db moved; refetch the project list + tree. */
   'projects.changed': ChangeSignalPayload
+  /** A proactive offer to alert on; answer reach.outcome shown within 15s once presented. */
+  'reach.offer': ReachOfferPayload
   /** Affection reaction detected in the user's message (hearts etc.). */
   reaction: ReactionPayload
   /** A completed reasoning block (non-streaming providers). */
@@ -7516,6 +7557,7 @@ export const GATEWAY_EVENT_TYPES = [
   'preview.restart.complete',
   'preview.restart.progress',
   'projects.changed',
+  'reach.offer',
   'reaction',
   'reasoning.available',
   'reasoning.delta',

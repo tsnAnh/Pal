@@ -9569,6 +9569,7 @@
               "cli",
               "tui",
               "gui",
+              "ios",
               "acp",
               "tool",
               "oneshot"
@@ -12934,6 +12935,25 @@
         "title": "CliExecResult",
         "type": "object"
       },
+      "ClientAttentionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "foreground",
+              "background",
+              "idle"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ClientAttentionParams",
+        "type": "object"
+      },
       "ClientCapabilitiesParams": {
         "additionalProperties": false,
         "properties": {
@@ -12976,6 +12996,80 @@
           "server_requests"
         ],
         "title": "ClientCapabilitiesResult",
+        "type": "object"
+      },
+      "ClientHelloParams": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "desktop",
+              "ios",
+              "tui",
+              "cli",
+              "web"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "device_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Device Id",
+            "type": "string"
+          },
+          "label": {
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "app_version": {
+            "default": "",
+            "maxLength": 32,
+            "title": "App Version",
+            "type": "string"
+          },
+          "accepts_offers": {
+            "default": false,
+            "title": "Accepts Offers",
+            "type": "boolean"
+          },
+          "attention": {
+            "default": "foreground",
+            "enum": [
+              "foreground",
+              "background",
+              "idle"
+            ],
+            "title": "Attention",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "device_id",
+          "label"
+        ],
+        "title": "ClientHelloParams",
+        "type": "object"
+      },
+      "ClientHelloResult": {
+        "additionalProperties": false,
+        "properties": {
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          },
+          "same_host": {
+            "title": "Same Host",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recorded",
+          "same_host"
+        ],
+        "title": "ClientHelloResult",
         "type": "object"
       },
       "ClipboardPasteParams": {
@@ -34713,6 +34807,82 @@
         "title": "QueuedPrompt",
         "type": "object"
       },
+      "ReachOfferPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "offer_id": {
+            "title": "Offer Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "notify",
+              "suggest"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "domain": {
+            "title": "Domain",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "offer_id",
+          "kind",
+          "domain",
+          "title",
+          "body"
+        ],
+        "title": "ReachOfferPayload",
+        "type": "object"
+      },
+      "ReachOutcomeParams": {
+        "additionalProperties": false,
+        "properties": {
+          "offer_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Offer Id",
+            "type": "string"
+          },
+          "outcome": {
+            "enum": [
+              "shown",
+              "acted",
+              "dismissed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          }
+        },
+        "required": [
+          "offer_id",
+          "outcome"
+        ],
+        "title": "ReachOutcomeParams",
+        "type": "object"
+      },
       "ReactionAuthor": {
         "enum": [
           "user",
@@ -34798,6 +34968,20 @@
           "root"
         ],
         "title": "RecordRepoItem",
+        "type": "object"
+      },
+      "RecordedResult": {
+        "additionalProperties": false,
+        "properties": {
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recorded"
+        ],
+        "title": "RecordedResult",
         "type": "object"
       },
       "RelayAgentRow": {
@@ -50041,6 +50225,42 @@
       }
     },
     {
+      "name": "client.attention",
+      "summary": "Report a foreground/background/idle change; recorded is false before client.hello.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ClientAttentionParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/RecordedResult"
+        }
+      }
+    },
+    {
+      "name": "client.hello",
+      "summary": "Declare this connection's client device; resent on every reconnect, replaces the previous declaration. same_host is derived by the server, never claimed.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ClientHelloParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ClientHelloResult"
+        }
+      }
+    },
+    {
       "name": "command.observe",
       "summary": "Fire-only: a recognized command the classic CLI or the TUI runs itself; the gateway fires `pre_command` for it in the session's profile after replying (`queued` false: not fired).",
       "params": [
@@ -50433,6 +50653,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/CanonicalSubmitResult"
+        }
+      }
+    },
+    {
+      "name": "reach.outcome",
+      "summary": "Report what the user did with a reach.offer; outcomes only move forward, an unknown offer answers recorded false.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ReachOutcomeParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/RecordedResult"
         }
       }
     },
@@ -51588,6 +51826,18 @@
           "name": "payload",
           "schema": {
             "$ref": "#/components/schemas/ChangeSignalPayload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "reach.offer",
+      "summary": "A proactive offer to alert on; answer reach.outcome shown within 15s once presented.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "$ref": "#/components/schemas/ReachOfferPayload"
           }
         }
       ]

@@ -254,6 +254,10 @@ class AuthorityConnection:
         handlers.update(side_handlers(self))
         from gateway.session_llm_oneshot import handlers as oneshot_handlers
         handlers.update(oneshot_handlers(self))
+        from gateway.session_presence_controls import handlers as presence_handlers
+        handlers.update(presence_handlers(self))
+        from gateway.session_reach_controls import handlers as reach_handlers
+        handlers.update(reach_handlers(self))
         from gateway.session_images import attach_bytes
         from functools import partial
         handlers['image.attach_bytes'] = partial(attach_bytes, self)
@@ -549,7 +553,7 @@ class AuthorityConnection:
         return {'instance_id': self.authority.instance_id, 'profile_id': self.authority.profile_id,
                 'authority_epoch': self.authority.epoch,
                 'capabilities': ['durable-admission-v1', 'event-replay-v1', 'local-cli-create-v1', 'acp-editor-policy-v1',
-                                 'acp-session-mcp-v1', 'clarify-batch-v1'],
+                                 'acp-session-mcp-v1', 'clarify-batch-v1', 'reach-v1'],
                 'session_create': {'sources': sorted(SURFACES),
                                    'parameters': sorted(CREATE_FIELDS | {'title'})},
                 # Main's ``gateway.ready.skin``: the canonical client's own ready carries it.

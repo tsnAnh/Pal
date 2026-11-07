@@ -448,6 +448,29 @@ def emit_session_deleted(db, deleted_ids, *, reason, primary=None, sessions_dir=
 _FTS_TRIGGERS = ("messages_fts_insert", "messages_fts_delete", "messages_fts_update",
                  "messages_fts_trigram_insert", "messages_fts_trigram_delete", "messages_fts_trigram_update")
 
+REACH_OFFERS_SQL = """
+CREATE TABLE IF NOT EXISTS reach_offers (
+    offer_id TEXT PRIMARY KEY,
+    producer_key TEXT NOT NULL UNIQUE,
+    domain TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    consent TEXT NOT NULL,
+    title TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('routing', 'alerted', 'landed_silent', 'suppressed', 'deferred', 'unknown')),
+    reason TEXT NOT NULL DEFAULT '',
+    not_before REAL,
+    route_json TEXT,
+    attempts_json TEXT NOT NULL DEFAULT '[]',
+    alerted_at REAL,
+    outcome TEXT CHECK (outcome IN ('shown', 'acted', 'dismissed', 'expired')),
+    outcome_at REAL,
+    outcome_device TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_reach_offers_created ON reach_offers(created_at);
+CREATE INDEX IF NOT EXISTS idx_reach_offers_deferred ON reach_offers(not_before) WHERE status = 'deferred';
+"""
+
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER NOT NULL
@@ -767,7 +790,7 @@ CREATE INDEX IF NOT EXISTS idx_session_model_usage_session ON session_model_usag
 CREATE INDEX IF NOT EXISTS idx_session_model_usage_model ON session_model_usage(model);
 CREATE INDEX IF NOT EXISTS idx_async_delegations_delivery
     ON async_delegations(delivery_state, completed_at);
-"""
+""" + REACH_OFFERS_SQL
 
 # Indexes on later-added columns must run AFTER _reconcile_columns(), or executescript fails on legacy DBs.
 # sessions_runtime_ledger_delete_guard: every delete path in this release retires a session's ledger rows

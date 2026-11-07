@@ -5,6 +5,7 @@ docs of config.yaml.
 """
 
 from hermes_cli.config_defaults_auxiliary import _aux
+from hermes_cli.config_defaults_cron import CHRONOS_DEFAULTS
 
 #: Image every container terminal backend (docker/modal/daytona, the singularity plugin) uses unless the
 #: user pins one. LEGACY_SANDBOX_IMAGES are the plain defaults that preceded the desktop stack
@@ -1782,6 +1783,16 @@ DEFAULT_CONFIG = {
         "allow_lazy_installs": True,
     },
 
+    "proactive": {
+        "enabled": False,
+        "daily_budget": 3,
+        "min_gap_minutes": 60,
+        "quiet_hours": {"start": "22:00", "end": "08:00"},
+        "domain_tiers": {"cron": "notify", "suggestions": "suggest"},
+        "muted_domains": [],
+        "messaging_window_minutes": 30,
+    },
+
     "cron": {
         "catch_up_missed": True,  # False skips recurring misses beyond the local grace window.
         # Let cron-spawned agents use the cronjob toolset (the "cron-librarian" pattern). Off by
@@ -1808,18 +1819,7 @@ DEFAULT_CONFIG = {
         "provider": "",
         # Chronos settings; consulted only when provider == "chronos". All non-secret — the agent
         # holds NO scheduler credentials (provision reuses the Nous Portal token).
-        "chronos": {
-            # NAS/portal base URL that arms/cancels one-shots and mints the inbound fire JWT (used
-            # as the expected issuer).
-            "portal_url": "https://portal.nousresearch.com",
-            # This agent's publicly reachable base URL; NAS POSTs {callback_url}/api/cron/fire. ""
-            # -> Chronos unavailable, resolver falls back to the built-in ticker.
-            "callback_url": "",
-            "expected_audience": "",  # Expected JWT audience (e.g. "agent:{instance_id}").
-            # NAS JWKS URL for verifying the fire JWT signature. "" -> the fire endpoint refuses all
-            # tokens (never an unsigned decode).
-            "nas_jwks_url": "",
-        },
+        "chronos": CHRONOS_DEFAULTS,
         # Wrap delivered cron responses with a task-name header and "The agent cannot see this
         # message" footer. False = clean output.
         "wrap_response": True,

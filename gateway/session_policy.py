@@ -82,7 +82,7 @@ _TURN_PROFILE: ContextVar = ContextVar('follow_profile_read', default=None)  # (
 # Creation label -> agent surface. ``tool`` (third-party integrations, ``hermes chat --source tool``) and
 # ``oneshot`` (finite ``chat -q`` / ``-z`` runs) run as the CLI but keep their own stored label, so human
 # pickers hide them (INTERNAL_LISTING_SOURCES).
-SURFACES = {'cli': 'cli', 'tui': 'tui', 'gui': 'desktop', 'acp': 'acp', 'tool': 'cli', 'oneshot': 'cli'}
+SURFACES = {'cli': 'cli', 'tui': 'tui', 'gui': 'desktop', 'ios': 'ios', 'acp': 'acp', 'tool': 'cli', 'oneshot': 'cli'}
 # ``tool`` and ``oneshot`` stay stored under their own labels so pickers can hide them.
 # Every other creation label is rewritten to ``source='local'`` on peer refresh.
 _KEEP_STORED_LABEL = frozenset({'tool', 'oneshot'})

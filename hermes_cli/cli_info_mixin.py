@@ -626,6 +626,11 @@ class CLIInfoMixin:
             return
         self._show_usage()
 
+    def _handle_reach_command(self, cmd_original: str):
+        from hermes_cli.cli_commands_session_tools import _shlex_args
+        from hermes_cli.proactive_cmd import handle_proactive_command
+        self._console_print(handle_proactive_command(" ".join(_shlex_args(cmd_original))))
+
     def _agent_or_self(self, name: str):
         """Provider-ish attribute from the live agent, falling back to the CLI's own value."""
         return (getattr(self.agent, name, None) if self.agent else None) or getattr(self, name, None)

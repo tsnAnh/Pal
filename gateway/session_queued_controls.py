@@ -27,7 +27,7 @@ _TEXT_ONLY = frozenset({'text', 'surface_v1', 'display_v1', 'local_operator_v1'}
 # ``desktop`` is the label a Desktop chat migrated from main keeps (hermes_state_local_migration).
 # cron, kanban, a2a and hosted-room (bot_room) producers read a saved result for every outcome they
 # do not name, so a transfer or replacement would strand them: never offered, refused by name.
-_INTERACTIVE_SOURCES = frozenset({'cli', 'tui', 'gui', 'desktop', 'acp'})
+_INTERACTIVE_SOURCES = frozenset({'cli', 'tui', 'gui', 'ios', 'desktop', 'acp'})
 
 
 def handlers(connection):

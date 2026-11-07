@@ -793,7 +793,7 @@ def _action_create(a: dict[str, Any]) -> str:
             grace_minutes=a["grace_minutes"],
             pinned=bool(a["pinned"]),
             failure_deliver=_resolve_cron_context_deliver(_normalize_deliver_param(a["failure_deliver"])),
-            catch_up=a["catch_up"],
+            catch_up=a["catch_up"], created_by=a["created_by"] or "user",
             **({"paused": a["paused"], "paused_reason": a["paused_reason"]}
                if a["paused"] is not False or a["paused_reason"] is not None else {}))
     except CronSchedulerRegistrationError as exc:
@@ -1138,7 +1138,8 @@ def cronjob(
     pinned: Optional[bool] = None,
     interpreter: Optional[str] = None,
     timezone: Optional[str] = None,
-    grace_minutes: Optional[int | str] = None) -> str:
+    grace_minutes: Optional[int | str] = None,
+    created_by: Optional[str] = None) -> str:
     """Unified cron job management tool."""
     a = dict(locals())
     del a["task_id"]  # unused but kept for handler signature compatibility
@@ -1218,7 +1219,7 @@ Jobs run in a fresh session with no current-chat context, so prompts must be sel
             },
             "deliver": {
                 "type": "string",
-                "description": "Where the job's output is POSTED as a one-way message (the job itself always runs in a fresh session with no chat context). Omit to address the chat/topic this job was created from. Otherwise: 'local' (save only, no delivery), 'all' (every connected home channel, resolved at fire time), 'bot-chat' or 'bot-chat:<profile>' (inject into a Bot Chat as a real message), or platform:chat_id:thread_id (e.g. 'telegram:-1001234567890:17585'). Comma-combine like 'origin,all'. From a local chat (CLI, TUI or Desktop) the default writes the result into that chat's history as a note, seen when the chat is reopened and by its next turn, not as a live message."
+                "description": "Where the job's output is POSTED as a one-way message (the job itself always runs in a fresh session with no chat context). Omit to address the chat/topic this job was created from. Otherwise: 'local' (save only, no delivery), 'all' (every connected home channel, resolved at fire time), 'bot-chat' or 'bot-chat:<profile>' (inject into a Bot Chat as a real message), 'active' (lands in the originating local chat and alerts the device the user is on, else their recent messaging chat or home channel; alerts for jobs you create need the user's proactive setting on), or platform:chat_id:thread_id (e.g. 'telegram:-1001234567890:17585'). Comma-combine like 'origin,all'. From a local chat (CLI, TUI or Desktop) the default writes the result into that chat's history as a note, seen when the chat is reopened and by its next turn, not as a live message."
             },
             "failure_deliver": {
                 "type": "string",
@@ -1303,6 +1304,12 @@ _HANDLER_FORWARDED_ARGS = (
     "paused_reason", "pinned", "timezone", "grace_minutes", "catch_up")
 
 
+def _tool_created_by() -> str:
+    from gateway.session_context import get_session_env
+    from utils import is_truthy_value
+    return "agent" if is_truthy_value(get_session_env("HERMES_CRON_SESSION", "")) else "user"
+
+
 def _cronjob_handler(args, **kw):
     """Model-tool dispatch: resolves the one model-facing ``monitor`` field into the stored
     ``monitor_script``/``monitor_url`` pair (legacy field names still accepted)."""
@@ -1315,6 +1322,7 @@ def _cronjob_handler(args, **kw):
         task_id=kw.get("task_id"),
         session_id=kw.get("session_id"),
         paused=args.get("paused", False),
+        created_by=_tool_created_by(),
         **{key: args.get(key) for key in _HANDLER_FORWARDED_ARGS},
     )
 

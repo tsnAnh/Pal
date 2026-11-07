@@ -8,10 +8,14 @@ persisted user row stays the words the user typed and the frozen system prefix i
 from contextlib import contextmanager
 from contextvars import ContextVar
 
+from gateway.reach_presence import ClientKind, origin_of, record_input
 from hermes_state_runtime import RuntimeStoreError
 
 SURFACES = frozenset({'hud', 'voice-live'})
 _VOICE_CONTEXT_LIMIT = 6000
+_ORIGIN_KEYS = frozenset({'kind', 'label', 'same_host'})
+_ORIGIN_LABEL_LIMIT = 40
+_ORIGIN_KINDS = frozenset(kind.value for kind in ClientKind)
 _SUBMIT_FIELDS = ('surface', 'voice_context', 'interrupted', 'voice_turn')
 _surface_turn = ContextVar('surface_turn', default=None)
 
@@ -21,7 +25,22 @@ def submit_surface_fields(params):
     return {key: params[key] for key in _SUBMIT_FIELDS if key in params}
 
 
-def admit_surface(params):
+def submit_origin(transport):
+    origin = origin_of(transport)
+    record_input(transport)
+    return origin
+
+
+def _checked_origin(origin):
+    if (not isinstance(origin, dict) or set(origin) != _ORIGIN_KEYS or not isinstance(origin['kind'], str)
+            or origin['kind'] not in _ORIGIN_KINDS
+            or not isinstance(origin['label'], str) or not 0 < len(origin['label']) <= _ORIGIN_LABEL_LIMIT
+            or not origin['label'].isprintable() or type(origin['same_host']) is not bool):
+        raise RuntimeStoreError('invalid_params')
+    return {key: origin[key] for key in sorted(_ORIGIN_KEYS)}
+
+
+def admit_surface(params, origin=None):
     """Wire ``surface`` / ``voice_context`` / ``interrupted`` / ``voice_turn`` -> committed ``surface_v1``
     (``{}`` when absent). ``voice_turn`` marks a spoken voice-mode turn: it runs on ``auxiliary.voice_chat``."""
     surface, context, interrupted, voice_turn = (params.get(key) for key in _SUBMIT_FIELDS)
@@ -42,14 +61,18 @@ def admit_surface(params):
         committed['interrupted'] = True
     if voice_turn:
         committed['voice_turn'] = True
+    if origin is not None:
+        committed['origin'] = _checked_origin(origin)
     return {'surface_v1': committed} if committed else {}
 
 
 def restore_surface(committed):
     """A committed ``surface_v1`` arriving across a process boundary (managed worker), re-checked by
     the admission validator: only an object admission itself could have committed is accepted."""
-    if (not isinstance(committed, dict) or not committed or set(committed) - set(_SUBMIT_FIELDS)
-            or admit_surface(committed).get('surface_v1', {}) != committed):
+    if not isinstance(committed, dict) or not committed or set(committed) - {*_SUBMIT_FIELDS, 'origin'}:
+        raise RuntimeStoreError('invalid_params')
+    fields = {key: value for key, value in committed.items() if key != 'origin'}
+    if admit_surface(fields, origin=committed.get('origin')).get('surface_v1', {}) != committed:
         raise RuntimeStoreError('invalid_params')
     return committed
 
@@ -98,6 +121,10 @@ def surface_voice_turn():
     return bool((_surface_turn.get() or {}).get('voice_turn'))
 
 
+def surface_turn_origin():
+    return (_surface_turn.get() or {}).get('origin')
+
+
 def surface_turn_note(agent):
     """The executing admission's surface note, gated on the tools this agent actually has."""
     committed = _surface_turn.get()
@@ -112,5 +139,6 @@ def arm_surface_turn(agent, notes=(), voice_turn=False):
     that ride the current user message (never the system prompt). Assigned unconditionally so a
     reused agent never replays a stale note or route."""
     agent._voice_turn_pending = bool(voice_turn) or surface_voice_turn()
+    agent._client_origin = surface_turn_origin()
     agent._gateway_turn_context_notes = '\n\n'.join(
         note for note in (*notes, surface_turn_note(agent)) if note)

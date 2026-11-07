@@ -602,6 +602,8 @@ def _resolve_single_delivery_target(
     origin = _resolve_origin(job)
     if deliver_value == "local":
         return None
+    if _reach.is_active_token(deliver_value):
+        return _reach.active_target()
     # Must precede the generic platform:chat_id split so the profile name isn't parsed as chat_id.
     bot_chat_profile = parse_bot_chat_deliver_token(deliver_value)
     if bot_chat_profile is not None:
@@ -1880,6 +1882,12 @@ def _deliver_result(
                 and not warning_notifications_enabled(target["platform"], user_cfg)):
             suppressed_targets += 1
             continue
+        if target["platform"] == _reach.REACH_PLATFORM:
+            reach_error = _reach.deliver_active(
+                job, content, lane_text=cleaned_delivery_content, alert_text=mirror_text, for_failure=for_failure)
+            if reach_error:
+                delivery_errors.append(reach_error)
+            continue
         # Bot Chat owns admission; never concurrently resume a live owner's transcript.
         if target["platform"] == BOT_CHAT_PLATFORM:
             bot_chat_error = _deliver_to_bot_chat(job, content, target["chat_id"], for_failure=for_failure)
@@ -1931,5 +1939,6 @@ def _deliver_result(
 # populated before ``scheduler`` re-exports from it.
 from cron import scheduler as _sched
 from cron import scheduler_delivery_origin as _origin
+from cron import scheduler_delivery_reach as _reach
 from cron import scheduler_preflight as _preflight
 from cron import scheduler_script as _script

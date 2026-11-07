@@ -35,6 +35,7 @@ from hermes_constants import get_hermes_home
 from cron.constants import CLAIM_TTL_INACTIVITY_HEADROOM, FIRE_CLAIM_SKEW_SECONDS, FIRE_CLAIM_TTL_SECONDS
 from cron.env_settings import cron_env_setting
 from cron.jobs_invariants import _validate_job_mode_invariants, validate_schedule_knobs
+from cron.job_provenance import normalize_created_by
 from cron.jobs_model_pin import _main_model_pin
 from cron import jobs_time
 from cron.scheduler_ownership import _claim_owner_is_dead
@@ -1835,6 +1836,7 @@ def create_job(
     interpreter: Optional[str] = None,
     timezone: Optional[str] = None,
     grace_minutes: Optional[int] = None,
+    created_by: Optional[str] = None,
 ) -> dict[str, Any]:
     """Create a new cron job and return the stored record.
 
@@ -1939,6 +1941,7 @@ def create_job(
         ("failure_deliver", f["failure_deliver"]), ("interpreter", f["interpreter"]),
         ("timezone", f["timezone"]), ("grace_minutes", f["grace_minutes"]),
         ("catch_up", f["catch_up"]),
+        ("created_by", normalize_created_by(created_by)),
     ):
         if value is not None:
             job[key] = value

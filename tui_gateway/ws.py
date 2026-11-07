@@ -151,6 +151,7 @@ class WSTransport:
         #: and for the ``user_id`` the agent is built with (``server._session_auth_user_id``).
         self.auth_identity = auth_identity
         self.desktop_local = False
+        self.last_frame_at: float | None = None
         #: The served profile home whose skin this peer follows (None = the launch home); see change_watcher.
         self.skin_home: str | None = None
         self._closed = False
@@ -670,6 +671,7 @@ async def handle_ws(ws: Any, *, auth_identity: dict | None = None, subprotocol: 
         while True:
             try:
                 raw = await _unless_dispatch_failed(ws.receive_text())
+                transport.last_frame_at = time.time()
                 _note_dashboard_client_activity()
             except _SendFailed:
                 raise
