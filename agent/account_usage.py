@@ -915,6 +915,7 @@ _COPILOT_QUOTA_LABELS = (
 )
 _COPILOT_MODEL_SCOPED_QUOTAS = frozenset({"premium_interactions"})
 _COPILOT_NO_QUOTA_REASON = "GitHub did not report Copilot quota for this account."
+_COPILOT_TOKEN_SECRETS = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
 
 
 def _resolve_copilot_usage_token(api_key: Optional[str]) -> str:
@@ -927,7 +928,15 @@ def _resolve_copilot_usage_token(api_key: Optional[str]) -> str:
         token = str(entry.runtime_api_key or "").strip()
         if token and entry.last_status != STATUS_DEAD:
             return token
-    return ""
+    from agent.secret_scope import get_secret
+
+    for name in _COPILOT_TOKEN_SECRETS:
+        token = str(get_secret(name) or "").strip()
+        if token:
+            return token
+    from hermes_cli.git_credentials import _gh_cli_token
+
+    return str(_gh_cli_token() or "").strip()
 
 
 def _copilot_headers(token: str) -> dict[str, str]:
@@ -948,6 +957,13 @@ def _copilot_quota_used_percent(quota: dict) -> Optional[float]:
     return min(100.0, max(0.0, used))
 
 
+def _copilot_plan(payload: dict) -> Optional[str]:
+    sku = str(payload.get("access_type_sku") or "").strip().lower()
+    if sku.startswith("free"):
+        return "Free"
+    return _title_case_slug(payload.get("copilot_plan") or sku or None)
+
+
 def _fetch_copilot_account_usage(
     base_url: Optional[str] = None, api_key: Optional[str] = None,
 ) -> Optional[AccountUsageSnapshot]:
@@ -956,7 +972,7 @@ def _fetch_copilot_account_usage(
         return None
     payload = _get_json(_COPILOT_USER_URL, _copilot_headers(token), timeout=_COPILOT_USAGE_TIMEOUT_S)
     quotas = payload.get("quota_snapshots") if isinstance(payload, dict) else None
-    plan = _title_case_slug(payload.get("copilot_plan") or payload.get("access_type_sku")) if isinstance(payload, dict) else None
+    plan = _copilot_plan(payload) if isinstance(payload, dict) else None
     if not isinstance(quotas, dict):
         return _snapshot("copilot", "copilot_internal_user", [], [], plan=plan,
                          unavailable_reason=_COPILOT_NO_QUOTA_REASON)
@@ -969,6 +985,8 @@ def _fetch_copilot_account_usage(
             continue
         if quota.get("unlimited") is True:
             details.append(f"{label}: unlimited")
+            continue
+        if _is_finite_num(quota.get("entitlement")) and float(quota["entitlement"]) <= 0:
             continue
         used = _copilot_quota_used_percent(quota)
         if used is None:

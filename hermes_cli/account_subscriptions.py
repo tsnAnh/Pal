@@ -139,6 +139,10 @@ def _standalone_credentials() -> list[Credential]:
             continue
         if status.get("logged_in") and status.get("key_source") != "local-offline":
             found[slug] = KIND_API_KEY
+    for provider, rows in read_credential_pool().items():
+        slug = str(provider or "").strip().lower()
+        if slug in _SUBSCRIPTION_PROVIDERS and not rows and slug not in found:
+            found[slug] = KIND_SUBSCRIPTION
     signed_in = _load_auth_store().get("providers")
     for slug, state in (signed_in.items() if isinstance(signed_in, dict) else ()):
         slug = str(slug).strip().lower()

@@ -316,3 +316,20 @@ def test_unknown_params_are_refused_by_the_wire_contract(runtime):
 
     assert "result" not in response
     assert response["error"]["code"] == 4000
+
+
+def test_copilot_signed_in_outside_the_pool_is_listed_with_its_quota(runtime, monkeypatch):
+    launch = runtime.homes["launch"]
+    store = json.loads((launch / "auth.json").read_text())
+    store["credential_pool"]["copilot"] = []
+    (launch / "auth.json").write_text(json.dumps(store))
+    for name in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr("hermes_cli.git_credentials._gh_cli_token", lambda: COPILOT_TOKEN)
+
+    rows = _subscriptions(runtime, refresh=True)
+
+    copilot = rows["copilot"]
+    assert (copilot["provider_label"], copilot["kind"], copilot["state"]) == ("GitHub Copilot", "subscription", "ready")
+    assert _window(copilot, "Chat")["used_percent"] == pytest.approx(50.0)
+    assert COPILOT_TOKEN not in json.dumps(rows)
