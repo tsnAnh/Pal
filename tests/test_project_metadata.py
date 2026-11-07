@@ -123,6 +123,7 @@ def test_lazy_installable_extras_excluded_from_all():
         "wake", "wake-openwakeword", "wake-sherpa", "wake-porcupine",
         "google-chat",
         "keychain",  # keyring — vault key in the OS keychain, installed by `hermes vault key migrate`
+        "apns",  # h2 — HTTP/2 for Apple push notifications, lazy-installed by the push sender
         "mistral",  # mistralai — Voxtral STT/TTS, lazy-installed (stt.mistral / tts.mistral)
     }
     all_extra_specs = optional_dependencies["all"]

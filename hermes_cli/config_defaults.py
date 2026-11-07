@@ -6,6 +6,8 @@ docs of config.yaml.
 
 from hermes_cli.config_defaults_auxiliary import _aux
 from hermes_cli.config_defaults_cron import CHRONOS_DEFAULTS
+from hermes_cli.config_defaults_bot_mode import BOT_MODE_DEFAULTS
+from hermes_cli.config_defaults_push import PUSH_DEFAULTS, PUSH_ENV_VARS
 
 #: Image every container terminal backend (docker/modal/daytona, the singularity plugin) uses unless the
 #: user pins one. LEGACY_SANDBOX_IMAGES are the plain defaults that preceded the desktop stack
@@ -1783,6 +1785,7 @@ DEFAULT_CONFIG = {
         "allow_lazy_installs": True,
     },
 
+    "push": PUSH_DEFAULTS,
     "proactive": {
         "enabled": False,
         "daily_budget": 3,
@@ -1939,18 +1942,7 @@ DEFAULT_CONFIG = {
         # activity for this many days so stale rows aren't scanned forever. 0 = off.
         "done_sub_retention_days": 30,
     },
-    # Bot Mode cross-connection relay (tools/bot_relay.py): envelopes queued by message_agent for
-    # agents on other connections wait in an on-disk outbox until the Desktop drains them.
-    "bot_mode": {
-        # Drain-time TTL (seconds): older envelopes are NOT delivered on drain; the sender gets an
-        # error reply (reason 'queued_expired') so a DM can't land hours late as a zombie. 0 = no
-        # drain-time expiry (the 6h stale-artifact sweep still applies).
-        "envelope_ttl_seconds": 900,
-        # How long a second delivery into a busy target profile queues behind the current turn
-        # before failing with a structured 'target_busy' error. Deliveries are serialized per
-        # profile with a cross-process file lock.
-        "turn_wait_seconds": 120,
-    },
+    "bot_mode": BOT_MODE_DEFAULTS,
     "code_execution": {  # execute_code settings (programmatic tool calls).
         # project = run in the session cwd with the active venv/conda python so project deps and
         # relative paths resolve. strict = isolated temp dir with hermes-agent's own python
@@ -3118,4 +3110,5 @@ OPTIONAL_ENV_VARS = OptionalEnvVars({
     "HERMES_EPHEMERAL_SYSTEM_PROMPT": _setting(
         "Ephemeral system prompt injected at API-call time (never persisted to sessions)",
         "Ephemeral system prompt", None),
+    **PUSH_ENV_VARS,
 })
