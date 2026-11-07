@@ -114,11 +114,25 @@ def token_works_alone(request: Request, token: str) -> bool:
     ``?token=``, the refresh route) on *request*'s listener: anywhere but the gateway's Webapp behind
     the gate, as on main; there, only when this listener gave it to a native app's sign-in and it has
     not expired."""
+    if _forgotten(token):
+        return False
     if not applies(request):
         return True
     with _records_lock:
         expires = _loaded(_home(request)).get(_digest(token))
     return expires is not None and expires > time.time()
+
+
+def _forgotten(token: str) -> bool:
+    import sqlite3
+
+    from gateway import device_registry
+
+    try:
+        return device_registry.is_revoked(device_registry.install_root(None), token)
+    except (sqlite3.Error, OSError):
+        _log.warning("Could not read the record of forgotten devices; treating the token as not forgotten", exc_info=True)
+        return False
 
 
 def gave_native_app(request: Request, session) -> None:

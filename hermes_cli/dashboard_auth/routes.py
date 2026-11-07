@@ -19,6 +19,7 @@ allowlists the public ones.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import threading
 import time
 from collections import OrderedDict, deque
@@ -587,9 +588,34 @@ async def api_auth_ws_ticket(request: Request):
 
 # --- Public: RFC 8252 native-app token exchange + refresh ------------------
 
+DEVICE_ID_PATTERN = r"^[A-Za-z0-9-]{8,64}$"
+
+
 class _NativeTokenBody(BaseModel):
     code: str
     code_verifier: str
+    device_id: str = Field(default="", pattern=r"^$|" + DEVICE_ID_PATTERN)
+
+
+async def _bind_device_grant(session: Session, device_id: str, *, previous_refresh_token: str = "") -> None:
+    if not session.refresh_token or not (device_id or previous_refresh_token):
+        return
+
+    def write() -> None:
+        from gateway import device_registry
+        root, now = device_registry.install_root(None), time.time()
+        if previous_refresh_token and device_registry.rotate_grant(
+                root, old_refresh_token=previous_refresh_token, access_token=session.access_token,
+                refresh_token=session.refresh_token, now=now) is not None:
+            return
+        if device_id:
+            device_registry.bind_grant(root, device_id=device_id, access_token=session.access_token,
+                                       refresh_token=session.refresh_token, provider=session.provider, now=now)
+
+    try:
+        await run_in_threadpool(write)
+    except (sqlite3.Error, OSError):
+        _log.warning("Could not record which device holds a native sign-in", exc_info=True)
 
 
 @router.post("/auth/native/token", name="auth_native_token")
@@ -603,6 +629,7 @@ async def auth_native_token(request: Request, body: _NativeTokenBody):
         _audit(request, AuditEvent.NATIVE_TOKEN_FAILURE, reason="invalid_code_or_pkce")
         raise _http(400, "Invalid or expired authorization code.")
     webapp_sign_in.gave_native_app(request, session)
+    await _bind_device_grant(session, body.device_id)
     _audit(request, AuditEvent.NATIVE_TOKEN_SUCCESS, provider=session.provider,
            user_id=session.user_id)
     return _bearer_payload(session)
@@ -611,6 +638,7 @@ async def auth_native_token(request: Request, body: _NativeTokenBody):
 class _NativeRefreshBody(BaseModel):
     refresh_token: str
     provider: str = ""
+    device_id: str = Field(default="", pattern=r"^$|" + DEVICE_ID_PATTERN)
 
 
 @router.post("/auth/native/refresh", name="auth_native_refresh")
@@ -637,6 +665,7 @@ async def auth_native_refresh(request: Request, body: _NativeRefreshBody):
     if refreshed is not None:
         session = refreshed[0]
         webapp_sign_in.gave_native_app(request, session)
+        await _bind_device_grant(session, body.device_id, previous_refresh_token=body.refresh_token)
         _audit(request, AuditEvent.REFRESH_SUCCESS, provider=session.provider,
                user_id=session.user_id)
         return _bearer_payload(session)
