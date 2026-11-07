@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: Scripts/testflight [--export-only] [--build-number N]
+
+Archives HermesBots for App Store distribution and uploads it to App Store Connect
+for TestFlight, signing with the Xcode account for team G94PJ7VQBJ.
+
+  --export-only      write the signed .ipa to build/testflight/export instead of uploading
+  --build-number N   CFBundleVersion to stamp (default: UTC yymmdd.HHMM)
+USAGE
+}
+
+destination=upload
+build_number="$(date -u +%y%m%d.%H%M)"
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --export-only) destination=export; shift ;;
+    --build-number) build_number="${2:?--build-number needs a value}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "unknown argument: $1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+ios_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+out="$ios_dir/build/testflight"
+archive="$out/HermesBots-$build_number.xcarchive"
+options="$out/ExportOptions.plist"
+mkdir -p "$out"
+
+command -v xcodegen >/dev/null || { echo "xcodegen is required (brew install xcodegen)" >&2; exit 1; }
+(cd "$ios_dir" && xcodegen generate --quiet)
+
+xcodebuild archive \
+  -project "$ios_dir/HermesBots.xcodeproj" \
+  -scheme HermesBots \
+  -configuration Release \
+  -destination generic/platform=iOS \
+  -archivePath "$archive" \
+  -allowProvisioningUpdates \
+  CURRENT_PROJECT_VERSION="$build_number" \
+  | tee "$out/archive.log" | grep -E "error:|warning: .*signing|ARCHIVE (SUCCEEDED|FAILED)" || true
+[[ -d "$archive" ]] || { echo "archive failed; see $out/archive.log" >&2; exit 1; }
+
+cat > "$options" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key><string>app-store-connect</string>
+  <key>destination</key><string>$destination</string>
+  <key>teamID</key><string>G94PJ7VQBJ</string>
+  <key>signingStyle</key><string>automatic</string>
+  <key>uploadSymbols</key><true/>
+  <key>manageAppVersionAndBuildNumber</key><false/>
+  <key>testFlightInternalTestingOnly</key><true/>
+</dict>
+</plist>
+PLIST
+
+xcodebuild -exportArchive \
+  -archivePath "$archive" \
+  -exportOptionsPlist "$options" \
+  -exportPath "$out/export" \
+  -allowProvisioningUpdates \
+  > "$out/export.log" 2>&1 || { tail -40 "$out/export.log" >&2; exit 1; }
+
+tail -5 "$out/export.log"
+echo "build $build_number: $([[ $destination == upload ]] && echo "uploaded to App Store Connect" || echo "exported to $out/export")"
