@@ -694,6 +694,9 @@ def _resolve_toolsets(params, config, source, safe_mode, coding_posture=False, b
         disabled = set(parse_config_string_list((config.get('agent') or {}).get('disabled_toolsets')))
         surface = set(CLIENT_SURFACE_TOOLSETS) if source == 'gui' else {'project'}
         enabled |= surface - (disabled - {'desktop_ui'})
+    if explicit is None and source == 'ios':
+        from agent.skill_utils import parse_config_string_list
+        enabled |= {'iphone'} - set(parse_config_string_list((config.get('agent') or {}).get('disabled_toolsets')))
     if safe_mode:
         # Plugin toolsets are user customizations; the safe worker never imports them.
         from hermes_cli.tools_config import _get_plugin_toolset_keys

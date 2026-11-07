@@ -148,6 +148,12 @@ TOOLSETS = {
         ["manage_catalog"],
         platforms=frozenset({"desktop"}),
     ),
+    "iphone": _ts(
+        "The user's own iPhone through the Hermes iOS app: calendar, reminders, contacts, location, alarms and "
+        "timers, Home accessories (iOS app sessions only; available once an iPhone connector is on)",
+        ["iphone"],
+        platforms=frozenset({"ios"}),
+    ),
     "clarify": _ts("Ask the user clarifying questions (multiple-choice or open-ended)", ["clarify"]),
     "code_execution": _ts("Run Python scripts that call tools programmatically (reduces LLM round trips)", ["execute_code"]),
     "delegation": _ts("Spawn subagents with isolated context for complex subtasks", ["delegate_task"]),
