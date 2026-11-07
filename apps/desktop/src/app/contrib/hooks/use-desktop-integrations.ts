@@ -25,6 +25,7 @@ import {
 } from '@/store/native-notifications'
 import { requestPluginCatalogInstallFromDeepLink } from '@/store/plugin-catalog-install'
 import { openPluginInstallRequest } from '@/store/plugin-install-request'
+import { settleReachOfferNotification } from '@/store/presence-offers'
 import { openFolderAsProject } from '@/store/projects'
 import {
   $selectedStoredSessionId,
@@ -371,6 +372,7 @@ export function useDesktopIntegrations({
         invokePluginNotifyAction(payload.notifyId, payload.actionId)
       } else {
         invokePluginNotifyActivate(payload.notifyId)
+        settleReachOfferNotification(payload.notifyId, 'acted')
       }
 
       if (payload.activate) {
@@ -389,6 +391,14 @@ export function useDesktopIntegrations({
 
     return () => unsubscribe?.()
   }, [navigate])
+
+  useEffect(() => {
+    const unsubscribe = window.hermesDesktop?.onNotificationClose?.(({ notifyId }) => {
+      settleReachOfferNotification(notifyId, 'dismissed')
+    })
+
+    return () => unsubscribe?.()
+  }, [])
 
   // hermes:// deep links:
   //  - mcp/install?… → pending MCP install (explicit confirm, never auto-install)

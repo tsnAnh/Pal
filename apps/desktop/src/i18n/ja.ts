@@ -189,7 +189,8 @@ export const jaOverrides = {
       turnErrorTitle: 'ターンが失敗しました',
       backgroundDoneTitle: 'バックグラウンドタスクが完了しました',
       backgroundFailedTitle: 'バックグラウンドタスクが失敗しました',
-      creditsTitle: 'クレジット'
+      creditsTitle: 'クレジット',
+      proactiveOpen: '開く'
     }
   },
 

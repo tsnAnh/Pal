@@ -613,6 +613,12 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
 
     return () => ipcRenderer.removeListener('hermes:notification-action', listener)
   },
+  onNotificationClose: callback => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('hermes:notification-close', listener)
+
+    return () => ipcRenderer.removeListener('hermes:notification-close', listener)
+  },
   onNotificationActivate: callback => {
     const listener = (_event, payload) => callback(payload)
     ipcRenderer.on('hermes:notification-activate', listener)
@@ -653,6 +659,8 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   },
   // AC ↔ battery transitions; renderers slow their backstop polls on battery.
   getOnBattery: () => ipcRenderer.invoke('hermes:power-battery:get'),
+  getPresenceIdentity: () => ipcRenderer.invoke('hermes:presence:identity'),
+  getSystemIdle: () => ipcRenderer.invoke('hermes:presence:idle'),
   onBatteryChanged: callback => {
     const listener = (_event, onBattery) => callback(Boolean(onBattery))
     ipcRenderer.on('hermes:power-battery', listener)

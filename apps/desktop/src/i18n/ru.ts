@@ -177,7 +177,8 @@ export const ruOverrides = {
       turnErrorTitle: 'Ход не удался',
       backgroundDoneTitle: 'Фоновая задача завершена',
       backgroundFailedTitle: 'Фоновая задача не удалась',
-      creditsTitle: 'Кредиты'
+      creditsTitle: 'Кредиты',
+      proactiveOpen: 'Открыть'
     }
   },
   ...ruNotices,

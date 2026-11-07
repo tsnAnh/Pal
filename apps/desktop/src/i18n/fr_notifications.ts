@@ -33,6 +33,10 @@ export const frNotifications = {
     plugin: {
       label: 'Notifications des plugins',
       description: 'Un plugin desktop a envoyé une notification pendant que Hermes était en arrière-plan.'
+    },
+    proactive: {
+      label: 'Suggestions proactives',
+      description: 'Hermes vous contacte de lui-même, par exemple avec le résultat d’une tâche planifiée ou une suggestion.'
     }
   },
   browserPermission: {

@@ -501,7 +501,8 @@ export const frOverrides = {
       turnErrorTitle: 'Échec du tour',
       backgroundDoneTitle: 'Tâche en arrière-plan terminée',
       backgroundFailedTitle: 'Échec de la tâche en arrière-plan',
-      creditsTitle: 'Crédits'
+      creditsTitle: 'Crédits',
+      proactiveOpen: 'Ouvrir'
     }
   },
   ...frNotices,

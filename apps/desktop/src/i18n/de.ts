@@ -501,7 +501,8 @@ export const deOverrides = {
       turnErrorTitle: 'Turn fehlgeschlagen',
       backgroundDoneTitle: 'Hintergrundaufgabe abgeschlossen',
       backgroundFailedTitle: 'Hintergrundaufgabe fehlgeschlagen',
-      creditsTitle: 'Credits'
+      creditsTitle: 'Credits',
+      proactiveOpen: 'Öffnen'
     }
   },
   ...deNotices,

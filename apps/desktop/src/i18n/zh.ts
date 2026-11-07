@@ -279,7 +279,8 @@ export const zhOverrides = {
       turnErrorTitle: '本轮失败',
       backgroundDoneTitle: '后台任务已完成',
       backgroundFailedTitle: '后台任务失败',
-      creditsTitle: '额度'
+      creditsTitle: '额度',
+      proactiveOpen: '打开'
     }
   },
 

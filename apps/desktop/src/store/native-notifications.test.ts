@@ -11,6 +11,7 @@ import {
   invokePluginNotifyAction,
   invokePluginNotifyActivate,
   NATIVE_NOTIFICATION_KINDS,
+  presentNativeNotification,
   respondToApprovalAction,
   sendTestNativeNotification,
   setNativeNotifyEnabled,
@@ -404,5 +405,58 @@ describe('app sounds mute', () => {
 
   it('leaves OS notification sound alone when not muted', () => {
     expect(fire()).toEqual([undefined, undefined])
+  })
+})
+
+describe('proactive live offers', () => {
+  const offer = (tag: string) => ({ kind: 'proactive' as const, tag, title: 'Nightly report' })
+
+  it('fires whether or not the window is focused', () => {
+    setWindowState({ focused: true, hidden: false })
+    dispatchNativeNotification(offer('focused'))
+    setWindowState({ focused: false, hidden: true })
+    dispatchNativeNotification(offer('away'))
+
+    expect(notify).toHaveBeenCalledTimes(2)
+  })
+
+  it('is not held back by the post-connect quiet window that guards replayed prompts', () => {
+    markNativeNotifyBaseline()
+
+    expect(dispatchNativeNotification(offer('right-after-reconnect'))).toBe(true)
+    expect(dispatchNativeNotification({ kind: 'approval', sessionId: freshSession(), title: 'Approval' })).toBe(false)
+  })
+
+  it('follows its own enable toggle and the master toggle', () => {
+    setNativeNotifyKind('proactive', false)
+    expect(dispatchNativeNotification(offer('kind-off'))).toBe(false)
+    setNativeNotifyKind('proactive', true)
+    setNativeNotifyEnabled(false)
+    expect(dispatchNativeNotification(offer('master-off'))).toBe(false)
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('does not collapse distinct offers into one throttled notification', () => {
+    dispatchNativeNotification(offer('a'))
+    dispatchNativeNotification(offer('b'))
+    dispatchNativeNotification(offer('b'))
+
+    expect(notify).toHaveBeenCalledTimes(2)
+  })
+
+  it('resolves with what the OS reported and passes a stored session id through to click handling', async () => {
+    notify.mockResolvedValueOnce(false)
+
+    expect(await presentNativeNotification({ ...offer('declined'), focusSessionId: 'stored-1' })).toBe(false)
+    expect(await presentNativeNotification({ ...offer('accepted'), focusSessionId: 'stored-1' })).toBe(true)
+    expect(notify).toHaveBeenLastCalledWith(expect.objectContaining({ focusSessionId: 'stored-1', kind: 'proactive' }))
+  })
+
+  it('resolves false when the bridge throws or is missing', async () => {
+    notify.mockRejectedValueOnce(new Error('ipc closed'))
+    expect(await presentNativeNotification(offer('throws'))).toBe(false)
+
+    delete desktopWindow.hermesDesktop
+    expect(await presentNativeNotification(offer('no-bridge'))).toBe(false)
   })
 })

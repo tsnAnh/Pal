@@ -490,7 +490,8 @@ export const en: Translations = {
       turnErrorTitle: 'Turn failed',
       backgroundDoneTitle: 'Background task finished',
       backgroundFailedTitle: 'Background task failed',
-      creditsTitle: 'Credits'
+      creditsTitle: 'Credits',
+      proactiveOpen: 'Open'
     }
   },
 

@@ -24,14 +24,9 @@ import { isMissingRpcMethod } from '@/lib/gateway-rpc'
 import { traceIdentityChange } from '@/lib/identity-trace'
 import { isPermanentLocalGatewayEnsureError } from '@/lib/local-gateway-ensure-failure'
 import { initialGatewayProfile } from '@/lib/platform'
-import {
-  isTimeoutError,
-  RECONNECT_ATTEMPT_TIMEOUT_MS,
-  SOURCE_SWITCH_DIAL_TIMEOUT_MS,
-  withTimeout
-} from '@/lib/with-timeout'
+import { RECONNECT_ATTEMPT_TIMEOUT_MS, SOURCE_SWITCH_DIAL_TIMEOUT_MS, withTimeout } from '@/lib/with-timeout'
 import { $gatewayActivationEpoch } from '@/store/gateway-activation-epoch'
-import { isMissingConnectionError, isMissingProfileError } from '@/store/gateway-dial-failures'
+import { isMissingConnectionError, isMissingProfileError, isStalledDialError } from '@/store/gateway-dial-failures'
 import { notifyError, RECOVERY_ACTIONS } from '@/store/notifications'
 import { markNativeNotifyBaseline } from '@/store/notify-baseline'
 import { setConnection, setGatewayState } from '@/store/session'
@@ -67,6 +62,7 @@ interface RegistryConfig {
    * the connection store. */
   activeConnectionId?: () => null | string
   onEvent: (event: GatewayEvent) => void
+  bindSocket?: (gateway: HermesGateway) => () => void
   /** Server→client request (clarify, approval, …) from ANY socket the registry owns; the
    *  request's `respond` already routes to the socket it came from. `profile` /
    *  `connectionId` tag the source the same way events are tagged. */
@@ -135,6 +131,7 @@ interface Secondary {
   offEvent: () => void
   offRequest: () => void
   offState: () => void
+  offBound: () => void
   reconnectTimer: ReturnType<typeof setTimeout> | null
   reconnectAttempt: number
   /**
@@ -867,16 +864,6 @@ async function openSecondary(entry: Secondary): Promise<void> {
 // ensureActiveGatewayOpen) re-arms it with a fresh budget.
 const SECONDARY_STALLED_DIAL_BUDGET = 3
 
-function isStalledDialError(error: unknown): boolean {
-  if (isTimeoutError(error)) {
-    return true
-  }
-
-  const message = error instanceof Error ? error.message : String(error ?? '')
-
-  return message.includes('timed out while waiting for a free slot')
-}
-
 function rearmSecondary(entry: Secondary, priority: SpawnPriority = 'foreground'): void {
   const reauthError = g.reauthFailures.get(entry.scope)?.error
 
@@ -1049,6 +1036,7 @@ function createSecondary(profile: string, connectionId: null | string = null): S
     offEvent: () => {},
     offRequest: () => {},
     offState: () => {},
+    offBound: g.config?.bindSocket?.(gateway) ?? (() => {}),
     reconnectTimer: null,
     reconnectAttempt: 0,
     livenessProbeFailures: 0,
@@ -2184,6 +2172,8 @@ export function openSecondaryCount(): number {
 // Tear a secondary down: stop its reconnect loop, detach listeners, close the
 // socket. Caller handles removal from the map.
 function disposeSecondary(entry: Secondary): void {
+  entry.offBound()
+
   if (!entry.wantOpen) {
     return
   }

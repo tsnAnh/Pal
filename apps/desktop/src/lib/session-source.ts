@@ -52,6 +52,7 @@ export const LOCAL_SESSION_SOURCE_IDS = [
   'codex',
   'desktop',
   'gateway',
+  'ios',
   'kanban',
   'local',
   'oneshot',

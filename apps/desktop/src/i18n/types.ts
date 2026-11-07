@@ -522,6 +522,7 @@ export interface Translations extends NoticeTranslations {
       backgroundDoneTitle: string
       backgroundFailedTitle: string
       creditsTitle: string
+      proactiveOpen: string
     }
   }
 

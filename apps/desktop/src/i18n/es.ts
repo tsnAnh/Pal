@@ -504,7 +504,8 @@ export const esOverrides = {
       turnErrorTitle: 'El turno falló',
       backgroundDoneTitle: 'Tarea en segundo plano finalizada',
       backgroundFailedTitle: 'La tarea en segundo plano falló',
-      creditsTitle: 'Créditos'
+      creditsTitle: 'Créditos',
+      proactiveOpen: 'Abrir'
     }
   },
   ...esNotices,

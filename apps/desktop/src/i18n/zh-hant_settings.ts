@@ -242,6 +242,10 @@ export const zhHantSettings = {
         plugin: {
           label: '外掛通知',
           description: 'Hermes 在背景時，桌面外掛傳送了通知。'
+        },
+        proactive: {
+          label: '主動提醒',
+          description: 'Hermes 主動聯絡你，例如排程工作的結果或建議。'
         }
       },
       browserPermission: {

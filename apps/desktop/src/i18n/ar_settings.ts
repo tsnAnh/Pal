@@ -266,6 +266,10 @@ export const arSettings = {
         backgroundDone: {
           label: 'اكتملت مهمة الخلفية',
           description: 'اكتمل أمر طرفية يعمل في الخلفية.'
+        },
+        proactive: {
+          label: 'اقتراحات استباقية',
+          description: 'تواصل Hermes معك من تلقاء نفسه، مثل نتيجة مهمة مجدولة أو اقتراح.'
         }
       },
       browserPermission: {
