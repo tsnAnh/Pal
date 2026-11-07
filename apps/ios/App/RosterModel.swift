@@ -13,12 +13,15 @@ struct BotRow: Identifiable, Equatable {
     let lastActive: Date?
     let spec: BotAvatarSpec
     let accent: BotAccent?
+    let sessionIDs: Set<String>
 
     var id: String { name }
 }
 
 private enum RosterWire {
     struct Canonical: Decodable {
+        var id: String?
+        var resolvedId: String?
         var preview: String?
         var lastActive: Double?
     }
@@ -47,6 +50,7 @@ final class RosterModel {
     private(set) var live: [String: BotLiveState] = [:]
     private(set) var celebrating: Set<String> = []
     var query = ""
+    var path: [String] = []
 
     private let connection: ConnectionModel
     private var photos: [String: Data] = [:]
@@ -69,6 +73,13 @@ final class RosterModel {
         bots.first { $0.name == name }
     }
 
+    @discardableResult
+    func open(sessionID: String) -> Bool {
+        guard let bot = bots.first(where: { $0.sessionIDs.contains(sessionID) }) else { return false }
+        if path.last != bot.name { path = [bot.name] }
+        return true
+    }
+
     func activity(for name: String) -> BotActivity {
         BotActivity.derive(link: link, live: live[name], hasLocalPrompt: false, now: Date())
     }
@@ -89,7 +100,12 @@ final class RosterModel {
 
     func runLive() async {
         guard feed == nil, let client = connection.client else { return }
-        let feed = RosterLiveFeed(connect: { try await client.connect() }, diagnostics: .osLog())
+        let presence = client.presence
+        let feed = RosterLiveFeed(
+            connect: { try await client.connect(reach: .offerTarget) },
+            onEvent: { presence?.receive($0) },
+            diagnostics: .osLog()
+        )
         self.feed = feed
         await feed.start()
         await withTaskCancellationHandler {
@@ -158,7 +174,8 @@ final class RosterModel {
             preview: preview,
             lastActive: lastActive,
             spec: BotAvatarSpec(name: profile.name, uiMeta: uiMeta, photo: photos[profile.name]),
-            accent: BotAccent(name: profile.name, uiMeta: uiMeta)
+            accent: BotAccent(name: profile.name, uiMeta: uiMeta),
+            sessionIDs: Set([profile.canonicalSession?.id, profile.canonicalSession?.resolvedId].compactMap { $0 })
         )
     }
 

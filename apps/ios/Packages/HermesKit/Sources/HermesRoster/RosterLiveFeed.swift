@@ -51,6 +51,7 @@ public actor RosterLiveFeed {
 
     private let continuation: AsyncStream<RosterFeedUpdate>.Continuation
     private let connect: @Sendable () async throws -> GatewayConnection
+    private let onEvent: (@Sendable (GatewayEvent) -> Void)?
     private let timing: RosterFeedTiming
     private let diagnostics: Diagnostics
     private let clock = ContinuousClock()
@@ -63,11 +64,13 @@ public actor RosterLiveFeed {
 
     public init(
         connect: @escaping @Sendable () async throws -> GatewayConnection,
+        onEvent: (@Sendable (GatewayEvent) -> Void)? = nil,
         timing: RosterFeedTiming = .standard,
         diagnostics: Diagnostics = .silent
     ) {
         (updates, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         self.connect = connect
+        self.onEvent = onEvent
         self.timing = timing
         self.diagnostics = diagnostics
         lastRefresh = clock.now
@@ -127,7 +130,7 @@ public actor RosterLiveFeed {
         lastRefresh = clock.now
         trigger.yield()
         await withTaskGroup(of: Void.self) { group in
-            group.addTask { await Self.pump(connection.events, into: trigger) }
+            group.addTask { await Self.pump(connection.events, into: trigger, observer: self.onEvent) }
             group.addTask { await self.keepAlive(connection) }
             group.addTask { await self.refreshLoop(connection, triggers) }
             group.addTask { await self.ticker(trigger) }
@@ -138,9 +141,14 @@ public actor RosterLiveFeed {
         activeTrigger = nil
     }
 
-    private static func pump(_ events: AsyncStream<GatewayEvent>, into trigger: AsyncStream<Void>.Continuation) async {
-        for await event in events where changeEvents.contains(event.type) {
-            trigger.yield()
+    private static func pump(
+        _ events: AsyncStream<GatewayEvent>,
+        into trigger: AsyncStream<Void>.Continuation,
+        observer: (@Sendable (GatewayEvent) -> Void)?
+    ) async {
+        for await event in events {
+            observer?(event)
+            if changeEvents.contains(event.type) { trigger.yield() }
         }
     }
 

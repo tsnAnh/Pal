@@ -7,6 +7,7 @@ import HermesProtocol
 import HermesREST
 import HermesTransport
 import Observation
+import UIKit
 
 @MainActor
 @Observable
@@ -29,11 +30,21 @@ final class ConnectionModel {
     private let transport: any HTTPTransport
     private let diagnostics: Diagnostics
     private let browser: WebAuthenticationBrowser
+    let presence: ReachPresence
     private var connection: GatewayConnection?
     private var reopening: Task<GatewayConnection, any Error>?
+    private var attentionChain: Task<Void, Never>?
 
-    init(auth: AuthSession, transport: any HTTPTransport, diagnostics: Diagnostics, initialBaseURL: String, keychainUnavailable: Bool = false) {
+    init(
+        auth: AuthSession,
+        transport: any HTTPTransport,
+        diagnostics: Diagnostics,
+        initialBaseURL: String,
+        presence: ReachPresence,
+        keychainUnavailable: Bool = false
+    ) {
         self.auth = auth
+        self.presence = presence
         self.keychainUnavailable = keychainUnavailable
         self.transport = transport
         self.diagnostics = diagnostics
@@ -60,13 +71,28 @@ final class ConnectionModel {
             keychainUnavailable = true
             auth = try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics)
         }
+        let identity = DeviceIdentity.resolve(
+            store: KeychainDeviceIDStore(),
+            formFactor: Self.formFactor(of: UIDevice.current.userInterfaceIdiom),
+            appVersion: DeviceIdentity.appVersion(of: .main),
+            diagnostics: diagnostics
+        )
         return ConnectionModel(
             auth: auth,
             transport: transport,
             diagnostics: diagnostics,
             initialBaseURL: "",
+            presence: ReachPresence(identity: identity, diagnostics: diagnostics),
             keychainUnavailable: keychainUnavailable
         )
+    }
+
+    private static func formFactor(of idiom: UIUserInterfaceIdiom) -> DeviceFormFactor {
+        switch idiom {
+        case .phone: .phone
+        case .pad: .pad
+        default: .other
+        }
     }
 
     private static func keychainSession(store: KeychainCredentialStore, transport: any HTTPTransport, diagnostics: Diagnostics) -> AuthSession {
@@ -79,6 +105,15 @@ final class ConnectionModel {
         guard let reloaded = try? AuthSession(store: KeychainCredentialStore(), transport: transport, diagnostics: diagnostics) else { return }
         auth = reloaded
         keychainUnavailable = false
+    }
+
+    func report(attention: ReachAttention) {
+        let presence = presence
+        let previous = attentionChain
+        attentionChain = Task {
+            await previous?.value
+            await presence.setAttention(attention)
+        }
     }
 
     var isConnected: Bool {
@@ -158,7 +193,7 @@ final class ConnectionModel {
 
     private func connect() async {
         phase = .connecting
-        let client = HermesClient(auth: auth, transport: transport, diagnostics: diagnostics)
+        let client = HermesClient(auth: auth, transport: transport, diagnostics: diagnostics, presence: presence)
         self.client = client
         do {
             await connection?.close()

@@ -10,13 +10,35 @@ public struct RuntimeDescription: Sendable, Equatable, Decodable {
     public var profileID: String
     public var authorityEpoch: Int
     public var capabilities: [String]
+    public var sessionCreate: SessionCreateDescription?
 
     enum CodingKeys: String, CodingKey {
         case instanceID = "instance_id"
         case profileID = "profile_id"
         case authorityEpoch = "authority_epoch"
         case capabilities
+        case sessionCreate = "session_create"
     }
+
+    public var supportsReach: Bool { capabilities.contains(ReachWire.capability) }
+
+    public static let iosSource = "ios"
+    public static let fallbackSource = "gui"
+
+    public var createSource: String {
+        sessionCreate?.sources.contains(Self.iosSource) == true ? Self.iosSource : Self.fallbackSource
+    }
+
+    public static func createSource(advertised: JSONValue?) -> String {
+        guard let advertised, let description = try? advertised.decoded(as: RuntimeDescription.self) else {
+            return fallbackSource
+        }
+        return description.createSource
+    }
+}
+
+public struct SessionCreateDescription: Sendable, Equatable, Decodable {
+    public var sources: [String]
 }
 
 public struct SocketTicket: Sendable, Decodable {
@@ -38,17 +60,20 @@ public struct HermesClient: Sendable {
     private let transport: any HTTPTransport
     private let diagnostics: Diagnostics
     private let dialOptions: GatewayDialOptions
+    public let presence: ReachPresence?
 
     public init(
         auth: AuthSession,
         transport: any HTTPTransport,
         diagnostics: Diagnostics = .silent,
-        dialOptions: GatewayDialOptions = GatewayDialOptions()
+        dialOptions: GatewayDialOptions = GatewayDialOptions(),
+        presence: ReachPresence? = nil
     ) {
         self.auth = auth
         self.transport = transport
         self.diagnostics = diagnostics
         self.dialOptions = dialOptions
+        self.presence = presence
     }
 
     public func mintSocketTicket(profile: String? = nil) async throws -> SocketTicket {
@@ -58,19 +83,46 @@ public struct HermesClient: Sendable {
         return try await rest.post("/api/webapp/socket-ticket", query: query, as: SocketTicket.self)
     }
 
-    public func connect(profile: String? = nil) async throws -> GatewayConnection {
+    public func connect(profile: String? = nil, reach role: ReachRole = .passive) async throws -> GatewayConnection {
         guard let baseURL = await auth.baseURL else { throw HermesClientError.notSignedIn }
         let ticket = try await mintSocketTicket(profile: profile)
-        return try await GatewayConnection.dial(
+        let connection = try await GatewayConnection.dial(
             url: baseURL.webSocketEndpoint("/api/ws"),
             ticket: ticket.ticket,
             options: dialOptions,
             diagnostics: diagnostics
         )
+        do {
+            try await negotiate(connection, role: role)
+        } catch {
+            await connection.close()
+            throw error
+        }
+        return connection
     }
 
     public func describeRuntime(on connection: GatewayConnection) async throws -> RuntimeDescription {
-        try await connection.call("runtime.describe", params: [:]).decoded(as: RuntimeDescription.self)
+        if let cached = connection.negotiatedRuntime, let description = try? cached.decoded(as: RuntimeDescription.self) {
+            return description
+        }
+        let result = try await connection.call("runtime.describe", params: [:])
+        let description = try result.decoded(as: RuntimeDescription.self)
+        connection.recordNegotiatedRuntime(result)
+        return description
+    }
+
+    private func negotiate(_ connection: GatewayConnection, role: ReachRole) async throws {
+        let description: RuntimeDescription
+        do {
+            description = try await describeRuntime(on: connection)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            diagnostics.info("ws", "runtime.describe unavailable: \(Diagnostics.describe(error))")
+            return
+        }
+        guard description.supportsReach, let presence else { return }
+        await presence.declare(on: connection, acceptsOffers: role == .offerTarget)
     }
 
     private func restClient() async throws -> RESTClient {

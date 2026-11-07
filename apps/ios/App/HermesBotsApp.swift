@@ -1,24 +1,33 @@
+import HermesClient
 import SwiftUI
 
 @main
 struct HermesBotsApp: App {
     @State private var model: ConnectionModel
     @State private var roster: RosterModel
+    @State private var offers: ReachOfferModel
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
         let model = ConnectionModel.live()
         _model = State(initialValue: model)
-        _roster = State(initialValue: RosterModel(connection: model))
+        let roster = RosterModel(connection: model)
+        _roster = State(initialValue: roster)
+        _offers = State(initialValue: ReachOfferModel(presence: model.presence) { sessionID in roster.open(sessionID: sessionID) })
     }
 
     var body: some Scene {
         WindowGroup {
             RootView(model: model, roster: roster)
+                .overlay { ReachOfferOverlay(model: offers) }
                 .preferredColorScheme(.dark)
                 .task { await model.restore() }
+                .task { await offers.listen() }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await model.restore() } }
+                }
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    model.report(attention: ReachAttention(sceneIsActive: phase == .active))
                 }
         }
     }
@@ -26,14 +35,14 @@ struct HermesBotsApp: App {
 
 struct RootView: View {
     let model: ConnectionModel
-    let roster: RosterModel
+    @Bindable var roster: RosterModel
 
     @State private var showsSettings = false
 
     var body: some View {
         switch model.phase {
         case .connected:
-            NavigationStack {
+            NavigationStack(path: $roster.path) {
                 RosterView(roster: roster, connection: model) { showsSettings = true }
                     .navigationDestination(for: String.self) { name in
                         if let bot = roster.bot(named: name) {

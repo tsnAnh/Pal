@@ -57,7 +57,7 @@ public struct SessionAPI: Sendable {
             "title": .string(title),
             "hidden": .bool(hidden),
             "request_id": .string(requestID),
-            "source": "gui",
+            "source": .string(RuntimeDescription.createSource(advertised: connection.negotiatedRuntime)),
         ])
         return try decode(SessionSnapshot.self, result, "session.create")
     }

@@ -87,7 +87,7 @@ hermes-agent/
 ├── plugins/              # memory/, context_engine/, model-providers/, kanban/, image_gen/, ...
 ├── skills/               # Built-in skills (by category)   optional-skills/: shipped, not active
 ├── ui-tui/, tui_gateway/ # Ink terminal UI + its Python JSON-RPC backend (also serves Desktop)
-├── apps/desktop/         # Electron desktop app (+ apps/shared)   web/: dashboard SPA
+├── apps/desktop/         # Electron desktop app (+ apps/shared)   web/: dashboard SPA   apps/ios/: iOS Bot client
 ├── scripts/              # check, run_tests.sh, code_health/, ci/
 ├── website/              # Docusaurus docs (developer-guide/ holds the long-form area docs)
 └── tests/                # Pytest suite, mirrors the source tree

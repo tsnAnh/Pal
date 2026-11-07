@@ -57,6 +57,8 @@ class E2ETestCase: XCTestCase {
         userField.tap()
         userField.typeText(env.username)
         let passwordField = web.secureTextFields.firstMatch
+        let done = app.buttons["Done"]
+        if done.waitForExistence(timeout: 3) { done.tap() }
         passwordField.tap()
         passwordField.typeText(env.password)
         web.buttons.matching(NSPredicate(format: "label ==[c] %@", "Sign in")).firstMatch.tap()
@@ -108,13 +110,13 @@ class E2ETestCase: XCTestCase {
         }
     }
 
-    func control(_ command: String) throws {
+    func control(_ command: String, timeout: TimeInterval = 120) throws {
         let directory = try XCTUnwrap(env.controlDirectory, "HERMES_UITEST_CTL not set")
         let request = URL(fileURLWithPath: directory).appendingPathComponent("request")
         let ack = URL(fileURLWithPath: directory).appendingPathComponent("ack")
         try? FileManager.default.removeItem(at: ack)
         try command.write(to: request, atomically: true, encoding: .utf8)
-        let deadline = Date().addingTimeInterval(120)
+        let deadline = Date().addingTimeInterval(timeout)
         while !FileManager.default.fileExists(atPath: ack.path) {
             XCTAssertLessThan(Date(), deadline, "control command \(command) was not acknowledged")
             Thread.sleep(forTimeInterval: 0.25)
