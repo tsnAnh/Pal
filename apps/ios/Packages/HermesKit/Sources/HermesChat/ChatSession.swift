@@ -141,6 +141,28 @@ public actor ChatSession: OutboxSubmitter {
         try await submitText(entry.text, submissionID: entry.submissionID, attachments: entry.attachments, hidden: false, echo: true)
     }
 
+    @discardableResult
+    public func submitVoiceTurn(_ text: String) async throws -> AdmissionStatus {
+        try await submitText(
+            text,
+            submissionID: "voice:\(UUID().uuidString)",
+            attachments: [],
+            hidden: false,
+            echo: true,
+            voiceTurn: true
+        )
+    }
+
+    public func attachImage(_ data: Data, filename: String) async throws -> StagedImage {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        return try await api.attachImage(sessionID: sessionID, data: data, filename: filename)
+    }
+
+    public func attachFile(_ data: Data, name: String, mime: String) async throws -> StagedFile {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        return try await api.attachFile(sessionID: sessionID, data: data, name: name, mime: mime)
+    }
+
     public func answerClarify(_ prompt: PendingPrompt, answer: String) async throws {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         _ = try await api.respondToClarify(
@@ -182,7 +204,8 @@ public actor ChatSession: OutboxSubmitter {
         submissionID: String,
         attachments: [PromptAttachment],
         hidden: Bool,
-        echo: Bool
+        echo: Bool,
+        voiceTurn: Bool = false
     ) async throws -> AdmissionStatus {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         if echo {
@@ -195,7 +218,8 @@ public actor ChatSession: OutboxSubmitter {
                 text: text,
                 submissionID: submissionID,
                 attachments: attachments,
-                hidden: hidden
+                hidden: hidden,
+                voiceTurn: voiceTurn
             )
         } catch {
             if echo, let refusal = RefusalReason(error), refusal.isPermanent {
