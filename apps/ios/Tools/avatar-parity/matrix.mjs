@@ -15,6 +15,8 @@ const BLOB_KIND_TRAIT = {
 
 export const KIND_TRAITS = BLOB_KIND_TRAIT
 
+export const EXTENDED_BLOB_KINDS = ['spark', 'clover', 'burst', 'gem']
+
 const CLASSIC_SHAPES = [
   'circle',
   'blob',
@@ -50,6 +52,14 @@ BLOB_KINDS.forEach((kind, index) => {
   add('blob-kinds', `${kind}-s2`, `${kind}-bot`, `blobatar:hermes${index * 7}:${kind}`)
   add('blob-kinds', `${kind}-dark`, `${kind}-bot`, `blobatar:0000zzzz:${kind}`, { color: '#1a1a2e', custom: true })
   add('blob-kinds', `${kind}-light`, `${kind}-bot`, `blobatar:a1b2c3d4:${kind}`, { color: '#f5f5f5', custom: true })
+})
+
+EXTENDED_BLOB_KINDS.forEach((kind, index) => {
+  add('blob-kinds', `${kind}-s1`, `${kind}-bot`, `blobatar:k7q2m9x${index + 10}:${kind}`)
+  add('blob-kinds', `${kind}-s2`, `${kind}-bot`, `blobatar:hermes${(index + 10) * 7}:${kind}`)
+  add('blob-kinds', `${kind}-dark`, `${kind}-bot`, `blobatar:0000zzzz:${kind}`, { color: '#1a1a2e', custom: true })
+  add('blob-kinds', `${kind}-light`, `${kind}-bot`, `blobatar:a1b2c3d4:${kind}`, { color: '#f5f5f5', custom: true })
+  add('blob-kinds', `${kind}-orange`, `${kind}-bot`, `blobatar:grok${index}:${kind}`, { color: '#f58903', custom: true })
 })
 
 add('blob-unpinned', 'alice', 'alice', 'blobatar')
@@ -240,6 +250,8 @@ export const SHAPE_INPUTS = [
   'blobatar:abc',
   'blobatar:abc:round',
   'blobatar:abc:sun',
+  'blobatar:abc:spark',
+  'blobatar::gem',
   'blobatar:abc:bogus',
   'blobatar:abc:',
   'blobatar::triangle',

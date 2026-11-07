@@ -65,7 +65,7 @@ export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, g
 
             return (
               <div className="grid justify-items-center gap-3">
-                {/* Silhouette pins: Auto (name decides) + the six blob kinds. */}
+                {/* Silhouette pins: Auto (name decides) + the blob kinds. */}
                 <div className="grid grid-cols-4 justify-items-center gap-1.5">
                   {['', ...BLOB_KINDS].map(k => (
                     <Tip key={k || 'auto'} label={k || b.editor.autoHint}>

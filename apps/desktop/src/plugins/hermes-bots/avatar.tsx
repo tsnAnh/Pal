@@ -11,6 +11,7 @@ import { profileColor } from '@hermes/plugin-sdk'
 import type { CSSProperties } from 'react'
 
 import { attributeText, eyeFillFor, safeAvatarColor } from './avatar-color'
+import { extendBlob, isExtendedBlobKind } from './blob-extended'
 import { grokifyBlob, inscribedBounds } from './blob-style'
 import type { AvatarAppearance, AvatarShape, BotMeta, FaceMood } from './types'
 
@@ -112,7 +113,7 @@ export function defaultShapeFor(name: string): AvatarShape {
 //   'blobatar'                — the face follows the bot's NAME (renaming the
 //                               bot re-rolls the face, live in the dialog)
 //   'blobatar:<seed>'         — seed locked (the 🔒 lock / 🎲 randomize picks)
-//   'blobatar:<seed>:<kind>'  — plus one of the ten silhouettes pinned
+//   'blobatar:<seed>:<kind>'  — plus one of the fourteen silhouettes pinned
 //   'blobatar::<kind>'        — silhouette pinned, seed still follows the name
 // Bot names are slugs (NAME_RE) and generated seeds are base36, so ':' never
 // appears inside a segment. Colors come from the library's own name-derived
@@ -128,7 +129,11 @@ export const BLOB_KINDS = [
   'droplet',
   'hexagon',
   'sun',
-  'triangle'
+  'triangle',
+  'spark',
+  'clover',
+  'burst',
+  'gem'
 ]
 
 // Trait positions at the center of each silhouette band. Band thresholds are
@@ -146,7 +151,11 @@ const BLOB_KIND_TRAIT: Record<string, number> = {
   droplet: 0.8875,
   hexagon: 0.9325,
   sun: 0.965,
-  triangle: 0.99
+  triangle: 0.99,
+  spark: 0.11,
+  clover: 0.11,
+  burst: 0.11,
+  gem: 0.11
 }
 
 export function isBlobShape(shape: null | string | undefined) {
@@ -237,7 +246,9 @@ function blobMarkup(
 
   try {
     // The name goes in as escaped text, through a replacer so `$&`-style patterns in it stay literal.
-    return grokifyBlob(blobatarSvg(seed, opts), { circle }).replace(
+    const library = blobatarSvg(seed, opts)
+
+    return grokifyBlob(isExtendedBlobKind(kind) ? extendBlob(library, kind) : library, { circle }).replace(
       '<svg ',
       () =>
         `<svg data-bot-face="${attributeText(name)}" data-bot-gaze="eyes" data-hb-mood="${attributeText(mood)}" ` +
