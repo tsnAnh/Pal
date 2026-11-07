@@ -4,7 +4,7 @@ import logging
 
 from hermes_cli.dashboard_auth.registry import list_providers
 
-_log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def revoke_refresh_token(refresh_token: str) -> int:
@@ -13,6 +13,6 @@ def revoke_refresh_token(refresh_token: str) -> int:
         try:
             provider.revoke_session(refresh_token=refresh_token)
             revoked += 1
-        except Exception as e:
-            _log.warning("dashboard-auth: revoke on %r failed: %s", provider.name, e)
+        except Exception:
+            logger.exception("dashboard-auth: revoke on %r failed", provider.name)
     return revoked

@@ -121,9 +121,7 @@ def _(rid, params: dict) -> dict:
     try:
         removed = _bd_runtime.reset()
         return _ok(rid, {**_display_snapshot(), "reset": removed})
-    except _bd_runtime.ResetRefused as e:
-        return _err(rid, _DISPLAY_ERR, str(e))
-    except Exception as e:
+    except (_bd_runtime.ResetRefused, OSError) as e:
         return _err(rid, _DISPLAY_ERR, str(e))
 
 
