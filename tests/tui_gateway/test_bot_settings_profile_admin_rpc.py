@@ -86,3 +86,11 @@ def test_delete_removes_only_the_named_bot(two_bots):
     result = _ok("profiles.delete", {"name": "scout"})
     assert result["name"] == "scout" and not doomed.exists()
     assert sorted(list_profile_names()) == ["default", "pilot"] and get_profile_dir("pilot").is_dir()
+
+
+def test_a_bots_id_is_its_name_and_a_rename_keeps_the_old_id_resolvable(two_bots):
+    roster = _ok("profiles.list", {"include_sessions": False})
+    assert roster["install_id"] and {row["name"] for row in roster["profiles"]} == {"default", "scout", "pilot"}
+    _ok("profiles.rename", {"name": "scout", "new_name": "ranger"})
+    renamed = {row["name"]: row for row in _ok("profiles.list", {"include_sessions": False})["profiles"]}
+    assert "scout" not in renamed and renamed["ranger"]["previous_names"] == ["scout"]
