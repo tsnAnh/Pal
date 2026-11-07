@@ -47,6 +47,20 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
     public var deliveryFailure: String?
     public var timestamp: Date?
     public var inbound: InboundKind = .person
+
+    public init(
+        id: String,
+        content: Content,
+        deliveryFailure: String? = nil,
+        timestamp: Date? = nil,
+        inbound: InboundKind = .person
+    ) {
+        self.id = id
+        self.content = content
+        self.deliveryFailure = deliveryFailure
+        self.timestamp = timestamp
+        self.inbound = inbound
+    }
 }
 
 public enum ApplyOutcome: Sendable, Hashable {
