@@ -88,7 +88,9 @@ def waiting_on_user(authority, session_id: str, prompt_id: str, kind: Kind) -> N
 def notifications_flag(cfg) -> bool:
     from utils import is_truthy_value
     section = cfg.get("bot_mode") if isinstance(cfg, dict) else None
-    return isinstance(section, dict) and is_truthy_value(section.get("notifications", False))
+    if not isinstance(section, dict):
+        return True
+    return is_truthy_value(section.get("notifications", True))
 
 
 def notifications_enabled(authority) -> bool:

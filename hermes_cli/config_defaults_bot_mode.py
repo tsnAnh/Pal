@@ -9,6 +9,6 @@ BOT_MODE_DEFAULTS = {
     # before failing with a structured 'target_busy' error. Deliveries are serialized per
     # profile with a cross-process file lock.
     "turn_wait_seconds": 120,
-    "notifications": False,
+    "notifications": True,
     "primary_profile": "default",
 }

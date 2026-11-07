@@ -147,21 +147,21 @@ async def test_the_phone_in_the_foreground_does_not_alert_itself(root, stub):
 
 
 @pytest.mark.asyncio
-async def test_a_bot_with_notifications_off_never_alerts(root, stub):
+async def test_a_bot_alerts_by_default_until_notifications_are_turned_off(root, stub):
     write_profile_config(root)
     configure_apns(root, stub)
     authority = await make_authority(root, answer=answer)
     phone = await phone_with_push(authority)
     await call(phone, "client.attention", {"state": "background"}, rid=5)
     await finish_turn(authority, phone, "turn-1")
-    assert stub.requests == []
+    assert len(stub.requests) == 1
 
-    await call(phone, "config.set", {"key": "bot_mode.notifications", "value": "on"}, rid=6)
+    await call(phone, "config.set", {"key": "bot_mode.notifications", "value": "off"}, rid=6)
     await finish_turn(authority, phone, "turn-2")
     assert len(stub.requests) == 1
-    await call(phone, "config.set", {"key": "bot_mode.notifications", "value": "off"}, rid=7)
+    await call(phone, "config.set", {"key": "bot_mode.notifications", "value": "on"}, rid=7)
     await finish_turn(authority, phone, "turn-3")
-    assert len(stub.requests) == 1
+    assert len(stub.requests) == 2
     await phone.close()
 
 
@@ -396,8 +396,8 @@ async def test_each_bot_keeps_its_own_notification_toggle(tmp_path, monkeypatch)
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     write_profile_config(tmp_path)
     alpha_home, beta_home = tmp_path / "profiles" / "alpha", tmp_path / "profiles" / "beta"
-    write_profile_config(alpha_home)
-    write_profile_config(beta_home, "bot_mode:\n  notifications: true\n")
+    write_profile_config(alpha_home, "bot_mode:\n  notifications: false\n")
+    write_profile_config(beta_home)
     runner = SimpleNamespace(config=SimpleNamespace(multiplex_profiles=False), session_authorities=[])
     alpha = await make_authority(alpha_home, runner, register=False)
     beta = await make_authority(beta_home, runner, register=False)
