@@ -175,6 +175,7 @@ _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
 # stays inline so fast-path ordering stays sane (write_json is _stdout_lock-guarded). Why each is slow:
 # billing/subscription/usage = blocking portal (+Stripe) round-trips; complete.* = git ls-files /
 # prompt_toolkit import + skill scan; model.options = credential pool + pricing + provider probe;
+# account.subscriptions = credential pool + state.db spend read + up to 10s of concurrent usage fetches;
 # pet.* = network or PNG decode (generate = several image-model round-trips); reload.mcp /
 # mcp.servers.* = rediscovery, cold npx spawn, ~30s OAuth wait; profiles.* = skill-tree walk + state.db
 # open; bot_relay.* = a FULL one-turn agent conversation (600s); setup.* / session.active_list =
@@ -184,7 +185,7 @@ _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
 # render (up to sessions.max_export_messages rows, ~0.8s at the default cap); onboarding.start = session
 # creation + a prompt.submit; onboarding.state = a bounded wait on the boot-time due answer.
 _LONG_HANDLERS = frozenset({
-    "session.foreign.list", "session.foreign.preview", "session.foreign.import",
+    "account.subscriptions", "session.foreign.list", "session.foreign.preview", "session.foreign.import",
     "billing.state", "subscription.state", "subscription.preview", "subscription.change",
     "subscription.resume", "subscription.upgrade", "usage.bars", "session.usage", "billing.step_up",
     "browser.manage", "cli.exec", "complete.path", "complete.slash", "llm.oneshot", "model.options",
@@ -2030,7 +2031,8 @@ from . import (
     methods_display as _methods_display, methods_display_watch as _methods_display_watch,
     methods_teach as _methods_teach,
     methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n, methods_machine as _methods_machine,
-    methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog)
+    methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog,
+    methods_account as _methods_account)
 
 for _m in (
     _session_registry, _agent_factory, _slash_worker_client,
@@ -2043,6 +2045,6 @@ for _m in (
     _methods_bot_relay, _prompt_turn, _billing_view, _methods_projects, _methods_session_foreign,
     _methods_session_control, _methods_subagents, _methods_vault, _methods_free_tier, _methods_connectors,
     _methods_connectors_account, _methods_display, _methods_display_watch, _methods_teach, _methods_onboarding,
-    _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog):
+    _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog, _methods_account):
     _m.register(sys.modules[__name__])
 del _m
