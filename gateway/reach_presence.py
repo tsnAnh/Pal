@@ -35,6 +35,8 @@ class Device:
     device_id: str
     label: str
     app_version: str
+    model: str = ""
+    os_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)

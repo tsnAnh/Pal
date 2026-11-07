@@ -16,6 +16,8 @@ class ClientHelloParams(Params):
     device_id: str = Field(pattern=r"^[A-Za-z0-9-]{8,64}$")
     label: str = Field(min_length=1, max_length=40)
     app_version: str = Field(default="", max_length=32)
+    model: str = Field(default="", max_length=40)
+    os: str = Field(default="", max_length=40)
     accepts_offers: bool = False
     attention: AttentionState = "foreground"
 

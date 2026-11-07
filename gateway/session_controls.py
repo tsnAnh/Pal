@@ -256,6 +256,8 @@ class AuthorityConnection:
         handlers.update(oneshot_handlers(self))
         from gateway.session_presence_controls import handlers as presence_handlers
         handlers.update(presence_handlers(self))
+        from gateway.device_controls import handlers as device_handlers
+        handlers.update(device_handlers(self))
         from gateway.session_reach_controls import handlers as reach_handlers
         handlers.update(reach_handlers(self))
         from gateway.session_images import attach_bytes
@@ -964,3 +966,5 @@ class AuthorityConnection:
         unbind_native_transport(self.authority, self.actor)
         self.subscriptions.clear()
         self.authority.events.pop(self.actor.transport_id, None)
+        from gateway.session_presence_controls import departed
+        await departed(self)
