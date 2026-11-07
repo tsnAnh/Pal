@@ -13,6 +13,7 @@ from . import (
     groups_bot_relay,
     i18n,
     liveness,
+    library,
     machine,
     profile_templates,
     profiles_vault_complete_foreign_subagents,
