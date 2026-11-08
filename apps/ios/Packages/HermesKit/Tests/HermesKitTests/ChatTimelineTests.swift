@@ -90,10 +90,4 @@ struct ChatTimelineTests {
         #expect(entries([assistant("a", at: 0), bot, done], lastSeen: Self.base.addingTimeInterval(100)).map(\.showsNewDivider) == [false, true, false])
         #expect(entries([assistant("a", at: 0), done], lastSeen: Self.base.addingTimeInterval(100)).map(\.showsNewDivider) == [false, true])
     }
-
-    @Test func newestDateIsTheMaximumNotTheLast() {
-        let items = [assistant("a", at: 900), assistant("b", at: 100), assistant("c", at: nil)]
-        #expect(ChatTimeline.newestDate(items: items, date: \.timestamp) == Self.base.addingTimeInterval(900))
-        #expect(ChatTimeline.newestDate(items: [assistant("x", at: nil)], date: \.timestamp) == nil)
-    }
 }

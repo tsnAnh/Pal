@@ -40,9 +40,11 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         case tool(ToolCall)
         case clarify(PromptCard)
         case approval(PromptCard)
+        case botThread(BotThreadLink)
     }
 
     public var id: String
+    public var uid: String?
     public var content: Content
     public var deliveryFailure: String?
     public var timestamp: Date?
@@ -53,9 +55,11 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         content: Content,
         deliveryFailure: String? = nil,
         timestamp: Date? = nil,
-        inbound: InboundKind = .person
+        inbound: InboundKind = .person,
+        uid: String? = nil
     ) {
         self.id = id
+        self.uid = uid
         self.content = content
         self.deliveryFailure = deliveryFailure
         self.timestamp = timestamp
@@ -166,6 +170,7 @@ public struct Transcript: Sendable, Equatable {
             case .tool(let call): Summary.Entry(kind: "tool", text: call.name)
             case .clarify(let card): Summary.Entry(kind: "clarify", text: card.prompt.question ?? "")
             case .approval(let card): Summary.Entry(kind: "approval", text: card.prompt.command ?? "")
+            case .botThread: nil
             }
         })
     }
@@ -226,7 +231,8 @@ public struct Transcript: Sendable, Equatable {
                 id: id,
                 content: .user(text: text, delivery: .sent),
                 timestamp: serverDate(message.timestamp),
-                inbound: InboundKind.classify(text: text, displayKind: message.displayKind)
+                inbound: InboundKind.classify(text: text, displayKind: message.displayKind),
+                uid: message.messageUID
             )
         case "assistant":
             let text = message.plainText
@@ -234,14 +240,16 @@ public struct Transcript: Sendable, Equatable {
             return TranscriptItem(
                 id: id,
                 content: .assistant(text: text, reasoning: message.reasoning ?? "", isStreaming: false),
-                timestamp: serverDate(message.timestamp)
+                timestamp: serverDate(message.timestamp),
+                uid: message.messageUID
             )
         case "tool":
             let toolID = message.toolCallID ?? id
             return TranscriptItem(
                 id: "tool:\(toolID)",
                 content: .tool(ToolCall(toolID: toolID, name: message.name ?? "tool", status: .finished, summary: nil)),
-                timestamp: serverDate(message.timestamp)
+                timestamp: serverDate(message.timestamp),
+                uid: message.messageUID
             )
         default:
             return nil

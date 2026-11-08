@@ -18,37 +18,36 @@ public enum ChatTimeline {
         lastSeen: Date?,
         calendar: Calendar = .current
     ) -> [TimelineEntry] {
-        var previousDate: Date?
+        let dates = items.map(date)
+        let separators = separators(for: dates, calendar: calendar)
         var dividerPlaced = false
-        return items.map { item in
-            let itemDate = date(item)
-            var separator: Date?
-            if let itemDate {
-                if let previousDate {
-                    let gap = itemDate.timeIntervalSince(previousDate)
-                    if gap >= separatorGap || !calendar.isDate(itemDate, inSameDayAs: previousDate) { separator = itemDate }
-                } else {
-                    separator = itemDate
-                }
-                previousDate = itemDate
-            }
+        return items.enumerated().map { index, item in
+            let itemDate = dates[index]
             var showsDivider = false
             if !dividerPlaced, let lastSeen, let itemDate, itemDate > lastSeen, isIncoming(item) {
                 showsDivider = true
                 dividerPlaced = true
             }
-            return TimelineEntry(item: item, date: itemDate, separator: separator, showsNewDivider: showsDivider)
+            return TimelineEntry(item: item, date: itemDate, separator: separators[index], showsNewDivider: showsDivider)
         }
     }
 
-    public static func newestDate(items: [TranscriptItem], date: (TranscriptItem) -> Date?) -> Date? {
-        items.compactMap(date).max()
+    public static func separators(for dates: [Date?], calendar: Calendar = .current) -> [Date?] {
+        var previousDate: Date?
+        return dates.map { itemDate in
+            guard let itemDate else { return nil }
+            defer { previousDate = itemDate }
+            guard let previousDate else { return itemDate }
+            let gap = itemDate.timeIntervalSince(previousDate)
+            return gap >= separatorGap || !calendar.isDate(itemDate, inSameDayAs: previousDate) ? itemDate : nil
+        }
     }
 
     private static func isIncoming(_ item: TranscriptItem) -> Bool {
         switch item.content {
         case .user: !item.inbound.isPerson
         case .assistant: true
+        case .botThread(let link): link.kind == .messageFrom
         case .tool, .clarify, .approval: false
         }
     }

@@ -179,13 +179,13 @@ public struct SessionAPI: Sendable {
         return try decode(ProfilesListResult.self, result, "profiles.list")
     }
 
-    private func call(_ method: String, _ params: [String: JSONValue]) async throws -> JSONValue {
+    func call(_ method: String, _ params: [String: JSONValue]) async throws -> JSONValue {
         var scoped = params
         scoped["profile"] = .string(profile)
         return try await connection.call(method, params: .object(scoped))
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue, _ method: String) throws -> T {
+    func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue, _ method: String) throws -> T {
         do {
             return try value.decoded(as: type)
         } catch {
