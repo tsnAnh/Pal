@@ -90,27 +90,32 @@ final class BotChatPresentationE2ETests: E2ETestCase {
         let app = launch()
         signInIfNeeded(app)
         openBot(app, "bot-alpha")
-        send(app, "SLOW show it whole")
-        let partial = bubbles(app, "assistantBubble", containing: "slow-")
+        let marker = "SLOW show it whole " + UUID().uuidString.prefix(6)
+        send(app, marker)
+        let sent = bubbles(app, "userBubble", containing: marker).firstMatch
         let streamingPartial = bubbles(app, "assistantBubble-streaming", containing: "slow-")
         let thinking = app.descendants(matching: .any).matching(identifier: "assistantBubble-streaming")
             .matching(NSPredicate(format: "label == %@", "Thinking"))
-        let whole = bubbles(app, "assistantBubble", containing: "slow-39")
 
         var thinkingSamples = 0
+        var reply: XCUIElement?
         let deadline = Date().addingTimeInterval(90)
-        while Date() < deadline, !whole.firstMatch.exists {
-            if partial.firstMatch.exists, !whole.firstMatch.exists {
-                XCTFail("partial reply was shown while streaming: \(partial.firstMatch.label)")
-                return
-            }
+        while Date() < deadline, reply == nil {
             XCTAssertFalse(streamingPartial.firstMatch.exists, "streaming text is not shown")
             if thinking.firstMatch.exists { thinkingSamples += 1 }
+            if let latest = app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last,
+               sent.exists, latest.frame.minY > sent.frame.minY {
+                guard latest.label.contains("slow-39") else {
+                    XCTFail("partial reply was shown while streaming: \(latest.label)")
+                    return
+                }
+                reply = latest
+            }
             Thread.sleep(forTimeInterval: 0.3)
         }
-        XCTAssertTrue(whole.firstMatch.exists, "whole reply arrived")
+        let whole = try XCTUnwrap(reply, "whole reply arrived")
         XCTAssertGreaterThanOrEqual(thinkingSamples, 5, "thinking bubble stays up until the reply is complete")
-        XCTAssertTrue(whole.firstMatch.label.contains("slow-00"), "reply starts at its first word")
+        XCTAssertTrue(whole.label.contains("slow-00"), "reply starts at its first word")
         waitGone(thinking.firstMatch, timeout: 15, "thinking bubble gone once the reply is shown")
         shot(app, "chat-reply-whole")
     }
