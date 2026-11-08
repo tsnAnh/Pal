@@ -1,32 +1,10 @@
 import Foundation
 import HermesProtocol
+import HermesRoster
 
-public struct BotMeta: Sendable, Equatable {
-    public static let namespace = "hermes-bots"
-
-    public var fields: [String: JSONValue]
-    public var revision: Int?
-
-    public init(fields: [String: JSONValue] = [:], revision: Int? = nil) {
-        self.fields = fields
-        self.revision = revision
-    }
-
+extension BotMeta {
     init(row: ProfileRowWire) {
-        fields = row.uiMeta?[Self.namespace]?.objectValue ?? [:]
-        revision = row.uiMetaRevisions?[Self.namespace]
-    }
-
-    public var title: String? {
-        fields["title"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    public var shape: String? {
-        fields["shape"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
-    }
-
-    public var color: String? {
-        fields["color"]?.stringValue
+        self.init(fields: row.uiMeta?[Self.namespace]?.objectValue ?? [:], revision: row.uiMetaRevisions?[Self.namespace])
     }
 }
 

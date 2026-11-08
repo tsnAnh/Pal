@@ -2,19 +2,21 @@ import CryptoKit
 import Foundation
 import HermesDiagnostics
 import HermesProtocol
+import HermesRoster
 
 public struct BotProfileService: Sendable {
     public static let notificationsKey = "bot_mode.notifications"
-    public static let defaultAttempts = 3
 
     private let gateway: BotsGateway
-    private let attempts: Int
+    private let admin: BotAdmin
+    private let writer: BotMetaWriter
     private let diagnostics: Diagnostics
 
-    public init(gateway: BotsGateway, attempts: Int = BotProfileService.defaultAttempts, diagnostics: Diagnostics = .silent) {
+    public init(gateway: BotsGateway, attempts: Int = BotMetaWriter.defaultAttempts, diagnostics: Diagnostics = .silent) {
         self.gateway = gateway
-        self.attempts = max(1, attempts)
         self.diagnostics = diagnostics
+        admin = BotAdmin(gateway: gateway.roster, diagnostics: diagnostics)
+        writer = BotMetaWriter(gateway: gateway.roster, attempts: attempts, diagnostics: diagnostics)
     }
 
     public func profile(named name: String) async throws -> BotProfile {
@@ -60,10 +62,8 @@ public struct BotProfileService: Sendable {
 
     public func makePrimary(_ name: String) async throws {
         do {
-            let result = try await gateway.call("profiles.set_primary", ["name": .string(name)])
-            guard try gateway.decoded(ProfilesSetPrimaryWire.self, result).ok else { throw BotsError.rejected(reason: nil) }
+            try await admin.makePrimary(name)
         } catch {
-            diagnostics.warning("bots", "make primary failed: \(Diagnostics.describe(error))")
             throw BotsError.surface(error)
         }
     }
@@ -72,7 +72,7 @@ public struct BotProfileService: Sendable {
         let title = proposed.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, title.count <= Self.maximumTitleLength else { throw BotsError.rejected(reason: "invalid_name") }
         do {
-            try await updateMeta(profile.name) { fields in
+            try await writer.update(profile.name) { fields in
                 var next = fields
                 next["title"] = .string(title)
                 return next
@@ -88,7 +88,7 @@ public struct BotProfileService: Sendable {
 
     public func updateLook(_ name: String, shape: String, colorHex: String) async throws {
         do {
-            try await updateMeta(name) { fields in
+            try await writer.update(name) { fields in
                 var next = fields
                 next["shape"] = .string(shape)
                 next["color"] = .string(colorHex)
@@ -132,29 +132,4 @@ public struct BotProfileService: Sendable {
     }
 
     static let maximumTitleLength = 60
-
-    private func updateMeta(_ name: String, change: @Sendable ([String: JSONValue]) -> [String: JSONValue]) async throws {
-        for attempt in 1...attempts {
-            try Task.checkCancellation()
-            let current = try await profile(named: name).meta
-            let next = change(current.fields)
-            if next == current.fields { return }
-            var params: [String: JSONValue] = [
-                "name": .string(name),
-                "ui_meta": [BotMeta.namespace: .object(next)],
-            ]
-            if let revision = current.revision {
-                params["ui_meta_expected_revisions"] = [BotMeta.namespace: .int(revision)]
-            }
-            let result = try await gateway.call("profiles.configure", params)
-            let applied = try gateway.decoded(ProfilesConfigureWire.self, result).applied
-            if let conflicts = applied?.uiMetaConflicts, !conflicts.isEmpty {
-                diagnostics.info("bots", "ui_meta revision conflict on attempt \(attempt)")
-                continue
-            }
-            guard applied?.uiMeta != false else { throw BotsError.rejected(reason: nil) }
-            return
-        }
-        throw BotsError.conflict
-    }
 }

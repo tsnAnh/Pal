@@ -32,7 +32,7 @@ let package = Package(
             ]
         ),
         .target(name: "HermesRoster", dependencies: ["HermesProtocol", "HermesDiagnostics", "HermesTransport"]),
-        .target(name: "HermesBotProfile", dependencies: ["HermesProtocol", "HermesDiagnostics", "HermesTransport"]),
+        .target(name: "HermesBotProfile", dependencies: ["HermesProtocol", "HermesDiagnostics", "HermesTransport", "HermesRoster"]),
         .testTarget(
             name: "HermesKitTests",
             dependencies: [

@@ -1,5 +1,6 @@
 import Foundation
 import HermesProtocol
+import HermesRoster
 import HermesTransport
 
 public struct BotsGateway: Sendable {
@@ -13,6 +14,10 @@ public struct BotsGateway: Sendable {
 
     public func call(_ method: String, _ params: [String: JSONValue] = [:]) async throws -> JSONValue {
         try await perform(method, .object(params))
+    }
+
+    var roster: RosterGateway {
+        RosterGateway(call: perform)
     }
 
     func scoped(_ method: String, profile: String, _ params: [String: JSONValue] = [:]) async throws -> JSONValue {
@@ -44,11 +49,26 @@ public enum BotsError: Error, Sendable, Equatable {
 
     public static func classify(_ error: any Error) -> BotsError {
         if let bots = error as? BotsError { return bots }
+        if let admin = error as? BotAdminError { return BotsError(admin) }
         guard case GatewayTransportError.rpc(let rpc) = error else { return .unavailable }
         switch rpc.reasonCode ?? rpc.message {
         case "permission_denied", "profile_mismatch": return .permissionDenied
         case "not_found": return .notFound
         default: return .rejected(reason: rpc.reasonCode)
+        }
+    }
+}
+
+extension BotsError {
+    init(_ admin: BotAdminError) {
+        switch admin {
+        case .permissionDenied: self = .permissionDenied
+        case .botNotFound: self = .notFound
+        case .conflict: self = .conflict
+        case .rejected: self = .rejected(reason: nil)
+        case .invalidName: self = .rejected(reason: "invalid_name")
+        case .nameTaken: self = .rejected(reason: "name_taken")
+        case .unavailable, .incomplete: self = .unavailable
         }
     }
 }

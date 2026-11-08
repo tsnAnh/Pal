@@ -21,6 +21,14 @@ public struct BotMeta: Sendable, Equatable {
             .flatMap { $0.isEmpty ? nil : $0 }
     }
 
+    public var shape: String? {
+        fields["shape"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    public var color: String? {
+        fields["color"]?.stringValue
+    }
+
     public func setting(pinned: Bool) -> [String: JSONValue] {
         var next = fields
         next[Self.pinnedKey] = .bool(pinned)

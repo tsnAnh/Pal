@@ -24,23 +24,6 @@ public struct ProfilesListWire: Codable, Sendable, Hashable {
     public var profiles: [ProfileRowWire]
 }
 
-public struct ProfilesConfigureWire: Codable, Sendable, Hashable {
-    public struct Applied: Codable, Sendable, Hashable {
-        public var uiMeta: Bool?
-        public var uiMetaConflicts: [String: JSONValue]?
-        public var uiMetaRevisions: [String: Int]?
-
-        enum CodingKeys: String, CodingKey {
-            case uiMeta = "ui_meta"
-            case uiMetaConflicts = "ui_meta_conflicts"
-            case uiMetaRevisions = "ui_meta_revisions"
-        }
-    }
-
-    public var ok: Bool?
-    public var applied: Applied?
-}
-
 public struct ProfilesRenameWire: Codable, Sendable, Hashable {
     public var ok: Bool
     public var name: String
@@ -51,11 +34,6 @@ public struct ProfilesRenameWire: Codable, Sendable, Hashable {
         case name
         case displayName = "display_name"
     }
-}
-
-public struct ProfilesSetPrimaryWire: Codable, Sendable, Hashable {
-    public var ok: Bool
-    public var name: String
 }
 
 public struct ProfileTemplateWire: Codable, Sendable, Hashable {

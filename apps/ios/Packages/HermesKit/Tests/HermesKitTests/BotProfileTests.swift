@@ -2,6 +2,7 @@ import CryptoKit
 import Foundation
 import HermesBotProfile
 import HermesProtocol
+import HermesRoster
 import HermesTransport
 import Synchronization
 import Testing
@@ -177,7 +178,7 @@ struct BotProfileTests {
         await #expect(throws: BotsError.conflict) {
             try await service(stubborn).updateLook("a", shape: "boxy", colorHex: "#fff")
         }
-        #expect(stubborn.calls(to: "profiles.configure").count == BotProfileService.defaultAttempts)
+        #expect(stubborn.calls(to: "profiles.configure").count == BotMetaWriter.defaultAttempts)
     }
 
     @Test("look update marks the look custom and keeps unrelated fields")
