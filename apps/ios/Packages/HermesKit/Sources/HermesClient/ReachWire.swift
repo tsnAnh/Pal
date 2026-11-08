@@ -72,7 +72,7 @@ public enum ReachWire {
     public static let capability = "reach-v1"
 
     public static func helloParams(identity: DeviceIdentity, acceptsOffers: Bool, attention: ReachAttention) -> JSONValue {
-        [
+        var params: [String: JSONValue] = [
             "kind": .string(DeviceIdentity.kind),
             "device_id": .string(identity.deviceID),
             "label": .string(identity.label),
@@ -80,6 +80,9 @@ public enum ReachWire {
             "accepts_offers": .bool(acceptsOffers),
             "attention": .string(attention.rawValue),
         ]
+        if !identity.model.isEmpty { params["model"] = .string(identity.model) }
+        if !identity.os.isEmpty { params["os"] = .string(identity.os) }
+        return .object(params)
     }
 
     public static func attentionParams(_ attention: ReachAttention) -> JSONValue {

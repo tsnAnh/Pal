@@ -21,15 +21,20 @@ public struct DeviceIdentity: Sendable, Equatable {
     public static let kind = "ios"
     public static let maximumLabelLength = 40
     public static let maximumVersionLength = 32
+    public static let maximumHardwareLength = 40
 
     public let deviceID: String
     public let label: String
     public let appVersion: String
+    public let model: String
+    public let os: String
 
-    public init(deviceID: String, formFactor: DeviceFormFactor, appVersion: String) {
+    public init(deviceID: String, formFactor: DeviceFormFactor, appVersion: String, model: String = "", os: String = "") {
         self.deviceID = deviceID
         self.label = formFactor.label
         self.appVersion = String(appVersion.prefix(Self.maximumVersionLength))
+        self.model = String(model.prefix(Self.maximumHardwareLength))
+        self.os = String(os.prefix(Self.maximumHardwareLength))
     }
 
     public static func isValid(deviceID: String) -> Bool {
@@ -55,6 +60,8 @@ public struct DeviceIdentity: Sendable, Equatable {
         store: any DeviceIDStore,
         formFactor: DeviceFormFactor,
         appVersion: String,
+        model: String = "",
+        os: String = "",
         diagnostics: Diagnostics = .silent
     ) -> DeviceIdentity {
         let deviceID: String
@@ -67,9 +74,9 @@ public struct DeviceIdentity: Sendable, Equatable {
             }
         } catch {
             diagnostics.warning("reach", "device id not persisted: \(Diagnostics.describe(error))")
-            return DeviceIdentity(deviceID: UUID().uuidString, formFactor: formFactor, appVersion: appVersion)
+            return DeviceIdentity(deviceID: UUID().uuidString, formFactor: formFactor, appVersion: appVersion, model: model, os: os)
         }
-        return DeviceIdentity(deviceID: deviceID, formFactor: formFactor, appVersion: appVersion)
+        return DeviceIdentity(deviceID: deviceID, formFactor: formFactor, appVersion: appVersion, model: model, os: os)
     }
 }
 
