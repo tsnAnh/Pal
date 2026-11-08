@@ -5,6 +5,9 @@ docs of config.yaml.
 """
 
 from hermes_cli.config_defaults_auxiliary import _aux
+from hermes_cli.config_defaults_cron import CHRONOS_DEFAULTS
+from hermes_cli.config_defaults_bot_mode import BOT_MODE_DEFAULTS
+from hermes_cli.config_defaults_push import PUSH_DEFAULTS, PUSH_ENV_VARS
 
 #: Image every container terminal backend (docker/modal/daytona, the singularity plugin) uses unless the
 #: user pins one. LEGACY_SANDBOX_IMAGES are the plain defaults that preceded the desktop stack
@@ -1782,6 +1785,17 @@ DEFAULT_CONFIG = {
         "allow_lazy_installs": True,
     },
 
+    "push": PUSH_DEFAULTS,
+    "proactive": {
+        "enabled": False,
+        "daily_budget": 3,
+        "min_gap_minutes": 60,
+        "quiet_hours": {"start": "22:00", "end": "08:00"},
+        "domain_tiers": {"cron": "notify", "suggestions": "suggest"},
+        "muted_domains": [],
+        "messaging_window_minutes": 30,
+    },
+
     "cron": {
         "catch_up_missed": True,  # False skips recurring misses beyond the local grace window.
         # Let cron-spawned agents use the cronjob toolset (the "cron-librarian" pattern). Off by
@@ -1808,18 +1822,7 @@ DEFAULT_CONFIG = {
         "provider": "",
         # Chronos settings; consulted only when provider == "chronos". All non-secret — the agent
         # holds NO scheduler credentials (provision reuses the Nous Portal token).
-        "chronos": {
-            # NAS/portal base URL that arms/cancels one-shots and mints the inbound fire JWT (used
-            # as the expected issuer).
-            "portal_url": "https://portal.nousresearch.com",
-            # This agent's publicly reachable base URL; NAS POSTs {callback_url}/api/cron/fire. ""
-            # -> Chronos unavailable, resolver falls back to the built-in ticker.
-            "callback_url": "",
-            "expected_audience": "",  # Expected JWT audience (e.g. "agent:{instance_id}").
-            # NAS JWKS URL for verifying the fire JWT signature. "" -> the fire endpoint refuses all
-            # tokens (never an unsigned decode).
-            "nas_jwks_url": "",
-        },
+        "chronos": CHRONOS_DEFAULTS,
         # Wrap delivered cron responses with a task-name header and "The agent cannot see this
         # message" footer. False = clean output.
         "wrap_response": True,
@@ -1939,18 +1942,7 @@ DEFAULT_CONFIG = {
         # activity for this many days so stale rows aren't scanned forever. 0 = off.
         "done_sub_retention_days": 30,
     },
-    # Bot Mode cross-connection relay (tools/bot_relay.py): envelopes queued by message_agent for
-    # agents on other connections wait in an on-disk outbox until the Desktop drains them.
-    "bot_mode": {
-        # Drain-time TTL (seconds): older envelopes are NOT delivered on drain; the sender gets an
-        # error reply (reason 'queued_expired') so a DM can't land hours late as a zombie. 0 = no
-        # drain-time expiry (the 6h stale-artifact sweep still applies).
-        "envelope_ttl_seconds": 900,
-        # How long a second delivery into a busy target profile queues behind the current turn
-        # before failing with a structured 'target_busy' error. Deliveries are serialized per
-        # profile with a cross-process file lock.
-        "turn_wait_seconds": 120,
-    },
+    "bot_mode": BOT_MODE_DEFAULTS,
     "code_execution": {  # execute_code settings (programmatic tool calls).
         # project = run in the session cwd with the active venv/conda python so project deps and
         # relative paths resolve. strict = isolated temp dir with hermes-agent's own python
@@ -2520,6 +2512,7 @@ DEFAULT_CONFIG = {
         # long; it restarts on the next use. Idle Xvnc + Xfce hold ~220 MB, an abandoned browser far more.
         # 0 keeps screens up until stopped.
         "idle_stop_minutes": 30,
+        "max_screens": 4,
         # Where the screen (and with it computer_use and the bot's browser) runs.
         #   auto      follow the terminal backend: inside the docker / ssh / streaming plugin sandbox when one is
         #             configured, on the gateway host when terminal.backend is local. A sandbox backend that
@@ -3118,4 +3111,5 @@ OPTIONAL_ENV_VARS = OptionalEnvVars({
     "HERMES_EPHEMERAL_SYSTEM_PROMPT": _setting(
         "Ephemeral system prompt injected at API-call time (never persisted to sessions)",
         "Ephemeral system prompt", None),
+    **PUSH_ENV_VARS,
 })

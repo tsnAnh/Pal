@@ -33,6 +33,10 @@ export const jaNotifications = {
     plugin: {
       label: 'プラグイン通知',
       description: 'Hermes がバックグラウンドの間に、デスクトッププラグインが通知を送信しました。'
+    },
+    proactive: {
+      label: 'プロアクティブな通知',
+      description: 'スケジュールされたジョブの結果や提案など、Hermes から自発的に届く通知です。'
     }
   },
   browserPermission: {

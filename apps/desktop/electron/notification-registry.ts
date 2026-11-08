@@ -13,7 +13,7 @@ export function createNotificationRegistry({ ttlMs = NOTIFICATION_RETENTION_TTL_
   const live = new Set<RetainedNotification>()
   const releaseEvents = releaseOnClose ? [...RELEASE_EVENTS, 'close'] : RELEASE_EVENTS
 
-  function retain(notification: RetainedNotification): void {
+  function retain(notification: RetainedNotification, onExpire?: () => void): void {
     live.add(notification)
 
     const release = () => {
@@ -31,6 +31,7 @@ export function createNotificationRegistry({ ttlMs = NOTIFICATION_RETENTION_TTL_
 
     // Bound retention without leaving an OS notification whose handler is gone.
     const timer = setTimeout(() => {
+      onExpire?.()
       notification.close()
       release()
     }, ttlMs)

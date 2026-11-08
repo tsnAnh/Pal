@@ -558,10 +558,12 @@ async def recover_bot_mailbox(authority):
     aborts startup."""
     from gateway.session_bot import recover_bot_deliveries
     from tools.bot_live_delivery import MailboxUnusable
+    from gateway.session_bot_threads_backfill import start_backfill
     try:
         await recover_bot_deliveries(authority)
     except MailboxUnusable as exc:
         logger.warning('Bot Chat recovery skipped for %s: %s', authority.db.db_path, exc)
+    start_backfill(authority)
 
 
 async def start_gateway_runtime_api(runner):

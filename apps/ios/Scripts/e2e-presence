@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+
+case "${1:-}" in
+  -h|--help)
+    cat <<USAGE
+usage: HERMES_IOS_SIM_UDID=<existing simulator> e2e-presence
+Cross-client reach E2E: the real Desktop app (Playwright, attached to the running gateway of the same HERMES_HOME) and the real iOS app
+(XCUITest) on one e2e-gateway with a recording stub LLM. Artifacts land in
+apps/ios/Artifacts/presence-e2e/<run-id>/ (report.json is the verdict). Exits non-zero on any failed assertion.
+Env: HERMES_PRESENCE_E2E_RUN_ID, HERMES_PRESENCE_E2E_ARTIFACTS, HERMES_PRESENCE_E2E_SKIP_DESKTOP_BUILD=1.
+USAGE
+    exit 0 ;;
+esac
+
+if [ "${1:-}" != "--inner" ]; then
+  exec "$IOS_DIR/Scripts/e2e-gateway" -- "$IOS_DIR/Scripts/e2e-presence" --inner
+fi
+
+DESKTOP_DIR="$REPO/apps/desktop"
+RUN_ID="${HERMES_PRESENCE_E2E_RUN_ID:-$(date +%Y%m%d-%H%M%S)}"
+ART="${HERMES_PRESENCE_E2E_ARTIFACTS:-$IOS_DIR/Artifacts/presence-e2e}/$RUN_ID"
+OWNER="reach-e2e"
+UDID="${HERMES_IOS_SIM_UDID:?set HERMES_IOS_SIM_UDID to an existing simulator}"
+PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
+TOOL="$IOS_DIR/Tools/presence-e2e/presence_e2e.py"
+LEDGER="$HOME/.claude/hooks/device-ledger.sh"
+BUNDLE_ID="dev.tsnanh.hermes.bot"
+RUNNER_ID="dev.tsnanh.hermes.bot.uitests.xctrunner"
+CTL_DIR="$(mktemp -d /tmp/hermes-presence-e2e-ctl.XXXXXX)"
+BOT="bot-alpha"
+BOOTED_BY_US=0
+WATCHER_PID=""
+RECORD_PID=""
+DESKTOP_PID=""
+
+disk_report() {
+  du -sh "$HOME/.android/avd" "$HOME/Library/Developer/CoreSimulator/Devices" "$HOME/Library/Developer/XCTestDevices" 2>&1
+}
+
+stop_pid() {
+  local pid="$1"
+  [ -n "$pid" ] || return 0
+  kill "$pid" 2>/dev/null || return 0
+  for _ in $(seq 20); do kill -0 "$pid" 2>/dev/null || return 0; sleep 0.5; done
+  kill -9 "$pid" 2>/dev/null || true
+}
+
+tool() {
+  HERMES_PRESENCE_E2E_CTL="$CTL_DIR" HERMES_PRESENCE_E2E_ART="$ART" HERMES_PRESENCE_E2E_RUN="$RUN_ID" \
+    "$PYTHON" -I "$TOOL" "$@"
+}
+
+control_loop() {
+  while true; do
+    if [ -f "$CTL_DIR/request" ]; then
+      local command status=ok
+      command="$(cat "$CTL_DIR/request")"
+      rm -f "$CTL_DIR/request"
+      echo "== $command" >>"$ART/control.log"
+      case "$command" in
+        desktop-turn-1|assert-notes|fire-job-1|assert-row-1|fire-job-2|assert-row-2|quit-desktop|fire-job-3|assert-row-3|assert-beta)
+          tool "$command" >>"$ART/control.log" 2>&1 || status=fail ;;
+        *) status=fail ;;
+      esac
+      echo "$command -> $status" >>"$ART/control.log"
+      echo "$status" >"$CTL_DIR/ack.tmp"
+      mv "$CTL_DIR/ack.tmp" "$CTL_DIR/ack"
+    fi
+    sleep 0.2
+  done
+}
+
+cleanup() {
+  set +e
+  [ -n "$WATCHER_PID" ] && kill "$WATCHER_PID" 2>/dev/null
+  [ -n "$RECORD_PID" ] && kill -INT "$RECORD_PID" 2>/dev/null && wait "$RECORD_PID" 2>/dev/null
+  stop_pid "$DESKTOP_PID"
+  xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null
+  xcrun simctl uninstall "$UDID" "$RUNNER_ID" 2>/dev/null
+  if [ "$BOOTED_BY_US" = 1 ]; then
+    bash "$LEDGER" cleanup --owner "$OWNER"
+    xcrun simctl list devices | grep "$UDID" | grep -q Booted && xcrun simctl shutdown "$UDID"
+  fi
+  rm -rf "$CTL_DIR"
+  echo "== disk after" | tee -a "$ART/disk.txt"
+  disk_report | tee -a "$ART/disk.txt"
+  echo "artifacts: $ART"
+}
+trap cleanup EXIT
+
+mkdir -p "$ART"
+echo "== disk before" | tee "$ART/disk.txt"
+disk_report | tee -a "$ART/disk.txt"
+xcrun simctl list devices | grep -E "Booted|hermes-ios" | tee "$ART/devices-before.txt" || true
+
+for config in "$HERMES_IOS_E2E_HOME/config.yaml" "$HERMES_IOS_E2E_HOME"/profiles/*/config.yaml; do
+  printf 'proactive:\n  quiet_hours: null\nauxiliary:\n  title_generation:\n    enabled: false\n' >>"$config"
+done
+
+if [ "${HERMES_PRESENCE_E2E_SKIP_DESKTOP_BUILD:-0}" != 1 ]; then
+  echo "== desktop build"
+  ( cd "$DESKTOP_DIR" && npm run build ) >"$ART/desktop-build.log" 2>&1
+fi
+
+echo "== xcodegen + build"
+( cd "$IOS_DIR" && xcodegen generate >/dev/null )
+( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+  -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
+  build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
+
+if ! xcrun simctl list devices | grep "$UDID" | grep -q Booted; then
+  xcrun simctl boot "$UDID"
+  BOOTED_BY_US=1
+  xcrun simctl bootstatus "$UDID" >/dev/null
+  for _ in $(seq 30); do
+    bash "$LEDGER" claim "$UDID" --owner "$OWNER" && break
+    sleep 2
+  done
+fi
+xcrun simctl bootstatus "$UDID" >/dev/null
+xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null || true
+
+echo "== desktop spec (background)"
+(
+  cd "$DESKTOP_DIR" &&
+  HERMES_PRESENCE_E2E_CTL="$CTL_DIR" \
+  HERMES_PRESENCE_E2E_HOME="$HERMES_IOS_E2E_HOME" \
+  HERMES_PRESENCE_E2E_PROFILE="$BOT" \
+  HERMES_PRESENCE_E2E_ARTIFACTS="$ART" \
+  HERMES_E2E_PYTHON="$PYTHON" \
+  exec npx playwright test -c e2e/core/playwright.config.ts presence-cross-client.spec.ts \
+    --trace on --output "$ART/playwright-output"
+) >"$ART/desktop-playwright.log" 2>&1 &
+DESKTOP_PID=$!
+
+for _ in $(seq 600); do
+  [ -f "$CTL_DIR/desktop.ready" ] && break
+  kill -0 "$DESKTOP_PID" 2>/dev/null || { echo "desktop spec exited before it was ready" >&2; tail -40 "$ART/desktop-playwright.log" >&2; exit 1; }
+  sleep 1
+done
+[ -f "$CTL_DIR/desktop.ready" ] || { echo "desktop never became ready" >&2; exit 1; }
+cp "$CTL_DIR/desktop.ready" "$ART/desktop-hello.json"
+
+control_loop &
+WATCHER_PID=$!
+
+echo "== XCUITest"
+xcrun simctl io "$UDID" recordVideo --display=1 --codec h264 --force "$ART/presence-e2e.mov" >"$ART/record.log" 2>&1 &
+RECORD_PID=$!
+sleep 2
+set +e
+( cd "$IOS_DIR" &&
+  TEST_RUNNER_HERMES_UITEST_BASE_URL="$HERMES_IOS_TEST_BASE_URL" \
+  TEST_RUNNER_HERMES_UITEST_USERNAME="$HERMES_IOS_TEST_USERNAME" \
+  TEST_RUNNER_HERMES_UITEST_PASSWORD="$HERMES_IOS_TEST_PASSWORD" \
+  TEST_RUNNER_HERMES_UITEST_CTL="$CTL_DIR" \
+  TEST_RUNNER_HERMES_UITEST_SHOTS="$ART" \
+  TEST_RUNNER_HERMES_UITEST_PRESENCE_CROSS=1 \
+  TEST_RUNNER_HERMES_UITEST_PRESENCE_RUN="$RUN_ID" \
+  TEST_RUNNER_HERMES_UITEST_PRESENCE_BOT="$BOT" \
+  TEST_RUNNER_HERMES_UITEST_PRESENCE_TITLE_1="presence-job-1-$RUN_ID" \
+  xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+    -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
+    -only-testing:HermesBotsUITests/PresenceCrossClientE2ETests \
+    -resultBundlePath "$ART/presence-e2e.xcresult" -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 \
+    test-without-building ) >"$ART/xcodebuild-test.log" 2>&1
+IOS_STATUS=$?
+kill -INT "$RECORD_PID" 2>/dev/null
+wait "$RECORD_PID" 2>/dev/null
+RECORD_PID=""
+
+DESKTOP_STATUS=0
+for _ in $(seq 120); do kill -0 "$DESKTOP_PID" 2>/dev/null || break; sleep 1; done
+if kill -0 "$DESKTOP_PID" 2>/dev/null; then
+  stop_pid "$DESKTOP_PID"
+  DESKTOP_STATUS=1
+else
+  wait "$DESKTOP_PID" || DESKTOP_STATUS=$?
+fi
+DESKTOP_PID=""
+kill "$WATCHER_PID" 2>/dev/null
+WATCHER_PID=""
+
+cp "$HERMES_IOS_E2E_STUB_LOG" "$ART/stub-requests.jsonl" 2>/dev/null
+cp "$HERMES_IOS_E2E_GATEWAY_LOG" "$ART/gateway.log" 2>/dev/null
+for profile_db in "$HERMES_IOS_E2E_HOME"/state.db "$HERMES_IOS_E2E_HOME"/profiles/*/state.db; do
+  [ -f "$profile_db" ] || continue
+  label="$(basename "$(dirname "$profile_db")")"
+  sqlite3 "file:$profile_db?mode=ro" -json "SELECT * FROM reach_offers ORDER BY created_at;" >"$ART/reach_offers-$label.json" 2>/dev/null || true
+done
+set -e
+
+grep -E "Test Case .*(passed|failed)|Executed|TEST (EXECUTE|BUILD)" "$ART/xcodebuild-test.log" | tail -8 || true
+set +e
+tool finalize --ios-status "$IOS_STATUS" --desktop-status "$DESKTOP_STATUS"
+VERDICT=$?
+set -e
+echo "report: $ART/report.json (verdict exit $VERDICT)"
+exit "$VERDICT"

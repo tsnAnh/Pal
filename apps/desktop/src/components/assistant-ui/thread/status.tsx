@@ -199,7 +199,12 @@ const DRAFTING_REVEAL_MS = 200
  * What to call the wait, if it deserves a name. Compaction outranks a draft —
  * it's rarer, slower, and explains a transcript that looks like it reset.
  */
-function useStatusHint(compacting: boolean, drafting: DraftingTool | null, providerWait: string): string {
+function useStatusHint(
+  compacting: boolean,
+  drafting: DraftingTool | null,
+  providerWait: string,
+  botChat: boolean
+): string {
   const [revealed, setRevealed] = useState(false)
   const name = drafting?.name ?? ''
 
@@ -219,7 +224,7 @@ function useStatusHint(compacting: boolean, drafting: DraftingTool | null, provi
     return COMPACTION_LABEL
   }
 
-  if (providerWait) {
+  if (providerWait && !botChat) {
     return providerWait
   }
 
@@ -254,15 +259,15 @@ interface WaitBodyProps {
   localLoad: ReturnType<typeof useLocalModelLoad>
 }
 
-function useBotWaitLabel(hint: string, localLoad: ReturnType<typeof useLocalModelLoad>): string {
+function useBotWaitLabel(hint: string): string {
   const { t } = useI18n()
 
-  return hint || (localLoad ? t.assistant.thread.loadingLocalModel(localLoad.model) : t.assistant.thread.botWorking)
+  return hint || t.assistant.thread.botWorking
 }
 
 const WaitBody: FC<WaitBodyProps> = ({ botChat, elapsed, hint, localLoad }) => {
   const { t } = useI18n()
-  const botLabel = useBotWaitLabel(hint, localLoad)
+  const botLabel = useBotWaitLabel(hint)
 
   if (botChat) {
     return <HintText className="text-(--ui-text-tertiary)">{botLabel}</HintText>
@@ -290,12 +295,12 @@ export const ResponseLoadingIndicator: FC = () => {
   const botChat = useSurfacePersona() !== null
   const { compacting, drafting, providerWait, turnStartedAt } = useThreadSessionStatus()
   const elapsed = useElapsedSeconds(true, undefined, turnStartedAt)
-  const hint = useStatusHint(compacting, drafting, providerWait)
+  const hint = useStatusHint(compacting, drafting, providerWait, botChat)
   // Renderer-synthesized load bar: covers loads the backend's wait loop
   // can't narrate (gateway still initializing, or an auxiliary call — not
   // the main request — triggered the autoload). A real wait frame wins.
   const localLoad = useLocalModelLoad(!hint)
-  const botLabel = useBotWaitLabel(hint, localLoad)
+  const botLabel = useBotWaitLabel(hint)
 
   return (
     <StatusRow
@@ -359,7 +364,7 @@ interface TurnActivityRowProps {
 
 const TurnActivityRow: FC<TurnActivityRowProps> = ({ active, elapsed, hint, localLoad }) => {
   const botChat = useSurfacePersona() !== null
-  const botLabel = useBotWaitLabel(hint, localLoad)
+  const botLabel = useBotWaitLabel(hint)
 
   return (
     <StatusRow
@@ -401,7 +406,7 @@ export const TurnActivityIndicator: FC<{ thinking?: boolean }> = ({ thinking = f
   // the whole turn so far.
   const [quietSince, setQuietSince] = useState<number | undefined>(undefined)
   const { awaitingInput, busy, compacting, drafting, providerWait, turnStartedAt } = useThreadSessionStatus()
-  const hint = useStatusHint(compacting, drafting, providerWait)
+  const hint = useStatusHint(compacting, drafting, providerWait, botChat)
 
   // A tool run at the tail already narrates the wait — its summary counts the
   // calls, its ticker names the current one, and it carries its own timer. A

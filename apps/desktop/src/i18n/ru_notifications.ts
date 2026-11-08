@@ -33,6 +33,10 @@ export const ruNotifications = {
     plugin: {
       label: 'Уведомления плагинов',
       description: 'Плагин приложения отправил уведомление, пока Hermes был в фоне.'
+    },
+    proactive: {
+      label: 'Проактивные уведомления',
+      description: 'Hermes сам обращается к вам, например с результатом задания по расписанию или с предложением.'
     }
   },
   browserPermission: {

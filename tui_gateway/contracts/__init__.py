@@ -3,6 +3,7 @@ module is listed here so the generator and the runtime see the same catalog."""
 
 from . import (
     billing_delegation_pets,
+    bot_settings,
     bot_teach,
     common,
     config_free_tier_control,
@@ -13,7 +14,9 @@ from . import (
     groups_bot_relay,
     i18n,
     liveness,
+    library,
     machine,
+    permissions,
     profile_templates,
     profiles_vault_complete_foreign_subagents,
     projects_pets,
@@ -22,8 +25,9 @@ from . import (
     sessions,
     tools_commands,
     tools_mcp_plugins,
+    account,
 )
-from . import canonical
+from . import canonical, canonical_bot_threads, canonical_bridge, canonical_device, canonical_devices, canonical_reach, canonical_search
 from .base import JsonValue, Params, Payload, Result, WireEnum
 from .registry import CANONICAL_METHODS, EVENTS, METHODS, SERVER_REQUESTS
 

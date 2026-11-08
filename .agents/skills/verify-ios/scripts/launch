@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+HERE="$SKILL_DIR/scripts"
+
+case "${1:-}" in
+  -h|--help)
+    cat <<USAGE
+usage: launch
+Records a baseline, starts an isolated sandbox gateway + fake LLM, builds the app and UI tests,
+boots one simulator (waits for a free slot), claims it in the device ledger, then runs doctor.
+Env: VERIFY_IOS_OWNER (ledger owner, default verify-ios), VERIFY_IOS_UDID (pin a simulator),
+VERIFY_IOS_SLOT_WAIT_SECONDS (default 900), HERMES_IOS_PYTHON,
+VERIFY_IOS_SEED (parity: seed the 8-bot parity roster via e2e-gateway --seed; default off).
+On any failure launch runs cleanup before exiting non-zero. Evidence is never removed.
+USAGE
+    exit 0 ;;
+esac
+
+if [ -f "$RUN_ENV" ]; then
+  . "$RUN_ENV"
+  if pid_alive "${BACKEND_PID:-}"; then
+    die "a run (${RUN_ID:-?}) is already active; run scripts/cleanup first. Refusing to double-drive."
+  fi
+  "$HERE/cleanup" >/dev/null 2>&1 || true
+fi
+
+RUN_ID="$(date +%Y%m%d-%H%M%S)"
+set_state RUN_ID "$RUN_ID"
+set_state EVIDENCE "$EVIDENCE_ROOT/$RUN_ID"
+mkdir -p "$EVIDENCE_ROOT/$RUN_ID"
+git -C "$REPO" check-ignore -q "$EVIDENCE_ROOT/$RUN_ID/x" || die "evidence dir is not gitignored: $EVIDENCE_ROOT"
+
+fail() { say "launch failed; running cleanup"; "$HERE/cleanup" || true; exit 1; }
+trap fail ERR
+trap 'fail' INT TERM
+
+"$HERE/baseline"
+"$HERE/backend-up"
+"$HERE/build"
+"$HERE/sim-up"
+trap - ERR INT TERM
+"$HERE/doctor"

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
+BUNDLE_ID="dev.tsnanh.hermes.bot"
+
+usage() {
+  cat <<USAGE
+usage: push-on-ready --udid UDID --home SANDBOX_HOME --marker-glob GLOB --profile SLUG --name DISPLAY_NAME
+                     [--reply TEXT] [--timeout SECONDS] [--out DIR]
+Waits for a UI test to drop its ready marker (a file matching GLOB, for example
+apps/ios/Artifacts/verify-ios/<run>/drive-*-push/shots/ready-for-push) and for the simulator's APNs token to be
+stored in the sandbox gateway's device registry, then delivers the payload gateway/push_notify.py builds with
+xcrun simctl push. Prints the registered device (token length only, never the token). Exits 0 once delivered.
+USAGE
+}
+
+UDID=""; HOME_DIR=""; GLOB=""; PROFILE=""; NAME=""; REPLY="Finished the report you asked for"; TIMEOUT=600; OUT="${TMPDIR:-/tmp}"
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --udid) UDID="$2"; shift 2 ;;
+    --home) HOME_DIR="$2"; shift 2 ;;
+    --marker-glob) GLOB="$2"; shift 2 ;;
+    --profile) PROFILE="$2"; shift 2 ;;
+    --name) NAME="$2"; shift 2 ;;
+    --reply) REPLY="$2"; shift 2 ;;
+    --timeout) TIMEOUT="$2"; shift 2 ;;
+    --out) OUT="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+done
+[ -n "$UDID" ] && [ -n "$HOME_DIR" ] && [ -n "$GLOB" ] && [ -n "$PROFILE" ] && [ -n "$NAME" ] || { usage >&2; exit 2; }
+case "$HOME_DIR" in /tmp/*|/private/tmp/*|/private/var/*) ;; *) echo "push-on-ready: home must be a sandbox under /tmp" >&2; exit 2 ;; esac
+
+LIVE_DB="$HOME_DIR/devices.db"
+SNAPSHOT="$(mktemp -t push-on-ready-devices)"
+trap 'rm -f "$SNAPSHOT"' EXIT
+snapshot() {
+  cp "$LIVE_DB" "$SNAPSHOT" 2>/dev/null
+}
+registered() {
+  snapshot && [ "$(sqlite3 "$SNAPSHOT" "SELECT COUNT(*) FROM devices WHERE kind='ios' AND push_token IS NOT NULL;" 2>/dev/null || echo 0)" -ge 1 ]
+}
+marker() {
+  compgen -G "$GLOB" >/dev/null 2>&1
+}
+
+DEADLINE=$(( $(date +%s) + TIMEOUT ))
+until marker && registered; do
+  [ "$(date +%s)" -lt "$DEADLINE" ] || { echo "push-on-ready: timed out (marker=$(marker && echo yes || echo no) registered=$(registered && echo yes || echo no))" >&2; exit 1; }
+  sleep 0.5
+done
+mkdir -p "$OUT"
+sqlite3 -header "$SNAPSHOT" "SELECT device_id, kind, label, model, os, push_environment, push_bundle_id, length(push_token) AS token_chars FROM devices WHERE kind='ios' AND push_token IS NOT NULL;" | tee "$OUT/registered-device.txt"
+"$PYTHON" "$IOS_DIR/Tools/push-payload/make_payload.py" "$PROFILE" "$NAME" "$REPLY" >"$OUT/payload.json"
+cat "$OUT/payload.json"
+xcrun simctl push "$UDID" "$BUNDLE_ID" "$OUT/payload.json"
+echo "push-on-ready: delivered to $UDID"

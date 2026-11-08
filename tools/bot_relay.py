@@ -221,22 +221,20 @@ def remote_target_forms(roster: list[dict], local_taken: set[str] | frozenset[st
     return [_form(row) for row in roster]
 
 
-_SENDER_STAMP_RE = re.compile(r"^(Message from 🤖 .+? \(@)([A-Za-z0-9_-]+)(\): )", re.DOTALL)
-
-
 def qualify_sender_stamp(message: str, from_handle: Any, from_connection: Any, roster: list[dict],
                          local_taken: set[str] | frozenset[str] = frozenset()) -> str:
     """Rewrite a relayed DM's ``Message from 🤖 <name> (@<handle>):`` stamp so the handle is the
     form THIS gateway can reply to: the sender's row in the local relay roster as
     ``remote_target_forms`` renders it, else ``handle@connection``. A relayed ``@hermes`` is another
     machine's default — left bare, a reply lands on the recipient's own default (#103731)."""
+    from tools.bot_dm_wire import restamp_sender
+
     handle, conn = str(from_handle or "").strip().lstrip("@"), str(from_connection or "").strip()
-    match = _SENDER_STAMP_RE.match(str(message or ""))
-    if not match or not conn or not _HANDLE_RE.match(handle) or not _HANDLE_RE.match(conn):
+    if not conn or not _HANDLE_RE.match(handle) or not _HANDLE_RE.match(conn):
         return message
     forms = dict(zip(((r["connection_id"].lower(), r["handle"].lower()) for r in roster), remote_target_forms(roster, local_taken)))
     form = forms.get((conn.lower(), handle.lower())) or f"{handle}@{conn}"
-    return f"{match.group(1)}{form}{match.group(3)}{message[match.end():]}"
+    return restamp_sender(str(message or ""), form) or message
 
 
 def _envelope_ttl_seconds() -> int:
@@ -436,6 +434,9 @@ def write_reply(root: Path | str, envelope_id: str, *, reply: str = "", error: s
         from tools.bot_failure_reasons import classify_agent_error
 
         code = classify_agent_error(err)
+    from tools.bot_mode_dm_threads import settle
+    from tools.bot_thread_ledger import Outcome
+    settle(root, safe, Outcome.failed(code) if err else Outcome.answered(str(reply or "")))
     _atomic_write_json(path, {"id": safe, "at": int(time.time()), "reply": str(reply or ""), "error": err, "reason": code})
     return path
 

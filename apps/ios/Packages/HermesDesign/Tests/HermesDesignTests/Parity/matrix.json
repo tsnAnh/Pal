@@ -974,6 +974,490 @@
    "png": "blob-kinds-triangle-light.png"
   },
   {
+   "id": "blob-kinds-spark-s1",
+   "group": "blob-kinds",
+   "name": "spark-bot",
+   "meta": {
+    "shape": "blobatar:k7q2m9x10:spark"
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:k7q2m9x10:spark",
+    "appearanceColor": "hsl(111 68% 58%)",
+    "color": "hsl(111 68% 58%)",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "k7q2m9x10",
+    "pinnedKind": "spark",
+    "customBody": false,
+    "headFill": "#70e8ff",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-spark-s1.png"
+  },
+  {
+   "id": "blob-kinds-spark-s2",
+   "group": "blob-kinds",
+   "name": "spark-bot",
+   "meta": {
+    "shape": "blobatar:hermes70:spark"
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:hermes70:spark",
+    "appearanceColor": "hsl(111 68% 58%)",
+    "color": "hsl(111 68% 58%)",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "hermes70",
+    "pinnedKind": "spark",
+    "customBody": false,
+    "headFill": "#00c3a7",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-spark-s2.png"
+  },
+  {
+   "id": "blob-kinds-spark-dark",
+   "group": "blob-kinds",
+   "name": "spark-bot",
+   "meta": {
+    "shape": "blobatar:0000zzzz:spark",
+    "color": "#1a1a2e",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:0000zzzz:spark",
+    "appearanceColor": "#1a1a2e",
+    "color": "#1a1a2e",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "0000zzzz",
+    "pinnedKind": "spark",
+    "customBody": true,
+    "headFill": "#1a1a2e",
+    "eyeFill": "#f3f4fd"
+   },
+   "png": "blob-kinds-spark-dark.png"
+  },
+  {
+   "id": "blob-kinds-spark-light",
+   "group": "blob-kinds",
+   "name": "spark-bot",
+   "meta": {
+    "shape": "blobatar:a1b2c3d4:spark",
+    "color": "#f5f5f5",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:a1b2c3d4:spark",
+    "appearanceColor": "#f5f5f5",
+    "color": "#f5f5f5",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "a1b2c3d4",
+    "pinnedKind": "spark",
+    "customBody": true,
+    "headFill": "#f5f5f5",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-spark-light.png"
+  },
+  {
+   "id": "blob-kinds-spark-orange",
+   "group": "blob-kinds",
+   "name": "spark-bot",
+   "meta": {
+    "shape": "blobatar:grok0:spark",
+    "color": "#f58903",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:grok0:spark",
+    "appearanceColor": "#f58903",
+    "color": "#f58903",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "grok0",
+    "pinnedKind": "spark",
+    "customBody": true,
+    "headFill": "#f58903",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-spark-orange.png"
+  },
+  {
+   "id": "blob-kinds-clover-s1",
+   "group": "blob-kinds",
+   "name": "clover-bot",
+   "meta": {
+    "shape": "blobatar:k7q2m9x11:clover"
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:k7q2m9x11:clover",
+    "appearanceColor": "hsl(119 68% 58%)",
+    "color": "hsl(119 68% 58%)",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "k7q2m9x11",
+    "pinnedKind": "clover",
+    "customBody": false,
+    "headFill": "#30f6c9",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-clover-s1.png"
+  },
+  {
+   "id": "blob-kinds-clover-s2",
+   "group": "blob-kinds",
+   "name": "clover-bot",
+   "meta": {
+    "shape": "blobatar:hermes77:clover"
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:hermes77:clover",
+    "appearanceColor": "hsl(119 68% 58%)",
+    "color": "hsl(119 68% 58%)",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "hermes77",
+    "pinnedKind": "clover",
+    "customBody": false,
+    "headFill": "#66abfa",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-clover-s2.png"
+  },
+  {
+   "id": "blob-kinds-clover-dark",
+   "group": "blob-kinds",
+   "name": "clover-bot",
+   "meta": {
+    "shape": "blobatar:0000zzzz:clover",
+    "color": "#1a1a2e",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:0000zzzz:clover",
+    "appearanceColor": "#1a1a2e",
+    "color": "#1a1a2e",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "0000zzzz",
+    "pinnedKind": "clover",
+    "customBody": true,
+    "headFill": "#1a1a2e",
+    "eyeFill": "#f3f4fd"
+   },
+   "png": "blob-kinds-clover-dark.png"
+  },
+  {
+   "id": "blob-kinds-clover-light",
+   "group": "blob-kinds",
+   "name": "clover-bot",
+   "meta": {
+    "shape": "blobatar:a1b2c3d4:clover",
+    "color": "#f5f5f5",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:a1b2c3d4:clover",
+    "appearanceColor": "#f5f5f5",
+    "color": "#f5f5f5",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "a1b2c3d4",
+    "pinnedKind": "clover",
+    "customBody": true,
+    "headFill": "#f5f5f5",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-clover-light.png"
+  },
+  {
+   "id": "blob-kinds-clover-orange",
+   "group": "blob-kinds",
+   "name": "clover-bot",
+   "meta": {
+    "shape": "blobatar:grok1:clover",
+    "color": "#f58903",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:grok1:clover",
+    "appearanceColor": "#f58903",
+    "color": "#f58903",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "grok1",
+    "pinnedKind": "clover",
+    "customBody": true,
+    "headFill": "#f58903",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-clover-orange.png"
+  },
+  {
+   "id": "blob-kinds-burst-s1",
+   "group": "blob-kinds",
+   "name": "burst-bot",
+   "meta": {
+    "shape": "blobatar:k7q2m9x12:burst"
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:k7q2m9x12:burst",
+    "appearanceColor": "hsl(346 68% 58%)",
+    "color": "hsl(346 68% 58%)",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "k7q2m9x12",
+    "pinnedKind": "burst",
+    "customBody": false,
+    "headFill": "#d2d7eb",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-burst-s1.png"
+  },
+  {
+   "id": "blob-kinds-burst-s2",
+   "group": "blob-kinds",
+   "name": "burst-bot",
+   "meta": {
+    "shape": "blobatar:hermes84:burst"
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:hermes84:burst",
+    "appearanceColor": "hsl(346 68% 58%)",
+    "color": "hsl(346 68% 58%)",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "hermes84",
+    "pinnedKind": "burst",
+    "customBody": false,
+    "headFill": "#213d43",
+    "eyeFill": "#f3f4fd"
+   },
+   "png": "blob-kinds-burst-s2.png"
+  },
+  {
+   "id": "blob-kinds-burst-dark",
+   "group": "blob-kinds",
+   "name": "burst-bot",
+   "meta": {
+    "shape": "blobatar:0000zzzz:burst",
+    "color": "#1a1a2e",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:0000zzzz:burst",
+    "appearanceColor": "#1a1a2e",
+    "color": "#1a1a2e",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "0000zzzz",
+    "pinnedKind": "burst",
+    "customBody": true,
+    "headFill": "#1a1a2e",
+    "eyeFill": "#f3f4fd"
+   },
+   "png": "blob-kinds-burst-dark.png"
+  },
+  {
+   "id": "blob-kinds-burst-light",
+   "group": "blob-kinds",
+   "name": "burst-bot",
+   "meta": {
+    "shape": "blobatar:a1b2c3d4:burst",
+    "color": "#f5f5f5",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:a1b2c3d4:burst",
+    "appearanceColor": "#f5f5f5",
+    "color": "#f5f5f5",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "a1b2c3d4",
+    "pinnedKind": "burst",
+    "customBody": true,
+    "headFill": "#f5f5f5",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-burst-light.png"
+  },
+  {
+   "id": "blob-kinds-burst-orange",
+   "group": "blob-kinds",
+   "name": "burst-bot",
+   "meta": {
+    "shape": "blobatar:grok2:burst",
+    "color": "#f58903",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:grok2:burst",
+    "appearanceColor": "#f58903",
+    "color": "#f58903",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "grok2",
+    "pinnedKind": "burst",
+    "customBody": true,
+    "headFill": "#f58903",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-burst-orange.png"
+  },
+  {
+   "id": "blob-kinds-gem-s1",
+   "group": "blob-kinds",
+   "name": "gem-bot",
+   "meta": {
+    "shape": "blobatar:k7q2m9x13:gem"
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:k7q2m9x13:gem",
+    "appearanceColor": "hsl(257 68% 58%)",
+    "color": "hsl(257 68% 58%)",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "k7q2m9x13",
+    "pinnedKind": "gem",
+    "customBody": false,
+    "headFill": "#ffc0ae",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-gem-s1.png"
+  },
+  {
+   "id": "blob-kinds-gem-s2",
+   "group": "blob-kinds",
+   "name": "gem-bot",
+   "meta": {
+    "shape": "blobatar:hermes91:gem"
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:hermes91:gem",
+    "appearanceColor": "hsl(257 68% 58%)",
+    "color": "hsl(257 68% 58%)",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "hermes91",
+    "pinnedKind": "gem",
+    "customBody": false,
+    "headFill": "#c5dce6",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-gem-s2.png"
+  },
+  {
+   "id": "blob-kinds-gem-dark",
+   "group": "blob-kinds",
+   "name": "gem-bot",
+   "meta": {
+    "shape": "blobatar:0000zzzz:gem",
+    "color": "#1a1a2e",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:0000zzzz:gem",
+    "appearanceColor": "#1a1a2e",
+    "color": "#1a1a2e",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "0000zzzz",
+    "pinnedKind": "gem",
+    "customBody": true,
+    "headFill": "#1a1a2e",
+    "eyeFill": "#f3f4fd"
+   },
+   "png": "blob-kinds-gem-dark.png"
+  },
+  {
+   "id": "blob-kinds-gem-light",
+   "group": "blob-kinds",
+   "name": "gem-bot",
+   "meta": {
+    "shape": "blobatar:a1b2c3d4:gem",
+    "color": "#f5f5f5",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:a1b2c3d4:gem",
+    "appearanceColor": "#f5f5f5",
+    "color": "#f5f5f5",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "a1b2c3d4",
+    "pinnedKind": "gem",
+    "customBody": true,
+    "headFill": "#f5f5f5",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-gem-light.png"
+  },
+  {
+   "id": "blob-kinds-gem-orange",
+   "group": "blob-kinds",
+   "name": "gem-bot",
+   "meta": {
+    "shape": "blobatar:grok3:gem",
+    "color": "#f58903",
+    "custom": true
+   },
+   "mood": "idle",
+   "render": true,
+   "resolved": {
+    "shape": "blobatar:grok3:gem",
+    "appearanceColor": "#f58903",
+    "color": "#f58903",
+    "hasImage": false,
+    "kind": "blob",
+    "seed": "grok3",
+    "pinnedKind": "gem",
+    "customBody": true,
+    "headFill": "#f58903",
+    "eyeFill": "#1b1b1b"
+   },
+   "png": "blob-kinds-gem-orange.png"
+  },
+  {
    "id": "blob-unpinned-alice",
    "group": "blob-unpinned",
    "name": "alice",
@@ -3490,6 +3974,54 @@
    "seed": "abc",
    "seedPart": "abc",
    "kind": "sun"
+  },
+  {
+   "shape": "blobatar:abc:spark",
+   "name": "",
+   "isBlob": true,
+   "seed": "abc",
+   "seedPart": "abc",
+   "kind": "spark"
+  },
+  {
+   "shape": "blobatar:abc:spark",
+   "name": "alice",
+   "isBlob": true,
+   "seed": "abc",
+   "seedPart": "abc",
+   "kind": "spark"
+  },
+  {
+   "shape": "blobatar:abc:spark",
+   "name": "chó hóng hớt",
+   "isBlob": true,
+   "seed": "abc",
+   "seedPart": "abc",
+   "kind": "spark"
+  },
+  {
+   "shape": "blobatar::gem",
+   "name": "",
+   "isBlob": true,
+   "seed": "agent",
+   "seedPart": "",
+   "kind": "gem"
+  },
+  {
+   "shape": "blobatar::gem",
+   "name": "alice",
+   "isBlob": true,
+   "seed": "alice",
+   "seedPart": "",
+   "kind": "gem"
+  },
+  {
+   "shape": "blobatar::gem",
+   "name": "chó hóng hớt",
+   "isBlob": true,
+   "seed": "chó hóng hớt",
+   "seedPart": "",
+   "kind": "gem"
   },
   {
    "shape": "blobatar:abc:bogus",

@@ -87,6 +87,17 @@ def _pre_dispatch_housekeeping(_sched, headless: bool) -> None:
     except Exception as _legacy_exc:
         _sched.logger.warning("Legacy Bot Chat pending drain failed: %s", _legacy_exc, exc_info=True)
     _sched._maybe_reap_dead_owners()
+    if not headless:
+        _drain_deferred_reach_alerts(_sched)
+
+
+def _drain_deferred_reach_alerts(_sched) -> None:
+    try:
+        from gateway.reach import drain_deferred_threadsafe
+        from hermes_constants import get_hermes_home
+        drain_deferred_threadsafe(get_hermes_home())
+    except Exception as exc:
+        _sched.logger.warning("Deferred proactive alert drain failed: %s", exc, exc_info=True)
 
 
 def _tick_admitted(

@@ -23,6 +23,7 @@ NAME_MAX_CHARS = 80
 ABOUT_YOU_DIR = "bot-mode"
 ABOUT_YOU_FILE = "about-you.yaml"
 _LOCK_FILE = ".about-you.lock"
+TIMEZONE_AUTO_KEY = "timezone_auto"
 _TIMEZONE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_+\-/]*")
 _UNSET: Any = object()
 _thread_lock = threading.Lock()
@@ -69,25 +70,31 @@ def _tolerant(normalize, value: object) -> str:
         return ""
 
 
-def read_about_you(root: Path | None = None) -> dict[str, str]:
-    """``{"name", "timezone"}`` as stored; both ``""`` when missing, unreadable or invalid."""
-    empty = {"name": "", "timezone": ""}
+def _read_document(root: Path | None) -> dict[str, Any]:
     try:
         path = about_you_path(root or about_you_root())
         if not path.is_file():
-            return empty
+            return {}
         import hermes_yaml as yaml
         from ruamel.yaml.error import YAMLError
 
         data = yaml.safe_load(path.read_text(encoding="utf-8-sig", errors="replace"))
     except (OSError, ValueError, YAMLError):
-        return empty
-    if not isinstance(data, dict):
-        return empty
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def read_about_you(root: Path | None = None) -> dict[str, str]:
+    """``{"name", "timezone"}`` as stored; both ``""`` when missing, unreadable or invalid."""
+    data = _read_document(root)
     return {
         "name": _tolerant(normalize_name, data.get("name")),
         "timezone": _tolerant(normalize_timezone, data.get("timezone")),
     }
+
+
+def read_timezone_auto(root: Path | None = None) -> bool:
+    return _read_document(root).get(TIMEZONE_AUTO_KEY) is True
 
 
 @contextlib.contextmanager
@@ -116,11 +123,14 @@ def _ensure_private_dir(directory: Path) -> None:
 
 
 def write_about_you(
-    root: Path | None = None, *, name: object = _UNSET, timezone: object = _UNSET
+    root: Path | None = None, *, name: object = _UNSET, timezone: object = _UNSET,
+    timezone_auto: object = _UNSET
 ) -> dict[str, str]:
     """Merge the given fields into the stored facts and return the normalized result. A field
     left out is unchanged; ``None`` or blank clears it. Raises ``ValueError`` for a bad time zone
     before anything is written."""
+    if timezone_auto is not _UNSET and not isinstance(timezone_auto, bool):
+        raise ValueError("timezone_auto must be true or false")
     new_name = _UNSET if name is _UNSET else normalize_name(name)
     new_zone = _UNSET if timezone is _UNSET else normalize_timezone(timezone)
     root = root or about_you_root()
@@ -128,13 +138,17 @@ def write_about_you(
     _ensure_private_dir(path.parent)
     with _write_lock(path.parent):
         facts = read_about_you(root)
+        auto = read_timezone_auto(root) if timezone_auto is _UNSET else timezone_auto
         if new_name is not _UNSET:
             facts["name"] = new_name
         if new_zone is not _UNSET:
             facts["timezone"] = new_zone
         from utils import atomic_yaml_write
 
-        atomic_yaml_write(path, {k: v for k, v in facts.items() if v}, create_mode=0o600)
+        document = {k: v for k, v in facts.items() if v}
+        if auto:
+            document[TIMEZONE_AUTO_KEY] = True
+        atomic_yaml_write(path, document, create_mode=0o600)
         with contextlib.suppress(OSError):
             path.chmod(0o600)
     return facts

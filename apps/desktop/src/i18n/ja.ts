@@ -189,7 +189,8 @@ export const jaOverrides = {
       turnErrorTitle: 'ターンが失敗しました',
       backgroundDoneTitle: 'バックグラウンドタスクが完了しました',
       backgroundFailedTitle: 'バックグラウンドタスクが失敗しました',
-      creditsTitle: 'クレジット'
+      creditsTitle: 'クレジット',
+      proactiveOpen: '開く'
     }
   },
 
@@ -3415,6 +3416,11 @@ export const jaOverrides = {
       allowSession: 'このセッションで許可',
       alwaysAllowMenu: '常に許可…',
       jumpToApproval: '承認が必要',
+      botTitle: '確認が必要です',
+      botBody: 'この操作で何かが変更または削除される可能性があります。許可しますか？',
+      showDetails: '詳細を表示',
+      hideDetails: '詳細を隠す',
+      botAlwaysDescription: 'このボットは、どのチャットでも、この種の操作の前に確認しなくなります。',
       reject: '拒否',
       alwaysTitle: 'このコマンドを常に許可しますか？',
       alwaysDescription: pattern =>

@@ -12,13 +12,18 @@ final class BotChatE2ETests: E2ETestCase {
             XCTAssertTrue(row.label.contains(name), row.label)
         }
         shot(app, "roster")
-        let search = app.descendants(matching: .any)["rosterSearchField"]
+        let launcher = app.buttons["rosterSearchField"]
+        waitFor(launcher, timeout: 10, "search launcher")
+        launcher.tap()
+        let search = app.descendants(matching: .any)["searchField"]
         waitFor(search, timeout: 10, "search field")
-        search.tap()
+        waitFor(app.keyboards.firstMatch, timeout: 10, "keyboard")
         search.typeText("alpha")
-        waitGone(app.buttons["botRow-bot-beta"], timeout: 10, "search filters rows")
-        XCTAssertTrue(app.buttons["botRow-bot-alpha"].exists)
+        waitFor(app.buttons["searchResult-bot-bot-alpha"], timeout: 10, "search finds the bot")
+        waitGone(app.buttons["searchResult-bot-bot-beta"], timeout: 10, "search filters bots")
         shot(app, "roster-search")
+        app.buttons["searchClose"].tap()
+        waitFor(app.buttons["botRow-bot-alpha"], timeout: 10, "roster after closing search")
     }
 
     func test2SendStreamsReply() throws {
@@ -137,19 +142,5 @@ final class BotChatE2ETests: E2ETestCase {
         let newestReply = try XCTUnwrap(app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last)
         XCTAssertTrue(newestReply.isHittable, "newest reply is visible")
         shot(app, "chat-reopen-settled")
-    }
-
-    private func waitForReply(_ app: XCUIApplication, below text: String) {
-        let userBubble = bubbles(app, "userBubble", containing: text).firstMatch
-        let deadline = Date().addingTimeInterval(60)
-        while Date() < deadline {
-            let reply = app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last
-            if let reply, userBubble.exists, reply.frame.minY > userBubble.frame.minY,
-               !app.descendants(matching: .any)["assistantBubble-streaming"].exists {
-                return
-            }
-            Thread.sleep(forTimeInterval: 0.25)
-        }
-        XCTFail("reply to \(text) did not complete")
     }
 }

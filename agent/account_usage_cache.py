@@ -15,9 +15,11 @@ gauge: a per-turn or ``/usage`` fetch still lands there, so non-pooled chips are
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 from contextvars import copy_context
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterable, Optional
 
 if TYPE_CHECKING:
@@ -29,6 +31,8 @@ REFRESH_AFTER_S = 120.0
 # credential's windows stop updating, and reporting stale numbers as live would mislabel an
 # account that may have recovered (or worsened) in the meantime.
 SNAPSHOT_STALE_AFTER_S = 15 * 60.0
+
+logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
 # slot key (home, provider, identity_id, base_url) → snapshot
@@ -229,3 +233,51 @@ def _refresh_entries(requests: list[dict]) -> None:
             )
         finally:
             _release_refresh(key)
+
+
+@dataclass(frozen=True)
+class UsageFetchRequest:
+    provider: str
+    identity_id: Optional[str] = None
+    base_url: Optional[str] = None
+    api_key: Optional[str] = None
+
+    @property
+    def key(self) -> tuple[str, str]:
+        return (str(self.provider or "").strip().lower(), str(self.identity_id or "").strip())
+
+
+@dataclass(frozen=True)
+class UsageFetchOutcome:
+    snapshot: Optional[AccountUsageSnapshot] = None
+    timed_out: bool = False
+
+
+def fetch_account_usage_now(
+    requests: Iterable[UsageFetchRequest], *, deadline_s: float,
+) -> dict[tuple[str, str], UsageFetchOutcome]:
+    unique = {request.key: request for request in requests}
+    outcomes: dict[tuple[str, str], UsageFetchOutcome] = {}
+
+    def _run(request: UsageFetchRequest) -> None:
+        from agent.account_usage import fetch_account_usage
+
+        try:
+            snapshot = fetch_account_usage(
+                request.provider, base_url=request.base_url, api_key=request.api_key,
+                read_only=request.identity_id is not None, identity_id=request.identity_id)
+        except Exception:
+            logger.debug("Usage fetch for %s failed", request.provider, exc_info=True)
+            snapshot = None
+        outcomes[request.key] = UsageFetchOutcome(snapshot=snapshot)
+
+    threads = []
+    for request in unique.values():
+        thread = threading.Thread(
+            target=copy_context().run, args=(_run, request), name="hermes-account-usage-fetch", daemon=True)
+        thread.start()
+        threads.append(thread)
+    deadline = time.monotonic() + deadline_s
+    for thread in threads:
+        thread.join(max(0.0, deadline - time.monotonic()))
+    return {key: outcomes.get(key, UsageFetchOutcome(timed_out=True)) for key in unique}

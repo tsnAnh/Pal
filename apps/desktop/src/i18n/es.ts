@@ -504,7 +504,8 @@ export const esOverrides = {
       turnErrorTitle: 'El turno falló',
       backgroundDoneTitle: 'Tarea en segundo plano finalizada',
       backgroundFailedTitle: 'La tarea en segundo plano falló',
-      creditsTitle: 'Créditos'
+      creditsTitle: 'Créditos',
+      proactiveOpen: 'Abrir'
     }
   },
   ...esNotices,
@@ -5081,6 +5082,11 @@ export const esOverrides = {
       allowSession: 'Permitir esta sesión',
       alwaysAllowMenu: 'Permitir siempre…',
       jumpToApproval: 'Aprobación necesaria',
+      botTitle: 'Necesita tu aprobación',
+      botBody: 'Esto podría cambiar o eliminar algo. ¿Lo permites?',
+      showDetails: 'Ver detalles',
+      hideDetails: 'Ocultar detalles',
+      botAlwaysDescription: 'Este bot ya no preguntará antes de hacer algo así, en ningún chat.',
       reject: 'Rechazar',
       alwaysTitle: '¿Permitir siempre este comando?',
       alwaysDescription: pattern =>

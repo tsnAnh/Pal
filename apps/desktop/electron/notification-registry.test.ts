@@ -69,3 +69,14 @@ it('dismisses an expired notification before releasing it and releases failed de
   expect(failed.close).not.toHaveBeenCalled()
   expect(vi.getTimerCount()).toBe(0)
 })
+
+it('announces expiry before closing a notification it gave up on', () => {
+  vi.useFakeTimers()
+  const registry = createNotificationRegistry({ ttlMs: 1000 })
+  const order: string[] = []
+  const notification = Object.assign(new EventEmitter(), { close: vi.fn(() => order.push('close')) })
+  registry.retain(notification, () => order.push('expire'))
+  vi.advanceTimersByTime(1000)
+
+  expect(order).toEqual(['expire', 'close'])
+})

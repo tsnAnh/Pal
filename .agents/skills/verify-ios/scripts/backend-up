@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+load_run
+[ -x "$PYTHON" ] || die "python not found at $PYTHON; set HERMES_IOS_PYTHON"
+if pid_alive "${BACKEND_PID:-}"; then die "backend already running (pid $BACKEND_PID)"; fi
+
+READY_SECONDS="${VERIFY_IOS_BACKEND_READY_SECONDS:-1200}"
+OUT="$STATE_ROOT/backend.out"
+: >"$OUT"
+(
+  cd "$REPO"
+  args=()
+  while IFS= read -r name; do args+=(-u "$name"); done < <(strip_env_names)
+  exec env ${args[@]+"${args[@]}"} HERMES_IOS_PYTHON="$PYTHON" "$IOS_DIR/Scripts/e2e-gateway" ${VERIFY_IOS_SEED:+--seed "$VERIFY_IOS_SEED"}
+) >"$OUT" 2>&1 &
+PID=$!
+set_state BACKEND_PID "$PID"
+
+for _ in $(seq "$READY_SECONDS"); do
+  grep -q '^export HERMES_IOS_TEST_BASE_URL=' "$OUT" && break
+  pid_alive "$PID" || { tail -30 "$OUT" >&2; die "e2e-gateway exited before ready"; }
+  sleep 1
+done
+grep -q '^export HERMES_IOS_TEST_BASE_URL=' "$OUT" || { tail -30 "$OUT" >&2; die "backend not ready after ${READY_SECONDS}s"; }
+
+grep '^export HERMES_IOS_' "$OUT" >"$BACKEND_ENV"
+chmod 600 "$BACKEND_ENV"
+. "$BACKEND_ENV"
+set_state BASE_URL "$HERMES_IOS_TEST_BASE_URL"
+set_state BACKEND_PORT "${HERMES_IOS_TEST_BASE_URL##*:}"
+set_state BACKEND_CHILDREN "$(pgrep -P "$PID" | tr '\n' ' ')"
+curl -fs "$HERMES_IOS_TEST_BASE_URL/api/auth/providers" >/dev/null || die "gateway does not answer /api/auth/providers"
+curl -fs "$HERMES_IOS_E2E_STUB_URL/models" >/dev/null || die "fake LLM does not answer /models"
+for profile in ${HERMES_IOS_E2E_PROFILES//,/ }; do
+  [ -f "$(sandbox_profile_config "$HERMES_IOS_E2E_HOME" "$profile")" ] || die "profile $profile missing in sandbox home"
+done
+say "backend ready: $HERMES_IOS_TEST_BASE_URL (pid $PID, home $HERMES_IOS_E2E_HOME, profiles $HERMES_IOS_E2E_PROFILES)"

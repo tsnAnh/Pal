@@ -2,6 +2,14 @@ import Foundation
 
 public enum BlobKind: String, CaseIterable, Sendable {
     case round, organic, boxy, capsule, nub, cloud, droplet, hexagon, sun, triangle
+    case spark, clover, burst, gem
+
+    var isExtended: Bool {
+        switch self {
+        case .spark, .clover, .burst, .gem: true
+        default: false
+        }
+    }
 
     var traitPosition: Double {
         switch self {
@@ -15,6 +23,7 @@ public enum BlobKind: String, CaseIterable, Sendable {
         case .hexagon: 0.9325
         case .sun: 0.965
         case .triangle: 0.99
+        case .spark, .clover, .burst, .gem: 0.11
         }
     }
 }

@@ -383,8 +383,8 @@ class TestRealProfileCdpLaunch:
         helper = subprocess.Popen([*_SLEEPER, "--type=renderer", f"--user-data-dir={tmp_path}"])
         browser = subprocess.Popen([*_SLEEPER, f"--user-data-dir={tmp_path}"])
         try:
-            found = launcher._pid_naming_dir(str(tmp_path))
-            other = launcher._pid_naming_dir(str(tmp_path / "other"))
+            found = launcher.chromium_pid_on(str(tmp_path))
+            other = launcher.chromium_pid_on(str(tmp_path / "other"))
         finally:
             for proc in (helper, browser):
                 proc.kill()

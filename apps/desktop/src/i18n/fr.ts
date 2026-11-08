@@ -501,7 +501,8 @@ export const frOverrides = {
       turnErrorTitle: 'Échec du tour',
       backgroundDoneTitle: 'Tâche en arrière-plan terminée',
       backgroundFailedTitle: 'Échec de la tâche en arrière-plan',
-      creditsTitle: 'Crédits'
+      creditsTitle: 'Crédits',
+      proactiveOpen: 'Ouvrir'
     }
   },
   ...frNotices,
@@ -5103,6 +5104,11 @@ export const frOverrides = {
       allowSession: 'Autoriser cette session',
       alwaysAllowMenu: 'Toujours autoriser…',
       jumpToApproval: 'Approbation requise',
+      botTitle: 'Votre accord est nécessaire',
+      botBody: 'Cela pourrait modifier ou supprimer quelque chose. L’autoriser ?',
+      showDetails: 'Afficher les détails',
+      hideDetails: 'Masquer les détails',
+      botAlwaysDescription: 'Ce bot ne demandera plus avant de faire ce genre de chose, dans aucune discussion.',
       reject: 'Rejeter',
       alwaysTitle: 'Toujours autoriser cette commande ?',
       alwaysDescription: pattern =>

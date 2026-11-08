@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+[ "${1:-}" != "-h" ] && [ "${1:-}" != "--help" ] || { say "usage: logs [window]   app os_log lines from the simulator (default window 10m) into the evidence dir"; exit 0; }
+WINDOW="${1:-10m}"
+load_run
+OUT="$EVIDENCE/app-os-log-$(date +%H%M%S).txt"
+perl -e 'alarm 120; exec @ARGV' xcrun simctl spawn "$UDID" log show --info --last "$WINDOW" --style compact \
+  --predicate "subsystem == \"$LOG_SUBSYSTEM\"" >"$OUT"
+say "$OUT ($(wc -l <"$OUT" | tr -d ' ') lines)"

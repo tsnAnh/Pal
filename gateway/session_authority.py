@@ -70,6 +70,7 @@ class LiveSession:
     context_breakdown: tuple | None = None
     # A viewer attached while a guarded deferred pick awaits consent: the next boundary asks again.
     reask_pick: bool = False
+    iphone_toolset: bool | None = None
     # (principal, effort) of a ``/reasoning`` command that arrived while a turn ran: applied in memory at
     # once, committed to the policy at the next boundary (gateway/session_setting_commands.py).
     pending_reasoning: tuple | None = None
@@ -696,7 +697,7 @@ class SessionAuthority:
             raise RuntimeStoreError('invalid_params')
         from gateway.session_ingress_media import admit_attachments
         from gateway.session_finite import admit_finite
-        from gateway.session_surface import admit_surface
+        from gateway.session_surface import admit_surface, submit_origin
         from gateway.session_display import admit_display
         from gateway.session_cli_turn import admit_cli_turn
         finite = admit_finite(request.payload)
@@ -706,7 +707,8 @@ class SessionAuthority:
             from hermes_state_runtime import find_session_admission
             return find_session_admission(self.db, principal_id=actor.subject,
                                           session_id=request.ref.session_id, request_id=request.request_id)
-        payload = {'text': request.payload['text'], **finite, **admit_surface(request.payload),
+        origin = submit_origin(self.events.get(actor.transport_id))
+        payload = {'text': request.payload['text'], **finite, **admit_surface(request.payload, origin=origin),
                    **admit_display(request.payload), **admit_cli_turn(request.payload),
                    **admit_attachments(request.payload.get('attachments'), admitted=admitted)}
         if _kanban_card is not None:
@@ -1016,12 +1018,16 @@ class SessionAuthority:
         with live.event_stream.lock:
             self.check_approval_generation(session_id, generation)
             live.controls.register(session_id, route, generation, data, timeout_s=timeout_s)
+            from gateway.push_notify import Kind, waiting_on_user
+            waiting_on_user(self, session_id, data['request_id'], Kind.APPROVAL)
 
     def register_clarify(self, session_id, generation, entry, *, timeout_s=None):
         live = self.sessions[session_id]
         with live.event_stream.lock:
             self.check_approval_generation(session_id, generation)
             live.controls.register_clarify(session_id, generation, entry, timeout_s=timeout_s)
+            from gateway.push_notify import Kind, waiting_on_user
+            waiting_on_user(self, session_id, entry.clarify_id, Kind.CLARIFY)
 
     async def respond(self, actor, ref, generation, prompt_id, response, *, kind="approval"):
         capability = {"approval": "session:approve", "clarify": "session:respond"}.get(kind)

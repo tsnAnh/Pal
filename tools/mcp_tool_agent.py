@@ -42,7 +42,7 @@ def _resolve_refresh_toolsets(agent, enabled_override, disabled_override):
             from toolsets import session_disabled_toolsets
             agent._configured_disabled_toolsets = disabled_override
             disabled = session_disabled_toolsets(
-                disabled_override, getattr(agent, "platform", None), oneshot=agent_is_oneshot(agent))
+                disabled_override, getattr(agent, "platform", None), oneshot=agent_is_oneshot(agent), enabled=enabled)
         agent.enabled_toolsets, agent.disabled_toolsets = enabled, disabled
     return enabled, disabled
 

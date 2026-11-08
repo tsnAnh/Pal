@@ -160,7 +160,9 @@ public struct WireMessage: Codable, Sendable, Hashable {
     public var toolCallID: String?
     public var timestamp: Double?
     public var rowID: Int?
+    public var messageUID: String?
     public var displayKind: String?
+    public var displayMetadata: JSONValue?
     public var name: String?
     public var reasoning: String?
 
@@ -171,15 +173,18 @@ public struct WireMessage: Codable, Sendable, Hashable {
         case toolCallID = "tool_call_id"
         case timestamp
         case rowID = "row_id"
+        case messageUID = "message_uid"
         case displayKind = "display_kind"
+        case displayMetadata = "display_metadata"
         case name
         case reasoning
     }
 
-    public init(role: String, text: String? = nil, rowID: Int? = nil) {
+    public init(role: String, text: String? = nil, rowID: Int? = nil, messageUID: String? = nil) {
         self.role = role
         self.text = text
         self.rowID = rowID
+        self.messageUID = messageUID
     }
 
     public var plainText: String {

@@ -41,13 +41,17 @@ vi.mock('./shared', () => ({ getPluginCtx: () => null, ID: 'hermes-bots' }))
 /** The library's frozen band per silhouette (gen2 thresholds). */
 const BANDS: Record<string, [number, number]> = {
   boxy: [0.48, 0.6],
+  burst: [0, 0.22],
+  clover: [0, 0.22],
   capsule: [0.6, 0.7],
   cloud: [0.79, 0.86],
   droplet: [0.86, 0.915],
+  gem: [0, 0.22],
   hexagon: [0.915, 0.95],
   nub: [0.7, 0.79],
   organic: [0.22, 0.48],
   round: [0, 0.22],
+  spark: [0, 0.22],
   sun: [0.95, 0.98],
   triangle: [0.98, 1]
 }
@@ -167,9 +171,9 @@ describe('the blink and gaze structure of a math face', () => {
   it('wraps the two eyes in a gaze group and a lids group', async () => {
     const { BotFace } = await import('./avatar')
     const { container } = render(<BotFace color="#38bdf8" name="agent" shape="squircle" size={32} />)
-    const rects = container.querySelectorAll('svg[data-hb-math] [data-hb-gaze] > [data-hb-lids] > [data-hb-eye] > rect')
+    const eyes = container.querySelectorAll('svg[data-hb-math] [data-hb-gaze] > [data-hb-lids] > [data-hb-eye] > path')
 
-    expect(rects).toHaveLength(2)
+    expect(eyes).toHaveLength(2)
     expect(container.querySelector('svg[data-hb-math]')?.getAttribute('style')).toContain('--hb-blink-delay')
   })
 

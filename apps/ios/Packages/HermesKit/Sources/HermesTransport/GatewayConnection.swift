@@ -142,6 +142,7 @@ public actor GatewayConnection {
     private var readyEvent: GatewayEvent?
     private var receiveTask: Task<Void, Never>?
     private var closeReason: GatewayCloseReason?
+    private nonisolated let negotiated = Mutex<JSONValue?>(nil)
 
     private init(
         session: URLSession,
@@ -223,6 +224,14 @@ public actor GatewayConnection {
         } onCancel: {
             Task { await self.fail(id, with: CancellationError()) }
         }
+    }
+
+    public var isClosed: Bool { closeReason != nil }
+
+    public nonisolated var negotiatedRuntime: JSONValue? { negotiated.withLock { $0 } }
+
+    public nonisolated func recordNegotiatedRuntime(_ description: JSONValue) {
+        negotiated.withLock { $0 = description }
     }
 
     public func ping() async throws {

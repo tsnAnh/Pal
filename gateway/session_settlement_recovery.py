@@ -119,6 +119,8 @@ def _publish_completion(authority, live, ref, row, settled, response, captured):
         # line, Desktop toast), so a turn the owner's stop cut short says why (#134889 F1).
         complete['warning'] = notice
     live.event_stream.publish(ref.session_id, complete)
+    from gateway.push_notify import turn_finished
+    turn_finished(authority, ref.session_id, row, complete)
 
 
 RESTART_INTERRUPT_NOTICE = ('Gateway restarting: this turn was interrupted and will not be run again. '

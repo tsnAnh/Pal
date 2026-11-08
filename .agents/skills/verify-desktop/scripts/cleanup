@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+[ -n "${HERMES_E2E_VERIFY_RUN:-}" ] && exec env -u HERMES_E2E_VERIFY_RUN "$0" "$@"
+
+run="${1:-}"
+pattern="HERMES_E2E_VERIFY_RUN=${run}"
+
+ancestors() {
+  local pid=$$
+  while [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
+    echo "$pid"
+    pid="$(ps -o ppid= -p "$pid" | tr -d ' ')"
+  done
+}
+
+ours() {
+  local skip
+  skip="$(ancestors | tr '\n' ' ')"
+  ps -Eww -ax -o pid=,command= | grep -F -- "$pattern" | awk '{print $1}' | while read -r pid; do
+    case " $skip " in *" $pid "*) ;; *) kill -0 "$pid" 2>/dev/null && echo "$pid" ;; esac
+  done
+}
+
+pids="$(ours)"
+
+if [ -z "$pids" ]; then
+  echo "cleanup: no processes left from verify run ${run:-<any>}"
+  exit 0
+fi
+
+echo "cleanup: stopping $(echo "$pids" | wc -l | tr -d ' ') process(es) from verify run ${run:-<any>}: $(echo $pids)"
+kill -TERM $pids 2>/dev/null
+
+for _ in $(seq 1 15); do
+  sleep 1
+  [ -z "$(ours)" ] && { echo "cleanup: done"; exit 0; }
+done
+
+kill -KILL $(ours) 2>/dev/null
+sleep 1
+[ -z "$(ours)" ] && { echo "cleanup: done after SIGKILL"; exit 0; }
+echo "cleanup: still running: $(ours | tr '\n' ' ')"
+exit 1

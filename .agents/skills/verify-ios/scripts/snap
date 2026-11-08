@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+[ "${1:-}" != "-h" ] && [ "${1:-}" != "--help" ] || { say "usage: snap <name>   screenshot the claimed simulator into the run's evidence dir"; exit 0; }
+NAME="${1:?usage: snap <name>}"
+load_run
+mkdir -p "$EVIDENCE/snaps"
+OUT="$EVIDENCE/snaps/$(date +%H%M%S)-$NAME.png"
+xcrun simctl io "$UDID" screenshot "$OUT" >/dev/null
+say "$OUT"

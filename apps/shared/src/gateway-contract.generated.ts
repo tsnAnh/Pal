@@ -485,6 +485,108 @@ export interface ProjectFacts {
   verifyCommands: string[]
   contextFiles: string[]
 }
+export interface ProfilesRenameParams {
+  name: string
+  new_name: string
+}
+/** ``name`` is the canonical id after the rename; the primary bot keeps ``default`` and carries the new label in ``display_name``. */
+export interface ProfilesRenameResult {
+  ok: boolean
+  name: string
+  path: string
+  display_name?: string | null
+}
+export interface ProfilesDeleteParams {
+  name: string
+}
+/** ``settlement_pending`` means the home is already gone and only the durable identity cleanup is outstanding; ``retry_command`` finishes it. */
+export interface ProfilesDeleteResult {
+  ok: boolean
+  name: string
+  path: string
+  identity_settled?: boolean | null
+  settlement_pending?: boolean | null
+  retry_command?: string | null
+}
+/** One bot's Slack connection. Credentials are never echoed: only whether each is set. ``state`` is the gateway's verdict for the Slack adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``, ``gateway_stopped``, ``startup_failed``, ...). */
+export interface MessagingSlackStatus {
+  profile: string
+  enabled: boolean
+  configured: boolean
+  gateway_running: boolean
+  state?: string | null
+  error_code?: string | null
+  error_message?: string | null
+  bot_token_set: boolean
+  app_token_set: boolean
+  allowed_users_set: boolean
+}
+/** ``bot_token`` (xoxb-) and ``app_token`` (xapp-, Socket Mode) are written to the bot's own .env only. ``allowed_users`` are Slack member IDs allowed to talk to the bot. */
+export interface MessagingSlackConnectParams {
+  profile?: string | null
+  bot_token: string
+  app_token: string
+  allowed_users?: string[] | null
+}
+/** The status after the write plus what became of the gateway: ``hot_served`` when a running multiplexer rebuilt the adapter, else a gateway restart (``restart_started``; refused while a chat is live: ``restart_busy``). */
+export interface MessagingSlackConnectResult {
+  profile: string
+  enabled: boolean
+  configured: boolean
+  gateway_running: boolean
+  state?: string | null
+  error_code?: string | null
+  error_message?: string | null
+  bot_token_set: boolean
+  app_token_set: boolean
+  allowed_users_set: boolean
+  hot_served: boolean
+  restart_started: boolean
+  restart_busy?: boolean | null
+  restart_error?: string | null
+}
+export interface MessagingSlackManifestParams {
+  profile?: string | null
+  display_name?: string | null
+}
+/** ``create_url`` opens Slack's create-from-manifest page with the bot's name already filled in. */
+export interface MessagingSlackManifestResult {
+  profile: string
+  bot_name: string
+  manifest: Record<string, unknown>
+  create_url: string
+}
+/** ``text`` is pasted free text, one fact per line (bullets, numbering and dates are stripped); ``target`` is the profile notes (``user``, the default) or the agent's own notes (``memory``). */
+export interface MemoryImportParams {
+  profile?: string | null
+  text: string
+  target?: MemoryImportTarget | null
+}
+export type MemoryImportTarget = 'user' | 'memory'
+/** Counts of the pasted lines: ``added`` landed; ``duplicates`` were already remembered (or repeated), ``too_long`` exceeded one entry, ``blocked`` failed the memory safety scan, ``over_budget`` no longer fit the store's size cap (the first that did not fit and every one after it). ``usage`` is the store's fill. */
+export interface MemoryImportResult {
+  profile: string
+  target: MemoryImportTarget
+  candidates: number
+  added: number
+  duplicates: number
+  too_long: number
+  blocked: number
+  over_budget: number
+  usage: string
+  entry_count: number
+}
+/** The caller's own native sign-in tokens: holding the refresh token is the proof of ownership. */
+export interface AuthRevokeSelfParams {
+  refresh_token: string
+  access_token?: string | null
+}
+/** ``providers_revoked`` counts the sign-in providers that accepted the revocation; ``forgotten`` the recorded native tokens (refresh and access) the gateway stopped honouring at once. */
+export interface AuthRevokeSelfResult {
+  ok: boolean
+  providers_revoked: number
+  forgotten: number
+}
 export interface BotTeachStatus {
   available: boolean
   reason?: string | null
@@ -1437,7 +1539,7 @@ export interface ConnectorPolicySetResult {
   revision: string
   effective: ConnectorPolicyEffectiveUnrestricted | ConnectorPolicyEffectiveDenyAll | ConnectorPolicyEffectiveAllow | ConnectorPolicyEffectiveDeny
 }
-/** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. */
+/** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. Each bot has its own screen and its own Chrome, which runs on a copy of the machine's one master Chrome profile: refreshed from master when that Chrome starts, written back when it exits. ``profile_copy_synced_at`` is the last refresh or write-back (epoch seconds, null before the first). A screen in the bot's own Docker sandbox reports the same: its Chrome runs on the copy, mounted in. ``chrome`` is null when the screen runs in a sandbox that holds no copy (ssh, or a container several profiles share). ``shared_files_path`` is the one files folder every bot on this machine shares (``~``-relative; mounted at ``/bot-computer/files`` in a bot's Docker sandbox), null then too. */
 export interface DisplayStatus {
   profile: string
   supported: boolean
@@ -1455,8 +1557,13 @@ export interface DisplayStatus {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
+  disk?: DisplayDisk | null
 }
 /** A persisted Docker sandbox kept on the previous default image; the user decides the switch. */
 export interface DisplayImageSwitch {
@@ -1464,6 +1571,8 @@ export interface DisplayImageSwitch {
   target_image: string
   containers: number
 }
+export type DisplayScreenState = 'running' | 'stopped' | 'starting'
+export type DisplayChromeState = 'running' | 'stopped'
 /** ``tools/bot_desktop/lease.py::Lease`` as clients may see it: the holder's viewer id is a capability and never leaves the gateway; ``viewer_hash`` lets the holder recognise itself. */
 export interface DisplayLease {
   holder: LeaseHolder
@@ -1476,6 +1585,14 @@ export interface DisplayLease {
   ask_at?: number
 }
 export type LeaseHolder = 'agent' | 'human'
+/** The disk the bot's screen and browser data live on: ``critical`` below 512 MB free or 97% used, ``low`` below 2 GB free or 90% used. */
+export interface DisplayDisk {
+  level: DisplayDiskLevel
+  free_mb: number
+  total_mb: number
+  used_pct: number
+}
+export type DisplayDiskLevel = 'normal' | 'low' | 'critical'
 /** ``data_url`` is null while the screen is stopped or while a human holds the lease (``suppressed``): the frame may show what they are typing. */
 export interface DisplayThumbnailResult {
   data_url?: string | null
@@ -1502,9 +1619,45 @@ export interface DisplayStopResult {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
+  disk?: DisplayDisk | null
   stopped: boolean
+}
+export interface DisplayResetParams {
+  profile?: string | null
+  force?: boolean | null
+}
+/** ``reset`` names what was wiped (the desktop settings ``xdg`` and this bot's ``browser-profile`` copy); an already-clean screen answers an empty list. The master Chrome profile, the shared files folder and other bots are never touched; unsynced changes in this bot's copy are discarded, and its next Chrome start is seeded from master again. */
+export interface DisplayResetResult {
+  profile: string
+  supported: boolean
+  installed: boolean
+  missing: string[]
+  running: boolean
+  pid?: number | null
+  display?: string | null
+  socket?: string | null
+  geometry: string
+  install_command?: string | null
+  browser?: string | null
+  blocker?: string | null
+  memory_available_mb?: number | null
+  memory_limit_mb?: number | null
+  placement?: string
+  image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
+  lease: DisplayLease
+  profile_key: string
+  disk?: DisplayDisk | null
+  reset: string[]
 }
 export interface DisplayObserveParams {
   profile?: string | null
@@ -1527,8 +1680,13 @@ export interface DisplayObserveResult {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
+  disk?: DisplayDisk | null
   ticket: string
   path: string
   viewer_id: string
@@ -1554,8 +1712,13 @@ export interface DisplaySwitchSandboxImageResult {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
+  disk?: DisplayDisk | null
   docker_image: string
 }
 export interface DisplayInstallResult {
@@ -2023,6 +2186,46 @@ export interface ClientCapabilitiesResult {
   declines_not_shown?: boolean
   canonical_clarify_batch?: boolean
 }
+/** ``limit`` is clamped to 1..200. ``before`` is the ``next_before`` of the previous page. */
+export interface LibraryListParams {
+  profile?: string | null
+  kind?: LibraryKindFilter
+  limit?: number
+  before?: string | null
+}
+export type LibraryKindFilter = 'all' | 'media' | 'links' | 'files'
+/** ``index_complete`` is false while a large history is still being indexed: ask again to see more. */
+export interface LibraryListResult {
+  items: LibraryItem[]
+  next_before?: string | null
+  index_complete?: boolean
+}
+/** ``asset_ref`` is set only for a local file ``library.asset`` may serve; ``url`` for a link or a remote media item. */
+export interface LibraryItem {
+  id: string
+  kind: LibraryItemKind
+  title: string
+  subtitle: string
+  url?: string | null
+  asset_ref?: string | null
+  mime?: string | null
+  size?: number | null
+  session_id: string
+  occurred_at: string
+}
+export type LibraryItemKind = 'link' | 'media' | 'file'
+/** ``max_bytes`` defaults to 8 MB (max 16 MB). Images come back as a thumbnail of at most 512 px unless ``thumbnail`` is false. */
+export interface LibraryAssetParams {
+  profile?: string | null
+  asset_ref: string
+  max_bytes?: number | null
+  thumbnail?: boolean
+}
+export interface LibraryAssetResult {
+  mime: string
+  data_base64: string
+  size: number
+}
 /** Client→server method params / server→client request params. Unknown keys are rejected. */
 export type Params = Record<string, never>
 /** ``machine_kind`` is ``Spark``, ``Mac``, ``PC`` or ``computer``. ``nvidia_platform`` is ``products.nvidia_platform()``: ``rtx_spark``, ``dgx_spark``, ``discrete`` or null. ``locale`` is the OS account's first UI language, null when the OS has none. */
@@ -2044,6 +2247,37 @@ export interface MachineInfo {
   vendor?: string | null
   wsl?: boolean | null
   container?: boolean | null
+}
+/** ``auto_review`` is true only under the smart guardian; ``approval_mode`` is the profile's real setting so a client can say approvals are off, in which case rules are stored and not applied. */
+export interface PermissionsState {
+  auto_review: boolean
+  approval_mode: PermissionsApprovalMode
+  ask: PermissionRule[]
+  allow: PermissionRule[]
+}
+export type PermissionsApprovalMode = 'manual' | 'smart' | 'off'
+/** A short sentence the user typed; ``created_at`` is ISO 8601 UTC. */
+export interface PermissionRule {
+  id: string
+  text: string
+  created_at: string
+}
+export interface PermissionsSetAutoReviewParams {
+  profile?: string | null
+  enabled: boolean
+}
+export interface PermissionsRuleAddParams {
+  profile?: string | null
+  list: PermissionRuleList
+  text: string
+}
+export type PermissionRuleList = 'ask' | 'allow'
+export interface PermissionsRuleRemoveParams {
+  profile?: string | null
+  id: string
+}
+export interface PermissionsRuleRemoveResult {
+  removed: boolean
 }
 /** ``word`` is the token under the cursor (``@`` prefix = context reference); ``cwd`` / ``session_id`` pick the directory the listing resolves against. */
 export interface CompletePathParams {
@@ -2101,6 +2335,7 @@ export interface ModelDisconnectResult {
 export interface ProfilesListParams {
   profile?: string | null
   include_sessions?: boolean | string | null
+  include_routines?: boolean | string | null
 }
 /** ``bot_mode_protocol`` tells clients this backend injects the teammate protocol itself; ``install_id`` (as on ``/api/status``) names the machine that answered; ``bot_onboarding`` says this backend marks new bots with ``onboarding_pending`` and answers ``profiles.onboard``. */
 export interface ProfilesListResult {
@@ -2116,6 +2351,7 @@ export interface ProfileRow {
   name: string
   path: string
   is_default?: boolean
+  is_primary?: boolean
   model?: string | null
   provider?: string | null
   description?: string
@@ -2129,6 +2365,7 @@ export interface ProfileRow {
   ui_meta?: Record<string, unknown> | null
   has_avatar?: boolean
   onboarding_pending?: boolean
+  routines_enabled?: number | null
 }
 /** Newest human-facing session of a profile (``_latest_profile_session_rows``). */
 export interface ProfileSessionPreview {
@@ -2162,15 +2399,18 @@ export interface ProfileCanonicalSession {
 export interface BotAboutYouGetParams {
   profile?: string | null
 }
+/** ``timezone_auto``: the client keeps ``timezone`` in step with its device and pushes it on change. */
 export interface BotAboutYouFacts {
   name?: string
   timezone?: string
+  timezone_auto?: boolean
 }
-/** A key left out is unchanged; ``null`` or blank clears it. */
+/** A key left out is unchanged; ``null`` or blank clears it (``timezone_auto`` null reads as off). */
 export interface BotAboutYouSetParams {
   profile?: string | null
   name?: string | null
   timezone?: string | null
+  timezone_auto?: boolean | null
 }
 /** ``clone_from`` omitted = fresh profile + bundled skills; ``mirror_credentials`` defaults on so a headless bot has a provider. */
 export interface ProfilesCreateParams {
@@ -4210,6 +4450,8 @@ export interface CronJobRow {
   provider?: string | null
   base_url?: string | null
   schedule?: string
+  schedule_text?: string | null
+  schedule_timezone?: string | null
   repeat?: number | string | null
   deliver?: string | null
   next_run_at?: string | null
@@ -4809,6 +5051,33 @@ export interface PluginCatalogLookupEntry {
   subdir: string
   tier?: string
 }
+export interface AccountSubscriptionsParams {
+  profile?: string | null
+  refresh?: boolean
+}
+export interface AccountSubscriptionsResult {
+  subscriptions: AccountSubscription[]
+}
+export interface AccountSubscription {
+  id: string
+  provider: string
+  provider_label: string
+  account_label?: string | null
+  kind: 'subscription' | 'api_key'
+  plan?: string | null
+  active: boolean
+  state: 'ready' | 'limited' | 'unknown' | 'unavailable'
+  windows?: ProviderUsageWindow[]
+  spend?: AccountSubscriptionSpend | null
+  unavailable_reason?: string | null
+  fetched_at?: string | null
+}
+export interface AccountSubscriptionSpend {
+  period_days: number
+  usd?: number | null
+  input_tokens: number
+  output_tokens: number
+}
 export interface GroupsAttachmentUploadParams {
   profile?: string | null
   room_id: string
@@ -5206,7 +5475,7 @@ export type WorkerPersistResult = Record<string, unknown>
 export interface CanonicalCreateParams {
   profile?: string | null
   request_id?: string | null
-  source?: 'cli' | 'tui' | 'gui' | 'acp' | 'tool' | 'oneshot'
+  source?: 'cli' | 'tui' | 'gui' | 'ios' | 'acp' | 'tool' | 'oneshot'
   cwd?: string | null
   row_cwd?: string | null
   model?: string | null
@@ -5506,6 +5775,7 @@ export interface CanonicalConfigSetParams {
 export interface CanonicalProfilesParams {
   profile?: string | null
   include_sessions?: boolean
+  include_routines?: boolean
 }
 export interface CanonicalProfilesResult {
   profiles: CanonicalProfileRow[]
@@ -5519,6 +5789,7 @@ export interface CanonicalProfileRow {
   name: string
   path: string
   is_default?: boolean
+  is_primary?: boolean
   model?: string | null
   provider?: string | null
   description?: string
@@ -5532,6 +5803,7 @@ export interface CanonicalProfileRow {
   ui_meta?: Record<string, unknown> | null
   has_avatar?: boolean
   onboarding_pending?: boolean
+  routines_enabled?: number | null
 }
 export interface CanonicalAttachedImageResult {
   name?: string | null
@@ -5600,6 +5872,214 @@ export interface CanonicalBotStopResult {
   status: string
   stopped: boolean
   handoffs: number
+}
+export interface BotThreadListParams {
+  profile?: string | null
+}
+export interface BotThreadListResult {
+  threads: BotThreadSummary[]
+}
+export interface BotThreadSummary {
+  thread_id: string
+  counterpart: BotThreadParticipant
+  last_at: string
+  last_preview: string
+  last_sender_key: string
+  message_count: number
+}
+/** ``local_profile`` names a bot on this install (its avatar asset is ``profiles.get_asset`` of that profile); a remote bot has none and is drawn from its ``key``. */
+export interface BotThreadParticipant {
+  key: string
+  is_self: boolean
+  local_profile?: string | null
+  display_name: string
+  handle: string
+  avatar: BotThreadAvatar
+}
+export interface BotThreadAvatar {
+  has_asset: boolean
+  ui_meta?: unknown | null
+}
+/** At most one of ``focus`` (an exchange a main-chat link opens), ``before`` / ``after`` (a message ``seq`` cursor from a previous page) or ``since_rev`` (catch-up after ``bot_threads.changed``: new messages and status changes). None reads the newest page. */
+export interface BotThreadReadParams {
+  profile?: string | null
+  thread_id: string
+  focus?: string | null
+  before?: number | null
+  after?: number | null
+  since_rev?: number | null
+  limit?: number
+}
+/** Oldest first. ``before`` / ``after`` are the cursors for the next older / newer page (null at either end); ``coverage`` is ``own_side`` when the counterpart may answer where this profile cannot see it (a peer gateway's open chat). There is no write verb: threads are read-only. */
+export interface BotThreadReadResult {
+  thread_id: string
+  participants: BotThreadParticipant[]
+  messages: BotThreadMessage[]
+  focus_index?: number | null
+  before?: number | null
+  after?: number | null
+  rev: number
+  coverage: 'both_sides' | 'own_side'
+  history_since?: string | null
+  read_only?: true
+}
+export interface BotThreadMessage {
+  id: string
+  exchange_id: string
+  sender_key: string
+  text: string
+  at: string
+  part: 'message' | 'reply'
+  status: BotThreadStatus
+  status_text?: string | null
+}
+export type BotThreadStatus = 'pending' | 'delivered' | 'unknown' | 'answered' | 'failed'
+export interface BotThreadLinksParams {
+  profile?: string | null
+  session_id: string
+  limit?: number
+}
+export interface BotThreadLinksResult {
+  links: BotThreadLink[]
+  truncated: boolean
+}
+/** One compact main-chat row at ``anchor_uid`` (a row's ``message_uid``) replacing ``covered_uids``. ``count`` 1 renders "Messaged X" / "Message from X"; more renders "N messages with X". Tapping opens ``bot.thread.read`` with ``focus=exchange_id``. */
+export interface BotThreadLink {
+  anchor_uid: string
+  thread_id: string
+  exchange_id: string
+  kind: 'messaged' | 'message_from'
+  counterpart: BotThreadParticipant
+  covered_uids: string[]
+  count: number
+}
+export interface ProfilesSetPrimaryParams {
+  name: string
+}
+export interface ProfilesSetPrimaryResult {
+  ok: boolean
+  name: string
+}
+export interface DeviceConnectorsListParams {
+  device_id?: string | null
+}
+export interface DeviceConnectorsResult {
+  device_id: string
+  connectors: DeviceConnectorStatus[]
+}
+export interface DeviceConnectorStatus {
+  id: DeviceConnectorId
+  title: string
+  subtitle: string
+  state: DeviceConnectorState
+  os_permission: DeviceOsPermission
+}
+export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms'
+export type DeviceConnectorState = 'allowed' | 'ask' | 'off'
+export type DeviceOsPermission = 'granted' | 'denied' | 'not_determined' | 'unsupported'
+export interface DeviceConnectorsSetParams {
+  id: DeviceConnectorId
+  state?: DeviceConnectorState | null
+  os_permission?: DeviceOsPermission | null
+  device_id?: string | null
+}
+export interface DeviceToolRespondParams {
+  request_id: string
+  ok: boolean
+  result?: unknown
+  error?: DeviceToolError | null
+}
+export interface DeviceToolError {
+  code: DeviceToolErrorCode
+  message?: string
+}
+export type DeviceToolErrorCode = 'permission_denied' | 'consent_declined' | 'unsupported' | 'invalid_args' | 'not_found' | 'failed'
+export interface DeviceToolRespondResult {
+  recorded: boolean
+}
+export interface ClientHelloParams {
+  kind: 'desktop' | 'ios' | 'tui' | 'cli' | 'web'
+  device_id: string
+  label: string
+  app_version?: string
+  model?: string
+  os?: string
+  accepts_offers?: boolean
+  device_tools?: boolean
+  attention?: 'foreground' | 'background' | 'idle'
+}
+export interface ClientHelloResult {
+  recorded: boolean
+  same_host: boolean
+}
+export interface ClientAttentionParams {
+  state: 'foreground' | 'background' | 'idle'
+}
+export interface RecordedResult {
+  recorded: boolean
+}
+export interface ReachOutcomeParams {
+  offer_id: string
+  outcome: 'shown' | 'acted' | 'dismissed'
+}
+export type DevicesListParams = Record<string, never>
+export interface DevicesListResult {
+  devices: DeviceRow[]
+}
+export interface DeviceRow {
+  device_id: string
+  kind: 'desktop' | 'ios' | 'tui' | 'cli' | 'web'
+  label: string
+  model?: string | null
+  os?: string | null
+  this_device: boolean
+  online: boolean
+  last_seen_at: string
+  push_enabled: boolean
+}
+export interface DevicesForgetParams {
+  device_id: string
+  confirm_self?: boolean
+}
+export interface DevicesForgetResult {
+  forgotten: boolean
+  grants_revoked: number
+  push_removed: boolean
+}
+export interface PushRegisterParams {
+  device_id: string
+  apns_token: string
+  environment: 'sandbox' | 'production'
+  bundle_id: string
+}
+export interface PushRegisterResult {
+  registered: boolean
+  push_enabled: boolean
+}
+export interface PushUnregisterParams {
+  device_id: string
+}
+export interface PushUnregisterResult {
+  removed: boolean
+}
+/** ``query`` is trimmed and must be 1..200 characters. ``limit`` defaults to 20 and is clamped to 1..50. */
+export interface SessionSearchParams {
+  profile?: string | null
+  query: string
+  limit?: number
+}
+export interface SessionSearchResult {
+  results: SessionSearchHit[]
+}
+/** ``session_id`` is the conversation's lineage root and ``resolved_id`` the compression-lineage tip ``session.list`` reports. ``role`` and ``timestamp`` are null for a hit on a session id or title. ``snippet`` is plain text of at most 240 characters; ``timestamp`` is the matching message's unix seconds. */
+export interface SessionSearchHit {
+  session_id: string
+  resolved_id?: string | null
+  title: string | null
+  snippet: string
+  role: string | null
+  timestamp: number | null
+  profile: string
 }
 /** ``answers`` rides only on a reconnect replay (locks the server already accepted; null = skipped). */
 export interface ClarifyRequestParams {
@@ -5843,8 +6323,13 @@ export interface DisplayStatusPayload {
   memory_limit_mb?: number | null
   placement?: string
   image_switch?: DisplayImageSwitch | null
+  screen?: DisplayScreenState
+  chrome?: DisplayChromeState | null
+  profile_copy_synced_at?: number | null
+  shared_files_path?: string | null
   lease: DisplayLease
   profile_key: string
+  disk?: DisplayDisk | null
 }
 export interface DisplayLeasePayload {
   profile_key: string
@@ -6298,10 +6783,36 @@ export interface PetHatchProgressPayload {
 }
 /** ``change_watcher._CHANGE_WATCHES`` payload fn — ``{}`` for every watch except pet.changed. */
 export type ChangeSignalPayload = Record<string, unknown>
+export interface DeviceToolRequestPayload {
+  request_id: string
+  action: DeviceToolAction
+  connector: DeviceConnectorId
+  args: unknown
+  needs_consent: boolean
+  profile: string
+  session_id?: string | null
+  deadline_seconds: number
+}
+export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set'
+export interface DeviceToolCancelPayload {
+  request_id: string
+  reason: DeviceToolCancelReason
+}
+export type DeviceToolCancelReason = 'timeout' | 'interrupted' | 'disconnected'
+export interface ReachOfferPayload {
+  offer_id: string
+  kind: 'notify' | 'suggest'
+  domain: string
+  title: string
+  body: string
+  session_id?: string | null
+}
 export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN'
 
 // ── Client→server methods ──
 export interface RpcMethods {
+  /** Every model-provider credential the profile holds (credential pool plus standalone logins and keys), active provider first then subscriptions then API keys, each with its usage windows and recent spend. refresh=false answers from the usage cache with no network call; refresh=true fetches all accounts concurrently within a 10s bound. */
+  'account.subscriptions': { params: AccountSubscriptionsParams; result: AccountSubscriptionsResult }
   /** Registry-wide background process summary for ``/agents``. */
   'agents.list': { params: AgentsListParams; result: AgentsListResult }
   /** Replay the approvals still waiting on this session (reconnect / polling). */
@@ -6310,6 +6821,8 @@ export interface RpcMethods {
   'approval.received': { params: ApprovalReceivedParams; result: ApprovalReceivedResult }
   /** Deliver the user's decision on a dangerous command (falls back to durable identity on a stale sid). */
   'approval.respond': { params: ApprovalRespondParams; result: ApprovalRespondResult }
+  /** Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record. */
+  'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
   /** Enable/disable auto top-up with its threshold and reload amount (billing:manage). */
   'billing.auto_reload': { params: BillingAutoReloadParams; result: BillingMutationResult }
   /** Start a one-off top-up charge (billing:manage, idempotent). */
@@ -6418,6 +6931,8 @@ export interface RpcMethods {
   'display.lease.resolve': { params: DisplayLeaseResolveParams; result: DisplayLeaseResult }
   /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
   'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
+  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a screen in a sandbox the bot does not have to itself. */
+  'display.reset': { params: DisplayResetParams; result: DisplayResetResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }
   /** Runtime + lease snapshot for this profile's screen. */
@@ -6514,6 +7029,10 @@ export interface RpcMethods {
   'learning.edit': { params: LearningEditParams; result: LearningMutationResult }
   /** Pre-render the /journey timeline (frames + legend/summary) so the TUI walks it locally. */
   'learning.frames': { params: LearningFramesParams; result: LearningFramesResult }
+  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. */
+  'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
+  /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
+  'library.list': { params: LibraryListParams; result: LibraryListResult }
   /** Stateless one-shot LLM completion (titles, ideas) on the session's or the task backend. */
   'llm.oneshot': { params: LlmOneshotParams; result: LlmOneshotResult }
   /** Facts about the machine running this backend and its OS account, for the desktop first run. */
@@ -6540,8 +7059,18 @@ export interface RpcMethods {
   'mcp.servers.status': { params: ProfileParams; result: McpServersStatusResult }
   /** Connect, list tools, disconnect — an OAuth server with no token on disk is reported as not ok. */
   'mcp.servers.test': { params: McpServerNameParams; result: McpServersTestResult }
+  /** Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned. */
+  'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
   /** Set/clear one author's emoji reaction on a message; returns the row's full reaction list. */
   'message.react': { params: MessageReactParams; result: MessageReactResult }
+  /** Validate and save a bot's Slack tokens, enable the adapter and reload it. */
+  'messaging.slack.connect': { params: MessagingSlackConnectParams; result: MessagingSlackConnectResult }
+  /** Remove a bot's Slack tokens and disable the adapter. */
+  'messaging.slack.disconnect': { params: ProfileParams; result: MessagingSlackConnectResult }
+  /** Slack app manifest named after the bot, plus the api.slack.com link that creates the app from it. */
+  'messaging.slack.manifest': { params: MessagingSlackManifestParams; result: MessagingSlackManifestResult }
+  /** Slack connection state of one bot (never carries a token). */
+  'messaging.slack.status': { params: ProfileParams; result: MessagingSlackStatus }
   /** Remove every credential (env keys and OAuth state) for a provider. */
   'model.disconnect': { params: ModelDisconnectParams; result: ModelDisconnectResult }
   /** Provider/model inventory for the picker, layered over the session's live provider when given. */
@@ -6560,6 +7089,14 @@ export interface RpcMethods {
   'paste.collapse': { params: PasteCollapseParams; result: PasteCollapseResult }
   /** Render a PDF's pages to PNG and queue them as images for the next turn. */
   'pdf.attach': { params: PdfAttachParams; result: PdfAttachResult }
+  /** Auto-Review state and both rule lists of one profile. */
+  'permissions.get': { params: ProfileParams; result: PermissionsState }
+  /** Add a rule (1 to 280 characters after trimming, at most 30 per list, never a repeat of a rule in either list); returns the stored rule. */
+  'permissions.rules.add': { params: PermissionsRuleAddParams; result: PermissionRule }
+  /** Remove a rule from whichever list holds it; an unknown id answers removed false, so a retry converges. */
+  'permissions.rules.remove': { params: PermissionsRuleRemoveParams; result: PermissionsRuleRemoveResult }
+  /** Turn Auto-Review on (smart guardian) or off (manual prompts); idempotent, never writes the mode that skips approvals, and leaves an already-off profile as it is. */
+  'permissions.set_auto_review': { params: PermissionsSetAutoReviewParams; result: PermissionsState }
   /** Stop an in-flight pet generate/hatch by token (idempotent). */
   'pet.cancel': { params: PetCancelParams; result: PetCancelResult }
   /** Half-block cell frames (or a kitty placement) for one pet state. */
@@ -6610,6 +7147,8 @@ export interface RpcMethods {
   'profiles.configure': { params: ProfilesConfigureParams; result: ProfilesConfigureResult }
   /** Create a profile (ws twin of POST /api/profiles), mirroring launch credentials by default. */
   'profiles.create': { params: ProfilesCreateParams; result: ProfilesCreateResult }
+  /** Delete a bot and its home (ws twin of DELETE /api/profiles/{name}); refuses the primary bot and the bot serving the connection. */
+  'profiles.delete': { params: ProfilesDeleteParams; result: ProfilesDeleteResult }
   /** Everything the profile editor shows: soul, model pin, skills, toolsets, MCP servers. */
   'profiles.describe': { params: ProfileNameParams; result: ProfilesDescribeResult }
   /** A profile asset as a data URL. */
@@ -6620,6 +7159,8 @@ export interface RpcMethods {
   'profiles.list': { params: ProfilesListParams; result: ProfilesListResult }
   /** Answer or dismiss a new bot's first-run question and clear its onboarding_pending flag. */
   'profiles.onboard': { params: ProfilesOnboardParams; result: ProfilesOnboardResult }
+  /** Rename a bot (ws twin of PATCH /api/profiles/{name}); the primary bot only changes its display name. */
+  'profiles.rename': { params: ProfilesRenameParams; result: ProfilesRenameResult }
   /** Store or clear a profile asset (avatar) atomically. */
   'profiles.set_asset': { params: ProfilesSetAssetParams; result: ProfilesSetAssetResult }
   /** A bot's shareable template (.hermesbot, base64): setup only, never history or secrets. */
@@ -6849,10 +7390,12 @@ export interface RpcMethods {
 }
 export type RpcMethod = keyof RpcMethods
 export const RPC_METHODS = [
+  'account.subscriptions',
   'agents.list',
   'approval.pending',
   'approval.received',
   'approval.respond',
+  'auth.revoke_self',
   'billing.auto_reload',
   'billing.charge',
   'billing.charge_status',
@@ -6907,6 +7450,7 @@ export const RPC_METHODS = [
   'display.lease.release',
   'display.lease.resolve',
   'display.observe',
+  'display.reset',
   'display.start',
   'display.status',
   'display.stop',
@@ -6955,6 +7499,8 @@ export const RPC_METHODS = [
   'learning.detail',
   'learning.edit',
   'learning.frames',
+  'library.asset',
+  'library.list',
   'llm.oneshot',
   'machine.facts',
   'mcp.catalog',
@@ -6968,7 +7514,12 @@ export const RPC_METHODS = [
   'mcp.servers.set_api_key',
   'mcp.servers.status',
   'mcp.servers.test',
+  'memory.import',
   'message.react',
+  'messaging.slack.connect',
+  'messaging.slack.disconnect',
+  'messaging.slack.manifest',
+  'messaging.slack.status',
   'model.disconnect',
   'model.options',
   'model.save_key',
@@ -6978,6 +7529,10 @@ export const RPC_METHODS = [
   'onboarding.state',
   'paste.collapse',
   'pdf.attach',
+  'permissions.get',
+  'permissions.rules.add',
+  'permissions.rules.remove',
+  'permissions.set_auto_review',
   'pet.cancel',
   'pet.cells',
   'pet.disable',
@@ -7003,11 +7558,13 @@ export const RPC_METHODS = [
   'process.stop',
   'profiles.configure',
   'profiles.create',
+  'profiles.delete',
   'profiles.describe',
   'profiles.get_asset',
   'profiles.identity.undo',
   'profiles.list',
   'profiles.onboard',
+  'profiles.rename',
   'profiles.set_asset',
   'profiles.template.export',
   'profiles.template.import',
@@ -7127,7 +7684,21 @@ export const RPC_METHODS = [
 export interface CanonicalRpcMethods {
   /** Forward one A2A input into the conversation its identity tuple names. */
   'a2a.forward': { params: A2aForwardParams; result: A2aForwardResult }
+  /** Every model-provider credential the profile holds (credential pool plus standalone logins and keys), active provider first then subscriptions then API keys, each with its usage windows and recent spend. refresh=false answers from the usage cache with no network call; refresh=true fetches all accounts concurrently within a 10s bound. */
+  'account.subscriptions': { params: AccountSubscriptionsParams; result: AccountSubscriptionsResult }
   'approval.respond': { params: CanonicalApprovalParams; result: PromptResponseResult }
+  /** Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record. */
+  'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
+  /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
+  'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
+  /** This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat. */
+  'bot.thread.list': { params: BotThreadListParams; result: BotThreadListResult }
+  /** Read one bot-to-bot thread from this profile's own ledger. not_found when the profile has no exchange in it. Requires session:read on the profile's Bot Chat. */
+  'bot.thread.read': { params: BotThreadReadParams; result: BotThreadReadResult }
+  /** Owner facts (name, time zone) shared by every Bot Mode bot on this install. */
+  'bot_mode.about_you.get': { params: BotAboutYouGetParams; result: BotAboutYouFacts }
+  /** Save owner facts install-wide; validates the time zone and answers the normalized values. */
+  'bot_mode.about_you.set': { params: BotAboutYouSetParams; result: BotAboutYouFacts }
   'bot_relay.deliver': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
   'bot_relay.settle': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
   'bot_relay.stop': { params: CanonicalBotStopParams; result: CanonicalBotStopResult }
@@ -7135,18 +7706,66 @@ export interface CanonicalRpcMethods {
   'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }
   /** Generation-fenced answer to a pending clarify prompt (empty answer = skipped). */
   'clarify.respond': { params: ClarifyRespondParams; result: PromptResponseResult }
+  /** Report a foreground/background/idle change; recorded is false before client.hello. */
+  'client.attention': { params: ClientAttentionParams; result: RecordedResult }
+  /** Declare this connection's client device; resent on every reconnect, replaces the previous declaration. same_host is derived by the server, never claimed. */
+  'client.hello': { params: ClientHelloParams; result: ClientHelloResult }
   /** Fire-only: a recognized command the classic CLI or the TUI runs itself; the gateway fires `pre_command` for it in the session's profile after replying (`queued` false: not fired). */
   'command.observe': { params: CommandObserveParams; result: CommandObserveResult }
   'config.get': { params: ConfigGetParams; result: CanonicalConfigGetResult }
   'config.set': { params: CanonicalConfigSetParams; result: ConfigSetResult }
+  /** The scoped member's hosted connector accounts, optionally filtered by connector slug. */
+  'connectors.accounts': { params: ConnectorAccountsParams; result: ConnectorAccountsResult }
+  /** Remove one hosted connector account owned by the scoped member. */
+  'connectors.accounts.remove': { params: ConnectorAccountsRemoveParams; result: ConnectorAccountsRemoveResult }
+  /** The hosted connector catalog available to the scoped member. */
+  'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
+  /** Start or re-initiate authorization for named connectors on a session or account operation. */
+  'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
+  /** Connector catalog + connection state for one session or profile account owner. */
+  'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
+  /** The current snapshot of one open session or account operation. */
+  'connectors.operation.status': { params: ConnectionOperationParams; result: ConnectionOperationStatus }
+  /** The browser leg came back (hermes://connections/done): read the accounts now, not at the next tick. */
+  'connectors.operation.wake': { params: ConnectionOperationParams; result: ConnectionWakeResult }
   /** Cancel a queued cron admission or latch cancellation on a started one. */
   'cron.cancel': { params: CronAdmissionParams; result: CronCancelResult }
+  /** List/add/remove/pause/resume/run cron jobs, read run history, preview a schedule and manage a routine's webhook trigger in the (optionally profile-scoped) cron store. */
+  'cron.manage': { params: CronManageParams; result: CronManageResult }
   /** Re-observe a firing after a scheduler restart (same request identity). */
   'cron.recover': { params: CronRunParams; result: CronStatusResult }
   /** Status and, once terminal, the result of one cron admission. */
   'cron.status': { params: CronAdmissionParams; result: CronStatusResult }
   /** Admit one cron firing into the owning profile's durable FIFO. */
   'cron.submit': { params: CronRunParams; result: CronSubmitResult }
+  /** Answer a device.tool.request from the connection that received it: ok true carries result (an object shaped for the action), ok false carries error. recorded is false for an unknown, expired, already answered or foreign request. */
+  'device.tool.respond': { params: DeviceToolRespondParams; result: DeviceToolRespondResult }
+  /** The iPhone connectors of one declared device (default: the calling connection's own, set by client.hello). state is the user's choice and defaults to ask; os_permission is what the phone last reported. */
+  'device_connectors.list': { params: DeviceConnectorsListParams; result: DeviceConnectorsResult }
+  /** Persist one connector's state and/or the OS permission the phone observed. At least one of state or os_permission is required; os_permission may only be reported for the calling connection's own device. */
+  'device_connectors.set': { params: DeviceConnectorsSetParams; result: DeviceConnectorsResult }
+  /** Revoke the device's sign-in grants and push token, drop its row and close its live connections. Forgetting the calling device answers confirm_required unless confirm_self is true. */
+  'devices.forget': { params: DevicesForgetParams; result: DevicesForgetResult }
+  /** Every device the user has connected on this install, newest first. online is live presence; last_seen_at survives restarts; push_enabled needs a registered token and a configured push provider. */
+  'devices.list': { params: DevicesListParams; result: DevicesListResult }
+  /** Take over: the human named by a viewer id this connection minted controls the screen. */
+  'display.lease.acquire': { params: DisplayLeaseAcquireParams; result: DisplayLeaseResult }
+  /** Hand back. Without a viewer id the release is refused while a human holds unless force. */
+  'display.lease.release': { params: DisplayLeaseReleaseParams; result: DisplayLeaseResult }
+  /** End the bot's pending hand-back ask (I'm done / Cancel). ask_at limits it to the ask the card showed. */
+  'display.lease.resolve': { params: DisplayLeaseResolveParams; result: DisplayLeaseResult }
+  /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
+  'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
+  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a screen in a sandbox the bot does not have to itself. */
+  'display.reset': { params: DisplayResetParams; result: DisplayResetResult }
+  /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
+  'display.start': { params: ProfileParams; result: DisplayStatus }
+  /** Runtime + lease snapshot for this profile's screen. */
+  'display.status': { params: ProfileParams; result: DisplayStatus }
+  /** Stop the screen. Refused (5300, code viewer_mismatch) while a human holds unless force. */
+  'display.stop': { params: DisplayStopParams; result: DisplayStopResult }
+  /** One JPEG grab of the bot's screen; read-only, never changes the lease. */
+  'display.thumbnail': { params: ProfileParams; result: DisplayThumbnailResult }
   'groups.approve': { params: CanonicalRoomApproveParams; result: GroupsApproveResult }
   /** Read one committed attachment for a live room viewer. */
   'groups.attachment.download': { params: GroupsAttachmentDownloadParams; result: RoomAttachmentBytes }
@@ -7159,7 +7778,61 @@ export interface CanonicalRpcMethods {
   'image.attach_bytes': { params: ImageAttachBytesParams; result: CanonicalAttachedImageResult }
   /** Native-owner only: admit the dispatcher's current claim on a kanban task. */
   'kanban.run': { params: KanbanRunParams; result: KanbanRunResult }
+  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. */
+  'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
+  /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
+  'library.list': { params: LibraryListParams; result: LibraryListResult }
+  /** Curated MCP presets with per-profile installed/enabled state and the env keys each needs. */
+  'mcp.catalog': { params: ProfileParams; result: McpCatalogResult }
+  /** Add a server to the profile's config from a catalog preset and/or an explicit config. */
+  'mcp.servers.add': { params: McpServersAddParams; result: McpServersAddResult }
+  /** Relay a client-captured redirect into a client_redirect_uri flow. */
+  'mcp.servers.oauth.callback': { params: McpOauthCallbackParams; result: McpOauthCallbackResult }
+  /** Cancel a flow owned by the resolved profile, waking its callback worker. */
+  'mcp.servers.oauth.cancel': { params: McpOauthFlowParams; result: McpOauthCancelResult }
+  /** Poll a flow; approved persists tokens for the profile and returns the probed tools. */
+  'mcp.servers.oauth.poll': { params: McpOauthFlowParams; result: McpOauthPollResult }
+  /** Begin a PKCE OAuth flow; the client opens auth_url and polls mcp.servers.oauth.poll. */
+  'mcp.servers.oauth.start': { params: McpOauthStartParams; result: McpOauthStartResult }
+  /** Drop a server from the profile's config.yaml. */
+  'mcp.servers.remove': { params: McpServerNameParams; result: McpServersRemoveResult }
+  /** Store a credential in the profile's .env and reference it from the server config (header or env). */
+  'mcp.servers.set_api_key': { params: McpServersSetApiKeyParams; result: McpServersSetApiKeyResult }
+  /** Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned. */
+  'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
+  /** Validate and save a bot's Slack tokens, enable the adapter and reload it. */
+  'messaging.slack.connect': { params: MessagingSlackConnectParams; result: MessagingSlackConnectResult }
+  /** Remove a bot's Slack tokens and disable the adapter. */
+  'messaging.slack.disconnect': { params: ProfileParams; result: MessagingSlackConnectResult }
+  /** Slack app manifest named after the bot, plus the api.slack.com link that creates the app from it. */
+  'messaging.slack.manifest': { params: MessagingSlackManifestParams; result: MessagingSlackManifestResult }
+  /** Slack connection state of one bot (never carries a token). */
+  'messaging.slack.status': { params: ProfileParams; result: MessagingSlackStatus }
+  /** Auto-Review state and both rule lists of one profile. */
+  'permissions.get': { params: ProfileParams; result: PermissionsState }
+  /** Add a rule (1 to 280 characters after trimming, at most 30 per list, never a repeat of a rule in either list); returns the stored rule. */
+  'permissions.rules.add': { params: PermissionsRuleAddParams; result: PermissionRule }
+  /** Remove a rule from whichever list holds it; an unknown id answers removed false, so a retry converges. */
+  'permissions.rules.remove': { params: PermissionsRuleRemoveParams; result: PermissionsRuleRemoveResult }
+  /** Turn Auto-Review on (smart guardian) or off (manual prompts); idempotent, never writes the mode that skips approvals, and leaves an already-off profile as it is. */
+  'permissions.set_auto_review': { params: PermissionsSetAutoReviewParams; result: PermissionsState }
+  /** Editor Save: apply any subset of a profile's sections and report each one. */
+  'profiles.configure': { params: ProfilesConfigureParams; result: ProfilesConfigureResult }
+  /** Create a profile (ws twin of POST /api/profiles), mirroring launch credentials by default. */
+  'profiles.create': { params: ProfilesCreateParams; result: ProfilesCreateResult }
+  /** Delete a bot and its home (ws twin of DELETE /api/profiles/{name}); refuses the primary bot and the bot serving the connection. */
+  'profiles.delete': { params: ProfilesDeleteParams; result: ProfilesDeleteResult }
+  /** A profile asset as a data URL. */
+  'profiles.get_asset': { params: ProfilesGetAssetParams; result: ProfilesGetAssetResult }
   'profiles.list': { params: CanonicalProfilesParams; result: CanonicalProfilesResult }
+  /** Rename a bot (ws twin of PATCH /api/profiles/{name}); the primary bot only changes its display name. */
+  'profiles.rename': { params: ProfilesRenameParams; result: ProfilesRenameResult }
+  /** Store or clear a profile asset (avatar) atomically. */
+  'profiles.set_asset': { params: ProfilesSetAssetParams; result: ProfilesSetAssetResult }
+  /** Make a bot the install's primary: the one the apps open first. Only a pointer in the install-wide config moves; nothing is copied. An unknown name answers not_found. */
+  'profiles.set_primary': { params: ProfilesSetPrimaryParams; result: ProfilesSetPrimaryResult }
+  /** A bot's shareable template (.hermesbot, base64): setup only, never history or secrets. */
+  'profiles.template.export': { params: ProfilesTemplateExportParams; result: ProfilesTemplateExportResult }
   /** Retire a queued admission; a started one is interrupted in the same call. */
   'prompt.cancel': { params: PromptCancelParams; result: AdmissionStatus }
   /** Current receipt of one admission the caller submitted (or controls). */
@@ -7171,6 +7844,12 @@ export interface CanonicalRpcMethods {
   /** Hand a still-queued admission's text to the running turn's agent as a steer. The admission reads 'started' with that turn (pending snapshots mark it 'steering') and never runs on its own; it settles terminal 'steered' when the turn completes with its text, else 'interrupted' (its completion frame says 'cancelled', as an interrupted turn's does); a text the turn never consumed goes back to its queue place. Refusals: admission_started, session_idle, steer_unavailable (no agent to take it: the admission stays queued), unsupported_control, not_found. */
   'prompt.steer_queued': { params: CanonicalSteerQueuedParams; result: AdmissionStatus }
   'prompt.submit': { params: CanonicalSubmitParams; result: CanonicalSubmitResult }
+  /** Store this device's APNs token. device_id must be the id declared by client.hello on this connection. push_enabled is false while the install has no push credentials. */
+  'push.register': { params: PushRegisterParams; result: PushRegisterResult }
+  /** Remove this device's APNs token; removed is false when none was stored. */
+  'push.unregister': { params: PushUnregisterParams; result: PushUnregisterResult }
+  /** Report what the user did with a reach.offer; outcomes only move forward, an unknown offer answers recorded false. */
+  'reach.outcome': { params: ReachOutcomeParams; result: RecordedResult }
   /** The classic CLI's /diff session: everything changed since the session's earliest retained checkpoint, as data for its terminal renderer. */
   'rollback.session_diff': { params: RollbackSessionDiffParams; result: RollbackSessionDiffResult }
   /** Owner identity and the canonical capabilities a client may rely on. */
@@ -7193,11 +7872,31 @@ export interface CanonicalRpcMethods {
   'session.prune': { params: SessionPruneParams; result: SessionPruneResult }
   'session.redirect': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
   'session.resume': { params: CanonicalResumeParams; result: CanonicalSnapshot }
+  /** Search a profile's visible conversations by session id, message text and title: id matches first, then message hits, then title matches, one hit per conversation. Internal sessions and hidden sessions other than the canonical Bot Chat never match. */
+  'session.search': { params: SessionSearchParams; result: SessionSearchResult }
   /** The session.usage dict on demand: what main's classic CLI read off its agent. */
   'session.stats': { params: SessionStatsParams; result: SessionStats }
   'session.steer': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
+  /** Write both shared-metrics opt-ins at once (send requires collection) and reconcile consent windows. */
+  'shared_metrics.set': { params: SharedMetricsSetParams; result: SharedMetricsConsentResult }
+  /** Pure read of the focused profile's shared-metrics opt-ins (collection, upload, answered). */
+  'shared_metrics.status': { params: ProfileParams; result: SharedMetricsConsentResult }
   /** Ink ``!cmd`` / ``{!cmd}`` on the shared owner: one safe command for a local session, in its frozen launch cwd (``gateway/session_shell.py``). */
   'shell.exec': { params: CanonicalShellExecParams; result: ShellExecResult }
+  /** Skills hub backend: list the profile's skills or search / browse / inspect / install from the hub. */
+  'skills.manage': { params: SkillsManageParams; result: SkillsManageResult }
+  /** Add a login / payment / address item to the local vault. */
+  'vault.add': { params: VaultAddParams; result: VaultAddResult }
+  /** Metadata-only listing across the local vault and every unlocked password manager. */
+  'vault.list': { params: ProfileParams; result: VaultListResult }
+  /** Forget a manager's session token (every manager when no name is given). */
+  'vault.lock': { params: VaultLockParams; result: VaultLockResult }
+  /** Remove a local vault item by id. */
+  'vault.remove': { params: VaultRemoveParams; result: VaultRemoveResult }
+  /** Status of every login source (local vault + detected password managers). */
+  'vault.sources': { params: ProfileParams; result: VaultSourcesResult }
+  /** Unlock a password manager for this session with its master password. */
+  'vault.unlock': { params: VaultUnlockParams; result: VaultUnlockResult }
   /** Adopt a registered execution after verifying the live producer claim. */
   'worker.adopt': { params: WorkerScopeParams; result: WorkerExecution }
   /** Sequence-fenced typed persistence write from an adopted worker. */
@@ -7208,19 +7907,50 @@ export interface CanonicalRpcMethods {
 export type CanonicalRpcMethod = keyof CanonicalRpcMethods
 export const CANONICAL_RPC_METHODS = [
   'a2a.forward',
+  'account.subscriptions',
   'approval.respond',
+  'auth.revoke_self',
+  'bot.thread.links',
+  'bot.thread.list',
+  'bot.thread.read',
+  'bot_mode.about_you.get',
+  'bot_mode.about_you.set',
   'bot_relay.deliver',
   'bot_relay.settle',
   'bot_relay.stop',
   'clarify.lock',
   'clarify.respond',
+  'client.attention',
+  'client.hello',
   'command.observe',
   'config.get',
   'config.set',
+  'connectors.accounts',
+  'connectors.accounts.remove',
+  'connectors.catalog',
+  'connectors.connect',
+  'connectors.list',
+  'connectors.operation.status',
+  'connectors.operation.wake',
   'cron.cancel',
+  'cron.manage',
   'cron.recover',
   'cron.status',
   'cron.submit',
+  'device.tool.respond',
+  'device_connectors.list',
+  'device_connectors.set',
+  'devices.forget',
+  'devices.list',
+  'display.lease.acquire',
+  'display.lease.release',
+  'display.lease.resolve',
+  'display.observe',
+  'display.reset',
+  'display.start',
+  'display.status',
+  'display.stop',
+  'display.thumbnail',
   'groups.approve',
   'groups.attachment.download',
   'groups.attachment.upload',
@@ -7229,13 +7959,43 @@ export const CANONICAL_RPC_METHODS = [
   'groups.retry',
   'image.attach_bytes',
   'kanban.run',
+  'library.asset',
+  'library.list',
+  'mcp.catalog',
+  'mcp.servers.add',
+  'mcp.servers.oauth.callback',
+  'mcp.servers.oauth.cancel',
+  'mcp.servers.oauth.poll',
+  'mcp.servers.oauth.start',
+  'mcp.servers.remove',
+  'mcp.servers.set_api_key',
+  'memory.import',
+  'messaging.slack.connect',
+  'messaging.slack.disconnect',
+  'messaging.slack.manifest',
+  'messaging.slack.status',
+  'permissions.get',
+  'permissions.rules.add',
+  'permissions.rules.remove',
+  'permissions.set_auto_review',
+  'profiles.configure',
+  'profiles.create',
+  'profiles.delete',
+  'profiles.get_asset',
   'profiles.list',
+  'profiles.rename',
+  'profiles.set_asset',
+  'profiles.set_primary',
+  'profiles.template.export',
   'prompt.cancel',
   'prompt.receipt',
   'prompt.replace_queued',
   'prompt.resolve_unknown',
   'prompt.steer_queued',
   'prompt.submit',
+  'push.register',
+  'push.unregister',
+  'reach.outcome',
   'rollback.session_diff',
   'runtime.describe',
   'session.automation',
@@ -7250,9 +8010,19 @@ export const CANONICAL_RPC_METHODS = [
   'session.prune',
   'session.redirect',
   'session.resume',
+  'session.search',
   'session.stats',
   'session.steer',
+  'shared_metrics.set',
+  'shared_metrics.status',
   'shell.exec',
+  'skills.manage',
+  'vault.add',
+  'vault.list',
+  'vault.lock',
+  'vault.remove',
+  'vault.sources',
+  'vault.unlock',
   'worker.adopt',
   'worker.persist',
   'worker.register'
@@ -7327,6 +8097,8 @@ export interface BackendGatewayEventMap {
   'billing.step_up.verification': BillingStepUpVerificationPayload
   /** A bot-relay outbox envelope is queued; drain it. */
   'bot_relay.outbox.pending': ChangeSignalPayload
+  /** A served profile's bot thread ledger moved (any process). Re-read open threads with since_rev and the open Bot Chat's bot.thread.links. */
+  'bot_threads.changed': Record<string, never>
   /** Browser (CDP) connect / install progress line. */
   'browser.progress': BrowserProgressPayload
   /** A /btw side question was answered. */
@@ -7337,6 +8109,10 @@ export interface BackendGatewayEventMap {
   'connection.update': ConnectionUpdatePayload
   /** cron/jobs.json moved; refetch the cron list. */
   'cron.changed': ChangeSignalPayload
+  /** A device.tool.request is no longer wanted; dismiss any prompt for it. A late respond is ignored. */
+  'device.tool.cancel': DeviceToolCancelPayload
+  /** The bot asks this iPhone to run one action on the device (EventKit, HomeKit, Contacts, CoreLocation, AlarmKit). Answer device.tool.respond before deadline_seconds. needs_consent means the connector's state is ask: show a consent prompt first, persist the choice with device_connectors.set, and answer consent_declined if the user refuses. */
+  'device.tool.request': DeviceToolRequestPayload
   /** The install ended (0 ok, -1 cancelled, -2 no sudo: the command to run by hand was streamed). */
   'display.install.done': DisplayInstallDonePayload
   /** One line of package-manager output. */
@@ -7399,6 +8175,8 @@ export interface BackendGatewayEventMap {
   'preview.restart.progress': PreviewRestartProgressPayload
   /** projects.db moved; refetch the project list + tree. */
   'projects.changed': ChangeSignalPayload
+  /** A proactive offer to alert on; answer reach.outcome shown within 15s once presented. */
+  'reach.offer': ReachOfferPayload
   /** Affection reaction detected in the user's message (hearts etc.). */
   reaction: ReactionPayload
   /** A completed reasoning block (non-streaming providers). */
@@ -7480,11 +8258,14 @@ export const GATEWAY_EVENT_TYPES = [
   'background.complete',
   'billing.step_up.verification',
   'bot_relay.outbox.pending',
+  'bot_threads.changed',
   'browser.progress',
   'btw.complete',
   'connection.request',
   'connection.update',
   'cron.changed',
+  'device.tool.cancel',
+  'device.tool.request',
   'display.install.done',
   'display.install.log',
   'display.lease',
@@ -7516,6 +8297,7 @@ export const GATEWAY_EVENT_TYPES = [
   'preview.restart.complete',
   'preview.restart.progress',
   'projects.changed',
+  'reach.offer',
   'reaction',
   'reasoning.available',
   'reasoning.delta',

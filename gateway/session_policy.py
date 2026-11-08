@@ -82,7 +82,7 @@ _TURN_PROFILE: ContextVar = ContextVar('follow_profile_read', default=None)  # (
 # Creation label -> agent surface. ``tool`` (third-party integrations, ``hermes chat --source tool``) and
 # ``oneshot`` (finite ``chat -q`` / ``-z`` runs) run as the CLI but keep their own stored label, so human
 # pickers hide them (INTERNAL_LISTING_SOURCES).
-SURFACES = {'cli': 'cli', 'tui': 'tui', 'gui': 'desktop', 'acp': 'acp', 'tool': 'cli', 'oneshot': 'cli'}
+SURFACES = {'cli': 'cli', 'tui': 'tui', 'gui': 'desktop', 'ios': 'ios', 'acp': 'acp', 'tool': 'cli', 'oneshot': 'cli'}
 # ``tool`` and ``oneshot`` stay stored under their own labels so pickers can hide them.
 # Every other creation label is rewritten to ``source='local'`` on peer refresh.
 _KEEP_STORED_LABEL = frozenset({'tool', 'oneshot'})
@@ -694,6 +694,9 @@ def _resolve_toolsets(params, config, source, safe_mode, coding_posture=False, b
         disabled = set(parse_config_string_list((config.get('agent') or {}).get('disabled_toolsets')))
         surface = set(CLIENT_SURFACE_TOOLSETS) if source == 'gui' else {'project'}
         enabled |= surface - (disabled - {'desktop_ui'})
+    if explicit is None and source == 'ios':
+        from agent.skill_utils import parse_config_string_list
+        enabled |= {'iphone'} - set(parse_config_string_list((config.get('agent') or {}).get('disabled_toolsets')))
     if safe_mode:
         # Plugin toolsets are user customizations; the safe worker never imports them.
         from hermes_cli.tools_config import _get_plugin_toolset_keys
@@ -1029,7 +1032,9 @@ def policy_turn_toolsets(authority, policy, config, session_id):
     """A local turn's toolsets: the policy's current set, plus ``onboarding`` for an onboarding chat
     (``agent.onboarding_session.onboarding_chat_toolsets``)."""
     from agent.onboarding_session import onboarding_chat_toolsets
-    return onboarding_chat_toolsets(list(policy.current_toolsets(config)), getattr(authority, 'db', None), session_id)
+    from gateway.session_iphone_toolset import with_iphone
+    enabled = onboarding_chat_toolsets(list(policy.current_toolsets(config)), getattr(authority, 'db', None), session_id)
+    return with_iphone(authority, policy, config, enabled, session_id)
 
 
 def local_desktop_turn(runner, source, scope):

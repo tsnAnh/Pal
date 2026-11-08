@@ -1,3 +1,6 @@
+import { curveEye, parseTransform, readEyeSize, readSurfaceSpec, type SurfaceSpec } from './eye-frame'
+import { eyesDriven, prefersReducedMotion } from './face-driver'
+
 export interface GazePoint {
   x: number
   y: number
@@ -47,12 +50,11 @@ const SCOPE_SELECTOR = '[data-bot-gaze-scope]'
 const FACE_SELECTOR = 'svg[data-bot-face]'
 const EYES_SELECTOR = '[data-hb-gaze]'
 const EYE_SELECTOR = '[data-hb-eye]'
-const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)'
 const FIRST_FRAME_SECONDS = 1 / 60
 const CENTRED: GazeOffset = { x: 0, y: 0 }
 const EYE_TRANSFORM = /translate\(([-\d.]+)[ ,]+([-\d.]+)\)\s*rotate\(([-\d.]+)\)/
-const GROUP_TRANSLATE = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/
 const REST_ATTRIBUTE = 'data-hb-rest'
+const MASK_IDENTITY_ATTRIBUTE = 'data-hb-mask'
 const TILT_RADIANS = (FIGURE_TILT_DEGREES * Math.PI) / 180
 
 interface FaceGaze {
@@ -64,7 +66,10 @@ interface FaceGaze {
   group: SVGGElement
   identity: string
   rig: EyeRig
+  surface: SurfaceSpec
 }
+
+type FaceParts = Omit<FaceGaze, 'attention' | 'attentionTarget' | 'gaze' | 'gazeTarget'>
 
 export function gazeOffset(origin: GazePoint, faceWidth: number, pointer: GazePoint): GazeOffset {
   const dx = pointer.x - origin.x
@@ -102,14 +107,6 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
-function halfExtent(eye: EyeRest, angle: number): { x: number; y: number } {
-  const radians = (angle * Math.PI) / 180
-  const cos = Math.abs(Math.cos(radians))
-  const sin = Math.abs(Math.sin(radians))
-
-  return { x: (cos * eye.width + sin * eye.height) / 2, y: (sin * eye.width + cos * eye.height) / 2 }
-}
-
 function shiftWithin(shift: number, lows: number[], highs: number[]): number {
   const low = Math.max(...lows)
   const high = Math.min(...highs)
@@ -117,22 +114,17 @@ function shiftWithin(shift: number, lows: number[], highs: number[]): number {
   return low > high ? (low + high) / 2 : clamp(shift, low, high)
 }
 
-export function composeEyes(
-  rig: EyeRig,
-  attention: number,
-  gaze: GazeOffset,
-  wander: GazePoint = CENTRED
-): [EyePose, EyePose] {
+function halfExtent(eye: EyeRest, angle: number): GazePoint {
+  const radians = (angle * Math.PI) / 180
+  const cos = Math.abs(Math.cos(radians))
+  const sin = Math.abs(Math.sin(radians))
+
+  return { x: (cos * eye.width + sin * eye.height) / 2, y: (sin * eye.width + cos * eye.height) / 2 }
+}
+
+export function composeEyes(rig: EyeRig, attention: number, gaze: GazeOffset): [EyePose, EyePose] {
   const weight = clamp(attention, 0, 1)
-  const { left, right } = rig
-
-  const bounds = {
-    maxX: rig.bounds.maxX - wander.x,
-    maxY: rig.bounds.maxY - wander.y,
-    minX: rig.bounds.minX - wander.x,
-    minY: rig.bounds.minY - wander.y
-  }
-
+  const { bounds, left, right } = rig
   const width = bounds.maxX - bounds.minX
   const height = bounds.maxY - bounds.minY
   const restMidX = (left.x + right.x) / 2
@@ -176,15 +168,13 @@ export function composeEyes(
 
 function readEyeRest(eye: SVGGElement): EyeRest | null {
   const match = EYE_TRANSFORM.exec(eye.getAttribute(REST_ATTRIBUTE) ?? '')
-  const rect = eye.querySelector('rect')
-  const width = Number(rect?.getAttribute('width'))
-  const height = Number(rect?.getAttribute('height'))
+  const size = readEyeSize(eye)
 
-  if (!match || !(width > 0) || !(height > 0)) {
+  if (!match || !size) {
     return null
   }
 
-  return { height, slant: Number(match[3]), width, x: Number(match[1]), y: Number(match[2]) }
+  return { ...size, slant: Number(match[3]), x: Number(match[1]), y: Number(match[2]) }
 }
 
 function readBounds(group: SVGGElement): BodyBounds | null {
@@ -199,17 +189,22 @@ function readBounds(group: SVGGElement): BodyBounds | null {
 }
 
 function faceIdentity(group: SVGGElement, eyes: SVGGElement[]): string {
-  return [group.getAttribute('data-hb-bounds'), ...eyes.map(eye => eye.getAttribute(REST_ATTRIBUTE))].join('|')
+  return [
+    group.getAttribute('data-hb-bounds'),
+    group.getAttribute(MASK_IDENTITY_ATTRIBUTE),
+    ...eyes.map(eye => eye.getAttribute(REST_ATTRIBUTE))
+  ].join('|')
 }
 
-function readFace(svg: SVGSVGElement): Omit<FaceGaze, 'attention' | 'attentionTarget' | 'gaze' | 'gazeTarget'> | null {
+function readFace(svg: SVGSVGElement): FaceParts | null {
   const group = svg.querySelector<SVGGElement>(EYES_SELECTOR)
   const bounds = group && readBounds(group)
+  const surface = group && readSurfaceSpec(group)
   const [leftEye, rightEye] = group ? Array.from(group.querySelectorAll<SVGGElement>(EYE_SELECTOR)) : []
   const left = leftEye && readEyeRest(leftEye)
   const right = rightEye && readEyeRest(rightEye)
 
-  if (!group || !bounds || !left || !right) {
+  if (!group || !bounds || !surface || !left || !right) {
     return null
   }
 
@@ -217,41 +212,38 @@ function readFace(svg: SVGSVGElement): Omit<FaceGaze, 'attention' | 'attentionTa
     eyes: [leftEye, rightEye],
     group,
     identity: faceIdentity(group, [leftEye, rightEye]),
-    rig: { bounds, left, right }
+    rig: { bounds, left, right },
+    surface
   }
-}
-
-function readWander(group: SVGGElement): GazePoint {
-  const match = GROUP_TRANSLATE.exec(group.getAttribute('transform') ?? '')
-
-  return match ? { x: Number(match[1]), y: Number(match[2]) } : CENTRED
 }
 
 function faceTracked(svg: SVGSVGElement): boolean {
   return svg.hasAttribute('data-hb-math') || svg.getAttribute('data-bot-gaze') === 'eyes'
 }
 
+function paintEye(face: FaceParts, index: number, transform: string) {
+  const eye = face.eyes[index]
+  const size = index === 0 ? face.rig.left : face.rig.right
+  const d = curveEye(face.surface, size, parseTransform(transform))
+
+  eye.setAttribute('transform', transform)
+  eye.querySelector('path')?.setAttribute('d', d)
+}
+
 function writeEyes(face: FaceGaze) {
-  composeEyes(face.rig, face.attention, face.gaze, readWander(face.group)).forEach((pose, index) => {
-    face.eyes[index].setAttribute(
-      'transform',
-      `translate(${pose.x.toFixed(3)} ${pose.y.toFixed(3)}) rotate(${pose.angle.toFixed(3)})`
-    )
+  composeEyes(face.rig, face.attention, face.gaze).forEach((pose, index) => {
+    paintEye(face, index, `translate(${pose.x.toFixed(3)} ${pose.y.toFixed(3)}) rotate(${pose.angle.toFixed(3)})`)
   })
 }
 
-function restoreEyes(face: FaceGaze) {
-  face.eyes.forEach(eye => {
+function restoreEyes(face: FaceParts) {
+  face.eyes.forEach((eye, index) => {
     const rest = eye.getAttribute(REST_ATTRIBUTE)
 
     if (rest) {
-      eye.setAttribute('transform', rest)
+      paintEye(face, index, rest)
     }
   })
-}
-
-function prefersReducedMotion(): boolean {
-  return typeof window.matchMedia === 'function' && window.matchMedia(REDUCED_MOTION_QUERY).matches
 }
 
 function scopeOf(target: EventTarget | null): Element | null {
@@ -266,6 +258,8 @@ function reachedTarget(face: FaceGaze): boolean {
   )
 }
 
+const faces = new Map<SVGSVGElement, FaceGaze>()
+
 let activeStop: (() => void) | null = null
 
 export function startFaceGaze(): () => void {
@@ -273,7 +267,6 @@ export function startFaceGaze(): () => void {
     return activeStop
   }
 
-  const faces = new Map<SVGSVGElement, FaceGaze>()
   let frame = 0
   let running = false
   let lastTime: null | number = null
@@ -286,7 +279,7 @@ export function startFaceGaze(): () => void {
       return known
     }
 
-    const parts = faceTracked(svg) ? readFace(svg) : null
+    const parts = faceTracked(svg) && !eyesDriven(svg) ? readFace(svg) : null
 
     if (!parts) {
       return null
@@ -384,6 +377,12 @@ export function startFaceGaze(): () => void {
 
     for (const [svg, face] of faces) {
       if (!svg.isConnected || !face.eyes[0].isConnected || !refreshRig(face, svg)) {
+        faces.delete(svg)
+
+        continue
+      }
+
+      if (eyesDriven(svg)) {
         faces.delete(svg)
 
         continue

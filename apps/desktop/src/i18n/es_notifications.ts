@@ -33,6 +33,10 @@ export const esNotifications = {
     plugin: {
       label: 'Notificaciones de complementos',
       description: 'Un complemento de escritorio envió una notificación mientras Hermes estaba en segundo plano.'
+    },
+    proactive: {
+      label: 'Avisos proactivos',
+      description: 'Hermes se pone en contacto por iniciativa propia, por ejemplo con el resultado de una tarea programada o una sugerencia.'
     }
   },
   browserPermission: {

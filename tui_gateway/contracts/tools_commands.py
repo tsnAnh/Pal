@@ -476,6 +476,8 @@ class CronJobRow(_Open):
     provider: str | None = None
     base_url: str | None = None
     schedule: str = "?"
+    schedule_text: str | None = None
+    schedule_timezone: str | None = None
     repeat: int | str | None = None
     deliver: str | None = None
     next_run_at: str | None = None

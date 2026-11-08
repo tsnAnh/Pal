@@ -177,7 +177,8 @@ export const ruOverrides = {
       turnErrorTitle: 'Ход не удался',
       backgroundDoneTitle: 'Фоновая задача завершена',
       backgroundFailedTitle: 'Фоновая задача не удалась',
-      creditsTitle: 'Кредиты'
+      creditsTitle: 'Кредиты',
+      proactiveOpen: 'Открыть'
     }
   },
   ...ruNotices,
@@ -3561,6 +3562,11 @@ export const ruOverrides = {
       allowSession: 'Разрешить в этом сеансе',
       alwaysAllowMenu: 'Всегда разрешать…',
       jumpToApproval: 'Нужно подтверждение',
+      botTitle: 'Нужно ваше согласие',
+      botBody: 'Это может что-то изменить или удалить. Разрешить?',
+      showDetails: 'Показать подробности',
+      hideDetails: 'Скрыть подробности',
+      botAlwaysDescription: 'Этот бот больше не будет спрашивать перед такими действиями ни в одном чате.',
       reject: 'Отклонить',
       alwaysTitle: 'Всегда разрешать эту команду?',
       alwaysDescription: pattern =>

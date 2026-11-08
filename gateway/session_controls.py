@@ -32,6 +32,8 @@ def _refusal_data(exc: RuntimeStoreError) -> dict:
             data[key] = getattr(exc, key)
     if getattr(exc, 'admitted', None) is False:
         data['admitted'] = False  # nothing admitted yet: the sender may finalize with ``bot_relay.settle``
+    for key, value in (getattr(exc, 'wire_data', None) or {}).items():
+        data.setdefault(key, value)
     return data
 
 
@@ -254,6 +256,18 @@ class AuthorityConnection:
         handlers.update(side_handlers(self))
         from gateway.session_llm_oneshot import handlers as oneshot_handlers
         handlers.update(oneshot_handlers(self))
+        from gateway.session_presence_controls import handlers as presence_handlers
+        handlers.update(presence_handlers(self))
+        from gateway.device_controls import handlers as device_handlers
+        handlers.update(device_handlers(self))
+        from gateway.session_reach_controls import handlers as reach_handlers
+        handlers.update(reach_handlers(self))
+        from gateway.session_device_controls import handlers as device_connector_handlers
+        handlers.update(device_connector_handlers(self))
+        from gateway.session_bot_thread_controls import handlers as bot_thread_handlers
+        handlers.update(bot_thread_handlers(self))
+        from gateway.session_search_controls import handlers as search_handlers
+        handlers.update(search_handlers(self))
         from gateway.session_images import attach_bytes
         from functools import partial
         handlers['image.attach_bytes'] = partial(attach_bytes, self)
@@ -277,6 +291,8 @@ class AuthorityConnection:
         handlers['session.control'] = partial(control, self)
         from gateway.session_onboarding import handlers as onboarding_handlers
         handlers.update(onboarding_handlers(self))
+        from gateway.session_legacy_bridge import handlers as bridge_handlers
+        handlers.update(bridge_handlers(self))
         return handlers
 
     async def dispatch(self, request):
@@ -345,14 +361,12 @@ class AuthorityConnection:
             # launch profile's config into a served secondary's session. Under a single profile
             # the scope is that profile's own home, so behaviour is unchanged.
             from gateway.session_authorities import async_owner_scope
-            from gateway.session_connections import METHODS as CONNECTION_METHODS, session_owned
             async with async_owner_scope(self.authority):
                 if method in GROUP_METHODS or method == 'profiles.list':
                     result = await dispatch_group_control(self, method, params)
-                elif method not in handlers or (method in CONNECTION_METHODS and not session_owned(params)):
+                elif method not in handlers:
                     # JSON-RPC's own verdict: clients key compat fallbacks on -32601, and a
                     # 4001 'invalid_params' would read as a bad argument on a method that exists.
-                    # An account-owned connector call (the Connectors page) keeps its legacy handler.
                     return {'jsonrpc': '2.0', 'id': rid, 'error': {
                         'code': -32601, 'message': unknown_method_message(method),
                         'data': {'reason': 'unknown_method'}}}
@@ -549,7 +563,7 @@ class AuthorityConnection:
         return {'instance_id': self.authority.instance_id, 'profile_id': self.authority.profile_id,
                 'authority_epoch': self.authority.epoch,
                 'capabilities': ['durable-admission-v1', 'event-replay-v1', 'local-cli-create-v1', 'acp-editor-policy-v1',
-                                 'acp-session-mcp-v1', 'clarify-batch-v1'],
+                                 'acp-session-mcp-v1', 'clarify-batch-v1', 'reach-v1'],
                 'session_create': {'sources': sorted(SURFACES),
                                    'parameters': sorted(CREATE_FIELDS | {'title'})},
                 # Main's ``gateway.ready.skin``: the canonical client's own ready carries it.
@@ -960,3 +974,7 @@ class AuthorityConnection:
         unbind_native_transport(self.authority, self.actor)
         self.subscriptions.clear()
         self.authority.events.pop(self.actor.transport_id, None)
+        from gateway.session_presence_controls import departed
+        await departed(self)
+        from gateway.device_tools import forget_transport
+        forget_transport(self.transport)

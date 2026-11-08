@@ -126,7 +126,18 @@ def add_suggestion(
         }
         suggestions.append(record)
         _save_raw(suggestions)
-        return record
+    _offer_to_reach(record)
+    return record
+
+
+def _offer_to_reach(record: dict[str, Any]) -> None:
+    try:
+        from gateway import reach
+        reach.offer_threadsafe(get_hermes_home(), reach.Offer(
+            producer_key=f"suggestion:{record['id']}", domain="suggestions", kind=reach.OfferKind.SUGGEST,
+            consent=reach.Consent.INITIATED, title=record["title"], body=record["description"]), wait=False)
+    except Exception:
+        logger.warning("Could not offer suggestion %s to the user", record["id"], exc_info=True)
 
 
 def get_suggestion(ref: str) -> Optional[dict[str, Any]]:
@@ -176,7 +187,7 @@ def accept_suggestion(ref: str, *, origin: Optional[dict[str, Any]] = None) -> O
         CronSchedulerRegistrationError, create_job_with_scheduler_registration,
     )
 
-    spec = dict(s.get("job_spec") or {})
+    spec = dict(s.get("job_spec") or {}, created_by="suggestion")
     if origin is not None and "origin" not in spec:
         spec["origin"] = origin
 

@@ -33,6 +33,10 @@ export const zhNotifications = {
     plugin: {
       label: '插件通知',
       description: 'Hermes 在后台时，桌面插件发送了通知。'
+    },
+    proactive: {
+      label: '主动提醒',
+      description: 'Hermes 主动联系你，例如定时任务的结果或建议。'
     }
   },
   browserPermission: {

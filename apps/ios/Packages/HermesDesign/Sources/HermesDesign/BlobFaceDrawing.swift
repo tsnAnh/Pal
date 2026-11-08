@@ -3,7 +3,7 @@ import SwiftUI
 
 enum BlobFaceDrawing {
     private static let bodyRounding = 26.0
-    private static let pill = (width: 9.0, height: 21.0, gap: 19.0, slant: -11.0, shiftX: 10.0, shiftY: -8.0, reach: 6.0)
+    private static let pill = (width: 10.0, height: 23.0, gap: 28.0, slant: -11.0, shiftX: 15.0, shiftY: -18.0, reach: 9.0)
     private static let figure = CGAffineTransform.svgList([
         .svgRotate(-14, aroundX: 50, y: 50),
         .svgTranslate(50, 50),

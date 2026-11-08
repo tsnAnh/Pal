@@ -1,0 +1,64 @@
+#!/usr/bin/env -S python3 -I
+import re
+import sys
+from pathlib import Path
+
+CLASS = re.compile(r'\bclass\s+(\w+)\s*:[^{]*\{')
+TEST = re.compile(r'\bfunc\s+(test\w*)\s*\(')
+CONTROL = re.compile(r'\bcontrol\s*\(')
+CONTROL_ENV = 'HERMES_UITEST_CTL'
+
+
+def matching_brace(source, start):
+    depth = 0
+    for index in range(start, len(source)):
+        if source[index] == '{':
+            depth += 1
+        elif source[index] == '}':
+            depth -= 1
+            if depth == 0:
+                return index
+    return len(source)
+
+
+def lanes_in(source):
+    for cls in CLASS.finditer(source):
+        body_end = matching_brace(source, cls.end() - 1)
+        body = source[cls.end():body_end]
+        class_needs_control = CONTROL_ENV in body and not TEST.search(body[:body.find(CONTROL_ENV)])
+        for test in TEST.finditer(body):
+            open_brace = body.find('{', test.end())
+            test_body = body[open_brace:matching_brace(body, open_brace) + 1]
+            control = class_needs_control or bool(CONTROL.search(test_body)) or CONTROL_ENV in test_body
+            yield f'{cls.group(1)}/{test.group(1)}', 'control' if control else 'drive'
+
+
+def catalog(ui_tests):
+    found = {}
+    for path in sorted(ui_tests.glob('*.swift')):
+        found.update(lanes_in(path.read_text(encoding='utf-8')))
+    return found
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] in ('-h', '--help'):
+        print('usage: test-lanes UI_TESTS_DIR SELECTOR...\n'
+              'Prints "<Class/test>\\t<drive|control>" for every test a selector names. A test is control when\n'
+              'it calls control(...) or reads HERMES_UITEST_CTL; those only pass under drive-control.',
+              file=sys.stderr)
+        return 2
+    tests = catalog(Path(argv[1]))
+    status = 0
+    for selector in argv[2:]:
+        selector = selector.removesuffix('()')
+        matched = [name for name in tests if name == selector or name.split('/')[0] == selector]
+        if not matched:
+            print(f'test-lanes: no UI test matches {selector}', file=sys.stderr)
+            status = 2
+        for name in matched:
+            print(f'{name}\t{tests[name]}')
+    return status
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv))

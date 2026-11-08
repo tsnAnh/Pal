@@ -80,7 +80,8 @@ export const zhHantDiagnostics = {
       turnErrorTitle: '本輪失敗',
       backgroundDoneTitle: '背景工作已完成',
       backgroundFailedTitle: '背景工作失敗',
-      creditsTitle: '額度'
+      creditsTitle: '額度',
+      proactiveOpen: '開啟'
     }
   },
 

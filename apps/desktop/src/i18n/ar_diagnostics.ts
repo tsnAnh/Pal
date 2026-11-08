@@ -99,7 +99,8 @@ export const arDiagnostics = {
       turnDoneBody: 'اكتملت الرسالة.',
       turnErrorTitle: 'فشلت الجولة',
       backgroundDoneTitle: 'انتهت المهمة في الخلفية',
-      backgroundFailedTitle: 'فشلت المهمة في الخلفية'
+      backgroundFailedTitle: 'فشلت المهمة في الخلفية',
+      proactiveOpen: 'فتح'
     }
   },
   errors: {

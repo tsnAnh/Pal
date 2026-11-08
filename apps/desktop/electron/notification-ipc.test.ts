@@ -156,3 +156,78 @@ it('flashes an unfocused source window until it regains focus, and leaves a focu
   await notify(event, { kind: 'turnDone', sessionId: 'c', title: 'Hermes finished' })
   expect(source.flashFrame).toHaveBeenCalledTimes(2)
 })
+
+async function showWithNotifyId(platform: NodeJS.Platform) {
+  const source = windowStub()
+  host.fromWebContents.mockReturnValue(source)
+  registerNativeNotifications({ getMainWindow: () => null, focusWindow: vi.fn(), platform })
+
+  const notify = host.handle.mock.calls[0][1] as (
+    event: IpcMainInvokeEvent,
+    payload: HermesNotification
+  ) => Promise<boolean>
+
+  await notify({ sender: source.webContents } as unknown as IpcMainInvokeEvent, {
+    kind: 'proactive',
+    notifyId: 'reach:offer-1',
+    tag: 'offer-1',
+    title: 'Nightly report'
+  })
+
+  return source
+}
+
+it('tells the source renderer when the user closes a notification that carries a handle', async () => {
+  const source = await showWithNotifyId('darwin')
+  host.shown[0].emit('close')
+
+  expect(source.webContents.send).toHaveBeenCalledWith('hermes:notification-close', {
+    notifyId: 'reach:offer-1',
+    tag: 'offer-1'
+  })
+})
+
+it('does not report a close for a notification without a handle', async () => {
+  const source = windowStub()
+  host.fromWebContents.mockReturnValue(source)
+  registerNativeNotifications({ getMainWindow: () => null, focusWindow: vi.fn(), platform: 'darwin' })
+
+  const notify = host.handle.mock.calls[0][1] as (
+    event: IpcMainInvokeEvent,
+    payload: HermesNotification
+  ) => Promise<boolean>
+
+  await notify({ sender: source.webContents } as unknown as IpcMainInvokeEvent, { kind: 'turnDone', title: 'Done' })
+  host.shown[0].emit('close')
+
+  expect(source.webContents.send).not.toHaveBeenCalledWith('hermes:notification-close', expect.anything())
+})
+
+it('treats a Windows banner timeout as not a dismissal', async () => {
+  const source = await showWithNotifyId('win32')
+  host.shown[0].emit('close')
+
+  expect(source.webContents.send).not.toHaveBeenCalledWith('hermes:notification-close', expect.anything())
+})
+
+it('does not report a close to a source window that has gone away', async () => {
+  const source = await showWithNotifyId('darwin')
+  source.isDestroyed.mockReturnValue(true)
+  host.shown[0].emit('close')
+
+  expect(source.webContents.send).not.toHaveBeenCalledWith('hermes:notification-close', expect.anything())
+})
+
+it('does not report the registry expiring a notification as a dismissal', async () => {
+  vi.useFakeTimers()
+
+  try {
+    const source = await showWithNotifyId('darwin')
+    Object.assign(host.shown[0], { close: () => void host.shown[0].emit('close') })
+    vi.advanceTimersByTime(10 * 60 * 1000)
+
+    expect(source.webContents.send).not.toHaveBeenCalledWith('hermes:notification-close', expect.anything())
+  } finally {
+    vi.useRealTimers()
+  }
+})

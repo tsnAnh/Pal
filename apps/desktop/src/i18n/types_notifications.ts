@@ -6,7 +6,7 @@ export interface NotificationSettingsTranslations {
   enableAllDesc: string
   focusedHint: string
   kinds: Record<
-    'approval' | 'backgroundDone' | 'credits' | 'input' | 'plugin' | 'turnDone' | 'turnError',
+    'approval' | 'backgroundDone' | 'credits' | 'input' | 'plugin' | 'proactive' | 'turnDone' | 'turnError',
     { label: string; description: string }
   >
   browserPermission: {

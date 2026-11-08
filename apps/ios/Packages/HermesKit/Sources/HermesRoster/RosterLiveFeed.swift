@@ -7,11 +7,13 @@ public struct RosterSnapshot: Sendable, Equatable {
     public var profiles: [JSONValue]
     public var live: [String: BotLiveState]
     public var receivedAt: Date
+    public var capabilities: RosterCapabilities
 
-    public init(profiles: [JSONValue], live: [String: BotLiveState], receivedAt: Date) {
+    public init(profiles: [JSONValue], live: [String: BotLiveState], receivedAt: Date, capabilities: RosterCapabilities = RosterCapabilities()) {
         self.profiles = profiles
         self.live = live
         self.receivedAt = receivedAt
+        self.capabilities = capabilities
     }
 }
 
@@ -51,6 +53,7 @@ public actor RosterLiveFeed {
 
     private let continuation: AsyncStream<RosterFeedUpdate>.Continuation
     private let connect: @Sendable () async throws -> GatewayConnection
+    private let onEvent: (@Sendable (GatewayEvent) -> Void)?
     private let timing: RosterFeedTiming
     private let diagnostics: Diagnostics
     private let clock = ContinuousClock()
@@ -63,11 +66,13 @@ public actor RosterLiveFeed {
 
     public init(
         connect: @escaping @Sendable () async throws -> GatewayConnection,
+        onEvent: (@Sendable (GatewayEvent) -> Void)? = nil,
         timing: RosterFeedTiming = .standard,
         diagnostics: Diagnostics = .silent
     ) {
         (updates, continuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         self.connect = connect
+        self.onEvent = onEvent
         self.timing = timing
         self.diagnostics = diagnostics
         lastRefresh = clock.now
@@ -127,7 +132,7 @@ public actor RosterLiveFeed {
         lastRefresh = clock.now
         trigger.yield()
         await withTaskGroup(of: Void.self) { group in
-            group.addTask { await Self.pump(connection.events, into: trigger) }
+            group.addTask { await Self.pump(connection.events, into: trigger, observer: self.onEvent) }
             group.addTask { await self.keepAlive(connection) }
             group.addTask { await self.refreshLoop(connection, triggers) }
             group.addTask { await self.ticker(trigger) }
@@ -138,9 +143,14 @@ public actor RosterLiveFeed {
         activeTrigger = nil
     }
 
-    private static func pump(_ events: AsyncStream<GatewayEvent>, into trigger: AsyncStream<Void>.Continuation) async {
-        for await event in events where changeEvents.contains(event.type) {
-            trigger.yield()
+    private static func pump(
+        _ events: AsyncStream<GatewayEvent>,
+        into trigger: AsyncStream<Void>.Continuation,
+        observer: (@Sendable (GatewayEvent) -> Void)?
+    ) async {
+        for await event in events {
+            observer?(event)
+            if changeEvents.contains(event.type) { trigger.yield() }
         }
     }
 
@@ -186,7 +196,9 @@ public actor RosterLiveFeed {
                 state.sessions.contains { $0 == .working || $0 == .starting || $0 == .waiting }
             }
             lastRefresh = clock.now
-            continuation.yield(.snapshot(RosterSnapshot(profiles: rows, live: live, receivedAt: Date())))
+            continuation.yield(.snapshot(RosterSnapshot(
+                profiles: rows, live: live, receivedAt: Date(), capabilities: RosterCapabilities(listResult: result)
+            )))
         } catch is CancellationError {
             return
         } catch GatewayTransportError.rpc(let error) {

@@ -33,6 +33,10 @@ export const enNotifications = {
     plugin: {
       label: 'Plugin notifications',
       description: 'A desktop plugin sent a notification while Hermes was in the background.'
+    },
+    proactive: {
+      label: 'Proactive suggestions',
+      description: 'Hermes reached out on its own, such as a scheduled job result or a suggestion.'
     }
   },
   browserPermission: {

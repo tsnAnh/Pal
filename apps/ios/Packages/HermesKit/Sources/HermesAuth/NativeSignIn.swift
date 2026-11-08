@@ -12,17 +12,20 @@ public struct NativeSignIn: Sendable {
     private let diagnostics: Diagnostics
     private let callbackTimeout: Duration
     private let now: @Sendable () -> Date
+    private let deviceID: String?
 
     public init(
         transport: any HTTPTransport,
         diagnostics: Diagnostics = .silent,
         callbackTimeout: Duration = .seconds(300),
+        deviceID: String? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) {
         self.transport = transport
         self.diagnostics = diagnostics
         self.callbackTimeout = callbackTimeout
         self.now = now
+        self.deviceID = deviceID
     }
 
     private enum Step: Sendable {
@@ -31,7 +34,7 @@ public struct NativeSignIn: Sendable {
     }
 
     public func signIn(baseURL: GatewayBaseURL, browser: any AuthorizationBrowser) async throws -> StoredCredentials {
-        let api = NativeAuthAPI(baseURL: baseURL, transport: transport, diagnostics: diagnostics, now: now)
+        let api = NativeAuthAPI(baseURL: baseURL, transport: transport, diagnostics: diagnostics, now: now, deviceID: deviceID)
         let pkce = try PKCE.generate()
         let state = try PKCE.randomToken(byteCount: 24)
         let listener = try await LoopbackRedirectListener.start(timeout: callbackTimeout, diagnostics: diagnostics)

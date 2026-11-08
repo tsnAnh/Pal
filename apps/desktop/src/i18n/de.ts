@@ -501,7 +501,8 @@ export const deOverrides = {
       turnErrorTitle: 'Turn fehlgeschlagen',
       backgroundDoneTitle: 'Hintergrundaufgabe abgeschlossen',
       backgroundFailedTitle: 'Hintergrundaufgabe fehlgeschlagen',
-      creditsTitle: 'Credits'
+      creditsTitle: 'Credits',
+      proactiveOpen: 'Öffnen'
     }
   },
   ...deNotices,
@@ -5095,6 +5096,11 @@ export const deOverrides = {
       allowSession: 'Diese Session erlauben',
       alwaysAllowMenu: 'Immer erlauben…',
       jumpToApproval: 'Genehmigung erforderlich',
+      botTitle: 'Braucht Ihre Zustimmung',
+      botBody: 'Das könnte etwas ändern oder löschen. Erlauben?',
+      showDetails: 'Details anzeigen',
+      hideDetails: 'Details ausblenden',
+      botAlwaysDescription: 'Dieser Bot fragt vor solchen Aktionen nicht mehr nach, in keinem Chat.',
       reject: 'Ablehnen',
       alwaysTitle: 'Diesen Befehl immer erlauben?',
       alwaysDescription: pattern =>

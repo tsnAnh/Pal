@@ -33,6 +33,10 @@ export const deNotifications = {
     plugin: {
       label: 'Plugin-Benachrichtigungen',
       description: 'Ein Desktop-Plugin hat eine Benachrichtigung gesendet, während Hermes im Hintergrund war.'
+    },
+    proactive: {
+      label: 'Proaktive Hinweise',
+      description: 'Hermes meldet sich von sich aus, etwa mit einem Ergebnis eines geplanten Jobs oder einem Vorschlag.'
     }
   },
   browserPermission: {

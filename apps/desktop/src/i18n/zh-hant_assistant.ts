@@ -294,6 +294,11 @@ export const zhHantAssistant = {
       allowSession: '允許本工作階段',
       alwaysAllowMenu: '一律允許…',
       jumpToApproval: '需要核准',
+      botTitle: '需要你的同意',
+      botBody: '這可能會變更或刪除某些內容。要允許嗎？',
+      showDetails: '顯示詳細資料',
+      hideDetails: '隱藏詳細資料',
+      botAlwaysDescription: '此機器人在任何聊天中執行這類操作前都不會再詢問。',
       reject: '拒絕',
       alwaysTitle: '一律允許此指令？',
       alwaysDescription: pattern =>

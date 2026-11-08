@@ -9,6 +9,7 @@ public struct AvatarColor: Equatable, Hashable, Sendable {
     public let alpha: Double
 
     public static let darkLuminance = 110.0
+    public static let whiteLuminance = 230.0
     public static let lightEyeFillCSS = "#f3f4fd"
     public static let darkEyeFillCSS = "#1b1b1b"
     public static let primary = AvatarColor(unchecked: "#8b5cf6", red: 139, green: 92, blue: 246, alpha: 1)
@@ -26,8 +27,20 @@ public struct AvatarColor: Equatable, Hashable, Sendable {
         self = parsed
     }
 
+    public var luminance: Double {
+        0.2126 * red + 0.7152 * green + 0.0722 * blue
+    }
+
     public var isDark: Bool {
-        0.2126 * red + 0.7152 * green + 0.0722 * blue < Self.darkLuminance
+        luminance < Self.darkLuminance
+    }
+
+    public var isWhite: Bool {
+        luminance >= Self.whiteLuminance
+    }
+
+    func recolored(to target: AvatarColor) -> AvatarColor {
+        AvatarColor(unchecked: target.css, red: target.red, green: target.green, blue: target.blue, alpha: alpha)
     }
 
     public var eyeFillCSS: String {

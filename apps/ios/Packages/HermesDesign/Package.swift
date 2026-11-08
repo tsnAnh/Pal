@@ -13,6 +13,7 @@ let package = Package(
     targets: [
         .target(
             name: "HermesDesign",
+            resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .testTarget(

@@ -52,7 +52,7 @@ describe('AvatarPopover', () => {
   it('offers every silhouette and saves the chosen one at once', () => {
     open()
 
-    expect(screen.getAllByRole('radio', { name: /^Shape \d+$/ })).toHaveLength(10)
+    expect(screen.getAllByRole('radio', { name: /^Shape \d+$/ })).toHaveLength(14)
 
     fireEvent.click(screen.getByRole('radio', { name: 'Shape 4' }))
 
@@ -231,13 +231,13 @@ describe('AvatarPopover', () => {
       expect(window.document.activeElement).toBe(screen.getByRole('radio', { name: 'Shape 2' }))
 
       fireEvent.keyDown(window.document.activeElement!, { key: 'End' })
-      expect(window.document.activeElement).toBe(screen.getByRole('radio', { name: 'Shape 10' }))
+      expect(window.document.activeElement).toBe(screen.getByRole('radio', { name: 'Shape 14' }))
 
       fireEvent.keyDown(window.document.activeElement!, { key: 'ArrowRight' })
       expect(window.document.activeElement).toBe(screen.getByRole('radio', { name: 'Shape 1' }))
 
       fireEvent.keyDown(window.document.activeElement!, { key: 'ArrowLeft' })
-      expect(window.document.activeElement).toBe(screen.getByRole('radio', { name: 'Shape 10' }))
+      expect(window.document.activeElement).toBe(screen.getByRole('radio', { name: 'Shape 14' }))
     })
   })
 })
