@@ -17,14 +17,14 @@ struct BotLookTests {
     func defaults() {
         let look = BotLook(name: "market-researcher", shape: nil, color: nil)
         #expect(look.seed == "market-researcher")
-        #expect(look.kind == BotLook.defaultKind)
+        #expect(look.kind == BotLookCatalog.defaultShape)
         #expect(look.colorHex.hasPrefix("#"))
     }
 
     @Test("classic and unknown shapes fall back to the default kind")
     func nonBlob() {
-        #expect(BotLook(name: "a", shape: "hexagon", color: nil).kind == BotLook.defaultKind)
-        #expect(BotLook(name: "a", shape: "blobatar:a:nonsense", color: nil).kind == BotLook.defaultKind)
+        #expect(BotLook(name: "a", shape: "hexagon", color: nil).kind == BotLookCatalog.defaultShape)
+        #expect(BotLook(name: "a", shape: "blobatar:a:nonsense", color: nil).kind == BotLookCatalog.defaultShape)
     }
 
     @Test("an hsl colour is stored as a hex swatch")

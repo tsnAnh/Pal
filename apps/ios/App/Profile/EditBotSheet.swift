@@ -38,8 +38,7 @@ struct EditBotSheet: View {
                             .padding(.horizontal, HermesMetrics.screenMargin)
                             .accessibilityLabel(Text("Name"))
                             .accessibilityIdentifier("editBotName")
-                        BotLookEditor(look: $model.look)
-                            .padding(.horizontal, HermesMetrics.screenMargin)
+                        BotLookPicker(shape: $model.look.kind, colorHex: $model.look.colorHex, seed: model.look.seed)
                         if let failure = model.failure {
                             Text(failure)
                                 .hermesText(.rowSubtitle)

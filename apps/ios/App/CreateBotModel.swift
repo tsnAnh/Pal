@@ -20,7 +20,7 @@ final class CreateBotModel {
     }
 
     var shape = BotLookCatalog.defaultShape
-    var swatch = BotLookCatalog.defaultSwatch
+    var colorHex = BotLookCatalog.defaultSwatch.hex
     private(set) var isCreating = false
     private(set) var failure: Failure?
 
@@ -39,7 +39,7 @@ final class CreateBotModel {
             name: seed,
             meta: BotAvatarMeta(
                 shape: BotLookCatalog.shapeString(seed: seed, kind: shape),
-                color: swatch.hex,
+                color: colorHex,
                 custom: true,
                 imageKind: .shape
             )
@@ -51,7 +51,7 @@ final class CreateBotModel {
         isCreating = true
         failure = nil
         defer { isCreating = false }
-        let request = NewBotRequest(name: name, kind: shape.rawValue, colorHex: swatch.hex)
+        let request = NewBotRequest(name: name, kind: shape.rawValue, colorHex: colorHex)
         do {
             return try await roster.create(request, spec: spec)
         } catch BotAdminError.incomplete(let profile) {

@@ -24,7 +24,7 @@ struct CreateBotSheet: View {
                         .padding(.top, 33)
                     nameField
                         .padding(.top, 60)
-                    BotLookPicker(shape: $model.shape, swatch: $model.swatch, seed: model.seed)
+                    BotLookPicker(shape: $model.shape, colorHex: $model.colorHex, seed: model.seed)
                         .padding(.top, 26)
                 }
                 .padding(.bottom, 24)

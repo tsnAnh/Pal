@@ -2,14 +2,14 @@ import SwiftUI
 
 public struct BotLookPicker: View {
     @Binding public var shape: BlobKind
-    @Binding public var swatch: BotLookCatalog.Swatch
+    @Binding public var colorHex: String
     public let seed: String
 
     @Environment(\.hermesTheme) private var theme
 
-    public init(shape: Binding<BlobKind>, swatch: Binding<BotLookCatalog.Swatch>, seed: String) {
+    public init(shape: Binding<BlobKind>, colorHex: Binding<String>, seed: String) {
         _shape = shape
-        _swatch = swatch
+        _colorHex = colorHex
         self.seed = seed
     }
 
@@ -39,7 +39,7 @@ public struct BotLookPicker: View {
     private func spec(for kind: BlobKind) -> BotAvatarSpec {
         BotAvatarSpec(
             name: seed,
-            meta: BotAvatarMeta(shape: BotLookCatalog.shapeString(seed: seed, kind: kind), color: swatch.hex, custom: true)
+            meta: BotAvatarMeta(shape: BotLookCatalog.shapeString(seed: seed, kind: kind), color: colorHex, custom: true)
         )
     }
 
@@ -65,9 +65,9 @@ public struct BotLookPicker: View {
     }
 
     private func swatchCell(_ option: BotLookCatalog.Swatch) -> some View {
-        let isSelected = option == swatch
+        let isSelected = option.hex.caseInsensitiveCompare(colorHex) == .orderedSame
         let color = AvatarColor(css: option.hex)?.swiftUIColor ?? .gray
-        return Button { swatch = option } label: {
+        return Button { colorHex = option.hex } label: {
             ZStack {
                 Circle().fill(color).frame(width: HermesMetrics.swatchDiameter, height: HermesMetrics.swatchDiameter)
                 if isSelected {
