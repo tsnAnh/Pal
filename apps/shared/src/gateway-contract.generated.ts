@@ -1539,7 +1539,7 @@ export interface ConnectorPolicySetResult {
   revision: string
   effective: ConnectorPolicyEffectiveUnrestricted | ConnectorPolicyEffectiveDenyAll | ConnectorPolicyEffectiveAllow | ConnectorPolicyEffectiveDeny
 }
-/** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. Each bot has its own screen and its own Chrome, which runs on a copy of the machine's one master Chrome profile: refreshed from master when that Chrome starts, written back when it exits. ``profile_copy_synced_at`` is the last refresh or write-back (epoch seconds, null before the first). ``chrome`` is null when the screen runs inside a sandbox the gateway cannot see into. ``shared_files_path`` is the one files folder every bot on this machine shares (``~``-relative), null for a sandboxed screen. */
+/** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. Each bot has its own screen and its own Chrome, which runs on a copy of the machine's one master Chrome profile: refreshed from master when that Chrome starts, written back when it exits. ``profile_copy_synced_at`` is the last refresh or write-back (epoch seconds, null before the first). A screen in the bot's own Docker sandbox reports the same: its Chrome runs on the copy, mounted in. ``chrome`` is null when the screen runs in a sandbox that holds no copy (ssh, or a container several profiles share). ``shared_files_path`` is the one files folder every bot on this machine shares (``~``-relative; mounted at ``/bot-computer/files`` in a bot's Docker sandbox), null then too. */
 export interface DisplayStatus {
   profile: string
   supported: boolean
@@ -6832,7 +6832,7 @@ export interface RpcMethods {
   'display.lease.resolve': { params: DisplayLeaseResolveParams; result: DisplayLeaseResult }
   /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
   'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
-  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen. */
+  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a screen in a sandbox the bot does not have to itself. */
   'display.reset': { params: DisplayResetParams; result: DisplayResetResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }
@@ -7645,7 +7645,7 @@ export interface CanonicalRpcMethods {
   'display.lease.release': { params: DisplayLeaseReleaseParams; result: DisplayLeaseResult }
   /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
   'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
-  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen. */
+  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a screen in a sandbox the bot does not have to itself. */
   'display.reset': { params: DisplayResetParams; result: DisplayResetResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }
