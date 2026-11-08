@@ -20,7 +20,8 @@ private struct ToastModifier: ViewModifier {
                         .overlay(Capsule().strokeBorder(Color(theme.palette.circleButtonStroke), lineWidth: HermesMetrics.circleButtonStrokeWidth))
                         .padding(.bottom, 28)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
-                        .accessibilityAddTraits(.updatesFrequently)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text(message))
                         .accessibilityIdentifier(accessibilityIdentifier)
                         .task(id: message) {
                             try? await Task.sleep(for: duration)

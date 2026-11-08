@@ -26,25 +26,25 @@ public struct SwipeActionRow<Content: View>: View {
 
     public var body: some View {
         ZStack(alignment: .trailing) {
-            Button {
-                close()
-                action()
-            } label: {
-                Text(actionTitle)
-                    .hermesText(.rowTitle)
-                    .foregroundStyle(Color(theme.palette.chipSelectedText))
-                    .frame(width: Self.revealWidth)
-                    .frame(maxHeight: .infinity)
-                    .background(Color(theme.palette.destructive))
+            if offset < 0 {
+                Button {
+                    close()
+                    action()
+                } label: {
+                    Text(actionTitle)
+                        .hermesText(.rowTitle)
+                        .foregroundStyle(Color(theme.palette.chipSelectedText))
+                        .frame(width: Self.revealWidth)
+                        .frame(maxHeight: .infinity)
+                        .background(Color(theme.palette.destructive))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            .opacity(offset < 0 ? 1 : 0)
-            .accessibilityHidden(offset == 0)
-            .accessibilityIdentifier("\(accessibilityIdentifier)-action")
             content
                 .background(Color(theme.palette.groupedCard))
                 .offset(x: offset)
                 .simultaneousGesture(drag)
+                .accessibilityElement(children: .contain)
                 .accessibilityAction(named: Text(actionTitle), action)
         }
         .accessibilityIdentifier(accessibilityIdentifier)
