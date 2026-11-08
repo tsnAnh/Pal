@@ -51,11 +51,25 @@ class ConnectAppsTestCase: E2ETestCase {
         waitGone(sheet(app), timeout: 10, "sheet closes")
     }
 
-    func openHeroChat(_ app: XCUIApplication) {
-        let hero = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "botRow-")).firstMatch
-        waitFor(hero, timeout: 30, "hero row")
-        hero.tap()
-        waitFor(app.descendants(matching: .any)["composerField"], timeout: 20, "composer")
+    func openDefaultBotChat(_ app: XCUIApplication) {
+        openBot(app, "default")
+    }
+
+    func tapChip(_ app: XCUIApplication, _ id: String) {
+        let target = chip(app, id)
+        waitFor(target, timeout: 10, "\(id) chip")
+        let row = app.descendants(matching: .any)["connectAppsChips"]
+        let screen = app.windows.firstMatch.frame
+        let leading = row.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
+        let trailing = row.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
+        for _ in 0..<10 where !screen.contains(target.frame) {
+            if target.frame.minX < screen.minX {
+                leading.press(forDuration: 0.1, thenDragTo: trailing)
+            } else {
+                trailing.press(forDuration: 0.1, thenDragTo: leading)
+            }
+        }
+        target.tap()
     }
 
     func assistantReply(_ app: XCUIApplication, containing text: String, timeout: TimeInterval = 90) {
@@ -114,7 +128,7 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         enable(app, "calendar", title: "Calendar")
         shot(app, "connect-apps-calendar-connected")
         closeSheet(app)
-        openHeroChat(app)
+        openDefaultBotChat(app)
         send(app, "IPHONE CALENDAR what is on today")
         assistantReply(app, containing: "Hermes sync review")
         shot(app, "chat-calendar-reply")
@@ -131,7 +145,7 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         waitLabel(deviceAction(app, "reminders"), contains: "Allow Reminders")
         shot(app, "connect-apps-reminders-off")
         closeSheet(app)
-        openHeroChat(app)
+        openDefaultBotChat(app)
         send(app, "IPHONE REMINDERS list them")
         assistantReply(app, containing: "iPhone refused: connector_off")
         send(app, "IPHONE CALENDAR what is on today")
@@ -145,7 +159,7 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         openIphoneSection(app)
         waitLabel(deviceAction(app, "contacts"), contains: "Allow Contacts")
         closeSheet(app)
-        openHeroChat(app)
+        openDefaultBotChat(app)
         send(app, "IPHONE CONTACTS Quokka")
         let allow = app.alerts.buttons["deviceConsentAllow"].firstMatch
         waitFor(allow, timeout: 60, "consent prompt")

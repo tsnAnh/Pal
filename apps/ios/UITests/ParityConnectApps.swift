@@ -41,22 +41,19 @@ final class ParityConnectApps: ConnectAppsTestCase {
 
     func test07Communication() throws {
         let app = readyCatalog()
-        waitFor(chip(app, "Communication"), timeout: 10, "Communication chip")
-        chip(app, "Communication").tap()
+        tapChip(app, "Communication")
         parityShot("07-connect-apps-communication")
     }
 
     func test08Design() throws {
         let app = readyCatalog()
-        waitFor(chip(app, "Design and media"), timeout: 10, "Design chip")
-        chip(app, "Design and media").tap()
+        tapChip(app, "Design and media")
         parityShot("08-connect-apps-design")
     }
 
     func test09Code() throws {
         let app = readyCatalog()
-        waitFor(chip(app, "Developer"), timeout: 10, "Developer chip")
-        chip(app, "Developer").tap()
+        tapChip(app, "Developer")
         parityShot("09-connect-apps-code")
     }
 
