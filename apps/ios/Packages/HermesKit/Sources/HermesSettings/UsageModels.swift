@@ -78,6 +78,8 @@ public struct UsageSpend: Sendable, Equatable {
         return tokens == 0 ? "No usage" : "\(Self.compact(tokens)) tokens"
     }
 
+    public var hasActivity: Bool { tokens > 0 || (usd ?? 0) > 0 }
+
     public var detailText: String? {
         guard usd != nil, tokens > 0 else { return nil }
         return "\(Self.compact(tokens)) tokens"
@@ -126,7 +128,7 @@ public struct UsageAccount: Identifiable, Sendable, Equatable {
         }
         isActive = subscription.active
         meters = subscription.windows.map { UsageMeter(window: $0, accountID: subscription.id) }
-        spend = subscription.spend.map(UsageSpend.init)
+        spend = subscription.spend.map(UsageSpend.init).flatMap { $0.hasActivity ? $0 : nil }
         note = Self.note(for: subscription, kind: kind)
     }
 

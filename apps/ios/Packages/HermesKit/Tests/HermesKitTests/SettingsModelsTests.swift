@@ -73,9 +73,9 @@ struct UsageMappingTests {
 
     @Test func spendWithoutPricesFallsBackToTokensAndTinyAmountsRound() {
         #expect(UsageSpend(.init(periodDays: 1, usd: nil, inputTokens: 900, outputTokens: 100)).valueText(locale: Locale(identifier: "en_US")) == "1K tokens")
-        #expect(UsageSpend(.init(periodDays: 1, usd: nil, inputTokens: 0, outputTokens: 0)).valueText(locale: Locale(identifier: "en_US")) == "No usage")
+        #expect(!UsageSpend(.init(periodDays: 1, usd: nil, inputTokens: 0, outputTokens: 0)).hasActivity)
         #expect(UsageSpend(.init(periodDays: 1, usd: 0.004, inputTokens: 10, outputTokens: 0)).valueText(locale: Locale(identifier: "en_US")) == "<$0.01")
-        #expect(UsageSpend(.init(periodDays: 1, usd: 0, inputTokens: 0, outputTokens: 0)).valueText(locale: Locale(identifier: "en_US")) == "$0.00")
+        #expect(!UsageSpend(.init(periodDays: 1, usd: 0, inputTokens: 0, outputTokens: 0)).hasActivity)
     }
 
     @Test func unavailableCredentialsKeepTheirReasonAndAreNeverNoLimits() throws {
@@ -273,6 +273,18 @@ struct SettingsBehaviourTests {
         for sample in [SettingsFailure.notAllowed, .unavailable, .notFound, .offline, .unexpected] {
             #expect(!sample.message.contains("RPC") && !sample.message.contains("_"))
         }
+    }
+
+    @Test func memoryImportSummaryNamesWhatLandedAndWhatWasSkipped() throws {
+        func summary(_ added: Int, duplicates: Int = 0, tooLong: Int = 0, blocked: Int = 0, overBudget: Int = 0) throws -> MemoryImportSummary {
+            let json = "{\"candidates\":\(added + duplicates + tooLong + blocked + overBudget),\"added\":\(added),\"duplicates\":\(duplicates),\"too_long\":\(tooLong),\"blocked\":\(blocked),\"over_budget\":\(overBudget)}"
+            return MemoryImportSummary(try SettingsWire.decoder.decode(SettingsWire.MemoryImport.self, from: Data(json.utf8)))
+        }
+        #expect(try summary(1).text == "Added 1 memory.")
+        #expect(try summary(2, duplicates: 1).text == "Added 2 memories. 1 already remembered.")
+        #expect(try summary(0, tooLong: 2, blocked: 1, overBudget: 3).text == "Added 0 memories. 2 too long. 1 not allowed. 3 did not fit in memory.")
+        #expect(try summary(0).text == "Nothing to import.")
+        #expect(try summary(4).added == 4)
     }
 
     @Test func notificationFlagReadsEveryShapeTheConfigReaderReturns() {

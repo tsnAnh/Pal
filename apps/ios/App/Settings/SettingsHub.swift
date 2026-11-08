@@ -66,12 +66,21 @@ final class SettingsHub {
     }
 
     func refresh() async {
+        async let headline: Void = refreshUsageHeadline()
+        async let state: Void = refreshAccountState()
+        _ = await (headline, state)
+    }
+
+    private func refreshUsageHeadline() async {
+        let subscriptions = try? await api.subscriptions(refresh: true)
+        usageHeadline = subscriptions.flatMap { UsageOverview($0).headlineText }
+    }
+
+    private func refreshAccountState() async {
         let api = api
-        async let usage = try? api.subscriptions(refresh: false)
         async let permissions = try? api.permissions()
         async let facts = try? api.aboutYou()
-        let (subscriptions, permissionState, aboutYou) = await (usage, permissions, facts)
-        usageHeadline = subscriptions.flatMap { UsageOverview($0).headlineText }
+        let (permissionState, aboutYou) = await (permissions, facts)
         self.permissions = permissionState.map(PermissionsSummary.init)
         self.aboutYou = aboutYou
         await keepTimeZoneInStep()
