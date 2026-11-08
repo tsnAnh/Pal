@@ -10,6 +10,7 @@ VERBS = {
     'display.observe': Verb('session:control'),
     'display.lease.acquire': Verb('session:control'),
     'display.lease.release': Verb('session:control'),
+    'display.lease.resolve': Verb('session:control'),
 }
 
 

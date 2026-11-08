@@ -20,7 +20,7 @@ BRIDGED = (
     "profiles.get_asset", "profiles.template.export", "profiles.create", "profiles.configure",
     "profiles.set_asset", "profiles.rename", "profiles.delete",
     "display.status", "display.thumbnail", "display.start", "display.stop", "display.reset", "display.observe",
-    "display.lease.acquire", "display.lease.release",
+    "display.lease.acquire", "display.lease.release", "display.lease.resolve",
     "shared_metrics.status", "shared_metrics.set",
     "connectors.list", "connectors.catalog", "connectors.connect", "connectors.operation.status",
     "connectors.operation.wake", "connection.respond",
