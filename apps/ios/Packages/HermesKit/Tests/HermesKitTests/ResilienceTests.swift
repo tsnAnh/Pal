@@ -19,13 +19,13 @@ private func rpcFailure(_ code: Int, _ message: String, reason: String? = nil, d
 private struct ThrowingSubmitter: OutboxSubmitter {
     let error: @Sendable () -> any Error
 
-    func submit(_ entry: OutboxEntry) async throws -> AdmissionStatus {
+    func submit(_ entry: OutboxEntry, files: [OutgoingFile]) async throws -> AdmissionStatus {
         throw error()
     }
 }
 
 private struct AcceptingSubmitter: OutboxSubmitter {
-    func submit(_ entry: OutboxEntry) async throws -> AdmissionStatus {
+    func submit(_ entry: OutboxEntry, files: [OutgoingFile]) async throws -> AdmissionStatus {
         try JSONValue.object(["admission_id": "a", "status": "queued"]).decoded(as: AdmissionStatus.self)
     }
 }

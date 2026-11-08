@@ -169,6 +169,9 @@ final class BotScript: Sendable {
     let messages = Mutex<[(role: String, text: String)]>([])
     let lastSequence = Mutex(1)
     let submitted = Mutex<[JSONValue]>([])
+    let received = Mutex<[String: [JSONValue]]>([:])
+
+    func calls(_ method: String) -> [JSONValue] { received.withLock { $0[method] ?? [] } }
 
     func count(_ method: String) -> Int { counts.withLock { $0[method] ?? 0 } }
 
@@ -194,11 +197,21 @@ final class BotScript: Sendable {
         ]
     }
 
+    var snapshotWithPrompt: JSONValue {
+        var object = snapshot.objectValue ?? [:]
+        object["running"] = true
+        object["prompts"] = [[
+            "kind": "clarify", "prompt_id": "p1", "execution_generation": 1, "question": "Which flavor?", "choices": ["a", "b"],
+        ]]
+        return .object(object)
+    }
+
     func handle(_ method: String, _ params: JSONValue?, _ connection: Int) -> FakeGateway.Reply {
         let number = counts.withLock { counts -> Int in
             counts[method, default: 0] += 1
             return counts[method] ?? 0
         }
+        if let params { received.withLock { $0[method, default: []].append(params) } }
         if let reply = overrides.withLock({ $0[method] })?(number) { return reply }
         switch method {
         case "session.list":
@@ -213,6 +226,22 @@ final class BotScript: Sendable {
         case "prompt.submit":
             if let params { submitted.withLock { $0.append(params) } }
             return .result(["admission_id": .string("a-\(number)"), "status": "queued"])
+        case "clarify.respond", "approval.respond":
+            return .result(["status": "resolved", "prompt_id": params?["prompt_id"] ?? ""])
+        case "image.attach_bytes":
+            let name = params?["filename"]?.stringValue ?? "image.png"
+            return .result([
+                "attached": true, "path": .string("/cache/images/upload_\(number)_\(name)"),
+                "mime": .string(name.hasSuffix(".jpg") ? "image/jpeg" : "image/png"),
+                "text": .string("[User attached image: upload_\(number)_\(name)]"),
+            ])
+        case "file.attach":
+            let name = params?["name"]?.stringValue ?? "file"
+            return .result(["attached": true, "ref_text": .string("@file:attachments/\(name)")])
+        case "session.interrupt":
+            return .result(["status": "interrupted"])
+        case "session.steer":
+            return .result(["status": "queued", "text": params?["text"] ?? ""])
         default:
             return .failure(RPCError(code: -32601, message: "unknown_method", data: ["reason": "unknown_method"]))
         }

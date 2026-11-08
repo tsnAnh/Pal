@@ -70,6 +70,7 @@ public struct Transcript: Sendable, Equatable {
 
     private var segmentLengths: [Int: Int] = [:]
     private var currentSegment: Int?
+    private var turnOpenings: [String: String] = [:]
 
     public init() {}
 
@@ -139,6 +140,7 @@ public struct Transcript: Sendable, Equatable {
         resyncRequested = false
         segmentLengths = [:]
         currentSegment = nil
+        turnOpenings = [:]
     }
 
     public func summary() -> Summary {
@@ -218,10 +220,10 @@ public struct Transcript: Sendable, Equatable {
     private mutating func reduce(_ event: SessionEvent) {
         switch event {
         case .messageStart(let start):
-            confirmOldestEcho()
             isRunning = true
             lastError = nil
             sealStreaming()
+            confirmOldestEcho()
             _ = start
         case .messageDelta(let delta):
             appendDelta(delta)
@@ -298,6 +300,14 @@ public struct Transcript: Sendable, Equatable {
             return false
         }), case .user(let text, _) = items[index].content else { return }
         items[index].content = .user(text: text, delivery: .sent)
+        turnOpenings[items[index].id] = items.last?.id
+    }
+
+    func turnOutputStart(after echoID: String, anchoredAt index: Int) -> Int {
+        guard let preceding = turnOpenings[echoID],
+              let position = items.firstIndex(where: { $0.id == preceding })
+        else { return index + 1 }
+        return max(position + 1, index + 1)
     }
 
     private mutating func appendDelta(_ delta: MessageDelta) {

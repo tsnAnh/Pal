@@ -39,6 +39,11 @@ public struct ChatStartOutcome: Sendable, Equatable {
     public var introAdmission: AdmissionStatus?
 }
 
+public struct ChatState: Sendable {
+    public let phase: ChatPhase
+    public let transcript: Transcript
+}
+
 public actor ChatSession: OutboxSubmitter {
     public nonisolated let profile: String
     public nonisolated let updates: AsyncStream<ChatUpdate>
@@ -60,6 +65,12 @@ public actor ChatSession: OutboxSubmitter {
     private var pumps: [Task<Void, Never>] = []
     private var reconnecting = false
     private var closing = false
+    private var waiters: [UUID: StateWaiter] = [:]
+
+    private struct StateWaiter {
+        let isSatisfied: @Sendable (ChatState) -> Bool
+        let continuation: CheckedContinuation<ChatState?, Never>
+    }
 
     public init(
         profile: String,
@@ -126,7 +137,7 @@ public actor ChatSession: OutboxSubmitter {
             let admission = try await submitText(
                 intro.text,
                 submissionID: "intro:\(resolution.snapshot.sessionID)",
-                attachments: [],
+                files: [],
                 hidden: intro.hidden,
                 echo: !intro.hidden
             )
@@ -137,8 +148,8 @@ public actor ChatSession: OutboxSubmitter {
         }
     }
 
-    public func submit(_ entry: OutboxEntry) async throws -> AdmissionStatus {
-        try await submitText(entry.text, submissionID: entry.submissionID, attachments: entry.attachments, hidden: false, echo: true)
+    public func submit(_ entry: OutboxEntry, files: [OutgoingFile]) async throws -> AdmissionStatus {
+        try await submitText(entry.text, submissionID: entry.submissionID, files: files, hidden: false, echo: true)
     }
 
     public func answerClarify(_ prompt: PendingPrompt, answer: String) async throws {
@@ -161,8 +172,48 @@ public actor ChatSession: OutboxSubmitter {
         )
     }
 
+    public func interrupt() async throws {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        try await api.interrupt(sessionID: sessionID, executionGeneration: transcript.executionGeneration)
+    }
+
+    public func steer(_ text: String) async throws -> SteerStatus {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        return try await api.steer(sessionID: sessionID, text: text, executionGeneration: transcript.executionGeneration)
+    }
+
+    public var state: ChatState { ChatState(phase: phase, transcript: transcript) }
+
+    public func awaitState(where isSatisfied: @escaping @Sendable (ChatState) -> Bool) async -> ChatState? {
+        if isSatisfied(state) { return state }
+        if closing { return nil }
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                waiters[id] = StateWaiter(isSatisfied: isSatisfied, continuation: continuation)
+            }
+        } onCancel: {
+            Task { await self.dropWaiter(id) }
+        }
+    }
+
+    private func dropWaiter(_ id: UUID) {
+        waiters.removeValue(forKey: id)?.continuation.resume(returning: nil)
+    }
+
+    private func notifyWaiters() {
+        let current = state
+        for (id, waiter) in waiters where waiter.isSatisfied(current) {
+            waiters[id] = nil
+            waiter.continuation.resume(returning: current)
+        }
+    }
+
     public func close() {
         closing = true
+        let abandoned = waiters.values
+        waiters = [:]
+        for waiter in abandoned { waiter.continuation.resume(returning: nil) }
         for pump in pumps { pump.cancel() }
         pumps.removeAll()
         let connection = self.connection
@@ -180,27 +231,29 @@ public actor ChatSession: OutboxSubmitter {
     private func submitText(
         _ text: String,
         submissionID: String,
-        attachments: [PromptAttachment],
+        files: [OutgoingFile],
         hidden: Bool,
         echo: Bool
     ) async throws -> AdmissionStatus {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         if echo {
-            transcript.echoUser(submissionID: submissionID, text: text)
+            transcript.echoUser(submissionID: submissionID, text: text.isEmpty ? files.map(\.name).joined(separator: ", ") : text)
             continuation.yield(.transcript(transcript))
+            notifyWaiters()
         }
         do {
             return try await api.submit(
                 sessionID: sessionID,
                 text: text,
                 submissionID: submissionID,
-                attachments: attachments,
+                files: files,
                 hidden: hidden
             )
         } catch {
             if echo, let refusal = RefusalReason(error), refusal.isPermanent {
                 transcript.markFailed(submissionID: submissionID, reason: refusal.reason)
                 continuation.yield(.transcript(transcript))
+                notifyWaiters()
             }
             throw error
         }
@@ -355,6 +408,7 @@ public actor ChatSession: OutboxSubmitter {
     private func setPhase(_ next: ChatPhase) {
         phase = next
         continuation.yield(.phase(next))
+        notifyWaiters()
     }
 
     private func publishLive() {
@@ -363,5 +417,6 @@ public actor ChatSession: OutboxSubmitter {
             continuation.yield(.phase(phase))
         }
         continuation.yield(.transcript(transcript))
+        notifyWaiters()
     }
 }
