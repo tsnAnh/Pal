@@ -14,11 +14,9 @@ public struct SystemAlarms: AlarmsProviding {
 
     private static let defaultsKey = "dev.tsnanh.hermes.device.alarms"
 
-    private let defaults: UserDefaults
+    private var defaults: UserDefaults { .standard }
 
-    public init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-    }
+    public init() {}
 
     public func setAlarm(at: Date, label: String?, repeatWeekdays: [Weekday]) async throws -> AlarmRecord {
         let id = UUID()
@@ -61,7 +59,7 @@ public struct SystemAlarms: AlarmsProviding {
     private func attributes(label: String?) -> AlarmAttributes<HermesAlarmMetadata> {
         let title = LocalizedStringResource(stringLiteral: label?.isEmpty == false ? label! : "Alarm")
         let presentation = AlarmPresentation(
-            alert: .init(title: title),
+            alert: .init(title: title, stopButton: AlarmButton(text: "Stop", textColor: .white, systemImageName: "stop.circle")),
             countdown: .init(title: title)
         )
         return AlarmAttributes(presentation: presentation, metadata: HermesAlarmMetadata(), tintColor: .blue)

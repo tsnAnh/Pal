@@ -75,9 +75,10 @@ public struct ConnectAppsService: Sendable {
             try decodeList(await call("connectors.list", ["owner": Self.account]), key: "connectors", as: HostedConnectorState.self)
         }
         async let presets = attempt { try decodeList(await call("mcp.catalog"), key: "servers", as: McpPresetEntry.self) }
-        let (hostedResult, statesResult, presetsResult) = await (hosted, states, presets)
+        async let skills = attempt { InstalledSkill.parse(try await call("skills.manage", ["action": "list"])) }
+        let (hostedResult, statesResult, presetsResult, skillsResult) = await (hosted, states, presets, skills)
         if hostedResult == nil, presetsResult == nil { throw ConnectAppsError.unavailable }
-        return ConnectCatalog.make(hosted: hostedResult ?? [], states: statesResult ?? [], mcp: presetsResult ?? [])
+        return ConnectCatalog.make(hosted: hostedResult ?? [], states: statesResult ?? [], mcp: presetsResult ?? [], skills: skillsResult ?? [])
     }
 
     private func attempt<T: Sendable>(_ work: () async throws -> T) async -> T? {

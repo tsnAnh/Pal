@@ -108,6 +108,26 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
     public var isConnected: Bool { state == .connected }
 }
 
+public struct InstalledSkill: Sendable, Equatable, Identifiable {
+    public var name: String
+    public var category: String
+
+    public var id: String { "\(category)/\(name)" }
+
+    public init(name: String, category: String) {
+        self.name = name
+        self.category = category
+    }
+
+    public static func parse(_ value: JSONValue) -> [InstalledSkill] {
+        guard let groups = value["skills"]?.objectValue else { return [] }
+        return groups.flatMap { category, names in
+            (names.arrayValue ?? []).compactMap { $0.stringValue }.map { InstalledSkill(name: $0, category: category) }
+        }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+}
+
 public struct ConnectCatalog: Sendable, Equatable {
     public static let otherCategory = "Other"
     private static let preferredOrder = [
@@ -116,9 +136,17 @@ public struct ConnectCatalog: Sendable, Equatable {
     ]
 
     public var apps: [ConnectApp]
+    public var skills: [InstalledSkill]
 
-    public init(apps: [ConnectApp] = []) {
+    public init(apps: [ConnectApp] = [], skills: [InstalledSkill] = []) {
         self.apps = apps
+        self.skills = skills
+    }
+
+    public func matchingSkills(_ query: String) -> [InstalledSkill] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return [] }
+        return skills.filter { $0.name.localizedStandardContains(needle) || $0.category.localizedStandardContains(needle) }
     }
 
     public var categories: [String] {
@@ -142,7 +170,7 @@ public struct ConnectCatalog: Sendable, Equatable {
         return apps.filter { $0.name.localizedStandardContains(needle) || $0.summary.localizedStandardContains(needle) }
     }
 
-    public static func make(hosted: [HostedConnectorEntry], states: [HostedConnectorState], mcp: [McpPresetEntry]) -> ConnectCatalog {
+    public static func make(hosted: [HostedConnectorEntry], states: [HostedConnectorState], mcp: [McpPresetEntry], skills: [InstalledSkill] = []) -> ConnectCatalog {
         let stateBySlug = Dictionary(states.map { ($0.connector, $0) }, uniquingKeysWith: { _, last in last })
         let hostedSlugs = Set(hosted.map(\.slug))
         var apps = hosted.map { entry in
@@ -161,7 +189,7 @@ public struct ConnectCatalog: Sendable, Equatable {
             )
         }
         apps.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-        return ConnectCatalog(apps: apps)
+        return ConnectCatalog(apps: apps, skills: skills)
     }
 
     static func hostedState(_ state: HostedConnectorState?) -> ConnectAppState {

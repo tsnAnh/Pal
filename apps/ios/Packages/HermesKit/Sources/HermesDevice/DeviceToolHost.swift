@@ -143,6 +143,7 @@ public actor DeviceToolHost {
     private func accept(_ request: DeviceToolRequest, on live: GatewayConnection) {
         guard inFlight[request.requestID] == nil, !answered.contains(request.requestID) else { return }
         let executor = executor
+        diagnostics.info("device", "device.tool.request \(request.action) consent=\(request.needsConsent)")
         let task = Task { [weak self] in
             let outcome = await executor.execute(request)
             guard !Task.isCancelled else { return }
@@ -155,10 +156,18 @@ public actor DeviceToolHost {
         guard inFlight.removeValue(forKey: request.requestID) != nil else { return }
         answered.append(request.requestID)
         if answered.count > Self.answeredCapacity { answered.removeFirst() }
+        diagnostics.info("device", "device.tool.respond \(request.action) \(Self.summary(of: outcome))")
         do {
             _ = try await live.call("device.tool.respond", params: outcome.respondParams(requestID: request.requestID), timeout: timing.callTimeout)
         } catch {
             diagnostics.info("device", "device.tool.respond failed: \(Diagnostics.describe(error))")
+        }
+    }
+
+    private static func summary(of outcome: DeviceToolOutcome) -> String {
+        switch outcome {
+        case .success: "ok"
+        case .failure(let code, _): code.rawValue
         }
     }
 

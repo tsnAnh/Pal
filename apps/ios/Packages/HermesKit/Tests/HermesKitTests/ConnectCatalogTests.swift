@@ -78,6 +78,14 @@ struct ConnectCatalogTests {
         #expect(catalog.matching("zzz").isEmpty)
     }
 
+    @Test func installedSkillsAreSearchableByNameAndCategory() {
+        let skills = InstalledSkill.parse(["skills": ["apple": ["apple-reminders", "findmy"], "email": ["himalaya"]]])
+        let catalog = ConnectCatalog.make(hosted: [], states: [], mcp: [], skills: skills)
+        #expect(catalog.matchingSkills("remind").map(\.name) == ["apple-reminders"])
+        #expect(catalog.matchingSkills("email").map(\.name) == ["himalaya"])
+        #expect(catalog.matchingSkills("").isEmpty)
+    }
+
     @Test func aNonHttpsLogoIsDropped() throws {
         let rows: JSONValue = [
             ["slug": "a", "name": "A", "description": "", "category": "Developer", "logo_url": "http://insecure.example/a.png"],
