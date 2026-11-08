@@ -91,6 +91,7 @@ class Server:
         self.screen = screen
         self.init_delay = init_delay
         self.dirty: list[tuple[int, int, int, int]] = []
+        self.pending: tuple[int, int, int, int] | None = None
 
     def log(self, line: str) -> None:
         with self.log_path.open("a", encoding="utf-8") as fh:
@@ -121,49 +122,65 @@ class Server:
         await writer.drain()
 
     async def messages(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        pending = None
+        self.pending = None
+        handlers = {
+            0: self.on_set_pixel_format,
+            2: self.on_set_encodings,
+            3: self.on_update_request,
+            4: self.on_key,
+            5: self.on_pointer,
+            6: self.on_client_cut_text,
+        }
         while True:
             kind = (await reader.readexactly(1))[0]
-            if kind == 0:
-                await reader.readexactly(19)
-                self.log("set-pixel-format")
-            elif kind == 2:
-                (count,) = struct.unpack(">xH", await reader.readexactly(3))
-                encodings = struct.unpack(f">{count}i", await reader.readexactly(4 * count))
-                self.log(f"set-encodings {list(encodings)}")
-            elif kind == 3:
-                incremental, x, y, w, h = struct.unpack(">BHHHH", await reader.readexactly(9))
-                if not incremental:
-                    await self.send(writer, [(0, 0, self.screen.width, self.screen.height)])
-                    pending = None
-                elif self.dirty:
-                    await self.send(writer, self.take_dirty())
-                    pending = None
-                else:
-                    pending = (x, y, w, h)
-            elif kind == 4:
-                down, _pad, keysym = struct.unpack(">BHI", await reader.readexactly(7))
-                self.log(f"key down={down} keysym=0x{keysym:x}")
-                if down:
-                    self.screen.keys += 1
-                    self.dirty.append((0, 0, self.screen.width, 24))
-            elif kind == 5:
-                buttons, x, y = struct.unpack(">BHH", await reader.readexactly(5))
-                self.log(f"pointer buttons={buttons} x={x} y={y}")
-                self.dirty.append(self.screen.marker_rect())
-                self.screen.pointer = (min(x, self.screen.width - 1), min(y, self.screen.height - 1))
-                self.screen.buttons = buttons
-                self.dirty.append(self.screen.marker_rect())
-            elif kind == 6:
-                (length,) = struct.unpack(">xxxI", await reader.readexactly(7))
-                text = (await reader.readexactly(length)).decode("latin-1")
-                self.log(f"client-cut-text {text!r}")
-            else:
+            handler = handlers.get(kind)
+            if handler is None:
                 self.log(f"unknown client message {kind}")
                 return
-            if pending is not None and self.dirty:
+            await handler(reader, writer)
+            if self.pending is not None and self.dirty:
                 await self.send(writer, self.take_dirty())
-                pending = None
+                self.pending = None
+
+    async def on_set_pixel_format(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        await reader.readexactly(19)
+        self.log("set-pixel-format")
+
+    async def on_set_encodings(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        (count,) = struct.unpack(">xH", await reader.readexactly(3))
+        encodings = struct.unpack(f">{count}i", await reader.readexactly(4 * count))
+        self.log(f"set-encodings {list(encodings)}")
+
+    async def on_update_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        incremental, x, y, w, h = struct.unpack(">BHHHH", await reader.readexactly(9))
+        if not incremental:
+            await self.send(writer, [(0, 0, self.screen.width, self.screen.height)])
+            self.pending = None
+        elif self.dirty:
+            await self.send(writer, self.take_dirty())
+            self.pending = None
+        else:
+            self.pending = (x, y, w, h)
+
+    async def on_key(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        down, _pad, keysym = struct.unpack(">BHI", await reader.readexactly(7))
+        self.log(f"key down={down} keysym=0x{keysym:x}")
+        if down:
+            self.screen.keys += 1
+            self.dirty.append((0, 0, self.screen.width, 24))
+
+    async def on_pointer(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        buttons, x, y = struct.unpack(">BHH", await reader.readexactly(5))
+        self.log(f"pointer buttons={buttons} x={x} y={y}")
+        self.dirty.append(self.screen.marker_rect())
+        self.screen.pointer = (min(x, self.screen.width - 1), min(y, self.screen.height - 1))
+        self.screen.buttons = buttons
+        self.dirty.append(self.screen.marker_rect())
+
+    async def on_client_cut_text(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        (length,) = struct.unpack(">xxxI", await reader.readexactly(7))
+        text = (await reader.readexactly(length)).decode("latin-1")
+        self.log(f"client-cut-text {text!r}")
 
     def take_dirty(self) -> list[tuple[int, int, int, int]]:
         left = min(r[0] for r in self.dirty)
