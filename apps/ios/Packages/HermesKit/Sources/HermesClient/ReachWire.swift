@@ -22,6 +22,7 @@ public enum ReachOutcome: String, Sendable, Equatable {
 public enum ReachRole: Sendable, Equatable {
     case passive
     case offerTarget
+    case deviceHost
 }
 
 public struct ReachOffer: Sendable, Equatable, Identifiable, Decodable {
@@ -71,7 +72,12 @@ public struct ReachOffer: Sendable, Equatable, Identifiable, Decodable {
 public enum ReachWire {
     public static let capability = "reach-v1"
 
-    public static func helloParams(identity: DeviceIdentity, acceptsOffers: Bool, attention: ReachAttention) -> JSONValue {
+    public static func helloParams(
+        identity: DeviceIdentity,
+        acceptsOffers: Bool,
+        attention: ReachAttention,
+        deviceTools: Bool = false
+    ) -> JSONValue {
         var params: [String: JSONValue] = [
             "kind": .string(DeviceIdentity.kind),
             "device_id": .string(identity.deviceID),
@@ -82,6 +88,7 @@ public enum ReachWire {
         ]
         if !identity.model.isEmpty { params["model"] = .string(identity.model) }
         if !identity.os.isEmpty { params["os"] = .string(identity.os) }
+        if deviceTools { params["device_tools"] = .bool(true) }
         return .object(params)
     }
 
