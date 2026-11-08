@@ -9,6 +9,7 @@ VERBS = {
     'mcp.servers.oauth.start': Verb('session:control'),
     'mcp.servers.oauth.poll': Verb('session:control'),
     'mcp.servers.oauth.cancel': Verb('session:control'),
+    'mcp.servers.oauth.callback': Verb('session:control'),
 }
 
 

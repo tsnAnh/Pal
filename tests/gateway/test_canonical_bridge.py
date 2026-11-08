@@ -116,7 +116,8 @@ async def test_a_read_grant_cannot_change_the_mcp_servers_a_bot_has(bots):
     reader = bots.connect('alpha', capabilities=READ)
     for method, params in (('mcp.servers.add', {'name': 'airtable', 'preset': 'airtable'}),
                            ('mcp.servers.remove', {'name': 'airtable'}),
-                           ('mcp.servers.set_api_key', {'name': 'airtable', 'value': 'secret-value'})):
+                           ('mcp.servers.set_api_key', {'name': 'airtable', 'value': 'secret-value'}),
+                           ('mcp.servers.oauth.callback', {'name': 'airtable', 'session_id': 'flow', 'code': 'c', 'state': 's'})):
         assert failure(await call(reader, method, params))['message'] == 'permission_denied', method
     assert config_of(get_profile_dir('alpha')) == before
 
