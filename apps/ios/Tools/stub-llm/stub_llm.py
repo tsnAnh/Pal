@@ -17,6 +17,7 @@ CLARIFY_QUESTION = "Which flavor do you want?"
 CLARIFY_CHOICES = ["vanilla", "chocolate"]
 DM_PROMPT_PREFIX = "MESSAGE_AGENT "
 DM_BODY_MARKER = " :: "
+DM_STAMP_PREFIX = "Message from \U0001f916 "
 DM_STAMP = re.compile(r"\AMessage from \U0001f916 .+? \(@[A-Za-z0-9_-]+\): ?(.*)\Z", re.DOTALL)
 DM_REPLY_FIELD = re.compile(r'"reply":\s*("(?:[^"\\]|\\.)*")')
 DM_DEFAULT_REPLY = "Đã nhận, em xử lý ngay."
@@ -61,7 +62,7 @@ def dm_plan(last_role, last, last_user, names):
     if last_user.startswith(DM_PROMPT_PREFIX) and "message_agent" in names:
         target, _, message = last_user[len(DM_PROMPT_PREFIX):].partition(DM_BODY_MARKER)
         return "tool", {"name": "message_agent", "arguments": {"target": target.strip(), "message": message}}, 0
-    stamped = DM_STAMP.match(last_user.strip())
+    stamped = DM_STAMP.match(last_user[last_user.rfind(DM_STAMP_PREFIX):].strip()) if DM_STAMP_PREFIX in last_user else None
     if stamped:
         return "final", dm_replies().get(stamped.group(1).strip(), DM_DEFAULT_REPLY), NORMAL_DELAY
     if last_user.lstrip().startswith("[IMPORTANT: Background process") and '"reply"' in last_user:
