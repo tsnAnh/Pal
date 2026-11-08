@@ -132,7 +132,7 @@ struct ConnectAppsSheet: View {
     @ViewBuilder
     private var allSections: some View {
         ConnectSectionHeader("This iPhone", accessibilityIdentifier: "connectAppsSection-iphone") { model.selection = ConnectChip.iphone }
-        ForEach(model.deviceRows) { deviceRow($0) }
+        ForEach(model.deviceRows, id: \.renderID) { deviceRow($0) }
         ForEach(model.catalog.categories, id: \.self) { category in
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
             ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) }
@@ -151,7 +151,7 @@ struct ConnectAppsSheet: View {
                 .padding(.bottom, 10)
                 .accessibilityIdentifier("connectAppsIphoneCaption")
         }
-        ForEach(model.deviceRows) { deviceRow($0) }
+        ForEach(model.deviceRows, id: \.renderID) { deviceRow($0) }
     }
 
     @ViewBuilder
@@ -165,7 +165,7 @@ struct ConnectAppsSheet: View {
                 .padding(.top, 60)
                 .accessibilityIdentifier("connectAppsNoMatches")
         }
-        ForEach(devices) { deviceRow($0) }
+        ForEach(devices, id: \.renderID) { deviceRow($0) }
         ForEach(apps) { appRow($0) }
         if !skills.isEmpty {
             ConnectSectionHeader("Skills", accessibilityIdentifier: "connectAppsSection-skills")

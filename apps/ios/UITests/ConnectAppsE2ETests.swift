@@ -147,7 +147,7 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         closeSheet(app)
         openHeroChat(app)
         send(app, "IPHONE CONTACTS Quokka")
-        let allow = app.alerts.buttons["Allow"]
+        let allow = app.alerts.buttons["deviceConsentAllow"].firstMatch
         waitFor(allow, timeout: 60, "consent prompt")
         XCTAssertTrue(app.alerts.firstMatch.label.contains("Contacts"), app.alerts.firstMatch.label)
         shot(app, "chat-contacts-consent")

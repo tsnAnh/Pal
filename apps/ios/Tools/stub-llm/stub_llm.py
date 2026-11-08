@@ -84,7 +84,7 @@ def last_tool_name(messages):
 
 
 def iphone_arguments(user_text):
-    after = user_text.split(IPHONE_TRIGGER, 1)[1].split()
+    after = (user_text.split(IPHONE_TRIGGER, 1)[1].strip().splitlines() or [""])[0].split()
     kind, rest = (after[0].upper() if after else ""), " ".join(after[1:])
     now = datetime.datetime.now(datetime.UTC)
     window = {
@@ -94,7 +94,7 @@ def iphone_arguments(user_text):
     actions = {
         "CALENDAR": {"action": "calendar.list_events", "args": window},
         "REMINDERS": {"action": "reminders.list", "args": {}},
-        "CONTACTS": {"action": "contacts.search", "args": {"query": rest or "a"}},
+        "CONTACTS": {"action": "contacts.search", "args": {"query": rest[:80] or "a"}},
         "LOCATION": {"action": "location.current", "args": {}},
     }
     return actions.get(kind)

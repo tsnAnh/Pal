@@ -26,6 +26,8 @@ struct DeviceRow: Identifiable, Equatable {
     let title: String
     let subtitle: String
     let action: Action
+
+    var renderID: String { "\(id.rawValue)-\(action)" }
 }
 
 struct ConnectNotice: Identifiable {
@@ -94,6 +96,7 @@ final class ConnectAppsModel {
     private let service: ConnectAppsService
     private let pool: DeviceHostPool
     private let permissions = SystemPermissions()
+    private let diagnostics = Diagnostics.osLog()
     private var statuses: [DeviceConnectorStatus] = []
     private var localPermissions: [DeviceConnectorID: DeviceOSPermission] = [:]
     private var ledger: ConnectorLedger?
@@ -166,6 +169,7 @@ final class ConnectAppsModel {
     private func apply(_ snapshot: [DeviceConnectorStatus]) {
         statuses = snapshot
         rebuildDeviceRows()
+        diagnostics.info("device", "ledger snapshot \(snapshot.count) connected=\(deviceRows.filter { $0.action == .connected }.count)")
     }
 
     private func rebuildDeviceRows() {
@@ -194,10 +198,12 @@ final class ConnectAppsModel {
             if !(await ledger.isLoaded) { _ = try await ledger.refresh() }
             var status = await permissions.status(of: row.id)
             if status == .notDetermined { status = await permissions.request(row.id) }
+            diagnostics.info("device", "allow \(row.id.rawValue) os=\(status.rawValue)")
             localPermissions[row.id] = status
             switch status {
             case .granted:
                 try await ledger.set(row.id, state: .allowed, osPermission: .granted)
+                diagnostics.info("device", "set \(row.id.rawValue) ok")
                 pool.remember(profile)
             case .denied, .notDetermined:
                 try await ledger.set(row.id, osPermission: .denied)
@@ -205,6 +211,7 @@ final class ConnectAppsModel {
                 report("\(row.title) isn't available on this iPhone.")
             }
         } catch {
+            diagnostics.info("device", "allow \(row.id.rawValue) failed: \(Diagnostics.describe(error))")
             report("Couldn't turn on \(row.title). Try again.")
         }
         rebuildDeviceRows()
