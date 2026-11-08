@@ -96,7 +96,8 @@ struct ComputerHelpSheet: View {
             }
             .scrollEdgeEffectStyle(.soft, for: .top)
         }
-        .presentationDetents([.large])
+        .presentationDetents([.fraction(0.955)])
+        .presentationDragIndicator(.hidden)
     }
 }
 

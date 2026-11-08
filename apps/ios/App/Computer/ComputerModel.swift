@@ -49,7 +49,6 @@ final class ComputerModel {
     private var pressed: UInt8 = 0
     private var lastRemote: CGPoint?
     private var reopening = false
-    private var latestClipboard: String?
     private var clipboardWaiter: CheckedContinuation<String?, Never>?
 
     init(
@@ -88,7 +87,8 @@ final class ComputerModel {
             }
             viewerID = observation.viewerID
             let end = await stream(observation, onReady: { failures = 0 })
-            guard let end, !Task.isCancelled, end != .closed || reopening else { break }
+            guard let end, !Task.isCancelled else { break }
+            let wasReopening = reopening
             reopening = false
             hasControl = false
             switch end {
@@ -97,9 +97,9 @@ final class ComputerModel {
             case .desktopGone:
                 phase = .unavailable(.unavailable)
                 return
-            case .closed:
+            case .closed where wasReopening:
                 continue
-            case .failed, .lost, .ticketRejected:
+            case .closed, .failed, .lost, .ticketRejected:
                 guard failures < Self.reconnectDelays.count else {
                     phase = .lost
                     return
@@ -208,7 +208,6 @@ final class ComputerModel {
 
     func copyToPhone() async {
         guard hasControl else { return }
-        latestClipboard = nil
         input?.yield(.key(Self.controlLeft, down: true))
         input?.yield(.key(0x63, down: true))
         input?.yield(.key(0x63, down: false))
@@ -282,7 +281,6 @@ final class ComputerModel {
             case .resized(let size):
                 remoteSize = size
             case .clipboard(let text):
-                latestClipboard = text
                 resolveClipboardWaiter(text)
             case .bell:
                 break
@@ -290,6 +288,7 @@ final class ComputerModel {
                 return end
             }
         }
+        await session.close()
         return nil
     }
 

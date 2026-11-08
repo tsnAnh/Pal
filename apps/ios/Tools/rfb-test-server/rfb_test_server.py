@@ -128,7 +128,7 @@ class Server:
                 await reader.readexactly(19)
                 self.log("set-pixel-format")
             elif kind == 2:
-                _, count = struct.unpack(">xH", await reader.readexactly(3))
+                (count,) = struct.unpack(">xH", await reader.readexactly(3))
                 encodings = struct.unpack(f">{count}i", await reader.readexactly(4 * count))
                 self.log(f"set-encodings {list(encodings)}")
             elif kind == 3:

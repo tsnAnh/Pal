@@ -17,7 +17,10 @@ struct ComputerView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Color.black
+                .ignoresSafeArea()
+                .accessibilityElement()
+                .accessibilityIdentifier("computerScreen")
             if model.phase == .live {
                 ComputerSurface(
                     image: model.frame,
@@ -40,7 +43,6 @@ struct ComputerView: View {
                 .accessibilityValue(Text(model.statusLabel))
         }
         .overlay(alignment: .bottom) { bottomBar }
-        .accessibilityIdentifier("computerScreen")
         .navigationBarBackButtonHidden()
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar { toolbar }
@@ -81,13 +83,19 @@ struct ComputerView: View {
         .sharedBackgroundVisibility(.hidden)
     }
 
-    @ViewBuilder
     private var overlayState: some View {
+        stateContent
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var stateContent: some View {
         switch model.phase {
         case .connecting, .live:
             VStack(spacing: ComputerMetrics.spinnerToText) {
                 ProgressView()
-                    .controlSize(.large)
+                    .controlSize(.regular)
                     .tint(Color(white: 0.45))
                 Text("Connecting…")
                     .font(.system(size: ComputerMetrics.statusSize))
@@ -181,12 +189,13 @@ struct ComputerView: View {
 enum ComputerMetrics {
     static let avatarSize: CGFloat = 26
     static let avatarToName: CGFloat = 9
-    static let titleSize: CGFloat = 17
-    static let statusSize: CGFloat = 16
+    static let titleSize: CGFloat = 15
+    static let statusSize: CGFloat = 12.5
     static let spinnerToText: CGFloat = 14
     static let chromeDiameter: CGFloat = 44
     static let pillHeight: CGFloat = 38
-    static let pillPadding: CGFloat = 14
+    static let pillTextSize: CGFloat = 12
+    static let pillPadding: CGFloat = 13
     static let barMargin: CGFloat = 30
     static let barBottom: CGFloat = 30
     static let barSpacing: CGFloat = 10
@@ -223,12 +232,10 @@ struct ComputerToolIcon: View {
 }
 
 struct ComputerPillStyle: ButtonStyle {
-    @Environment(\.isEnabled) private var isEnabled
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16))
-            .foregroundStyle(.white.opacity(isEnabled ? 1 : 0.5))
+            .font(.system(size: ComputerMetrics.pillTextSize))
+            .foregroundStyle(.white)
             .padding(.horizontal, ComputerMetrics.pillPadding)
             .frame(height: ComputerMetrics.pillHeight)
             .background(ComputerChrome.fill, in: Capsule())
