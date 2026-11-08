@@ -132,7 +132,7 @@ struct RootView: View {
             .sheet(item: $router.sheet, onDismiss: { createBot = CreateBotModel() }) { sheet in
                 switch sheet {
                 case .settings:
-                    SettingsSheet(model: model, roster: roster) { router.dismissSheet() }
+                    SettingsSheet(model: model, roster: roster, openConnectApps: { router.presentConnectApps() }) { router.dismissSheet() }
                 case .createBot:
                     CreateBotSheet(model: createBot, roster: roster, router: router)
                 case .connectApps:

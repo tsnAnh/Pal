@@ -11,21 +11,23 @@ enum SettingsCopy {
 struct SettingsSheet: View {
     @Bindable var model: ConnectionModel
     let roster: RosterModel
+    let openConnectApps: () -> Void
     let onClose: () -> Void
 
     @State private var hub: SettingsHub
     @State private var path: [SettingsRoute] = []
 
-    init(model: ConnectionModel, roster: RosterModel, onClose: @escaping () -> Void) {
+    init(model: ConnectionModel, roster: RosterModel, openConnectApps: @escaping () -> Void, onClose: @escaping () -> Void) {
         self.model = model
         self.roster = roster
+        self.openConnectApps = openConnectApps
         self.onClose = onClose
         _hub = State(initialValue: SettingsHub(connection: model, roster: roster))
     }
 
     var body: some View {
         NavigationStack(path: $path) {
-            SettingsRootView(hub: hub, connection: model, onClose: onClose) { path.append($0) }
+            SettingsRootView(hub: hub, connection: model, openConnectApps: openConnectApps, onClose: onClose) { path.append($0) }
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationDestination(for: SettingsRoute.self) { route in
                     SettingsDestination(route: route, hub: hub, connection: model) { path.removeLast() }
@@ -63,6 +65,7 @@ private struct SettingsDestination: View {
 struct SettingsRootView: View {
     let hub: SettingsHub
     let connection: ConnectionModel
+    let openConnectApps: () -> Void
     let onClose: () -> Void
     let open: (SettingsRoute) -> Void
 
@@ -78,6 +81,7 @@ struct SettingsRootView: View {
             ScrollView {
                 VStack(spacing: HermesMetrics.cardGap) {
                     accountCard
+                    connectAppsCard
                     botCard
                     preferencesCard
                     feedbackCard
@@ -123,6 +127,14 @@ struct SettingsRootView: View {
             )
             SettingsRow.navigate(
                 "Vault", subtitle: SettingsCopy.vaultSubtitle, accessibilityIdentifier: "settingsVaultRow", action: { open(.vault) }
+            )
+        }
+    }
+
+    private var connectAppsCard: some View {
+        GroupedCard(accessibilityIdentifier: "settingsConnectAppsCard") {
+            SettingsRow.navigate(
+                "Connect apps", subtitle: "Search plugins", accessibilityIdentifier: "settingsConnectAppsRow", action: openConnectApps
             )
         }
     }

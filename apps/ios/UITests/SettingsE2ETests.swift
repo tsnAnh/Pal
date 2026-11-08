@@ -100,7 +100,7 @@ final class SettingsE2ETests: SettingsE2ETestCase {
     func test01RootShowsEveryRowAndHidesTheDroppedOnes() throws {
         let app = signedIn(resetCredentials: true)
         openSettings(app)
-        for identifier in ["settingsAccountRow", "settingsUsageRow", "settingsVaultRow", "settingsPermissionsRow", "settingsTimeZoneAutoToggle", "settingsTimeZoneRow"] {
+        for identifier in ["settingsAccountRow", "settingsUsageRow", "settingsVaultRow", "settingsConnectAppsRow", "settingsPermissionsRow", "settingsTimeZoneAutoToggle", "settingsTimeZoneRow"] {
             waitFor(element(app, identifier), timeout: 15, identifier)
         }
         for identifier in ["settingsBotComputerRow", "settingsDevicesRow", "settingsImportMemoryRow", "settingsNotificationsToggle", "settingsAppearanceRow", "settingsLanguageRow", "settingsHapticsRow", "settingsDataSharingRow", "settingsFeedbackRow", "settingsSignOutRow"] {
@@ -111,8 +111,15 @@ final class SettingsE2ETests: SettingsE2ETestCase {
             XCTAssertFalse(app.staticTexts[text].exists, "\(text) must stay hidden")
             XCTAssertFalse(app.buttons[text].exists, "\(text) must stay hidden")
         }
-        XCTAssertFalse(element(app, "settingsConnectAppsRow").exists, "no Connect apps route exists, so no row")
         shot(app, "settings-root-bottom")
+    }
+
+    func test01bConnectAppsRowOpensTheConnectAppsSheet() throws {
+        let app = signedIn()
+        openSettings(app)
+        scrollTo(app, "settingsConnectAppsRow").tap()
+        waitFor(element(app, "connectApps"), timeout: 20, "connect apps sheet")
+        shot(app, "settings-connect-apps")
     }
 
     func test02AppearanceChangeRethemesImmediatelyAndPersistsAcrossRelaunch() throws {
