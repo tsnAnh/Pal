@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(git -C "$SKILL_DIR" rev-parse --show-toplevel)"
+DESKTOP="$REPO/apps/desktop"
+build=1
+journeys=()
+
+for arg in "$@"; do
+  case "$arg" in
+    --no-build) build=0 ;;
+    -h|--help)
+      echo "usage: scripts/verify [--no-build] [journey ...]"
+      echo "journeys: $(cd "$SKILL_DIR/journeys" && ls *.spec.ts | sed 's/\.spec\.ts$//' | tr '\n' ' ')"
+      exit 0 ;;
+    *) journeys+=("$arg") ;;
+  esac
+done
+
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+export VERIFY_RUN_DIR="$DESKTOP/test-results/verify-desktop/$RUN_ID"
+export HERMES_E2E_VERIFY_RUN="$RUN_ID"
+mkdir -p "$VERIFY_RUN_DIR"
+
+{
+  echo "run: $RUN_ID"
+  echo "commit: $(git -C "$REPO" rev-parse HEAD)"
+  echo "dirty files: $(git -C "$REPO" status --porcelain | wc -l | tr -d ' ')"
+  echo "journeys: ${journeys[*]:-all}"
+} > "$VERIFY_RUN_DIR/run.txt"
+
+cd "$DESKTOP" || exit 2
+
+if [ "$build" = 1 ]; then
+  npm run build > "$VERIFY_RUN_DIR/build.log" 2>&1 || { echo "build failed: $VERIFY_RUN_DIR/build.log"; exit 2; }
+fi
+
+npx playwright test --config "$SKILL_DIR/playwright.config.ts" "${journeys[@]}" 2>&1 | tee "$VERIFY_RUN_DIR/playwright.log"
+status=${PIPESTATUS[0]}
+
+"$SKILL_DIR/scripts/cleanup" "$RUN_ID" >> "$VERIFY_RUN_DIR/run.txt" 2>&1
+echo "exit: $status" >> "$VERIFY_RUN_DIR/run.txt"
+echo "evidence: $VERIFY_RUN_DIR"
+exit "$status"

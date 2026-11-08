@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+FAILS=0
+ok() { say "PASS $*"; }
+bad() { say "FAIL $*"; FAILS=$((FAILS + 1)); }
+check() { local label="$1"; shift; if "$@" >/dev/null 2>&1; then ok "$label"; else bad "$label"; fi; }
+
+[ -f "$RUN_ENV" ] || { say "FAIL no active run (scripts/launch has not run, or cleanup already ran)"; exit 1; }
+load_run
+[ -f "$BACKEND_ENV" ] && . "$BACKEND_ENV"
+
+say "run $RUN_ID owner $OWNER evidence $EVIDENCE"
+check "evidence dir exists and is gitignored" bash -c "[ -d '$EVIDENCE' ] && git -C '$REPO' check-ignore -q '$EVIDENCE/x'"
+
+check "backend wrapper pid ${BACKEND_PID:-none} alive and is e2e-gateway" bash -c "kill -0 '${BACKEND_PID:-0}' && ps -o command= -p '${BACKEND_PID:-0}' | grep -q e2e-gateway"
+LISTENER="$(lsof -ti "tcp:${BACKEND_PORT:-0}" -sTCP:LISTEN 2>/dev/null | head -1)"
+if [ -n "$LISTENER" ] && ps -o ppid= -p "$LISTENER" | tr -d ' ' | grep -qx "${BACKEND_PID:-x}"; then ok "port ${BACKEND_PORT:-?} is owned by our gateway (pid $LISTENER)"; else bad "port ${BACKEND_PORT:-?} is not owned by our gateway (listener: ${LISTENER:-none})"; fi
+check "gateway answers /api/auth/providers" curl -fs "${BASE_URL:-http://127.0.0.1:0}/api/auth/providers"
+check "fake LLM answers /models" curl -fs "${HERMES_IOS_E2E_STUB_URL:-http://127.0.0.1:0/v1}/models"
+case "${HERMES_IOS_E2E_HOME:-}" in
+  /tmp/*|/private/tmp/*) ok "HERMES_HOME is a sandbox: $HERMES_IOS_E2E_HOME" ;;
+  *) bad "HERMES_HOME is not under /tmp: ${HERMES_IOS_E2E_HOME:-unset}" ;;
+esac
+check "sandbox config points at the fake LLM" grep -q "base_url: ${HERMES_IOS_E2E_STUB_URL:-none}" "${HERMES_IOS_E2E_HOME:-/nonexistent}/config.yaml"
+for profile in ${HERMES_IOS_E2E_PROFILES//,/ }; do
+  check "sandbox profile $profile exists" test -f "$(sandbox_profile_config "${HERMES_IOS_E2E_HOME:-/nonexistent}" "$profile")"
+  check "real ~/.hermes has no $profile profile" test ! -e "$HOME/.hermes/profiles/$profile"
+done
+
+STATE="$(sim_state "${UDID:-none}")"
+if [ "$STATE" = "Booted" ]; then ok "simulator ${UDID} booted"; else bad "simulator ${UDID:-none} is $STATE"; fi
+check "simulator ${UDID:-none} is claimed by $OWNER" bash -c ". '$SKILL_DIR/scripts/common.sh'; OWNER='$OWNER'; owned_udids | grep -qx '${UDID:-none}'"
+if [ "$(booted_count)" -le "$MAX_SIMS" ]; then ok "machine simulators running: $(booted_count)/$MAX_SIMS"; else bad "machine simulators running: $(booted_count)/$MAX_SIMS"; fi
+
+APP="$DERIVED/Build/Products/Debug-iphonesimulator/HermesBots.app"
+if [ -d "$APP" ]; then
+  NEWER="$(find "$IOS_DIR/App" "$IOS_DIR/Packages/HermesKit/Sources" "$IOS_DIR/Packages/HermesDesign/Sources" "$IOS_DIR/UITests" -name '*.swift' -newer "$APP/HermesBots" 2>/dev/null | head -3)"
+  if [ -z "$NEWER" ]; then ok "built app is newer than all sources"; else bad "sources changed since the build; rerun scripts/build: $(echo $NEWER | tr '\n' ' ')"; fi
+else
+  bad "no built app at $APP; run scripts/build"
+fi
+check "xctestrun present" bash -c "ls '$DERIVED'/Build/Products/*.xctestrun"
+
+[ "$FAILS" -eq 0 ] && say "doctor: OK" || { say "doctor: $FAILS failing check(s)"; exit 1; }

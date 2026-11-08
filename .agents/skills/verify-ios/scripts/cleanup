@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
+case "${1:-}" in
+  -h|--help)
+    cat <<USAGE
+usage: cleanup
+Tears down only what scripts/launch started: uninstalls the app and UI-test runner (unless they were on the
+simulator before), releases and shuts down the claimed simulator through the device ledger, stops the sandbox
+gateway and fake LLM, deletes the sandbox home, removes XCTestDevices clones this run created when no other
+xcodebuild is running, and reports disk against the baseline. Evidence is never removed. Safe to rerun.
+USAGE
+    exit 0 ;;
+esac
+
+if [ ! -f "$RUN_ENV" ]; then
+  say "cleanup: no active run; nothing to tear down"
+  exit 0
+fi
+load_run
+ISSUES=0
+note() { say "$*"; }
+problem() { say "PROBLEM $*"; ISSUES=$((ISSUES + 1)); }
+mkdir -p "$EVIDENCE"
+REPORT="$EVIDENCE/cleanup-report.txt"
+: >"$REPORT"
+log() { say "$*" | tee -a "$REPORT"; }
+
+if [ -n "${UDID:-}" ] && [ "$(sim_state "$UDID")" = "Booted" ] && [ "${APP_PREINSTALLED:-1}" = 0 ]; then
+  xcrun simctl uninstall "$UDID" "$BUNDLE_ID" >/dev/null 2>&1 && log "uninstalled $BUNDLE_ID from $UDID"
+  xcrun simctl uninstall "$UDID" "$RUNNER_ID" >/dev/null 2>&1 && log "uninstalled $RUNNER_ID from $UDID"
+fi
+
+if [ "${SIM_BOOTED_BY_US:-0}" = 1 ]; then
+  bash "$LEDGER" cleanup --owner "$OWNER" 2>&1 | tee -a "$REPORT"
+  if [ -n "${UDID:-}" ] && [ "$(sim_state "$UDID")" = "Booted" ] && owned_udids | grep -qx "$UDID"; then
+    xcrun simctl shutdown "$UDID" >/dev/null 2>&1 || true
+    bash "$LEDGER" release "$UDID" --owner "$OWNER" >/dev/null 2>&1 || true
+  fi
+  if [ "$(sim_state "$UDID")" = "Booted" ]; then problem "simulator $UDID is still booted"; else log "simulator $UDID is shut down"; fi
+fi
+
+if [ -n "${BACKEND_PID:-}" ]; then
+  stop_pid "$BACKEND_PID"
+  for child in ${BACKEND_CHILDREN:-}; do
+    if pid_alive "$child" && ps -o command= -p "$child" | grep -Eq 'hermes_cli|stub_llm'; then kill -9 "$child" 2>/dev/null; fi
+  done
+  if pid_alive "$BACKEND_PID"; then problem "backend pid $BACKEND_PID still alive"; else log "backend pid $BACKEND_PID stopped"; fi
+  for pid in ${BACKEND_CHILDREN:-}; do pid_alive "$pid" && problem "backend child pid $pid still alive"; done
+  if [ -n "${BACKEND_PORT:-}" ] && [ -n "$(lsof -ti "tcp:$BACKEND_PORT" -sTCP:LISTEN 2>/dev/null)" ]; then problem "port $BACKEND_PORT still has a listener"; else log "gateway port ${BACKEND_PORT:-?} is free"; fi
+fi
+
+REAL_PROFILES_BEFORE="$EVIDENCE/baseline/real-hermes-profiles-before.txt"
+if [ -f "$REAL_PROFILES_BEFORE" ]; then
+  if diff <(ls -1 "$HOME/.hermes/profiles" 2>/dev/null | sort) "$REAL_PROFILES_BEFORE" >/dev/null; then log "real ~/.hermes/profiles unchanged"; else problem "real ~/.hermes/profiles changed during the run"; fi
+fi
+
+BASELINE_CLONES="$EVIDENCE/baseline/xctest-clones-before.txt"
+if [ -f "$BASELINE_CLONES" ]; then
+  NEW_CLONES="$(comm -13 "$BASELINE_CLONES" <(xctest_clone_udids))"
+  if [ -n "$NEW_CLONES" ]; then
+    if pgrep -x xcodebuild >/dev/null 2>&1; then
+      log "XCTestDevices clones created during this run are kept because another xcodebuild is running: $(echo $NEW_CLONES)"
+    else
+      for clone in $NEW_CLONES; do xcrun simctl --set "$XCTEST_DEVICES_DIR" delete "$clone" && log "deleted XCTestDevices clone $clone"; done
+    fi
+  fi
+fi
+
+if pgrep -x Simulator >/dev/null 2>&1 && [ "$(booted_count)" = 0 ]; then
+  log "Simulator.app is running with no booted device; quit it: osascript -e 'quit app \"Simulator\"' (this skill never opens it)"
+fi
+
+AFTER_SIM="$(disk_kb "$SIM_DEVICES_DIR")"
+AFTER_XCTEST="$(disk_kb "$XCTEST_DEVICES_DIR")"
+{
+  echo "disk before (KB): CoreSimulator/Devices=${DISK_BEFORE_SIM_KB:-?} XCTestDevices=${DISK_BEFORE_XCTEST_KB:-?}"
+  echo "disk after  (KB): CoreSimulator/Devices=$AFTER_SIM XCTestDevices=$AFTER_XCTEST"
+  disk_report
+} | tee -a "$REPORT"
+if [ -n "${DISK_BEFORE_SIM_KB:-}" ] && [ "$AFTER_SIM" -gt "$DISK_BEFORE_SIM_KB" ]; then
+  log "NOTE CoreSimulator/Devices grew $((AFTER_SIM - DISK_BEFORE_SIM_KB)) KB; other sessions' simulators share this directory, so growth is not necessarily ours"
+fi
+
+xcrun simctl list devices >"$EVIDENCE/baseline/devices-after-cleanup.txt"
+log "booted simulators now: $(booted_count)"
+if [ "$ISSUES" -eq 0 ]; then
+  rm -f "$RUN_ENV" "$BACKEND_ENV" "$STATE_ROOT/backend.out"
+  log "cleanup: OK; evidence kept at $EVIDENCE"
+else
+  log "cleanup: $ISSUES problem(s); run state kept for a rerun; evidence kept at $EVIDENCE"
+  exit 1
+fi

@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
+usage() {
+  cat <<USAGE
+usage: drive [--label NAME] [--no-video] TEST...
+       drive [--label NAME] [--no-video] --rerun-failed
+TEST is a UI test class or Class/testMethod from apps/ios/UITests, for example
+  BotChatE2ETests/test2SendStreamsReply   SignInFlowTests
+Tests that call control(...) or read HERMES_UITEST_CTL are refused here; run each with drive-control.
+--rerun-failed reruns only the tests that failed in the previous drive of this run.
+Runs it with xcodebuild test-without-building on the launched simulator against the launched backend,
+records video, captures screenshots, os_log, gateway log, fake-LLM request log and sandbox DB counts.
+Exit 0 only when every selected test passed and none was skipped.
+USAGE
+}
+
+LABEL=""
+VIDEO=1
+TESTS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --label) LABEL="$2"; shift 2 ;;
+    --no-video) VIDEO=0; shift ;;
+    --rerun-failed) RERUN=1; shift ;;
+    *) TESTS+=("$1"); shift ;;
+  esac
+done
+LAST_FAILED="$STATE_ROOT/last-failed"
+if [ "${RERUN:-0}" = 1 ]; then
+  [ "${#TESTS[@]}" = 0 ] || die "--rerun-failed takes no TEST arguments"
+  [ -s "$LAST_FAILED" ] || die "no failed tests recorded from a previous drive in this run"
+  while IFS= read -r test; do TESTS+=("$test"); done <"$LAST_FAILED"
+  say "rerunning failed: ${TESTS[*]}"
+fi
+[ "${#TESTS[@]}" -gt 0 ] || { usage >&2; exit 2; }
+
+LANES="$("$(dirname "${BASH_SOURCE[0]}")/test-lanes" "$IOS_DIR/UITests" "${TESTS[@]}")" || die "unknown UI test selector; see test-lanes output above"
+CONTROL_TESTS="$(printf '%s\n' "$LANES" | awk -F'\t' '$2 == "control" {print $1}')"
+if [ -n "$CONTROL_TESTS" ]; then
+  DRIVE_TESTS="$(printf '%s\n' "$LANES" | awk -F'\t' '$2 == "drive" {printf "%s ", $1}')"
+  {
+    say "verify-ios: these tests need the gateway control channel and always fail under drive (HERMES_UITEST_CTL not set):"
+    printf '%s\n' "$CONTROL_TESTS" | sed 's|^|  $S/drive-control |'
+    [ -z "$DRIVE_TESTS" ] || say "run the rest with: \$S/drive $DRIVE_TESTS"
+  } >&2
+  exit 2
+fi
+
+load_run
+load_backend
+[ "$(sim_state "$UDID")" = "Booted" ] || die "simulator $UDID is not booted; run scripts/doctor"
+[ -n "$LABEL" ] || LABEL="$(printf '%s' "${TESTS[0]}" | tr '/' '-')"
+DIR="$EVIDENCE/drive-$(date +%H%M%S)-$LABEL"
+mkdir -p "$DIR/shots"
+
+ONLY=()
+for test in "${TESTS[@]}"; do ONLY+=("-only-testing:HermesBotsUITests/$test"); done
+
+RECORD_PID=""
+if [ "$VIDEO" = 1 ]; then
+  xcrun simctl io "$UDID" recordVideo --display=1 --codec h264 --force "$DIR/run.mov" >"$DIR/record.log" 2>&1 &
+  RECORD_PID=$!
+  sleep 2
+fi
+
+ARGS=()
+while IFS= read -r name; do ARGS+=(-u "$name"); done < <(strip_env_names)
+( cd "$IOS_DIR" && env ${ARGS[@]+"${ARGS[@]}"} \
+  TEST_RUNNER_HERMES_UITEST_BASE_URL="$HERMES_IOS_TEST_BASE_URL" \
+  TEST_RUNNER_HERMES_UITEST_USERNAME="$HERMES_IOS_TEST_USERNAME" \
+  TEST_RUNNER_HERMES_UITEST_PASSWORD="$HERMES_IOS_TEST_PASSWORD" \
+  TEST_RUNNER_HERMES_UITEST_SHOTS="$DIR/shots" \
+  TEST_RUNNER_HERMES_UITEST_SEED="${VERIFY_IOS_SEED:-}" \
+  xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+    -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$DERIVED" \
+    "${ONLY[@]}" -resultBundlePath "$DIR/result.xcresult" \
+    -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 \
+    test-without-building ) >"$DIR/xcodebuild-test.log" 2>&1
+XC_STATUS=$?
+
+if [ -n "$RECORD_PID" ]; then
+  kill -INT "$RECORD_PID" 2>/dev/null
+  wait "$RECORD_PID" 2>/dev/null
+fi
+
+perl -e 'alarm 120; exec @ARGV' xcrun simctl spawn "$UDID" log show --info --last 20m --style compact \
+  --predicate "subsystem == \"$LOG_SUBSYSTEM\"" >"$DIR/app-os-log.txt" 2>/dev/null
+cp "$HERMES_IOS_E2E_GATEWAY_LOG" "$DIR/gateway.log" 2>/dev/null
+cp "$HERMES_IOS_E2E_STUB_LOG" "$DIR/fake-llm-requests.jsonl" 2>/dev/null
+for db in "$HERMES_IOS_E2E_HOME"/profiles/*/state.db; do
+  [ -f "$db" ] || continue
+  profile="$(basename "$(dirname "$db")")"
+  sqlite3 "file:$db?mode=ro" "SELECT '$profile', role, COUNT(*) FROM messages GROUP BY role;" >>"$DIR/sandbox-db-messages.txt" 2>&1
+done
+
+for file in "$DIR"/*.log "$DIR"/*.txt "$DIR"/*.jsonl; do
+  [ -f "$file" ] && sed -i '' -e "s/$HERMES_IOS_TEST_PASSWORD/<redacted>/g" "$file"
+done
+
+SUMMARY="$(xcrun xcresulttool get test-results summary --path "$DIR/result.xcresult" 2>/dev/null)"
+PASSED="$(printf '%s' "$SUMMARY" | "$JQ" -r '.passedTests // 0' 2>/dev/null || echo 0)"
+FAILED="$(printf '%s' "$SUMMARY" | "$JQ" -r '.failedTests // 0' 2>/dev/null || echo 0)"
+SKIPPED="$(printf '%s' "$SUMMARY" | "$JQ" -r '.skippedTests // 0' 2>/dev/null || echo 0)"
+printf '%s' "$SUMMARY" >"$DIR/result-summary.json"
+xcrun xcresulttool get test-results tests --path "$DIR/result.xcresult" 2>/dev/null | "$JQ" -r '
+  .. | objects | select(.nodeType? == "Test Case" and .result? == "Failed") | .nodeIdentifier | sub("\\(\\)$"; "")
+' 2>/dev/null | sort -u >"$LAST_FAILED"
+[ -s "$LAST_FAILED" ] && say "failed tests (rerun just these with --rerun-failed):" && sed 's/^/  /' "$LAST_FAILED"
+
+if [ "$XC_STATUS" = 0 ] && [ "${PASSED:-0}" -ge 1 ] && [ "${FAILED:-1}" = 0 ] && [ "${SKIPPED:-1}" = 0 ]; then VERDICT=PASS; else VERDICT=FAIL; fi
+printf 'verdict=%s passed=%s failed=%s skipped=%s xcodebuild_exit=%s tests=%s\n' "$VERDICT" "$PASSED" "$FAILED" "$SKIPPED" "$XC_STATUS" "${TESTS[*]}" | tee "$DIR/verdict.txt"
+say "evidence: $DIR"
+find "$DIR/shots" -name '*.png' | sort
+[ "$VERDICT" = PASS ]
