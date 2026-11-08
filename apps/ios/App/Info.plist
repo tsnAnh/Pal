@@ -22,6 +22,12 @@
 	<string>1</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Hermes Bots can take a photo to send to a bot.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Hermes Bots listens while you dictate a message or talk to a bot in voice mode.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Hermes Bots turns your speech into text on this device for dictation and voice mode.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

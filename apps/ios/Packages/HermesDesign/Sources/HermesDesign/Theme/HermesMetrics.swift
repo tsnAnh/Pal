@@ -177,4 +177,10 @@ public enum ChatMetrics {
     public static let headerButtonDiameter: CGFloat = 44
     public static let headerAvatarSize: CGFloat = 26
     public static let scrollButtonDiameter: CGFloat = 34
+    public static let linkAvatarSize: CGFloat = 20
+    public static let threadHeaderAvatarSize: CGFloat = 30
+    public static let threadAvatarSize: CGFloat = 18
+    public static let threadAvatarGap: CGFloat = 7
+    public static let threadNameInset: CGFloat = 10
+    public static let threadPillHeight: CGFloat = 36
 }

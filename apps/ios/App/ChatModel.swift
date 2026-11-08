@@ -12,6 +12,12 @@ enum BubbleDelivery: Equatable {
     case failed(submissionID: String)
 }
 
+enum ChatNotice: Equatable {
+    case botMessage(senderName: String, body: String)
+    case notification
+    case backgroundTaskFinished
+}
+
 struct ChatRow: Identifiable, Equatable {
     enum Kind: Equatable {
         case user(text: String, delivery: BubbleDelivery)
@@ -19,32 +25,90 @@ struct ChatRow: Identifiable, Equatable {
         case tool(name: String, summary: String?, isRunning: Bool)
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
+        case notice(ChatNotice)
+        case botThread(BotThreadLink)
     }
 
     let id: String
     let kind: Kind
     let separator: Date?
+    let showsUnreadDivider: Bool
+
+    var searchableText: String? {
+        switch kind {
+        case .user(let text, _), .assistant(let text, _): text
+        case .notice(.botMessage(_, let body)): body
+        default: nil
+        }
+    }
+}
+
+enum ChatConnectionState: Equatable {
+    case connecting
+    case live
+    case reconnecting
+}
+
+struct VoiceReply: Equatable {
+    var text: String
+    var isComplete: Bool
+    var turn: Int
+}
+
+struct PendingAttachment: Identifiable, Equatable {
+    enum Kind: Equatable {
+        case image
+        case file
+    }
+
+    enum Staged: Equatable {
+        case image(PromptAttachment)
+        case file(referenceText: String)
+    }
+
+    enum State: Equatable {
+        case uploading
+        case ready(Staged)
+        case failed
+    }
+
+    let id = UUID()
+    let kind: Kind
+    let name: String
+    let thumbnail: Data?
+    var state: State
 }
 
 @MainActor
 @Observable
 final class ChatModel {
     private(set) var rows: [ChatRow] = []
-    private(set) var isOffline = true
+    private(set) var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
     private(set) var hasPendingClarify = false
     private(set) var sendError: String?
+    private(set) var attachments: [PendingAttachment] = []
+    var isFinding = false
+    var findQuery = "" {
+        didSet { recomputeFind(resetPosition: true) }
+    }
+    private(set) var findMatches: [String] = []
+    private(set) var findPosition = 0
 
     let bot: BotRow
 
-    private let connection: ConnectionModel
+    private let connectionModel: ConnectionModel
     private let roster: RosterModel
+    private let lastSeenStore: ChatLastSeenStore
+    private let lastSeenAtOpen: Date?
     private var session: ChatSession?
     private var outbox: Outbox?
     private var transcript = Transcript()
     private var outboxEntries: [OutboxEntry] = []
+    private var botThreadLinks: [BotThreadLink] = []
     private var arrivals: [String: Date] = [:]
     private var hasBaseline = false
+    private var hasBeenLive = false
     private var lastSignature = ActivitySignature(running: false, prompting: false)
     private var tasks: [Task<Void, Never>] = []
     private var delivering = false
@@ -55,19 +119,66 @@ final class ChatModel {
         let prompting: Bool
     }
 
+    var isOffline: Bool { connection != .live }
+    var chatAccent: BotAccent? { bot.usesPrimaryLook ? nil : bot.accent }
+    var avatars: ParticipantAvatars { ParticipantAvatars(roster: roster) }
     var activity: BotActivity { roster.activity(for: bot.name) }
     var avatarMood: AvatarMood { roster.avatarMood(for: bot.name) }
 
-    private static let separatorGap: TimeInterval = 10 * 60
+    var isCatchingUp: Bool {
+        switch connection {
+        case .connecting: true
+        case .reconnecting: false
+        case .live: isRunning && !hasStreamingText && !hasPendingClarify
+        }
+    }
 
-    init(bot: BotRow, connection: ConnectionModel, roster: RosterModel) {
+    var canSendAttachments: Bool {
+        !attachments.contains { $0.state == .uploading }
+    }
+
+    var currentFindRowID: String? {
+        findMatches.indices.contains(findPosition) ? findMatches[findPosition] : nil
+    }
+
+    var voiceTurn: Int {
+        transcript.items.count { item in
+            if case .user = item.content { item.inbound.isPerson } else { false }
+        }
+    }
+
+    var voiceReply: VoiceReply {
+        var parts: [String] = []
+        for item in transcript.items.reversed() {
+            switch item.content {
+            case .user where item.inbound.isPerson:
+                break
+            case .assistant(let text, _, _) where !text.isEmpty:
+                parts.append(text)
+                continue
+            default:
+                continue
+            }
+            break
+        }
+        return VoiceReply(text: parts.reversed().joined(separator: "\n\n"), isComplete: !transcript.isRunning, turn: voiceTurn)
+    }
+
+    private var hasStreamingText: Bool {
+        guard let last = transcript.items.last, case .assistant(let text, _, let streaming) = last.content else { return false }
+        return streaming && !text.isEmpty
+    }
+
+    init(bot: BotRow, connection: ConnectionModel, roster: RosterModel, lastSeenStore: ChatLastSeenStore = ChatLastSeenStore()) {
         self.bot = bot
-        self.connection = connection
+        connectionModel = connection
         self.roster = roster
+        self.lastSeenStore = lastSeenStore
+        lastSeenAtOpen = lastSeenStore.lastSeen(for: bot.name)
     }
 
     func start() {
-        guard tasks.isEmpty, let connector = connection.chatConnector else { return }
+        guard tasks.isEmpty, let connector = connectionModel.chatConnector else { return }
         let session = ChatSession(profile: bot.name, connector: connector)
         self.session = session
         do {
@@ -82,6 +193,7 @@ final class ChatModel {
     }
 
     func stop() {
+        markViewed()
         tasks.forEach { $0.cancel() }
         tasks.removeAll()
         let session = self.session
@@ -91,17 +203,34 @@ final class ChatModel {
         roster.nudge()
     }
 
+    func markViewed() {
+        guard hasBaseline else { return }
+        lastSeenStore.record(Date(), for: bot.name)
+    }
+
     func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        if let prompt = pendingClarify {
+        let staged = attachments.compactMap { attachment -> PendingAttachment.Staged? in
+            if case .ready(let staged) = attachment.state { staged } else { nil }
+        }
+        guard !trimmed.isEmpty || !staged.isEmpty, canSendAttachments else { return }
+        if let prompt = pendingClarify, staged.isEmpty {
             answer(prompt, with: trimmed)
             return
         }
         guard let outbox else { return }
+        var body = trimmed
+        var images: [PromptAttachment] = []
+        for item in staged {
+            switch item {
+            case .image(let attachment): images.append(attachment)
+            case .file(let reference): body = body.isEmpty ? reference : body + "\n" + reference
+            }
+        }
+        attachments.removeAll()
         Task {
             do {
-                let entry = try await outbox.enqueue(botID: bot.name, text: trimmed)
+                let entry = try await outbox.enqueue(botID: bot.name, text: body, attachments: images)
                 await refreshOutbox()
                 _ = await outbox.deliver(entry.submissionID)
                 await refreshOutbox()
@@ -138,8 +267,86 @@ final class ChatModel {
         Task { try? await session.answerApproval(prompt, choice: choice) }
     }
 
+    func submitVoice(_ text: String) async -> Bool {
+        guard let session else { return false }
+        do {
+            try await session.submitVoiceTurn(text)
+            return true
+        } catch {
+            sendError = String(localized: "Your message could not be sent. Try again.")
+            return false
+        }
+    }
+
     func dismissError() {
         sendError = nil
+    }
+
+    func attachPhoto(_ upload: PreparedUpload) {
+        stage(PendingAttachment(kind: .image, name: upload.filename, thumbnail: upload.thumbnail, state: .uploading)) { session in
+            let staged = try await session.attachImage(upload.data, filename: upload.filename)
+            return .image(staged.promptAttachment)
+        }
+    }
+
+    func attachFile(_ upload: PreparedUpload, mime: String) {
+        stage(PendingAttachment(kind: .file, name: upload.filename, thumbnail: nil, state: .uploading)) { session in
+            let staged = try await session.attachFile(upload.data, name: upload.filename, mime: mime)
+            return .file(referenceText: staged.refText)
+        }
+    }
+
+    func removeAttachment(_ id: UUID) {
+        attachments.removeAll { $0.id == id }
+    }
+
+    func reportAttachmentFailure(_ message: String) {
+        sendError = message
+    }
+
+    func beginFinding() {
+        isFinding = true
+    }
+
+    func endFinding() {
+        isFinding = false
+        findQuery = ""
+    }
+
+    func findNext() {
+        guard !findMatches.isEmpty else { return }
+        findPosition = (findPosition + 1) % findMatches.count
+    }
+
+    func findPrevious() {
+        guard !findMatches.isEmpty else { return }
+        findPosition = (findPosition - 1 + findMatches.count) % findMatches.count
+    }
+
+    private func stage(
+        _ attachment: PendingAttachment,
+        upload: @escaping @Sendable (ChatSession) async throws -> PendingAttachment.Staged
+    ) {
+        attachments.append(attachment)
+        let id = attachment.id
+        guard let session else {
+            update(id, to: .failed)
+            sendError = String(localized: "Attachments need a connection. Try again in a moment.")
+            return
+        }
+        Task {
+            do {
+                update(id, to: .ready(try await upload(session)))
+            } catch {
+                update(id, to: .failed)
+                sendError = String(localized: "That attachment could not be uploaded.")
+            }
+        }
+    }
+
+    private func update(_ id: UUID, to state: PendingAttachment.State) {
+        guard let index = attachments.firstIndex(where: { $0.id == id }) else { return }
+        attachments[index].state = state
     }
 
     private var pendingClarify: PendingPrompt? {
@@ -159,21 +366,32 @@ final class ChatModel {
                 try await session.start(intro: intro)
                 return
             } catch {
-                isOffline = true
+                noteDisconnected()
                 try? await Task.sleep(for: delay)
                 delay = min(delay * 2, .seconds(8))
             }
         }
     }
 
+    private func noteDisconnected() {
+        connection = hasBeenLive ? .reconnecting : .connecting
+    }
+
+    private func noteLive() {
+        hasBeenLive = true
+        connection = .live
+    }
+
     private func consume(_ session: ChatSession) async {
         for await update in session.updates {
             switch update {
             case .phase(let phase):
-                if case .live = phase { isOffline = false } else { isOffline = true }
+                if case .live = phase { noteLive() } else { noteDisconnected() }
             case .transcript(let next):
                 transcript = next
-                if case .live = await session.phase { isOffline = false }
+                if case .live = await session.phase { noteLive() }
+            case .botThreadLinks(let links):
+                botThreadLinks = links
             }
             await refreshOutbox()
             observeActivityChange()
@@ -203,57 +421,106 @@ final class ChatModel {
         if signature != lastSignature { roster.nudge() }
     }
 
-    private func rebuild() {
-        let items = transcript.items
+    private func effectiveDate(_ item: TranscriptItem) -> Date? {
+        item.timestamp ?? arrivals[item.id]
+    }
+
+    private func allItems() -> [TranscriptItem] {
+        var items = BotThreadFolding.fold(transcript.items, links: botThreadLinks)
         let known = Set(items.map(\.id))
-        let now = Date()
-        for item in items where hasBaseline && arrivals[item.id] == nil { arrivals[item.id] = now }
-        var built: [ChatRow] = []
-        var lastArrival: Date?
-        func append(_ id: String, _ kind: ChatRow.Kind) {
-            var separator: Date?
-            if let arrival = arrivals[id] {
-                if lastArrival.map({ arrival.timeIntervalSince($0) >= Self.separatorGap }) ?? true { separator = arrival }
-                lastArrival = arrival
-            }
-            built.append(ChatRow(id: id, kind: kind, separator: separator))
-        }
-        let visible = outboxEntries.filter { !retried.contains($0.submissionID) }
-        let byID = Dictionary(visible.map { ("submission:\($0.submissionID)", $0) }, uniquingKeysWith: { first, _ in first })
-        for item in items {
-            switch item.content {
-            case .user(let text, let delivery):
-                var state: BubbleDelivery = switch delivery {
-                case .sent: .sent
-                case .sending: .sending
-                case .queued: .queued
-                }
-                if case .failed = byID[item.id]?.state, let entry = byID[item.id] { state = .failed(submissionID: entry.submissionID) }
-                append(item.id, .user(text: text, delivery: state))
-            case .assistant(let text, _, let streaming):
-                if text.isEmpty, !streaming { continue }
-                append(item.id, .assistant(text: text, isStreaming: streaming))
-            case .tool(let call):
-                append(item.id, .tool(name: call.name, summary: call.summary, isRunning: call.status == .running))
-            case .clarify(let card):
-                append(item.id, .clarify(card.prompt))
-            case .approval(let card):
-                append(item.id, .approval(card.prompt))
-            }
-        }
-        for entry in visible {
+        for entry in outboxEntries where !retried.contains(entry.submissionID) {
             let id = "submission:\(entry.submissionID)"
             guard !known.contains(id) else { continue }
+            let delivery: TranscriptItem.Delivery
             switch entry.state {
-            case .pending: append(id, .user(text: entry.text, delivery: .queued))
-            case .failed: append(id, .user(text: entry.text, delivery: .failed(submissionID: entry.submissionID)))
+            case .pending, .failed: delivery = .queued
             case .admitted: continue
             }
+            var item = TranscriptItem(id: id, content: .user(text: displayText(for: entry), delivery: delivery), timestamp: entry.createdAt)
+            if case .failed(let reason) = entry.state { item.deliveryFailure = reason }
+            items.append(item)
+        }
+        return items
+    }
+
+    private func displayText(for entry: OutboxEntry) -> String {
+        if !entry.text.isEmpty { return entry.text }
+        return entry.attachments.isEmpty ? "" : String(localized: "Photo")
+    }
+
+    private func rebuild() {
+        let now = Date()
+        for item in transcript.items where hasBaseline && item.timestamp == nil && arrivals[item.id] == nil { arrivals[item.id] = now }
+        let items = allItems()
+        let entries = ChatTimeline.entries(items: items, date: effectiveDate, lastSeen: lastSeenAtOpen)
+        let visible = outboxEntries.filter { !retried.contains($0.submissionID) }
+        let byID = Dictionary(visible.map { ("submission:\($0.submissionID)", $0) }, uniquingKeysWith: { first, _ in first })
+        var built: [ChatRow] = []
+        for entry in entries {
+            guard let kind = rowKind(for: entry.item, outbox: byID[entry.item.id]) else { continue }
+            built.append(ChatRow(id: entry.item.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider))
         }
         rows = built
         isRunning = transcript.isRunning
         hasPendingClarify = pendingClarify != nil
         if !hasBaseline, transcript.sessionID != nil { hasBaseline = true }
+        recomputeFind(resetPosition: false)
+    }
+
+    private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?) -> ChatRow.Kind? {
+        switch item.content {
+        case .user(let text, let delivery):
+            switch item.inbound {
+            case .person:
+                var state: BubbleDelivery = switch delivery {
+                case .sent: .sent
+                case .sending: .sending
+                case .queued: .queued
+                }
+                if let entry, case .failed = entry.state { state = .failed(submissionID: entry.submissionID) }
+                return .user(text: text, delivery: state)
+            case .botMessage(let sender, let body):
+                return .notice(.botMessage(senderName: sender.name, body: body))
+            case .systemNotification:
+                return .notice(.notification)
+            case .processCompletion:
+                return .notice(.backgroundTaskFinished)
+            }
+        case .assistant(let text, _, let streaming):
+            if text.isEmpty, !streaming { return nil }
+            return .assistant(text: text, isStreaming: streaming)
+        case .tool(let call):
+            return .tool(name: call.name, summary: call.summary, isRunning: call.status == .running)
+        case .clarify(let card):
+            return .clarify(card.prompt)
+        case .approval(let card):
+            return .approval(card.prompt)
+        case .botThread(let link):
+            return .botThread(link)
+        }
+    }
+
+    private func recomputeFind(resetPosition: Bool) {
+        let needle = findQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        let previous = currentFindRowID
+        guard isFinding || !needle.isEmpty else {
+            findMatches = []
+            findPosition = 0
+            return
+        }
+        findMatches = needle.isEmpty ? [] : rows.compactMap { row in
+            guard let text = row.searchableText,
+                  text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+            else { return nil }
+            return row.id
+        }
+        if resetPosition {
+            findPosition = max(0, findMatches.count - 1)
+        } else if let previous, let index = findMatches.firstIndex(of: previous) {
+            findPosition = index
+        } else {
+            findPosition = min(findPosition, max(0, findMatches.count - 1))
+        }
     }
 
     private static func outboxDirectory(for name: String) -> URL {
@@ -261,4 +528,10 @@ final class ChatModel {
         let safe = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "bot"
         return base.appending(path: safe, directoryHint: .isDirectory)
     }
+}
+
+struct PreparedUpload: Sendable {
+    let data: Data
+    let filename: String
+    let thumbnail: Data?
 }

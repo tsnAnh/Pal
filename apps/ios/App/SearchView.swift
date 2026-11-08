@@ -8,7 +8,7 @@ struct SearchHost: View {
     let router: AppRouter
 
     init(roster: RosterModel, router: AppRouter) {
-        _model = State(initialValue: SearchModel(roster: roster, supported: router.capabilities.searchScopes))
+        _model = State(initialValue: SearchModel(roster: roster, supported: router.searchScopes))
         self.roster = roster
         self.router = router
     }
@@ -26,7 +26,7 @@ struct SearchView: View {
     @Environment(\.hermesTheme) private var theme
 
     private var chips: [FilterChipItem<SearchScope>] {
-        router.capabilities.searchScopes.map { FilterChipItem(id: $0, title: Self.title(of: $0)) }
+        router.searchScopes.map { FilterChipItem(id: $0, title: Self.title(of: $0)) }
     }
 
     var body: some View {

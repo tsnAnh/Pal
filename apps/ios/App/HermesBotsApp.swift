@@ -56,8 +56,12 @@ struct RootView: View {
                         switch route {
                         case .chat(let name):
                             if let bot = roster.bot(named: name) {
-                                ChatView(model: ChatModel(bot: bot, connection: model, roster: roster))
+                                ChatView(model: ChatModel(bot: bot, connection: model, roster: roster), router: router)
                             }
+                        case .botProfile:
+                            EmptyView()
+                        case .botThread(let thread):
+                            BotThreadView(model: BotThreadModel(route: thread, connection: model, roster: roster))
                         }
                     }
             }

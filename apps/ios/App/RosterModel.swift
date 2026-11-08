@@ -17,6 +17,7 @@ struct BotRow: Identifiable, Equatable {
     let lastActive: Date?
     let spec: BotAvatarSpec
     let accent: BotAccent?
+    let usesPrimaryLook: Bool
     let sessionIDs: Set<String>
 
     var id: String { name }
@@ -270,6 +271,7 @@ final class RosterModel {
             lastActive: lastActive,
             spec: BotAvatarSpec(name: profile.name, uiMeta: uiMeta, photo: photos[profile.name]),
             accent: BotAccent(name: profile.name, uiMeta: uiMeta),
+            usesPrimaryLook: profile.name.lowercased() == BotAvatarSpec.primaryName && !BotAvatarMeta(uiMeta: uiMeta).custom,
             sessionIDs: Set([profile.canonical?.id, profile.canonical?.resolvedID].compactMap { $0 })
         )
     }

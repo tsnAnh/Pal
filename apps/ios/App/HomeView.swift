@@ -56,7 +56,7 @@ struct HomeView: View {
             FloatingSearchLauncher(
                 accessibilityLabel: String(localized: "Search"),
                 accessibilityIdentifier: "rosterSearchField",
-                leadingButton: router.capabilities.connectApps
+                leadingButton: router.capabilities.contains(.connectApps)
                     ? FloatingSearchBarLeadingButton(
                         systemName: "square.grid.2x2",
                         accessibilityLabel: String(localized: "Connect apps"),

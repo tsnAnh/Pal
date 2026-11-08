@@ -31,6 +31,9 @@ targets:
       properties:
         CFBundleDisplayName: Hermes Bots
         ITSAppUsesNonExemptEncryption: false
+        NSMicrophoneUsageDescription: Hermes Bots listens while you dictate a message or talk to a bot in voice mode.
+        NSSpeechRecognitionUsageDescription: Hermes Bots turns your speech into text on this device for dictation and voice mode.
+        NSCameraUsageDescription: Hermes Bots can take a photo to send to a bot.
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
