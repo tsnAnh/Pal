@@ -111,4 +111,14 @@ final class HomeE2ETests: E2ETestCase {
         waitForExpectations(timeout: 20)
         shot(app, "working")
     }
+
+    func test6ConnectAppsButtonOpensTheSheet() throws {
+        let app = launch()
+        signInIfNeeded(app)
+        let button = app.buttons["connectAppsButton"]
+        waitFor(button, timeout: 30, "connect apps button")
+        button.tap()
+        waitFor(app.descendants(matching: .any)["connectApps"], timeout: 20, "connect apps sheet")
+        shot(app, "connect-apps-from-home")
+    }
 }

@@ -61,7 +61,7 @@ struct HomeView: View {
                         systemName: "square.grid.2x2",
                         accessibilityLabel: String(localized: "Connect apps"),
                         accessibilityIdentifier: "connectAppsButton"
-                    ) {}
+                    ) { router.presentConnectApps() }
                     : nil
             ) { router.openSearch() }
         }

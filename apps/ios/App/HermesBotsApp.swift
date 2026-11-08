@@ -20,7 +20,7 @@ struct HermesBotsApp: App {
         _model = State(initialValue: model)
         let roster = RosterModel(connection: model)
         _roster = State(initialValue: roster)
-        let router = AppRouter(capabilities: [.botProfile])
+        let router = AppRouter(capabilities: [.botProfile, .connectApps])
         _router = State(initialValue: router)
         _appearance = State(initialValue: AppearanceStore())
         let consent = DeviceConsentPresenter { profile in roster.displayName(forProfile: profile) }
