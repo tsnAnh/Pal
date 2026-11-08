@@ -23,6 +23,7 @@ struct E2EEnvironment {
 @MainActor
 class E2ETestCase: XCTestCase {
     var env: E2EEnvironment!
+    private static var credentialsResetThisRun = false
 
     override func setUp() async throws {
         continueAfterFailure = false
@@ -31,7 +32,9 @@ class E2ETestCase: XCTestCase {
 
     func launch(resetCredentials: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments = (resetCredentials ? ["-hermes-reset-credentials"] : []) + extraArguments
+        let reset = resetCredentials || !Self.credentialsResetThisRun
+        Self.credentialsResetThisRun = true
+        app.launchArguments = (reset ? ["-hermes-reset-credentials"] : []) + extraArguments
         app.launch()
         return app
     }

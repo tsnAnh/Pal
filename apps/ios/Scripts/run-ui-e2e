@@ -19,7 +19,6 @@ BASE_URL="$HERMES_IOS_TEST_BASE_URL"
 PORT="${BASE_URL##*:}"
 CTL_DIR="$(mktemp -d /tmp/hermes-ui-e2e-ctl.XXXXXX)"
 PROBE_TEXT="OFFLINE-PING-7731"
-RESTART_PID=""
 RECORD_PID=""
 WATCHER_PID=""
 BOOTED_BY_US=0
@@ -52,10 +51,11 @@ kill_gateway() {
 start_gateway() {
   [ -z "$(gateway_listener)" ] || return 1
   ( cd "$REPO" && HERMES_HOME="$HERMES_IOS_E2E_HOME" exec "$PYTHON" -m hermes_cli.main gateway run >>"$ART/gateway-restart.log" 2>&1 ) &
-  RESTART_PID=$!
+  local restart_pid=$!
+  echo "$restart_pid" >"$CTL_DIR/restart.pid"
   for _ in $(seq 90); do
     curl -fs "$BASE_URL/api/auth/providers" >/dev/null 2>&1 && return 0
-    kill -0 "$RESTART_PID" 2>/dev/null || return 1
+    kill -0 "$restart_pid" 2>/dev/null || return 1
     sleep 1
   done
   return 1
@@ -131,7 +131,7 @@ cleanup() {
     bash "$LEDGER" cleanup --owner "$OWNER"
     xcrun simctl list devices | grep "$UDID" | grep -q Booted && xcrun simctl shutdown "$UDID"
   fi
-  stop_pid "$RESTART_PID"
+  [ -f "$CTL_DIR/restart.pid" ] && stop_pid "$(cat "$CTL_DIR/restart.pid")"
   rm -rf "$CTL_DIR"
   echo "== disk after" | tee -a "$ART/disk.txt"
   disk_report | tee -a "$ART/disk.txt"
