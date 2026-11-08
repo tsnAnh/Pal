@@ -139,6 +139,27 @@ final class BotChatE2ETests: E2ETestCase {
         shot(app, "chat-reopen-settled")
     }
 
+    func test8NewReplyInLongChatScrollsIntoView() throws {
+        let app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-alpha")
+        for index in 1...10 {
+            let text = String(format: "fill-%02d", index)
+            send(app, text)
+            waitFor(bubbles(app, "userBubble", containing: text).firstMatch, timeout: 10, "user bubble \(text)")
+            waitForReply(app, below: text)
+        }
+        let marker = "SLOW grow " + UUID().uuidString.prefix(6)
+        send(app, marker)
+        waitForReply(app, below: marker)
+        let composer = app.descendants(matching: .any)["composerField"]
+        let reply = try XCTUnwrap(app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last)
+        shot(app, "chat-long-new-reply")
+        XCTAssertTrue(reply.label.contains("slow-39"), reply.label)
+        XCTAssertTrue(reply.isHittable, "the new reply is on screen")
+        XCTAssertLessThanOrEqual(reply.frame.maxY, composer.frame.minY, "the end of the new reply sits above the composer")
+    }
+
     private func waitForReply(_ app: XCUIApplication, below text: String) {
         let userBubble = bubbles(app, "userBubble", containing: text).firstMatch
         let deadline = Date().addingTimeInterval(60)
