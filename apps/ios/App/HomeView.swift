@@ -21,9 +21,9 @@ struct HomeView: View {
                 ForEach(roster.rows) { bot in
                     NavigationLink(value: AppRoute.chat(botName: bot.name)) {
                         HomeRow(bot: bot, activity: roster.activity(for: bot.name), mood: roster.avatarMood(for: bot.name))
+                            .botContextMenu(bot, roster: roster)
                     }
                     .buttonStyle(.plain)
-                    .botContextMenu(bot, roster: roster)
                     .accessibilityIdentifier("botRow-\(bot.name)")
                     .accessibilityValue(Text(roster.activity(for: bot.name).accessibilityValue))
                 }
@@ -176,9 +176,9 @@ private struct PinnedHero: View {
                 NavigationLink(value: AppRoute.chat(botName: bot.name)) {
                     HeroCell(bot: bot, activity: roster.activity(for: bot.name), mood: roster.avatarMood(for: bot.name))
                         .frame(width: Self.cellWidth)
+                        .botContextMenu(bot, roster: roster)
                 }
                 .buttonStyle(.plain)
-                .botContextMenu(bot, roster: roster)
                 .accessibilityIdentifier("botRow-\(bot.name)")
                 .accessibilityValue(Text(roster.activity(for: bot.name).accessibilityValue))
             }
