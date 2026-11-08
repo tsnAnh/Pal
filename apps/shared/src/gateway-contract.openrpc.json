@@ -53827,6 +53827,42 @@
       }
     },
     {
+      "name": "connectors.accounts",
+      "summary": "The scoped member's hosted connector accounts, optionally filtered by connector slug.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ConnectorAccountsParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectorAccountsResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.accounts.remove",
+      "summary": "Remove one hosted connector account owned by the scoped member.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ConnectorAccountsRemoveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectorAccountsRemoveResult"
+        }
+      }
+    },
+    {
       "name": "connectors.catalog",
       "summary": "The hosted connector catalog available to the scoped member.",
       "params": [
@@ -54457,6 +54493,42 @@
       }
     },
     {
+      "name": "mcp.servers.add",
+      "summary": "Add a server to the profile's config from a catalog preset and/or an explicit config.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpServersAddParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpServersAddResult"
+        }
+      }
+    },
+    {
+      "name": "mcp.servers.oauth.callback",
+      "summary": "Relay a client-captured redirect into a client_redirect_uri flow.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpOauthCallbackParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpOauthCallbackResult"
+        }
+      }
+    },
+    {
       "name": "mcp.servers.oauth.cancel",
       "summary": "Cancel a flow owned by the resolved profile, waking its callback worker.",
       "params": [
@@ -54507,6 +54579,42 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/McpOauthStartResult"
+        }
+      }
+    },
+    {
+      "name": "mcp.servers.remove",
+      "summary": "Drop a server from the profile's config.yaml.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpServerNameParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpServersRemoveResult"
+        }
+      }
+    },
+    {
+      "name": "mcp.servers.set_api_key",
+      "summary": "Store a credential in the profile's .env and reference it from the server config (header or env).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpServersSetApiKeyParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpServersSetApiKeyResult"
         }
       }
     },
