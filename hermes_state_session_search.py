@@ -47,7 +47,7 @@ def _hit_payload(row: dict, snippet: str, role, session_started, timestamp=None)
 class SessionSearch:
     def __init__(self, db, query: str, *, limit: int, profile: str, source: Optional[str] = None,
                  sources: Optional[list[str]] = None, exclude_sources: Optional[list[str]] = None,
-                 include_hidden: bool = True):
+                 include_hidden: bool = True, visible_hidden_title: Optional[str] = None):
         self.db = db
         self.query = query
         self.limit = limit
@@ -56,6 +56,7 @@ class SessionSearch:
         self.sources = sources or None
         self.exclude_sources = exclude_sources or None
         self.include_hidden = include_hidden
+        self.visible_hidden_title = visible_hidden_title
         self.now = time.time()
         self.seen: dict[str, dict] = {}
         self._roots: dict[str, str] = {}
@@ -117,7 +118,7 @@ class SessionSearch:
             row = None
         if not row:
             return {**payload, "id": sid}
-        if not self.include_hidden and row.get("hidden"):
+        if row.get("hidden") and not self.include_hidden and row.get("title") != self.visible_hidden_title:
             return None
         last_active = row.get("last_active") or row.get("started_at")
         return {**payload,

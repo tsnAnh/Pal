@@ -152,6 +152,15 @@ async def test_hidden_and_internal_sessions_never_surface(conn):
 
 
 @pytest.mark.asyncio
+async def test_the_hidden_canonical_bot_chat_is_searchable_but_other_hidden_titles_are_not(conn):
+    db = conn.authority.db
+    _seed(db, 'bot-chat', 'orbit needle bot chat', title='Bot Chat', hidden=True)
+    _seed(db, 'side-chat', 'orbit needle side chat', title='Side Chat', hidden=True)
+    found = [row['session_id'] for row in (await _search(conn, query='orbit needle'))['result']['results']]
+    assert found == ['bot-chat']
+
+
+@pytest.mark.asyncio
 async def test_a_compressed_lineage_answers_once_with_its_tip(conn):
     db = conn.authority.db
     _seed(db, 'lineage-root', 'lineage needle first segment')

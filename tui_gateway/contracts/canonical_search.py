@@ -33,4 +33,4 @@ class SessionSearchResult(Result):
 canonical_method("session.search", params=SessionSearchParams, result=SessionSearchResult,
                  doc="Search a profile's visible conversations by session id, message text and title: id "
                      "matches first, then message hits, then title matches, one hit per conversation. "
-                     "Hidden and internal sessions never match.")
+                     "Internal sessions and hidden sessions other than the canonical Bot Chat never match.")

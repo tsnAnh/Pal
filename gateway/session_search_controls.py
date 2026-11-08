@@ -29,9 +29,11 @@ def _hit(row):
 
 def _search(authority, query, limit):
     from hermes_state_session_search import search_sessions
+    from hermes_state import SessionDB
     from hermes_state_sessions import INTERNAL_LISTING_SOURCES
     rows = search_sessions(authority.db, query, limit=limit, profile=authority.db._own_profile_name() or 'default',
-                           exclude_sources=list(INTERNAL_LISTING_SOURCES), include_hidden=False)
+                           exclude_sources=list(INTERNAL_LISTING_SOURCES), include_hidden=False,
+                           visible_hidden_title=SessionDB.CANONICAL_BOT_CHAT_TITLE)
     return [_hit(row) for row in rows]
 
 
