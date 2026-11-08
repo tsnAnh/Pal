@@ -12,6 +12,11 @@ SLOW_CHUNKS = 40
 SLOW_DELAY = 0.25
 CLARIFY_QUESTION = "Which flavor do you want?"
 CLARIFY_CHOICES = ["vanilla", "chocolate"]
+TOOL_FINAL_PREFIX = "stub-tool-final "
+TOOL_COMMANDS = {
+    "TOOLCALL": "sleep 6",
+    "APPROVE": 'cd "$(mktemp -d)" && git reset --hard',
+}
 
 log_lock = threading.Lock()
 
@@ -39,6 +44,11 @@ def plan(body):
     last = messages[-1] if messages else {}
     last_role = last.get("role")
     last_user = next((text_of(m.get("content")) for m in reversed(messages) if m.get("role") == "user"), "")
+    tool_trigger = next((key for key in TOOL_COMMANDS if key in last_user), None)
+    if "terminal" in names and tool_trigger and last_role == "tool":
+        return "text", [TOOL_FINAL_PREFIX + text_of(last.get("content"))], NORMAL_DELAY
+    if "terminal" in names and tool_trigger and last_role == "user":
+        return "tool", TOOL_COMMANDS[tool_trigger], 0
     if "clarify" in names and last_role == "tool":
         return "final", "Clarify answered: " + text_of(last.get("content")), NORMAL_DELAY
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:
@@ -98,15 +108,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def tool_call(self, kind, content):
+        if kind == "tool":
+            return "terminal", json.dumps({"command": content})
+        return "clarify", self.clarify_arguments()
+
     def clarify_arguments(self):
         return json.dumps({"questions": [{"question": CLARIFY_QUESTION, "choices": CLARIFY_CHOICES}]})
 
     def complete(self, kind, content):
         message = {"role": "assistant", "content": None}
         finish = "stop"
-        if kind == "clarify":
-            message["tool_calls"] = [{"id": "call_stub_clarify", "type": "function",
-                                      "function": {"name": "clarify", "arguments": self.clarify_arguments()}}]
+        if kind in ("clarify", "tool"):
+            name, arguments = self.tool_call(kind, content)
+            message["tool_calls"] = [{"id": f"call_stub_{name}", "type": "function",
+                                      "function": {"name": name, "arguments": arguments}}]
             finish = "tool_calls"
         else:
             message["content"] = content if isinstance(content, str) else "".join(content)
@@ -124,11 +140,11 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         try:
             self.chunk({"role": "assistant", "content": ""}, None)
-            if kind == "clarify":
-                arguments = self.clarify_arguments()
+            if kind in ("clarify", "tool"):
+                name, arguments = self.tool_call(kind, content)
                 half = len(arguments) // 2
-                call = {"index": 0, "id": "call_stub_clarify", "type": "function",
-                        "function": {"name": "clarify", "arguments": arguments[:half]}}
+                call = {"index": 0, "id": f"call_stub_{name}", "type": "function",
+                        "function": {"name": name, "arguments": arguments[:half]}}
                 self.chunk({"tool_calls": [call]}, None)
                 self.chunk({"tool_calls": [{"index": 0, "function": {"arguments": arguments[half:]}}]}, None)
                 self.chunk({}, "tool_calls")

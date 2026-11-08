@@ -16,7 +16,6 @@ struct ChatRow: Identifiable, Equatable {
     enum Kind: Equatable {
         case user(text: String, delivery: BubbleDelivery)
         case assistant(text: String, isStreaming: Bool)
-        case tool(name: String, summary: String?, isRunning: Bool)
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
     }
@@ -232,8 +231,8 @@ final class ChatModel {
             case .assistant(let text, _, let streaming):
                 if text.isEmpty, !streaming { continue }
                 append(item.id, .assistant(text: text, isStreaming: streaming))
-            case .tool(let call):
-                append(item.id, .tool(name: call.name, summary: call.summary, isRunning: call.status == .running))
+            case .tool:
+                continue
             case .clarify(let card):
                 append(item.id, .clarify(card.prompt))
             case .approval(let card):
@@ -249,10 +248,19 @@ final class ChatModel {
             case .admitted: continue
             }
         }
+        if shouldShowThinking(tail: built.last) { append(Self.thinkingRowID, .assistant(text: "", isStreaming: true)) }
         rows = built
         isRunning = transcript.isRunning
         hasPendingClarify = pendingClarify != nil
         if !hasBaseline, transcript.sessionID != nil { hasBaseline = true }
+    }
+
+    private static let thinkingRowID = "thinking"
+
+    private func shouldShowThinking(tail: ChatRow?) -> Bool {
+        guard transcript.isRunning, transcript.pendingPrompts.isEmpty else { return false }
+        if case .assistant(_, true)? = tail?.kind { return false }
+        return true
     }
 
     private static func outboxDirectory(for name: String) -> URL {

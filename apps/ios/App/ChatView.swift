@@ -168,8 +168,6 @@ private struct ChatRowView: View {
                 UserBubble(text: text, delivery: delivery, accent: model.bot.accent) { id in model.retry(id) }
             case .assistant(let text, let streaming):
                 AssistantBubble(text: text, isStreaming: streaming)
-            case .tool(let name, let summary, let running):
-                ToolLine(name: name, summary: summary, isRunning: running)
             case .clarify(let prompt):
                 ClarifyCard(prompt: prompt) { answer in model.answer(prompt, with: answer) }
             case .approval(let prompt):
@@ -274,29 +272,6 @@ private struct UserBubble: View {
     }
 }
 
-private struct ToolLine: View {
-    let name: String
-    let summary: String?
-    let isRunning: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if isRunning {
-                ProgressView().controlSize(.mini)
-            } else {
-                Image(systemName: "wrench.and.screwdriver").font(.caption)
-            }
-            Text(summary.flatMap { $0.isEmpty ? nil : $0 } ?? name)
-                .font(.footnote)
-                .lineLimit(1)
-        }
-        .foregroundStyle(.secondary)
-        .padding(.leading, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(isRunning ? "Running \(name)" : "Used \(name)"))
-    }
-}
-
 private struct ClarifyCard: View {
     let prompt: PendingPrompt
     let answer: (String) -> Void
@@ -390,18 +365,48 @@ private struct ApprovalCard: View {
     let prompt: PendingPrompt
     let choose: (String) -> Void
 
+    private static func label(for choice: String) -> String {
+        switch choice {
+        case "once": String(localized: "Allow")
+        case "session": String(localized: "Allow for this chat")
+        case "always": String(localized: "Always allow")
+        case "deny": String(localized: "Don't allow")
+        default: choice
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(prompt.description ?? String(localized: "Approval needed"))
+            Text("Needs your OK")
                 .font(.headline)
                 .foregroundStyle(Color.onCard)
-            if let command = prompt.command {
-                Text(command)
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(.secondary)
+            Text("This could change or delete something. Allow it?")
+                .font(.body)
+                .foregroundStyle(Color.onCard)
+            if prompt.description != nil || prompt.command != nil {
+                DisclosureGroup("Details") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let description = prompt.description {
+                            Text(description)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                        if let command = prompt.command {
+                            Text(command)
+                                .font(.footnote.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("approvalDetails")
             }
             ForEach(Array(prompt.choices.enumerated()), id: \.offset) { index, choice in
-                Button(choice) { choose(choice) }
+                Button(Self.label(for: choice)) { choose(choice) }
                     .buttonStyle(.glass)
                     .accessibilityIdentifier("approvalChoice-\(index)")
             }
