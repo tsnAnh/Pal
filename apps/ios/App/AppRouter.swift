@@ -5,6 +5,9 @@ enum AppRoute: Hashable {
     case chat(botName: String)
     case botProfile(botName: String)
     case botThread(BotThreadRoute)
+    case library(botName: String)
+    case routines(botName: String)
+    case slack(botName: String)
 }
 
 enum AppSheet: String, Identifiable {
