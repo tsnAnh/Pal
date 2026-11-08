@@ -74,12 +74,16 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
 
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier,
-              let target = PushWire.target(fromUserInfo: response.notification.request.content.userInfo)
-        else { return }
-        await MainActor.run { self.route(to: target) }
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping @Sendable () -> Void
+    ) {
+        let target = response.actionIdentifier == UNNotificationDefaultActionIdentifier
+            ? PushWire.target(fromUserInfo: response.notification.request.content.userInfo)
+            : nil
+        Task { @MainActor in
+            if let target { self.route(to: target) }
+            completionHandler()
+        }
     }
 
     private func route(to target: PushTarget) {

@@ -35,9 +35,14 @@ done
 [ -n "$UDID" ] && [ -n "$HOME_DIR" ] && [ -n "$GLOB" ] && [ -n "$PROFILE" ] && [ -n "$NAME" ] || { usage >&2; exit 2; }
 case "$HOME_DIR" in /tmp/*|/private/tmp/*|/private/var/*) ;; *) echo "push-on-ready: home must be a sandbox under /tmp" >&2; exit 2 ;; esac
 
-DB="$HOME_DIR/devices.db"
+LIVE_DB="$HOME_DIR/devices.db"
+SNAPSHOT="$(mktemp -t push-on-ready-devices)"
+trap 'rm -f "$SNAPSHOT"' EXIT
+snapshot() {
+  cp "$LIVE_DB" "$SNAPSHOT" 2>/dev/null
+}
 registered() {
-  [ -f "$DB" ] && [ "$(sqlite3 "file:$DB?mode=ro" "SELECT COUNT(*) FROM devices WHERE kind='ios' AND push_token IS NOT NULL;" 2>/dev/null || echo 0)" -ge 1 ]
+  snapshot && [ "$(sqlite3 "$SNAPSHOT" "SELECT COUNT(*) FROM devices WHERE kind='ios' AND push_token IS NOT NULL;" 2>/dev/null || echo 0)" -ge 1 ]
 }
 marker() {
   compgen -G "$GLOB" >/dev/null 2>&1
@@ -49,7 +54,7 @@ until marker && registered; do
   sleep 0.5
 done
 mkdir -p "$OUT"
-sqlite3 -header "file:$DB?mode=ro" "SELECT device_id, kind, label, model, os, push_environment, push_bundle_id, length(push_token) AS token_chars FROM devices WHERE kind='ios' AND push_token IS NOT NULL;" | tee "$OUT/registered-device.txt"
+sqlite3 -header "$SNAPSHOT" "SELECT device_id, kind, label, model, os, push_environment, push_bundle_id, length(push_token) AS token_chars FROM devices WHERE kind='ios' AND push_token IS NOT NULL;" | tee "$OUT/registered-device.txt"
 "$PYTHON" "$IOS_DIR/Tools/push-payload/make_payload.py" "$PROFILE" "$NAME" "$REPLY" >"$OUT/payload.json"
 cat "$OUT/payload.json"
 xcrun simctl push "$UDID" "$BUNDLE_ID" "$OUT/payload.json"
