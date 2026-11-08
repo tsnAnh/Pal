@@ -15,6 +15,7 @@ Chromium spawns merge in so the agent acts on this profile's screen and nowhere 
 from __future__ import annotations
 
 import contextlib
+import itertools
 import logging
 import math
 import os
@@ -132,6 +133,15 @@ def installable() -> bool:
     return is_root() or shutil.which("sudo") is not None
 
 
+SCREEN_RUNNING, SCREEN_STOPPED, SCREEN_STARTING = "running", "stopped", "starting"
+CHROME_RUNNING, CHROME_STOPPED = "running", "stopped"
+DEFAULT_MAX_SCREENS = 4
+
+
+class ScreenCapReached(RuntimeError):
+    pass
+
+
 @dataclass
 class DesktopStatus:
     profile: str
@@ -150,6 +160,10 @@ class DesktopStatus:
     memory_limit_mb: Optional[int] = None
     placement: str = "gateway"  # "gateway" | "terminal:<backend>" — where Xvnc runs
     image_switch: Optional[dict[str, object]] = None  # pending default-image switch the pane can approve
+    screen: str = SCREEN_STOPPED
+    chrome: Optional[str] = None
+    profile_copy_synced_at: Optional[float] = None
+    shared_files_path: Optional[str] = None
 
     def as_dict(self) -> dict[str, object]:
         return dict(self.__dict__)
@@ -626,11 +640,13 @@ def status(profile: Optional[str] = None) -> DesktopStatus:
         # A screen already running inside a sandbox is reported (and stoppable) even after the placement
         # setting moved: the recorded owner wins over the current policy until it is stopped.
         return _sandbox_status(profile, where)
+    from tools.bot_desktop import chrome_profile
     missing: list[str] = missing_binaries() if is_supported_host() else list(REQUIRED_BINARIES)
     pid = _launcher_pid()
     env = published_env()
     running = pid is not None and bool(env.get("DISPLAY"))
     mem = resources.memory_info() if is_supported_host() else resources.MemoryInfo(None, None)
+    copy = chrome_profile.copy_dir()
     return DesktopStatus(
         profile=profile or _profile_name(),
         supported=is_supported_host(),
@@ -647,7 +663,54 @@ def status(profile: Optional[str] = None) -> DesktopStatus:
         blocker=None if running or missing or not is_supported_host() else resources.memory_blocker(mem),
         memory_available_mb=mem.available_mb,
         memory_limit_mb=mem.limit_mb,
+        screen=SCREEN_RUNNING if running else SCREEN_STARTING if pid is not None else SCREEN_STOPPED,
+        chrome=CHROME_RUNNING if chrome_profile.chrome_running(copy) else CHROME_STOPPED,
+        profile_copy_synced_at=chrome_profile.synced_at(),
+        shared_files_path=chrome_profile.display_path(chrome_profile.shared_files_dir()),
     )
+
+
+def max_screens() -> int:
+    from hermes_cli.config import load_config_readonly
+    cfg = load_config_readonly().get("bot_desktop") or {}
+    try:
+        value = int(cfg.get("max_screens", DEFAULT_MAX_SCREENS))
+    except (TypeError, ValueError):
+        value = DEFAULT_MAX_SCREENS
+    return max(value, 0)
+
+
+def _screen_socket(cmdline: list[str]) -> Optional[str]:
+    if not cmdline or "Xvnc" not in Path(cmdline[0]).name:
+        return None
+    for flag, value in itertools.pairwise(cmdline):
+        if flag == "-rfbunixpath" and value.endswith("/bot-desktop/rfb.sock"):
+            return value
+    return None
+
+
+def running_screen_sockets() -> set[str]:
+    import psutil
+    found: set[str] = set()
+    for proc in psutil.process_iter(["cmdline"]):
+        try:
+            sock = _screen_socket(proc.info["cmdline"] or [])
+        except (psutil.Error, OSError):
+            continue
+        if sock is not None:
+            found.add(sock)
+    return found
+
+
+def _refuse_over_cap(own_socket: Path) -> None:
+    limit = max_screens()
+    if limit <= 0:
+        return
+    others = running_screen_sockets() - {str(own_socket)}
+    if len(others) >= limit:
+        raise ScreenCapReached(
+            f"{len(others)} bot screens are already running on this machine, the limit set by "
+            f"bot_desktop.max_screens ({limit}). Stop another bot's screen, or raise the limit.")
 
 
 def _sandbox_status(profile: Optional[str], where) -> DesktopStatus:
@@ -696,6 +759,7 @@ def _sandbox_status(profile: Optional[str], where) -> DesktopStatus:
         memory_limit_mb=None,
         placement=f"{placement.TERMINAL}:{where.backend}",
         image_switch=image_switch,
+        screen=SCREEN_RUNNING if running else SCREEN_STOPPED,
     )
 
 
@@ -778,6 +842,7 @@ def _spawn_and_wait(sd: Path, wait_seconds: float) -> DesktopStatus:
     """Caller holds ``start.lock``. Takes ``_ALLOC_LOCK`` itself, from picking the number to Xvnc's claim."""
     with contextlib.ExitStack() as alloc:
         alloc.enter_context(_flocked(_ALLOC_LOCK))
+        _refuse_over_cap(sd / "rfb.sock")
         num = _pick_display()
         (sd / "display").write_text(str(num), encoding="utf-8")
         env_file = sd / "env"
@@ -811,11 +876,13 @@ def _spawn_and_wait(sd: Path, wait_seconds: float) -> DesktopStatus:
             "HERMES_BD_HOME": str(get_hermes_home()),
             "HERMES_BD_IDLE_FIRST_DELAY": str(next_check_in(idle_stop_seconds(), 0.0)),
         })
-        from tools.bot_desktop.browser import dock_exec_line, dock_launch
+        from tools.bot_desktop import chrome_profile
+        child_env["HERMES_SHARED_FILES"] = str(chrome_profile.ensure_shared_files_dir())
+        from tools.bot_desktop.browser import dock_exec_line, dock_launch, dock_wrapper
         if (browser := dock_launch()) is not None:
             # The bare executable (the launcher checks it exists) and the ready-made, spec-quoted Exec= line.
             child_env["HERMES_BD_BROWSER_EXEC"] = browser[0]
-            child_env["HERMES_BD_BROWSER_EXEC_LINE"] = dock_exec_line(*browser)
+            child_env["HERMES_BD_BROWSER_EXEC_LINE"] = dock_exec_line(*browser, wrapper=dock_wrapper(browser[1]))
         # A new file per start: the log is a diagnostic for THIS launch, and nothing rotates it otherwise. Not
         # truncated in place: the old screen's idle check (in a session of its own) may still hold the old file
         # open, and its late write would land in this one behind a run of NUL bytes.
@@ -888,7 +955,7 @@ def _sandbox_published_env() -> dict[str, str]:
     return sandbox_host.published_env(env, _profile_name())
 
 
-def stop(still_due: Optional[Callable[[], bool]] = None) -> bool:
+def stop(still_due: Optional[Callable[[], bool]] = None, *, write_back: bool = True) -> bool:
     """Stop this profile's desktop; True when a running launcher (or the X server a dead one left behind)
     was signalled. ``still_due`` is asked again before anything is killed (under ``start.lock`` for a screen on
     this host); False there leaves the screen running."""
@@ -912,7 +979,22 @@ def stop(still_due: Optional[Callable[[], bool]] = None) -> bool:
         if still_due is not None and not still_due():
             logger.info("Bot Desktop for profile %s changed while the idle stop waited; kept", _profile_name())
             return False
-        return _stop_locked(sd)
+        return _stop_locked(sd, write_back=write_back)
+
+
+def reconcile() -> None:
+    from tools.bot_desktop import chrome_profile, sandbox_host
+    if not is_supported_host() or sandbox_host._read_marker():
+        return
+    sd = state_dir()
+    if not sd.is_dir():
+        return
+    with _flocked(sd / "start.lock"):
+        if _launcher_pid() is None:
+            _reap_orphaned_server(sd)
+            chrome_profile.shutdown()
+        else:
+            chrome_profile.write_back_if_idle()
 
 
 RESETTABLE_STATE = ("xdg", "browser-profile")
@@ -926,7 +1008,7 @@ def reset() -> list[str]:
     from tools.bot_desktop import sandbox_host
     if sandbox_host._read_marker() or placement.resolve().where == placement.TERMINAL:
         raise ResetRefused("This bot's screen runs in a sandbox; reset it from there.")
-    stop()
+    stop(write_back=False)
     if is_running():
         raise ResetRefused("The screen is still shutting down. Try again in a moment.")
     sd = state_dir()
@@ -945,14 +1027,17 @@ def reset() -> list[str]:
     return removed
 
 
-def _stop_locked(sd: Path) -> bool:
+def _stop_locked(sd: Path, *, write_back: bool = True) -> bool:
+    from tools.bot_desktop import chrome_profile
     pid = _launcher_pid()
     if pid is None:
         reaped = _reap_orphaned_server(sd)
         (sd / "env").unlink(missing_ok=True)
+        chrome_profile.shutdown(write=write_back)
         return reaped
     # The launcher runs in its own session; killing the group takes Xvnc, dbus and Xfce with it.
     _kill_group_then_wait(pid, pid, grace=5.0)
     for name in ("launcher.pid", "env", "activity", "idle-watch.out"):
         (sd / name).unlink(missing_ok=True)
+    chrome_profile.shutdown(write=write_back)
     return True
