@@ -49,6 +49,34 @@ public struct ConfigValueWire: Codable, Sendable, Hashable {
 
 public struct DisplayLeaseWire: Codable, Sendable, Hashable {
     public var holder: String
+    public var viewerHash: String?
+    public var ask: String?
+    public var askAt: Double?
+
+    enum CodingKeys: String, CodingKey {
+        case holder
+        case viewerHash = "viewer_hash"
+        case ask
+        case askAt = "ask_at"
+    }
+}
+
+public struct DisplayLeaseResultWire: Codable, Sendable, Hashable {
+    public var lease: DisplayLeaseWire
+}
+
+public struct DisplayObserveWire: Codable, Sendable, Hashable {
+    public var ticket: String
+    public var path: String
+    public var viewerID: String
+    public var lease: DisplayLeaseWire?
+
+    enum CodingKeys: String, CodingKey {
+        case ticket
+        case path
+        case viewerID = "viewer_id"
+        case lease
+    }
 }
 
 public struct DisplayStatusWire: Codable, Sendable, Hashable {
