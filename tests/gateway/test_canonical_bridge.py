@@ -6,7 +6,7 @@ from gateway.session_legacy_bridge import handlers as bridge_handlers
 from hermes_cli.primary_profile import primary_profile_name
 from hermes_cli.profiles import get_profile_dir
 from tests.gateway.bots_harness import FULL, READ, bots_state, call, config_of, failure, install_state
-from tui_gateway.contracts.canonical_bridge import BRIDGED
+from tui_gateway.contracts.canonical_bridge import BRIDGED, HANDLER_VALIDATED
 from tui_gateway.contracts.registry import CANONICAL_METHODS, METHODS
 
 install = pytest.fixture(install_state)
@@ -14,7 +14,7 @@ bots = pytest_asyncio.fixture(bots_state)
 
 
 def test_every_bridged_verb_reuses_the_sidecar_wire_on_the_canonical_catalog():
-    for name in BRIDGED:
+    for name in set(BRIDGED) - HANDLER_VALIDATED:
         assert CANONICAL_METHODS[name].params is METHODS[name].params, name
         assert CANONICAL_METHODS[name].result is METHODS[name].result, name
 

@@ -29,7 +29,11 @@ BRIDGED = (
     "skills.manage",
 )
 
+HANDLER_VALIDATED = frozenset({"connection.respond"})
+
 for _name in BRIDGED:
+    if _name in HANDLER_VALIDATED:
+        continue
     _shared = METHODS[_name]
     canonical_method(_name, params=_shared.params, result=_shared.result, doc=_shared.doc)
 
