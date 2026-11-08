@@ -95,7 +95,8 @@ final class ChatModel {
     private(set) var findMatches: [String] = []
     private(set) var findPosition = 0
 
-    let bot: BotRow
+    private let openedBot: BotRow
+    var bot: BotRow { roster.bot(named: openedBot.name) ?? openedBot }
 
     private let connectionModel: ConnectionModel
     private let roster: RosterModel
@@ -170,7 +171,7 @@ final class ChatModel {
     }
 
     init(bot: BotRow, connection: ConnectionModel, roster: RosterModel, lastSeenStore: ChatLastSeenStore = ChatLastSeenStore()) {
-        self.bot = bot
+        openedBot = bot
         connectionModel = connection
         self.roster = roster
         self.lastSeenStore = lastSeenStore
