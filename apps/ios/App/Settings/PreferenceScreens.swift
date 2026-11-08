@@ -250,6 +250,7 @@ struct ImportMemoryScreen: View {
                         .frame(minHeight: 180)
                         .padding(.horizontal, HermesMetrics.rowInset - 5)
                         .padding(.vertical, 8)
+                        .accessibilityIdentifier("importMemoryText")
                         .overlay(alignment: .topLeading) {
                             if model.text.isEmpty {
                                 Text("Paste what another assistant remembers about you")
@@ -258,9 +259,9 @@ struct ImportMemoryScreen: View {
                                     .padding(.horizontal, HermesMetrics.rowInset)
                                     .padding(.vertical, 16)
                                     .allowsHitTesting(false)
+                                    .accessibilityHidden(true)
                             }
                         }
-                        .accessibilityIdentifier("importMemoryText")
                 }
                 CardFootnote(
                     model.result ?? "One fact per line. Hermes removes repeats and skips anything unsafe.",
