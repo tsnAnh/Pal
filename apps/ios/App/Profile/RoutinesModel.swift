@@ -50,8 +50,7 @@ final class RoutinesModel {
         }
     }
 
-    func confirmRemoval() async {
-        guard let routine = pendingRemoval else { return }
+    func remove(_ routine: Routine) async {
         pendingRemoval = nil
         do {
             try await services.routines.remove(routine: routine.id, profile: botName)

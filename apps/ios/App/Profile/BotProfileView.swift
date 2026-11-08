@@ -76,13 +76,17 @@ struct BotProfileView: View {
 
     private var hero: some View {
         VStack(spacing: 0) {
-            AvatarBadge(diameter: ProfileMetrics.avatarDiameter, showsPrimaryBadge: model.isPrimary, accessibilityIdentifier: "profileAvatar") {
+            AvatarBadge(diameter: ProfileMetrics.avatarDiameter, showsPrimaryBadge: model.isPrimary, accessibilityIdentifier: "profileAvatarArtwork") {
                 if let spec = model.spec {
                     BotAvatarView(spec: spec, size: ProfileMetrics.avatarDiameter)
                 } else {
                     Color.clear
                 }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(model.displayName))
+            .accessibilityValue(Text(model.isPrimary ? "Primary bot" : ""))
+            .accessibilityIdentifier("profileAvatar")
             .padding(.top, ProfileMetrics.avatarTop)
             Text(model.displayName)
                 .font(.system(size: ProfileMetrics.nameSize))

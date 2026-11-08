@@ -52,13 +52,14 @@ struct RoutinesView: View {
         .confirmationDialog(
             Text("Delete this routine?"),
             isPresented: Binding(get: { model.pendingRemoval != nil }, set: { if !$0 { model.pendingRemoval = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) { Task { await model.confirmRemoval() } }
+            titleVisibility: .visible,
+            presenting: model.pendingRemoval
+        ) { routine in
+            Button("Delete", role: .destructive) { Task { await model.remove(routine) } }
                 .accessibilityIdentifier("routineDeleteConfirm")
             Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(model.pendingRemoval?.title ?? "") won't run again.")
+        } message: { routine in
+            Text("\(routine.title) won't run again.")
         }
     }
 
