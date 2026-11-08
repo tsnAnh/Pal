@@ -1,13 +1,11 @@
+import type { OfficialSkillInfo, SkillInfo, StarmapGraph } from '@/types/hermes'
+import type { ActionResponse } from '@/types/hermes'
 import type {
-  OfficialSkillInfo,
   SkillHubPreview,
   SkillHubScanResult,
   SkillHubSearchResponse,
-  SkillHubSourcesResponse,
-  SkillInfo,
-  StarmapGraph
-} from '@/types/hermes'
-import type { ActionResponse } from '@/types/hermes'
+  SkillHubSourcesResponse
+} from '@/types/skills-hub'
 
 import { capabilityScoped, hermesApi, type ProfileScope, profileScoped } from './client'
 

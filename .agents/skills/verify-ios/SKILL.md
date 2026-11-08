@@ -11,7 +11,7 @@ Everything below runs from the repo root. Helpers live in `.agents/skills/verify
 
 ## Rules this skill enforces
 
-- Never touch `~/.hermes`. The gateway runs with `HERMES_HOME=/tmp/hermes-ios-e2e.*/home` (a `config.yaml` there makes it the profile root, so `bot-alpha` and `bot-beta` are created inside it). `HOME` stays real because `simctl` and `xcodebuild` need it. Doctor asserts `~/.hermes/profiles/bot-alpha` and `bot-beta` do not exist, and `cleanup` fails if the listing of `~/.hermes/profiles` differs from the baseline.
+- Never touch `~/.hermes`. The gateway runs with `HERMES_HOME=/tmp/hermes-ios-e2e.*/home` (a `config.yaml` there makes it the profile root, so `bot-alpha` and `bot-beta` are created inside it). `HOME` stays real because `simctl` and `xcodebuild` need it. Doctor asserts `~/.hermes/profiles/bot-alpha` and `bot-beta` do not exist, and `cleanup` fails if the listing of `~/.hermes/profiles` differs from the baseline. <!-- no-tmp: ok — names the sandbox path apps/ios/Scripts/e2e-gateway creates and doctor and push-on-ready require under /tmp -->
 - Credentials and inherited `HERMES_*` runtime vars are stripped from every child env (same rules as `apps/desktop/e2e/fixtures.ts` `stripCredentials`).
 - One run at a time per checkout. State is keyed by the checkout path, so agents in different worktrees run in parallel (ports are free-picked, simulators are slot-gated and ledger-claimed per owner). `launch` refuses to start while this checkout's run is active. Do not drive an instance you did not start.
 - Simulator rules (machine-wide, from the user's global rules): at most 4 simulators run on this machine across all sessions (`CLAUDE_MAX_DEVICES`, shared with the resource gate hook). `sim-up` waits for a free slot (`VERIFY_IOS_SLOT_WAIT_SECONDS`, default 900) and never boots past the cap. It reuses an existing simulator, never creates or erases one, never claims one booted by someone else, claims the one it boots in the device ledger (`VERIFY_IOS_OWNER`, default `verify-ios`), and never opens Simulator.app. Never touch physical devices.
@@ -34,7 +34,7 @@ VERIFY_IOS_OWNER=<your-task-slug> $S/launch
 
 Why the in-repo fake LLM and not `tests-js/scripts/mock-server.ts`: the iOS harness already ships a stub that speaks what the app's tests need (streaming, a `clarify` tool call on the prompt `CLARIFY`, a slow stream on `SLOW`, and a request log). The desktop mock server does not. The pairing is the real product path, see Drive.
 
-State for the run lives in `/tmp/verify-ios-state-<uid>/<checkout-hash>/` (`run.env`, `backend.env`, `last-failed`). Evidence goes to `apps/ios/Artifacts/verify-ios/<run-id>/`, which is gitignored by `apps/ios/.gitignore` (`Artifacts/`) and survives cleanup.
+State for the run lives in `/tmp/verify-ios-state-<uid>/<checkout-hash>/` (`run.env`, `backend.env`, `last-failed`). Evidence goes to `apps/ios/Artifacts/verify-ios/<run-id>/`, which is gitignored by `apps/ios/.gitignore` (`Artifacts/`) and survives cleanup. <!-- no-tmp: ok — names the state root common.sh creates under /tmp -->
 
 ## Doctor
 
@@ -42,7 +42,7 @@ State for the run lives in `/tmp/verify-ios-state-<uid>/<checkout-hash>/` (`run.
 $S/doctor
 ```
 
-Read-only. Answers "is this instance worth driving": backend wrapper alive and is `e2e-gateway`, port owned by our gateway process, `/api/auth/providers` and the fake LLM answer, `HERMES_HOME` is under `/tmp` and points at the fake LLM, both profiles exist, real `~/.hermes` has no `bot-*` profile, simulator booted and claimed by this owner, machine simulator count within the cap, built app newer than every Swift source (stale build means rerun `$S/build`), `.xctestrun` present, evidence dir gitignored. Exits 1 with a `FAIL` line per problem. Run it first whenever anything looks off.
+Read-only. Answers "is this instance worth driving": backend wrapper alive and is `e2e-gateway`, port owned by our gateway process, `/api/auth/providers` and the fake LLM answer, `HERMES_HOME` is under `/tmp` and points at the fake LLM, both profiles exist, real `~/.hermes` has no `bot-*` profile, simulator booted and claimed by this owner, machine simulator count within the cap, built app newer than every Swift source (stale build means rerun `$S/build`), `.xctestrun` present, evidence dir gitignored. Exits 1 with a `FAIL` line per problem. Run it first whenever anything looks off. <!-- no-tmp: ok — describes doctor's /tmp sandbox guard -->
 
 ## Drive
 
@@ -63,7 +63,7 @@ $S/drive-control RosterLiveE2ETests/test1ExternalTurnShowsWorkingThenIdleWithNew
 $S/drive-control BotChatE2ETests/test5OfflineSendDeliversOnce
 ```
 
-`drive-control` delegates to `apps/ios/Scripts/run-ui-e2e`, which starts its own sandbox gateway (env stripped, `/tmp` `HERMES_HOME`; it pays the same multi-minute provisioning cost) and reuses the simulator you launched. It does not boot or claim anything.
+`drive-control` delegates to `apps/ios/Scripts/run-ui-e2e`, which starts its own sandbox gateway (env stripped, `/tmp` `HERMES_HOME`; it pays the same multi-minute provisioning cost) and reuses the simulator you launched. It does not boot or claim anything. <!-- no-tmp: ok — names the sandbox path run-ui-e2e and e2e-gateway create under /tmp -->
 
 `drive` refuses, before touching the simulator, any selected test that calls `control(...)` or reads `HERMES_UITEST_CTL` (classified by `scripts/test-lanes`), and prints the exact `drive-control` and `drive` commands to run instead. Such a test failing with "HERMES_UITEST_CTL not set" was never a product failure, so never build the base branch to prove it pre-existing.
 

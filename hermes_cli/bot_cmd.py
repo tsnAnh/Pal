@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import NoReturn
 
+from hermes_cli._startup_fast import project_root_str
 from hermes_cli.profile_admin_guard import ProfileAdminDenied
 from tools.environments.local import build_subprocess_env
 
@@ -38,7 +39,7 @@ def _die(message: str) -> NoReturn:
 
 
 def _visible_skill_names(profile_dir: Path) -> list[str]:
-    project_root = Path(__file__).parent.parent.resolve()
+    project_root = Path(project_root_str())
     try:
         result = subprocess.run(
             [sys.executable, "-c", _CATALOG_SCRIPT],

@@ -24,7 +24,6 @@ import shlex
 import subprocess
 import sys
 import tempfile
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -158,7 +157,9 @@ def run_fan_out(spec_path: str) -> int:
             return
         results[index] = {**base, **_outcome(entry.get("output", "text"), done.returncode, done.stdout, done.stderr)}
 
-    threads = [threading.Thread(target=run, args=item, daemon=True) for item in enumerate(entries)]
+    from agent.memory_provider import spawn_context_thread
+
+    threads = [spawn_context_thread(run, args=item, name=f"dm-fan-out-{item[0]}") for item in enumerate(entries)]
     for thread in threads:
         thread.start()
     for thread in threads:

@@ -30,9 +30,10 @@ from tools.approval_context import (
 )
 from tools.approval_detection import (
     _approval_key_aliases, _check_sudo_stdin_guard, detect_content_rule_keys, detect_dangerous_command,
-    detect_hardline_command, detect_human_required_code, detect_human_required_command,
+    detect_hardline_command,
 )
 from tools.approval_detection_grant import human_required_grant_scope
+from tools.approval_detection_human import detect_human_required_code, detect_human_required_command
 from tools.approval_floors import (
     _command_matches_permanent_allowlist, _hardline_block_result, _matching_permanent_allowlist_entry, _match_user_deny_rule, _sudo_stdin_block_result,
     _user_deny_block_result,

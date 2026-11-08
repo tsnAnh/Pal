@@ -221,7 +221,7 @@ def main():
     if not head.startswith(git("rev-parse", args.fix_ref)[:12]) or git("status", "--porcelain", "--", "gateway", "tui_gateway"):
         sys.exit(f"current checkout must be {args.fix_ref} with a clean gateway/ and tui_gateway/ (HEAD={head[:10]})")
 
-    worktree = Path(tempfile.mkdtemp(prefix="hermes-bench-pre-fix.", dir=os.environ.get("TMPDIR", "/tmp"))) / "tree"
+    worktree = Path(tempfile.mkdtemp(prefix="hermes-bench-pre-fix.")) / "tree"
     git("worktree", "add", "--detach", str(worktree), args.base_ref)
     gateways = []
     try:

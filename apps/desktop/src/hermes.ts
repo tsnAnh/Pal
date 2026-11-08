@@ -113,13 +113,6 @@ export type {
   SessionRuntimeInfo,
   SessionSearchResponse,
   SessionSearchResult,
-  SkillHubInstalledEntry,
-  SkillHubPreview,
-  SkillHubResult,
-  SkillHubScanResult,
-  SkillHubSearchResponse,
-  SkillHubSource,
-  SkillHubSourcesResponse,
   SkillInfo,
   StaleAuxAssignment,
   StarmapGraph,
@@ -137,3 +130,12 @@ export type {
   WebhookRoute,
   WebhooksResponse
 } from '@/types/hermes'
+export type {
+  SkillHubInstalledEntry,
+  SkillHubPreview,
+  SkillHubResult,
+  SkillHubScanResult,
+  SkillHubSearchResponse,
+  SkillHubSource,
+  SkillHubSourcesResponse
+} from '@/types/skills-hub'

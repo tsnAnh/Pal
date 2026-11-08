@@ -1911,12 +1911,6 @@ def _plugins_settings(rid, params):
     return _ok(rid, {"ok": True, "name": canonical, "written": written, "plugin": row})
 
 
-def _portable_server_names(plugin_dir: Path, key: str) -> set[str]:
-    package = _tools_mod("hermes_cli.agent_plugins").load_agent_plugin(plugin_dir, plugin_dir)
-    name_for = _tools_mod("hermes_cli.plugins_manifest").portable_mcp_server_name
-    return {name_for(key, server) for server in package.mcp_servers}
-
-
 def _plugins_update_all(rid, params):
     """Check every installed plugin and update each one ``hermes plugins update`` would move. Nothing is
     accepted on the user's behalf: a widened catalog pin or a caution scan of a git update comes back

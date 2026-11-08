@@ -106,8 +106,9 @@ def dock_wrapper(user_data_dir: str) -> tuple[str, ...]:
     if not chrome_profile.is_managed_copy(user_data_dir):
         return ()
     from hermes_cli._launchers import installation_command
+    from hermes_cli._startup_fast import project_root_str
     from hermes_constants import get_hermes_home
-    command = installation_command(Path(__file__).resolve().parents[2], module="tools.bot_desktop.chrome_profile")
+    command = installation_command(Path(project_root_str()), module="tools.bot_desktop.chrome_profile")
     return ("env", f"HERMES_HOME={get_hermes_home()}", *command, "run", "--")
 
 

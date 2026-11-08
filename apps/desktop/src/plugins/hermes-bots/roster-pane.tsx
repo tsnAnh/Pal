@@ -236,6 +236,46 @@ function useReconcileRosterOwner(
   }, [data, error, selectionHydrated, roster, sourceSnapshot, allMeta])
 }
 
+function resolveRosterSource({
+  data,
+  error,
+  rememberedSources,
+  hydrated,
+  selectedRosterKey
+}: {
+  data: ReturnType<typeof useRoster>['data']
+  error: ReturnType<typeof useRoster>['error']
+  rememberedSources: GatewaySource[]
+  hydrated: boolean
+  selectedRosterKey: string
+}) {
+  const live = Array.isArray(data?.profiles) ? data.profiles : null
+  const source = live ?? (error ? $lastRoster.get() : [])
+  const sourceSnapshot = Array.isArray(data?.sources) ? data.sources : rememberedSources
+
+  const sourceWithSelectedOwner = hydrated ? rosterWithSelectedOwner(source, sourceSnapshot, selectedRosterKey) : source
+
+  return { live, sourceSnapshot, sourceWithSelectedOwner }
+}
+
+function staleRosterNotice({
+  failed,
+  listedCount,
+  gatewayUp
+}: {
+  failed: boolean
+  listedCount: number
+  gatewayUp: boolean
+}): null | string {
+  if (!failed || !listedCount) {
+    return null
+  }
+
+  return (
+    'Roster refresh failed — showing the last good list.' + (gatewayUp ? '' : ' Waiting for the gateway to reconnect…')
+  )
+}
+
 export function BotsPane() {
   const { t } = useI18n()
   const b = useBots()
@@ -312,12 +352,13 @@ export function BotsPane() {
   // roster the user already had — mixed local+cloud gateways and remotes
   // waking from sleep fail transiently. Render the last good snapshot with
   // a notice; the full error card is reserved for "never had a roster".
-  const live = Array.isArray(data?.profiles) ? data.profiles : null
-  const source = live ?? (error ? $lastRoster.get() : [])
-  const sourceSnapshot = Array.isArray(data?.sources) ? data.sources : rememberedSources
-
-  const sourceWithSelectedOwner =
-    selectionHydrated && rosterHydrated ? rosterWithSelectedOwner(source, sourceSnapshot, selectedRosterKey) : source
+  const { live, sourceSnapshot, sourceWithSelectedOwner } = resolveRosterSource({
+    data,
+    error,
+    rememberedSources,
+    hydrated: selectionHydrated && rosterHydrated,
+    selectedRosterKey
+  })
 
   const { roster, activityOf, isPinned } = sortRosterBots(sourceWithSelectedOwner, allMeta)
 
@@ -447,11 +488,11 @@ export function BotsPane() {
 
   useReconcileRosterOwner(data, error, selectionHydrated, roster, sourceSnapshot, allMeta)
 
-  const staleNotice =
-    error && !live && (roster.length || gatewayRooms.length)
-      ? 'Roster refresh failed — showing the last good list.' +
-        (gatewayUp ? '' : ' Waiting for the gateway to reconnect…')
-      : null
+  const staleNotice = staleRosterNotice({
+    failed: Boolean(error) && !live,
+    listedCount: roster.length + gatewayRooms.length,
+    gatewayUp
+  })
 
   const groupChatMembers = groupChatName ? groupChatMemberBots(groupChatName, roster, allMeta) : []
 
