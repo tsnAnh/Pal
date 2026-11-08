@@ -94,6 +94,56 @@ struct ClarifyCard: View {
     }
 }
 
+struct ClarifyAnsweredCard: View {
+    let question: String
+    let answer: ClarifyRecord.Answer
+
+    @Environment(\.hermesTheme) private var theme
+
+    private var picks: [String] {
+        if case .answered(let picks) = answer { picks } else { [] }
+    }
+
+    private var spokenAnswer: String {
+        picks.isEmpty ? String(localized: "Skipped") : picks.joined(separator: ", ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(question)
+                .font(.headline)
+                .foregroundStyle(Color(theme.palette.textPrimary))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if picks.isEmpty {
+                Text("Skipped")
+                    .font(.body)
+                    .foregroundStyle(Color(theme.palette.textSecondary))
+            } else {
+                ForEach(Array(picks.enumerated()), id: \.offset) { _, pick in
+                    HStack(spacing: 14) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color(theme.palette.chipSelectedText))
+                            .frame(width: 30, height: 30)
+                            .background(Color(theme.palette.chipSelectedFill), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        Text(pick)
+                            .font(.body)
+                            .foregroundStyle(Color(theme.palette.textPrimary))
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(theme.palette.cardStroke), lineWidth: 1))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(question), \(spokenAnswer)"))
+        .accessibilityIdentifier("clarifyAnswered")
+    }
+}
+
 struct ApprovalCard: View {
     @Environment(\.hermesTheme) private var theme
 

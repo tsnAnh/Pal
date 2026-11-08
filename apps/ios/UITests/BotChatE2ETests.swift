@@ -48,13 +48,15 @@ final class BotChatE2ETests: E2ETestCase {
         XCTAssertTrue(app.staticTexts["Or answer in the chat below"].exists)
         shot(app, "chat-clarify")
         app.buttons["clarifyChoice-0"].tap()
-        waitFor(bubbles(app, "assistantBubble", containing: "\"user_response\": \"vanilla\"").firstMatch, timeout: 60, "card answer completes the turn")
-        waitGone(card, timeout: 15, "card removed after answer")
+        waitFor(bubbles(app, "assistantBubble", containing: "Got it, vanilla").firstMatch, timeout: 60, "card answer completes the turn")
+        waitGone(card, timeout: 15, "interactive card removed after answer")
+        waitFor(bubbles(app, "clarifyAnswered", containing: "vanilla").firstMatch, timeout: 10, "answered card stays")
 
         send(app, "CLARIFY again")
         waitFor(app.descendants(matching: .any)["clarifyCard"], timeout: 60, "second clarify card")
         send(app, "chocolate")
-        waitFor(bubbles(app, "assistantBubble", containing: "\"user_response\": \"chocolate\"").firstMatch, timeout: 60, "composer answer completes the turn")
+        waitFor(bubbles(app, "assistantBubble", containing: "Got it, chocolate").firstMatch, timeout: 60, "composer answer completes the turn")
+        waitFor(bubbles(app, "clarifyAnswered", containing: "chocolate").firstMatch, timeout: 10, "composer answer is shown on the answered card")
         XCTAssertEqual(bubbles(app, "userBubble", containing: "chocolate").count, 0, "answer is not a new chat message")
     }
 
@@ -102,6 +104,8 @@ final class BotChatE2ETests: E2ETestCase {
         send(app, "CLARIFY large text")
         waitFor(app.descendants(matching: .any)["clarifyCard"], timeout: 60, "clarify card")
         shot(app, "chat-clarify-dynamic-type-xl")
+        app.buttons["clarifySkip"].tap()
+        waitGone(app.descendants(matching: .any)["clarifyCard"], timeout: 15, "card skipped so the chat is left clean")
     }
 
     func test7ReopenLongChatStartsAtBottom() throws {

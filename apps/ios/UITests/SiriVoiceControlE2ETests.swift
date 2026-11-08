@@ -63,7 +63,7 @@ final class SiriVoiceControlE2ETests: SiriE2ETestCase {
         try await waitForStatus("needsInput", of: alpha, timeout: 20)
         let reply = try await definitions.intents["AnswerBotIntent"].makeIntent(bot: alpha, answer: "Chocolate.").run()
         let text: String = try reply.value
-        XCTAssertTrue(text.contains("\"user_response\": \"chocolate\""), "the offered choice, not the raw words, reaches the model: \(text)")
+        XCTAssertTrue(text.contains("Got it, chocolate."), "the offered choice, not the raw words, reaches the model: \(text)")
         let none = try await definitions.intents["AnswerBotIntent"].makeIntent(bot: alpha, answer: "anything").run()
         let nothing: String = try none.value
         XCTAssertTrue(nothing.contains("isn't waiting for an answer"), nothing)

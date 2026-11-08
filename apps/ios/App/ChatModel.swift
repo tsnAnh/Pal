@@ -22,6 +22,7 @@ struct ChatRow: Identifiable, Equatable {
     enum Kind: Equatable {
         case user(text: String, delivery: BubbleDelivery)
         case assistant(text: String, isStreaming: Bool)
+        case clarifyAnswered(question: String, answer: ClarifyRecord.Answer)
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
         case notice(ChatNotice)
@@ -488,7 +489,7 @@ final class ChatModel {
             guard let kind = rowKind(for: entry.item, outbox: byID[entry.item.id]) else { continue }
             built.append(ChatRow(id: entry.item.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider))
         }
-        if shouldShowThinking(tail: built.last) {
+        if shouldShowThinking {
             built.append(ChatRow(id: Self.thinkingRowID, kind: .assistant(text: "", isStreaming: true), separator: nil, showsUnreadDivider: false))
         }
         rows = built
@@ -518,10 +519,12 @@ final class ChatModel {
                 return .notice(.backgroundTaskFinished)
             }
         case .assistant(let text, _, let streaming):
-            if text.isEmpty, !streaming { return nil }
-            return .assistant(text: text, isStreaming: streaming)
+            if streaming || text.isEmpty { return nil }
+            return .assistant(text: text, isStreaming: false)
         case .tool:
             return nil
+        case .clarifyAnswered(let record):
+            return .clarifyAnswered(question: record.question, answer: record.answer)
         case .clarify(let card):
             return .clarify(card.prompt)
         case .approval(let card):
@@ -556,10 +559,8 @@ final class ChatModel {
 
     private static let thinkingRowID = "thinking"
 
-    private func shouldShowThinking(tail: ChatRow?) -> Bool {
-        guard transcript.isRunning, transcript.pendingPrompts.isEmpty else { return false }
-        if case .assistant(_, true)? = tail?.kind { return false }
-        return true
+    private var shouldShowThinking: Bool {
+        transcript.isRunning && transcript.pendingPrompts.isEmpty
     }
 }
 
