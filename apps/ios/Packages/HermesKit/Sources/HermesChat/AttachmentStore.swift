@@ -7,7 +7,7 @@ struct AttachmentStore: Sendable {
         root = directory.appendingPathComponent("attachments", isDirectory: true)
     }
 
-    func save(_ files: [OutgoingFile], submissionID: String) throws -> [PromptAttachment] {
+    func save(_ files: [OutgoingFile], submissionID: String) throws -> [StoredAttachment] {
         guard !files.isEmpty else { return [] }
         guard files.count <= OutgoingFile.maximumPerMessage else { throw AttachmentError.tooMany }
         let directory = root.appendingPathComponent(submissionID, isDirectory: true)
@@ -16,7 +16,7 @@ struct AttachmentStore: Sendable {
             return try files.enumerated().map { index, file in
                 let stored = "\(submissionID)/\(index)-\(file.name)"
                 try file.data.write(to: root.appendingPathComponent(stored), options: Self.writeOptions)
-                return PromptAttachment(name: file.name, mime: file.mime, stored: stored)
+                return StoredAttachment(name: file.name, mime: file.mime, stored: stored)
             }
         } catch {
             remove(submissionID: submissionID)
@@ -24,7 +24,7 @@ struct AttachmentStore: Sendable {
         }
     }
 
-    func load(_ attachments: [PromptAttachment]) throws -> [OutgoingFile] {
+    func load(_ attachments: [StoredAttachment]) throws -> [OutgoingFile] {
         try attachments.map { attachment in
             let url = root.appendingPathComponent(attachment.stored).standardizedFileURL
             guard url.path.hasPrefix(root.standardizedFileURL.path + "/"),

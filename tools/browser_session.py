@@ -16,6 +16,7 @@ import atexit
 import logging
 import threading
 import uuid
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from hermes_cli.config import DEFAULT_CONFIG
@@ -167,10 +168,13 @@ def _bot_desktop_target() -> Optional[tuple[str, dict[str, Any]]]:
     from tools.bot_desktop import runtime as _bd_runtime
     if not _bd_runtime.published_env().get("DISPLAY"):
         return None
-    from tools.bot_desktop import browser as _bd_browser
+    from tools.bot_desktop import browser as _bd_browser, chrome_profile
     udd = str(_bd_browser.profile_dir())
-    return f"profile:{udd}", {"executable": _bd_browser.executable(), "user_data_dir": udd, "ephemeral": False,
+    kwargs: dict[str, Any] = {"executable": _bd_browser.executable(), "user_data_dir": udd, "ephemeral": False,
                               "extra_args": _bd_browser.SHARED_PROFILE_ARGS}
+    if chrome_profile.is_managed_copy(udd):
+        kwargs["prepare"] = lambda: chrome_profile.prepare_launch(Path(udd))
+    return f"profile:{udd}", kwargs
 
 
 def _launch_target(cache_key: str) -> tuple[str, dict[str, Any], bool]:

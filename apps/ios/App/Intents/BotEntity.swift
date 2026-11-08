@@ -1,5 +1,6 @@
 import AppIntents
 import Foundation
+import HermesRoster
 
 struct BotEntity: AppEntity, IndexedEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Bot"
@@ -23,8 +24,8 @@ struct BotEntity: AppEntity, IndexedEntity {
         self.isDefault = isDefault
     }
 
-    init(_ profile: BotProfile) {
-        self.init(id: profile.name, name: profile.title, isDefault: profile.isDefault ?? false)
+    init(_ profile: RosterProfile) {
+        self.init(id: profile.name, name: RosterModel.displayName(of: profile), isDefault: profile.isDefault)
     }
 
     init(_ row: BotRow) {

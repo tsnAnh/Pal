@@ -47,6 +47,7 @@ class CanonicalProfilesResult(ProfilesListResult):
 
 class CanonicalProfilesParams(ProfileParams):
     include_sessions: bool = True
+    include_routines: bool = False
 
 
 class CanonicalRoomCreateParams(RoomParams):

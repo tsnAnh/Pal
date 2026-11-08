@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+
+usage() {
+  cat <<USAGE
+usage: drive-control [--label NAME] TEST
+For UI tests that need the control channel (kill and restart the gateway, external turns, DB count):
+RosterLiveE2ETests/..., BotChatE2ETests/test5OfflineSendDeliversOnce.
+Delegates to apps/ios/Scripts/run-ui-e2e, which starts its own sandbox gateway and fake LLM, so it does not
+use the backend from scripts/launch. It reuses the simulator claimed by launch and never boots or claims one.
+Env is credential-stripped. Evidence goes to the run's evidence dir.
+USAGE
+}
+
+LABEL=""
+TEST=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --label) LABEL="$2"; shift 2 ;;
+    *) TEST="$1"; shift ;;
+  esac
+done
+[ -n "$TEST" ] || { usage >&2; exit 2; }
+
+load_run
+[ "$(sim_state "$UDID")" = "Booted" ] || die "simulator $UDID is not booted; run scripts/doctor"
+[ -n "$LABEL" ] || LABEL="$(printf '%s' "$TEST" | tr '/' '-')"
+DIR="$EVIDENCE/drive-control-$(date +%H%M%S)-$LABEL"
+mkdir -p "$DIR"
+
+ARGS=()
+while IFS= read -r name; do ARGS+=(-u "$name"); done < <(strip_env_names)
+env ${ARGS[@]+"${ARGS[@]}"} \
+  HERMES_IOS_PYTHON="$PYTHON" HERMES_IOS_SIM_UDID="$UDID" HERMES_UI_E2E_OWNER="$OWNER" \
+  HERMES_UI_E2E_ARTIFACTS="$DIR" HERMES_UI_E2E_ONLY="HermesBotsUITests/$TEST" \
+  "$IOS_DIR/Scripts/run-ui-e2e" 2>&1 | tee "$DIR/run-ui-e2e.out"
+STATUS="${PIPESTATUS[0]}"
+
+SUMMARY="$(xcrun xcresulttool get test-results summary --path "$DIR/ui-e2e.xcresult" 2>/dev/null)"
+printf '%s' "$SUMMARY" >"$DIR/result-summary.json"
+PASSED="$(printf '%s' "$SUMMARY" | "$JQ" -r '.passedTests // 0' 2>/dev/null || echo 0)"
+FAILED="$(printf '%s' "$SUMMARY" | "$JQ" -r '.failedTests // 0' 2>/dev/null || echo 0)"
+SKIPPED="$(printf '%s' "$SUMMARY" | "$JQ" -r '.skippedTests // 0' 2>/dev/null || echo 0)"
+if [ "$STATUS" = 0 ] && [ "${PASSED:-0}" -ge 1 ] && [ "${FAILED:-1}" = 0 ] && [ "${SKIPPED:-1}" = 0 ]; then VERDICT=PASS; else VERDICT=FAIL; fi
+printf 'verdict=%s passed=%s failed=%s skipped=%s run_ui_e2e_exit=%s test=%s\n' "$VERDICT" "$PASSED" "$FAILED" "$SKIPPED" "$STATUS" "$TEST" | tee "$DIR/verdict.txt"
+say "evidence: $DIR"
+[ "$VERDICT" = PASS ]

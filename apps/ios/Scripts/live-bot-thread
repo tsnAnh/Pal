@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+DRIVE="$REPO/.claude/skills/verify-ios/scripts/drive"
+STATE_ROOT="${VERIFY_IOS_STATE_ROOT:-/tmp/verify-ios-state-$(id -u)}"
+TARGET="${1:-cho-research-app}"
+RECIPIENT="${2:-market-researcher}"
+
+usage() {
+  echo "usage: live-bot-thread [SENDER_SLUG RECIPIENT_SLUG]"
+  echo "Needs a launched verify-ios run with VERIFY_IOS_SEED=parity. Runs LiveBotThreadE2ETests, and once the thread screen is open"
+  echo "(its thread-live-ready shot exists) makes SENDER message RECIPIENT through the real gateway as a second client."
+}
+case "${1:-}" in -h|--help) usage; exit 0 ;; esac
+
+[ -f "$STATE_ROOT/backend.env" ] || { echo "live-bot-thread: no launched backend" >&2; exit 1; }
+set -a
+. "$STATE_ROOT/backend.env"
+set +a
+
+LOG="$(mktemp /tmp/live-bot-thread.XXXXXX)"
+trap 'rm -f "$LOG"' EXIT
+EXISTING="$(ls -d "$IOS_DIR"/Artifacts/verify-ios/*/drive-*-live-thread 2>/dev/null || true)"
+"$DRIVE" --label live-thread LiveBotThreadE2ETests >"$LOG" 2>&1 &
+DRIVE_PID=$!
+
+MARKER=""
+for _ in $(seq 600); do
+  for dir in $(ls -d "$IOS_DIR"/Artifacts/verify-ios/*/drive-*-live-thread 2>/dev/null || true); do
+    case "$EXISTING" in *"$dir"*) continue ;; esac
+    ready="$(ls "$dir"/shots/thread-live-ready-*.png 2>/dev/null | head -1 || true)"
+    [ -n "$ready" ] && MARKER="$(basename "$ready" .png | sed 's/^thread-live-ready-//')" && break
+  done
+  [ -n "$MARKER" ] && break
+  kill -0 "$DRIVE_PID" 2>/dev/null || break
+  sleep 1
+done
+
+if [ -n "$MARKER" ]; then
+  "$IOS_DIR/Scripts/gateway-client" submit --profile "$TARGET" \
+    --text "MESSAGE_AGENT $RECIPIENT :: $MARKER are you there?" --hold 60
+fi
+
+STATUS=0
+wait "$DRIVE_PID" || STATUS=$?
+cat "$LOG"
+exit "$STATUS"

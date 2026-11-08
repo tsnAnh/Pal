@@ -1,6 +1,6 @@
 """Toolset helpers: get/resolve/validate named tool groups (static TOOLSETS + registry-registered)."""
 
-from typing import Dict, List, Any, Set, Optional, Tuple
+from typing import Dict, Iterable, List, Any, Set, Optional, Tuple
 
 
 # Shared tool list for CLI and all messaging platform toolsets (edit once, all
@@ -147,6 +147,12 @@ TOOLSETS = {
         "Desktop catalog plugin/skill install requests through the approval card (GUI sessions only)",
         ["manage_catalog"],
         platforms=frozenset({"desktop"}),
+    ),
+    "iphone": _ts(
+        "The user's own iPhone through the Hermes iOS app: calendar, reminders, contacts, location, alarms and "
+        "timers, Home accessories (iOS app sessions only; available once an iPhone connector is on)",
+        ["iphone"],
+        platforms=frozenset({"ios"}),
     ),
     "clarify": _ts("Ask the user clarifying questions (multiple-choice or open-ended)", ["clarify"]),
     "code_execution": _ts("Run Python scripts that call tools programmatically (reduces LLM round trips)", ["execute_code"]),
@@ -446,21 +452,31 @@ def get_toolset_names() -> list[str]:
     return sorted(set(TOOLSETS.keys()) | set(_plugin_display_names()))
 
 
-def session_platform_tool_drops(platform: Optional[str]) -> frozenset:
-    """Tools of every platform-gated toolset that a session on *platform* does not get."""
-    return frozenset(tool for name, platforms in TOOLSET_SESSION_PLATFORMS.items() if platform not in platforms
-                     for tool in resolve_toolset(name))
+CROSS_SURFACE_TOOLSETS = frozenset({"iphone"})
+
+
+def _gated_toolsets(platform: Optional[str], enabled: Optional[Iterable[str]]) -> list[str]:
+    named = CROSS_SURFACE_TOOLSETS & set(enabled or ())
+    return [name for name, platforms in TOOLSET_SESSION_PLATFORMS.items()
+            if platform not in platforms and name not in named]
+
+
+def session_platform_tool_drops(platform: Optional[str], enabled: Optional[Iterable[str]] = None) -> frozenset:
+    """Tools of every platform-gated toolset that a session on *platform* does not get. A cross-surface
+    toolset (``CROSS_SURFACE_TOOLSETS``) that the session's *enabled* toolsets name is not gated."""
+    return frozenset(tool for name in _gated_toolsets(platform, enabled) for tool in resolve_toolset(name))
 
 
 def session_disabled_toolsets(
     disabled: Optional[list[str]], platform: Optional[str], *, oneshot: bool = False,
+    enabled: Optional[Iterable[str]] = None,
 ) -> Optional[list[str]]:
     """*disabled* plus every platform-gated toolset a session on *platform* does not get, and for a *oneshot*
     session the toolsets nobody is there to use (``agent.oneshot_footprint.ONESHOT_DISABLED_TOOLSETS``). An agent
     stores this as its ``disabled_toolsets``, so the tool list, the tool_search listing and bridge, MCP refreshes
     and delegate children (which inherit it) all subtract the gated tools in ``_select_tool_names``."""
     from agent.oneshot_footprint import ONESHOT_DISABLED_TOOLSETS
-    gated = [name for name, platforms in TOOLSET_SESSION_PLATFORMS.items() if platform not in platforms]
+    gated = _gated_toolsets(platform, enabled)
     gated += ONESHOT_DISABLED_TOOLSETS if oneshot else ()
     gated = [name for name in gated if name not in (disabled or ())]
     return [*(disabled or ()), *gated] if gated else disabled
@@ -470,7 +486,8 @@ def agent_tool_drops(agent: Any) -> frozenset:
     """Tool names *agent* never carries, whatever its toolsets resolved to: the side-agent drops and
     the toolsets its session platform does not get. Applied at load, MCP refresh and prefix restore."""
     from tools.connectors.turn import side_agent_tool_drops
-    return side_agent_tool_drops(agent) | session_platform_tool_drops(getattr(agent, "platform", None))
+    return side_agent_tool_drops(agent) | session_platform_tool_drops(
+        getattr(agent, "platform", None), getattr(agent, "enabled_toolsets", None))
 
 
 def agent_tool_surface(agent: Any, tools: list[dict[str, Any]]) -> list[dict[str, Any]]:

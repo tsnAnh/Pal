@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_BUNDLE="dev.tsnanh.hermes.bot"
+RUNNER_BUNDLE="dev.tsnanh.hermes.bot.uitests.xctrunner"
+APP_SERVICES=(calendar reminders contacts)
+RUNNER_SERVICES=(calendar)
+
+usage() {
+  cat <<USAGE
+usage: device-tools-fixture grant|revoke UDID
+Grants (or revokes) the simulator privacy services the iPhone-tool UI tests rely on, so the OS
+permission prompts never block a run: calendar, reminders and contacts for the app, and calendar
+for the UI test runner (it seeds and removes one event). Touches only the named simulator and
+only these two bundle ids. Run revoke after the tests, pass or fail.
+USAGE
+}
+
+[ "$#" -eq 2 ] || { usage >&2; exit 2; }
+ACTION="$1"
+UDID="$2"
+case "$ACTION" in
+  grant) VERB=grant ;;
+  revoke) VERB=reset ;;
+  *) usage >&2; exit 2 ;;
+esac
+
+for service in "${APP_SERVICES[@]}"; do
+  xcrun simctl privacy "$UDID" "$VERB" "$service" "$APP_BUNDLE"
+done
+for service in "${RUNNER_SERVICES[@]}"; do
+  xcrun simctl privacy "$UDID" "$VERB" "$service" "$RUNNER_BUNDLE"
+done
+echo "device-tools-fixture: $ACTION done for $UDID"

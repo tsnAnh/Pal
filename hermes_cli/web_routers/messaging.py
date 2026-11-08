@@ -994,6 +994,36 @@ def _multiplex_port_binding_conflict(platform_id: str, requested_profile: Option
     )
 
 
+def _apply_platform_update(
+    platform_id: str, entry: dict[str, Any], env_value_rules: dict[str, tuple[Any, str]],
+    env: dict[str, str], clear_env: Collection[str], enabled: Optional[bool],
+) -> None:
+    allowed_env = set(entry["env_vars"])
+
+    def _check_allowed(key: str) -> None:
+        if key not in allowed_env:
+            raise HTTPException(status_code=400, detail=f"{key} is not configurable for {entry['name']}")
+
+    updates: dict[str, str] = {}
+    for key in clear_env:
+        _check_allowed(key)
+    for key, value in env.items():
+        _check_allowed(key)
+        trimmed = value.strip()
+        if not trimmed:
+            continue
+        if is_redacted_credential_preview(trimmed):
+            raise HTTPException(status_code=400, detail=REDACTED_CREDENTIAL_WRITE_DETAIL)
+        _validate_messaging_env_value(env_value_rules, key, trimmed)
+        updates[key] = trimmed
+    for key in clear_env:
+        remove_env_value(key)
+    for key, value in updates.items():
+        save_env_value(key, value)
+    if enabled is not None:
+        _write_platform_enabled(platform_id, enabled)
+
+
 @router.put("/api/messaging/platforms/{platform_id}")
 async def update_messaging_platform(platform_id: str, body: MessagingPlatformUpdate, profile: Optional[str] = None):
     target_profile = body.profile or profile
@@ -1016,36 +1046,9 @@ async def update_messaging_platform(platform_id: str, body: MessagingPlatformUpd
             )
             raise HTTPException(status_code=409, detail=conflict)
 
-    allowed_env = set(entry["env_vars"])
-
-    def _check_allowed(key: str) -> None:
-        if key not in allowed_env:
-            raise HTTPException(status_code=400, detail=f"{key} is not configurable for {entry['name']}")
-
     def _apply():
         with _profile_scope(target_profile):
-            updates: dict[str, str] = {}
-
-            # Validate the whole request before clearing or replacing anything.
-            for key in body.clear_env:
-                _check_allowed(key)
-            for key, value in body.env.items():
-                _check_allowed(key)
-                trimmed = value.strip()
-                if not trimmed:
-                    continue
-                if is_redacted_credential_preview(trimmed):
-                    raise HTTPException(status_code=400, detail=REDACTED_CREDENTIAL_WRITE_DETAIL)
-                _validate_messaging_env_value(env_value_rules, key, trimmed)
-                updates[key] = trimmed
-
-            for key in body.clear_env:
-                remove_env_value(key)
-            for key, value in updates.items():
-                save_env_value(key, value)
-
-            if body.enabled is not None:
-                _write_platform_enabled(platform_id, body.enabled)
+            _apply_platform_update(platform_id, entry, env_value_rules, body.env, body.clear_env, body.enabled)
 
     with http_failure(f"PUT /api/messaging/platforms/{platform_id} failed", 500, detail="Internal server error"):
         await asyncio.to_thread(_apply)

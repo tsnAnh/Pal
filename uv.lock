@@ -2371,6 +2371,9 @@ all = [
 anthropic = [
     { name = "anthropic" },
 ]
+apns = [
+    { name = "h2" },
+]
 audio-io = [
     { name = "numpy" },
     { name = "sounddevice" },
@@ -2652,6 +2655,7 @@ requires-dist = [
     { name = "google-auth-httplib2", marker = "extra == 'google'", specifier = "==0.4.4" },
     { name = "google-auth-oauthlib", marker = "extra == 'google'", specifier = "==1.5.0" },
     { name = "google-cloud-pubsub", marker = "(platform_machine != 'ARM64' and extra == 'google-chat') or (sys_platform != 'win32' and extra == 'google-chat')", specifier = "==2.43.0" },
+    { name = "h2", marker = "extra == 'apns'", specifier = "==4.4.1" },
     { name = "hermes-agent", extras = ["acp"], marker = "extra == 'all'" },
     { name = "hermes-agent", extras = ["acp"], marker = "extra == 'termux'" },
     { name = "hermes-agent", extras = ["cron"], marker = "extra == 'all'" },
@@ -2775,7 +2779,7 @@ requires-dist = [
     { name = "winrt-windows-services-store", marker = "python_full_version >= '3.14' and sys_platform == 'win32'", specifier = ">=3.2.1,<4" },
     { name = "youtube-transcript-api", marker = "extra == 'youtube'", specifier = "==1.2.4" },
 ]
-provides-extras = ["uvloop", "anthropic", "exa", "firecrawl", "parallel-web", "ddgs", "fal", "edge-tts", "neutts", "kittentts", "piper", "modal", "daytona", "vercel", "google-meet", "messaging", "cron", "slack", "matrix", "wecom", "keychain", "tts-premium", "voice", "wake", "telegram", "discord", "stt-whisper", "audio-io", "silk", "wake-openwakeword", "wake-sherpa", "wake-porcupine", "google-chat", "doc-extract", "documents", "documents-pdf", "trace-upload", "vision", "pty", "mcp", "nemo-relay", "sms", "teams", "computer-use", "acp", "mistral", "otlp", "bedrock", "vertex", "azure-identity", "termux", "termux-all", "dingtalk", "feishu", "google", "youtube", "web", "all"]
+provides-extras = ["uvloop", "anthropic", "exa", "firecrawl", "parallel-web", "ddgs", "fal", "edge-tts", "neutts", "kittentts", "piper", "modal", "daytona", "vercel", "google-meet", "messaging", "cron", "slack", "matrix", "wecom", "keychain", "tts-premium", "voice", "wake", "telegram", "discord", "stt-whisper", "audio-io", "silk", "wake-openwakeword", "wake-sherpa", "wake-porcupine", "google-chat", "doc-extract", "documents", "documents-pdf", "trace-upload", "vision", "pty", "mcp", "nemo-relay", "sms", "apns", "teams", "computer-use", "acp", "mistral", "otlp", "bedrock", "vertex", "azure-identity", "termux", "termux-all", "dingtalk", "feishu", "google", "youtube", "web", "all"]
 
 [package.metadata.requires-dev]
 dev = [

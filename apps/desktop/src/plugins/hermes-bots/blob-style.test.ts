@@ -42,15 +42,18 @@ describe('grokifyBlob', () => {
     for (const wrapper of wrappers) {
       expect(wrapper.getAttribute('transform')).toMatch(/^translate\([-\d.]+ [-\d.]+\) rotate\(-11\)$/)
 
-      const pill = wrapper.querySelector(':scope > rect')!
+      const pill = wrapper.querySelector(':scope > path')!
 
-      expect(pill.getAttribute('rx')).toBe('4.5')
-      expect(pill.getAttribute('x')).toBe('-4.5')
-      expect(pill.getAttribute('y')).toBe('-10.5')
+      expect(wrapper.getAttribute('data-hb-size')).toBe('10 23')
+      expect(pill.getAttribute('d')).toMatch(/^M-?[\d.]+ -?[\d.]+L/)
       expect(pill.hasAttribute('transform')).toBe(false)
+      expect(wrapper.querySelector('rect')).toBeNull()
     }
 
-    expect(eyes.querySelector('path')).toBeNull()
+    expect(eyes.querySelectorAll('path')).toHaveLength(2)
+    expect(gaze.getAttribute('data-hb-mask')).toBeTruthy()
+    expect(gaze.getAttribute('data-hb-frame')).toBe(figure.getAttribute('transform'))
+    expect(gaze.getAttribute('data-hb-reach')).toBe('13')
   })
 
   it('returns markup that is not a blob face unchanged', () => {
@@ -64,6 +67,46 @@ describe('grokifyBlob', () => {
 
     expect(once).not.toBe(blobatar('beta', { size: 32 }))
     expect(grokifyBlob(once)).toBe(once)
+  })
+})
+
+const eyeAreas = (svg: string) =>
+  Array.from(parse(svg).querySelectorAll('[data-hb-eye] path'), path => {
+    const points = Array.from((path.getAttribute('d') ?? '').matchAll(/(-?[\d.]+) (-?[\d.]+)/g), m => [
+      Number(m[1]),
+      Number(m[2])
+    ])
+
+    return (
+      Math.abs(
+        points.reduce(
+          (sum, [x, y], i) => sum + x * points[(i + 1) % points.length][1] - points[(i + 1) % points.length][0] * y,
+          0
+        )
+      ) / 2
+    )
+  })
+
+describe('grokifyBlob eyes', () => {
+  const flatPill = 10 * 23 - (4 - Math.PI) * 5 ** 2
+
+  it('paints the eyes on a round body, foreshortened where it curves away', () => {
+    const round = grokifyBlob(blobatar('alpha', { size: 48, traits: { shape: 0.11 } }), { circle: true })
+    const areas = eyeAreas(round)
+
+    expect(areas).toHaveLength(2)
+
+    for (const area of areas) {
+      expect(area).toBeGreaterThan(flatPill * 0.5)
+      expect(area).toBeLessThan(flatPill * 0.995)
+    }
+  })
+
+  it.each(SHAPES)('keeps both eyes on the body for silhouette %s', shape => {
+    const areas = eyeAreas(grokifyBlob(blobatar('alpha', { size: 48, traits: { shape } })))
+
+    expect(areas).toHaveLength(2)
+    expect(areas.every(area => area > flatPill * 0.4 && area <= flatPill * 1.001)).toBe(true)
   })
 })
 
@@ -82,7 +125,10 @@ describe('grokifyBlob attribute safety', () => {
 
   it('lights the eyes on a dark body and darkens them on a light one', () => {
     const eyeFill = (svg: string) =>
-      new DOMParser().parseFromString(grokifyBlob(svg), 'image/svg+xml').querySelector('[data-hb-eyes]')?.getAttribute('fill')
+      new DOMParser()
+        .parseFromString(grokifyBlob(svg), 'image/svg+xml')
+        .querySelector('[data-hb-eyes]')
+        ?.getAttribute('fill')
 
     expect(eyeFill(hostile('#1a1a2a'))).toBe('#f3f4fd')
     expect(eyeFill(hostile('#fde68a'))).toBe('#1b1b1b')
@@ -90,7 +136,33 @@ describe('grokifyBlob attribute safety', () => {
 })
 
 const KINDS = ['round', 'organic', 'boxy', 'capsule', 'nub', 'cloud', 'droplet', 'hexagon', 'sun', 'triangle']
-const NAMES = ['alpha', 'beta', 'gamma', 'delta', 'epsilon', 'zeta', 'eta', 'theta', 'iota', 'kappa', 'lambda', 'mu', 'nu', 'xi', 'omicron', 'pi', 'rho', 'sigma', 'tau', 'upsilon', 'phi', 'chi', 'psi', 'omega']
+
+const NAMES = [
+  'alpha',
+  'beta',
+  'gamma',
+  'delta',
+  'epsilon',
+  'zeta',
+  'eta',
+  'theta',
+  'iota',
+  'kappa',
+  'lambda',
+  'mu',
+  'nu',
+  'xi',
+  'omicron',
+  'pi',
+  'rho',
+  'sigma',
+  'tau',
+  'upsilon',
+  'phi',
+  'chi',
+  'psi',
+  'omega'
+]
 
 const bodyPath = (svg: string) => /<g fill="[^"]+"><path d="([^"]+)"/.exec(svg)![1]
 
@@ -117,7 +189,12 @@ describe('grokifyBlob circle', () => {
     expect(body.getAttribute('stroke-linejoin')).toBe('round')
 
     const [cx, cy, r] = ['cx', 'cy', 'r'].map(attr => Number(circles[0].getAttribute(attr)))
-    const points = [...bodyPath(source).matchAll(/(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)/g)].map(m => [Number(m[1]), Number(m[2])])
+
+    const points = [...bodyPath(source).matchAll(/(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)/g)].map(m => [
+      Number(m[1]),
+      Number(m[2])
+    ])
+
     const xs = points.map(([x]) => x)
     const ys = points.map(([, y]) => y)
 

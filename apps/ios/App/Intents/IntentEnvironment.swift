@@ -9,11 +9,13 @@ final class IntentEnvironment {
 
     let connection: ConnectionModel
     let roster: RosterModel
+    private let router: AppRouter
     private let links: BotLinks
 
-    init(connection: ConnectionModel, roster: RosterModel, links: BotLinks) {
+    init(connection: ConnectionModel, roster: RosterModel, router: AppRouter, links: BotLinks) {
         self.connection = connection
         self.roster = roster
+        self.router = router
         self.links = links
     }
 
@@ -25,7 +27,7 @@ final class IntentEnvironment {
         } catch {
             throw BotIntentError.unreachable
         }
-        return BotProfile.parse(result["profiles"]?.arrayValue ?? []).map(BotEntity.init)
+        return (result["profiles"]?.arrayValue ?? []).compactMap(RosterProfile.init).map(BotEntity.init)
     }
 
     func activity(of bot: BotEntity) async throws -> BotActivity {
@@ -77,12 +79,12 @@ final class IntentEnvironment {
     }
 
     func open(_ bot: BotEntity) {
-        roster.open(botNamed: bot.id)
+        router.openChat(botName: bot.id)
     }
 
     func draft(_ text: String, for bot: BotEntity) {
         if !text.isEmpty { roster.drafts[bot.id] = text }
-        roster.open(botNamed: bot.id)
+        router.openChat(botName: bot.id)
     }
 
     private func ensureConnected() async throws {

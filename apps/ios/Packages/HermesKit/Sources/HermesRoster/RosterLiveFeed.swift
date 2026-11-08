@@ -7,11 +7,13 @@ public struct RosterSnapshot: Sendable, Equatable {
     public var profiles: [JSONValue]
     public var live: [String: BotLiveState]
     public var receivedAt: Date
+    public var capabilities: RosterCapabilities
 
-    public init(profiles: [JSONValue], live: [String: BotLiveState], receivedAt: Date) {
+    public init(profiles: [JSONValue], live: [String: BotLiveState], receivedAt: Date, capabilities: RosterCapabilities = RosterCapabilities()) {
         self.profiles = profiles
         self.live = live
         self.receivedAt = receivedAt
+        self.capabilities = capabilities
     }
 }
 

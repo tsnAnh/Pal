@@ -10,7 +10,9 @@ public enum RosterSnapshotFetcher {
         let rows = result["profiles"]?.arrayValue ?? []
         let live = await liveStates(for: rows, call: call)
         try Task.checkCancellation()
-        return RosterSnapshot(profiles: rows, live: live, receivedAt: now)
+        return RosterSnapshot(
+            profiles: rows, live: live, receivedAt: now, capabilities: RosterCapabilities(listResult: result)
+        )
     }
 
     public static func fetch(on connection: GatewayConnection, now: Date = Date()) async throws -> RosterSnapshot {

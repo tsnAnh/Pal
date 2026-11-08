@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -uo pipefail
+
+SKILL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(git -C "$SKILL_DIR" rev-parse --show-toplevel)"
+DESKTOP="$REPO/apps/desktop"
+fail=0
+
+ok() { echo "ok    $1"; }
+warn() { echo "warn  $1"; }
+bad() { echo "FAIL  $1"; fail=1; }
+
+major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"
+[ "$major" -ge 26 ] && ok "node $(node --version)" || bad "node >= 26 required (have $(node --version 2>/dev/null || echo none))"
+
+[ -d "$REPO/node_modules/@playwright/test" ] && ok "@playwright/test installed at repo root" || bad "run npm install at the repo root"
+
+electron="$(cd "$DESKTOP" && node -p "require('electron')" 2>/dev/null)"
+[ -x "$electron" ] && ok "electron binary $electron" || bad "electron binary missing; run npm install at the repo root"
+
+if "$REPO/.venv/bin/python" -c 'import hermes_cli' 2>/dev/null; then
+  ok "backend python $REPO/.venv/bin/python imports hermes_cli"
+else
+  bad "backend venv missing or broken; run: source $REPO/activate"
+fi
+
+if [ -f "$DESKTOP/dist/electron-main.mjs" ] && [ -f "$DESKTOP/dist/index.html" ]; then
+  newer="$(find "$DESKTOP/src" "$DESKTOP/electron" -type f -newer "$DESKTOP/dist/index.html" 2>/dev/null | head -3)"
+  if [ -n "$newer" ]; then
+    warn "dist/ is older than sources (e.g. ${newer%%$'\n'*}); run scripts/verify without --no-build"
+  else
+    ok "dist/ is newer than src/ and electron/"
+  fi
+else
+  warn "dist/ not built; scripts/verify builds it unless --no-build"
+fi
+
+cores="$(sysctl -n hw.ncpu 2>/dev/null || nproc)"
+load="$(uptime | sed -E 's/.*load averages?: *([0-9.]+).*/\1/')"
+if awk -v l="$load" -v c="$cores" 'BEGIN { exit !(l > 2 * c) }'; then
+  warn "load average $load on $cores cores; boot can exceed the ready deadline, wait or expect a slow first run"
+else
+  ok "load average $load on $cores cores"
+fi
+
+stale="$(ps -Eww -ax -o pid=,command= | grep -F 'HERMES_E2E_VERIFY_RUN=' | grep -v grep | awk '{print $1}' | tr '\n' ' ')"
+[ -z "$stale" ] && ok "no processes from earlier verify runs" || warn "processes from earlier verify runs: $stale (scripts/cleanup stops them)"
+
+exit "$fail"

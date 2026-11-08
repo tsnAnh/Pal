@@ -146,6 +146,9 @@ def _build_docker_env(*, image, cwd, timeout, cc, task_id, host_cwd, **_):
     session_scoped = (_docker_session_isolation_enabled() and task_id != "default"
                       and not _has_isolation_overrides(task_id))
     kwargs = {out: cc.get(key, default) for out, key, default in _DOCKER_KWARGS}
+    if not kwargs["shared_container_key"]:
+        from tools.bot_desktop.sandbox_computer import docker_volumes
+        kwargs["volumes"] = [*(kwargs["volumes"] or []), *docker_volumes()]
     if session_scoped:
         kwargs["persist_across_processes"] = False
     docker_env_obj = _DockerEnvironment(image=image, cwd=cwd, timeout=timeout, task_id=task_id, host_cwd=host_cwd,

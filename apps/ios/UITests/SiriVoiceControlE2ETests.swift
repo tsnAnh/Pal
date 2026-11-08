@@ -89,7 +89,7 @@ final class SiriVoiceControlE2ETests: SiriE2ETestCase {
         let seen = try stubRequests().count
         let spoken = try await ask(alpha, unique("APPROVE this"))
         addTeardownBlock { @MainActor in self.denyAnyOpenApproval(in: app) }
-        XCTAssertTrue(spoken.contains("wants to run a command: rm -rf hermes-stub-approval-probe"), spoken)
+        XCTAssertTrue(spoken.contains("wants to run a command: cd \"$(mktemp -d)\" && git reset --hard"), spoken)
         XCTAssertTrue(spoken.contains("Review"), "voice path is named: \(spoken)")
         let definitions = definitions
         let decided = try await run(within: 60) {

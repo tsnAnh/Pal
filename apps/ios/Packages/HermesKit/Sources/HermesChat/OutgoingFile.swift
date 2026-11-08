@@ -15,7 +15,7 @@ public enum AttachmentKind: Sendable, Equatable {
     case document
 }
 
-public struct PromptAttachment: Codable, Sendable, Hashable {
+public struct StoredAttachment: Codable, Sendable, Hashable {
     public var name: String
     public var mime: String
     public var stored: String

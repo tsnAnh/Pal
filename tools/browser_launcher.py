@@ -297,13 +297,13 @@ def _wait_for_devtools(proc: subprocess.Popen, user_data_dir: str, deadline: flo
 def _singleton_pid(user_data_dir: str) -> Optional[int]:
     """Pid of the Chromium holding ``user_data_dir``: the ``SingletonLock`` symlink (POSIX), else (Windows
     has no symlink, only a locked ``lockfile``) the browser process whose argv names the dir."""
-    owner = _singleton_owner(user_data_dir)
+    owner = singleton_owner(user_data_dir)
     if owner is None:
-        return _pid_naming_dir(user_data_dir) if os.name == "nt" else None
+        return chromium_pid_on(user_data_dir) if os.name == "nt" else None
     return owner[1]
 
 
-def _singleton_owner(user_data_dir: str) -> Optional[tuple[str, int]]:
+def singleton_owner(user_data_dir: str) -> Optional[tuple[str, int]]:
     """``(hostname, pid)`` Chromium wrote into ``user_data_dir``'s ``SingletonLock`` symlink (POSIX), else None."""
     try:
         target = os.readlink(os.path.join(user_data_dir, "SingletonLock"))
@@ -313,13 +313,13 @@ def _singleton_owner(user_data_dir: str) -> Optional[tuple[str, int]]:
     return (host, int(pid_text)) if pid_text.isdigit() else None
 
 
-def _foreign_holder(user_data_dir: str) -> Optional[int]:
+def foreign_holder(user_data_dir: str) -> Optional[int]:
     """The ``SingletonLock`` pid of a Chromium on ``user_data_dir`` that runs in an environment this process cannot
     verify, else None. Foreign: the lock is not a live process here whose argv names the dir, and it was written
     under another hostname (another host or container; Chromium too refuses such a lock) or names the browser
     of a launch record from another PID namespace. A lock of this hostname with no such record is stale (this
     environment's crashed browser): Chromium itself takes it over, and so does a launch."""
-    owner = _singleton_owner(user_data_dir)
+    owner = singleton_owner(user_data_dir)
     if owner is None:
         return None
     host, pid = owner
@@ -356,7 +356,7 @@ def _record_names(records: Path, user_data_dir: str, pid) -> list[str]:
     return sorted(p.name for p in records.glob(f"{stem}*.json") if pattern.match(p.name))
 
 
-def _pid_naming_dir(user_data_dir: str) -> Optional[int]:
+def chromium_pid_on(user_data_dir: str) -> Optional[int]:
     """The browser (not a ``--type=`` helper) process whose argv carries ``--user-data-dir=<dir>``."""
     import psutil
     for proc in psutil.process_iter(["pid"]):
@@ -369,9 +369,9 @@ def _pid_naming_dir(user_data_dir: str) -> Optional[int]:
     return None
 
 
-def _browser_running_on(user_data_dir: str) -> bool:
+def chromium_running_on(user_data_dir: str) -> bool:
     """A live Chromium still uses ``user_data_dir`` (by argv: a ``SingletonLock`` outlives a crashed browser)."""
-    return _pid_naming_dir(user_data_dir) is not None
+    return chromium_pid_on(user_data_dir) is not None
 
 
 def _devtools_endpoint_live(port: int, path: str) -> bool:
@@ -532,10 +532,8 @@ def _start_shared(key: str, executable: str, udd: str, home_key: str, prepare,
     probe and the lease. A first launch holds the lock for its whole readiness wait; the reaper skips a busy
     profile instead of waiting (:func:`_reap_shared_profiles`). A browser another environment holds is attached
     through its endpoint, or refused; never launched over."""
-    from tools import browser_launcher_holders as holders
-    state = _shared_state_dir(udd)
-    with holders.records_lock(state) if state is not None else contextlib.nullcontext():
-        foreign = _foreign_holder(udd)
+    with shared_profile_lock(udd):
+        foreign = foreign_holder(udd)
         if foreign is not None:
             attached = _attach_foreign(key, udd, home_key, foreign)
             if attached is None:
@@ -552,6 +550,14 @@ def _start_shared(key: str, executable: str, udd: str, home_key: str, prepare,
         with _lock:  # registered under the lock too: another key's stop must see this key as its heir
             _browsers[key] = attached
     return attached, None
+
+
+@contextlib.contextmanager
+def shared_profile_lock(user_data_dir: str):
+    from tools import browser_launcher_holders as holders
+    state = _shared_state_dir(user_data_dir)
+    with holders.records_lock(state) if state is not None else contextlib.nullcontext():
+        yield
 
 
 def launch_chromium(key: str, *, executable: Optional[str] = None, user_data_dir: Optional[str] = None,
@@ -1047,7 +1053,7 @@ def _reap_record(path: Path, home: Optional[str]) -> bool:
         logger.info("browser: reaped orphaned Chromium pid %s (%s)", record["pid"], record["user_data_dir"])
     udd = record.get("user_data_dir")
     if (record.get("ephemeral") and isinstance(udd, str) and _inside_ephemeral_root(udd, home)
-            and (reaped or not _browser_running_on(udd))):
+            and (reaped or not chromium_running_on(udd))):
         shutil.rmtree(udd, ignore_errors=True)  # its owner is gone: no launch reuses a per-process dir
     path.unlink(missing_ok=True)
     return reaped
@@ -1117,7 +1123,7 @@ def _reclaim_throwaway_dirs(home: str) -> None:
             continue  # not a launcher dir, another PID namespace's (its owner cannot be checked here), or ours
         if process_alive(int(match.group(1)), int(match.group(2)) if match.group(2) else None):
             continue
-        if _browser_running_on(str(entry)):  # its record was lost or could not prove the pid: never pull the dir
+        if chromium_running_on(str(entry)):  # its record was lost or could not prove the pid: never pull the dir
             logger.debug("browser: keeping the throwaway profile %s: a Chromium still runs on it", entry)
             continue
         shutil.rmtree(entry, ignore_errors=True)  # a symlink is refused, never followed

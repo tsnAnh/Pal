@@ -148,9 +148,20 @@ def _own_profile_read(server: Any, req: dict, home: str) -> dict:
     return {"jsonrpc": "2.0", "id": req.get("id"), "result": {"sessions": rows}}
 
 
-def dispatch_legacy(server: Any, req: dict, transport: Any, actor: Any) -> dict | None:
+def _answer_inline(server: Any, req: dict, transport: Any) -> dict:
+    """The sidecar's admitted-request path on the calling thread: a long handler answers in the
+    return value instead of writing its reply to *transport* from the pool."""
+    token = server.bind_transport(transport)
+    try:
+        return server.handle_request(req)
+    finally:
+        server.reset_transport(token)
+
+
+def dispatch_legacy(server: Any, req: dict, transport: Any, actor: Any, *, inline: bool = False) -> dict | None:
     """Run ``server.dispatch`` with the ticket's profile home bound (call from a worker thread;
-    the pool path copies this context, so long handlers see it too)."""
+    the pool path copies this context, so long handlers see it too). ``inline`` answers every
+    handler in the return value, for a caller that owns the reply frame."""
     try:
         home = _foreign_profile_home(server, getattr(actor, "profile_id", None))
     except OSError:
@@ -182,6 +193,6 @@ def dispatch_legacy(server: Any, req: dict, transport: Any, actor: Any) -> dict 
     token = _connection_profile_home.set(home)
     try:
         with scope:
-            return server.dispatch(req, transport)
+            return _answer_inline(server, req, transport) if inline else server.dispatch(req, transport)
     finally:
         _connection_profile_home.reset(token)

@@ -232,12 +232,16 @@ final class BotScript: Sendable {
             let name = params?["filename"]?.stringValue ?? "image.png"
             return .result([
                 "attached": true, "path": .string("/cache/images/upload_\(number)_\(name)"),
+                "name": .string("upload_\(number)_\(name)"),
                 "mime": .string(name.hasSuffix(".jpg") ? "image/jpeg" : "image/png"),
                 "text": .string("[User attached image: upload_\(number)_\(name)]"),
             ])
         case "file.attach":
             let name = params?["name"]?.stringValue ?? "file"
-            return .result(["attached": true, "ref_text": .string("@file:attachments/\(name)")])
+            return .result([
+                "attached": true, "name": .string(name), "path": .string("/attachments/\(name)"),
+                "ref_text": .string("@file:attachments/\(name)"),
+            ])
         case "session.interrupt":
             return .result(["status": "interrupted"])
         case "session.steer":

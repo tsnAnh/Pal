@@ -1,10 +1,12 @@
-import { attributeText, eyeFillFor } from './avatar-color'
+import { attributeText, eyeFillFor, isWhiteAvatarColor } from './avatar-color'
+import { circlePath, curveEye, type EyeSize, parseTransform, surfaceAttributes, type SurfaceSpec } from './eye-frame'
 
 const BLOB_PARTS = /^(<svg[^>]*>)<g fill="([^"]+)">(.*?)<\/g><g fill="([^"]+)">(.*?)<\/g>(.*)<\/svg>$/s
 
 const FIGURE_TRANSFORM = 'rotate(-14 50 50) translate(50 50) scale(0.77) translate(-50 -50)'
 const BODY_ROUNDING = 26
-const PILL = { width: 9, height: 21, gap: 19, slant: -11, shiftX: 10, shiftY: -8, reach: 6 }
+const PILL = { width: 10, height: 23, gap: 28, slant: -11, shiftX: 15, shiftY: -18, reach: 9 }
+const PILL_SIZE: EyeSize = { height: PILL.height, width: PILL.width }
 const PATH_DATA = /\sd="([^"]+)"/g
 const NUMBER = /-?\d+(?:\.\d+)?/g
 
@@ -140,16 +142,17 @@ function pillCentre(x: number, y: number, box: Box): [number, number] {
   ]
 }
 
-function pill([x, y]: [number, number], side: 'l' | 'r') {
+function pill([x, y]: [number, number], side: 'l' | 'r', spec: SurfaceSpec) {
   const rest = `translate(${x} ${y}) rotate(${PILL.slant})`
+  const d = curveEye(spec, PILL_SIZE, parseTransform(rest))
 
   return (
-    `<g data-hb-eye="${side}" data-hb-rest="${rest}" transform="${rest}">` +
-    `<rect x="${-PILL.width / 2}" y="${-PILL.height / 2}" width="${PILL.width}" height="${PILL.height}" rx="${PILL.width / 2}"/></g>`
+    `<g data-hb-eye="${side}" data-hb-rest="${rest}" data-hb-size="${PILL.width} ${PILL.height}" transform="${rest}">` +
+    `<path d="${d}"/></g>`
   )
 }
 
-function pills(eyes: string): null | string {
+function pills(eyes: string, spec: SurfaceSpec): null | string {
   const [left, right] = eyeBoxes(eyes)
 
   if (!left || !right) {
@@ -160,8 +163,19 @@ function pills(eyes: string): null | string {
   const midY = (left.minY + left.maxY + right.minY + right.maxY) / 4 + PILL.shiftY
 
   return (
-    pill(pillCentre(midX - PILL.gap / 2, midY, left), 'l') + pill(pillCentre(midX + PILL.gap / 2, midY, right), 'r')
+    pill(pillCentre(midX - PILL.gap / 2, midY, left), 'l', spec) +
+    pill(pillCentre(midX + PILL.gap / 2, midY, right), 'r', spec)
   )
+}
+
+function maskOf(body: string): string[] {
+  const circles = [...body.matchAll(CIRCLE)].map(match =>
+    circlePath(Number(match[1]), Number(match[2]), Number(match[3]))
+  )
+
+  const paths = [...body.matchAll(PATH_DATA)].map(match => match[1])
+
+  return [...circles, ...paths]
 }
 
 const CIRCLE_SAMPLES = 48
@@ -196,6 +210,12 @@ function circleBody(body: string): CircleBody | null {
   }
 }
 
+function attributeList(attributes: Record<string, string>): string {
+  return Object.entries(attributes)
+    .map(([name, value]) => ` ${name}="${attributeText(value)}"`)
+    .join('')
+}
+
 export function grokifyBlob(svg: string, options: { circle?: boolean } = {}): string {
   const parts = BLOB_PARTS.exec(svg)
 
@@ -206,8 +226,10 @@ export function grokifyBlob(svg: string, options: { circle?: boolean } = {}): st
   const [, open, rawBodyFill, libraryBody, , eyes, rest] = parts
   const round = options.circle ? circleBody(libraryBody) : null
   const body = round?.markup ?? libraryBody
-  const eyePills = pills(eyes)
   const bounds = round?.bounds ?? bodyBounds(body)
+
+  const spec: SurfaceSpec = { frame: FIGURE_TRANSFORM, mask: maskOf(body), reach: BODY_ROUNDING / 2 }
+  const eyePills = pills(eyes, spec)
 
   if (!eyePills || !bounds) {
     return svg
@@ -216,9 +238,11 @@ export function grokifyBlob(svg: string, options: { circle?: boolean } = {}): st
   const bodyFill = attributeText(rawBodyFill)
   const eyeFill = attributeText(eyeFillFor(rawBodyFill))
 
+  const tone = isWhiteAvatarColor(rawBodyFill) ? ' data-hb-tone="white"' : ''
+
   return (
-    `${open}<g transform="${FIGURE_TRANSFORM}">` +
-    `<g fill="${bodyFill}" stroke="${bodyFill}" stroke-width="${BODY_ROUNDING}" stroke-linejoin="round">${body}</g>` +
-    `<g data-hb-eyes="" fill="${eyeFill}"><g data-hb-gaze="" data-hb-bounds="${attributeText(bounds)}"><g data-hb-lids="">${eyePills}</g></g></g></g>${rest}</svg>`
+    `${open.replace(/>$/, `${tone}>`)}<g transform="${FIGURE_TRANSFORM}">` +
+    `<g data-hb-body="" fill="${bodyFill}" stroke="${bodyFill}" stroke-width="${BODY_ROUNDING}" stroke-linejoin="round">${body}</g>` +
+    `<g data-hb-eyes="" fill="${eyeFill}"><g data-hb-gaze="" data-hb-bounds="${attributeText(bounds)}"${attributeList(surfaceAttributes(spec))}><g data-hb-lids="">${eyePills}</g></g></g></g>${rest}</svg>`
   )
 }

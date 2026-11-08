@@ -26,6 +26,9 @@ _LAUNCH_TIMEOUT_S = 60.0
 # re-checks there before signalling: a crashed Chromium's pid may name another job by then.
 _launched: dict[str, tuple[Any, int, Optional[str], str]] = {}
 _launched_lock = threading.Lock()
+# Per shared key whose Chromium runs on a bot's host-synced profile copy: the home owning that copy, so the
+# write-back after a stop lands in that bot's copy whichever scope the teardown runs in.
+_copy_homes: dict[str, Any] = {}
 # Per shared key: held across "is a browser running?" + launch + claim, and across the stop, so two sessions
 # first using one container never both see no browser and both launch.
 _key_locks: dict[str, threading.Lock] = {}
@@ -157,6 +160,12 @@ def _spawn_owned(env, user, udd: str, key: str, published: dict) -> int:
     if not exe:
         raise RuntimeError("the sandbox image has no Chromium to run the browser")
     child_env = {**published, "TMPDIR": streams.sandbox_temp_dir(env)}
+    from tools.bot_desktop import sandbox_computer
+    if udd == sandbox_computer.CONTAINER_PROFILE:
+        from hermes_constants import get_hermes_home
+        sandbox_computer.prepare_launch(env)
+        with _launched_lock:
+            _copy_homes[key] = get_hermes_home()
     pid, start = _start_chromium(env, user, exe, udd, child_env)
     with _launched_lock:
         _launched[key] = (env, pid, start, udd)
@@ -243,8 +252,21 @@ def stop_sandbox_browser(session_info: dict[str, Any]) -> None:
 def _stop_launched(key: str) -> None:
     with _launched_lock:
         launched = _launched.pop(key, None)
+        copy_home = _copy_homes.pop(key, None)
     if launched is None:
         return
+    _signal_launched(launched)
+    if copy_home is not None:
+        from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+        from tools.bot_desktop import sandbox_computer
+        token = set_hermes_home_override(copy_home)
+        try:
+            sandbox_computer.write_back_after_exit(launched[0])
+        finally:
+            reset_hermes_home_override(token)
+
+
+def _signal_launched(launched: tuple[Any, int, Optional[str], str]) -> None:
     from tools.bot_desktop import sandbox_host
     from tools.environments import streams
     env, pid, start, udd = launched

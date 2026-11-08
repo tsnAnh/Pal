@@ -14,6 +14,7 @@ public struct OutboxEntry: Codable, Sendable, Hashable, Identifiable {
     public var botID: String
     public var text: String
     public var attachments: [PromptAttachment]
+    public var files: [StoredAttachment]
     public var createdAt: Date
     public var state: State
     public var attempts: Int
@@ -26,6 +27,7 @@ public struct OutboxEntry: Codable, Sendable, Hashable, Identifiable {
         botID: String,
         text: String,
         attachments: [PromptAttachment],
+        files: [StoredAttachment] = [],
         createdAt: Date,
         state: State,
         attempts: Int,
@@ -35,10 +37,24 @@ public struct OutboxEntry: Codable, Sendable, Hashable, Identifiable {
         self.botID = botID
         self.text = text
         self.attachments = attachments
+        self.files = files
         self.createdAt = createdAt
         self.state = state
         self.attempts = attempts
         self.nextAttemptAt = nextAttemptAt
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        submissionID = try container.decode(String.self, forKey: .submissionID)
+        botID = try container.decode(String.self, forKey: .botID)
+        text = try container.decode(String.self, forKey: .text)
+        attachments = try container.decode([PromptAttachment].self, forKey: .attachments)
+        files = try container.decodeIfPresent([StoredAttachment].self, forKey: .files) ?? []
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        state = try container.decode(State.self, forKey: .state)
+        attempts = try container.decode(Int.self, forKey: .attempts)
+        nextAttemptAt = try container.decodeIfPresent(Date.self, forKey: .nextAttemptAt)
     }
 }
 
@@ -145,7 +161,7 @@ public struct OutboxStore: Sendable {
 
 public actor Outbox {
     private let store: OutboxStore
-    private let attachments: AttachmentStore
+    private let fileStore: AttachmentStore
     private let submitter: any OutboxSubmitter
     private let diagnostics: Diagnostics
     private let now: @Sendable () -> Date
@@ -159,12 +175,12 @@ public actor Outbox {
         now: @escaping @Sendable () -> Date = { Date() }
     ) throws {
         store = OutboxStore(directory: directory, diagnostics: diagnostics)
-        attachments = AttachmentStore(directory: directory)
+        fileStore = AttachmentStore(directory: directory)
         self.submitter = submitter
         self.diagnostics = diagnostics
         self.now = now
         entries = try store.load()
-        attachments.sweep(keeping: Set(entries.map(\.submissionID)))
+        fileStore.sweep(keeping: Set(entries.map(\.submissionID)))
     }
 
     public static let attachmentUnreadable = "attachment_unreadable"
@@ -173,14 +189,20 @@ public actor Outbox {
         min(300, 2 * pow(2, Double(max(attempts, 1) - 1)))
     }
 
-    public func enqueue(botID: String, text: String, files: [OutgoingFile] = []) throws -> OutboxEntry {
+    public func enqueue(
+        botID: String,
+        text: String,
+        attachments: [PromptAttachment] = [],
+        files: [OutgoingFile] = []
+    ) throws -> OutboxEntry {
         let submissionID = UUID().uuidString
-        let saved = try attachments.save(files, submissionID: submissionID)
+        let saved = try fileStore.save(files, submissionID: submissionID)
         let entry = OutboxEntry(
             submissionID: submissionID,
             botID: botID,
             text: text,
-            attachments: saved,
+            attachments: attachments,
+            files: saved,
             createdAt: Date(),
             state: .pending,
             attempts: 0
@@ -188,14 +210,19 @@ public actor Outbox {
         do {
             entries = try store.update { $0.append(entry) }.entries
         } catch {
-            attachments.remove(submissionID: submissionID)
+            fileStore.remove(submissionID: submissionID)
             throw error
         }
         return entry
     }
 
     public func requeue(_ failed: OutboxEntry) throws -> OutboxEntry {
-        try enqueue(botID: failed.botID, text: failed.text, files: try attachments.load(failed.attachments))
+        try enqueue(
+            botID: failed.botID,
+            text: failed.text,
+            attachments: failed.attachments,
+            files: try fileStore.load(failed.files)
+        )
     }
 
     public func snapshot(botID: String? = nil) -> [OutboxEntry] {
@@ -215,7 +242,7 @@ public actor Outbox {
         defer { inFlight.remove(submissionID) }
         let files: [OutgoingFile]
         do {
-            files = try attachments.load(entry.attachments)
+            files = try fileStore.load(entry.files)
         } catch {
             diagnostics.warning("outbox", "attachments are no longer readable: \(Diagnostics.describe(error))")
             record(submissionID, state: .failed(reason: Self.attachmentUnreadable))
@@ -224,7 +251,7 @@ public actor Outbox {
         do {
             let status = try await submitter.submit(entry, files: files)
             record(submissionID, state: .admitted(admissionID: status.admissionID))
-            attachments.remove(submissionID: submissionID)
+            fileStore.remove(submissionID: submissionID)
             return .admitted(status)
         } catch {
             if let refusal = RefusalReason(error), refusal.isPermanent {
@@ -253,13 +280,13 @@ public actor Outbox {
         entries = try store.update { stored in
             stored.removeAll { $0.submissionID == submissionID && $0.state == .pending }
         }.entries
-        attachments.remove(submissionID: submissionID)
+        fileStore.remove(submissionID: submissionID)
     }
 
     public func purgeFinished() throws {
         let removed = entries.filter { $0.state != .pending }.map(\.submissionID)
         entries = try store.update { $0.removeAll { $0.state != .pending } }.entries
-        for submissionID in removed { attachments.remove(submissionID: submissionID) }
+        for submissionID in removed { fileStore.remove(submissionID: submissionID) }
     }
 
     private func refresh() {
@@ -318,6 +345,7 @@ public struct BotChatSubmitter: OutboxSubmitter {
                 sessionID: resolution.snapshot.sessionID,
                 text: entry.text,
                 submissionID: entry.submissionID,
+                attachments: entry.attachments,
                 files: files
             )
             await connection.close()

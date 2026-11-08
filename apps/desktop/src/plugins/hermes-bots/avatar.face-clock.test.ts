@@ -13,6 +13,8 @@
  * fallback is what every un-upgraded install runs.
  */
 
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { budgetedLoopMock } = vi.hoisted(() => ({ budgetedLoopMock: { impl: undefined as unknown } }))
@@ -22,6 +24,7 @@ vi.mock('@hermes/plugin-sdk', async () => {
 
   return {
     atom,
+    avatarLoadingClips: (await import('./loading-clips-test-utils')).loadingClipFile(),
     blobatarSvg: undefined,
     // A live binding on the real SDK; the getter lets one test file cover both
     // the budgeted-loop path and the older hand-rolled one.
@@ -288,48 +291,66 @@ describe('the SDK budgeted-loop path', () => {
 })
 
 describe('the painted pill eyes', () => {
-  function mountEyedFace() {
-    const face = mountFace()
+  async function paintedFace() {
+    const { BotFace, startFaceClock } = await loadClock()
+    const host = document.createElement('div')
 
-    face.innerHTML =
-      '<path data-hb-body="1"/><g data-hb-gaze=""><g data-hb-eye="l" transform="translate(18.7 15.6) rotate(-11)"><rect width="4.8" height="11.4"/></g></g>'
+    host.innerHTML = renderToStaticMarkup(
+      createElement(BotFace, { color: '#3e8ef7', mood: 'work', name: 'alpha', shape: 'circle', size: 48 })
+    )
+    document.body.append(host)
+
+    const face = host.querySelector('svg')!
+
+    startFaceClock()
+    observer!.emit([{ isIntersecting: true, target: face }])
 
     return {
-      face,
-      eye: face.querySelector('[data-hb-eye]')!,
+      eyes: Array.from(face.querySelectorAll<SVGGElement>('[data-hb-eye]')),
       gaze: face.querySelector('[data-hb-gaze]')!,
-      left: face.querySelector('rect')!
+      lids: face.querySelector('[data-hb-lids]')!,
+      staticShapes: Array.from(face.querySelectorAll('[data-hb-eye] path'), path => path.getAttribute('d'))
     }
   }
 
-  async function paintedFace() {
-    const { startFaceClock } = await loadClock()
-    const mounted = mountEyedFace()
+  it('plays the loading clips on the eyes and leaves the gaze group where it is', async () => {
+    const { eyes, gaze } = await paintedFace()
 
-    startFaceClock()
-    observer!.emit([{ isIntersecting: true, target: mounted.face }])
+    pump(100)
 
-    return mounted
-  }
+    expect(gaze.hasAttribute('transform')).toBe(false)
 
-  it('wanders the mood gaze on the gaze group and leaves the eyes to face-gaze', async () => {
-    const { eye, gaze } = await paintedFace()
-
-    pump()
-
-    expect(gaze.getAttribute('transform')).toMatch(/^translate\(-?[\d.]+ -?[\d.]+\)$/)
-    expect(eye.getAttribute('transform')).toBe('translate(18.7 15.6) rotate(-11)')
+    for (const eye of eyes) {
+      expect(eye.getAttribute('transform')).toMatch(/^matrix\(/)
+    }
   })
 
-  it('leaves the eye height to the CSS blink however long it runs', async () => {
-    const { left } = await paintedFace()
-    const heights = new Set<string>()
+  it('repaints the eyes on the body wherever the clips carry them', async () => {
+    const { eyes, staticShapes } = await paintedFace()
+    const shapes = new Set<string>()
 
     for (let i = 0; i < 45; i++) {
       pump(100)
-      heights.add(left.getAttribute('height')!)
+      eyes.forEach(eye => shapes.add(eye.querySelector('path')!.getAttribute('d')!))
     }
 
-    expect([...heights]).toEqual(['11.4'])
+    expect(shapes.size, 'a carried eye is re-projected, not left as the static drawing').toBeGreaterThan(
+      staticShapes.length
+    )
+
+    for (const shape of shapes) {
+      expect(shape).toMatch(/^(M-?[\d.]+ -?[\d.]+L.*Z)?$/)
+    }
+  })
+
+  it('leaves the blink to the CSS however long the clock runs', async () => {
+    const { lids } = await paintedFace()
+
+    for (let i = 0; i < 45; i++) {
+      pump(100)
+    }
+
+    expect(lids.hasAttribute('transform')).toBe(false)
+    expect(lids.getAttribute('style')).toBeNull()
   })
 })

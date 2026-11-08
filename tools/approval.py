@@ -39,6 +39,7 @@ from tools.approval_floors import (
 )
 from tools.approval_gateway_wait import _await_gateway_decision
 from tools.approval_prompt import _present_with_selected_transport, _transport_choice, prompt_dangerous_approval
+from tools import approval_rules
 from tools.approval_smart import _smart_verdict
 
 logger = logging.getLogger(__name__)
@@ -797,26 +798,33 @@ _DRAFT_GATE = _GateSpec(
 
 def _smart_gate(spec: _GateSpec, command: str, description: str, pattern_key: str,
                 pattern_keys: list[str], session_key: str, *,
-                human_present: bool) -> tuple[dict | None, bool]:
-    """Guardian-LLM step -> ``(result, smart_denied_for_owner)``: a result ends the gate;
+                human_present: bool, verdict: str | None = None) -> tuple[dict | None, bool, bool]:
+    """Guardian-LLM step -> ``(result, smart_denied_for_owner, rule_ask)``: a result ends the gate;
     ``smart_denied_for_owner`` means an interactive owner may still override the DENY for this
-    one operation (once/deny only, nothing persists).
+    one operation (once/deny only, nothing persists); ``rule_ask`` means the action matches one of
+    the user's Always Ask rules, so a human decides this one operation however safe the guardian
+    thinks it is.
 
     APPROVE approves this command only — pattern-level persistence would let one benign
-    command suppress review of later commands in the same broad detector category. A DENY
-    counts toward the denial breaker even when an owner may override it. ESCALATE follows the
-    normal, potentially persistent manual behavior.
+    command suppress review of later commands in the same broad detector category. ALLOW (an Allow
+    rule matched) approves it the same way. A DENY counts toward the denial breaker even when an
+    owner may override it. ESCALATE follows the normal, potentially persistent manual behavior.
+    ``verdict`` is a guardian answer already obtained for this command (the rule review that ran
+    ahead of the session and permanent allowlists), so one command never costs two guardian calls.
     """
-    verdict = _smart_verdict(command, description, pattern_key, pattern_keys, session_key)
-    if verdict == "approve":
+    verdict = verdict or _smart_verdict(command, description, pattern_key, pattern_keys, session_key)
+    if verdict == "ask":
+        return None, False, True
+    if verdict in ("approve", "allow"):
         _reset_denials(session_key)
         logger.debug(spec.smart_log.format(command=command[:60], description=description, session_key=session_key))
-        return {"approved": True, "message": None, "smart_approved": True, "description": description}, False
+        approved = {"approved": True, "message": None, "smart_approved": True, "description": description}
+        return (approved | {"rule_allowed": True} if verdict == "allow" else approved), False, False
     if verdict != "deny":
-        return None, False
+        return None, False, False
     _record_denial(session_key)
     if human_present:
-        return None, True
+        return None, True, False
     return {
         # Unattended programmatic platforms (webhook/msgraph_webhook/ api_server): respect unattended_mode
         # config. Resolves instantly — never a pending approval nobody can answer (#37284, #87509).
@@ -824,7 +832,7 @@ def _smart_gate(spec: _GateSpec, command: str, description: str, pattern_key: st
         "message": (f"BLOCKED by smart approval: {description}. The command was assessed as genuinely "
                     f"dangerous. Do NOT retry.{_denial_breaker_addendum(session_key)}"),
         "smart_denied": True,
-    }, True
+    }, True, False
 
 
 def _gateway_prompt_data(*, command: str, description: str, pattern_key: str, pattern_keys: list[str],
@@ -847,10 +855,26 @@ def _with_edit(spec: _GateSpec, decision: dict, result: dict) -> dict:
     return result
 
 
+def _guardian_step(spec: _GateSpec, command: str, description: str, pattern_key: str, pattern_keys: list[str],
+                   session_key: str, *, smart: bool, rule_ask: bool, human_present: bool,
+                   verdict: str | None) -> tuple[dict | None, bool, bool, str]:
+    """``(result, smart_denied, rule_ask, description)``: the guardian step of :func:`_human_decision`. An action
+    already known to match an Always Ask rule skips the guardian; one it flags that way is described as such."""
+    smart_denied = False
+    if smart and not rule_ask:
+        result, smart_denied, rule_ask = _smart_gate(
+            spec, command, description, pattern_key, pattern_keys, session_key,
+            human_present=human_present, verdict=verdict)
+        if result is not None:
+            return result, False, False, description
+    return None, smart_denied, rule_ask, approval_rules.ask_description(description) if rule_ask else description
+
+
 def _human_decision(spec: _GateSpec, *, command: str, description: str,
                     pattern_key: str, pattern_keys: list[str],
                     session_key: str, approval_callback, is_cli: bool, is_gateway: bool,
-                    is_ask: bool, smart: bool = False, pending_body=None, extra_data: dict | None = None) -> dict:
+                    is_ask: bool, smart: bool = False, pending_body=None, extra_data: dict | None = None,
+                    rule_ask: bool = False, verdict: str | None = None) -> dict:
     """Ask a human (after the optional guardian-LLM step) and turn the answer into the gate result.
 
     ``pattern_keys`` are what :func:`_persist_choice` stores on session/always; a smart-DENY
@@ -859,14 +883,14 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
     """
     from agent.redact import redact_sensitive_text
 
-    smart_denied = False
-    if smart:
-        result, smart_denied = _smart_gate(spec, command, description, pattern_key, pattern_keys,
-                                           session_key, human_present=is_cli or is_gateway or is_ask)
-        if result is not None:
-            return result
+    result, smart_denied, rule_ask, description = _guardian_step(
+        spec, command, description, pattern_key, pattern_keys, session_key, smart=smart, rule_ask=rule_ask,
+        human_present=is_cli or is_gateway or is_ask, verdict=verdict)
+    if result is not None:
+        return result
     pending_body = pending_body() if pending_body else None
-    one_shot = smart_denied or spec.one_shot
+    once_only = rule_ask or spec.one_shot
+    one_shot = smart_denied or once_only
     allow_permanent = not one_shot
 
     def deny(template: str, outcome: str, **fmt) -> dict:
@@ -965,7 +989,7 @@ def _human_decision(spec: _GateSpec, *, command: str, description: str,
                        pattern_keys=list(pattern_keys), session_key=session_key, surface="cli")
     approval_context._fire_approval_hook("pre_approval_request", **hook_kwargs)
     choice = prompt_dangerous_approval(prompt_command, prompt_description, allow_permanent=allow_permanent,
-                                       allow_session=not spec.one_shot, smart_denied=smart_denied,
+                                       allow_session=not once_only, smart_denied=smart_denied,
                                        approval_callback=approval_callback)
     approval_context._fire_approval_hook("post_approval_response", **hook_kwargs, choice=choice)
     if choice == "timeout":
@@ -1299,28 +1323,42 @@ def check_all_command_guards(command: str, env_type: str,
     approval_mode = approval_context._get_approval_mode()
     if _yolo_active() or approval_mode == "off":
         return _approved()
-    if _command_matches_permanent_allowlist(command):
-        return _approved()
+    allowlisted = _command_matches_permanent_allowlist(command)
 
     approval_callback, is_cli, is_gateway, is_ask = _presence(approval_callback)
     # Outside CLI/gateway/ask flows we never block on approvals: each
     # unattended context applies its configured deny/approve mode, else allow.
     if not is_cli and not is_gateway and not is_ask:
+        if allowlisted:
+            return _approved()
         for ctx in _unattended_contexts():
             result = _unattended_deny(command, ctx)
             if result is not None:
                 return result
         return _approved()
 
+    review_ask_rules = approval_mode == "smart" and bool(approval_rules.current().ask)
+    if allowlisted and not review_ask_rules:
+        return _approved()
+
     is_dangerous, pattern_key, description = detect_dangerous_command(command)
     session_key = get_current_session_key()
-    if not is_dangerous or is_approved(session_key, pattern_key):
+    verdict = None
+    if review_ask_rules:
+        review_key = pattern_key if is_dangerous else "rule_review"
+        verdict = _smart_verdict(command, description if is_dangerous else approval_rules.REVIEW_DESCRIPTION,
+                                 review_key, [review_key], session_key)
+    rule_ask = verdict == "ask" or (verdict in ("deny", "escalate") and not is_dangerous and not allowlisted)
+    if not rule_ask and (allowlisted or not is_dangerous or is_approved(session_key, pattern_key)):
         return _approved()
+    if not is_dangerous:
+        pattern_key, description = approval_rules.ask_pattern_key(command), ""
     return _human_decision(
         _COMMAND_GATE, command=command, description=description,
         pattern_key=pattern_key, pattern_keys=[pattern_key],
         session_key=session_key, approval_callback=approval_callback,
         is_cli=is_cli, is_gateway=is_gateway, is_ask=is_ask, smart=approval_mode == "smart",
+        rule_ask=rule_ask, verdict=verdict,
     )
 
 

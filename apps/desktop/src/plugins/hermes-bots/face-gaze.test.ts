@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { circlePath, curveEye, parseTransform, surfaceAttributes, type SurfaceSpec } from './eye-frame'
 import {
   ATTENTION_GAP,
   composeEyes,
-  type EyePose,
   type EyeRig,
   FIGURE_TILT_DEGREES,
   GAZE_REACH,
@@ -21,17 +21,14 @@ const origin = { x: 120, y: 120 }
 const faceWidth = 40
 const noGaze = { x: 0, y: 0 }
 const mid = (eyes: ReturnType<typeof composeEyes>) => (eyes[0].x + eyes[1].x) / 2
+const span = (values: number[]) => Math.max(...values) - Math.min(...values)
 
-const extent = ({ angle, surface }: Pick<EyePose, 'angle' | 'surface'>, width = 9, height = 21) => {
+const halfExtent = (angle: number) => {
   const radians = (angle * Math.PI) / 180
-  const cos = Math.cos(radians)
-  const sin = Math.sin(radians)
-  const [a, b, c, d] = surface
-  const shape = [cos * a - sin * b, sin * a + cos * b, cos * c - sin * d, sin * c + cos * d]
 
   return {
-    x: (Math.abs(shape[0]) * width + Math.abs(shape[2]) * height) / 2,
-    y: (Math.abs(shape[1]) * width + Math.abs(shape[3]) * height) / 2
+    x: (Math.abs(Math.cos(radians)) * 9 + Math.abs(Math.sin(radians)) * 21) / 2,
+    y: (Math.abs(Math.sin(radians)) * 9 + Math.abs(Math.cos(radians)) * 21) / 2
   }
 }
 
@@ -64,8 +61,8 @@ describe('composeEyes', () => {
   it('holds the baked idle pose at zero attention whatever the gaze', () => {
     const eyes = composeEyes(rig, 0, { x: 1, y: -1 })
 
-    expect(eyes[0]).toEqual({ angle: -11, surface: [1, 0, 0, 1], x: 55, y: 42 })
-    expect(eyes[1]).toEqual({ angle: -11, surface: [1, 0, 0, 1], x: 74, y: 42 })
+    expect(eyes[0]).toEqual({ angle: -11, x: 55, y: 42 })
+    expect(eyes[1]).toEqual({ angle: -11, x: 74, y: 42 })
   })
 
   const pairSpan = (eyes: { x: number; y: number }[]) => Math.hypot(eyes[1].x - eyes[0].x, eyes[1].y - eyes[0].y)
@@ -86,32 +83,17 @@ describe('composeEyes', () => {
     expect(pairSpan(eyes)).toBeCloseTo(19 * ATTENTION_GAP)
     expect(screenSlope(eyes)).toBeCloseTo(0)
     expect(mid(eyes)).toBeCloseTo(50)
-    expect(eyes[0].surface).toEqual([1, 0, 0, 1])
   })
 
-  it('turns the eyes around a ball when looking sideways', () => {
-    const level = pairSpan(composeEyes(rig, 1, noGaze))
+  it('slides the pair toward the pointer without turning the layout', () => {
+    const level = composeEyes(rig, 1, noGaze)
     const right = composeEyes(rig, 1, { x: 1, y: 0 })
     const left = composeEyes(rig, 1, { x: -1, y: 0 })
 
-    expect(right[1].surface[0]).toBeLessThan(0.8)
-    expect(right[0].surface[0]).toBeGreaterThan(1)
-    expect(left[0].surface[0]).toBeCloseTo(right[1].surface[0])
-    expect(left[1].surface[0]).toBeCloseTo(right[0].surface[0])
-    expect(pairSpan(right)).toBeLessThan(level * 0.9)
+    expect(mid(right)).toBeGreaterThan(mid(level) + 10)
+    expect(mid(left)).toBeLessThan(mid(level) - 10)
+    expect(pairSpan(right)).toBeCloseTo(pairSpan(level))
     expect(screenSlope(right)).toBeCloseTo(0)
-  })
-
-  it('squashes both eyes vertically when looking up or down', () => {
-    for (const y of [-1, 1]) {
-      const eyes = composeEyes(rig, 1, { x: 0, y })
-
-      for (const eye of eyes) {
-        expect(eye.surface[3]).toBeLessThan(0.95)
-      }
-
-      expect(eyes[0].surface[1]).toBeCloseTo(-eyes[1].surface[1])
-    }
   })
 
   it('scales the gaze travel with attention', () => {
@@ -140,12 +122,12 @@ describe('composeEyes', () => {
       { x: 0.7, y: 0.7 }
     ]) {
       for (const eye of composeEyes(rig, 1, gaze)) {
-        const { x: hx, y: hy } = extent(eye)
+        const half = halfExtent(eye.angle)
 
-        expect(eye.x - hx).toBeGreaterThanOrEqual(10 - 1e-6)
-        expect(eye.x + hx).toBeLessThanOrEqual(90 + 1e-6)
-        expect(eye.y - hy).toBeGreaterThanOrEqual(10 - 1e-6)
-        expect(eye.y + hy).toBeLessThanOrEqual(90 + 1e-6)
+        expect(eye.x - half.x).toBeGreaterThanOrEqual(10 - 1e-6)
+        expect(eye.x + half.x).toBeLessThanOrEqual(90 + 1e-6)
+        expect(eye.y - half.y).toBeGreaterThanOrEqual(10 - 1e-6)
+        expect(eye.y + half.y).toBeLessThanOrEqual(90 + 1e-6)
       }
     }
   })
@@ -155,11 +137,21 @@ describe('composeEyes', () => {
     const eyes = composeEyes(narrow, 1, { x: 1, y: 0 })
 
     expect(pairSpan(eyes)).toBeGreaterThan(19 * ATTENTION_GAP * 0.7)
-    expect(pairSpan(eyes)).toBeLessThan(19 * ATTENTION_GAP)
+    expect(pairSpan(eyes)).toBeCloseTo(19 * ATTENTION_GAP)
     expect(screenSlope(eyes)).toBeCloseTo(0)
-    expect(eyes[1].x + extent(eyes[1]).x).toBeLessThanOrEqual(80 + 1e-6)
+    expect(eyes[1].x + halfExtent(eyes[1].angle).x).toBeLessThanOrEqual(80 + 1e-6)
   })
 })
+
+const BALL: SurfaceSpec = { frame: '', mask: [circlePath(50, 50, 40)], reach: 0 }
+const PILL = { height: 21, width: 9 }
+const REST_LEFT = 'translate(55 42) rotate(-11)'
+const REST_RIGHT = 'translate(74 42) rotate(-11)'
+
+const paintedAt = (rest: string) => curveEye(BALL, PILL, parseTransform(rest))
+
+const outlineOf = (d: null | string) =>
+  Array.from((d ?? '').matchAll(/(-?[\d.]+) (-?[\d.]+)/g), point => ({ x: Number(point[1]), y: Number(point[2]) }))
 
 describe('startFaceGaze', () => {
   let stop: () => void
@@ -167,18 +159,19 @@ describe('startFaceGaze', () => {
   let queue: FrameRequestCallback[] = []
   let clock = 0
 
-  const REST_LEFT = 'translate(55 42) rotate(-11)'
-  const REST_RIGHT = 'translate(74 42) rotate(-11)'
-
   const mount = (kind: 'blob' | 'math' = 'blob', gazeTransform = '') => {
     const attrs = kind === 'math' ? 'data-hb-math="1"' : 'data-bot-gaze="eyes"'
 
+    const surface = Object.entries(surfaceAttributes(BALL))
+      .map(([name, value]) => `${name}="${value}"`)
+      .join(' ')
+
     const eye = (side: string, transform: string) =>
-      `<g data-hb-eye="${side}" data-hb-rest="${transform}" transform="${transform}"><rect x="-4.5" y="-10.5" width="9" height="21" rx="4.5"/></g>`
+      `<g data-hb-eye="${side}" data-hb-rest="${transform}" data-hb-size="9 21" transform="${transform}"><path d="${paintedAt(transform)}"/></g>`
 
     document.body.innerHTML = `
       <div data-bot-gaze-scope id="scope">
-        <svg data-bot-face="a" ${attrs} viewBox="0 0 100 100"><g><g data-hb-gaze="" data-hb-bounds="10 10 90 90" ${gazeTransform ? `transform="${gazeTransform}"` : ''}>
+        <svg data-bot-face="a" ${attrs} viewBox="0 0 100 100"><g><g data-hb-gaze="" data-hb-bounds="10 10 90 90" ${surface} ${gazeTransform ? `transform="${gazeTransform}"` : ''}>
           ${eye('l', REST_LEFT)}${eye('r', REST_RIGHT)}
         </g></g></svg>
       </div>
@@ -187,7 +180,7 @@ describe('startFaceGaze', () => {
     face.getBoundingClientRect = () => ({ left: 100, top: 100, width: 40, height: 40 }) as DOMRect
     const [left, right] = Array.from(document.querySelectorAll<SVGGElement>('[data-hb-eye]'))
 
-    return { left, right, scope: document.getElementById('scope')!, outside: document.getElementById('outside')! }
+    return { face, left, right, scope: document.getElementById('scope')!, outside: document.getElementById('outside')! }
   }
 
   const frames = (count: number) => {
@@ -200,21 +193,17 @@ describe('startFaceGaze', () => {
   }
 
   const parse = (eye: Element) => {
-    const match =
-      /translate\(([-\d.]+) ([-\d.]+)\) rotate\(([-\d.]+)\)(?: matrix\(([-\d.]+) ([-\d.]+) ([-\d.]+) ([-\d.]+) 0 0\))?/.exec(
-        eye.getAttribute('transform') ?? ''
-      )
-
-    const surface = match?.[4] ? ([4, 5, 6, 7].map(i => Number(match[i])) as [number, number, number, number]) : null
+    const match = /translate\(([-\d.]+) ([-\d.]+)\) rotate\(([-\d.]+)\)/.exec(eye.getAttribute('transform') ?? '')
 
     return {
       angle: Number(match?.[3]),
-      surface: surface ?? ([1, 0, 0, 1] as const),
+      outline: outlineOf(eye.querySelector('path')?.getAttribute('d') ?? null),
       x: Number(match?.[1]),
       y: Number(match?.[2])
     }
   }
 
+  const widthOf = (eye: Element) => span(parse(eye).outline.map(point => point.x))
   const attentionOf = (eye: Element) => (parse(eye).angle + 11) / (FIGURE_TILT_DEGREES + 11)
 
   const move = (target: Element, x: number, y: number) =>
@@ -255,32 +244,66 @@ describe('startFaceGaze', () => {
     expect(previous).toBeLessThan(1)
   })
 
-  it('eases attention back down on leaving and restores the baked pose exactly', () => {
+  it('eases attention back down on leaving and restores the static render exactly', () => {
     const { left, outside, right, scope } = mount()
+    const staticLeft = left.querySelector('path')!.getAttribute('d')
+    const staticRight = right.querySelector('path')!.getAttribute('d')
 
     move(scope, 400, 120)
     frames(60)
     expect(attentionOf(left)).toBeCloseTo(1, 2)
+    expect(left.querySelector('path')!.getAttribute('d')).not.toBe(staticLeft)
     move(outside, 400, 120)
     frames(24)
     expect(attentionOf(left)).toBeLessThan(0.07)
     frames(120)
     expect(left.getAttribute('transform')).toBe(REST_LEFT)
     expect(right.getAttribute('transform')).toBe(REST_RIGHT)
+    expect(left.querySelector('path')!.getAttribute('d')).toBe(staticLeft)
+    expect(right.querySelector('path')!.getAttribute('d')).toBe(staticRight)
     expect(queue).toHaveLength(0)
   })
 
-  it('looks toward the pointer at full attention', () => {
+  it('looks toward the pointer and curves the leading eye around the body', () => {
     const { left, right, scope } = mount()
 
     move(scope, 5000, 120)
     frames(120)
     expect((parse(left).x + parse(right).x) / 2).toBeGreaterThan(50 + 12)
-    expect(parse(right).surface[0]).toBeLessThan(0.8)
+    expect(widthOf(right), 'the leading eye narrows as it nears the rim').toBeLessThan(widthOf(left))
+    expect(widthOf(right)).toBeLessThan(9 * 0.9)
     move(scope, -5000, 120)
     frames(120)
     expect((parse(left).x + parse(right).x) / 2).toBeLessThan(50 - 12)
-    expect(parse(left).surface[0]).toBeLessThan(0.8)
+    expect(widthOf(left)).toBeLessThan(widthOf(right))
+  })
+
+  it('paints every eye on the body however it looks', () => {
+    const { left, right, scope } = mount()
+
+    for (const pointer of [
+      [5000, 120],
+      [-5000, 120],
+      [120, 5000],
+      [120, -5000]
+    ]) {
+      move(scope, pointer[0], pointer[1])
+      frames(120)
+
+      for (const eye of [left, right]) {
+        const { angle, outline, x, y } = parse(eye)
+        const radians = (angle * Math.PI) / 180
+
+        expect(outline.length).toBeGreaterThan(8)
+
+        for (const point of outline) {
+          const px = x + point.x * Math.cos(radians) - point.y * Math.sin(radians)
+          const py = y + point.x * Math.sin(radians) + point.y * Math.cos(radians)
+
+          expect(Math.hypot(px - 50, py - 50)).toBeLessThanOrEqual(40 + 1e-2)
+        }
+      }
+    }
   })
 
   it('drives math faces through the same eyes', () => {
@@ -317,26 +340,6 @@ describe('startFaceGaze', () => {
     second()
   })
 
-  it('keeps the eyes inside the body while mood wander shifts the gaze group', () => {
-    const { left, right, scope } = mount('blob', 'translate(3.6 -3.6)')
-
-    for (const pointer of [5000, -5000]) {
-      move(scope, pointer, 120)
-      frames(120)
-
-      for (const eye of [left, right]) {
-        const pose = parse(eye)
-        const { x, y } = pose
-        const { x: hx, y: hy } = extent(pose)
-
-        expect(x + 3.6 - hx).toBeGreaterThanOrEqual(10 - 1e-6)
-        expect(x + 3.6 + hx).toBeLessThanOrEqual(90 + 1e-6)
-        expect(y - 3.6 - hy).toBeGreaterThanOrEqual(10 - 1e-6)
-        expect(y - 3.6 + hy).toBeLessThanOrEqual(90 + 1e-6)
-      }
-    }
-  })
-
   it('restores the pose a re-render baked in mid-hover, not the one first seen', () => {
     const { left, outside, right, scope } = mount()
     const NEXT_LEFT = 'translate(55 50) rotate(-11)'
@@ -357,6 +360,7 @@ describe('startFaceGaze', () => {
 
     expect(left.getAttribute('transform')).toBe(NEXT_LEFT)
     expect(right.getAttribute('transform')).toBe(NEXT_RIGHT)
+    expect(left.querySelector('path')!.getAttribute('d')).toBe(paintedAt(NEXT_LEFT))
   })
 
   it('follows a changed body box while hovered', () => {
@@ -372,5 +376,53 @@ describe('startFaceGaze', () => {
     frames(60)
 
     expect(parse(left).y).toBeGreaterThan(before)
+  })
+
+  describe('when the loading clips drive the face', () => {
+    const staticOf = (eye: Element) => eye.querySelector('path')!.getAttribute('d')
+
+    it('leaves a loading face alone however the pointer moves', () => {
+      const { face, left, right, scope } = mount()
+      const staticLeft = staticOf(left)
+
+      face.setAttribute('data-hb-mood', 'work')
+      move(scope, 400, 120)
+      frames(60)
+
+      expect(left.getAttribute('transform')).toBe(REST_LEFT)
+      expect(right.getAttribute('transform')).toBe(REST_RIGHT)
+      expect(staticOf(left)).toBe(staticLeft)
+    })
+
+    it('drops a face the clips take over mid-hover without painting over them', () => {
+      const { face, left, scope } = mount()
+
+      move(scope, 400, 120)
+      frames(30)
+      face.setAttribute('data-hb-motion', '')
+      left.setAttribute('transform', 'translate(1 2) rotate(3)')
+      left.querySelector('path')!.setAttribute('d', 'M0 0Z')
+      move(scope, 420, 120)
+      frames(60)
+
+      expect(left.getAttribute('transform')).toBe('translate(1 2) rotate(3)')
+      expect(staticOf(left)).toBe('M0 0Z')
+    })
+
+    it('resumes following the pointer once the clips release the face', () => {
+      const { face, left, scope } = mount()
+      const staticLeft = staticOf(left)
+
+      face.setAttribute('data-hb-mood', 'work')
+      move(scope, 400, 120)
+      frames(10)
+      expect(staticOf(left)).toBe(staticLeft)
+
+      face.setAttribute('data-hb-mood', 'idle')
+      move(scope, 400, 120)
+      frames(60)
+
+      expect(staticOf(left)).not.toBe(staticLeft)
+    })
   })
 })

@@ -106,7 +106,7 @@ struct OutboxAttachmentTests {
         let directory = try temporaryDirectory()
         let first = try Outbox(directory: directory, submitter: Recorder(failure: nil))
         let entry = try await first.enqueue(botID: "bot", text: "look", files: try samples())
-        #expect(entry.attachments.map(\.name) == ["a.txt", "b.png"])
+        #expect(entry.files.map(\.name) == ["a.txt", "b.png"])
 
         let recorder = Recorder(failure: nil)
         let restarted = try Outbox(directory: directory, submitter: recorder)
@@ -147,7 +147,7 @@ struct OutboxAttachmentTests {
         let failed = try #require(await outbox.snapshot(botID: "bot").first)
         let again = try await outbox.requeue(failed)
         #expect(again.submissionID != failed.submissionID)
-        #expect(again.attachments.map(\.name) == ["a.txt", "b.png"])
+        #expect(again.files.map(\.name) == ["a.txt", "b.png"])
         try await outbox.purgeFinished()
         #expect(!FileManager.default.fileExists(atPath: attachmentsDirectory(directory).appendingPathComponent(failed.submissionID).path))
         #expect(FileManager.default.fileExists(atPath: attachmentsDirectory(directory).appendingPathComponent(again.submissionID).path))

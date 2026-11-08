@@ -106,6 +106,34 @@ def trigger_remove(params: dict) -> dict[str, Any]:
     return {"success": True, "removed": remove_routine_trigger(_profile(params), job["id"])}
 
 
+def annotate_listing(result: dict[str, Any]) -> dict[str, Any]:
+    from cron.jobs import load_jobs
+    from cron.schedule_describe import describe_schedule
+    from hermes_time import get_timezone_name
+
+    rows = result.get("jobs")
+    if not isinstance(rows, list) or not rows:
+        return result
+    stored = {job.get("id"): job for job in load_jobs()}
+    profile_zone = get_timezone_name()
+    for row in rows:
+        job = stored.get(row.get("job_id")) or {}
+        row["schedule_text"] = describe_schedule(job.get("schedule"))
+        row["schedule_timezone"] = str(job.get("timezone") or "").strip() or profile_zone
+    return result
+
+
+def enabled_routine_count(profile_dir: Any) -> int:
+    from pathlib import Path
+
+    from cron.jobs import is_terminal_job, load_jobs, use_cron_store
+
+    if not (Path(profile_dir) / "cron" / "jobs.json").is_file():
+        return 0
+    with use_cron_store(profile_dir):
+        return sum(1 for job in load_jobs() if job.get("enabled", True) and not is_terminal_job(job))
+
+
 def remove_routine(params: dict, cronjob: Callable[..., str]) -> dict[str, Any]:
     """Remove the routine, then its webhook trigger: a removed routine must not leave a live endpoint
     behind, and a routine whose removal failed keeps its trigger. A trigger failure after a successful

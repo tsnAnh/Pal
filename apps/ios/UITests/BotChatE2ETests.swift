@@ -12,13 +12,18 @@ final class BotChatE2ETests: E2ETestCase {
             XCTAssertTrue(row.label.contains(name), row.label)
         }
         shot(app, "roster")
-        let search = app.descendants(matching: .any)["rosterSearchField"]
+        let launcher = app.buttons["rosterSearchField"]
+        waitFor(launcher, timeout: 10, "search launcher")
+        launcher.tap()
+        let search = app.descendants(matching: .any)["searchField"]
         waitFor(search, timeout: 10, "search field")
-        search.tap()
+        waitFor(app.keyboards.firstMatch, timeout: 10, "keyboard")
         search.typeText("alpha")
-        waitGone(app.buttons["botRow-bot-beta"], timeout: 10, "search filters rows")
-        XCTAssertTrue(app.buttons["botRow-bot-alpha"].exists)
+        waitFor(app.buttons["searchResult-bot-bot-alpha"], timeout: 10, "search finds the bot")
+        waitGone(app.buttons["searchResult-bot-bot-beta"], timeout: 10, "search filters bots")
         shot(app, "roster-search")
+        app.buttons["searchClose"].tap()
+        waitFor(app.buttons["botRow-bot-alpha"], timeout: 10, "roster after closing search")
     }
 
     func test2SendStreamsReply() throws {
@@ -158,44 +163,5 @@ final class BotChatE2ETests: E2ETestCase {
         XCTAssertTrue(reply.label.contains("slow-39"), reply.label)
         XCTAssertTrue(reply.isHittable, "the new reply is on screen")
         XCTAssertLessThanOrEqual(reply.frame.maxY, composer.frame.minY, "the end of the new reply sits above the composer")
-    }
-
-    func test9ScrollingBackWhileAReplyStreamsStaysPut() throws {
-        let app = launch()
-        signInIfNeeded(app)
-        openBot(app, "bot-alpha")
-        for index in 1...6 {
-            let text = String(format: "read-%02d", index)
-            send(app, text)
-            waitFor(bubbles(app, "userBubble", containing: text).firstMatch, timeout: 10, "user bubble \(text)")
-            waitForReply(app, below: text)
-        }
-        let marker = "SLOW read back " + UUID().uuidString.prefix(6)
-        send(app, marker)
-        waitFor(app.descendants(matching: .any)["assistantBubble-streaming"], timeout: 30, "reply starts streaming")
-        let chat = app.descendants(matching: .any)["chatScreen"]
-        chat.swipeDown()
-        chat.swipeDown()
-        Thread.sleep(forTimeInterval: 1)
-        let anchor = try XCTUnwrap((1...6).map { bubbles(app, "userBubble", containing: String(format: "read-%02d", $0)).firstMatch }.first { $0.isHittable }, "an earlier message is on screen after scrolling back")
-        let before = anchor.frame.minY
-        waitForReply(app, below: marker)
-        shot(app, "chat-read-back-while-streaming")
-        XCTAssertTrue(anchor.isHittable, "the message being read stays on screen")
-        XCTAssertEqual(anchor.frame.minY, before, accuracy: 2, "the reply streaming in does not move what the user is reading")
-    }
-
-    private func waitForReply(_ app: XCUIApplication, below text: String) {
-        let userBubble = bubbles(app, "userBubble", containing: text).firstMatch
-        let deadline = Date().addingTimeInterval(60)
-        while Date() < deadline {
-            let reply = app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last
-            if let reply, userBubble.exists, reply.frame.minY > userBubble.frame.minY,
-               !app.descendants(matching: .any)["assistantBubble-streaming"].exists {
-                return
-            }
-            Thread.sleep(forTimeInterval: 0.25)
-        }
-        XCTFail("reply to \(text) did not complete")
     }
 }

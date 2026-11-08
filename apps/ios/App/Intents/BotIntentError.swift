@@ -50,11 +50,11 @@ enum BotIntentError: Error, CustomLocalizedStringResourceConvertible {
 
     init(_ error: any Error) {
         switch error {
-        case AttachmentError.tooLarge(let name): self = .fileTooLarge(name: name)
-        case AttachmentError.empty(let name): self = .fileEmpty(name: name)
-        case AttachmentError.unsupported(let name): self = .fileUnsupported(name: name)
-        case AttachmentError.unreadable(let name): self = .fileUnreadable(name: name)
-        case AttachmentError.tooMany: self = .tooManyFiles
+        case HermesChat.AttachmentError.tooLarge(let name): self = .fileTooLarge(name: name)
+        case HermesChat.AttachmentError.empty(let name): self = .fileEmpty(name: name)
+        case HermesChat.AttachmentError.unsupported(let name): self = .fileUnsupported(name: name)
+        case HermesChat.AttachmentError.unreadable(let name): self = .fileUnreadable(name: name)
+        case HermesChat.AttachmentError.tooMany: self = .tooManyFiles
         case let error as ErrandError: self.init(error)
         case let error as BotIntentError: self = error
         default: self = .unreachable
