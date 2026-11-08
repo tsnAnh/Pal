@@ -29,9 +29,13 @@ class E2ETestCase: XCTestCase {
         env = try E2EEnvironment.load()
     }
 
+    private static var signedInToThisRunsGateway = false
+
     func launch(resetCredentials: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
+        let reset = resetCredentials || !Self.signedInToThisRunsGateway
+        Self.signedInToThisRunsGateway = true
         let app = XCUIApplication()
-        app.launchArguments = (resetCredentials ? ["-hermes-reset-credentials"] : []) + extraArguments
+        app.launchArguments = (reset ? ["-hermes-reset-credentials"] : []) + extraArguments
         app.launch()
         return app
     }
