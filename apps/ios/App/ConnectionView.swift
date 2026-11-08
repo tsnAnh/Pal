@@ -96,14 +96,3 @@ struct ConnectionView: View {
         }
     }
 }
-
-struct SettingsSheet: View {
-    @Bindable var model: ConnectionModel
-    let onClose: () -> Void
-
-    var body: some View {
-        SheetChrome(title: "Hermes Bots", accessibilityIdentifier: "settingsSheet", onLeading: onClose) {
-            ConnectionForm(model: model)
-        }
-    }
-}

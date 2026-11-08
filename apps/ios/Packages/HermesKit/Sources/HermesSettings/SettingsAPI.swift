@@ -187,9 +187,11 @@ public struct SettingsAPI: Sendable {
     }
 }
 
-public enum PermissionList: String, Sendable, CaseIterable {
+public enum PermissionList: String, Sendable, CaseIterable, Identifiable {
     case ask
     case allow
+
+    public var id: String { rawValue }
 }
 
 public enum NotificationFlag {

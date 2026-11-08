@@ -87,6 +87,8 @@ targets:
         product: HermesDevice
       - package: HermesKit
         product: HermesConnect
+      - package: HermesKit
+        product: HermesSettings
       - package: HermesDesign
         product: HermesDesign
   HermesBotsUITests:

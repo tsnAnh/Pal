@@ -25,6 +25,8 @@ final class ConnectionModel {
     private(set) var phase: Phase = .signedOut
     private(set) var client: HermesClient?
     private(set) var userInitial = "H"
+    private(set) var userName = ""
+    let localDeviceID: String?
 
     private var auth: AuthSession
     private var keychainUnavailable: Bool
@@ -42,8 +44,10 @@ final class ConnectionModel {
         diagnostics: Diagnostics,
         initialBaseURL: String,
         presence: ReachPresence,
+        localDeviceID: String? = nil,
         keychainUnavailable: Bool = false
     ) {
+        self.localDeviceID = localDeviceID
         self.auth = auth
         self.presence = presence
         self.keychainUnavailable = keychainUnavailable
@@ -86,6 +90,7 @@ final class ConnectionModel {
             diagnostics: diagnostics,
             initialBaseURL: "",
             presence: ReachPresence(identity: identity, diagnostics: diagnostics),
+            localDeviceID: identity.deviceID,
             keychainUnavailable: keychainUnavailable
         )
     }
@@ -214,6 +219,8 @@ final class ConnectionModel {
         connection = nil
         client = nil
         try? await auth.signOut()
+        userName = ""
+        userInitial = "H"
         phase = .signedOut
     }
 
@@ -226,8 +233,9 @@ final class ConnectionModel {
             let connection = try await client.connect()
             self.connection = connection
             let description = try await client.describeRuntime(on: connection)
-            if let userID = await auth.userID, let first = userID.first(where: \.isLetter) {
-                userInitial = String(first).uppercased()
+            if let userID = await auth.userID {
+                userName = userID
+                if let first = userID.first(where: \.isLetter) { userInitial = String(first).uppercased() }
             }
             phase = .connected(instanceID: description.instanceID)
         } catch {
