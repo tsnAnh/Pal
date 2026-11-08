@@ -3,6 +3,7 @@ watch_match, watch_disabled, watch_overflow_*, async_delegation) into the
 ``[IMPORTANT: ...]`` / ``[ASYNC DELEGATION ...]`` text the CLI drain loop, gateway and
 TUI inject into the agent conversation."""
 
+import re
 import time
 from dataclasses import dataclass
 from contextlib import suppress
@@ -505,3 +506,20 @@ def format_process_notification(evt: dict) -> str | None:
     return (
         f"[IMPORTANT: Background process {_sid} {_completion_status(evt)} (exit code {_exit}{_signal}).\n"
         f"{attribution}Command: {_cmd}\nOutput:\n{_out}]")
+
+
+_SINGLE_COMPLETION_RE = re.compile(r"^\[IMPORTANT: Background process (\S+) (?!matched watch pattern )[^\n]*\(exit code [^\n]*\)\.\n")
+_COMPLETION_OUTPUT_RE = re.compile(r"\nOutput:\n(?:\.\.\.\(first \d+ characters cut[^\n]*\n)?(.*)\]$", re.DOTALL)
+
+
+def completion_process_id(content: str) -> str | None:
+    """The process id of a single-process completion from ``format_process_notification``."""
+    match = _SINGLE_COMPLETION_RE.match(content or "")
+    return match.group(1) if match else None
+
+
+def completion_output(content: str) -> str | None:
+    if completion_process_id(content) is None:
+        return None
+    match = _COMPLETION_OUTPUT_RE.search(content)
+    return match.group(1) if match else None

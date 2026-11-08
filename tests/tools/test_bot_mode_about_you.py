@@ -165,14 +165,14 @@ def test_rpc_round_trip(home):
     import tui_gateway.server as srv
 
     get, set_ = srv._methods["bot_mode.about_you.get"], srv._methods["bot_mode.about_you.set"]
-    assert get(1, {})["result"] == {"name": "", "timezone": ""}
+    assert get(1, {})["result"] == {"name": "", "timezone": "", "timezone_auto": False}
 
     saved = set_(2, {"name": "  Ann\n", "timezone": "Europe/Paris"})["result"]
-    assert saved == {"name": "Ann", "timezone": "Europe/Paris"}
+    assert saved == {"name": "Ann", "timezone": "Europe/Paris", "timezone_auto": False}
     assert get(3, {})["result"] == saved
 
-    assert set_(4, {"name": "Bea"})["result"] == {"name": "Bea", "timezone": "Europe/Paris"}
-    assert set_(5, {"timezone": None})["result"] == {"name": "Bea", "timezone": ""}
+    assert set_(4, {"name": "Bea"})["result"] == {"name": "Bea", "timezone": "Europe/Paris", "timezone_auto": False}
+    assert set_(5, {"timezone": None})["result"] == {"name": "Bea", "timezone": "", "timezone_auto": False}
 
     rejected = set_(6, {"timezone": "Mars/Base"})
     assert rejected["error"]["code"] == 4065

@@ -41,11 +41,31 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         case clarifyAnswered(ClarifyRecord)
         case clarify(PromptCard)
         case approval(PromptCard)
+        case botThread(BotThreadLink)
     }
 
     public var id: String
+    public var uid: String?
     public var content: Content
     public var deliveryFailure: String?
+    public var timestamp: Date?
+    public var inbound: InboundKind = .person
+
+    public init(
+        id: String,
+        content: Content,
+        deliveryFailure: String? = nil,
+        timestamp: Date? = nil,
+        inbound: InboundKind = .person,
+        uid: String? = nil
+    ) {
+        self.id = id
+        self.uid = uid
+        self.content = content
+        self.deliveryFailure = deliveryFailure
+        self.timestamp = timestamp
+        self.inbound = inbound
+    }
 }
 
 public enum ApplyOutcome: Sendable, Hashable {
@@ -71,6 +91,7 @@ public struct Transcript: Sendable, Equatable {
 
     private var segmentLengths: [Int: Int] = [:]
     private var currentSegment: Int?
+    private var turnOpenings: [String: String] = [:]
 
     public init() {}
 
@@ -130,7 +151,8 @@ public struct Transcript: Sendable, Equatable {
             guard let text = admission.text, !text.isEmpty else { continue }
             items.append(TranscriptItem(
                 id: Self.echoID(admission.inputID ?? admission.admissionID),
-                content: .user(text: text, delivery: .queued)
+                content: .user(text: text, delivery: .queued),
+                inbound: InboundKind.classify(text: text, displayKind: nil)
             ))
         }
         for prompt in snapshot.prompts { addCard(prompt) }
@@ -140,6 +162,7 @@ public struct Transcript: Sendable, Equatable {
         resyncRequested = false
         segmentLengths = [:]
         currentSegment = nil
+        turnOpenings = [:]
     }
 
     public func summary() -> Summary {
@@ -151,6 +174,7 @@ public struct Transcript: Sendable, Equatable {
             case .clarifyAnswered(let record): Summary.Entry(kind: "clarify-answered", text: record.summaryText)
             case .clarify(let card): Summary.Entry(kind: "clarify", text: card.prompt.question ?? "")
             case .approval(let card): Summary.Entry(kind: "approval", text: card.prompt.command ?? "")
+            case .botThread: nil
             }
         })
     }
@@ -197,42 +221,61 @@ public struct Transcript: Sendable, Equatable {
         currentSegment = nil
     }
 
+    private static func serverDate(_ timestamp: Double?) -> Date? {
+        timestamp.flatMap { $0.isFinite && $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+    }
+
     private static func items(from message: WireMessage) -> [TranscriptItem] {
         let id = message.rowID.map { "row:\($0)" } ?? UUID().uuidString
         switch message.role {
         case "user":
             guard message.displayKind != "hidden" else { return [] }
-            return [TranscriptItem(id: id, content: .user(text: message.plainText, delivery: .sent))]
+            let text = message.plainText
+            return [TranscriptItem(
+                id: id,
+                content: .user(text: text, delivery: .sent),
+                timestamp: serverDate(message.timestamp),
+                inbound: InboundKind.classify(text: text, displayKind: message.displayKind),
+                uid: message.messageUID
+            )]
         case "assistant":
             let text = message.plainText
             guard !text.isEmpty else { return [] }
-            return [TranscriptItem(id: id, content: .assistant(text: text, reasoning: message.reasoning ?? "", isStreaming: false))]
+            return [TranscriptItem(
+                id: id,
+                content: .assistant(text: text, reasoning: message.reasoning ?? "", isStreaming: false),
+                timestamp: serverDate(message.timestamp),
+                uid: message.messageUID
+            )]
         case "tool":
             let toolID = message.toolCallID ?? id
             if message.name == nil || message.name == "clarify", let result = ClarifyResult(json: message.plainText) {
-                return answeredItems(toolID: toolID, records: result.records)
+                return answeredItems(toolID: toolID, records: result.records, timestamp: serverDate(message.timestamp))
             }
-            return [TranscriptItem(id: "tool:\(toolID)", content: .tool(ToolCall(
-                toolID: toolID, name: message.name ?? "tool", status: .finished, summary: nil
-            )))]
+            return [TranscriptItem(
+                id: "tool:\(toolID)",
+                content: .tool(ToolCall(toolID: toolID, name: message.name ?? "tool", status: .finished, summary: nil)),
+                timestamp: serverDate(message.timestamp),
+                uid: message.messageUID
+            )]
         default:
             return []
         }
     }
 
-    private static func answeredItems(toolID: String, records: [ClarifyRecord]) -> [TranscriptItem] {
+    private static func answeredItems(toolID: String, records: [ClarifyRecord], timestamp: Date? = nil) -> [TranscriptItem] {
         records.enumerated().map { index, record in
-            TranscriptItem(id: "tool:\(toolID)#\(index)", content: .clarifyAnswered(record))
+            TranscriptItem(id: "tool:\(toolID)#\(index)", content: .clarifyAnswered(record), timestamp: timestamp)
         }
     }
 
     private mutating func reduce(_ event: SessionEvent) {
         switch event {
         case .messageStart(let start):
-            confirmOldestEcho()
             isRunning = true
             lastError = nil
             sealStreaming()
+            confirmOldestEcho()
             _ = start
         case .messageDelta(let delta):
             appendDelta(delta)
@@ -292,7 +335,8 @@ public struct Transcript: Sendable, Equatable {
         if admission.status != .queued, lastUserTurnIsUnanswered(text: text) { return }
         items.append(TranscriptItem(
             id: id,
-            content: .user(text: text, delivery: admission.status == .queued ? .queued : .sent)
+            content: .user(text: text, delivery: admission.status == .queued ? .queued : .sent),
+            inbound: InboundKind.classify(text: text, displayKind: nil)
         ))
     }
 
@@ -313,6 +357,14 @@ public struct Transcript: Sendable, Equatable {
             return false
         }), case .user(let text, _) = items[index].content else { return }
         items[index].content = .user(text: text, delivery: .sent)
+        turnOpenings[items[index].id] = items.last?.id
+    }
+
+    func turnOutputStart(after echoID: String, anchoredAt index: Int) -> Int {
+        guard let preceding = turnOpenings[echoID],
+              let position = items.firstIndex(where: { $0.id == preceding })
+        else { return index + 1 }
+        return max(position + 1, index + 1)
     }
 
     private mutating func appendDelta(_ delta: MessageDelta) {

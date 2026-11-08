@@ -17,6 +17,23 @@ def handlers(connection):
 
 def authorize(connection, ref, params, capability):
     connection.authority.authorize(connection.actor, ref, capability)
+    _require_own_profile(connection, params)
+
+
+def authorize_profile(connection, params, capability):
+    """``authorize`` for a verb that belongs to the profile, not to one session: the same serving,
+    profile and capability checks with no session lookup."""
+    from gateway.session_authorities import require_serving
+    authority, actor = connection.authority, connection.actor
+    require_serving(authority)
+    if actor.profile_id != authority.profile_id:
+        raise RuntimeStoreError('profile_mismatch')
+    if capability not in actor.capabilities:
+        raise RuntimeStoreError('permission_denied')
+    _require_own_profile(connection, params)
+
+
+def _require_own_profile(connection, params):
     # The contract's ``profile`` is nullable; null means this owner, as an omitted key does.
     if params.get('profile') is not None:
         from hermes_cli.profiles import profile_matches_home

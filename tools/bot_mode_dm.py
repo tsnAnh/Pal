@@ -244,7 +244,11 @@ def message_agent_tool(target: str = "", message: str = "", task_id: Optional[st
     if not raw_target:
         return _roster_err("target is required.")
     # Sender signature: the friendly name when the bot has one (#89720); the @handle stays the routing alias.
-    content = f"Message from 🤖 {_display_name(me, roster_homes.get(me, Path(home)), roster)} (@{_handle(me, roster)}): " + body
+    from tools.bot_dm_wire import format_peer_label, format_sender_stamp
+    content = format_sender_stamp(_display_name(me, roster_homes.get(me, Path(home)), roster), _handle(me, roster), body)
+    from tools import bot_thread_identity as thread_identity
+    from tools.bot_mode_dm_threads import Handoff
+    handoff = Handoff(Path(home), body, getattr(agent, "session_id", None) or None)
     delivery = dict(task_id=task_id, agent=agent)
     # Attribution for the recipient's memory hooks; the text prefix above stays the human-facing signature.
     author = {"id": f"bot:{me}", "name": _handle(me, roster), "is_bot": True}
@@ -259,6 +263,8 @@ def message_agent_tool(target: str = "", message: str = "", task_id: Optional[st
         # A peer dm crosses installs: qualify the id with this host so the peer's own '<me>' stays distinct.
         from agent.turn_author import bot_author_id, local_origin
         peer_author = {**author, "id": bot_author_id(me, local_origin())}
+        from tools.bot_thread_ledger import peer_origin
+        peer_counterpart = thread_identity.outbound_peer(peer_name, peer_profile, peer_origin(home, peer_name))
         # Pin the registry-owning profile: `hermes peer` resolves bot_peers via the profile-scoped
         # load_config(), while the roster above reads the machine-root config — the CLI must run
         # in that same profile or a secondary-profile bot sees an empty registry.
@@ -268,15 +274,15 @@ def message_agent_tool(target: str = "", message: str = "", task_id: Optional[st
         # this interpreter; _delivery_lock/_local_delivery_home match argv[0] by basename,
         # so the absolute path stays compatible.
         return _start_delivery([_hermes_cli(), "-p", _self_profile_name(root), "peer", "dm", dm_target], content,
-                               f"@{peer_profile or peer_name} on peer '{peer_name}'", stdin_file=True,
-                               author=peer_author, **delivery)
+                               format_peer_label(peer_profile or peer_name, peer_name), stdin_file=True,
+                               author=peer_author, handoff=handoff.to(peer_counterpart), **delivery)
 
     # A connection-qualified target ('hermes@mini') names a relay row outright; it is the form the relay itself
     # hands out for a colliding row, and stamps on replies. Resolved locally first, a local bot whose friendly
     # name slugs to 'hermes-mini' captured it. An '@' name no connection answers to still resolves locally.
     if "@" in raw_target.strip().lstrip("@"):
         # The sender's own relay folder, as below: the default's would relay a named bot's DM as the default.
-        relayed = _try_relay_delivery(Path(home), raw_target, content, me, **delivery)
+        relayed = _try_relay_delivery(Path(home), raw_target, content, me, handoff=handoff, **delivery)
         if relayed is not None:
             return relayed
     # Local teammate — folder id, or a friendly name / Desktop @-slug ('Scribe', 'Dr. Foo').
@@ -288,7 +294,7 @@ def message_agent_tool(target: str = "", message: str = "", task_id: Optional[st
         # Unknown locally, or same-name target on ANOTHER connection (this gateway's 'default'
         # messaging the cloud 'default'): every Desktop-connected gateway is reachable via the
         # relay roster, so try that before reporting a resolution failure / self-message.
-        relayed = _try_relay_delivery(Path(home), raw_target, content, me, **delivery)
+        relayed = _try_relay_delivery(Path(home), raw_target, content, me, handoff=handoff, **delivery)
         if relayed is not None:
             return relayed
         if resolved == me:
@@ -298,12 +304,15 @@ def message_agent_tool(target: str = "", message: str = "", task_id: Optional[st
                            "(roles are listed in your system prompt).")
     # Local teammates are admitted through the profile authority; the argv only names the
     # profile for the runner's lock/home lookups and is never executed.
+    local_counterpart = thread_identity.outbound_local(
+        resolved, _handle(resolved, roster), _display_name(resolved, roster_homes[resolved], roster))
     return _start_delivery([_hermes_cli(), "-p", resolved], content, f"@{_handle(resolved, roster)}",
-                           stdin_file=False, profile_home=roster_homes[resolved], author=author, **delivery)
+                           stdin_file=False, profile_home=roster_homes[resolved], author=author,
+                           handoff=handoff.to(local_counterpart), **delivery)
 
 
 def _try_relay_delivery(root: Path, raw_target: str, content: str, me: str, *,
-                        task_id: Optional[str], agent: Any) -> Optional[str]:
+                        task_id: Optional[str], agent: Any, handoff: Any = None) -> Optional[str]:
     """Cross-connection delivery via the Desktop relay; None when the target doesn't
     resolve against the relay roster. The envelope is queued on disk for the Desktop
     to drain; a background waiter is spawned immediately so the relayed reply wakes
@@ -332,7 +341,12 @@ def _try_relay_delivery(root: Path, raw_target: str, content: str, me: str, *,
             # Structured refusal so the agent can distinguish it from a resolution error ('runtime_offline'
             # per the #93091 reason enum).
             return json.dumps({"error": str(exc), "reason": exc.reason})
-        label = f"@{match['handle']} on {match['connection_label'] or match['connection_id']}"
+        if handoff is not None:
+            from tools.bot_thread_identity import outbound_relay
+            from tools.bot_thread_ledger import Status
+            handoff.to(outbound_relay(match)).sent(envelope["id"], Status.pending)
+        from tools.bot_dm_wire import format_relay_label
+        label = format_relay_label(match['handle'], match['connection_label'] or match['connection_id'])
         raw = _spawn_delivery(waiter_command(root, envelope), label, delivery_id=envelope["id"], task_id=task_id, agent=agent)
         waiter_error = json.loads(raw).get("error")
         if not waiter_error:
@@ -551,7 +565,8 @@ def _admit_live_dm(profile_home: Path | None, dm_file: str, author: Optional[dic
     return record
 
 
-def _wait_live_dm(home: str, delivery_id: str, *, dm_file: str | os.PathLike | None = None) -> int:
+def _wait_live_dm(home: str, delivery_id: str, *, dm_file: str | os.PathLike | None = None,
+                  ledger_home: Path | None = None) -> int:
     from tools.bot_failure_reasons import RUNTIME_OFFLINE
     from tools.bot_live_delivery import await_delivery, cancel_queued_delivery, owner_holds_delivery
 
@@ -595,6 +610,9 @@ def _wait_live_dm(home: str, delivery_id: str, *, dm_file: str | os.PathLike | N
         # plaintext) — the live branch returns before _run_delivery's own unlink.
         _unlink_dm_file(_live_intent_file(dm_file))
         _unlink_dm_file(str(dm_file))
+    if ledger_home is not None:
+        from tools.bot_mode_dm_threads import outcome_from_live_payload, settle
+        settle(ledger_home, delivery_id, outcome_from_live_payload(payload))
     print(json.dumps(payload))
     return 0 if status in ("settled", "queued", "claimed") else 1
 
@@ -632,7 +650,8 @@ def _runner_argv(args: list[str]) -> tuple[Optional[str], str, str, list[str]] |
 
 
 def _run_delivery(argv: list[str], dm_file: str, *, stdin_file: bool,
-                  profile_home: Path | None = None, author: Optional[dict] = None) -> int:
+                  profile_home: Path | None = None, author: Optional[dict] = None,
+                  ledger_home: Path | None = None) -> int:
     """Admit local DMs only through the profile authority; retain uncertain intent.
 
     The optional peer stdin transport remains an explicit remote route, never a
@@ -654,7 +673,8 @@ def _run_delivery(argv: list[str], dm_file: str, *, stdin_file: bool,
                 print(_live_outcome_unknown(dm_file, exc))
                 return 1
             if record is not None:
-                return _wait_live_dm(record["profile_home"], record["delivery_id"], dm_file=dm_file)
+                return _wait_live_dm(record["profile_home"], record["delivery_id"], dm_file=dm_file,
+                                     ledger_home=ledger_home)
     if not stdin_file:
         print(json.dumps({"reason": "runtime_unavailable", "error": "No canonical Bot Chat authority; payload retained."}))
         return 1
@@ -667,19 +687,36 @@ def _run_delivery(argv: list[str], dm_file: str, *, stdin_file: bool,
             # after subprocess.run returns, not merely after stdin reaches EOF.
             with open(dm_file, "r", encoding="utf-8-sig") as stream:
                 # Passing the file descriptor as stdin bypasses the BOM-aware decoder.
+                if ledger_home is not None:
+                    return _run_peer_delivery(argv, stream.read().encode("utf-8"), env, dm_file, ledger_home)
                 return subprocess.run(argv, input=stream.read().encode("utf-8"), check=False, env=env).returncode
     finally:
         _unlink_dm_file(dm_file)
 
 
+def _run_peer_delivery(argv: list[str], message: bytes, env: dict, dm_file: str, ledger_home: Path) -> int:
+    from tools.bot_mode_dm_threads import outcome_from_peer_result, read_peer_result, settle
+
+    result_file = f"{dm_file}.result.json"
+    code = subprocess.run([*argv, "--result-file", result_file], input=message, check=False, env=env).returncode  # health: allow HX006 -- same unbounded transport call as the ledger-less branch; the runner's lifetime is capped by _runner_policy
+    result = read_peer_result(result_file)
+    if result is not None:
+        settle(ledger_home, _dm_delivery_id(dm_file), outcome_from_peer_result(result),
+               learned_origin=str(result.get("origin") or "") or None)
+    return code
+
+
 def _delivery_command(argv: list[str], dm_file: str, *, stdin_file: bool,
-                      profile_home: Path | None = None, author: Optional[dict] = None) -> str:
+                      profile_home: Path | None = None, author: Optional[dict] = None,
+                      ledger_home: Path | None = None) -> str:
     """Build an argv-safe command for the cleanup-owning background runner:
     ``--run-delivery [--author <json>] <mode> <dm_file> [--profile-home <path>] <argv...>``."""
     runner_argv = [sys.executable, str(Path(__file__).resolve()), "--run-delivery",
                    "stdin" if stdin_file else "query-file", dm_file]
     if profile_home is not None:
         runner_argv.extend(["--profile-home", str(Path(profile_home).resolve())])
+    if ledger_home is not None:
+        runner_argv.extend(["--ledger-home", str(Path(ledger_home).resolve())])
     runner_argv.extend(argv)
     if sys.platform == "win32":
         # The tracked local backend uses Git Bash on native Windows: forward slashes keep drive
@@ -693,7 +730,7 @@ def _delivery_command(argv: list[str], dm_file: str, *, stdin_file: bool,
 
 def _start_delivery(argv: list[str], content: str, label: str, *, stdin_file: bool,
                     task_id: Optional[str], agent: Any, profile_home: Path | None = None,
-                    author: Optional[dict] = None) -> str:
+                    author: Optional[dict] = None, handoff: Any = None) -> str:
     """Create a DM file and transfer its cleanup ownership to the runner."""
     dm_file = _write_dm_file(content)
     if profile_home is not None:
@@ -709,7 +746,9 @@ def _start_delivery(argv: list[str], content: str, label: str, *, stdin_file: bo
             from tools.bot_handoff_ledger import record_handoff
             record_handoff(getattr(agent, "session_id", ""), delivery_id=record["delivery_id"],
                            profile_home=profile_home, profile=argv[2] if len(argv) > 2 else "")
-            command = _delivery_command(argv, dm_file, stdin_file=False, profile_home=profile_home, author=author)
+            ledger_home = _record_sent(handoff, record["delivery_id"], "delivered")
+            command = _delivery_command(argv, dm_file, stdin_file=False, profile_home=profile_home, author=author,
+                                        ledger_home=ledger_home)
             notification = json.loads(_spawn_delivery(command, label, task_id=task_id, agent=agent))
             result = dict(status=record["status"], delivery_id=record["delivery_id"], to=label,
                           detail="Durably queued for the live Bot Chat owner. Do NOT wait or resend; finish your turn.")
@@ -724,11 +763,25 @@ def _start_delivery(argv: list[str], content: str, label: str, *, stdin_file: bo
                     result["detail"] = f"Durably queued for the live Bot Chat owner. Do NOT resend. {notification['detail']}"
             return json.dumps(result)
     try:
-        command = _delivery_command(argv, dm_file, stdin_file=stdin_file, profile_home=profile_home, author=author)
+        ledger_home = _record_sent(handoff, _dm_delivery_id(dm_file), "pending")
+        command = _delivery_command(argv, dm_file, stdin_file=stdin_file, profile_home=profile_home, author=author,
+                                    ledger_home=ledger_home)
     except BaseException:
         _unlink_dm_file(dm_file)
         raise
-    return _spawn_delivery(command, label, dm_file=dm_file, task_id=task_id, agent=agent)
+    delivery_id = _dm_delivery_id(dm_file)
+    ack = _spawn_delivery(command, label, dm_file=dm_file, task_id=task_id, agent=agent)
+    if handoff is not None:
+        handoff.failed_to_start(delivery_id, ack)
+    return ack
+
+
+def _record_sent(handoff: Any, delivery_id: str, status: str) -> Path | None:
+    if handoff is None:
+        return None
+    from tools.bot_thread_ledger import Status
+    handoff.sent(delivery_id, Status(status))
+    return handoff.home
 
 
 def _runner_policy(label: str) -> Any:
@@ -861,15 +914,11 @@ def _wait_reply_main(reply_path: str, label: str, budget_seconds: str) -> int:
         if os.path.exists(reply_path):
             with open(reply_path, encoding="utf-8-sig") as fh:
                 d = json.load(fh)
+            from tools.bot_dm_wire import format_relay_failure, format_relay_reply
             if d.get("error"):
-                # Typed reason code rides ahead of the free text so the sender can branch on it
-                # without parsing provider prose. See #93091.
-                code = str(d.get("reason") or "").strip()
-                tag = f" [reason: {code}]" if code else ""
-                print(f"Delivery to {label} failed{tag}: {d['error']}")
+                print(format_relay_failure(label, d.get("reason"), d["error"]))
                 return 1
-            print(f"Reply from {label}:")
-            print(d.get("reply") or "(empty reply)")
+            print(format_relay_reply(label, d.get("reply")))
             return 0
         # 250ms cadence: stat is cheap and a longer sleep is pure dead air.
         time.sleep(0.25)
@@ -895,10 +944,11 @@ def _delivery_main(args: list[str]) -> int:
         if author is None:
             return 2
     try:
-        profile_home = None
-        if len(argv) >= 2 and argv[0] == "--profile-home":
-            profile_home, argv = Path(argv[1]), argv[2:]
-        return _run_delivery(argv, dm_file, stdin_file=mode == "stdin", profile_home=profile_home, author=author)
+        homes: dict[str, Path] = {}
+        while len(argv) >= 2 and argv[0] in ("--profile-home", "--ledger-home") and argv[0] not in homes:
+            homes[argv[0]], argv = Path(argv[1]), argv[2:]
+        return _run_delivery(argv, dm_file, stdin_file=mode == "stdin", profile_home=homes.get("--profile-home"),
+                             author=author, ledger_home=homes.get("--ledger-home"))
     except Exception as exc:
         # Every refusal ships a typed reason on stdout so the completion notification carries it
         # back to the sender (#93091): 'target_busy' from the queue's bounded wait, otherwise the

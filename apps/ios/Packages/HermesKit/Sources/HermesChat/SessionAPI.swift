@@ -7,6 +7,31 @@ public enum ChatError: Error, Sendable, Equatable {
     case notConnected
     case unexpectedResponse(method: String)
     case titleNotApplied
+    case attachmentRefused
+}
+
+public struct StagedImage: Decodable, Sendable, Hashable {
+    public var attached: Bool
+    public var path: String
+    public var mime: String
+    public var name: String
+    public var text: String?
+
+    public var promptAttachment: PromptAttachment { PromptAttachment(path: path, mime: mime) }
+}
+
+public struct StagedFile: Decodable, Sendable, Hashable {
+    public var attached: Bool
+    public var name: String
+    public var path: String
+    public var refText: String
+
+    enum CodingKeys: String, CodingKey {
+        case attached
+        case name
+        case path
+        case refText = "ref_text"
+    }
 }
 
 public struct PromptAttachment: Codable, Sendable, Hashable {
@@ -17,6 +42,11 @@ public struct PromptAttachment: Codable, Sendable, Hashable {
         self.path = path
         self.mime = mime
     }
+}
+
+public enum SteerStatus: String, Sendable, Equatable {
+    case queued
+    case rejected
 }
 
 public protocol ChatConnector: Sendable {
@@ -81,7 +111,8 @@ public struct SessionAPI: Sendable {
         text: String,
         submissionID: String,
         attachments: [PromptAttachment] = [],
-        hidden: Bool = false
+        hidden: Bool = false,
+        voiceTurn: Bool = false
     ) async throws -> AdmissionStatus {
         var params: [String: JSONValue] = [
             "session_id": .string(sessionID),
@@ -92,8 +123,31 @@ public struct SessionAPI: Sendable {
             params["attachments"] = .array(attachments.map { ["path": .string($0.path), "mime": .string($0.mime)] })
         }
         if hidden { params["display_kind"] = "hidden" }
+        if voiceTurn { params["voice_turn"] = true }
         let result = try await call("prompt.submit", params)
         return try decode(AdmissionStatus.self, result, "prompt.submit")
+    }
+
+    public func attachImage(sessionID: String, data: Data, filename: String) async throws -> StagedImage {
+        let result = try await call("image.attach_bytes", [
+            "session_id": .string(sessionID),
+            "content_base64": .string(data.base64EncodedString()),
+            "filename": .string(filename),
+        ])
+        let staged = try decode(StagedImage.self, result, "image.attach_bytes")
+        guard staged.attached else { throw ChatError.attachmentRefused }
+        return staged
+    }
+
+    public func attachFile(sessionID: String, data: Data, name: String, mime: String) async throws -> StagedFile {
+        let result = try await call("file.attach", [
+            "session_id": .string(sessionID),
+            "data_url": .string("data:\(mime);base64,\(data.base64EncodedString())"),
+            "name": .string(name),
+        ])
+        let staged = try decode(StagedFile.self, result, "file.attach")
+        guard staged.attached else { throw ChatError.attachmentRefused }
+        return staged
     }
 
     public func respondToClarify(
@@ -126,18 +180,34 @@ public struct SessionAPI: Sendable {
         return try decode(PromptResponseResult.self, result, "approval.respond")
     }
 
+    public func interrupt(sessionID: String, executionGeneration: Int) async throws {
+        _ = try await call("session.interrupt", [
+            "session_id": .string(sessionID),
+            "execution_generation": .int(executionGeneration),
+        ])
+    }
+
+    public func steer(sessionID: String, text: String, executionGeneration: Int) async throws -> SteerStatus {
+        let result = try await call("session.steer", [
+            "session_id": .string(sessionID),
+            "text": .string(text),
+            "execution_generation": .int(executionGeneration),
+        ])
+        return SteerStatus(rawValue: result["status"]?.stringValue ?? "") ?? .rejected
+    }
+
     public func profiles() async throws -> ProfilesListResult {
         let result = try await connection.call("profiles.list", params: ["include_sessions": true])
         return try decode(ProfilesListResult.self, result, "profiles.list")
     }
 
-    private func call(_ method: String, _ params: [String: JSONValue]) async throws -> JSONValue {
+    func call(_ method: String, _ params: [String: JSONValue]) async throws -> JSONValue {
         var scoped = params
         scoped["profile"] = .string(profile)
         return try await connection.call(method, params: .object(scoped))
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue, _ method: String) throws -> T {
+    func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue, _ method: String) throws -> T {
         do {
             return try value.decoded(as: type)
         } catch {

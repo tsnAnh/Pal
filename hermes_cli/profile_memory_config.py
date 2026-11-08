@@ -80,3 +80,12 @@ def cloned_memory_provider(profile_dir: Path) -> Optional[str]:
     if provider and ((profile_dir / provider).is_dir() or (profile_dir / f"{provider}.json").is_file()):
         return provider
     return None
+
+
+def cloned_plugin_names(profile_dir: Path) -> list[str]:
+    """Plugins a clone now carries in ``plugins/``, for the CLI notice."""
+    try:
+        return sorted(p.name for p in (profile_dir / "plugins").iterdir()
+                      if not p.name.startswith(".") and (p.is_dir() or p.is_symlink()))
+    except OSError:
+        return []

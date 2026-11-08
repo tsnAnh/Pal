@@ -12,13 +12,18 @@ final class BotChatE2ETests: E2ETestCase {
             XCTAssertTrue(row.label.contains(name), row.label)
         }
         shot(app, "roster")
-        let search = app.descendants(matching: .any)["rosterSearchField"]
+        let launcher = app.buttons["rosterSearchField"]
+        waitFor(launcher, timeout: 10, "search launcher")
+        launcher.tap()
+        let search = app.descendants(matching: .any)["searchField"]
         waitFor(search, timeout: 10, "search field")
-        search.tap()
+        waitFor(app.keyboards.firstMatch, timeout: 10, "keyboard")
         search.typeText("alpha")
-        waitGone(app.buttons["botRow-bot-beta"], timeout: 10, "search filters rows")
-        XCTAssertTrue(app.buttons["botRow-bot-alpha"].exists)
+        waitFor(app.buttons["searchResult-bot-bot-alpha"], timeout: 10, "search finds the bot")
+        waitGone(app.buttons["searchResult-bot-bot-beta"], timeout: 10, "search filters bots")
         shot(app, "roster-search")
+        app.buttons["searchClose"].tap()
+        waitFor(app.buttons["botRow-bot-alpha"], timeout: 10, "roster after closing search")
     }
 
     func test2SendStreamsReply() throws {
@@ -143,17 +148,24 @@ final class BotChatE2ETests: E2ETestCase {
         shot(app, "chat-reopen-settled")
     }
 
-    private func waitForReply(_ app: XCUIApplication, below text: String) {
-        let userBubble = bubbles(app, "userBubble", containing: text).firstMatch
-        let deadline = Date().addingTimeInterval(60)
-        while Date() < deadline {
-            let reply = app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last
-            if let reply, userBubble.exists, reply.frame.minY > userBubble.frame.minY,
-               !app.descendants(matching: .any)["assistantBubble-streaming"].exists {
-                return
-            }
-            Thread.sleep(forTimeInterval: 0.25)
+    func test8NewReplyInLongChatScrollsIntoView() throws {
+        let app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-alpha")
+        for index in 1...10 {
+            let text = String(format: "fill-%02d", index)
+            send(app, text)
+            waitFor(bubbles(app, "userBubble", containing: text).firstMatch, timeout: 10, "user bubble \(text)")
+            waitForReply(app, below: text)
         }
-        XCTFail("reply to \(text) did not complete")
+        let marker = "SLOW grow " + UUID().uuidString.prefix(6)
+        send(app, marker)
+        waitForReply(app, below: marker)
+        let composer = app.descendants(matching: .any)["composerField"]
+        let reply = try XCTUnwrap(app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last)
+        shot(app, "chat-long-new-reply")
+        XCTAssertTrue(reply.label.contains("slow-39"), reply.label)
+        XCTAssertTrue(reply.isHittable, "the new reply is on screen")
+        XCTAssertLessThanOrEqual(reply.frame.maxY, composer.frame.minY, "the end of the new reply sits above the composer")
     }
 }

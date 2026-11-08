@@ -48,6 +48,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s idle-watch %(message)s")  # stderr = launcher.log
     if runtime.stop_if_idle(launcher=_own_launcher(sys.argv[1:])):
         return
+    runtime.reconcile()
     delay = next_check_in(runtime.idle_stop_seconds(), runtime.idle_seconds())
     logger.info("screen kept; next idle check in %ds", delay)
     print(delay)

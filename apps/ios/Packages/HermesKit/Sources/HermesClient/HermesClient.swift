@@ -53,6 +53,7 @@ public struct SocketTicket: Sendable, Decodable {
 
 public enum HermesClientError: Error, Sendable, Equatable {
     case notSignedIn
+    case deviceToolsUnavailable
 }
 
 public struct HermesClient: Sendable {
@@ -119,10 +120,15 @@ public struct HermesClient: Sendable {
             throw CancellationError()
         } catch {
             diagnostics.info("ws", "runtime.describe unavailable: \(Diagnostics.describe(error))")
+            if role == .deviceHost { throw HermesClientError.deviceToolsUnavailable }
             return
         }
-        guard description.supportsReach, let presence else { return }
-        await presence.declare(on: connection, acceptsOffers: role == .offerTarget)
+        guard description.supportsReach, let presence else {
+            if role == .deviceHost { throw HermesClientError.deviceToolsUnavailable }
+            return
+        }
+        let declared = await presence.declare(on: connection, acceptsOffers: role == .offerTarget, deviceTools: role == .deviceHost)
+        if role == .deviceHost, !declared { throw HermesClientError.deviceToolsUnavailable }
     }
 
     private func restClient() async throws -> RESTClient {

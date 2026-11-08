@@ -7,14 +7,11 @@ final class SignInFlowTests: E2ETestCase {
         signInIfNeeded(app)
 
         app.buttons["userAvatarButton"].tap()
-        let status = app.staticTexts["statusLabel"]
-        waitFor(status, timeout: 15, "settings status")
-        XCTAssertEqual(status.label, "Connected")
-        let instance = app.staticTexts["instanceIDLabel"]
-        waitFor(instance, timeout: 10)
-        XCTAssertFalse(instance.label.isEmpty)
-        let attachment = XCTAttachment(string: "instance_id=\(instance.label)")
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        waitFor(app.descendants(matching: .any)["settingsSheet"], timeout: 15, "settings sheet")
+        let account = app.buttons["settingsAccountRow"]
+        waitFor(account, timeout: 15, "account row")
+        let host = try XCTUnwrap(URL(string: env.baseURL)?.host(), "base URL host")
+        XCTAssertTrue(account.label.contains(host), "the account row names the signed-in gateway: \(account.label)")
+        shot(app, "signed-in-settings")
     }
 }

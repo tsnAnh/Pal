@@ -112,8 +112,8 @@ private struct LossyAckSubmitter: OutboxSubmitter {
     let lostAcks: Mutable<Int>
     let admitted: Mutable<[AdmissionStatus]>
 
-    func submit(_ entry: OutboxEntry) async throws -> AdmissionStatus {
-        let status = try await inner.submit(entry)
+    func submit(_ entry: OutboxEntry, files: [OutgoingFile]) async throws -> AdmissionStatus {
+        let status = try await inner.submit(entry, files: files)
         admitted.box.withLock { $0.append(status) }
         let lose = lostAcks.box.withLock { remaining -> Bool in
             guard remaining > 0 else { return false }
@@ -456,7 +456,7 @@ struct ChatE2ETests {
 private struct EchoingErrorSubmitter: OutboxSubmitter {
     let error: GatewayTransportError
 
-    func submit(_ entry: OutboxEntry) async throws -> AdmissionStatus {
+    func submit(_ entry: OutboxEntry, files: [OutgoingFile]) async throws -> AdmissionStatus {
         throw error
     }
 }

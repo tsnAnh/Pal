@@ -119,7 +119,10 @@ def _poll_idle_screens() -> None:
     for home in _watched_lease_homes():
         token = set_hermes_home_override(home)
         try:
-            _bd_runtime.stop_if_idle()
+            if not _bd_runtime.stop_if_idle():
+                _bd_runtime.reconcile()
+        except Exception:
+            logger.warning("Bot Desktop idle check failed for %s", home, exc_info=True)
         finally:
             reset_hermes_home_override(token)
 

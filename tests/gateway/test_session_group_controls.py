@@ -109,7 +109,8 @@ def test_profile_discovery_and_group_controls_enforce_actor_scope(tmp_path, monk
             for method in ('profiles.list', 'groups.list'):
                 denied = await call(method, {'profile': 'foreign'})
                 assert denied['error']['message'] == 'profile_mismatch', denied
-            assert (await call('profiles.delete'))['error']['code'] == -32601  # unknown method, not a bad argument
+            refused = await call('profiles.delete', {'name': 'helper'}, capabilities=['session:read'])
+            assert refused['error']['message'] == 'permission_denied', refused
         asyncio.run(probe())
 
 

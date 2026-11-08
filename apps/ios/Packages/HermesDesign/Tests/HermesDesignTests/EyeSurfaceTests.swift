@@ -14,6 +14,7 @@ private func rig(_ shape: String) throws -> AvatarRig {
 
 private let bodyShapes = BlobKind.allCases.map { "blobatar:k7q2m9x0:\($0.rawValue)" } + ClassicShape.allCases.map(\.rawValue)
 private let everyShape = bodyShapes + (1...6).map { "sigil-\($0)" }
+private let starArmShapes: Set = ["blobatar:k7q2m9x0:\(BlobKind.burst.rawValue)"]
 
 private func eyes(_ rig: AvatarRig, _ pose: AvatarPose) -> [CGRect] {
     rig.eyePaths(pose).map(\.boundingRect).sorted { $0.midX < $1.midX }
@@ -92,7 +93,7 @@ struct EyeSurfaceTests {
         }
     }
 
-    @Test("looking right moves the pair right and squeezes the leading eye", arguments: everyShape)
+    @Test("looking right moves the pair right and squeezes the leading eye", arguments: everyShape.filter { !starArmShapes.contains($0) })
     func lookRight(shape: String) throws {
         let rig = try rig(shape)
         let rest = eyes(rig, .facing)

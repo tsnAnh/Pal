@@ -132,7 +132,11 @@ def desktop_home(env: Any) -> str:
 
 def browser_profile_dir(env: Any) -> str:
     """The ONE ``--user-data-dir`` the agent's browser and the dock's Browser icon share inside the
-    sandbox (same rule as the host: two profiles would mean the human logs into a jar the bot never sees)."""
+    sandbox (same rule as the host: two profiles would mean the human logs into a jar the bot never sees).
+    In a bot's own Docker container that is its host-synced Chrome copy, bind-mounted in."""
+    from tools.bot_desktop import sandbox_computer
+    if sandbox_computer.active(env):
+        return sandbox_computer.CONTAINER_PROFILE
     return f"{desktop_home(env).rstrip('/')}/.hermes/bot-desktop/browser-profile"
 
 
@@ -309,6 +313,15 @@ rm -f {q}/env {q}/launcher.pid {q}/rfb.sock
 """
     proc = streams.run_in(env, ["bash", "-c", script], user=_user_for(env), timeout=30)
     _marker().unlink(missing_ok=True)
+    return proc.returncode == 0
+
+
+def wipe_desktop_settings(env: Any, profile: str) -> bool:
+    """Remove the stopped screen's desktop settings inside the sandbox; True when there were any."""
+    xdg = shlex.quote(f"{_remote_dir(env, profile)}/xdg")
+    proc = streams.run_in(env, ["bash", "-c", f"[ -d {xdg} ] || exit 3; rm -rf {xdg}"], user=_user_for(env), timeout=30)
+    if proc.returncode not in (0, 3):
+        raise RuntimeError(f"could not wipe the sandbox desktop settings: {proc.stderr.decode('utf-8', 'replace')[-300:]}")
     return proc.returncode == 0
 
 

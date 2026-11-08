@@ -7,6 +7,7 @@ struct E2EEnvironment {
     let password: String
     let controlDirectory: String?
     let shotsDirectory: String?
+    let stubLogPath: String?
 
     static func load() throws -> E2EEnvironment {
         let env = ProcessInfo.processInfo.environment
@@ -15,7 +16,8 @@ struct E2EEnvironment {
             username: try XCTUnwrap(env["HERMES_UITEST_USERNAME"], "HERMES_UITEST_USERNAME not set"),
             password: try XCTUnwrap(env["HERMES_UITEST_PASSWORD"], "HERMES_UITEST_PASSWORD not set"),
             controlDirectory: env["HERMES_UITEST_CTL"],
-            shotsDirectory: env["HERMES_UITEST_SHOTS"]
+            shotsDirectory: env["HERMES_UITEST_SHOTS"],
+            stubLogPath: env["HERMES_UITEST_STUB_LOG"]
         )
     }
 }
@@ -23,24 +25,43 @@ struct E2EEnvironment {
 @MainActor
 class E2ETestCase: XCTestCase {
     var env: E2EEnvironment!
+    private static var credentialsResetThisRun = false
 
     override func setUp() async throws {
         continueAfterFailure = false
         env = try E2EEnvironment.load()
     }
 
-    private static var signedInToThisRunsGateway = false
-
     func launch(resetCredentials: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
-        let reset = resetCredentials || !Self.signedInToThisRunsGateway
-        Self.signedInToThisRunsGateway = true
         let app = XCUIApplication()
+        let reset = resetCredentials || !Self.credentialsResetThisRun
+        Self.credentialsResetThisRun = true
         app.launchArguments = (reset ? ["-hermes-reset-credentials"] : []) + extraArguments
         app.launch()
         return app
     }
 
+    private static var notificationPromptSettled = false
+
+    func allowNotificationsIfAsked() {
+        guard !Self.notificationPromptSettled else { return }
+        Self.notificationPromptSettled = true
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
+        if allow.waitForExistence(timeout: 4) { allow.tap() }
+    }
+
+    func signalHost(_ name: String) {
+        guard let directory = env.shotsDirectory else { return }
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: URL(fileURLWithPath: directory).appendingPathComponent(name).path, contents: Data())
+    }
+
     func signInIfNeeded(_ app: XCUIApplication) {
+        signInThenSettle(app)
+        allowNotificationsIfAsked()
+    }
+
+    private func signInThenSettle(_ app: XCUIApplication) {
         if roster(app).waitForExistence(timeout: 15) { return }
         let field = app.textFields["baseURLField"]
         XCTAssertTrue(field.waitForExistence(timeout: 15), app.debugDescription)
@@ -58,10 +79,16 @@ class E2ETestCase: XCTestCase {
         XCTAssertTrue(web.waitForExistence(timeout: 20), app.debugDescription)
         let userField = web.textFields.firstMatch
         XCTAssertTrue(userField.waitForExistence(timeout: 20), app.debugDescription)
+        let passwordField = web.secureTextFields.firstMatch
+        XCTAssertTrue(passwordField.waitForExistence(timeout: 20), app.debugDescription)
+        passwordField.tap()
+        passwordField.typeText(env.password)
         userField.tap()
-        userField.typeText(env.username + "\t")
-        web.secureTextFields.firstMatch.typeText(env.password)
-        web.buttons.matching(NSPredicate(format: "label ==[c] %@", "Sign in")).firstMatch.tap()
+        userField.typeText(env.username + "\n")
+        if !roster(app).waitForExistence(timeout: 8) {
+            let submit = web.buttons.matching(NSPredicate(format: "label ==[c] %@", "Sign in")).firstMatch
+            if submit.exists, submit.isHittable { submit.tap() }
+        }
         XCTAssertTrue(roster(app).waitForExistence(timeout: 40), app.debugDescription)
     }
 
@@ -93,13 +120,36 @@ class E2ETestCase: XCTestCase {
         XCTAssertTrue(element.waitForExistence(timeout: timeout), message + "\n" + XCUIApplication().debugDescription, file: file, line: line)
     }
 
+    @discardableResult
+    func waitForReply(_ app: XCUIApplication, below text: String, timeout: TimeInterval = 60) -> XCUIElement? {
+        let userBubble = bubbles(app, "userBubble", containing: text).firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let reply = app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last
+            if let reply, userBubble.exists, reply.frame.minY > userBubble.frame.minY,
+               !app.descendants(matching: .any)["assistantBubble-streaming"].exists {
+                return reply
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        XCTFail("reply to \(text) did not complete")
+        return nil
+    }
+
     func waitGone(_ element: XCUIElement, timeout: TimeInterval = 60, _ message: String = "", file: StaticString = #filePath, line: UInt = #line) {
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element)
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: timeout), .completed, message, file: file, line: line)
     }
 
     func shot(_ app: XCUIApplication, _ name: String) {
-        let screenshot = app.screenshot()
+        store(app.screenshot(), named: name)
+    }
+
+    func screenShot(_ name: String) {
+        store(XCUIScreen.main.screenshot(), named: name)
+    }
+
+    private func store(_ screenshot: XCUIScreenshot, named name: String) {
         let attachment = XCTAttachment(screenshot: screenshot)
         attachment.name = name
         attachment.lifetime = .keepAlways
