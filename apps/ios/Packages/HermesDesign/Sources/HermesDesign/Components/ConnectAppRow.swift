@@ -6,10 +6,10 @@ public enum ConnectRowMetrics {
     public static let tileRadius: CGFloat = 10
     public static let tileToTextGap: CGFloat = 14
     public static let verticalPadding: CGFloat = 13
-    public static let titleSize: CGFloat = 17
-    public static let subtitleSize: CGFloat = 14
-    public static let sectionTitleSize: CGFloat = 18
-    public static let captionSize: CGFloat = 14.5
+    public static let titleSize: CGFloat = 16
+    public static let subtitleSize: CGFloat = 12.5
+    public static let sectionTitleSize: CGFloat = 16
+    public static let captionSize: CGFloat = 12.5
     public static let summaryLineLimit = 2
 }
 
@@ -200,7 +200,7 @@ public struct ConnectSectionHeader: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
-        .padding(.top, 22)
+        .padding(.top, 16)
         .padding(.bottom, 6)
         .contentShape(Rectangle())
     }
@@ -222,9 +222,9 @@ public struct ConnectedCountButton: View {
     public var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 17))
+                .font(.system(size: 18.5))
                 .foregroundStyle(Color(theme.palette.textPrimary))
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 16)
                 .frame(height: HermesMetrics.circleButtonDiameter)
                 .background(Color(theme.palette.circleButtonFill), in: Capsule())
                 .overlay(Capsule().strokeBorder(Color(theme.palette.circleButtonStroke), lineWidth: HermesMetrics.circleButtonStrokeWidth))

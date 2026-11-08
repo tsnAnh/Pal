@@ -98,7 +98,6 @@ struct ConnectAppsSheet: View {
                 selection: $model.selection,
                 accessibilityIdentifier: "connectAppsChips"
             )
-            .padding(.bottom, 14)
         }
         switch model.phase {
         case .loading where model.catalog.apps.isEmpty:
