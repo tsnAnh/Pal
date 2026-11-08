@@ -52893,24 +52893,6 @@
       }
     },
     {
-      "name": "connection.respond",
-      "summary": "Per-target outcomes from the card, and an optional Continue.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/ConnectionRespondParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/ConnectionRespondResult"
-        }
-      }
-    },
-    {
       "name": "connectors.catalog",
       "summary": "The hosted connector catalog available to the scoped member.",
       "params": [

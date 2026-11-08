@@ -7583,8 +7583,6 @@ export interface CanonicalRpcMethods {
   'command.observe': { params: CommandObserveParams; result: CommandObserveResult }
   'config.get': { params: ConfigGetParams; result: CanonicalConfigGetResult }
   'config.set': { params: CanonicalConfigSetParams; result: ConfigSetResult }
-  /** Per-target outcomes from the card, and an optional Continue. */
-  'connection.respond': { params: ConnectionRespondParams; result: ConnectionRespondResult }
   /** The hosted connector catalog available to the scoped member. */
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
@@ -7777,7 +7775,6 @@ export const CANONICAL_RPC_METHODS = [
   'command.observe',
   'config.get',
   'config.set',
-  'connection.respond',
   'connectors.catalog',
   'connectors.connect',
   'connectors.list',
