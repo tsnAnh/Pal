@@ -52,6 +52,7 @@ struct VaultScreen: View {
     @State private var model = VaultModel()
     @State private var adding = false
     @State private var removing: VaultEntry?
+    @State private var confirmingRemoval = false
 
     var body: some View {
         SettingsPage(
@@ -79,17 +80,6 @@ struct VaultScreen: View {
         .sheet(isPresented: $adding) {
             AddVaultLoginSheet(model: model, hub: hub) { adding = false }
         }
-        .confirmationDialog(
-            "Remove \(removing?.title ?? "this item") from your vault?",
-            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                if let entry = removing { Task { await model.remove(entry, api: hub.api) } }
-                removing = nil
-            }
-            Button("Cancel", role: .cancel) { removing = nil }
-        }
         .alert("Vault", isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -104,9 +94,21 @@ struct VaultScreen: View {
                 PlaceholderRow("Your vault is empty", accessibilityIdentifier: "vaultEmptyRow")
             } else {
                 ForEach(entries) { entry in
-                    VaultEntryRow(entry: entry) { removing = entry }
+                    VaultEntryRow(entry: entry) {
+                        removing = entry
+                        confirmingRemoval = true
+                    }
                 }
             }
+        }
+        .confirmationDialog(
+            "Remove this item from your vault?", isPresented: $confirmingRemoval, titleVisibility: .visible, presenting: removing
+        ) { entry in
+            Button("Remove", role: .destructive) { Task { await model.remove(entry, api: hub.api) } }
+                .accessibilityIdentifier("vaultRemoveConfirm")
+            Button("Cancel", role: .cancel) {}
+        } message: { entry in
+            Text(entry.title)
         }
     }
 }
@@ -147,7 +149,12 @@ private struct AddVaultLoginSheet: View {
                     "Save", kind: draft.isComplete ? .accent : .dimmed, isBusy: model.isBusy,
                     accessibilityIdentifier: "vaultSaveButton"
                 ) {
-                    Task { if await model.add(draft, api: hub.api) { close() } }
+                    Task {
+                        if await model.add(draft, api: hub.api) {
+                            draft.password = ""
+                            close()
+                        }
+                    }
                 }
             },
             content: {
@@ -156,7 +163,7 @@ private struct AddVaultLoginSheet: View {
                         GroupedCard(accessibilityIdentifier: "vaultAddFields") {
                             field("Name", text: $draft.label, identifier: "vaultNameField", content: .none)
                             field("Website", text: $draft.website, identifier: "vaultWebsiteField", content: .URL)
-                            field("Email, phone or username", text: $draft.identifier, identifier: "vaultIdentifierField", content: .username)
+                            field("Email, phone or username", text: $draft.identifier, identifier: "vaultIdentifierField", content: .none)
                             secureField
                         }
                         CardFootnote(
@@ -184,7 +191,7 @@ private struct AddVaultLoginSheet: View {
 
     private var secureField: some View {
         SecureField("Password", text: $draft.password)
-            .textContentType(.password)
+            .textContentType(.oneTimeCode)
             .hermesText(.rowTitle)
             .foregroundStyle(Color(theme.palette.textPrimary))
             .padding(.horizontal, HermesMetrics.rowInset)
