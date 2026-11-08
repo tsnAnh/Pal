@@ -77,12 +77,11 @@ def turn_finished(authority, session_id: str, row, complete: dict) -> None:
     if kind is None or not admission_id or _field(row, "principal_id") == CRON_PRINCIPAL_ID:
         return
     text = complete.get("text")
-    _submit(authority, Notice(kind, session_id, f"{authority.profile_id}:{session_id}:turn:{admission_id}",
-                              text if isinstance(text, str) else ""))
+    _submit(authority, Notice(kind, session_id, f"{session_id}:turn:{admission_id}", text if isinstance(text, str) else ""))
 
 
 def waiting_on_user(authority, session_id: str, prompt_id: str, kind: Kind) -> None:
-    _submit(authority, Notice(kind, session_id, f"{authority.profile_id}:{session_id}:{kind.value}:{prompt_id}"))
+    _submit(authority, Notice(kind, session_id, f"{session_id}:{kind.value}:{prompt_id}"))
 
 
 def notifications_flag(cfg) -> bool:
@@ -153,7 +152,7 @@ def deliver(authority, notice: Notice, now: float) -> int:
         client = push_apns.shared_client(config)
     except push_apns.ApnsUnavailable:
         return 0
-    if not device_registry.claim_push(root, notice.claim_key, now):
+    if not device_registry.claim_push(root, f"{authority.profile_id}:{notice.claim_key}", now):
         return 0
     profile, name = _bot_identity(authority)
     payload = _payload(notice, profile, name)
