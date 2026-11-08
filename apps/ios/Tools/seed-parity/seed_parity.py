@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import uuid
+from collections import namedtuple
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -266,6 +267,22 @@ EXCHANGES = (
 
 DM_WAIT_SECONDS = 120
 
+ProviderAccount = namedtuple("ProviderAccount", "provider label auth_type base_path spend")
+
+PROVIDER_ACCOUNTS = (
+    ProviderAccount("openai-codex", "Personal", "oauth", "/backend-api/codex", None),
+    ProviderAccount("copilot", "Personal", "oauth", "", None),
+    ProviderAccount("openai", "Default key", "api_key", "", (182_400, 56_300, 4.27)),
+)
+SPEND_SOURCE = "api_server"
+
+OtherDevice = namedtuple("OtherDevice", "device_id label days_ago")
+
+OTHER_DEVICES = (
+    OtherDevice("e2e-desktop-0001", "Bens-MacBook-Pro.local", 9),
+    OtherDevice("e2e-desktop-0002", "tsnanh", 56),
+)
+
 
 def slugs():
     return [bot.slug for bot in BOTS]
@@ -424,6 +441,47 @@ async def seed_through_gateway(home, now):
         pump.cancel()
 
 
+def provider_root(stub_url):
+    return stub_url.rstrip("/").removesuffix("/v1")
+
+
+def seed_provider_accounts(home, stub_url):
+    from hermes_cli.auth import write_credential_pool
+    from hermes_state import SessionDB
+
+    root = provider_root(stub_url)
+    for account in PROVIDER_ACCOUNTS:
+        entry = {
+            "id": f"e2e-{account.provider}", "label": account.label, "auth_type": account.auth_type, "priority": 0,
+            "source": "manual", "access_token": f"e2e-fake-{account.provider}-credential",
+        }
+        if account.base_path:
+            entry["base_url"] = root + account.base_path
+        write_credential_pool(account.provider, [entry])
+    database = SessionDB(db_path=home / "state.db")
+    try:
+        for account in PROVIDER_ACCOUNTS:
+            if account.spend is None:
+                continue
+            input_tokens, output_tokens, usd = account.spend
+            database.update_token_counts(
+                f"e2e-spend-{account.provider}", input_tokens=input_tokens, output_tokens=output_tokens,
+                model="e2e-model", actual_cost_usd=usd, cost_status="actual", cost_source="provider_response",
+                billing_provider=account.provider, billing_mode="api", api_call_count=12, source=SPEND_SOURCE)
+    finally:
+        database.close()
+
+
+def seed_other_devices(home, now):
+    from gateway import device_registry
+
+    root = device_registry.install_root(home)
+    for device in OTHER_DEVICES:
+        device_registry.record_hello(
+            root, device_id=device.device_id, kind="desktop", label=device.label, model="Mac", os_name="macOS",
+            app_version="1.0", now=(now - timedelta(days=device.days_ago)).timestamp())
+
+
 def require_sandbox_home(home):
     resolved = home.resolve()
     if not any(part.startswith(HOME_MARKER) for part in resolved.parts):
@@ -442,7 +500,10 @@ def seed(home, repo, dm_replies):
     os.environ["HERMES_HOME"] = str(home)
     write_dm_replies(dm_replies)
     sys.path.insert(0, str(repo))
-    asyncio.run(seed_through_gateway(home, datetime.now().astimezone()))
+    now = datetime.now().astimezone()
+    asyncio.run(seed_through_gateway(home, now))
+    seed_provider_accounts(home, os.environ["HERMES_IOS_E2E_STUB_URL"])
+    seed_other_devices(home, now)
     print(",".join(slugs()))
 
 

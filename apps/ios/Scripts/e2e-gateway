@@ -127,7 +127,12 @@ model:
 YAML
 done
 
-( cd "$GATEWAY_REPO" && HERMES_HOME="$HOME_DIR" exec "$PYTHON" -m hermes_cli.main gateway run >"$GATEWAY_LOG" 2>&1 ) &
+GATEWAY_ENV=(HERMES_HOME="$HOME_DIR")
+if [ "$SEED" = "parity" ]; then
+  GATEWAY_ENV+=(PYTHONPATH="$IOS_DIR/Tools/seed-parity/gateway-doubles" IOS_E2E_PROVIDER_USAGE_URL="${STUB_URL%/v1}")
+fi
+
+( cd "$GATEWAY_REPO" && exec env "${GATEWAY_ENV[@]}" "$PYTHON" -m hermes_cli.main gateway run >"$GATEWAY_LOG" 2>&1 ) &
 GATEWAY_PID=$!
 for _ in $(seq 90); do
   curl -fs "$BASE_URL/api/auth/providers" >/dev/null 2>&1 && break
