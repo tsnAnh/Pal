@@ -8,6 +8,7 @@ enum SpeechListenerError: Error, Equatable {
     case onDeviceUnsupported
     case noMicrophone
     case audioFailure
+    case nothingRecognised
 }
 
 enum SpeechListenerEvent: Sendable {
@@ -107,6 +108,7 @@ extension SpeechListenerError {
         case .onDeviceUnsupported: String(localized: "On-device speech recognition isn't available for your language on this device.")
         case .noMicrophone: String(localized: "No microphone is available on this device.")
         case .audioFailure: String(localized: "The microphone couldn't be started. Try again.")
+        case .nothingRecognised: String(localized: "Couldn't catch that. Try again.")
         }
     }
 }

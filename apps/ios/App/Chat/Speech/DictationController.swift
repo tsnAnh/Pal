@@ -15,6 +15,7 @@ final class DictationController {
 
     @ObservationIgnored private let listener = SpeechListener()
     @ObservationIgnored private var base = ""
+    @ObservationIgnored private var heardSpeech = false
     @ObservationIgnored private var startTask: Task<Void, Never>?
 
     var isActive: Bool { state != .idle }
@@ -26,6 +27,7 @@ final class DictationController {
         }
         failure = nil
         base = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        heardSpeech = false
         state = .starting
         startTask = Task { [weak self] in
             guard let self else { return }
@@ -70,12 +72,13 @@ final class DictationController {
         guard state == .listening else { return }
         switch event {
         case .partial(let text):
+            heardSpeech = true
             apply(joined(text))
         case .final(let text):
             apply(joined(text))
             stop()
         case .failed:
-            stop()
+            if heardSpeech { stop() } else { finish(with: .nothingRecognised) }
         }
     }
 

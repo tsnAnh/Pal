@@ -178,12 +178,22 @@ final class GrokChatE2ETests: E2ETestCase {
             }
             return false
         }
-        app.buttons["micButton"].tap()
-        app.tap()
+        let mic = app.buttons["micButton"]
+        mic.tap()
         let unavailable = app.alerts["Dictation unavailable"]
-        let listening = app.buttons["micButton"].label == "Stop dictation"
-        XCTAssertTrue(listening || unavailable.waitForExistence(timeout: 10), "dictation either listens or explains why not")
+        var listening = false
+        var explained = false
+        let deadline = Date().addingTimeInterval(15)
+        while Date() < deadline && !listening && !explained {
+            listening = mic.label == "Stop dictation"
+            explained = unavailable.exists
+            if !listening && !explained {
+                app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.01)).tap()
+                Thread.sleep(forTimeInterval: 0.3)
+            }
+        }
         shot(app, "dictation-\(listening ? "listening" : "unavailable")")
+        XCTAssertTrue(listening || explained, "dictation either listens or explains why not")
         if unavailable.exists { unavailable.buttons["OK"].tap() }
     }
 }
