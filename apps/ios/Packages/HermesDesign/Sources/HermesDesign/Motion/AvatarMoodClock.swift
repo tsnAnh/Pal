@@ -6,23 +6,29 @@ struct AvatarMoodClock: Equatable, Sendable {
     var since: Date
     var from: AvatarPose?
     var blinkDelay: Double
+    var loadingSeed: UInt64
     var reduceMotion: Bool
 
-    init(mood: AvatarMood, since: Date, blinkDelay: Double, reduceMotion: Bool, from: AvatarPose? = nil) {
+    init(
+        mood: AvatarMood, since: Date, blinkDelay: Double, loadingSeed: UInt64, reduceMotion: Bool, from: AvatarPose? = nil
+    ) {
         self.mood = mood
         self.since = since
         self.blinkDelay = blinkDelay
+        self.loadingSeed = loadingSeed
         self.reduceMotion = reduceMotion
         self.from = from
     }
 
     func changing(to mood: AvatarMood, at date: Date) -> AvatarMoodClock {
-        AvatarMoodClock(mood: mood, since: date, blinkDelay: blinkDelay, reduceMotion: reduceMotion, from: pose(at: date))
+        AvatarMoodClock(
+            mood: mood, since: date, blinkDelay: blinkDelay, loadingSeed: loadingSeed, reduceMotion: reduceMotion, from: pose(at: date)
+        )
     }
 
     func pose(at date: Date) -> AvatarPose {
         let t = date.timeIntervalSince(since)
-        var pose = AvatarMotion.pose(mood, at: t, reduceMotion: reduceMotion)
+        var pose = AvatarMotion.pose(mood, at: t, reduceMotion: reduceMotion, seed: sessionSeed)
         if let from, !reduceMotion, t < AvatarMotion.settleDuration {
             pose = from.blended(to: pose, Ease.easeOut(max(0, t) / AvatarMotion.settleDuration))
         }
@@ -40,6 +46,10 @@ struct AvatarMoodClock: Equatable, Sendable {
         guard blinks(at: candidate.timeIntervalSince(since)) else { return nil }
         let blinkStart = AvatarBlink.nextStart(after: candidate.timeIntervalSinceReferenceDate, delay: blinkDelay)
         return Date(timeIntervalSinceReferenceDate: blinkStart)
+    }
+
+    var sessionSeed: UInt64 {
+        loadingSeed ^ UInt64(truncatingIfNeeded: Int64((since.timeIntervalSince1970 * 1000).rounded(.down)))
     }
 
     private var oneShotDuration: Double {

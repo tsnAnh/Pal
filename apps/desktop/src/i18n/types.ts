@@ -4013,6 +4013,11 @@ export interface Translations extends NoticeTranslations {
       run: string
       command: string
       commandDetails: string
+      botTitle: string
+      botBody: string
+      botAlwaysDescription: string
+      showDetails: string
+      hideDetails: string
       moreOptions: string
       allowSession: string
       alwaysAllowMenu: string

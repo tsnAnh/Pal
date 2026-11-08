@@ -55,37 +55,55 @@ struct AvatarMotionArtifacts {
 
     private struct Motion {
         var name: String
-        var clock: AvatarMoodClock
         var duration: Double
+        var pose: (Double) -> AvatarPose
+    }
+
+    private static let sequenceSeconds = 30.0
+
+    private static func clipPose(_ name: String, atFraction fraction: Double) -> AvatarPose {
+        let clip = LoadingClips.all.first { $0.name == name }!
+        return clip.track.pose(at: clip.duration * fraction)
+    }
+
+    private static func doneMotion(for spec: BotAvatarSpec) -> Motion {
+        let delay = AvatarBlink.delaySeconds(for: spec.blinkKey)
+        let seed = LoadingSequence.seed(for: spec.blinkKey)
+        let working = AvatarMoodClock(mood: .work, since: start, blinkDelay: delay, loadingSeed: seed, reduceMotion: false)
+        let clock = working.changing(to: .done, at: start)
+        return Motion(name: "done", duration: AvatarMood.doneDuration + 0.6) { clock.pose(at: start.addingTimeInterval($0)) }
+    }
+
+    private static func loadingMotions(for spec: BotAvatarSpec) -> [Motion] {
+        let delay = AvatarBlink.delaySeconds(for: spec.blinkKey)
+        let seed = LoadingSequence.seed(for: spec.blinkKey)
+        let idle = AvatarMoodClock(mood: .idle, since: start.addingTimeInterval(-10), blinkDelay: delay, loadingSeed: seed, reduceMotion: false)
+        let clock = idle.changing(to: .work, at: start)
+        let sequence = Motion(name: "sequence", duration: sequenceSeconds) { clock.pose(at: start.addingTimeInterval($0)) }
+        let clips = LoadingClips.all.map { clip in
+            Motion(name: "clip-\(clip.name)", duration: clip.duration) { clip.track.pose(at: $0) }
+        }
+        return clips + [sequence]
     }
 
     private static let start = Date(timeIntervalSinceReferenceDate: 800_000_000)
 
-    private static func motions(for spec: BotAvatarSpec) -> [Motion] {
-        let delay = AvatarBlink.delaySeconds(for: spec.blinkKey)
-        let idle = AvatarMoodClock(mood: .idle, since: start.addingTimeInterval(-10), blinkDelay: delay, reduceMotion: false)
-        let working = AvatarMoodClock(mood: .work, since: start, blinkDelay: delay, reduceMotion: false)
-        return [
-            Motion(name: "loading", clock: idle.changing(to: .work, at: start), duration: AvatarMotion.loopDuration),
-            Motion(name: "done", clock: working.changing(to: .done, at: start), duration: AvatarMood.doneDuration + 0.6),
-        ]
-    }
-
-    @Test("frames for every featured avatar and motion")
+    @Test("frames for every loading clip, the 30 s sequence and the done motion")
     func frames() throws {
         let root = URL(fileURLWithPath: try #require(outputDirectory), isDirectory: true)
-        for (kind, spec) in Self.featured {
+        for (index, (kind, spec)) in Self.featured.enumerated() {
             let content = AvatarContent(spec)
-            for motion in Self.motions(for: spec) {
+            let motions = (index == 0 ? Self.loadingMotions(for: spec) : []) + [Self.doneMotion(for: spec)]
+            for motion in motions {
                 let folder = root.appendingPathComponent("frames/\(kind)-\(motion.name)", isDirectory: true)
                 try? FileManager.default.removeItem(at: folder)
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 let count = Int((motion.duration * framesPerSecond).rounded())
-                for index in 0..<count {
-                    let pose = motion.clock.pose(at: Self.start.addingTimeInterval(Double(index) / framesPerSecond))
+                for frame in 0..<count {
+                    let pose = motion.pose(Double(frame) / framesPerSecond)
                     let view = ZStack { stage; AvatarFrame(content: content, pose: pose, size: 116) }
                         .frame(width: 160, height: 160)
-                    try writePNG(view, scale: 2, to: folder.appendingPathComponent(String(format: "%04d.png", index)))
+                    try writePNG(view, scale: 2, to: folder.appendingPathComponent(String(format: "%04d.png", frame)))
                 }
             }
         }
@@ -102,9 +120,10 @@ struct AvatarMotionArtifacts {
         rows += [("sigil", spec("Rune", shape: "sigil-3", color: "#f5a524"))]
         rows += [("photo", BotAvatarSpec(name: "Pic", meta: BotAvatarMeta(imageKind: .photo), photo: try photoData()))]
 
-        let loopBeats: [Double] = [0, 0.66, 1.2, 2.35, 5.9, 6.03, 8.2, 8.62, 8.8, 9.5]
+        let clipBeats = ["spin", "scan-down", "glance-blink", "drop", "squint", "double-take", "sleepy", "surprise", "bounce", "dot-stare"]
         let doneBeats: [Double] = [0.4, 0.8, 1.26, 2.0]
-        let poses = loopBeats.map { AvatarMotion.pose(.work, at: $0) } + doneBeats.map { AvatarMotion.pose(.done, at: $0) }
+        let poses = clipBeats.map { Self.clipPose($0, atFraction: 0.5) }
+            + doneBeats.map { AvatarMotion.pose(.done, at: $0, seed: 0) }
 
         let grid = VStack(alignment: .leading, spacing: 6) {
             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
@@ -124,7 +143,7 @@ struct AvatarMotionArtifacts {
         let sizeSheet = VStack(alignment: .leading, spacing: 8) {
             ForEach(Array(Self.featured.enumerated()), id: \.offset) { _, row in
                 HStack(spacing: 14) {
-                    ForEach(Array([AvatarMotion.pose(.work, at: 1.2), AvatarMotion.pose(.work, at: 8.62), AvatarMotion.pose(.done, at: 0.8)].enumerated()), id: \.offset) { _, pose in
+                    ForEach(Array([Self.clipPose("scan-down", atFraction: 0.3), Self.clipPose("surprise", atFraction: 0.5), AvatarMotion.pose(.done, at: 0.8, seed: 0)].enumerated()), id: \.offset) { _, pose in
                         ForEach(sizes, id: \.self) { size in
                             AvatarFrame(content: AvatarContent(row.1), pose: pose, size: size).frame(width: size * 1.4, height: size * 1.4)
                         }

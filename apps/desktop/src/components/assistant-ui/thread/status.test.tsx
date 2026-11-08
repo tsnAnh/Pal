@@ -1,11 +1,13 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { toolPresentVerb } from '@/components/assistant-ui/tool/run-summary'
 import { __resetElapsedTimerRegistryForTests } from '@/components/chat/activity-timer'
 import { I18nProvider } from '@/i18n'
 import { type ChatPersona, ChatPersonaContext } from '@/store/chat-persona'
 import { $providerWaitSessions, setSessionProviderWait } from '@/store/provider-wait'
 import { $activeSessionId, $turnStartedAt } from '@/store/session'
+import { $draftingToolSessions, setSessionDraftingTool } from '@/store/tool-drafting'
 
 import { ResponseLoadingIndicator } from './status'
 
@@ -37,6 +39,7 @@ describe('ResponseLoadingIndicator timer', () => {
     $activeSessionId.set(null)
     $turnStartedAt.set(null)
     $providerWaitSessions.set({})
+    $draftingToolSessions.set({})
     __resetElapsedTimerRegistryForTests()
     vi.restoreAllMocks()
     vi.useRealTimers()
@@ -117,14 +120,36 @@ describe('ResponseLoadingIndicator timer', () => {
     expect(container.querySelector('.dither')).not.toBeNull()
   })
 
-  it('names a provider wait instead of the generic label in a bot chat', () => {
+  it('never shows provider-wait text or a model name in a bot chat', () => {
+    $activeSessionId.set('session-a')
+    $turnStartedAt.set(Date.now())
+
+    for (const frame of [
+      '⏳ waiting on local-model — 30s with no output yet',
+      '⏳ loading Qwen3-32B into memory — 40%',
+      '⚙ processing prompt — 31%'
+    ]) {
+      setSessionProviderWait('session-a', frame)
+      const { container, unmount } = renderIndicator(PERSONA)
+
+      expect(screen.getByText('Reviewing your request')).toBeTruthy()
+      expect(screen.getByRole('status').getAttribute('aria-label')).toBe('Reviewing your request')
+      expect(container.textContent).not.toMatch(/local-model|Qwen3|processing prompt|waiting on/i)
+      unmount()
+    }
+  })
+
+  it('keeps the friendly tool verb while a tool is drafted in a bot chat', () => {
     $activeSessionId.set('session-a')
     $turnStartedAt.set(Date.now())
     setSessionProviderWait('session-a', '⏳ waiting on local-model — 30s with no output yet')
-
+    setSessionDraftingTool('session-a', 'terminal')
     renderIndicator(PERSONA)
 
-    expect(screen.getByText('⏳ waiting on local-model — 30s with no output yet')).toBeTruthy()
+    act(() => vi.advanceTimersByTime(300))
+
+    expect(screen.getByText(toolPresentVerb('terminal'))).toBeTruthy()
     expect(screen.queryByText('Reviewing your request')).toBeNull()
+    expect(screen.getByRole('status').textContent).not.toMatch(/local-model/)
   })
 })

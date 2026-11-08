@@ -3,31 +3,6 @@ import HermesDesign
 import HermesProtocol
 import SwiftUI
 
-struct ToolLine: View {
-    @Environment(\.hermesTheme) private var theme
-
-    let name: String
-    let summary: String?
-    let isRunning: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            if isRunning {
-                ProgressView().controlSize(.mini)
-            } else {
-                Image(systemName: "wrench.and.screwdriver").font(.caption)
-            }
-            Text(summary.flatMap { $0.isEmpty ? nil : $0 } ?? name)
-                .font(.footnote)
-                .lineLimit(1)
-        }
-        .foregroundStyle(Color(theme.palette.textSecondary))
-        .padding(.leading, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(isRunning ? "Running \(name)" : "Used \(name)"))
-    }
-}
-
 struct ClarifyCard: View {
     let prompt: PendingPrompt
     let answer: (String) -> Void
@@ -125,18 +100,49 @@ struct ApprovalCard: View {
     let prompt: PendingPrompt
     let choose: (String) -> Void
 
+    private static func label(for choice: String) -> String {
+        switch choice {
+        case "once": String(localized: "Allow")
+        case "session": String(localized: "Allow for this chat")
+        case "always": String(localized: "Always allow")
+        case "deny": String(localized: "Don't allow")
+        default: choice
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(prompt.description ?? String(localized: "Approval needed"))
+            Text("Needs your OK")
                 .font(.headline)
                 .foregroundStyle(Color(theme.palette.textPrimary))
-            if let command = prompt.command {
-                Text(command)
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(Color(theme.palette.textSecondary))
+            Text("This could change or delete something. Allow it?")
+                .font(.body)
+                .foregroundStyle(Color(theme.palette.textPrimary))
+            if prompt.description != nil || prompt.command != nil {
+                DisclosureGroup("Details") {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let description = prompt.description {
+                            Text(description)
+                                .font(.footnote)
+                                .foregroundStyle(Color(theme.palette.textSecondary))
+                        }
+                        if let command = prompt.command {
+                            Text(command)
+                                .font(.footnote.monospaced())
+                                .foregroundStyle(Color(theme.palette.textSecondary))
+                                .textSelection(.enabled)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 4)
+                }
+                .font(.subheadline)
+                .foregroundStyle(Color(theme.palette.textSecondary))
+                .tint(Color(theme.palette.textSecondary))
+                .accessibilityIdentifier("approvalDetails")
             }
             ForEach(Array(prompt.choices.enumerated()), id: \.offset) { index, choice in
-                Button(choice) { choose(choice) }
+                Button(Self.label(for: choice)) { choose(choice) }
                     .buttonStyle(.glass)
                     .accessibilityIdentifier("approvalChoice-\(index)")
             }

@@ -36,6 +36,13 @@ struct AvatarPose: Equatable, Sendable {
     ]
     static let appearance: [any WritableKeyPath<AvatarPose, Double> & Sendable] = [\.eyeDot, \.eyeHappy, \.eyeOpen, \.opacity]
 
+    static let named: [String: any WritableKeyPath<AvatarPose, Double> & Sendable] = [
+        "front": \.front, "eyeX": \.eyeX, "eyeY": \.eyeY, "eyeRoll": \.eyeRoll, "eyeSpread": \.eyeSpread,
+        "eyeScale": \.eyeScale, "eyeDot": \.eyeDot, "eyeHappy": \.eyeHappy, "eyeOpen": \.eyeOpen,
+        "bodyX": \.bodyX, "bodyY": \.bodyY, "bodyScaleX": \.bodyScaleX, "bodyScaleY": \.bodyScaleY,
+        "bodyRotation": \.bodyRotation, "opacity": \.opacity,
+    ]
+
     func with(_ change: (inout AvatarPose) -> Void) -> AvatarPose {
         var copy = self
         change(&copy)

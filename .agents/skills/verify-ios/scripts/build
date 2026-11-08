@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+load_run
+DIR="$EVIDENCE/build"
+mkdir -p "$DIR"
+say "xcodegen generate"
+( cd "$IOS_DIR" && xcodegen generate ) >"$DIR/xcodegen.log" 2>&1
+say "xcodebuild build-for-testing (log: $DIR/xcodebuild-build.log)"
+( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+  -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$DERIVED" \
+  build-for-testing ) >"$DIR/xcodebuild-build.log" 2>&1 || { tail -40 "$DIR/xcodebuild-build.log" >&2; die "build failed"; }
+grep -E "TEST BUILD (SUCCEEDED|FAILED)" "$DIR/xcodebuild-build.log" | tail -1

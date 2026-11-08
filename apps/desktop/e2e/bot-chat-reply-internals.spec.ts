@@ -5,6 +5,7 @@ import type { Locator, Page } from '@playwright/test'
 
 import { writeEnvFile, writeMockProviderConfig } from '../../../tests-js/scripts/mock-provider-config'
 import {
+  APPROVAL_COMMAND,
   APPROVAL_COMMAND_TRIGGER,
   MOCK_REPLY,
   SINGLE_BATCH_CLARIFY_QUESTIONS,
@@ -77,18 +78,24 @@ async function openBotChat(page: Page, bot = 'alpha'): Promise<Locator> {
   return botSurface
 }
 
-async function expectOneNameAboveFailedCall(botSurface: Locator): Promise<void> {
+async function expectFailedCallHidden(botSurface: Locator): Promise<void> {
   const response = botSurface.locator('[data-slot="aui_response-group"]').last()
-  await expect(response.locator('[data-bubble="assistant"]').filter({ hasText: REPLY_MARKER }).first()).toBeVisible({
-    timeout: 120_000
-  })
+  const reply = response.locator('[data-bubble="assistant"]').filter({ hasText: REPLY_MARKER }).first()
+  await expect(reply, 'the reply prose renders').toBeVisible({ timeout: 120_000 })
 
   const names = response.locator('[data-slot="bot-reply-name"]').filter({ visible: true })
   await expect(names, 'the response opens one name label').toHaveCount(1)
 
   const nameBox = await names.first().boundingBox()
-  const rowBox = await response.locator('[data-slot="tool-block"]').filter({ visible: true }).first().boundingBox()
-  expect(nameBox!.y, 'the name label sits above the failed call').toBeLessThan(rowBox!.y)
+  const replyBox = await reply.boundingBox()
+  expect(nameBox!.y, 'the name label sits above the reply card').toBeLessThan(replyBox!.y)
+
+  await expect(botSurface.locator('[data-slot="tool-block"]'), 'the failed call renders no tool row').toHaveCount(0)
+  await expect(botSurface.locator('[data-tool-summary]'), 'the failed call renders no summary line').toHaveCount(0)
+  expect(
+    (await botSurface.locator('[data-slot="aui_response-group"]').allInnerTexts()).join('\n'),
+    'the failed command text is not in any bot reply'
+  ).not.toContain(`ls ${FAILED_PATH}`)
 }
 
 async function watchNameLabels(page: Page): Promise<() => Promise<string[]>> {
@@ -283,19 +290,15 @@ test('a live bot reply that starts with tool calls shows exactly one name label'
   await capture(page, 'bot-chat-live-reply')
 })
 
-test('bot chat still shows a failed terminal call', async () => {
+test('bot chat hides a failed terminal call', async () => {
   test.setTimeout(240_000)
   const page = fixture!.page
   const botSurface = await openBotChat(page, FAILED_BOT)
 
   await sendInBotChat(botSurface, FAILED_PROMPT)
 
-  const failedRow = botSurface.locator('[data-slot="tool-block"]').filter({ visible: true })
-  await expect(failedRow.first(), 'the failed terminal call renders in the bot chat').toBeVisible({ timeout: 120_000 })
-  await expect(failedRow.first()).toContainText(FAILED_PATH)
+  await expectFailedCallHidden(botSurface)
   await expect(botSurface.locator('[data-slot="aui_thinking-disclosure"]'), 'still no thinking block').toHaveCount(0)
-
-  await expectOneNameAboveFailedCall(botSurface)
   await capture(page, 'bot-chat-failed-call')
 })
 
@@ -313,7 +316,21 @@ test('bot chat still shows an approval prompt the user can act on', async () => 
   const run = botSurface.locator('[data-approval-run]').filter({ visible: true })
   await expect(run, 'the approval prompt renders in the bot chat').toHaveCount(1, { timeout: 120_000 })
   await expect(botSurface.locator('[data-approval-deny]').filter({ visible: true })).toHaveCount(1)
+
+  const card = botSurface.locator('[data-slot="tool-approval-card"]').filter({ visible: true })
+  await expect(card.getByText('Needs your OK', { exact: true }), 'the card header is product language').toBeVisible()
+  await expect(card.getByText('Command', { exact: true }), 'no Command header in bot chat').toHaveCount(0)
+  await expect(botSurface.getByText(APPROVAL_COMMAND), 'the raw command is hidden until details open').toHaveCount(0)
+
+  const showDetails = card.getByRole('button', { name: 'Show details', exact: true })
+  await expect(showDetails).toHaveAttribute('aria-expanded', 'false')
+  await showDetails.click()
+  await expect(card.getByRole('button', { name: 'Hide details', exact: true })).toHaveAttribute('aria-expanded', 'true')
+  await expect(card.getByText(APPROVAL_COMMAND), 'Show details reveals the command').toBeVisible()
   await capture(page, 'bot-chat-approval')
+
+  await card.getByRole('button', { name: 'Hide details', exact: true }).click()
+  await expect(card.getByText(APPROVAL_COMMAND), 'Hide details hides the command again').toHaveCount(0)
 
   await run.click()
 
@@ -323,13 +340,11 @@ test('bot chat still shows an approval prompt the user can act on', async () => 
   })
 })
 
-test('a reloaded bot reply that starts with a failed call shows one name label above it', async () => {
+test('a reloaded bot reply that starts with a failed call hides it and keeps one name label', async () => {
   test.setTimeout(240_000)
   const page = fixture!.page
   const botSurface = await openBotChat(page, RELOADED_FAILED_BOT)
 
-  const failedRow = botSurface.locator('[data-slot="tool-block"]').filter({ visible: true })
-  await expect(failedRow.first(), 'the failed call renders from history').toBeVisible({ timeout: 90_000 })
-  await expectOneNameAboveFailedCall(botSurface)
+  await expectFailedCallHidden(botSurface)
   await capture(page, 'bot-chat-reloaded-failed-call')
 })

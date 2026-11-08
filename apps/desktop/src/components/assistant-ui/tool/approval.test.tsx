@@ -1,10 +1,11 @@
 import { AssistantRuntimeProvider, type ThreadMessage, useExternalStoreRuntime } from '@assistant-ui/react'
-import { act, cleanup, fireEvent, render as renderUi, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render as renderUi, screen, waitFor, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { HermesGateway } from '@/hermes'
 import { handleApprovalKey, releaseApprovalKey } from '@/lib/keybinds/approval-keys'
+import { type ChatPersona, ChatPersonaContext } from '@/store/chat-persona'
 import { $gateway } from '@/store/gateway'
 import {
   $approvalRequest,
@@ -25,9 +26,15 @@ function Runtime({ children }: { children: ReactNode }) {
   return <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>
 }
 
-function render(children: ReactNode) {
-  return renderUi(<Runtime>{children}</Runtime>)
+function render(children: ReactNode, persona: ChatPersona | null = null) {
+  return renderUi(
+    <Runtime>
+      <ChatPersonaContext.Provider value={persona}>{children}</ChatPersonaContext.Provider>
+    </Runtime>
+  )
 }
+
+const BOT_PERSONA: ChatPersona = { avatar: () => null, name: 'Bot' }
 
 beforeAll(() => {
   stubMenuDomApis()
@@ -401,5 +408,63 @@ describe('PendingApprovalStack', () => {
 
     expect(rpc).not.toHaveBeenCalledWith('approval.respond', expect.anything())
     expect($approvalRequest.get()).toBeNull()
+  })
+})
+
+describe('PendingApprovalStack in a bot chat', () => {
+  it('shows a plain ask and keeps the risk label and raw command behind a details toggle', () => {
+    setRequest('chmod -R 777 /tmp/x', undefined, { requestId: 'apr-bot' })
+    const { container } = render(<PendingApprovalStack />, BOT_PERSONA)
+
+    expect(screen.getByText('Needs your OK')).toBeTruthy()
+    expect(screen.getByText('This could change or delete something. Allow it?')).toBeTruthy()
+    expect(screen.queryByText('dangerous command')).toBeNull()
+    expect(screen.queryByText('Command')).toBeNull()
+    expect(container.querySelector('.codicon-terminal')).toBeNull()
+    expect(screen.queryByText('chmod -R 777 /tmp/x')).toBeNull()
+
+    const toggle = screen.getByRole('button', { name: 'Show details' })
+
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(toggle)
+    expect(screen.getByText('chmod -R 777 /tmp/x')).toBeTruthy()
+    expect(screen.getByText('dangerous command')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Hide details' }))
+    expect(screen.queryByText('chmod -R 777 /tmp/x')).toBeNull()
+    expect(screen.queryByText('dangerous command')).toBeNull()
+    expect(screen.getByRole('button', { name: /Run/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Reject/ })).toBeTruthy()
+  })
+
+  it('keeps the raw command and config path out of the always-allow dialog until details open', async () => {
+    setRequest('chmod -R 777 /tmp/x', true, { requestId: 'apr-bot-always' })
+    render(<PendingApprovalStack />, BOT_PERSONA)
+
+    fireEvent.keyDown(screen.getByRole('button', { name: /More approval options/ }), { key: 'Enter' })
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Always allow/ }))
+
+    const dialog = await screen.findByRole('dialog')
+
+    expect(dialog.textContent).not.toMatch(/chmod|config\.yaml|dangerous command/)
+    expect(within(dialog).getByText('This bot won’t ask again before doing this kind of thing, in any chat.')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Show details' }))
+    expect(within(dialog).getByText('chmod -R 777 /tmp/x')).toBeTruthy()
+  })
+
+  it('keeps a plugin-rule description behind details and never shows the placeholder', () => {
+    setApprovalRequest({
+      command: '<terminal> (plugin approval rule)',
+      description: 'Plugin requires approval for terminal: run\npwd',
+      requestId: 'apr-bot-synth',
+      sessionId: 'sess-1'
+    })
+    $activeSessionId.set('sess-1')
+    const { container } = render(<PendingApprovalStack />, BOT_PERSONA)
+
+    expect(screen.queryByText(/Plugin requires approval for terminal: run/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show details' }))
+    expect(screen.getByText(/Plugin requires approval for terminal: run/)).toBeTruthy()
+    expect(screen.queryByText(/plugin approval rule/)).toBeNull()
+    expect(container.querySelector('[data-slot="tool-approval-details"] pre')).toBeNull()
   })
 })

@@ -22,7 +22,6 @@ struct ChatRow: Identifiable, Equatable {
     enum Kind: Equatable {
         case user(text: String, delivery: BubbleDelivery)
         case assistant(text: String, isStreaming: Bool)
-        case tool(name: String, summary: String?, isRunning: Bool)
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
         case notice(ChatNotice)
@@ -452,7 +451,10 @@ final class ChatModel {
     private func rebuild() {
         let now = Date()
         for item in transcript.items where hasBaseline && item.timestamp == nil && arrivals[item.id] == nil { arrivals[item.id] = now }
-        let items = allItems()
+        let items = allItems().filter { item in
+            if case .tool = item.content { return false }
+            return true
+        }
         let entries = ChatTimeline.entries(items: items, date: effectiveDate, lastSeen: lastSeenAtOpen)
         let visible = outboxEntries.filter { !retried.contains($0.submissionID) }
         let byID = Dictionary(visible.map { ("submission:\($0.submissionID)", $0) }, uniquingKeysWith: { first, _ in first })
@@ -460,6 +462,9 @@ final class ChatModel {
         for entry in entries {
             guard let kind = rowKind(for: entry.item, outbox: byID[entry.item.id]) else { continue }
             built.append(ChatRow(id: entry.item.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider))
+        }
+        if shouldShowThinking(tail: built.last) {
+            built.append(ChatRow(id: Self.thinkingRowID, kind: .assistant(text: "", isStreaming: true), separator: nil, showsUnreadDivider: false))
         }
         rows = built
         isRunning = transcript.isRunning
@@ -490,8 +495,8 @@ final class ChatModel {
         case .assistant(let text, _, let streaming):
             if text.isEmpty, !streaming { return nil }
             return .assistant(text: text, isStreaming: streaming)
-        case .tool(let call):
-            return .tool(name: call.name, summary: call.summary, isRunning: call.status == .running)
+        case .tool:
+            return nil
         case .clarify(let card):
             return .clarify(card.prompt)
         case .approval(let card):
@@ -522,6 +527,14 @@ final class ChatModel {
         } else {
             findPosition = min(findPosition, max(0, findMatches.count - 1))
         }
+    }
+
+    private static let thinkingRowID = "thinking"
+
+    private func shouldShowThinking(tail: ChatRow?) -> Bool {
+        guard transcript.isRunning, transcript.pendingPrompts.isEmpty else { return false }
+        if case .assistant(_, true)? = tail?.kind { return false }
+        return true
     }
 
     private static func outboxDirectory(for name: String) -> URL {

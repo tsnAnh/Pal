@@ -1,6 +1,6 @@
 import Foundation
 
-enum Ease: Sendable {
+enum Ease: String, Codable, Sendable {
     case linear
     case easeIn
     case easeOut
@@ -49,15 +49,14 @@ enum AvatarMotion {
     static let reducedPulsePeriod = 2.0
     static let reducedDoneDuration = 1.2
 
-    static var loopDuration: Double { loading.duration }
     static var doneDuration: Double { done.duration }
 
-    static func pose(_ mood: AvatarMood, at t: Double, reduceMotion: Bool = false) -> AvatarPose {
+    static func pose(_ mood: AvatarMood, at t: Double, reduceMotion: Bool = false, seed: UInt64) -> AvatarPose {
         switch (mood, reduceMotion) {
         case (.idle, _):
             return .rest
         case (.think, false), (.work, false):
-            var pose = loading.pose(at: loopTime(t))
+            var pose = LoadingSequence(seed: seed).pose(at: t)
             pose.dots = workingDots(mood, at: t)
             return pose
         case (.think, true), (.work, true):
@@ -85,12 +84,6 @@ enum AvatarMotion {
         return reduceMotion ? reducedDoneDuration : doneDuration
     }
 
-    private static func loopTime(_ t: Double) -> Double {
-        let period = loopDuration
-        let wrapped = t.truncatingRemainder(dividingBy: period)
-        return wrapped < 0 ? wrapped + period : wrapped
-    }
-
     private static func workingDots(_ mood: AvatarMood, at t: Double) -> SIMD3<Double> {
         let rate: Double
         switch mood {
@@ -111,68 +104,7 @@ enum AvatarMotion {
     }
 
     private static let facing = AvatarPose.facing
-    private static let lookDownLeft = facing.with {
-        $0.eyeX = -0.13; $0.eyeY = 0.11; $0.eyeRoll = 33; $0.bodyX = -0.03; $0.bodyRotation = 4
-    }
-    private static let lookDown = facing.with { $0.eyeY = 0.19; $0.bodyX = -0.005 }
-    private static let lookDownRight = facing.with {
-        $0.eyeX = 0.17; $0.eyeY = 0.12; $0.eyeRoll = -36; $0.bodyX = 0.02; $0.bodyRotation = -4
-    }
-    private static let lookUpLeft = facing.with {
-        $0.eyeX = -0.13; $0.eyeY = -0.12; $0.eyeRoll = 15; $0.bodyX = -0.06; $0.bodyRotation = 3
-    }
-    private static let lookUpRight = facing.with {
-        $0.eyeX = 0.11; $0.eyeY = -0.13; $0.eyeRoll = -13; $0.bodyX = 0.03; $0.bodyRotation = -3
-    }
-    private static let lookUp = facing.with { $0.eyeY = -0.18; $0.bodyY = -0.035 }
-    private static let dropped = facing.with { $0.bodyY = 0.1 }
-    private static let squint = facing.with { $0.eyeScale = 0.55; $0.eyeDot = 0.6 }
     static let offstage = 0.9
-
-    static let loading = KeyframeTrack([
-        key(0.00, facing),
-        key(0.42, facing),
-        key(0.52, .easeIn, facing.with { $0.eyeX = 0.12 }),
-        key(0.62, .easeIn, facing.with { $0.eyeX = offstage; $0.bodyScaleY = 0.72; $0.opacity = 0.9 }),
-        key(0.62, facing.with { $0.eyeX = -offstage; $0.bodyScaleY = 0.72; $0.opacity = 0.9 }),
-        key(0.72, .easeOut, facing.with {
-            $0.eyeX = -offstage; $0.bodyScaleX = 0.56; $0.bodyScaleY = 0.56; $0.opacity = 0.85
-        }),
-        key(0.82, .easeIn, facing.with { $0.eyeX = -0.75; $0.bodyScaleX = 0.94; $0.bodyScaleY = 0.74; $0.opacity = 0.92 }),
-        key(0.95, .easeOut, facing.with { $0.eyeX = -0.42 }),
-        key(1.20, .easeOut, lookDownLeft),
-        key(1.75, .easeIn, lookDown),
-        key(2.35, .easeOut, lookDownRight),
-        key(2.80, lookDownLeft),
-        key(3.35, .easeIn, lookDown),
-        key(3.95, .easeOut, lookDownRight),
-        key(4.40, lookDownLeft),
-        key(4.70, .easeOut, facing),
-        key(5.45, facing),
-        key(5.85, lookUpLeft),
-        key(5.95, lookUpLeft),
-        key(6.03, .easeIn, lookUpLeft.with { $0.eyeOpen = 0.1 }),
-        key(6.12, .easeOut, lookUpLeft),
-        key(6.45, lookUpLeft.with { $0.eyeY = -0.16 }),
-        key(6.95, lookUpRight),
-        key(7.45, lookUpRight),
-        key(7.85, lookUp),
-        key(7.95, lookUp),
-        key(8.05, .easeIn, dropped.with { $0.eyeY = -0.1; $0.bodyScaleX = 1.04; $0.bodyScaleY = 0.94 }),
-        key(8.20, .easeOut, dropped.with { $0.eyeY = 0.11 }),
-        key(8.35, dropped.with { $0.eyeY = 0.08 }),
-        key(8.48, dropped.with { $0.eyeY = -0.02 }),
-        key(8.58, .easeIn, dropped.with { $0.eyeY = -0.3 }),
-        key(8.66, .easeIn, dropped.with { $0.eyeY = -offstage }),
-        key(8.66, dropped.with { $0.eyeY = offstage }),
-        key(8.76, .easeOut, facing.with { $0.eyeY = 0.36 }),
-        key(8.88, .easeOut, facing.with { $0.eyeY = 0.18 }),
-        key(9.10, .easeOut, facing),
-        key(9.20, facing),
-        key(9.38, squint),
-        key(9.62, squint),
-        key(9.90, facing),
-    ])
 
     private static let happy = facing.with { $0.eyeHappy = 1; $0.eyeY = -0.02 }
 

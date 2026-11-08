@@ -4411,11 +4411,6 @@ html[data-hermes-desktop-host='browser'] [data-slot='sidebar-container'] {
   color: var(--err-ink);
 }
 
-svg[data-bot-face][data-hb-mood='think'],
-svg[data-bot-face][data-hb-mood='work'] {
-  --hb-blink-period: 1.45s;
-}
-
 svg[data-bot-face] [data-hb-lids] {
   transform-box: fill-box;
   transform-origin: center;
@@ -4438,8 +4433,31 @@ svg[data-bot-face][data-hb-visible] [data-hb-lids] {
   }
 }
 
+svg[data-bot-face][data-hb-mood='think'] [data-hb-lids],
+svg[data-bot-face][data-hb-mood='work'] [data-hb-lids] {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   svg[data-bot-face][data-hb-visible] [data-hb-lids] {
     animation: none;
   }
+}
+
+:root:not(.dark) svg[data-bot-face][data-hb-tone='white'] [data-hb-body] {
+  fill: #1b1b1b;
+  stroke: #1b1b1b;
+}
+
+:root:not(.dark) svg[data-bot-face][data-hb-tone='white'] [data-hb-body] path {
+  stroke: #1b1b1b;
+}
+
+:root:not(.dark) svg[data-bot-face][data-hb-tone='white'] [data-hb-eye] path {
+  fill: #f3f4fd;
+}
+
+:root:not(.dark) svg[data-bot-face][data-hb-tone='white'][data-hb-sigil] [data-hb-eye] path,
+:root:not(.dark) svg[data-bot-face][data-hb-tone='white'] [data-hb-dot] {
+  fill: #1b1b1b;
 }

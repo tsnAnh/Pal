@@ -24,6 +24,7 @@ import { triggerHaptic } from '@/lib/haptics'
 import { ChevronDown, Loader2 } from '@/lib/icons'
 import { releaseApprovalKey } from '@/lib/keybinds/approval-keys'
 import { cn } from '@/lib/utils'
+import { useSurfacePersona } from '@/store/chat-persona'
 import { $gateway } from '@/store/gateway'
 import { reconnectAction } from '@/store/gateway-reconnect'
 import { notifyError } from '@/store/notifications'
@@ -285,8 +286,30 @@ const ApprovalMoreOptions: FC<ApprovalMoreOptionsProps> = ({
   )
 }
 
+const ApprovalDetails: FC<{ command: string; description: string }> = ({ command, description }) => {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="min-w-0" data-slot="tool-approval-details">
+      <Button aria-expanded={open} onClick={() => setOpen(value => !value)} size="inline" variant="text">
+        {open ? t.assistant.approval.hideDetails : t.assistant.approval.showDetails}
+      </Button>
+      {open && description && (
+        <p className="m-0 mt-1.5 break-words text-xs leading-relaxed text-(--ui-text-secondary)">{description}</p>
+      )}
+      {open && command && (
+        <pre className="m-0 mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-(--ui-text-primary)">
+          {command}
+        </pre>
+      )}
+    </div>
+  )
+}
+
 const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }) => {
   const { t } = useI18n()
+  const botChat = useSurfacePersona() !== null
   const copy = t.assistant.approval
   const gateway = useStore($gateway)
   const [submitting, setSubmitting] = useState<ApprovalChoice | null>(null)
@@ -343,6 +366,8 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
   const showsDescription = !hasCommand || SYNTHETIC_COMMAND_RE.test(request.command.trim())
 
   const details = showsDescription ? request.description.trim() : request.command.trim()
+  const botDescription = request.description.trim()
+  const botCommand = showsDescription ? '' : request.command.trim()
 
   const respond = useCallback(
     async (choice: ApprovalChoice) => {
@@ -385,18 +410,25 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
       ref={cardRef}
     >
       <div className="flex items-center gap-2 px-2.5 pt-2 text-xs text-(--ui-text-secondary)">
-        <Codicon name="terminal" size="0.875rem" />
-        <span>{showsDescription ? copy.commandDetails : copy.command}</span>
+        {!botChat && <Codicon name="terminal" size="0.875rem" />}
+        <span>{botChat ? copy.botTitle : showsDescription ? copy.commandDetails : copy.command}</span>
         {total > 1 && (
           <span className="ml-auto text-[0.6875rem] tabular-nums text-(--ui-text-tertiary)">
             {position} / {total}
           </span>
         )}
       </div>
-      {details.length > 0 && (
-        <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words px-2.5 py-2 font-mono text-xs leading-relaxed text-(--ui-text-primary)">
-          {details}
-        </pre>
+      {botChat ? (
+        <div className="flex min-w-0 flex-col gap-1.5 px-2.5 py-2">
+          <p className="m-0 break-words text-sm leading-relaxed text-(--ui-text-primary)">{copy.botBody}</p>
+          {(botDescription || botCommand) && <ApprovalDetails command={botCommand} description={botDescription} />}
+        </div>
+      ) : (
+        details.length > 0 && (
+          <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words px-2.5 py-2 font-mono text-xs leading-relaxed text-(--ui-text-primary)">
+            {details}
+          </pre>
+        )
       )}
       <div className="flex items-center justify-end gap-1.5 px-2 pb-2 pt-1" data-slot="tool-approval-actions">
         {request.scope === 'bot_chat' ? (
@@ -439,10 +471,16 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{copy.alwaysTitle}</DialogTitle>
-            <DialogDescription>{copy.alwaysDescription(request.description)}</DialogDescription>
+            <DialogDescription>
+              {botChat ? copy.botAlwaysDescription : copy.alwaysDescription(request.description)}
+            </DialogDescription>
           </DialogHeader>
 
-          {request.command.trim() && (
+          {botChat && (botDescription || botCommand) && (
+            <ApprovalDetails command={botCommand} description={botDescription} />
+          )}
+
+          {!botChat && request.command.trim() && (
             <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background) px-2.5 py-1.5 font-mono text-xs leading-snug text-foreground">
               {request.command.trim()}
             </pre>

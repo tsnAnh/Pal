@@ -1,0 +1,637 @@
+#!/usr/bin/env python3
+import argparse
+import asyncio
+import datetime
+import json
+import os
+import pathlib
+import re
+import secrets
+import shlex
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+REPO = pathlib.Path(__file__).resolve().parents[4]
+VENV_PY = REPO / ".venv" / "bin" / "python"
+MOCK_SCRIPT = pathlib.Path(__file__).resolve().parent / "mock-up.mts"
+EVIDENCE_ROOT = REPO / "test-results" / "verify-hermes"
+SANDBOX_PREFIX = "hermes-verify-"
+
+if VENV_PY.exists() and not os.environ.get("HV_REEXEC") and pathlib.Path(sys.prefix).resolve() != (REPO / ".venv").resolve():
+    os.environ["HV_REEXEC"] = "1"
+    os.execv(str(VENV_PY), [str(VENV_PY), __file__, *sys.argv[1:]])
+
+CREDENTIAL_PATTERN = re.compile(r"(API_KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|ACCESS_KEY|PRIVATE_KEY|BASE_URL)")
+PROVIDER_PREFIXES = (
+    "OPENAI_", "ANTHROPIC_", "OPENROUTER_", "GEMINI_", "GOOGLE_", "OLLAMA_", "GROQ_", "XAI_", "NOUS_",
+    "AWS_", "AZURE_", "HF_", "DEEPSEEK_", "MISTRAL_", "KIMI_", "MOONSHOT_", "ZAI_", "GLM_", "COPILOT_",
+    "TERMINAL_", "MESSAGING_",
+)
+DROPPED_NAMES = {"PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV", "TMUX", "TMUX_PANE"}
+DEFAULT_TIMEOUT = 240.0
+
+
+def die(message: str, code: int = 1) -> None:
+    print(f"hv: {message}", file=sys.stderr)
+    sys.exit(code)
+
+
+def sandbox_root(run: str) -> pathlib.Path:
+    base = pathlib.Path(tempfile.gettempdir()).resolve()
+    return base / f"{SANDBOX_PREFIX}{run}"
+
+
+def load_run(run: str) -> dict:
+    state = sandbox_root(run) / "run.json"
+    if not state.is_file():
+        die(f"no run {run!r}: {state} is missing (run `hv up` first, or the run was already torn down)")
+    return json.loads(state.read_text())
+
+
+def save_run(state: dict) -> None:
+    path = pathlib.Path(state["root"]) / "run.json"
+    path.write_text(json.dumps(state, indent=2))
+
+
+def clean_env(state: dict | None, extra: dict | None = None) -> dict:
+    env = {}
+    for key, value in os.environ.items():
+        if not value or key in DROPPED_NAMES or key.startswith(("HERMES_", "HV_")):
+            continue
+        if CREDENTIAL_PATTERN.search(key) or key.startswith(PROVIDER_PREFIXES):
+            continue
+        env[key] = value
+    env["LANG"] = "en_US.UTF-8"
+    env["TERM"] = "xterm-256color"
+    env["HERMES_DISABLE_LAZY_INSTALLS"] = "1"
+    if state:
+        env["HOME"] = state["home"]
+        env["HERMES_HOME"] = state["hermes_home"]
+        env["HV_RUN_ID"] = state["run"]
+    env.update(extra or {})
+    return env
+
+
+def evidence_path(state: dict, label: str, suffix: str) -> pathlib.Path:
+    directory = pathlib.Path(state["evidence"])
+    directory.mkdir(parents=True, exist_ok=True)
+    counter = directory / ".seq"
+    index = (int(counter.read_text()) if counter.exists() else 0) + 1
+    counter.write_text(str(index))
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-")[:48] or "step"
+    return directory / f"{index:02d}-{safe}{suffix}"
+
+
+def log_step(state: dict, text: str) -> None:
+    directory = pathlib.Path(state["evidence"])
+    directory.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.datetime.now().isoformat(timespec="seconds")
+    with (directory / "steps.log").open("a") as handle:
+        handle.write(f"{stamp} {text}\n")
+
+
+def pid_alive(pid: int | None) -> bool:
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def marker_pids(run: str) -> list[int]:
+    out = subprocess.run(["ps", "-wwE", "-axo", "pid=,command="], capture_output=True, text=True).stdout
+    needle = f" HV_RUN_ID={run}"
+    found = []
+    for line in out.splitlines():
+        if needle in line or line.rstrip().endswith(f"HV_RUN_ID={run}"):
+            pid = int(line.split(None, 1)[0])
+            if pid != os.getpid():
+                found.append(pid)
+    return found
+
+
+def descendants(pid: int) -> list[int]:
+    out = subprocess.run(["ps", "-axo", "pid=,ppid="], capture_output=True, text=True).stdout
+    children: dict[int, list[int]] = {}
+    for line in out.splitlines():
+        child, parent = (int(x) for x in line.split())
+        children.setdefault(parent, []).append(child)
+    stack, found = [pid], []
+    while stack:
+        for child in children.get(stack.pop(), []):
+            found.append(child)
+            stack.append(child)
+    return found
+
+
+def stop_tree(pid: int, grace: float = 8.0) -> None:
+    if not pid_alive(pid):
+        return
+    tree = [pid, *descendants(pid)]
+    for target in tree:
+        try:
+            os.kill(target, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.time() + grace
+    while time.time() < deadline and any(pid_alive(t) for t in tree):
+        time.sleep(0.2)
+    for target in tree:
+        if pid_alive(target):
+            try:
+                os.kill(target, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    deadline = time.time() + 3.0
+    while time.time() < deadline and any(pid_alive(t) for t in tree):
+        time.sleep(0.1)
+
+
+def http_json(url: str, timeout: float = 5.0):
+    with urllib.request.urlopen(url, timeout=timeout) as response:
+        return json.loads(response.read().decode())
+
+
+def wait_for_line(path: pathlib.Path, pattern: str, timeout: float, pid: int | None = None) -> re.Match:
+    deadline = time.time() + timeout
+    regex = re.compile(pattern)
+    while time.time() < deadline:
+        if path.exists():
+            match = regex.search(path.read_text(errors="replace"))
+            if match:
+                return match
+        if pid is not None and not pid_alive(pid):
+            die(f"process {pid} exited before {pattern!r} appeared; see {path}")
+        time.sleep(0.3)
+    die(f"timed out after {timeout:.0f}s waiting for {pattern!r} in {path}")
+
+
+def hermes_argv(*args: str) -> list[str]:
+    return [str(VENV_PY), str(REPO / "hermes"), *args]
+
+
+def cmd_up(args) -> None:
+    if not VENV_PY.exists():
+        die(f"{VENV_PY} is missing; build the checkout env first (see SKILL.md Launch)")
+    if not shutil.which("node"):
+        die("node is required for the mock provider")
+    run = args.run or f"{datetime.datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(2)}"
+    root = sandbox_root(run)
+    if root.exists():
+        die(f"{root} already exists")
+    home = root / "home"
+    hermes_home = root / "hermes-home"
+    work = root / "work"
+    for directory in (home, hermes_home, work):
+        directory.mkdir(parents=True)
+    evidence = EVIDENCE_ROOT / run
+    evidence.mkdir(parents=True, exist_ok=True)
+    state = {
+        "run": run, "root": str(root), "home": str(home), "hermes_home": str(hermes_home), "work": str(work),
+        "evidence": str(evidence), "pids": {}, "created": time.time(),
+    }
+    save_run(state)
+    mock_log = root / "mock.log"
+    with mock_log.open("w") as handle:
+        proc = subprocess.Popen(
+            ["node", str(MOCK_SCRIPT), str(hermes_home)], cwd=str(REPO), env=clean_env(state),
+            stdout=handle, stderr=subprocess.STDOUT, start_new_session=True,
+        )
+    state["pids"]["mock"] = proc.pid
+    save_run(state)
+    match = wait_for_line(mock_log, r"HV_MOCK_READY port=(\d+) url=(\S+)", 30, proc.pid)
+    state["mock_port"], state["mock_url"] = int(match.group(1)), match.group(2)
+    save_run(state)
+    log_step(state, f"up run={run} mock={state['mock_url']} hermes_home={hermes_home}")
+    if args.serve:
+        start_serve(state)
+    print(run)
+
+
+def start_serve(state: dict) -> None:
+    if state["pids"].get("serve") and pid_alive(state["pids"]["serve"]):
+        die("serve is already running for this run")
+    token = secrets.token_urlsafe(24)
+    log_path = pathlib.Path(state["root"]) / "serve.log"
+    env = clean_env(state, {"HERMES_DASHBOARD_SESSION_TOKEN": token, "HERMES_DESKTOP_ISOLATED_BACKEND": "1"})
+    with log_path.open("w") as handle:
+        proc = subprocess.Popen(
+            hermes_argv("serve", "--host", "127.0.0.1", "--port", "0", "--skip-build"),
+            cwd=state["work"], env=env, stdout=handle, stderr=subprocess.STDOUT, start_new_session=True,
+        )
+    state["pids"]["serve"] = proc.pid
+    state["serve_token"] = token
+    save_run(state)
+    match = wait_for_line(log_path, r"HERMES_BACKEND_READY port=(\d+)", 120, proc.pid)
+    state["serve_port"] = int(match.group(1))
+    save_run(state)
+    log_step(state, f"serve ready port={state['serve_port']} pid={proc.pid}")
+
+
+def cmd_serve(args) -> None:
+    state = load_run(args.run)
+    if args.action == "start":
+        start_serve(state)
+        print(f"http://127.0.0.1:{state['serve_port']}")
+    elif args.action == "stop":
+        pid = state["pids"].get("serve")
+        if pid:
+            stop_tree(pid)
+        state["pids"].pop("serve", None)
+        state.pop("serve_port", None)
+        save_run(state)
+        log_step(state, "serve stopped")
+    else:
+        print(json.dumps({"port": state.get("serve_port"), "pid": state["pids"].get("serve")}))
+
+
+def as_text(data) -> str:
+    return data.decode(errors="replace") if isinstance(data, bytes) else (data or "")
+
+
+def cmd_hermes(args) -> None:
+    state = load_run(args.run)
+    rest = args.rest[1:] if args.rest[:1] == ["--"] else args.rest
+    argv = hermes_argv(*rest)
+    start = time.time()
+    try:
+        proc = subprocess.run(argv, cwd=state["work"], env=clean_env(state), capture_output=True, text=True, timeout=args.timeout)
+    except subprocess.TimeoutExpired as exc:
+        proc = subprocess.CompletedProcess(argv, 124, as_text(exc.stdout), as_text(exc.stderr) + f"hv: timed out after {args.timeout:.0f}s\n")
+    elapsed = time.time() - start
+    label = "hermes-" + "-".join(rest[:3])
+    out = evidence_path(state, label, ".stdout")
+    out.write_text(proc.stdout)
+    out.with_suffix(".stderr").write_text(proc.stderr)
+    out.with_suffix(".cmd").write_text(f"{shlex.join(['hermes', *rest])}\nexit={proc.returncode}\nelapsed={elapsed:.1f}s\n")
+    log_step(state, f"hermes {shlex.join(rest)} exit={proc.returncode} evidence={out.name}")
+    sys.stdout.write(proc.stdout)
+    sys.stderr.write(proc.stderr)
+    sys.exit(proc.returncode)
+
+
+def cmd_mock_prompts(args) -> None:
+    state = load_run(args.run)
+    data = http_json(f"{state['mock_url']}/__e2e__/prompts")
+    print(json.dumps(data, indent=2))
+
+
+def tmux_base(state: dict) -> list[str]:
+    return ["tmux", "-L", f"hv-{state['run']}"]
+
+
+def tmux_run(state: dict, *argv: str, check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run([*tmux_base(state), *argv], env=clean_env(state), capture_output=True, text=True, check=check)
+
+
+def tmux_alive(state: dict) -> bool:
+    return tmux_run(state, "has-session", "-t", "hv", check=False).returncode == 0
+
+
+def tmux_pane_exited(state: dict) -> bool:
+    return tmux_run(state, "display-message", "-p", "-t", "hv", "#{pane_dead}", check=False).stdout.strip() == "1"
+
+
+def capture_pane(state: dict) -> str:
+    return tmux_run(state, "capture-pane", "-p", "-J", "-t", "hv", "-S", "-500", check=False).stdout
+
+
+def cmd_tmux(args) -> None:
+    state = load_run(args.run)
+    action = args.action
+    if action == "start":
+        if tmux_alive(state):
+            die("tmux session already running for this run")
+        rest = args.rest[1:] if args.rest[:1] == ["--"] else args.rest
+        mode = rest or ["--cli"]
+        command = shlex.join(hermes_argv(*mode))
+        tmux_run(state, "new-session", "-d", "-s", "hv", "-x", "140", "-y", "45", "-c", state["work"], command, ";", "set-option", "-g", "remain-on-exit", "on")
+        state["tmux"] = True
+        save_run(state)
+        log_step(state, f"tmux start {shlex.join(mode)}")
+    elif action == "send":
+        tmux_run(state, "send-keys", "-t", "hv", "-l", " ".join(args.rest))
+        tmux_run(state, "send-keys", "-t", "hv", "Enter")
+        log_step(state, f"tmux send {' '.join(args.rest)!r}")
+    elif action == "type":
+        tmux_run(state, "send-keys", "-t", "hv", "-l", " ".join(args.rest))
+    elif action == "key":
+        tmux_run(state, "send-keys", "-t", "hv", *args.rest)
+    elif action == "wait":
+        if not args.rest:
+            die("usage: hv tmux RUN wait REGEX [--timeout S] [--count N]")
+        regex = re.compile(" ".join(args.rest))
+        deadline = time.time() + args.timeout
+        while time.time() < deadline:
+            screen = capture_pane(state)
+            if len(regex.findall(screen)) >= args.count:
+                return
+            if not tmux_alive(state) or tmux_pane_exited(state):
+                die(f"the process in tmux exited while waiting; final screen:\n{screen[-1500:]}", 3)
+            time.sleep(0.5)
+        die(f"timed out after {args.timeout:.0f}s waiting for /{regex.pattern}/\n{capture_pane(state)}", 4)
+    elif action == "capture":
+        screen = capture_pane(state)
+        label = args.rest[0] if args.rest else "screen"
+        path = evidence_path(state, f"tmux-{label}", ".txt")
+        path.write_text(screen)
+        log_step(state, f"tmux capture {path.name}")
+        sys.stdout.write(screen)
+    elif action == "stop":
+        tmux_run(state, "kill-server", check=False)
+        state["tmux"] = False
+        save_run(state)
+        log_step(state, "tmux stopped")
+    else:
+        die(f"unknown tmux action {action!r}")
+
+
+async def rpc_session(state: dict, calls: list[tuple[str, dict]], until: str | None, timeout: float, label: str):
+    import websockets
+
+    url = f"ws://127.0.0.1:{state['serve_port']}/api/ws?token={state['serve_token']}"
+    frames: list[dict] = []
+    results: list = []
+    async with websockets.connect(url, max_size=None) as ws:
+        async def recv(limit: float):
+            raw = await asyncio.wait_for(ws.recv(), limit)
+            frame = json.loads(raw)
+            frames.append(frame)
+            return frame
+
+        while True:
+            frame = await recv(30)
+            if frame.get("params", {}).get("type") == "gateway.ready":
+                break
+        for index, (method, params) in enumerate(calls, start=1):
+            await ws.send(json.dumps({"jsonrpc": "2.0", "id": index, "method": method, "params": params}))
+            while True:
+                frame = await recv(timeout)
+                if frame.get("id") == index:
+                    if "error" in frame:
+                        results.append({"error": frame["error"]})
+                    else:
+                        results.append(frame.get("result"))
+                    break
+        if until:
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                frame = await recv(max(0.1, deadline - time.time()))
+                if frame.get("params", {}).get("type") == until:
+                    break
+            else:
+                raise TimeoutError(f"event {until} not seen within {timeout:.0f}s")
+    path = evidence_path(state, f"rpc-{label}", ".frames.jsonl")
+    path.write_text("".join(json.dumps(f) + "\n" for f in frames))
+    return results, frames, path
+
+
+def run_rpc(state: dict, calls, until, timeout, label):
+    if not state.get("serve_port"):
+        die("serve is not running for this run (hv serve RUN start)")
+    try:
+        return asyncio.run(rpc_session(state, calls, until, timeout, label))
+    except (TimeoutError, asyncio.TimeoutError) as exc:
+        die(f"rpc timed out: {exc}", 4)
+
+
+def cmd_rpc(args) -> None:
+    state = load_run(args.run)
+    params = json.loads(args.params) if args.params else {}
+    results, frames, path = run_rpc(state, [(args.method, params)], args.until, args.timeout, args.method)
+    log_step(state, f"rpc {args.method} {args.params or '{}'} frames={path.name}")
+    print(json.dumps(results[0], indent=2))
+    if args.until:
+        print(f"events: {[f['params']['type'] for f in frames if f.get('method') == 'event']}", file=sys.stderr)
+    if isinstance(results[0], dict) and "error" in results[0]:
+        sys.exit(5)
+
+
+def cmd_chat(args) -> None:
+    state = load_run(args.run)
+    calls = []
+    if args.session:
+        session_id = args.session
+    else:
+        created, _, _ = run_rpc(state, [("session.create", {"cols": 120, "cwd": state["work"], "source": "hv"})], None, args.timeout, "session-create")
+        if "error" in created[0]:
+            die(f"session.create failed: {created[0]}", 5)
+        session_id = created[0]["session_id"]
+        print(f"session_id={session_id} stored_session_id={created[0]['stored_session_id']}")
+    calls.append(("prompt.submit", {"session_id": session_id, "text": args.text}))
+    results, frames, path = run_rpc(state, calls, "message.complete", args.timeout, "chat")
+    events = [f["params"] for f in frames if f.get("method") == "event" and f["params"].get("session_id") == session_id]
+    complete = next((e for e in events if e["type"] == "message.complete"), None)
+    log_step(state, f"chat session={session_id} text={args.text!r} frames={path.name}")
+    if isinstance(results[0], dict) and "error" in results[0]:
+        die(f"prompt.submit failed: {results[0]}", 5)
+    print(f"submit={json.dumps(results[0])}")
+    print(f"event_types={sorted({e['type'] for e in events})}")
+    print(f"complete={json.dumps(complete['payload'] if complete else None)}")
+    if not complete or complete["payload"].get("status") != "complete":
+        sys.exit(6)
+
+
+def check(results: list, name: str, ok: bool, detail: str = "") -> None:
+    results.append((name, ok, detail))
+    print(f"{'ok  ' if ok else 'FAIL'} {name}{' - ' + detail if detail else ''}")
+
+
+def cmd_doctor(args) -> None:
+    state = load_run(args.run)
+    results: list = []
+    root = pathlib.Path(state["root"])
+    tmp = pathlib.Path(tempfile.gettempdir()).resolve()
+    real_hermes = pathlib.Path(os.path.expanduser("~")).resolve() / ".hermes"
+    hermes_home = pathlib.Path(state["hermes_home"]).resolve()
+    check(results, "sandbox is temp and isolated", tmp in hermes_home.parents and hermes_home != real_hermes, str(hermes_home))
+    env = clean_env(state)
+    leaked = sorted(k for k in env if CREDENTIAL_PATTERN.search(k) or k.startswith(PROVIDER_PREFIXES))
+    check(results, "env carries no credentials or provider vars", not leaked, ",".join(leaked))
+    check(results, "venv python present", VENV_PY.exists(), str(VENV_PY))
+    mock_pid = state["pids"].get("mock")
+    check(results, "mock provider process alive", pid_alive(mock_pid), f"pid={mock_pid}")
+    try:
+        models = http_json(f"{state['mock_url']}/v1/models")
+        ids = [m["id"] for m in models["data"]]
+        check(results, "mock lists mock-model", "mock-model" in ids, ",".join(ids))
+    except (urllib.error.URLError, OSError, KeyError, json.JSONDecodeError) as exc:
+        check(results, "mock lists mock-model", False, str(exc))
+    config = (hermes_home / "config.yaml").read_text() if (hermes_home / "config.yaml").exists() else ""
+    check(results, "config.yaml points at the mock", f"base_url: {state['mock_url']}/v1" in config)
+    proc = subprocess.run(hermes_argv("--version"), cwd=state["work"], env=env, capture_output=True, text=True, timeout=120)
+    version = proc.stdout.splitlines()[0] if proc.stdout else proc.stderr[:120]
+    head = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short=8", "HEAD"], capture_output=True, text=True).stdout.strip()
+    check(results, "hermes --version runs from the sandbox", proc.returncode == 0 and "Hermes Agent" in version, version)
+    check(results, "version names this checkout's HEAD", bool(head) and head in proc.stdout, f"HEAD={head}")
+    serve_pid = state["pids"].get("serve")
+    if serve_pid:
+        port = state.get("serve_port")
+        check(results, "serve process alive", pid_alive(serve_pid), f"pid={serve_pid} port={port}")
+        try:
+            status = http_json(f"http://127.0.0.1:{port}/api/status")
+            check(results, "serve owns the sandbox home", pathlib.Path(status["hermes_home"]).resolve() == hermes_home, status["hermes_home"])
+            check(results, "serve reports version", bool(status.get("version")), status.get("version", ""))
+        except (urllib.error.URLError, OSError, KeyError, json.JSONDecodeError) as exc:
+            check(results, "serve answers /api/status", False, str(exc))
+    if state.get("tmux"):
+        check(results, "tmux session present", tmux_alive(state), f"socket=hv-{state['run']} " + ("process exited" if tmux_pane_exited(state) else "process running"))
+    check(results, "evidence dir exists and is git-ignored", pathlib.Path(state["evidence"]).is_dir() and subprocess.run(
+        ["git", "-C", str(REPO), "check-ignore", "-q", state["evidence"]]).returncode == 0, state["evidence"])
+    check(results, "run root exists", root.is_dir(), str(root))
+    failed = [r for r in results if not r[1]]
+    log_step(state, f"doctor {'FAIL ' + ','.join(r[0] for r in failed) if failed else 'ok'}")
+    sys.exit(1 if failed else 0)
+
+
+def cmd_status(args) -> None:
+    state = load_run(args.run)
+    print(json.dumps({k: v for k, v in state.items() if k != "serve_token"}, indent=2))
+
+
+def cmd_path(args) -> None:
+    state = load_run(args.run)
+    print({"evidence": state["evidence"], "work": state["work"], "hermes-home": state["hermes_home"], "root": state["root"]}[args.which])
+
+
+def cmd_down(args) -> None:
+    root = sandbox_root(args.run)
+    state_file = root / "run.json"
+    if not state_file.is_file():
+        print(f"hv: nothing to tear down for {args.run}", file=sys.stderr)
+        sys.exit(0)
+    state = json.loads(state_file.read_text())
+    evidence = pathlib.Path(state["evidence"])
+    tmux_run_kwargs = {"env": clean_env(state), "capture_output": True, "text": True}
+    subprocess.run([*tmux_base(state), "kill-server"], **tmux_run_kwargs)
+    for role, pid in list(state["pids"].items()):
+        stop_tree(pid)
+    for pid in marker_pids(state["run"]):
+        stop_tree(pid, grace=3.0)
+    evidence.mkdir(parents=True, exist_ok=True)
+    for name in ("mock.log", "serve.log"):
+        source = root / name
+        if source.exists():
+            shutil.copy2(source, evidence / name)
+    logs = pathlib.Path(state["hermes_home"]) / "logs"
+    if logs.is_dir():
+        shutil.copytree(logs, evidence / "hermes-logs", dirs_exist_ok=True, ignore=shutil.ignore_patterns("curator"))
+    for name in ("run.json",):
+        if (root / name).exists():
+            sanitized = json.loads((root / name).read_text())
+            sanitized.pop("serve_token", None)
+            (evidence / name).write_text(json.dumps(sanitized, indent=2))
+    leftover: list[int] = []
+    for _ in range(20):
+        leftover = [pid for pid in marker_pids(state["run"]) if pid_alive(pid)]
+        leftover += [pid for pid in state["pids"].values() if pid_alive(pid)]
+        if not leftover:
+            break
+        time.sleep(0.25)
+    if leftover:
+        die(f"processes still alive after teardown: {sorted(set(leftover))}; sandbox kept at {root}", 7)
+    shutil.rmtree(root)
+    log_step(state, "down: processes stopped, sandbox removed, evidence kept")
+    print(f"torn down {args.run}; evidence kept at {evidence}")
+
+
+def pull_flags(argv: list[str]) -> tuple[list[str], dict[str, str]]:
+    found: dict[str, str] = {}
+    out: list[str] = []
+    index = 0
+    while index < len(argv):
+        if argv[index] == "--":
+            out.extend(argv[index:])
+            break
+        if argv[index] in ("--timeout", "--count") and index + 1 < len(argv):
+            found[argv[index][2:]] = argv[index + 1]
+            index += 2
+            continue
+        out.append(argv[index])
+        index += 1
+    return out, found
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="hv", description="Drive the Hermes engine in an isolated sandbox against a mock provider.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("up", help="create sandbox, start mock provider, optionally hermes serve; prints the run id")
+    p.add_argument("--serve", action="store_true")
+    p.add_argument("--run")
+    p.set_defaults(fn=cmd_up)
+
+    p = sub.add_parser("down", help="stop everything this run started, keep evidence, delete the sandbox")
+    p.add_argument("run")
+    p.set_defaults(fn=cmd_down)
+
+    p = sub.add_parser("doctor", help="read-only health check of a run")
+    p.add_argument("run")
+    p.set_defaults(fn=cmd_doctor)
+
+    p = sub.add_parser("status", help="print run state (no secrets)")
+    p.add_argument("run")
+    p.set_defaults(fn=cmd_status)
+
+    p = sub.add_parser("hermes", help="run `hermes ...` in the run's clean env; captures evidence")
+    p.add_argument("run")
+    p.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
+    p.add_argument("rest", nargs="*")
+    p.set_defaults(fn=cmd_hermes)
+
+    p = sub.add_parser("serve", help="start|stop|info the run's hermes serve backend")
+    p.add_argument("run")
+    p.add_argument("action", choices=["start", "stop", "info"])
+    p.set_defaults(fn=cmd_serve)
+
+    p = sub.add_parser("rpc", help="one JSON-RPC call over /api/ws")
+    p.add_argument("run")
+    p.add_argument("method")
+    p.add_argument("params", nargs="?")
+    p.add_argument("--until")
+    p.add_argument("--timeout", type=float, default=60.0)
+    p.set_defaults(fn=cmd_rpc)
+
+    p = sub.add_parser("chat", help="session.create + prompt.submit + wait for message.complete over JSON-RPC")
+    p.add_argument("run")
+    p.add_argument("text")
+    p.add_argument("--session")
+    p.add_argument("--timeout", type=float, default=90.0)
+    p.set_defaults(fn=cmd_chat)
+
+    p = sub.add_parser("tmux", help="drive the REPL/TUI in a dedicated tmux server")
+    p.add_argument("run")
+    p.add_argument("action", choices=["start", "send", "type", "key", "wait", "capture", "stop"])
+    p.add_argument("--timeout", type=float, default=90.0)
+    p.add_argument("rest", nargs="*")
+    p.set_defaults(fn=cmd_tmux)
+
+    p = sub.add_parser("path", help="print the evidence, work, hermes-home or root directory of a run")
+    p.add_argument("run")
+    p.add_argument("which", choices=["evidence", "work", "hermes-home", "root"])
+    p.set_defaults(fn=cmd_path)
+
+    p = sub.add_parser("mock-prompts", help="user prompts the mock provider received")
+    p.add_argument("run")
+    p.set_defaults(fn=cmd_mock_prompts)
+
+    argv, flags = pull_flags(sys.argv[1:])
+    args = parser.parse_args(argv)
+    if "timeout" in flags:
+        args.timeout = float(flags["timeout"])
+    args.count = int(flags.get("count", 1))
+    args.fn(args)
+
+
+if __name__ == "__main__":
+    main()

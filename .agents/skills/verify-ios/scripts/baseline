@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+set -euo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+load_run
+DIR="$EVIDENCE/baseline"
+mkdir -p "$DIR"
+xcrun simctl list devices >"$DIR/devices-before.txt"
+disk_report >"$DIR/disk-before.txt"
+xctest_clone_udids >"$DIR/xctest-clones-before.txt" || true
+bash "$LEDGER" mine >"$DIR/ledger-before.txt" 2>&1 || true
+booted_sims >"$DIR/booted-before.txt" || true
+ls -1 "$HOME/.hermes/profiles" 2>/dev/null | sort >"$DIR/real-hermes-profiles-before.txt" || true
+set_state DISK_BEFORE_SIM_KB "$(disk_kb "$SIM_DEVICES_DIR")"
+set_state DISK_BEFORE_XCTEST_KB "$(disk_kb "$XCTEST_DEVICES_DIR")"
+UDID="$(pick_sim)"
+[ -n "$UDID" ] || die "no shutdown iPhone simulator to reuse; set VERIFY_IOS_UDID or create one (and claim it with --created)"
+set_state UDID "$UDID"
+cat "$DIR/disk-before.txt"
+say "baseline: booted=$(booted_count) of $MAX_SIMS, chosen simulator $UDID ($(sim_state "$UDID"))"

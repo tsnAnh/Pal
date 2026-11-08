@@ -26,6 +26,11 @@ DM_SENT_REPLY = "Đã nhắn."
 dm_replies_path = None
 IPHONE_TRIGGER = "IPHONE"
 IPHONE_RESULT_LIMIT = 600
+TOOL_FINAL_PREFIX = "stub-tool-final "
+TOOL_COMMANDS = {
+    "TOOLCALL": "sleep 6",
+    "APPROVE": 'cd "$(mktemp -d)" && git reset --hard',
+}
 
 log_lock = threading.Lock()
 
@@ -144,6 +149,11 @@ def plan(body):
         return "final", iphone_answer(text_of(last.get("content"))), NORMAL_DELAY
     if "iphone" in names and last_role == "user" and IPHONE_TRIGGER in last_user and (call := iphone_arguments(last_user)):
         return "iphone", call, 0
+    tool_trigger = next((key for key in TOOL_COMMANDS if key in last_user), None)
+    if "terminal" in names and tool_trigger and last_role == "tool":
+        return "text", [TOOL_FINAL_PREFIX + text_of(last.get("content"))], NORMAL_DELAY
+    if "terminal" in names and tool_trigger and last_role == "user":
+        return "tool", {"name": "terminal", "arguments": {"command": TOOL_COMMANDS[tool_trigger]}}, 0
     if "clarify" in names and last_role == "tool":
         return "final", "Clarify answered: " + text_of(last.get("content")), NORMAL_DELAY
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:

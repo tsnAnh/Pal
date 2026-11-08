@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -uo pipefail
+. "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+case "${1:-}" in
+  -h|--help|"") say "usage: swift-test <HermesDesign|HermesKit> [swift test args...]   package tests on the host (no simulator); log goes to the run's evidence dir"; [ -n "${1:-}" ] && exit 0; exit 2 ;;
+esac
+PACKAGE="$1"; shift
+[ -d "$IOS_DIR/Packages/$PACKAGE" ] || die "unknown package $PACKAGE"
+load_run
+DIR="$EVIDENCE/swift-test-$PACKAGE-$(date +%H%M%S)"
+mkdir -p "$DIR"
+ARGS=()
+while IFS= read -r name; do ARGS+=(-u "$name"); done < <(strip_env_names)
+env ${ARGS[@]+"${ARGS[@]}"} swift test --package-path "$IOS_DIR/Packages/$PACKAGE" "$@" 2>&1 | tee "$DIR/swift-test.log" | tail -25
+STATUS="${PIPESTATUS[0]}"
+printf 'package=%s swift_test_exit=%s args=%s\n' "$PACKAGE" "$STATUS" "$*" | tee "$DIR/verdict.txt"
+say "evidence: $DIR"
+exit "$STATUS"

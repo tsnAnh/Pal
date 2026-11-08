@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./ansi": "./src/ansi.ts",
+    "./avatar-loading-clips.json": "./src/avatar-loading-clips.json",
     "./billing": "./src/billing-types.ts",
     "./billing-policy": "./src/billing-policy.ts",
     "./charge-settlement": "./src/charge-settlement.ts",

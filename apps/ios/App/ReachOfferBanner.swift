@@ -1,4 +1,5 @@
 import HermesClient
+import HermesDesign
 import SwiftUI
 
 struct ReachOfferOverlay: View {
@@ -20,6 +21,8 @@ struct ReachOfferOverlay: View {
 }
 
 private struct ReachOfferBanner: View {
+    @Environment(\.hermesTheme) private var theme
+
     let offer: ReachOffer
     let open: () -> Void
     let dismiss: () -> Void
@@ -30,13 +33,13 @@ private struct ReachOfferBanner: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(verbatim: offer.title)
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color(theme.palette.textPrimary))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if !offer.body.isEmpty {
                         Text(verbatim: offer.body)
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color(theme.palette.textSecondary))
                             .lineLimit(3)
                             .multilineTextAlignment(.leading)
                     }
@@ -49,7 +52,7 @@ private struct ReachOfferBanner: View {
             Button(action: dismiss) {
                 Image(systemName: "xmark")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color(theme.palette.textSecondary))
                     .frame(width: 32, height: 32)
                     .contentShape(Rectangle())
             }
@@ -58,8 +61,8 @@ private struct ReachOfferBanner: View {
             .accessibilityIdentifier("reach-offer-dismiss")
         }
         .padding(16)
-        .background(Color(white: 0.14), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(white: 0.24), lineWidth: 1))
+        .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(theme.palette.cardStroke), lineWidth: 1))
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .gesture(

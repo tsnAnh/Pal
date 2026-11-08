@@ -169,3 +169,13 @@ If any answer is "not sure," that's the part to go verify.
 strip render the same `notice_pending` state, with no localStorage latch, and every entry point
 opens the one sign-in dialog. Branch on `free_tier_row` / `free_tier`, never on provider display
 names. Long form: `ENGINEERING.md`.
+
+## Learned Workspace Facts
+
+- Desktop E2E on a fresh `HERMES_HOME` borrowing this checkout: provision the home first
+  (`hermes gateway ensure --timeout 900`, then `gateway stop`), then launch Electron. Its 75 s
+  ensure deadline otherwise kills the cold per-home PM sync and the retry starts a second sync.
+- Hermes Bots avatar eyes curve over each body shape's own surface (never flat, never one sphere for
+  all); iOS parity tests diff desktop renders: rerun `apps/ios/Tools/avatar-parity/regenerate.sh`.
+- Bot chats (desktop Bot Mode, iOS) never show tool lines, raw JSON or technical text; answered
+  clarify cards stay as cards.

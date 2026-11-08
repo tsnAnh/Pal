@@ -36,8 +36,6 @@ struct ChatRowView: View {
             }
         case .assistant(let text, let streaming):
             AssistantBubble(text: text, isStreaming: streaming, highlight: findQuery, isCurrentMatch: isCurrentMatch)
-        case .tool(let name, let summary, let running):
-            ToolLine(name: name, summary: summary, isRunning: running)
         case .clarify(let prompt):
             ClarifyCard(prompt: prompt) { answer in model.answer(prompt, with: answer) }
         case .approval(let prompt):
@@ -63,13 +61,19 @@ struct AssistantBubble: View {
     var body: some View {
         HStack(spacing: 0) {
             ChatBubble(fill: Color(theme.palette.assistantBubble)) {
-                MarkdownView(document: MarkdownDocument(parsing: text), highlight: highlight, isCurrentMatch: isCurrentMatch)
-                    .textSelection(.enabled)
+                if text.isEmpty {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(Color(theme.palette.textSecondary))
+                } else {
+                    MarkdownView(document: MarkdownDocument(parsing: text), highlight: highlight, isCurrentMatch: isCurrentMatch)
+                        .textSelection(.enabled)
+                }
             }
             Spacer(minLength: bubbleGapInsideMargins)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(text))
+        .accessibilityLabel(Text(text.isEmpty ? String(localized: "Thinking") : text))
         .accessibilityIdentifier(isStreaming ? "assistantBubble-streaming" : "assistantBubble")
     }
 }
@@ -83,17 +87,26 @@ struct UserBubble: View {
     let retry: (String) -> Void
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var paint: (foreground: Color, background: Color) {
+        guard let accent else { return (Color(theme.palette.userBubbleText), Color(theme.palette.userBubble)) }
+        guard colorScheme == .light, AvatarColor(css: accent.accentHex)?.isWhite == true,
+              let ink = AvatarColor(css: AvatarColor.darkEyeFillCSS), let onInk = AvatarColor(css: AvatarColor.lightEyeFillCSS)
+        else { return (accent.foreground, accent.accent) }
+        return (onInk.swiftUIColor, ink.swiftUIColor)
+    }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             HStack(spacing: 0) {
                 Spacer(minLength: bubbleGapInsideMargins)
-                ChatBubble(fill: accent?.accent ?? Color(theme.palette.userBubble)) {
+                ChatBubble(fill: paint.background) {
                     InlineText(
                         text: AttributedString(text),
                         highlight: highlight,
                         isCurrentMatch: isCurrentMatch,
-                        foreground: accent?.foreground ?? Color(theme.palette.userBubbleText)
+                        foreground: paint.foreground
                     )
                     .textSelection(.enabled)
                 }

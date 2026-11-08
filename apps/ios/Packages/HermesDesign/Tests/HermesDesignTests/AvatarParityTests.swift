@@ -22,6 +22,7 @@ private func score(_ testCase: ParityMatrix.Case) throws -> ParityScore {
     let size = CGFloat(matrix.size)
     let renderer = ImageRenderer(
         content: BotAvatarView(spec: spec, size: size, mood: AvatarMood(rawValue: testCase.mood) ?? .idle, animated: false)
+            .environment(\.colorScheme, .dark)
     )
     renderer.scale = 1
     guard let rendered = renderer.cgImage else { throw ParityError.renderFailed(testCase.id) }
