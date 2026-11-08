@@ -44,8 +44,42 @@ class DisplayImageSwitch(Result):
     containers: int
 
 
+class DisplayDiskLevel(WireEnum):
+    normal = "normal"
+    low = "low"
+    critical = "critical"
+
+
+class DisplayDisk(Result):
+    """The disk the bot's screen and browser data live on: ``critical`` below 512 MB free or 97% used,
+    ``low`` below 2 GB free or 90% used."""
+
+    level: DisplayDiskLevel
+    free_mb: int
+    total_mb: int
+    used_pct: int
+
+
+class DisplayScreenState(WireEnum):
+    running = "running"
+    stopped = "stopped"
+    starting = "starting"
+
+
+class DisplayChromeState(WireEnum):
+    running = "running"
+    stopped = "stopped"
+
+
 class DisplayStatus(Result):
-    """``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for."""
+    """``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for.
+
+    Each bot has its own screen and its own Chrome, which runs on a copy of the machine's one master Chrome
+    profile: refreshed from master when that Chrome starts, written back when it exits.
+    ``profile_copy_synced_at`` is the last refresh or write-back (epoch seconds, null before the first).
+    ``chrome`` is null when the screen runs inside a sandbox the gateway cannot see into.
+    ``shared_files_path`` is the one files folder every bot on this machine shares (``~``-relative),
+    null for a sandboxed screen."""
 
     profile: str
     supported: bool
@@ -63,8 +97,13 @@ class DisplayStatus(Result):
     memory_limit_mb: int | None = None
     placement: str = "gateway"  # "gateway" | "terminal:<backend>" — where Xvnc runs (bot_desktop.placement)
     image_switch: DisplayImageSwitch | None = None  # a default-image switch the pane may approve (docker placement)
+    screen: DisplayScreenState = DisplayScreenState.stopped
+    chrome: DisplayChromeState | None = None
+    profile_copy_synced_at: float | None = None
+    shared_files_path: str | None = None
     lease: DisplayLease
     profile_key: str
+    disk: DisplayDisk | None = None
 
 
 # ── methods ───────────────────────────────────────────────────────────────────────────────────
@@ -99,6 +138,23 @@ class DisplayStopResult(DisplayStatus):
 
 method("display.stop", params=DisplayStopParams, result=DisplayStopResult,
        doc="Stop the screen. Refused (5300, code viewer_mismatch) while a human holds unless force.")
+
+
+class DisplayResetParams(ProfileParams):
+    force: bool | None = None  # reset even while a human holds control
+
+
+class DisplayResetResult(DisplayStatus):
+    """``reset`` names what was wiped (the desktop settings ``xdg`` and this bot's ``browser-profile`` copy);
+    an already-clean screen answers an empty list. The master Chrome profile, the shared files folder and
+    other bots are never touched; unsynced changes in this bot's copy are discarded, and its next Chrome
+    start is seeded from master again."""
+
+    reset: list[str]
+
+
+method("display.reset", params=DisplayResetParams, result=DisplayResetResult,
+       doc="Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen.")
 
 
 class DisplayObserveParams(ProfileParams):

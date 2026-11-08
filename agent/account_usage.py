@@ -908,9 +908,100 @@ def _fetch_openrouter_account_usage(base_url: Optional[str], api_key: Optional[s
     return _snapshot("openrouter", "credits_api", windows, details)
 
 
+_COPILOT_USER_URL = "https://api.github.com/copilot_internal/user"
+_COPILOT_USAGE_TIMEOUT_S = 10.0
+_COPILOT_QUOTA_LABELS = (
+    ("premium_interactions", "Premium requests"), ("chat", "Chat"), ("completions", "Completions"),
+)
+_COPILOT_MODEL_SCOPED_QUOTAS = frozenset({"premium_interactions"})
+_COPILOT_NO_QUOTA_REASON = "GitHub did not report Copilot quota for this account."
+_COPILOT_TOKEN_SECRETS = ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN")
+
+
+def _resolve_copilot_usage_token(api_key: Optional[str]) -> str:
+    explicit = str(api_key or "").strip()
+    if explicit:
+        return explicit
+    from agent.credential_pool import STATUS_DEAD, load_pool
+
+    for entry in load_pool("copilot").entries():
+        token = str(entry.runtime_api_key or "").strip()
+        if token and entry.last_status != STATUS_DEAD:
+            return token
+    from agent.secret_scope import get_secret
+
+    for name in _COPILOT_TOKEN_SECRETS:
+        token = str(get_secret(name) or "").strip()
+        if token:
+            return token
+    from hermes_cli.git_credentials import _gh_cli_token
+
+    return str(_gh_cli_token() or "").strip()
+
+
+def _copilot_headers(token: str) -> dict[str, str]:
+    return {"Authorization": f"token {token}", "Accept": "application/json",
+            "Editor-Version": "vscode/1.99.3", "Editor-Plugin-Version": "copilot-chat/0.26.7",
+            "User-Agent": "GitHubCopilotChat/0.26.7", "X-Github-Api-Version": "2025-04-01"}
+
+
+def _copilot_quota_used_percent(quota: dict) -> Optional[float]:
+    remaining_percent = quota.get("percent_remaining")
+    if _is_finite_num(remaining_percent):
+        used = 100.0 - float(remaining_percent)
+    else:
+        entitlement, remaining = quota.get("entitlement"), quota.get("remaining")
+        if not (_is_finite_num(entitlement) and float(entitlement) > 0 and _is_finite_num(remaining)):
+            return None
+        used = (float(entitlement) - float(remaining)) / float(entitlement) * 100.0
+    return min(100.0, max(0.0, used))
+
+
+def _copilot_plan(payload: dict) -> Optional[str]:
+    sku = str(payload.get("access_type_sku") or "").strip().lower()
+    if sku.startswith("free"):
+        return "Free"
+    return _title_case_slug(payload.get("copilot_plan") or sku or None)
+
+
+def _fetch_copilot_account_usage(
+    base_url: Optional[str] = None, api_key: Optional[str] = None,
+) -> Optional[AccountUsageSnapshot]:
+    token = _resolve_copilot_usage_token(api_key)
+    if not token:
+        return None
+    payload = _get_json(_COPILOT_USER_URL, _copilot_headers(token), timeout=_COPILOT_USAGE_TIMEOUT_S)
+    quotas = payload.get("quota_snapshots") if isinstance(payload, dict) else None
+    plan = _copilot_plan(payload) if isinstance(payload, dict) else None
+    if not isinstance(quotas, dict):
+        return _snapshot("copilot", "copilot_internal_user", [], [], plan=plan,
+                         unavailable_reason=_COPILOT_NO_QUOTA_REASON)
+    reset_at = _parse_dt(payload.get("quota_reset_date_utc") or payload.get("quota_reset_date"))
+    windows: list[AccountUsageWindow] = []
+    details: list[str] = []
+    for key, label in _COPILOT_QUOTA_LABELS:
+        quota = quotas.get(key)
+        if not isinstance(quota, dict):
+            continue
+        if quota.get("unlimited") is True:
+            details.append(f"{label}: unlimited")
+            continue
+        if _is_finite_num(quota.get("entitlement")) and float(quota["entitlement"]) <= 0:
+            continue
+        used = _copilot_quota_used_percent(quota)
+        if used is None:
+            continue
+        windows.append(AccountUsageWindow(
+            label=label, used_percent=used, reset_at=reset_at,
+            scope="model" if key in _COPILOT_MODEL_SCOPED_QUOTAS else "account",
+        ))
+    return _snapshot("copilot", "copilot_internal_user", windows, details, plan=plan,
+                     unavailable_reason=None if windows or details else _COPILOT_NO_QUOTA_REASON)
+
+
 _USAGE_FETCHERS: dict[str, Callable[[Optional[str], Optional[str]], Optional[AccountUsageSnapshot]]] = {
     "openai-codex": _fetch_codex_account_usage, "anthropic": _fetch_anthropic_account_usage,
-    "openrouter": _fetch_openrouter_account_usage,
+    "openrouter": _fetch_openrouter_account_usage, "copilot": _fetch_copilot_account_usage,
 }
 
 # Picker per-credential variants: same parsers/fetch shape, but a failure is never repaired by

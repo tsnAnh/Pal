@@ -285,18 +285,24 @@ def _profile_ui_meta_fields(row: dict, profile_dir) -> None:
 def _(rid, params: dict) -> dict:
     """List Hermes profiles. ``include_sessions`` (default true) adds ``last_session`` /
     ``worker_session`` / ``canonical_session`` so a roster paints previews without N calls."""
+    from hermes_cli.primary_profile import primary_profile_name
     from hermes_cli.profiles import list_profiles
+    primary = primary_profile_name()
     include_sessions = is_truthy_value(params.get("include_sessions", True))
+    include_routines = is_truthy_value(params.get("include_routines", False))
     out = []
     # Roster polls this every 5s: ``skill_count`` is the last known value, refreshed off-request.
     for p in list_profiles(lazy_skill_count=True):
-        row = {"name": p.name, "path": str(p.path), "is_default": bool(p.is_default), "model": p.model,
+        row = {"name": p.name, "path": str(p.path), "is_default": bool(p.is_default), "is_primary": p.name == primary, "model": p.model,
                "provider": p.provider, "description": p.description or "",
                "display_name": p.display_name or "", "skill_count": p.skill_count or 0,
                "previous_names": list(p.previous_names or [])}
         if include_sessions:
             _profile_session_fields(row, p.path)
         _profile_ui_meta_fields(row, Path(str(p.path)))
+        if include_routines:
+            row["routines_enabled"] = _try(
+                lambda: _lazy("tui_gateway.cron_routine_actions", "enabled_routine_count")(p.path), None)
         out.append(row)
     # bot_mode_protocol: this backend injects the Bot Mode teammate-messaging protocol into every
     # session, so clients must not append it to SOUL.md. install_id (same value as /api/status)
@@ -308,18 +314,21 @@ def _(rid, params: dict) -> dict:
 @method("bot_mode.about_you.get")
 def _(rid, params: dict) -> dict:
     """The owner facts every Bot Mode bot shares (install-wide, not per profile) → ``{name, timezone}``."""
-    from tools.bot_mode_about_you import read_about_you
-    return _ok(rid, read_about_you())
+    from tools.bot_mode_about_you import read_about_you, read_timezone_auto
+    return _ok(rid, {**read_about_you(), "timezone_auto": read_timezone_auto()})
 
 
 @method("bot_mode.about_you.set")
 def _(rid, params: dict) -> dict:
     """Save owner facts (install-wide). A field left out is unchanged; ``null`` or blank clears it.
     Validates server-side (4065 on an unknown time zone) and returns the normalized ``{name, timezone}``."""
-    from tools.bot_mode_about_you import write_about_you
+    from tools.bot_mode_about_you import read_timezone_auto, write_about_you
     fields = {key: params[key] for key in ("name", "timezone") if key in params}
+    if "timezone_auto" in params:
+        fields["timezone_auto"] = params["timezone_auto"] is True
     try:
-        return _ok(rid, write_about_you(**fields))
+        facts = write_about_you(**fields)
+        return _ok(rid, {**facts, "timezone_auto": read_timezone_auto()})
     except ValueError as e:
         return _err(rid, 4065, str(e))
     except OSError as e:

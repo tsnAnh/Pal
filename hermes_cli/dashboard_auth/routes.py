@@ -19,6 +19,7 @@ allowlists the public ones.
 from __future__ import annotations
 
 import logging
+import sqlite3
 import threading
 import time
 from collections import OrderedDict, deque
@@ -32,7 +33,7 @@ from starlette.concurrency import run_in_threadpool
 
 from hermes_cli import webapp_sign_in
 from hermes_cli.dashboard_auth import (
-    get_provider, list_interactive_providers, list_providers, list_session_providers,
+    get_provider, list_interactive_providers, list_session_providers,
     native_flow)
 from hermes_cli.dashboard_auth import prefix as _prefix_mod
 from hermes_cli.dashboard_auth.audit import AuditEvent, audit_log
@@ -45,6 +46,7 @@ from hermes_cli.dashboard_auth.cookies import (
 from hermes_cli.dashboard_auth.login_page import (
     render_login_html, render_native_provider_choice_html)
 from hermes_cli.dashboard_auth.refresh_singleflight import refresh_session_coalesced
+from hermes_cli.dashboard_auth.revoke import revoke_refresh_token
 from hermes_cli.dashboard_auth.request_utils import (
     access_token_max_age, client_ip as _client_ip, is_safe_next_path)
 
@@ -513,12 +515,8 @@ async def auth_password_login(request: Request, body: _PasswordLoginBody):
 @router.post("/auth/logout", name="auth_logout")
 async def auth_logout(request: Request):
     _at, rt = read_session_cookies(request, webapp_sign_in.cookie_gateway(request))
-    # Best-effort revoke on every provider; failures logged, never raised.
-    for provider in list_providers() if rt else ():
-        try:
-            provider.revoke_session(refresh_token=rt)
-        except Exception as e:
-            _log.warning("dashboard-auth: revoke on %r failed: %s", provider.name, e)
+    if rt:
+        revoke_refresh_token(rt)
     sess = getattr(request.state, "session", None)
     _audit(request, AuditEvent.LOGOUT, provider=(sess.provider if sess else "unknown"),
            user_id=(sess.user_id if sess else ""))
@@ -587,9 +585,34 @@ async def api_auth_ws_ticket(request: Request):
 
 # --- Public: RFC 8252 native-app token exchange + refresh ------------------
 
+DEVICE_ID_PATTERN = r"^[A-Za-z0-9-]{8,64}$"
+
+
 class _NativeTokenBody(BaseModel):
     code: str
     code_verifier: str
+    device_id: str = Field(default="", pattern=r"^$|" + DEVICE_ID_PATTERN)
+
+
+async def _bind_device_grant(session: Session, device_id: str, *, previous_refresh_token: str = "") -> None:
+    if not session.refresh_token or not (device_id or previous_refresh_token):
+        return
+
+    def write() -> None:
+        from gateway import device_registry
+        root, now = device_registry.install_root(None), time.time()
+        if previous_refresh_token and device_registry.rotate_grant(
+                root, old_refresh_token=previous_refresh_token, access_token=session.access_token,
+                refresh_token=session.refresh_token, now=now) is not None:
+            return
+        if device_id:
+            device_registry.bind_grant(root, device_id=device_id, access_token=session.access_token,
+                                       refresh_token=session.refresh_token, provider=session.provider, now=now)
+
+    try:
+        await run_in_threadpool(write)
+    except (sqlite3.Error, OSError):
+        _log.warning("Could not record which device holds a native sign-in", exc_info=True)
 
 
 @router.post("/auth/native/token", name="auth_native_token")
@@ -603,6 +626,7 @@ async def auth_native_token(request: Request, body: _NativeTokenBody):
         _audit(request, AuditEvent.NATIVE_TOKEN_FAILURE, reason="invalid_code_or_pkce")
         raise _http(400, "Invalid or expired authorization code.")
     webapp_sign_in.gave_native_app(request, session)
+    await _bind_device_grant(session, body.device_id)
     _audit(request, AuditEvent.NATIVE_TOKEN_SUCCESS, provider=session.provider,
            user_id=session.user_id)
     return _bearer_payload(session)
@@ -611,6 +635,7 @@ async def auth_native_token(request: Request, body: _NativeTokenBody):
 class _NativeRefreshBody(BaseModel):
     refresh_token: str
     provider: str = ""
+    device_id: str = Field(default="", pattern=r"^$|" + DEVICE_ID_PATTERN)
 
 
 @router.post("/auth/native/refresh", name="auth_native_refresh")
@@ -637,6 +662,7 @@ async def auth_native_refresh(request: Request, body: _NativeRefreshBody):
     if refreshed is not None:
         session = refreshed[0]
         webapp_sign_in.gave_native_app(request, session)
+        await _bind_device_grant(session, body.device_id, previous_refresh_token=body.refresh_token)
         _audit(request, AuditEvent.REFRESH_SUCCESS, provider=session.provider,
                user_id=session.user_id)
         return _bearer_payload(session)

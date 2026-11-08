@@ -1325,7 +1325,7 @@ def _(rid, params: dict) -> dict:
             result["scoped"] = profile
         # Older gateways omit ``actions``; clients hide the routine controls they do not list.
         result["actions"] = list(routine.ROUTINE_ACTIONS)
-        return _ok(rid, result)
+        return _ok(rid, routine.annotate_listing(result))
     if action == "add":
         preview = routine.schedule_preview(params)
         if not preview["success"]:

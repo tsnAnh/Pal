@@ -42,7 +42,7 @@ _FIELDS = {
     'groups.discard': {'room_id', 'member_id', 'task_id', 'execution_generation'},
     'groups.approve': {'room_id', 'member_id', 'task_id', 'execution_generation',
                        'choice', 'request_id'},
-    'profiles.list': {'include_sessions'},
+    'profiles.list': {'include_sessions', 'include_routines'},
 }
 
 
@@ -395,8 +395,17 @@ def _profiles(authority, actor, home, params, siblings=()):
     from hermes_cli.profiles import _profile_info
     import hermes_yaml as yaml
     include_sessions = params.get('include_sessions', True)
-    if type(include_sessions) is not bool:
+    include_routines = params.get('include_routines', False)
+    if type(include_sessions) is not bool or type(include_routines) is not bool:
         raise RuntimeStoreError('invalid_params')
+    from hermes_cli.primary_profile import primary_profile_name
+    primary = primary_profile_name()
+
+    def decorate(entry, target):
+        entry['is_primary'] = entry['name'] == primary
+        if include_routines:
+            entry['routines_enabled'] = _enabled_routines(target)
+        return entry
     from gateway.session_authorities import served_profile_name
     name = served_profile_name(home)
     profile = _profile_info(name, home, is_default=name == 'default')
@@ -417,7 +426,7 @@ def _profiles(authority, actor, home, params, siblings=()):
         row['onboarding_pending'] = True
     if include_sessions:
         row.update(_bot_sessions(authority, actor))
-    profiles = [row]
+    profiles = [decorate(row, home)]
     seen = {home.resolve()}
 
     def discovered(configured, target, reach=None):
@@ -438,7 +447,7 @@ def _profiles(authority, actor, home, params, siblings=()):
                 entry['ui_meta'] = meta['ui_meta']
             if is_onboarding_pending(meta):
                 entry['onboarding_pending'] = True
-        profiles.append(entry)
+        profiles.append(decorate(entry, target))
 
     # Sibling profiles this process multiplexes: the roster lists them with the same
     # standing as a hosted-room destination, and the client routes their sessions by name.
@@ -466,8 +475,17 @@ def _profiles(authority, actor, home, params, siblings=()):
     # machine answered; the roster trace logged ``answered=-`` without it. It already returns
     # None for an unreadable root.
     from hermes_cli.install_identity import get_install_id
-    return {'profiles': profiles, 'bot_mode_protocol': True, 'bot_onboarding': True,
+    return {'profiles': profiles, 'bot_mode_protocol': True, 'bot_about_you': True, 'bot_onboarding': True,
             'install_id': get_install_id() or ''}
+
+
+def _enabled_routines(profile_dir):
+    from tui_gateway.cron_routine_actions import enabled_routine_count
+    try:
+        return enabled_routine_count(profile_dir)
+    except (OSError, ValueError):
+        logger.warning('Could not count the routines of %s', profile_dir.name, exc_info=True)
+        return None
 
 
 # The Bots pane polls ``profiles.list`` every 5 s. Re-listing ``profiles/`` and re-parsing every

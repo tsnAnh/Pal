@@ -175,6 +175,7 @@ _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
 # stays inline so fast-path ordering stays sane (write_json is _stdout_lock-guarded). Why each is slow:
 # billing/subscription/usage = blocking portal (+Stripe) round-trips; complete.* = git ls-files /
 # prompt_toolkit import + skill scan; model.options = credential pool + pricing + provider probe;
+# account.subscriptions = credential pool + state.db spend read + up to 10s of concurrent usage fetches;
 # pet.* = network or PNG decode (generate = several image-model round-trips); reload.mcp /
 # mcp.servers.* = rediscovery, cold npx spawn, ~30s OAuth wait; profiles.* = skill-tree walk + state.db
 # open; bot_relay.* = a FULL one-turn agent conversation (600s); setup.* / session.active_list =
@@ -184,7 +185,7 @@ _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
 # render (up to sessions.max_export_messages rows, ~0.8s at the default cap); onboarding.start = session
 # creation + a prompt.submit; onboarding.state = a bounded wait on the boot-time due answer.
 _LONG_HANDLERS = frozenset({
-    "session.foreign.list", "session.foreign.preview", "session.foreign.import",
+    "account.subscriptions", "session.foreign.list", "session.foreign.preview", "session.foreign.import",
     "billing.state", "subscription.state", "subscription.preview", "subscription.change",
     "subscription.resume", "subscription.upgrade", "usage.bars", "session.usage", "billing.step_up",
     "browser.manage", "cli.exec", "complete.path", "complete.slash", "llm.oneshot", "model.options",
@@ -199,7 +200,7 @@ _LONG_HANDLERS = frozenset({
     "setup.runtime_check", "setup.status", "free_tier.provision", "voice.toggle", "voice.record", "voice.tts", "wake.start",
     "wake.status", "session.active_list", "session.branch", "session.compress", "session.list",
     "session.resume", "session.save", "session.workspace.move", "shell.exec", "skills.manage", "slash.exec",
-    "onboarding.start", "onboarding.state",
+    "onboarding.start", "onboarding.state", "library.list", "library.asset",
     "command.dispatch",  # /goal draft invokes the auxiliary model; never block the RPC reader
     "shared_metrics.set",  # consent reconcile waits on the metrics store's write lock
 })
@@ -2021,6 +2022,7 @@ from . import (
     methods_complete as _methods_complete, methods_config as _methods_config,
     methods_config_set as _methods_config_set, methods_images as _methods_images,
     methods_profiles as _methods_profiles, methods_profile_templates as _methods_profile_templates,
+    methods_profile_admin as _methods_profile_admin, methods_messaging_slack as _methods_messaging_slack, methods_memory_import as _methods_memory_import, methods_account_session as _methods_account_session,
     methods_prompt as _methods_prompt, methods_session as _methods_session,
     methods_tools as _methods_tools, methods_tools_plugin_servers as _methods_tools_plugin_servers,
     methods_projects as _methods_projects, methods_session_foreign as _methods_session_foreign,
@@ -2028,9 +2030,10 @@ from . import (
     methods_vault as _methods_vault, methods_free_tier as _methods_free_tier,
     methods_connectors as _methods_connectors, methods_connectors_account as _methods_connectors_account,
     methods_display as _methods_display, methods_display_watch as _methods_display_watch,
-    methods_teach as _methods_teach,
+    methods_teach as _methods_teach, methods_library as _methods_library, methods_permissions as _methods_permissions,
     methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n, methods_machine as _methods_machine,
-    methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog)
+    methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog,
+    methods_account as _methods_account)
 
 for _m in (
     _session_registry, _agent_factory, _slash_worker_client,
@@ -2039,10 +2042,10 @@ for _m in (
     _prompt_attachments, _session_history, _agent_callbacks, _session_auto_continue, _plugin_inject, _rpc_dispatch,
     _methods_complete_helpers, _methods_slash, _methods_voice, _methods_browser,
     _methods_session, _methods_prompt, _methods_config,
-    _methods_config_set, _methods_complete, _methods_tools, _methods_tools_plugin_servers, _methods_profiles, _methods_profile_templates, _methods_images,
+    _methods_config_set, _methods_complete, _methods_tools, _methods_tools_plugin_servers, _methods_profiles, _methods_profile_templates, _methods_profile_admin, _methods_messaging_slack, _methods_memory_import, _methods_account_session, _methods_images,
     _methods_bot_relay, _prompt_turn, _billing_view, _methods_projects, _methods_session_foreign,
     _methods_session_control, _methods_subagents, _methods_vault, _methods_free_tier, _methods_connectors,
-    _methods_connectors_account, _methods_display, _methods_display_watch, _methods_teach, _methods_onboarding,
-    _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog):
+    _methods_connectors_account, _methods_display, _methods_display_watch, _methods_teach, _methods_library, _methods_permissions, _methods_onboarding,
+    _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog, _methods_account):
     _m.register(sys.modules[__name__])
 del _m
