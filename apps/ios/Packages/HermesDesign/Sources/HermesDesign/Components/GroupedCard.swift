@@ -2,11 +2,17 @@ import SwiftUI
 
 public struct GroupedCard<Content: View>: View {
     public let accessibilityIdentifier: String
+    public let separatorInset: CGFloat
     private let content: Content
 
     @Environment(\.hermesTheme) private var theme
 
-    public init(accessibilityIdentifier: String, @ViewBuilder content: () -> Content) {
+    public init(
+        separatorInset: CGFloat = HermesMetrics.rowInset,
+        accessibilityIdentifier: String,
+        @ViewBuilder content: () -> Content
+    ) {
+        self.separatorInset = separatorInset
         self.accessibilityIdentifier = accessibilityIdentifier
         self.content = content()
     }
@@ -21,7 +27,7 @@ public struct GroupedCard<Content: View>: View {
                         Rectangle()
                             .fill(Color(theme.palette.separator))
                             .frame(height: HermesMetrics.separatorThickness)
-                            .padding(.leading, HermesMetrics.rowInset)
+                            .padding(.leading, separatorInset)
                             .accessibilityHidden(true)
                     }
                 }

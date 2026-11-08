@@ -30,6 +30,25 @@ public struct HermesToggleStyle: ToggleStyle {
     }
 }
 
+public struct RowIcon {
+    let content: AnyView
+
+    public static func symbol(_ name: String) -> RowIcon {
+        RowIcon(content: AnyView(Image(systemName: name).font(.system(size: 17, weight: .light))))
+    }
+
+    public static func custom<Content: View>(_ view: Content) -> RowIcon {
+        RowIcon(content: AnyView(view))
+    }
+}
+
+extension HermesMetrics {
+    public static let rowIconLeadingInset: CGFloat = 22
+    public static let rowIconWidth: CGFloat = 19
+    public static let rowIconSpacing: CGFloat = 12.5
+    public static var iconRowSeparatorInset: CGFloat { rowIconLeadingInset + rowIconWidth + rowIconSpacing }
+}
+
 public struct SettingsRow: View {
     public enum Trailing {
         case none
@@ -48,6 +67,8 @@ public struct SettingsRow: View {
     public let value: String?
     public let trailing: Trailing
     public let role: Role
+    public let icon: RowIcon?
+    public let minimumHeight: CGFloat
     public let accessibilityIdentifier: String
     public let action: (() -> Void)?
 
@@ -59,6 +80,8 @@ public struct SettingsRow: View {
         value: String? = nil,
         trailing: Trailing = .none,
         role: Role = .standard,
+        icon: RowIcon? = nil,
+        minimumHeight: CGFloat = HermesMetrics.rowMinimumHeight,
         accessibilityIdentifier: String,
         action: (() -> Void)? = nil
     ) {
@@ -67,6 +90,8 @@ public struct SettingsRow: View {
         self.value = value
         self.trailing = trailing
         self.role = role
+        self.icon = icon
+        self.minimumHeight = minimumHeight
         self.accessibilityIdentifier = accessibilityIdentifier
         self.action = action
     }
@@ -75,19 +100,21 @@ public struct SettingsRow: View {
         _ title: String,
         subtitle: String? = nil,
         value: String? = nil,
+        icon: RowIcon? = nil,
         accessibilityIdentifier: String,
         action: @escaping () -> Void
     ) -> SettingsRow {
-        SettingsRow(title: title, subtitle: subtitle, value: value, trailing: .chevron, accessibilityIdentifier: accessibilityIdentifier, action: action)
+        SettingsRow(title: title, subtitle: subtitle, value: value, trailing: .chevron, icon: icon, accessibilityIdentifier: accessibilityIdentifier, action: action)
     }
 
     public static func value(
         _ title: String,
         value: String,
         subtitle: String? = nil,
+        icon: RowIcon? = nil,
         accessibilityIdentifier: String
     ) -> SettingsRow {
-        SettingsRow(title: title, subtitle: subtitle, value: value, accessibilityIdentifier: accessibilityIdentifier)
+        SettingsRow(title: title, subtitle: subtitle, value: value, icon: icon, accessibilityIdentifier: accessibilityIdentifier)
     }
 
     public static func external(
@@ -103,9 +130,10 @@ public struct SettingsRow: View {
         _ title: String,
         subtitle: String? = nil,
         isOn: Binding<Bool>,
+        minimumHeight: CGFloat = HermesMetrics.rowMinimumHeight,
         accessibilityIdentifier: String
     ) -> SettingsRow {
-        SettingsRow(title: title, subtitle: subtitle, trailing: .toggle(isOn), accessibilityIdentifier: accessibilityIdentifier)
+        SettingsRow(title: title, subtitle: subtitle, trailing: .toggle(isOn), minimumHeight: minimumHeight, accessibilityIdentifier: accessibilityIdentifier)
     }
 
     public static func destructive(
@@ -147,7 +175,13 @@ public struct SettingsRow: View {
     }
 
     private var rowContent: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: icon == nil ? 12 : HermesMetrics.rowIconSpacing) {
+            if let icon {
+                icon.content
+                    .foregroundStyle(Color(theme.palette.textSecondary))
+                    .frame(width: HermesMetrics.rowIconWidth)
+                    .accessibilityHidden(true)
+            }
             VStack(alignment: .leading, spacing: HermesMetrics.rowTextSpacing) {
                 Text(title)
                     .hermesText(.rowTitle)
@@ -168,10 +202,10 @@ public struct SettingsRow: View {
             }
             trailingAccessory
         }
-        .padding(.leading, HermesMetrics.rowInset)
+        .padding(.leading, icon == nil ? HermesMetrics.rowInset : HermesMetrics.rowIconLeadingInset)
         .padding(.trailing, HermesMetrics.rowInset)
         .padding(.vertical, subtitle == nil ? 0 : HermesMetrics.rowVerticalPadding)
-        .frame(minHeight: HermesMetrics.rowMinimumHeight)
+        .frame(minHeight: minimumHeight)
         .contentShape(Rectangle())
     }
 
