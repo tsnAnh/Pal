@@ -20,7 +20,7 @@ import {
 // #93911 — the client giving up before a valid typed settlement arrives.
 
 const repoRoot = join(process.cwd(), '..', '..')
-const configDefaults = readFileSync(join(repoRoot, 'hermes_cli/config_defaults.py'), 'utf8')
+const configDefaults = readFileSync(join(repoRoot, 'hermes_cli/config_defaults_bot_mode.py'), 'utf8')
 const relayPlumbing = readFileSync(join(repoRoot, 'tools/bot_relay.py'), 'utf8')
 
 function pyConstant(name: string): number {
@@ -34,7 +34,7 @@ describe('bot_relay.deliver budget mirrors', () => {
   it('mirrors the backend turn-lock default', () => {
     const lockWaitMatch = configDefaults.match(/"turn_wait_seconds":\s*(\d+)/)
 
-    expect(lockWaitMatch, 'bot_mode.turn_wait_seconds default must exist in config_defaults.py').toBeTruthy()
+    expect(lockWaitMatch, 'bot_mode.turn_wait_seconds default must exist in config_defaults_bot_mode.py').toBeTruthy()
     expect(RELAY_TURN_LOCK_WAIT_MS).toBe(Number(lockWaitMatch![1]) * 1000)
   })
 

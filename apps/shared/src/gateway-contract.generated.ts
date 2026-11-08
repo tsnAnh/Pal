@@ -1539,7 +1539,7 @@ export interface ConnectorPolicySetResult {
   revision: string
   effective: ConnectorPolicyEffectiveUnrestricted | ConnectorPolicyEffectiveDenyAll | ConnectorPolicyEffectiveAllow | ConnectorPolicyEffectiveDeny
 }
-/** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. Each bot has its own screen and its own Chrome, which runs on a copy of the machine's one master Chrome profile: refreshed from master when that Chrome starts, written back when it exits. ``profile_copy_synced_at`` is the last refresh or write-back (epoch seconds, null before the first). ``chrome`` is null when the screen runs inside a sandbox the gateway cannot see into. ``shared_files_path`` is the one files folder every bot on this machine shares (``~``-relative), null for a sandboxed screen. */
+/** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. Each bot has its own screen and its own Chrome, which runs on a copy of the machine's one master Chrome profile: refreshed from master when that Chrome starts, written back when it exits. ``profile_copy_synced_at`` is the last refresh or write-back (epoch seconds, null before the first). A screen in the bot's own Docker sandbox reports the same: its Chrome runs on the copy, mounted in. ``chrome`` is null when the screen runs in a sandbox that holds no copy (ssh, or a container several profiles share). ``shared_files_path`` is the one files folder every bot on this machine shares (``~``-relative; mounted at ``/bot-computer/files`` in a bot's Docker sandbox), null then too. */
 export interface DisplayStatus {
   profile: string
   supported: boolean
@@ -5873,6 +5873,86 @@ export interface CanonicalBotStopResult {
   stopped: boolean
   handoffs: number
 }
+export interface BotThreadListParams {
+  profile?: string | null
+}
+export interface BotThreadListResult {
+  threads: BotThreadSummary[]
+}
+export interface BotThreadSummary {
+  thread_id: string
+  counterpart: BotThreadParticipant
+  last_at: string
+  last_preview: string
+  last_sender_key: string
+  message_count: number
+}
+/** ``local_profile`` names a bot on this install (its avatar asset is ``profiles.get_asset`` of that profile); a remote bot has none and is drawn from its ``key``. */
+export interface BotThreadParticipant {
+  key: string
+  is_self: boolean
+  local_profile?: string | null
+  display_name: string
+  handle: string
+  avatar: BotThreadAvatar
+}
+export interface BotThreadAvatar {
+  has_asset: boolean
+  ui_meta?: unknown | null
+}
+/** At most one of ``focus`` (an exchange a main-chat link opens), ``before`` / ``after`` (a message ``seq`` cursor from a previous page) or ``since_rev`` (catch-up after ``bot_threads.changed``: new messages and status changes). None reads the newest page. */
+export interface BotThreadReadParams {
+  profile?: string | null
+  thread_id: string
+  focus?: string | null
+  before?: number | null
+  after?: number | null
+  since_rev?: number | null
+  limit?: number
+}
+/** Oldest first. ``before`` / ``after`` are the cursors for the next older / newer page (null at either end); ``coverage`` is ``own_side`` when the counterpart may answer where this profile cannot see it (a peer gateway's open chat). There is no write verb: threads are read-only. */
+export interface BotThreadReadResult {
+  thread_id: string
+  participants: BotThreadParticipant[]
+  messages: BotThreadMessage[]
+  focus_index?: number | null
+  before?: number | null
+  after?: number | null
+  rev: number
+  coverage: 'both_sides' | 'own_side'
+  history_since?: string | null
+  read_only?: true
+}
+export interface BotThreadMessage {
+  id: string
+  exchange_id: string
+  sender_key: string
+  text: string
+  at: string
+  part: 'message' | 'reply'
+  status: BotThreadStatus
+  status_text?: string | null
+}
+export type BotThreadStatus = 'pending' | 'delivered' | 'unknown' | 'answered' | 'failed'
+export interface BotThreadLinksParams {
+  profile?: string | null
+  session_id: string
+  limit?: number
+}
+export interface BotThreadLinksResult {
+  links: BotThreadLink[]
+  truncated: boolean
+}
+/** One compact main-chat row at ``anchor_uid`` (a row's ``message_uid``) replacing ``covered_uids``. ``count`` 1 renders "Messaged X" / "Message from X"; more renders "N messages with X". Tapping opens ``bot.thread.read`` with ``focus=exchange_id``. */
+export interface BotThreadLink {
+  anchor_uid: string
+  thread_id: string
+  exchange_id: string
+  kind: 'messaged' | 'message_from'
+  counterpart: BotThreadParticipant
+  covered_uids: string[]
+  count: number
+}
 export interface ProfilesSetPrimaryParams {
   name: string
 }
@@ -5981,6 +6061,25 @@ export interface PushUnregisterParams {
 }
 export interface PushUnregisterResult {
   removed: boolean
+}
+/** ``query`` is trimmed and must be 1..200 characters. ``limit`` defaults to 20 and is clamped to 1..50. */
+export interface SessionSearchParams {
+  profile?: string | null
+  query: string
+  limit?: number
+}
+export interface SessionSearchResult {
+  results: SessionSearchHit[]
+}
+/** ``session_id`` is the conversation's lineage root and ``resolved_id`` the compression-lineage tip ``session.list`` reports. ``role`` and ``timestamp`` are null for a hit on a session id or title. ``snippet`` is plain text of at most 240 characters; ``timestamp`` is the matching message's unix seconds. */
+export interface SessionSearchHit {
+  session_id: string
+  resolved_id?: string | null
+  title: string | null
+  snippet: string
+  role: string | null
+  timestamp: number | null
+  profile: string
 }
 /** ``answers`` rides only on a reconnect replay (locks the server already accepted; null = skipped). */
 export interface ClarifyRequestParams {
@@ -6832,7 +6931,7 @@ export interface RpcMethods {
   'display.lease.resolve': { params: DisplayLeaseResolveParams; result: DisplayLeaseResult }
   /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
   'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
-  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen. */
+  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a screen in a sandbox the bot does not have to itself. */
   'display.reset': { params: DisplayResetParams; result: DisplayResetResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }
@@ -7590,6 +7689,12 @@ export interface CanonicalRpcMethods {
   'approval.respond': { params: CanonicalApprovalParams; result: PromptResponseResult }
   /** Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record. */
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
+  /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
+  'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
+  /** This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat. */
+  'bot.thread.list': { params: BotThreadListParams; result: BotThreadListResult }
+  /** Read one bot-to-bot thread from this profile's own ledger. not_found when the profile has no exchange in it. Requires session:read on the profile's Bot Chat. */
+  'bot.thread.read': { params: BotThreadReadParams; result: BotThreadReadResult }
   /** Owner facts (name, time zone) shared by every Bot Mode bot on this install. */
   'bot_mode.about_you.get': { params: BotAboutYouGetParams; result: BotAboutYouFacts }
   /** Save owner facts install-wide; validates the time zone and answers the normalized values. */
@@ -7609,6 +7714,10 @@ export interface CanonicalRpcMethods {
   'command.observe': { params: CommandObserveParams; result: CommandObserveResult }
   'config.get': { params: ConfigGetParams; result: CanonicalConfigGetResult }
   'config.set': { params: CanonicalConfigSetParams; result: ConfigSetResult }
+  /** The scoped member's hosted connector accounts, optionally filtered by connector slug. */
+  'connectors.accounts': { params: ConnectorAccountsParams; result: ConnectorAccountsResult }
+  /** Remove one hosted connector account owned by the scoped member. */
+  'connectors.accounts.remove': { params: ConnectorAccountsRemoveParams; result: ConnectorAccountsRemoveResult }
   /** The hosted connector catalog available to the scoped member. */
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
@@ -7643,9 +7752,11 @@ export interface CanonicalRpcMethods {
   'display.lease.acquire': { params: DisplayLeaseAcquireParams; result: DisplayLeaseResult }
   /** Hand back. Without a viewer id the release is refused while a human holds unless force. */
   'display.lease.release': { params: DisplayLeaseReleaseParams; result: DisplayLeaseResult }
+  /** End the bot's pending hand-back ask (I'm done / Cancel). ask_at limits it to the ask the card showed. */
+  'display.lease.resolve': { params: DisplayLeaseResolveParams; result: DisplayLeaseResult }
   /** Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection. */
   'display.observe': { params: DisplayObserveParams; result: DisplayObserveResult }
-  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a sandboxed screen. */
+  /** Stop the screen and wipe its desktop settings and its Chrome profile copy (re-seeded from master on the next start). Refused (5300, code viewer_mismatch) while a human holds unless force; refused for a screen in a sandbox the bot does not have to itself. */
   'display.reset': { params: DisplayResetParams; result: DisplayResetResult }
   /** Start this profile's Xvnc + Xfce (idempotent); blocks until the display is published. */
   'display.start': { params: ProfileParams; result: DisplayStatus }
@@ -7673,12 +7784,20 @@ export interface CanonicalRpcMethods {
   'library.list': { params: LibraryListParams; result: LibraryListResult }
   /** Curated MCP presets with per-profile installed/enabled state and the env keys each needs. */
   'mcp.catalog': { params: ProfileParams; result: McpCatalogResult }
+  /** Add a server to the profile's config from a catalog preset and/or an explicit config. */
+  'mcp.servers.add': { params: McpServersAddParams; result: McpServersAddResult }
+  /** Relay a client-captured redirect into a client_redirect_uri flow. */
+  'mcp.servers.oauth.callback': { params: McpOauthCallbackParams; result: McpOauthCallbackResult }
   /** Cancel a flow owned by the resolved profile, waking its callback worker. */
   'mcp.servers.oauth.cancel': { params: McpOauthFlowParams; result: McpOauthCancelResult }
   /** Poll a flow; approved persists tokens for the profile and returns the probed tools. */
   'mcp.servers.oauth.poll': { params: McpOauthFlowParams; result: McpOauthPollResult }
   /** Begin a PKCE OAuth flow; the client opens auth_url and polls mcp.servers.oauth.poll. */
   'mcp.servers.oauth.start': { params: McpOauthStartParams; result: McpOauthStartResult }
+  /** Drop a server from the profile's config.yaml. */
+  'mcp.servers.remove': { params: McpServerNameParams; result: McpServersRemoveResult }
+  /** Store a credential in the profile's .env and reference it from the server config (header or env). */
+  'mcp.servers.set_api_key': { params: McpServersSetApiKeyParams; result: McpServersSetApiKeyResult }
   /** Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned. */
   'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
   /** Validate and save a bot's Slack tokens, enable the adapter and reload it. */
@@ -7753,6 +7872,8 @@ export interface CanonicalRpcMethods {
   'session.prune': { params: SessionPruneParams; result: SessionPruneResult }
   'session.redirect': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
   'session.resume': { params: CanonicalResumeParams; result: CanonicalSnapshot }
+  /** Search a profile's visible conversations by session id, message text and title: id matches first, then message hits, then title matches, one hit per conversation. Internal sessions and hidden sessions other than the canonical Bot Chat never match. */
+  'session.search': { params: SessionSearchParams; result: SessionSearchResult }
   /** The session.usage dict on demand: what main's classic CLI read off its agent. */
   'session.stats': { params: SessionStatsParams; result: SessionStats }
   'session.steer': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
@@ -7789,6 +7910,9 @@ export const CANONICAL_RPC_METHODS = [
   'account.subscriptions',
   'approval.respond',
   'auth.revoke_self',
+  'bot.thread.links',
+  'bot.thread.list',
+  'bot.thread.read',
   'bot_mode.about_you.get',
   'bot_mode.about_you.set',
   'bot_relay.deliver',
@@ -7801,6 +7925,8 @@ export const CANONICAL_RPC_METHODS = [
   'command.observe',
   'config.get',
   'config.set',
+  'connectors.accounts',
+  'connectors.accounts.remove',
   'connectors.catalog',
   'connectors.connect',
   'connectors.list',
@@ -7818,6 +7944,7 @@ export const CANONICAL_RPC_METHODS = [
   'devices.list',
   'display.lease.acquire',
   'display.lease.release',
+  'display.lease.resolve',
   'display.observe',
   'display.reset',
   'display.start',
@@ -7835,9 +7962,13 @@ export const CANONICAL_RPC_METHODS = [
   'library.asset',
   'library.list',
   'mcp.catalog',
+  'mcp.servers.add',
+  'mcp.servers.oauth.callback',
   'mcp.servers.oauth.cancel',
   'mcp.servers.oauth.poll',
   'mcp.servers.oauth.start',
+  'mcp.servers.remove',
+  'mcp.servers.set_api_key',
   'memory.import',
   'messaging.slack.connect',
   'messaging.slack.disconnect',
@@ -7879,6 +8010,7 @@ export const CANONICAL_RPC_METHODS = [
   'session.prune',
   'session.redirect',
   'session.resume',
+  'session.search',
   'session.stats',
   'session.steer',
   'shared_metrics.set',
@@ -7965,6 +8097,8 @@ export interface BackendGatewayEventMap {
   'billing.step_up.verification': BillingStepUpVerificationPayload
   /** A bot-relay outbox envelope is queued; drain it. */
   'bot_relay.outbox.pending': ChangeSignalPayload
+  /** A served profile's bot thread ledger moved (any process). Re-read open threads with since_rev and the open Bot Chat's bot.thread.links. */
+  'bot_threads.changed': Record<string, never>
   /** Browser (CDP) connect / install progress line. */
   'browser.progress': BrowserProgressPayload
   /** A /btw side question was answered. */
@@ -8124,6 +8258,7 @@ export const GATEWAY_EVENT_TYPES = [
   'background.complete',
   'billing.step_up.verification',
   'bot_relay.outbox.pending',
+  'bot_threads.changed',
   'browser.progress',
   'btw.complete',
   'connection.request',

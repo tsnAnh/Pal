@@ -5,6 +5,7 @@ import HermesClient
 import HermesDiagnostics
 import HermesProtocol
 import HermesREST
+import HermesRFB
 import HermesTransport
 import Observation
 import UIKit
@@ -24,6 +25,8 @@ final class ConnectionModel {
     private(set) var phase: Phase = .signedOut
     private(set) var client: HermesClient?
     private(set) var userInitial = "H"
+    private(set) var userName = ""
+    let localDeviceID: String?
 
     private var auth: AuthSession
     private var keychainUnavailable: Bool
@@ -41,8 +44,10 @@ final class ConnectionModel {
         diagnostics: Diagnostics,
         initialBaseURL: String,
         presence: ReachPresence,
+        localDeviceID: String? = nil,
         keychainUnavailable: Bool = false
     ) {
+        self.localDeviceID = localDeviceID
         self.auth = auth
         self.presence = presence
         self.keychainUnavailable = keychainUnavailable
@@ -59,30 +64,33 @@ final class ConnectionModel {
             try? store.clear()
         }
         let transport = URLSessionHTTPTransport()
-        let auth: AuthSession
-        var keychainUnavailable = false
-        do {
-            auth = try AuthSession(store: store, transport: transport, diagnostics: diagnostics)
-        } catch KeychainError.corruptItem {
-            try? store.clear()
-            auth = Self.keychainSession(store: store, transport: transport, diagnostics: diagnostics)
-        } catch {
-            diagnostics.info("auth", "credentials unavailable at launch: \(Diagnostics.describe(error))")
-            keychainUnavailable = true
-            auth = try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics)
-        }
         let identity = DeviceIdentity.resolve(
             store: KeychainDeviceIDStore(),
             formFactor: Self.formFactor(of: UIDevice.current.userInterfaceIdiom),
             appVersion: DeviceIdentity.appVersion(of: .main),
+            model: Self.hardwareModel(),
+            os: "iOS \(UIDevice.current.systemVersion)",
             diagnostics: diagnostics
         )
+        let auth: AuthSession
+        var keychainUnavailable = false
+        do {
+            auth = try AuthSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: identity.deviceID)
+        } catch KeychainError.corruptItem {
+            try? store.clear()
+            auth = Self.keychainSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: identity.deviceID)
+        } catch {
+            diagnostics.info("auth", "credentials unavailable at launch: \(Diagnostics.describe(error))")
+            keychainUnavailable = true
+            auth = try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: identity.deviceID)
+        }
         return ConnectionModel(
             auth: auth,
             transport: transport,
             diagnostics: diagnostics,
             initialBaseURL: "",
             presence: ReachPresence(identity: identity, diagnostics: diagnostics),
+            localDeviceID: identity.deviceID,
             keychainUnavailable: keychainUnavailable
         )
     }
@@ -95,14 +103,28 @@ final class ConnectionModel {
         }
     }
 
-    private static func keychainSession(store: KeychainCredentialStore, transport: any HTTPTransport, diagnostics: Diagnostics) -> AuthSession {
-        (try? AuthSession(store: store, transport: transport, diagnostics: diagnostics))
-            ?? (try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics))
+    private static func keychainSession(
+        store: KeychainCredentialStore,
+        transport: any HTTPTransport,
+        diagnostics: Diagnostics,
+        deviceID: String
+    ) -> AuthSession {
+        (try? AuthSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: deviceID))
+            ?? (try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: deviceID))
+    }
+
+    private static func hardwareModel() -> String {
+        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] { return simulated }
+        var system = utsname()
+        uname(&system)
+        return withUnsafeBytes(of: &system.machine) { buffer in
+            String(decoding: buffer.prefix { $0 != 0 }, as: UTF8.self)
+        }
     }
 
     private func reloadKeychainCredentialsIfNeeded() {
         guard keychainUnavailable else { return }
-        guard let reloaded = try? AuthSession(store: KeychainCredentialStore(), transport: transport, diagnostics: diagnostics) else { return }
+        guard let reloaded = try? AuthSession(store: KeychainCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID) else { return }
         auth = reloaded
         keychainUnavailable = false
     }
@@ -142,7 +164,7 @@ final class ConnectionModel {
         }
         phase = .signingIn
         do {
-            let credentials = try await NativeSignIn(transport: transport, diagnostics: diagnostics)
+            let credentials = try await NativeSignIn(transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID)
                 .signIn(baseURL: baseURL, browser: browser)
             try await auth.adopt(credentials)
         } catch {
@@ -183,11 +205,22 @@ final class ConnectionModel {
         return fresh
     }
 
+    static let displayStreamPath = "/api/display/ws"
+
+    func displayTransport(path: String, ticket: String) async throws -> any RFBTransport {
+        guard path == Self.displayStreamPath, let baseURL = await auth.baseURL else { throw HermesClientError.notSignedIn }
+        let url = baseURL.webSocketEndpoint(path, query: [URLQueryItem(name: "display_ticket", value: ticket)])
+        return WebSocketRFBTransport(url: url, diagnostics: diagnostics)
+    }
+
     func signOut() async {
+        await presence.unregisterPush()
         await connection?.close()
         connection = nil
         client = nil
         try? await auth.signOut()
+        userName = ""
+        userInitial = "H"
         phase = .signedOut
     }
 
@@ -200,8 +233,9 @@ final class ConnectionModel {
             let connection = try await client.connect()
             self.connection = connection
             let description = try await client.describeRuntime(on: connection)
-            if let userID = await auth.userID, let first = userID.first(where: \.isLetter) {
-                userInitial = String(first).uppercased()
+            if let userID = await auth.userID {
+                userName = userID
+                if let first = userID.first(where: \.isLetter) { userInitial = String(first).uppercased() }
             }
             phase = .connected(instanceID: description.instanceID)
         } catch {

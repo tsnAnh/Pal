@@ -26,7 +26,7 @@ final class AppearanceE2ETests: E2ETestCase {
             send(app, "hello alpha \(appearance.name)")
             waitFor(bubbles(app, "assistantBubble", containing: "stub-").firstMatch, timeout: 60, "streamed reply")
             shot(app, "appearance-\(appearance.name)-chat-white-bot")
-            app.navigationBars.buttons.firstMatch.tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
 
             openBot(app, "bot-beta")
             send(app, "CLARIFY pick one \(appearance.name)")
@@ -34,13 +34,13 @@ final class AppearanceE2ETests: E2ETestCase {
             shot(app, "appearance-\(appearance.name)-chat-clarify")
             app.buttons["clarifyChoice-0"].tap()
             waitFor(bubbles(app, "assistantBubble", containing: "user_response").firstMatch, timeout: 60, "answer")
-            app.navigationBars.buttons.firstMatch.tap()
+            app.navigationBars.buttons.element(boundBy: 0).tap()
 
             waitFor(roster(app), timeout: 15, "roster again")
             app.buttons["userAvatarButton"].tap()
-            waitFor(app.buttons["signOutButton"], timeout: 15, "settings")
-            shot(app, "appearance-\(appearance.name)-connection-connected")
-            app.buttons["settingsDone"].tap()
+            waitFor(app.descendants(matching: .any)["settingsSheet"], timeout: 15, "settings")
+            shot(app, "appearance-\(appearance.name)-settings")
+            app.buttons["settingsSheet-close"].tap()
         }
     }
 }

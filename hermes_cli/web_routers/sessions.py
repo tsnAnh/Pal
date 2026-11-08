@@ -28,6 +28,7 @@ from hermes_cli.web_routers._common import (
     CORRUPT_STORE_DETAIL, corrupt_store_as_status, log as _log, destructive_profile, http_failure,
 )
 from hermes_state import is_malformed_db_error
+from hermes_state_session_search import search_sessions as run_session_search
 from hermes_state_errors import SessionActiveWriteGuardError, StateDbReplacedError, is_transient_sqlite_error
 from hermes_state_health import STORAGE_CORRUPT, note_storage_error, storage_state
 
@@ -273,16 +274,6 @@ def get_sessions(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-def _is_compression_edge(child: dict, parent: dict) -> bool:
-    parent_ended_at = parent.get("ended_at")
-    started_at = child.get("started_at")
-    return (
-        parent.get("end_reason") == "compression"
-        and parent_ended_at is not None
-        and started_at is not None
-        and started_at >= parent_ended_at)
-
-
 @search_router.get("/api/sessions/search")
 async def search_sessions(
     q: str = "", limit: int = 20, profile: Optional[str] = None, source: str | None = None,
@@ -300,164 +291,10 @@ async def search_sessions(
         row_profile = _serving_profile(profile)
 
         def _search(db):
-            safe_limit = max(1, min(int(limit or 20), 100))
-            source_filter = source or None
-            source_list = _csv(sources)
-            include_sources = [source_filter] if source_filter else (source_list or None)
-            exclude_list = _csv(exclude_sources)
-            now = time.time()
-
-            def get_session(sid):
-                try:
-                    return db.get_session(sid)
-                except Exception:
-                    return None
-
-            # Walk parent_session_id to the compression root, memoized per
-            # chain; stops at branch/delegate edges (those stay searchable).
-            root_cache: dict = {}
-
-            def compression_root(session_id: str) -> str:
-                chain, cur, root = [], session_id, session_id
-                while cur and cur not in chain:  # ``not in chain`` guards parent cycles
-                    if cur in root_cache:
-                        root = root_cache[cur]
-                        break
-                    chain.append(cur)
-                    s = get_session(cur)
-                    parent = s.get("parent_session_id") if isinstance(s, dict) else None
-                    parent_session = get_session(parent) if parent else None
-                    if not parent_session or not _is_compression_edge(s, parent_session):
-                        root = cur
-                        break
-                    cur = parent
-                for node in chain:
-                    root_cache[node] = root
-                return root
-
-            tip_cache: dict = {}
-
-            def lineage_tip(session_id: str) -> str:
-                # Resolve the tip from the MATCHED id, never from the lineage
-                # root: the forward chain walk is defensively bounded, so a
-                # lineage deeper than the bound truncates to a stale mid id
-                # when started at the root. Resuming from the matched id is
-                # what the CLI does and always reaches the live tip (#125041).
-                if session_id not in tip_cache:
-                    try:
-                        tip_cache[session_id] = db.get_compression_tip(session_id) or session_id
-                    except Exception:
-                        tip_cache[session_id] = session_id
-                return tip_cache[session_id]
-
-            # One keyspace for id-hits and content-hits, keyed by lineage root;
-            # first hit wins, and ID matches run first.
-            seen: dict = {}
-
-            def add_lineage_result(raw_sid: str, payload: dict) -> None:
-                if not raw_sid:
-                    return
-                root = compression_root(raw_sid)
-                if root in seen or len(seen) >= safe_limit:
-                    return
-                payload = dict(payload)
-                sid = lineage_tip(raw_sid)
-                payload["session_id"] = sid
-                payload["lineage_root"] = root
-                payload["profile"] = row_profile
-                payload["is_default_profile"] = row_profile == "default"
-                try:
-                    row = db.get_session_rich_row(sid)
-                except Exception:
-                    row = None
-                if row:
-                    last_active = row.get("last_active") or row.get("started_at")
-                    payload.update({
-                        "id": row.get("id") or sid,
-                        "source": row.get("source"),
-                        "model": row.get("model"),
-                        "title": row.get("title"),
-                        "started_at": row.get("started_at"),
-                        "ended_at": row.get("ended_at"),
-                        "last_active": last_active,
-                        "is_active": (
-                            row.get("ended_at") is None and (now - (last_active or 0)) < 300),
-                        "message_count": row.get("message_count") or 0,
-                        "tool_call_count": row.get("tool_call_count") or 0,
-                        "input_tokens": row.get("input_tokens") or 0,
-                        "output_tokens": row.get("output_tokens") or 0,
-                        "preview": row.get("preview"),
-                        "parent_session_id": row.get("parent_session_id"),
-                        "profile": _serving_profile(profile),
-                        "archived": bool(row.get("archived"))})
-                else:
-                    payload["id"] = sid
-                seen[root] = payload
-
-            def hit_payload(row: dict, snippet: str, role, session_started) -> dict:
-                # `last_active` rides only on id-match rows (sessions table); FTS
-                # hits have no row recency and leave it null so the desktop can
-                # fall back to session_started instead of inventing one.
-                return {
-                    "snippet": snippet, "role": role, "source": row.get("source"),
-                    "model": row.get("model"), "session_started": session_started,
-                    "last_active": row.get("last_active")}
-
-            # Direct ID matches first (pasted ids never appear in message text).
-            for row in db.search_sessions_by_id(
-                q, limit=safe_limit, include_archived=True, source=source_filter,
-                sources=source_list or None, exclude_sources=exclude_list or None):
-                sid = row.get("id")
-                preview = (row.get("preview") or "").strip()
-                snippet = preview or f"Session ID: {sid}"
-                add_lineage_result(sid, hit_payload(row, snippet, None, row.get("started_at")))
-
-            # Prefix wildcards so partial words match ("nimb" -> "nimb*");
-            # quoted phrases and existing wildcards are kept as-is.
-            prefix_query = " ".join(
-                tok if tok.startswith('"') or tok.endswith("*") else tok + "*"
-                for tok in re.findall(r'"[^"]*"|\S+', q.strip()))
-            # Over-fetch so lineage dedup can still surface `limit` distinct
-            # conversations when several hits collapse onto one root.
-            matches = db.search_messages(
-                query=prefix_query, source_filter=include_sources,
-                exclude_sources=exclude_list or None, limit=max(safe_limit * 5, 50),
-                fields=("session_id", "role", "snippet", "source", "model", "session_started"))
-            for m in matches:
-                if len(seen) >= safe_limit:
-                    break
-                add_lineage_result(
-                    m["session_id"],
-                    hit_payload(m, m.get("snippet", ""), m.get("role"), m.get("session_started")))
-
-            # Title matches fill any remaining slots (#66242): the FTS index
-            # only covers message content, so a term that lives solely in a
-            # manually-set sessions.title would otherwise return nothing. The
-            # DB layer already knows how to LIKE-match titles across the whole
-            # compression chain (list_sessions_rich(search_query=) — the same
-            # helper the sidebar listing uses), so reuse it rather than adding
-            # a second title query path here. Best-effort: an old/odd store
-            # that rejects the call just skips the lane.
-            if len(seen) < safe_limit:
-                try:
-                    title_rows = db.list_sessions_rich(
-                        search_query=q.strip(), include_archived=True, order_by_last_active=True,
-                        source=source_filter, sources=source_list or None,
-                        exclude_sources=exclude_list or None, limit=safe_limit)
-                except Exception:  # health: allow BLE001 -- best-effort supplement lane: an old/odd store that rejects the search_query read must not fail the id+content results already collected
-                    _log.debug("Title-match supplement skipped for %r", q[: 200])
-                    title_rows = []
-                for row in title_rows:
-                    if len(seen) >= safe_limit:
-                        break
-                    sid = row.get("id")
-                    if not sid:
-                        continue
-                    preview = (row.get("preview") or "").strip()
-                    add_lineage_result(
-                        sid, hit_payload(row, preview or f"Session title matched: {q.strip()}",
-                                         None, row.get("started_at")))
-            return {"results": list(seen.values())}
+            hits = run_session_search(
+                db, q, limit=max(1, min(int(limit or 20), 100)), profile=row_profile, source=source,
+                sources=_csv(sources), exclude_sources=_csv(exclude_sources))
+            return {"results": [{k: v for k, v in hit.items() if k != "timestamp"} for hit in hits]}
 
         # FTS over a large state.db is the slowest read here; keep it off the loop (#60747).
         return await asyncio.to_thread(_with_db, profile, _search, read_only=True)

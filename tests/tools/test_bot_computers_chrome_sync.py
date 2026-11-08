@@ -152,7 +152,9 @@ def test_concurrent_exits_serialize_on_the_master_lock(root, monkeypatch):
     assert read_cookies(root / "bot-computers" / "chrome-master" / "Default" / "Cookies") in (["sid=alpha"], ["sid=beta"])
 
 
-def test_locks_caches_and_singletons_never_reach_master_or_copy(root):
+def test_locks_caches_and_singletons_never_reach_master_or_copy(root, monkeypatch):
+    from tools.environments import docker as docker_env
+    monkeypatch.setattr(docker_env, "find_docker", lambda: None)
     with bot(root, "alpha") as a:
         cp.seed()
         browse(a, cookies=["sid=1"], local_storage={"000003.log": "data", "LOCK": "", "LOG": "x"})
@@ -167,7 +169,9 @@ def test_locks_caches_and_singletons_never_reach_master_or_copy(root):
     with bot(root, "beta") as b:
         b.mkdir(parents=True)
         os.symlink("otherhost-999", b / "SingletonLock")
-        cp.seed()
+        with pytest.raises(cp.ChromeRunning):
+            cp.seed()
+        cp.prepare_launch(b)
         assert not (b / "SingletonLock").is_symlink()
         assert not (b / "Default" / "Local Storage" / "leveldb" / "LOCK").exists()
 

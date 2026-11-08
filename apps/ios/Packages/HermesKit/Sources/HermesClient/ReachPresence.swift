@@ -7,6 +7,7 @@ import Synchronization
 
 public actor ReachPresence {
     public nonisolated let offers: AsyncStream<ReachOffer>
+    public nonisolated let deviceID: String
 
     private struct Route {
         weak var connection: GatewayConnection?
@@ -24,9 +25,11 @@ public actor ReachPresence {
     private var routes: [Route] = []
     private var flushing = false
     private var reported: [String: ReachOutcome] = [:]
+    private var push: PushRegistration?
 
     public init(identity: DeviceIdentity, attention: ReachAttention = .foreground, diagnostics: Diagnostics = .silent) {
         self.identity = identity
+        deviceID = identity.deviceID
         self.attention = attention
         self.diagnostics = diagnostics
         (offers, offerContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -36,27 +39,71 @@ public actor ReachPresence {
 
     public var canPresentOffers: Bool { attention == .foreground }
 
-    public func declare(on connection: GatewayConnection, acceptsOffers: Bool) async {
+    @discardableResult
+    public func declare(on connection: GatewayConnection, acceptsOffers: Bool, deviceTools: Bool = false) async -> Bool {
         let declared = attention
         do {
             let result = try await connection.call(
                 "client.hello",
-                params: ReachWire.helloParams(identity: identity, acceptsOffers: acceptsOffers, attention: declared),
+                params: ReachWire.helloParams(identity: identity, acceptsOffers: acceptsOffers, attention: declared, deviceTools: deviceTools),
                 timeout: Self.callTimeout
             )
             guard result["recorded"]?.boolValue == true else {
                 diagnostics.info("reach", "client.hello was not recorded")
+                return false
+            }
+        } catch is CancellationError {
+            return false
+        } catch {
+            diagnostics.info("reach", "client.hello refused: \(Diagnostics.describe(error))")
+            return false
+        }
+        routes.removeAll { $0.connection == nil || $0.connection === connection }
+        routes.append(Route(connection: connection, acceptsOffers: acceptsOffers, delivered: declared))
+        await registerPush(on: connection)
+        await flush()
+        return true
+    }
+
+    public func setPushRegistration(_ registration: PushRegistration?) async {
+        guard registration != push else { return }
+        push = registration
+        for connection in routes.compactMap(\.connection) { await registerPush(on: connection) }
+    }
+
+    public func unregisterPush() async {
+        push = nil
+        for connection in routes.compactMap(\.connection) {
+            do {
+                _ = try await connection.call(
+                    "push.unregister",
+                    params: PushWire.unregisterParams(deviceID: identity.deviceID),
+                    timeout: Self.callTimeout
+                )
+            } catch is CancellationError {
                 return
+            } catch {
+                diagnostics.info("push", "push.unregister failed: \(Diagnostics.describe(error))")
+            }
+        }
+    }
+
+    private func registerPush(on connection: GatewayConnection) async {
+        guard let push else { return }
+        do {
+            let result = try await connection.call(
+                "push.register",
+                params: PushWire.registerParams(deviceID: identity.deviceID, registration: push),
+                timeout: Self.callTimeout
+            )
+            if result["push_enabled"]?.boolValue == false {
+                diagnostics.info("push", "registered; the gateway has no push credentials yet")
             }
         } catch is CancellationError {
             return
         } catch {
-            diagnostics.info("reach", "client.hello refused: \(Diagnostics.describe(error))")
-            return
+            diagnostics.info("push", "push.register failed: \(Diagnostics.describe(error))")
         }
-        routes.removeAll { $0.connection == nil || $0.connection === connection }
-        routes.append(Route(connection: connection, acceptsOffers: acceptsOffers, delivered: declared))
-        await flush()
     }
 
     public func setAttention(_ next: ReachAttention) async {

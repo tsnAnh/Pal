@@ -40,7 +40,31 @@ struct BlobFigure: Equatable {
     }
 
     init(seed: String, kind: BlobKind?) {
-        self.init(seed: seed, shapeTrait: kind?.traitPosition)
+        guard let kind, kind.isExtended else {
+            self.init(seed: seed, shapeTrait: kind?.traitPosition)
+            return
+        }
+        let base = BlobFigure(seed: seed, shapeTrait: kind.traitPosition)
+        guard let shape = ExtendedSilhouette(kind, aroundBody: base.mainPath) else {
+            self = base
+            return
+        }
+        self.init(
+            silhouette: kind, petals: shape.petals, extraPaths: [], mainPath: shape.mainPath,
+            eyes: base.eyes, palette: base.palette
+        )
+    }
+
+    private init(
+        silhouette: BlobKind, petals: [Petal], extraPaths: [String], mainPath: String, eyes: [Eye],
+        palette: BlobPalette.Colors
+    ) {
+        self.silhouette = silhouette
+        self.petals = petals
+        self.extraPaths = extraPaths
+        self.mainPath = mainPath
+        self.eyes = eyes
+        self.palette = palette
     }
 
     var svgMarkup: String {

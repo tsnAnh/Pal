@@ -101,8 +101,28 @@ def ensure_shared_files_dir() -> Path:
 
 
 def chrome_running(udd: Path) -> bool:
-    from tools.browser_launcher import chromium_running_on
-    return chromium_running_on(str(udd))
+    from tools.browser_launcher import chromium_running_on, foreign_holder
+    return foreign_holder(str(udd)) is not None or chromium_running_on(str(udd))
+
+
+def clear_singletons(udd: Path) -> None:
+    for name in _SINGLETONS:
+        with contextlib.suppress(OSError):
+            (udd / name).unlink()
+
+
+def master_changed_since(when: Optional[float]) -> bool:
+    if when is None:
+        return True
+    master = master_dir()
+    for item in DURABLE:
+        path = master / item.rel
+        files = _tree_files(path) if item.kind is Kind.TREE and path.is_dir() else [path]
+        for f in files:
+            with contextlib.suppress(OSError):
+                if f.stat().st_mtime > when:
+                    return True
+    return False
 
 
 def _read_manifest(copy: Path) -> Manifest:
@@ -334,15 +354,17 @@ def seed(copy: Optional[Path] = None) -> list[str]:
                 continue
             _install(item, src, copy / item.rel)
             refreshed.append(item.rel)
-        for name in _SINGLETONS:
-            with contextlib.suppress(OSError):
-                (copy / name).unlink()
+        clear_singletons(copy)
         _write_manifest(copy, Manifest(fingerprints=_fingerprints(copy), synced_at=time.time()))
     return refreshed
 
 
 def prepare_launch(copy: Path) -> Optional[str]:
+    from tools.browser_launcher import foreign_holder
     try:
+        if foreign_holder(str(copy)) is not None:
+            from tools.bot_desktop import sandbox_computer
+            sandbox_computer.release_stale_lock(None)
         seed(copy)
     except (OSError, sqlite3.Error, ChromeRunning) as exc:
         logger.warning("Bot Computer: Chrome starts on its last copy; master refresh failed: %s", exc)

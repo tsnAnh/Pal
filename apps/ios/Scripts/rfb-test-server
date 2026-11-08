@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+MAIN_CHECKOUT="$(cd "$(git -C "$REPO" rev-parse --git-common-dir)/.." && pwd)"
+PYTHON="${HERMES_IOS_PYTHON:-}"
+for candidate in "$REPO/.venv/bin/python" "$MAIN_CHECKOUT/.venv/bin/python"; do
+  [ -n "$PYTHON" ] && break
+  [ -x "$candidate" ] && PYTHON="$candidate"
+done
+
+usage() {
+  cat <<USAGE
+usage: rfb-test-server start PROFILE_HOME STATE_DIR [WIDTHxHEIGHT] [--init-delay SECONDS] [--wallpaper IMAGE]
+       rfb-test-server stop STATE_DIR
+Starts a stand-in for one bot's screen under PROFILE_HOME/bot-desktop (a sandbox profile home under /tmp),
+so the gateway's real display bridge has something to stream. STATE_DIR keeps the pid and the input log.
+stop kills only the recorded pid and removes the published screen state.
+USAGE
+}
+
+case "${1:-}" in
+  start)
+    [ "$#" -ge 3 ] || { usage >&2; exit 2; }
+    HOME_DIR="$2"; STATE="$3"; SIZE="1280x800"
+    shift 3
+    if [ "$#" -gt 0 ] && [[ "$1" != --* ]]; then SIZE="$1"; shift; fi
+    [ -n "$PYTHON" ] || { echo "rfb-test-server: no Python with psutil; set HERMES_IOS_PYTHON" >&2; exit 1; }
+    case "$HOME_DIR" in /tmp/*|/private/tmp/*|/private/var/*) ;; *) echo "rfb-test-server: profile home must be a sandbox under /tmp" >&2; exit 2 ;; esac
+    mkdir -p "$STATE"
+    [ ! -s "$STATE/pid" ] || ! kill -0 "$(cat "$STATE/pid")" 2>/dev/null || { echo "rfb-test-server: already running" >&2; exit 1; }
+    : >"$STATE/input.log"
+    "$PYTHON" -I "$IOS_DIR/Tools/rfb-test-server/rfb_test_server.py" --profile-home "$HOME_DIR" --log "$STATE/input.log" --size "$SIZE" "$@" >"$STATE/server.out" 2>&1 &
+    echo $! >"$STATE/pid"
+    for _ in $(seq 40); do
+      grep -q '^ready' "$STATE/server.out" 2>/dev/null && { echo "rfb-test-server: pid $(cat "$STATE/pid"), log $STATE/input.log"; exit 0; }
+      kill -0 "$(cat "$STATE/pid")" 2>/dev/null || { cat "$STATE/server.out" >&2; exit 1; }
+      sleep 0.25
+    done
+    echo "rfb-test-server: did not become ready" >&2; exit 1 ;;
+  stop)
+    [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+    STATE="$2"
+    [ -s "$STATE/pid" ] || { echo "rfb-test-server: not started"; exit 0; }
+    PID="$(cat "$STATE/pid")"
+    if kill -0 "$PID" 2>/dev/null; then
+      kill "$PID"
+      for _ in $(seq 40); do kill -0 "$PID" 2>/dev/null || break; sleep 0.25; done
+      kill -0 "$PID" 2>/dev/null && kill -9 "$PID"
+    fi
+    rm -f "$STATE/pid"
+    echo "rfb-test-server: stopped $PID" ;;
+  *) usage; exit 2 ;;
+esac

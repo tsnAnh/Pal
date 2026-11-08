@@ -16,6 +16,7 @@ public enum ChatPhase: Sendable, Equatable {
 public enum ChatUpdate: Sendable {
     case phase(ChatPhase)
     case transcript(Transcript)
+    case botThreadLinks([BotThreadLink])
 }
 
 public struct ReconnectPolicy: Sendable {
@@ -46,7 +47,11 @@ public actor ChatSession: OutboxSubmitter {
     public private(set) var phase: ChatPhase = .detached
     public private(set) var transcript = Transcript()
     public private(set) var terminalFailure: ChatTerminalFailure?
+    public private(set) var botThreadLinks: [BotThreadLink] = []
     public nonisolated let terminalFailures: AsyncStream<ChatTerminalFailure>
+
+    private static let botThreadsChangedEvent = "bot_threads.changed"
+    private static let messageCompleteEvent = "message.complete"
 
     private let continuation: AsyncStream<ChatUpdate>.Continuation
     private let failureContinuation: AsyncStream<ChatTerminalFailure>.Continuation
@@ -60,6 +65,8 @@ public actor ChatSession: OutboxSubmitter {
     private var pumps: [Task<Void, Never>] = []
     private var reconnecting = false
     private var closing = false
+    private var linksRefresh: Task<Void, Never>?
+    private var linksStale = false
 
     public init(
         profile: String,
@@ -141,6 +148,28 @@ public actor ChatSession: OutboxSubmitter {
         try await submitText(entry.text, submissionID: entry.submissionID, attachments: entry.attachments, hidden: false, echo: true)
     }
 
+    @discardableResult
+    public func submitVoiceTurn(_ text: String) async throws -> AdmissionStatus {
+        try await submitText(
+            text,
+            submissionID: "voice:\(UUID().uuidString)",
+            attachments: [],
+            hidden: false,
+            echo: true,
+            voiceTurn: true
+        )
+    }
+
+    public func attachImage(_ data: Data, filename: String) async throws -> StagedImage {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        return try await api.attachImage(sessionID: sessionID, data: data, filename: filename)
+    }
+
+    public func attachFile(_ data: Data, name: String, mime: String) async throws -> StagedFile {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        return try await api.attachFile(sessionID: sessionID, data: data, name: name, mime: mime)
+    }
+
     public func answerClarify(_ prompt: PendingPrompt, answer: String) async throws {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         _ = try await api.respondToClarify(
@@ -165,6 +194,8 @@ public actor ChatSession: OutboxSubmitter {
         closing = true
         for pump in pumps { pump.cancel() }
         pumps.removeAll()
+        linksRefresh?.cancel()
+        linksRefresh = nil
         let connection = self.connection
         let unattached = attaching
         attaching = nil
@@ -182,7 +213,8 @@ public actor ChatSession: OutboxSubmitter {
         submissionID: String,
         attachments: [PromptAttachment],
         hidden: Bool,
-        echo: Bool
+        echo: Bool,
+        voiceTurn: Bool = false
     ) async throws -> AdmissionStatus {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         if echo {
@@ -195,7 +227,8 @@ public actor ChatSession: OutboxSubmitter {
                 text: text,
                 submissionID: submissionID,
                 attachments: attachments,
-                hidden: hidden
+                hidden: hidden,
+                voiceTurn: voiceTurn
             )
         } catch {
             if echo, let refusal = RefusalReason(error), refusal.isPermanent {
@@ -212,6 +245,34 @@ public actor ChatSession: OutboxSubmitter {
             Task { await self.consume(connection) },
             Task { await self.rejectServerRequests(connection) },
         ]
+        refreshBotThreadLinks()
+    }
+
+    private func refreshBotThreadLinks() {
+        guard !closing else { return }
+        guard linksRefresh == nil else {
+            linksStale = true
+            return
+        }
+        linksRefresh = Task { await self.runLinksRefresh() }
+    }
+
+    private func runLinksRefresh() async {
+        repeat {
+            linksStale = false
+            guard !closing, let api, let sessionID = transcript.sessionID else { break }
+            do {
+                let result = try await api.botThreadLinks(sessionID: sessionID)
+                guard !closing else { break }
+                if result.links != botThreadLinks {
+                    botThreadLinks = result.links
+                    continuation.yield(.botThreadLinks(result.links))
+                }
+            } catch {
+                diagnostics.debug("chat", "bot thread links unavailable: \(Diagnostics.describe(error))")
+            }
+        } while linksStale && !closing
+        linksRefresh = nil
     }
 
     private func rejectServerRequests(_ connection: GatewayConnection) async {
@@ -235,9 +296,14 @@ public actor ChatSession: OutboxSubmitter {
     }
 
     private func handle(_ event: GatewayEvent) async -> Bool {
+        if event.type == Self.botThreadsChangedEvent {
+            refreshBotThreadLinks()
+            return true
+        }
         switch transcript.apply(SessionEventFrame(event)) {
         case .applied:
             publishLive()
+            if event.type == Self.messageCompleteEvent { refreshBotThreadLinks() }
         case .resyncRequired(let reason):
             diagnostics.info("chat", "resync required (\(reason))")
             return await resync()

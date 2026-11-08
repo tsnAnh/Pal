@@ -390,7 +390,24 @@ def _peer_run(args, message: str, peer_name: str, profile: str | None, base: str
         f"idempotency_key: {idempotency_key}"])
 
 
+def _write_result_file(args, status: str, *, reply: str = "", origin: object = None, reason: object = None) -> None:
+    path = getattr(args, "result_file", None)
+    if not path:
+        return
+    payload = {"status": status, "reply": reply, "origin": str(origin or "") or None,
+               "reason": str(reason or "") or None}
+    from utils import atomic_json_write
+    atomic_json_write(path, payload, mode=0o600)
+
+
 def _peer_dm(args, message: str, peer_name: str, profile: str | None, base: str, key: str) -> int:
+    code = _peer_dm_turn(args, message, peer_name, profile, base, key)
+    if code != 0:
+        _write_result_file(args, "unknown" if getattr(args, "_peer_turn_accepted", False) else "failed")
+    return code
+
+
+def _peer_dm_turn(args, message: str, peer_name: str, profile: str | None, base: str, key: str) -> int:
     session_id = ""
     try:
         session_id = _ensure_bot_chat(base, key)
@@ -407,6 +424,7 @@ def _peer_dm(args, message: str, peer_name: str, profile: str | None, base: str,
         # and deliver it twice. urllib raises that timeout bare; one it wraps in URLError hit while
         # connecting or sending, so the request never arrived and "could not reach" is the truth.
         if session_id and isinstance(exc, TimeoutError):
+            args._peer_turn_accepted = True
             print(f"Peer '{peer_name}' accepted the message but its turn is still running after "
                   f"{DM_TIMEOUT_S}s: the message is already in its Bot Chat (session {session_id}) "
                   "and will be answered there. The reply cannot come back on this call. Do NOT resend.",
@@ -417,6 +435,7 @@ def _peer_dm(args, message: str, peer_name: str, profile: str | None, base: str,
         # The peer's Bot Chat is open in its Desktop and that turn outlasted the peer's wait: the
         # message is in the open chat and is answered there, so a resend would run it twice.
         queued_in = result.get("session_id") or session_id
+        _write_result_file(args, "queued", origin=result.get("origin"))
         return _emit(args, {"peer": peer_name, "profile": profile, "session_id": queued_in,
                             "status": result.get("status") or "queued", "delivery_id": result.get("delivery_id")},
                      [f"Peer '{peer_name}' has its Bot Chat open, so the message went into that chat (session "
@@ -433,6 +452,7 @@ def _peer_dm(args, message: str, peer_name: str, profile: str | None, base: str,
     reply = "" if is_intentional_silence_response(reply) else strip_trailing_silence_marker(reply)
     payload = {"peer": peer_name, "profile": profile,
                "session_id": result.get("session_id") or session_id, "reply": reply}
+    _write_result_file(args, "settled", reply=reply, origin=result.get("origin"))
     return _emit(args, payload, [reply or "(no reply)"])
 
 
@@ -518,6 +538,9 @@ def build_peer_parser(subparsers) -> None:
                 sp.add_argument(
                     "--idempotency-key", default=None, help="Stable retry key (generated when omitted)")
         sp.add_argument("--json", action="store_true", default=False, help="Emit a JSON result")
+        if name == "dm":
+            sp.add_argument("--result-file", default=None,
+                            help="Also write the outcome as JSON to this path (status, reply, origin)")
 
     _remote("dm", "Message an agent on a peer gateway and print its reply", run_id=False)
     _remote("run", "Start a long peer turn asynchronously and return its run ID", run_id=False)

@@ -371,6 +371,27 @@ def _bot_relay_outbox_sig():
     return _bot_relay_outbox_seen or None
 
 
+_bot_threads_sig_cache: dict[str, tuple[object, int | None]] = {}
+
+
+def _bot_thread_revision(db_path: Path) -> int | None:
+    from tools.bot_thread_ledger import revision_readonly  # function-local: bodies are rebound onto server.py's globals
+    mtime = _newest_mtime_ns((db_path, db_path.with_name(f"{db_path.name}-wal")))
+    cached = _bot_threads_sig_cache.get(str(db_path))
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+    revision = revision_readonly(db_path)
+    if revision is None and cached is not None:
+        return cached[1]
+    _bot_threads_sig_cache[str(db_path)] = (_settled_mtime(mtime), revision)
+    return revision
+
+
+def _bot_threads_sig():
+    """Thread-ledger revision per watched profile store; runners and the peer door write it from other processes."""
+    return tuple(_bot_thread_revision(root / "state.db") for root in _watched_roots(_watcher_home()))
+
+
 def _skills_sig():
     """The skill roots' stat signature for every scope a session resolved commands in (each profile
     home and session repo, not only the launch one: ``agent.skill_commands.published_scopes_signature``):
@@ -397,7 +418,8 @@ _CHANGE_WATCHES: dict[str, tuple[float, Any, Any]] = {
     "pairing.changed": (2.0, _pairing_sig, dict),
     "skills.changed": (2.0, _skills_sig, dict),
     # 1s so a queued DM envelope reaches the Desktop's push-triggered drain fast.
-    "bot_relay.outbox.pending": (1.0, _bot_relay_outbox_sig, dict)}
+    "bot_relay.outbox.pending": (1.0, _bot_relay_outbox_sig, dict),
+    "bot_threads.changed": (1.0, _bot_threads_sig, dict)}
 
 # state.db moves on every append of a streaming turn and gateway_state.json on
 # in-flight bookkeeping; the floor coalesces bursts to one broadcast per window,

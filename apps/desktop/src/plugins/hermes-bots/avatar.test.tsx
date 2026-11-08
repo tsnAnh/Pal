@@ -41,13 +41,17 @@ vi.mock('./shared', () => ({ getPluginCtx: () => null, ID: 'hermes-bots' }))
 /** The library's frozen band per silhouette (gen2 thresholds). */
 const BANDS: Record<string, [number, number]> = {
   boxy: [0.48, 0.6],
+  burst: [0, 0.22],
+  clover: [0, 0.22],
   capsule: [0.6, 0.7],
   cloud: [0.79, 0.86],
   droplet: [0.86, 0.915],
+  gem: [0, 0.22],
   hexagon: [0.915, 0.95],
   nub: [0.7, 0.79],
   organic: [0.22, 0.48],
   round: [0, 0.22],
+  spark: [0, 0.22],
   sun: [0.95, 0.98],
   triangle: [0.98, 1]
 }

@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+MAIN_CHECKOUT="$(cd "$(git -C "$REPO" rev-parse --git-common-dir)/.." && pwd)"
+DRIVE="$REPO/.claude/skills/verify-ios/scripts/drive"
+REFERENCE_DIR="${HERMES_IOS_PARITY_REFERENCE_DIR:-$MAIN_CHECKOUT/apps/ios/Artifacts/grok-reference}"
+OUT_DIR="$IOS_DIR/Artifacts/parity"
+PYTHON="${HERMES_IOS_PYTHON:-}"
+for candidate in "$REPO/.venv/bin/python" "$MAIN_CHECKOUT/.venv/bin/python"; do
+  [ -n "$PYTHON" ] && break
+  [ -x "$candidate" ] && PYTHON="$candidate"
+done
+
+usage() {
+  cat <<USAGE
+usage: parity-shots TEST...            run UI tests through verify-ios drive, then compose parity images
+       parity-shots --from SHOTS_DIR   compose from an existing drive evidence shots dir
+
+TEST is a UI test class or Class/testMethod (default: ParityShots). Tests save full-screen screenshots
+named parity-<ref-name> (for example parity-01-home); each is placed next to
+Artifacts/grok-reference/<ref-name>.jpg at the reference height and written to
+apps/ios/Artifacts/parity/<ref-name>.png, plus index.png.
+Needs a launched verify-ios run (.claude/skills/verify-ios/scripts/launch). Artifacts are gitignored.
+USAGE
+}
+
+SHOTS_DIR=""
+TESTS=()
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -h|--help) usage; exit 0 ;;
+    --from) SHOTS_DIR="$2"; shift 2 ;;
+    *) TESTS+=("$1"); shift ;;
+  esac
+done
+
+[ -n "$PYTHON" ] || { echo "parity-shots: no Python with Pillow; set HERMES_IOS_PYTHON" >&2; exit 1; }
+[ -d "$REFERENCE_DIR" ] || { echo "parity-shots: reference frames not found at $REFERENCE_DIR" >&2; exit 1; }
+
+if [ -z "$SHOTS_DIR" ]; then
+  [ -x "$DRIVE" ] || { echo "parity-shots: verify-ios drive script not found at $DRIVE" >&2; exit 1; }
+  [ "${#TESTS[@]}" -gt 0 ] || TESTS=(ParityShots)
+  DRIVE_LOG="$(mktemp /tmp/parity-shots-drive.XXXXXX)"
+  trap 'rm -f "$DRIVE_LOG"' EXIT
+  set +e
+  "$DRIVE" --label parity "${TESTS[@]}" | tee "$DRIVE_LOG"
+  DRIVE_STATUS="${PIPESTATUS[0]}"
+  set -e
+  [ "$DRIVE_STATUS" = 0 ] || { echo "parity-shots: drive failed (exit $DRIVE_STATUS)" >&2; exit "$DRIVE_STATUS"; }
+  SHOTS_DIR="$(sed -n 's/^evidence: //p' "$DRIVE_LOG" | tail -1)/shots"
+fi
+
+exec "$PYTHON" -I "$IOS_DIR/Tools/parity-shots/compose.py" --shots "$SHOTS_DIR" --reference-dir "$REFERENCE_DIR" --out "$OUT_DIR"

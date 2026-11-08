@@ -89,7 +89,7 @@ struct BlobLayout {
             body.sides = 3
             body.rot = t.num("body.rot", -5, 5)
             body.round = t.num("poly.round", 0.24, 0.5)
-        case .round, .organic, .nub, .cloud, .sun:
+        case .round, .organic, .nub, .cloud, .sun, .spark, .clover, .burst, .gem:
             break
         }
     }
@@ -155,7 +155,7 @@ struct BlobLayout {
                 let angle = offset + (2 * Double.pi * Double(i)) / Double(count)
                 petals.append(.init(cx: b.cx + cos(angle) * dist, cy: b.cy + sin(angle) * dist, r: radius))
             }
-        case .round, .organic, .boxy, .hexagon, .triangle:
+        case .round, .organic, .boxy, .hexagon, .triangle, .spark, .clover, .burst, .gem:
             break
         }
     }

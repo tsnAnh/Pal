@@ -20,24 +20,33 @@ struct NativeAuthAPI: Sendable {
     let transport: any HTTPTransport
     let diagnostics: Diagnostics
     let now: @Sendable () -> Date
+    var deviceID: String?
+
+    private var boundDeviceID: String? {
+        deviceID.flatMap { DeviceIdentity.isValid(deviceID: $0) ? $0 : nil }
+    }
 
     private struct TokenBody: Encodable, Sendable {
         var code: String
         var codeVerifier: String
+        var deviceID: String?
 
         enum CodingKeys: String, CodingKey {
             case code
             case codeVerifier = "code_verifier"
+            case deviceID = "device_id"
         }
     }
 
     private struct RefreshBody: Encodable, Sendable {
         var refreshToken: String
         var provider: String
+        var deviceID: String?
 
         enum CodingKeys: String, CodingKey {
             case refreshToken = "refresh_token"
             case provider
+            case deviceID = "device_id"
         }
     }
 
@@ -57,7 +66,7 @@ struct NativeAuthAPI: Sendable {
     func exchange(code: String, verifier: String) async throws -> TokenSet {
         let payload = try await client.post(
             "/auth/native/token",
-            body: TokenBody(code: code, codeVerifier: verifier),
+            body: TokenBody(code: code, codeVerifier: verifier, deviceID: boundDeviceID),
             as: TokenSet.Payload.self
         )
         return TokenSet(payload: payload, now: now())
@@ -67,7 +76,7 @@ struct NativeAuthAPI: Sendable {
         do {
             let payload = try await client.post(
                 "/auth/native/refresh",
-                body: RefreshBody(refreshToken: refreshToken, provider: provider ?? ""),
+                body: RefreshBody(refreshToken: refreshToken, provider: provider ?? "", deviceID: boundDeviceID),
                 as: TokenSet.Payload.self
             )
             return TokenSet(payload: payload, now: now())

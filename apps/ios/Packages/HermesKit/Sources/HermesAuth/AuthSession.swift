@@ -8,6 +8,7 @@ public actor AuthSession: AccessTokenProvider {
     private let diagnostics: Diagnostics
     private let now: @Sendable () -> Date
     private let refreshLeeway: TimeInterval
+    private let deviceID: String?
     private var credentials: StoredCredentials?
     private var inflightRefresh: Task<TokenSet, any Error>?
 
@@ -16,12 +17,14 @@ public actor AuthSession: AccessTokenProvider {
         transport: any HTTPTransport,
         diagnostics: Diagnostics = .silent,
         refreshLeeway: TimeInterval = 60,
+        deviceID: String? = nil,
         now: @escaping @Sendable () -> Date = { Date() }
     ) throws {
         self.store = store
         self.transport = transport
         self.diagnostics = diagnostics
         self.refreshLeeway = refreshLeeway
+        self.deviceID = deviceID
         self.now = now
         self.credentials = try store.load()
     }
@@ -59,7 +62,7 @@ public actor AuthSession: AccessTokenProvider {
     private func refresh() async throws -> TokenSet {
         if let inflightRefresh { return try await inflightRefresh.value }
         guard let current = credentials else { throw SignInError.notSignedIn }
-        let api = NativeAuthAPI(baseURL: current.baseURL, transport: transport, diagnostics: diagnostics, now: now)
+        let api = NativeAuthAPI(baseURL: current.baseURL, transport: transport, diagnostics: diagnostics, now: now, deviceID: deviceID)
         let refreshToken = current.tokens.refreshToken
         let provider = current.tokens.provider
         let task = Task { try await api.refresh(refreshToken: refreshToken, provider: provider) }
