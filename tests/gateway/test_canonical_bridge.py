@@ -123,6 +123,15 @@ async def test_a_read_grant_cannot_change_the_mcp_servers_a_bot_has(bots):
 
 
 @pytest.mark.asyncio
+async def test_hosted_connector_accounts_are_served_and_removing_one_needs_control(bots):
+    reader = bots.connect(capabilities=READ)
+    assert (await call(reader, 'connectors.accounts', {})).get('error', {}).get('code') != -32601
+    removal = {'connection_id': 'ca_1'}
+    assert failure(await call(reader, 'connectors.accounts.remove', removal))['message'] == 'permission_denied'
+    assert (await call(bots.connect(), 'connectors.accounts.remove', removal)).get('error', {}).get('code') != -32601
+
+
+@pytest.mark.asyncio
 async def test_a_routed_write_lands_in_the_owning_profiles_home_only(bots):
     connection = bots.connect(host=True)
     changed = await call(connection, 'permissions.set_auto_review', {'profile': 'alpha', 'enabled': False})

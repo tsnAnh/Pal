@@ -3,6 +3,8 @@ from gateway.session_legacy_bridge import Verb, account_owned, bridged, serve
 VERBS = {
     'connectors.list': Verb('session:read', guard=account_owned),
     'connectors.catalog': Verb('session:read'),
+    'connectors.accounts': Verb('session:read'),
+    'connectors.accounts.remove': Verb('session:control'),
 }
 
 ACCOUNT_OWNED_VERBS = {
