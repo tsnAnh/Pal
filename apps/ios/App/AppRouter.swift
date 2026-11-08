@@ -25,7 +25,6 @@ enum AppCapability: Hashable {
 
 enum BotMenuAction: CaseIterable, Identifiable {
     case viewProfile
-    case findInChat
     case shareAsTemplate
 
     var id: Self { self }
@@ -77,7 +76,6 @@ final class AppRouter {
 
     func supports(_ action: BotMenuAction) -> Bool {
         switch action {
-        case .findInChat: true
         case .viewProfile: capabilities.contains(.botProfile)
         case .shareAsTemplate: capabilities.contains(.shareAsTemplate)
         }
@@ -93,7 +91,6 @@ final class AppRouter {
         switch action {
         case .viewProfile: push(.botProfile(botName: botName))
         case .shareAsTemplate: shareAsTemplateHandler?(botName)
-        case .findInChat: break
         }
     }
 

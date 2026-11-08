@@ -14,14 +14,14 @@ struct HomeView: View {
         ScrollView {
             LazyVStack(spacing: 0) {
                 if !roster.pinned.isEmpty {
-                    PinnedHero(roster: roster)
+                    PinnedHero(roster: roster, router: router)
                         .padding(.top, HermesMetrics.heroTopPadding)
                         .padding(.bottom, HermesMetrics.heroRowSpacing)
                 }
                 ForEach(roster.rows) { bot in
                     NavigationLink(value: AppRoute.chat(botName: bot.name)) {
                         HomeRow(bot: bot, activity: roster.activity(for: bot.name), mood: roster.avatarMood(for: bot.name))
-                            .botContextMenu(bot, roster: roster)
+                            .botContextMenu(bot, roster: roster, router: router)
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("botRow-\(bot.name)")
@@ -95,27 +95,6 @@ enum AdminErrorCopy {
     }
 }
 
-extension View {
-    func botContextMenu(_ bot: BotRow, roster: RosterModel) -> some View {
-        contextMenu {
-            Button {
-                roster.setPinned(bot, pinned: !bot.isPinned)
-            } label: {
-                Label(bot.isPinned ? "Unpin" : "Pin", systemImage: bot.isPinned ? "pin.slash" : "pin")
-            }
-            .accessibilityIdentifier(bot.isPinned ? "unpinAction" : "pinAction")
-            if !bot.isPrimary {
-                Button {
-                    roster.makePrimary(bot)
-                } label: {
-                    Label("Make Primary", systemImage: "star")
-                }
-                .accessibilityIdentifier("makePrimaryAction")
-            }
-        }
-    }
-}
-
 private struct UserAvatarView: View {
     let initial: String
     let link: GatewayLink
@@ -158,6 +137,7 @@ private struct UserAvatarView: View {
 
 private struct PinnedHero: View {
     let roster: RosterModel
+    let router: AppRouter
 
     private static let cellWidth: CGFloat = 112
 
@@ -176,7 +156,7 @@ private struct PinnedHero: View {
                 NavigationLink(value: AppRoute.chat(botName: bot.name)) {
                     HeroCell(bot: bot, activity: roster.activity(for: bot.name), mood: roster.avatarMood(for: bot.name))
                         .frame(width: Self.cellWidth)
-                        .botContextMenu(bot, roster: roster)
+                        .botContextMenu(bot, roster: roster, router: router)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("botRow-\(bot.name)")
