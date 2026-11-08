@@ -1,3 +1,4 @@
+import AppIntents
 import HermesClient
 import SwiftUI
 
@@ -6,6 +7,8 @@ struct HermesBotsApp: App {
     @State private var model: ConnectionModel
     @State private var roster: RosterModel
     @State private var offers: ReachOfferModel
+    @State private var links: BotLinks
+    @State private var directory = BotDirectory()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -14,15 +17,22 @@ struct HermesBotsApp: App {
         let roster = RosterModel(connection: model)
         _roster = State(initialValue: roster)
         _offers = State(initialValue: ReachOfferModel(presence: model.presence) { sessionID in roster.open(sessionID: sessionID) })
+        let links = BotLinks(connection: model)
+        _links = State(initialValue: links)
+        let environment = IntentEnvironment(connection: model, roster: roster, links: links)
+        AppDependencyManager.shared.add(dependency: environment)
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(model: model, roster: roster)
+            RootView(model: model, roster: roster, links: links)
                 .overlay { ReachOfferOverlay(model: offers) }
                 .preferredColorScheme(.dark)
                 .task { await model.restore() }
                 .task { await offers.listen() }
+                .onChange(of: roster.bots) { _, bots in
+                    Task { await directory.publish(bots) }
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await model.restore() } }
                 }
@@ -36,6 +46,7 @@ struct HermesBotsApp: App {
 struct RootView: View {
     let model: ConnectionModel
     @Bindable var roster: RosterModel
+    let links: BotLinks
 
     @State private var showsSettings = false
 
@@ -46,7 +57,7 @@ struct RootView: View {
                 RosterView(roster: roster, connection: model) { showsSettings = true }
                     .navigationDestination(for: String.self) { name in
                         if let bot = roster.bot(named: name) {
-                            ChatView(model: ChatModel(bot: bot, connection: model, roster: roster))
+                            ChatView(model: ChatModel(bot: bot, links: links, roster: roster))
                         }
                     }
             }

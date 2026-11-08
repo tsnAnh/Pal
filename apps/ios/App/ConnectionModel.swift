@@ -131,6 +131,11 @@ final class ConnectionModel {
         await connect()
     }
 
+    func retryConnection() async {
+        guard case .failed = phase else { return }
+        await connect()
+    }
+
     func signIn() async {
         guard !isBusy else { return }
         let baseURL: GatewayBaseURL

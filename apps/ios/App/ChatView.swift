@@ -54,6 +54,12 @@ struct ChatView: View {
         .toolbarTitleDisplayMode(.inline)
         .background(Color(white: 0.07))
         .task { model.start() }
+        .onChange(of: model.pendingDraft, initial: true) { _, pending in
+            guard let pending else { return }
+            draft = pending
+            model.clearPendingDraft()
+            composerFocused = true
+        }
         .onDisappear { model.stop() }
         .alert(
             Text("Something went wrong"),

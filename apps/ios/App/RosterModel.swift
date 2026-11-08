@@ -18,24 +18,6 @@ struct BotRow: Identifiable, Equatable {
     var id: String { name }
 }
 
-private enum RosterWire {
-    struct Canonical: Decodable {
-        var id: String?
-        var resolvedId: String?
-        var preview: String?
-        var lastActive: Double?
-    }
-
-    struct Profile: Decodable {
-        var name: String
-        var displayName: String?
-        var isDefault: Bool?
-        var canonicalSession: Canonical?
-        var uiMeta: JSONValue?
-        var hasAvatar: Bool?
-    }
-}
-
 private struct AssetWire: Decodable {
     var found: Bool
     var data: String?
@@ -51,6 +33,7 @@ final class RosterModel {
     private(set) var celebrating: Set<String> = []
     var query = ""
     var path: [String] = []
+    var drafts: [String: String] = [:]
 
     private let connection: ConnectionModel
     private var photos: [String: Data] = [:]
@@ -78,6 +61,10 @@ final class RosterModel {
         guard let bot = bots.first(where: { $0.sessionIDs.contains(sessionID) }) else { return false }
         if path.last != bot.name { path = [bot.name] }
         return true
+    }
+
+    func open(botNamed name: String) {
+        if path.last != name { path = [name] }
     }
 
     func activity(for name: String) -> BotActivity {
@@ -127,9 +114,7 @@ final class RosterModel {
     }
 
     private func apply(_ snapshot: RosterSnapshot) async {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        let profiles = snapshot.profiles.compactMap { try? $0.decoded(as: RosterWire.Profile.self, using: decoder) }
+        let profiles = BotProfile.parse(snapshot.profiles)
         for profile in profiles where profile.hasAvatar == true && photos[profile.name] == nil {
             if let data = await fetchAvatar(profile.name) { photos[profile.name] = data }
         }
@@ -147,29 +132,13 @@ final class RosterModel {
         isLoaded = true
     }
 
-    static func displayName(name: String, displayName: String?, uiMeta: [String: Any]?) -> String {
-        let botMeta = uiMeta?["hermes-bots"] as? [String: Any]
-        if let title = (botMeta?["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-            return title
-        }
-        if let display = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !display.isEmpty {
-            return display
-        }
-        let slug = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if slug.lowercased() == "default" { return "Hermes" }
-        let words = slug.replacingOccurrences(of: "[-_]+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
-        return words.split(separator: " ").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
-    }
-
-    private func row(from profile: RosterWire.Profile) -> BotRow {
-        let uiMeta = profile.uiMeta.flatMap(Self.dictionary(from:))
+    private func row(from profile: BotProfile) -> BotRow {
+        let uiMeta = profile.uiMetaObject
         let preview = profile.canonicalSession?.preview?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let lastActive = profile.canonicalSession?.lastActive.map { Date(timeIntervalSince1970: $0) }
-        let display = Self.displayName(name: profile.name, displayName: profile.displayName, uiMeta: uiMeta)
         return BotRow(
             name: profile.name,
-            displayName: display,
+            displayName: profile.title,
             isDefault: profile.isDefault ?? false,
             preview: preview,
             lastActive: lastActive,
@@ -185,11 +154,6 @@ final class RosterModel {
               let url = asset.data, let comma = url.firstIndex(of: ",")
         else { return nil }
         return Data(base64Encoded: String(url[url.index(after: comma)...]))
-    }
-
-    private static func dictionary(from value: JSONValue) -> [String: Any]? {
-        guard let data = try? JSONEncoder().encode(value) else { return nil }
-        return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }
 }
 

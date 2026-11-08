@@ -12,6 +12,11 @@ SLOW_CHUNKS = 40
 SLOW_DELAY = 0.25
 CLARIFY_QUESTION = "Which flavor do you want?"
 CLARIFY_CHOICES = ["vanilla", "chocolate"]
+APPROVAL_COMMAND = "rm -rf hermes-stub-approval-probe"
+STEER_COMMAND = "echo hermes-stub-steer-probe"
+
+TOOL_KINDS = ("clarify", "terminal", "slow_tool")
+STEER_CHUNKS = 60
 
 log_lock = threading.Lock()
 
@@ -33,12 +38,34 @@ def tool_names(body):
     return names
 
 
+def image_parts(body):
+    found = []
+    for message in body.get("messages") or []:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") not in ("image_url", "input_image"):
+                continue
+            url = part.get("image_url")
+            url = url.get("url") if isinstance(url, dict) else url
+            if isinstance(url, str):
+                found.append({"mime": url.split(";")[0].removeprefix("data:"), "length": len(url)})
+    return found
+
+
 def plan(body):
     messages = body.get("messages") or []
     names = tool_names(body)
     last = messages[-1] if messages else {}
     last_role = last.get("role")
     last_user = next((text_of(m.get("content")) for m in reversed(messages) if m.get("role") == "user"), "")
+    if "terminal" in names and last_role == "user" and "STEER" in last_user:
+        return "slow_tool", words("steer", STEER_CHUNKS), SLOW_DELAY
+    if last_role == "tool" and "APPROVE" in last_user:
+        return "final", "Approval result: " + text_of(last.get("content")), NORMAL_DELAY
+    if "terminal" in names and last_role == "user" and "APPROVE" in last_user:
+        return "terminal", None, 0
     if "clarify" in names and last_role == "tool":
         return "final", "Clarify answered: " + text_of(last.get("content")), NORMAL_DELAY
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:
@@ -85,6 +112,7 @@ class Handler(BaseHTTPRequestHandler):
             "stream": bool(body.get("stream")),
             "plan": kind,
             "tools": tool_names(body),
+            "images": image_parts(body),
             "messages": [{"role": m.get("role"), "content": text_of(m.get("content"))} for m in body.get("messages") or []],
         }
         with log_lock, open(self.log_path, "a", encoding="utf-8") as handle:
@@ -98,15 +126,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def clarify_arguments(self):
-        return json.dumps({"questions": [{"question": CLARIFY_QUESTION, "choices": CLARIFY_CHOICES}]})
+    def tool_call(self, kind):
+        if kind == "terminal":
+            return "call_stub_terminal", "terminal", json.dumps({"command": APPROVAL_COMMAND})
+        if kind == "slow_tool":
+            return "call_stub_probe", "terminal", json.dumps({"command": STEER_COMMAND})
+        arguments = json.dumps({"questions": [{"question": CLARIFY_QUESTION, "choices": CLARIFY_CHOICES}]})
+        return "call_stub_clarify", "clarify", arguments
 
     def complete(self, kind, content):
         message = {"role": "assistant", "content": None}
         finish = "stop"
-        if kind == "clarify":
-            message["tool_calls"] = [{"id": "call_stub_clarify", "type": "function",
-                                      "function": {"name": "clarify", "arguments": self.clarify_arguments()}}]
+        if kind in TOOL_KINDS:
+            call_id, name, arguments = self.tool_call(kind)
+            if kind == "slow_tool":
+                message["content"] = "".join(content)
+            message["tool_calls"] = [{"id": call_id, "type": "function",
+                                      "function": {"name": name, "arguments": arguments}}]
             finish = "tool_calls"
         else:
             message["content"] = content if isinstance(content, str) else "".join(content)
@@ -124,11 +160,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         try:
             self.chunk({"role": "assistant", "content": ""}, None)
-            if kind == "clarify":
-                arguments = self.clarify_arguments()
+            if kind in TOOL_KINDS:
+                if kind == "slow_tool":
+                    for piece in content:
+                        self.chunk({"content": piece}, None)
+                        time.sleep(delay)
+                call_id, name, arguments = self.tool_call(kind)
                 half = len(arguments) // 2
-                call = {"index": 0, "id": "call_stub_clarify", "type": "function",
-                        "function": {"name": "clarify", "arguments": arguments[:half]}}
+                call = {"index": 0, "id": call_id, "type": "function",
+                        "function": {"name": name, "arguments": arguments[:half]}}
                 self.chunk({"tool_calls": [call]}, None)
                 self.chunk({"tool_calls": [{"index": 0, "function": {"arguments": arguments[half:]}}]}, None)
                 self.chunk({}, "tool_calls")

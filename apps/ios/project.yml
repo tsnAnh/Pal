@@ -79,6 +79,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: HermesBots
+      - sdk: AppIntentsTesting.framework
 schemes:
   HermesBots:
     build:

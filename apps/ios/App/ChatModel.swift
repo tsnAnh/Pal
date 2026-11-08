@@ -37,8 +37,9 @@ final class ChatModel {
 
     let bot: BotRow
 
-    private let connection: ConnectionModel
+    private let links: BotLinks
     private let roster: RosterModel
+    private var link: BotLink?
     private var session: ChatSession?
     private var outbox: Outbox?
     private var transcript = Transcript()
@@ -46,7 +47,7 @@ final class ChatModel {
     private var arrivals: [String: Date] = [:]
     private var hasBaseline = false
     private var lastSignature = ActivitySignature(running: false, prompting: false)
-    private var tasks: [Task<Void, Never>] = []
+    private var running: Task<Void, Never>?
     private var delivering = false
     private var retried: Set<String> = []
 
@@ -55,39 +56,41 @@ final class ChatModel {
         let prompting: Bool
     }
 
+    var pendingDraft: String? { roster.drafts[bot.name] }
     var activity: BotActivity { roster.activity(for: bot.name) }
     var avatarMood: AvatarMood { roster.avatarMood(for: bot.name) }
 
     private static let separatorGap: TimeInterval = 10 * 60
 
-    init(bot: BotRow, connection: ConnectionModel, roster: RosterModel) {
+    init(bot: BotRow, links: BotLinks, roster: RosterModel) {
         self.bot = bot
-        self.connection = connection
+        self.links = links
         self.roster = roster
     }
 
     func start() {
-        guard tasks.isEmpty, let connector = connection.chatConnector else { return }
-        let session = ChatSession(profile: bot.name, connector: connector)
-        self.session = session
+        guard running == nil else { return }
+        let link: BotLink
         do {
-            let outbox = try Outbox(directory: Self.outboxDirectory(for: bot.name), submitter: session)
-            self.outbox = outbox
+            link = try links.link(for: bot.name)
         } catch {
             sendError = String(localized: "Messages can't be saved on this device.")
+            return
         }
-        tasks.append(Task { await self.attach(session) })
-        tasks.append(Task { await self.consume(session) })
-        tasks.append(Task { await self.retryLoop() })
+        self.link = link
+        outbox = link.outbox
+        running = Task { await self.run(link) }
     }
 
     func stop() {
-        tasks.forEach { $0.cancel() }
-        tasks.removeAll()
+        running?.cancel()
+        running = nil
         let session = self.session
+        let link = self.link
         self.session = nil
+        self.link = nil
         outbox = nil
-        Task { await session?.close() }
+        if let session, let link { Task { await link.sessions.release(session) } }
         roster.nudge()
     }
 
@@ -114,7 +117,7 @@ final class ChatModel {
     func retry(_ submissionID: String) {
         guard let outbox, let failed = outboxEntries.first(where: { $0.submissionID == submissionID }) else { return }
         Task {
-            guard let entry = try? await outbox.enqueue(botID: bot.name, text: failed.text, attachments: failed.attachments) else { return }
+            guard let entry = try? await outbox.requeue(failed) else { return }
             retried.insert(submissionID)
             await refreshOutbox()
             _ = await outbox.deliver(entry.submissionID)
@@ -138,12 +141,33 @@ final class ChatModel {
         Task { try? await session.answerApproval(prompt, choice: choice) }
     }
 
+    func clearPendingDraft() {
+        roster.drafts[bot.name] = nil
+    }
+
     func dismissError() {
         sendError = nil
     }
 
     private var pendingClarify: PendingPrompt? {
         transcript.pendingPrompts.first { $0.kind == .clarify }
+    }
+
+    private func run(_ link: BotLink) async {
+        let session = await link.sessions.acquire()
+        guard !Task.isCancelled else {
+            await link.sessions.release(session)
+            return
+        }
+        self.session = session
+        let state = await session.state
+        transcript = state.transcript
+        if case .live = state.phase { isOffline = false }
+        async let consuming: Void = consume(session)
+        async let retrying: Void = retryLoop()
+        await attach(session)
+        await consuming
+        await retrying
     }
 
     private func attach(_ session: ChatSession) async {
@@ -156,12 +180,12 @@ final class ChatModel {
         while !Task.isCancelled {
             do {
                 try await session.start()
-                return
-            } catch {
-                isOffline = true
-                try? await Task.sleep(for: delay)
-                delay = min(delay * 2, .seconds(8))
-            }
+                guard let settled = await session.awaitState(where: { $0.phase != .attaching }) else { return }
+                if settled.phase != .detached { return }
+            } catch {}
+            isOffline = true
+            try? await Task.sleep(for: delay)
+            delay = min(delay * 2, .seconds(8))
         }
     }
 
@@ -253,11 +277,5 @@ final class ChatModel {
         isRunning = transcript.isRunning
         hasPendingClarify = pendingClarify != nil
         if !hasBaseline, transcript.sessionID != nil { hasBaseline = true }
-    }
-
-    private static func outboxDirectory(for name: String) -> URL {
-        let base = URL.applicationSupportDirectory.appending(path: "outbox", directoryHint: .isDirectory)
-        let safe = name.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "bot"
-        return base.appending(path: safe, directoryHint: .isDirectory)
     }
 }
