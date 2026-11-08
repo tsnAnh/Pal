@@ -143,18 +143,4 @@ final class BotChatE2ETests: E2ETestCase {
         XCTAssertTrue(newestReply.isHittable, "newest reply is visible")
         shot(app, "chat-reopen-settled")
     }
-
-    private func waitForReply(_ app: XCUIApplication, below text: String) {
-        let userBubble = bubbles(app, "userBubble", containing: text).firstMatch
-        let deadline = Date().addingTimeInterval(60)
-        while Date() < deadline {
-            let reply = app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last
-            if let reply, userBubble.exists, reply.frame.minY > userBubble.frame.minY,
-               !app.descendants(matching: .any)["assistantBubble-streaming"].exists {
-                return
-            }
-            Thread.sleep(forTimeInterval: 0.25)
-        }
-        XCTFail("reply to \(text) did not complete")
-    }
 }

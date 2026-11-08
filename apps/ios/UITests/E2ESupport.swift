@@ -95,6 +95,22 @@ class E2ETestCase: XCTestCase {
         XCTAssertTrue(element.waitForExistence(timeout: timeout), message + "\n" + XCUIApplication().debugDescription, file: file, line: line)
     }
 
+    @discardableResult
+    func waitForReply(_ app: XCUIApplication, below text: String, timeout: TimeInterval = 60) -> XCUIElement? {
+        let userBubble = bubbles(app, "userBubble", containing: text).firstMatch
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let reply = app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last
+            if let reply, userBubble.exists, reply.frame.minY > userBubble.frame.minY,
+               !app.descendants(matching: .any)["assistantBubble-streaming"].exists {
+                return reply
+            }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        XCTFail("reply to \(text) did not complete")
+        return nil
+    }
+
     func waitGone(_ element: XCUIElement, timeout: TimeInterval = 60, _ message: String = "", file: StaticString = #filePath, line: UInt = #line) {
         let gone = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: element)
         XCTAssertEqual(XCTWaiter().wait(for: [gone], timeout: timeout), .completed, message, file: file, line: line)

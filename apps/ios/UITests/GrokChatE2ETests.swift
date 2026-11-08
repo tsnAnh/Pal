@@ -76,11 +76,11 @@ final class GrokChatE2ETests: E2ETestCase {
 
     func test3SendShowsAccentBubbleOnTheRightAndStreamedReplyOnTheLeft() throws {
         let app = openChat("cho-ua")
-        send(app, "hello accent")
-        let user = bubbles(app, "userBubble", containing: "hello accent").firstMatch
+        let text = "hello accent \(UUID().uuidString.prefix(8))"
+        send(app, text)
+        let user = bubbles(app, "userBubble", containing: text).firstMatch
         waitFor(user, timeout: 15, "user bubble")
-        waitFor(bubbles(app, "assistantBubble", containing: "stub-").firstMatch, timeout: 60, "streamed reply")
-        let reply = bubbles(app, "assistantBubble", containing: "stub-").firstMatch
+        let reply = try XCTUnwrap(waitForReply(app, below: text), "streamed reply")
         let width = app.frame.width
         XCTAssertGreaterThan(user.frame.midX, width / 2, "user bubble sits on the right")
         XCTAssertLessThan(reply.frame.midX, width / 2, "assistant bubble sits on the left")
@@ -109,11 +109,12 @@ final class GrokChatE2ETests: E2ETestCase {
         shot(app, "attachment-ready")
         let field = any(app, "composerField")
         field.tap()
-        field.typeText("PHOTO-CAPTION-4411")
+        let caption = "PHOTO-CAPTION-\(UUID().uuidString.prefix(8))"
+        field.typeText(caption)
         app.buttons["sendButton"].tap()
-        waitFor(bubbles(app, "userBubble", containing: "PHOTO-CAPTION-4411").firstMatch, timeout: 20, "caption bubble")
-        waitFor(bubbles(app, "assistantBubble", containing: "stub-").firstMatch, timeout: 60, "reply after the photo")
-        XCTAssertFalse(any(app, "attachmentChip").exists, "tray clears after sending")
+        waitFor(bubbles(app, "userBubble", containing: caption).firstMatch, timeout: 20, "caption bubble")
+        waitForReply(app, below: caption)
+        waitGone(any(app, "attachmentChip"), timeout: 10, "tray clears after sending")
         shot(app, "attachment-sent")
     }
 

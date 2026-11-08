@@ -21,8 +21,8 @@ final class SeededRosterE2ETests: E2ETestCase {
         }
         let rows = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "botRow-"))
         XCTAssertGreaterThanOrEqual(rows.count, Self.paritySlugs.count, app.debugDescription)
-        let ua = app.buttons["botRow-cho-ua"]
-        XCTAssertTrue(ua.label.contains("Đã giao làm 12 ảnh"), "seeded preview reaches the roster: \(ua.label)")
+        let untouched = app.buttons["botRow-upwork-hunter"]
+        XCTAssertTrue(untouched.label.contains("Tin cuối vẫn là tin anh gửi"), "seeded preview reaches the roster: \(untouched.label)")
         shot(app, "seeded-roster")
     }
 }
