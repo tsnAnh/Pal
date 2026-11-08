@@ -54133,6 +54133,24 @@
       }
     },
     {
+      "name": "display.lease.resolve",
+      "summary": "End the bot's pending hand-back ask (I'm done / Cancel). ask_at limits it to the ask the card showed.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DisplayLeaseResolveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DisplayLeaseResult"
+        }
+      }
+    },
+    {
       "name": "display.observe",
       "summary": "Mint a single-use ticket for /api/display/ws and the server-minted viewer id for this connection.",
       "params": [
