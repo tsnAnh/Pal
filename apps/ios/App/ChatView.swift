@@ -8,34 +8,43 @@ struct ChatView: View {
     @State private var model: ChatModel
     @State private var draft = ""
     @FocusState private var composerFocused: Bool
+    @State private var followsLatest = true
+    @State private var position = ScrollPosition(edge: .bottom)
 
     init(model: ChatModel) {
         _model = State(initialValue: model)
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
-                    ForEach(model.rows) { row in
-                        ChatRowView(row: row, model: model)
-                            .id(row.id)
-                    }
-                    Color.clear.frame(height: 1).id("bottom")
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                ForEach(model.rows) { row in
+                    ChatRowView(row: row, model: model)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
             }
-            .defaultScrollAnchor(.bottom)
-            .defaultScrollAnchor(.bottom, for: .sizeChanges)
-            .scrollDismissesKeyboard(.interactively)
-            .accessibilityIdentifier("chatScreen")
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Composer(botName: model.bot.displayName, draft: $draft, focused: $composerFocused) {
-                    model.send(draft)
-                    draft = ""
-                    withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) }
-                }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+        }
+        .scrollPosition($position)
+        .defaultScrollAnchor(.bottom)
+        .defaultScrollAnchor(.bottom, for: .sizeChanges)
+        .scrollDismissesKeyboard(.interactively)
+        .onScrollPhaseChange { _, phase, context in
+            guard phase == .idle else { return }
+            let geometry = context.geometry
+            followsLatest = geometry.visibleRect.maxY - geometry.contentInsets.bottom >= geometry.contentSize.height - 48
+        }
+        .onChange(of: model.rows.last, initial: true) {
+            guard followsLatest else { return }
+            position.scrollTo(edge: .bottom)
+        }
+        .accessibilityIdentifier("chatScreen")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Composer(botName: model.bot.displayName, draft: $draft, focused: $composerFocused) {
+                model.send(draft)
+                draft = ""
+                followsLatest = true
+                withAnimation(.easeOut(duration: 0.2)) { position.scrollTo(edge: .bottom) }
             }
         }
         .overlay {
