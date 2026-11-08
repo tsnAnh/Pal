@@ -3,24 +3,24 @@ import SwiftUI
 import Testing
 @testable import HermesDesign
 
-private let loop = AvatarMotion.loopDuration
+let testSeed = LoadingSequence.seed(for: "alpha")
 private let done = AvatarMood.doneDuration
-private let frame = 1.0 / 120
-private let allFields = AvatarPose.geometry + AvatarPose.appearance
+let frame = 1.0 / 120
+let allFields = AvatarPose.geometry + AvatarPose.appearance
 
 private func pose(_ mood: AvatarMood, _ t: Double, reduceMotion: Bool = false) -> AvatarPose {
-    AvatarMotion.pose(mood, at: t, reduceMotion: reduceMotion)
+    AvatarMotion.pose(mood, at: t, reduceMotion: reduceMotion, seed: testSeed)
 }
 
-private func samples(_ range: ClosedRange<Double>, step: Double = frame) -> [Double] {
+func samples(_ range: ClosedRange<Double>, step: Double = frame) -> [Double] {
     Array(stride(from: range.lowerBound, through: range.upperBound, by: step))
 }
 
-private func eyesHidden(_ pose: AvatarPose) -> Bool {
+func eyesHidden(_ pose: AvatarPose) -> Bool {
     abs(pose.eyeX) >= 0.75 || abs(pose.eyeY) >= 0.75
 }
 
-private func visibleJump(_ a: AvatarPose, _ b: AvatarPose) -> Bool {
+func visibleJump(_ a: AvatarPose, _ b: AvatarPose) -> Bool {
     if eyesHidden(a) || eyesHidden(b) {
         return abs(a.bodyScaleX - b.bodyScaleX) > 0.1 || abs(a.bodyY - b.bodyY) > 0.05
     }
@@ -47,79 +47,6 @@ private func noBlinkDelay(around seconds: ClosedRange<Double>) -> Double {
             AvatarBlink.openness(at: date($0).timeIntervalSinceReferenceDate, delay: delay) == 1
         }
     } ?? 0
-}
-
-@Suite("Loading loop follows the reference recording")
-struct LoadingLoopTests {
-    @Test("the loop is seamless across its boundary", arguments: [AvatarMood.work, .think])
-    func seamless(mood: AvatarMood) {
-        let start = pose(mood, 0)
-        #expect(!visibleJump(pose(mood, loop - frame), pose(mood, loop)))
-        for t in [loop - 1e-6, loop, loop + 1e-6, 2 * loop - 1e-6] {
-            let other = pose(mood, t)
-            for key in allFields {
-                #expect(abs(other[keyPath: key] - start[keyPath: key]) < 1e-3, "\(key) jumps at t=\(t)")
-            }
-        }
-    }
-
-    @Test("eyes only teleport while hidden behind the body")
-    func noVisibleJumps() {
-        let times = samples(0...(2 * loop))
-        var hiddenWraps = 0
-        for (a, b) in zip(times, times.dropFirst()) {
-            let before = pose(.work, a)
-            let after = pose(.work, b)
-            #expect(!visibleJump(before, after), "visible jump between t=\(a) and t=\(b)")
-            if abs(before.eyeX - after.eyeX) > 1 || abs(before.eyeY - after.eyeY) > 1 { hiddenWraps += 1 }
-        }
-        #expect(hiddenWraps == 4, "two wraps per loop: the spin and the vertical roll")
-    }
-
-    @Test("it opens facing the viewer with centred, upright eyes")
-    func opensFacing() {
-        let start = pose(.work, 0)
-        #expect(start.front == 1)
-        #expect(start.eyeX == 0 && start.eyeY == 0 && start.eyeRoll == 0 && start.eyeScale == 1)
-        #expect(start.bodyScaleX == 1 && start.bodyScaleY == 1 && start.opacity == 1)
-    }
-
-    @Test("it squashes and fades while the face spins round")
-    func spinSquash() {
-        let spin = samples(0.4...1.2).map { pose(.work, $0) }
-        #expect(spin.map(\.bodyScaleX).min()! <= 0.6)
-        #expect(spin.map(\.opacity).min()! <= 0.9)
-        #expect(spin.contains(where: eyesHidden))
-    }
-
-    @Test("it scans along the bottom from down-left to down-right")
-    func scans() {
-        let window = samples(1.0...4.6).map { pose(.work, $0) }
-        let downLeft = window.filter { $0.eyeX < -0.1 && $0.eyeY > 0.08 && $0.eyeRoll > 20 }
-        let downRight = window.filter { $0.eyeX > 0.1 && $0.eyeY > 0.08 && $0.eyeRoll < -20 }
-        #expect(!downLeft.isEmpty && !downRight.isEmpty)
-    }
-
-    @Test("it glances up-left, blinks, then glances up-right")
-    func glancesUp() {
-        let window = samples(5.4...7.6).map { pose(.work, $0) }
-        #expect(window.contains { $0.eyeX < -0.1 && $0.eyeY < -0.1 && $0.bodyX < -0.03 })
-        #expect(window.contains { $0.eyeX > 0.1 && $0.eyeY < -0.1 && $0.bodyX > 0.01 })
-        #expect(window.map(\.eyeOpen).min()! < 0.2)
-    }
-
-    @Test("the body drops and the face rolls over the top")
-    func drops() {
-        let window = samples(7.8...9.2).map { pose(.work, $0) }
-        #expect(window.map(\.bodyY).max()! >= 0.09)
-        #expect(window.contains { $0.eyeY <= -0.75 } && window.contains { $0.eyeY >= 0.75 })
-    }
-
-    @Test("the eyes shrink to dots before the loop restarts")
-    func dotEyes() {
-        let window = samples(9.1...loop).map { pose(.work, $0) }
-        #expect(window.contains { $0.eyeScale <= 0.6 && $0.eyeDot >= 0.5 })
-    }
 }
 
 @Suite("Done plays once and lands on idle")
@@ -153,7 +80,7 @@ struct DoneTests {
 
     @Test("re-entering done replays it")
     func replays() {
-        var clock = AvatarMoodClock(mood: .work, since: date(0), blinkDelay: 0, reduceMotion: false)
+        var clock = AvatarMoodClock(mood: .work, since: date(0), blinkDelay: 0, loadingSeed: testSeed, reduceMotion: false)
         clock = clock.changing(to: .done, at: date(2))
         #expect(clock.pose(at: date(2.9)).eyeHappy == 1)
         #expect(ignoringBlink(clock.pose(at: date(2 + done + 1))) == .rest)
@@ -170,7 +97,7 @@ struct SettleTests {
     @Test("a mood change starts from the pose on screen and settles in 0.4 s")
     func settles() {
         let delay = noBlinkDelay(around: 1.2...2)
-        let working = AvatarMoodClock(mood: .work, since: date(0), blinkDelay: delay, reduceMotion: false)
+        let working = AvatarMoodClock(mood: .work, since: date(0), blinkDelay: delay, loadingSeed: testSeed, reduceMotion: false)
         let shown = working.pose(at: date(1.3))
         let idle = working.changing(to: .idle, at: date(1.3))
         #expect(idle.pose(at: date(1.3)) == shown)
@@ -205,7 +132,7 @@ struct ReduceMotionTests {
 
     @Test("mood changes swap instantly and never blink")
     func noSettleOrBlink() {
-        let working = AvatarMoodClock(mood: .work, since: date(0), blinkDelay: 0, reduceMotion: true)
+        let working = AvatarMoodClock(mood: .work, since: date(0), blinkDelay: 0, loadingSeed: testSeed, reduceMotion: true)
         let idle = working.changing(to: .idle, at: date(1.3))
         for t in samples(1.3...10, step: 0.01) {
             #expect(idle.pose(at: date(t)) == .rest)
@@ -249,7 +176,7 @@ struct BlinkTests {
         #expect(a.blinkKey != BotAvatarSpec(name: "Orion", meta: BotAvatarMeta()).blinkKey)
 
         let delay = AvatarBlink.delaySeconds(for: a.blinkKey)
-        let idle = AvatarMoodClock(mood: .idle, since: date(0), blinkDelay: delay, reduceMotion: false)
+        let idle = AvatarMoodClock(mood: .idle, since: date(0), blinkDelay: delay, loadingSeed: testSeed, reduceMotion: false)
         let opened = samples(0...10, step: 0.005).map { idle.pose(at: date($0)).eyeOpen }
         #expect(opened.min()! < 0.2)
     }
@@ -265,7 +192,7 @@ struct ScheduleTests {
     @Test("idle avatars only wake up around blinks")
     func idleIsCheap() {
         let delay = AvatarBlink.delaySeconds(for: "agent")
-        let clock = AvatarMoodClock(mood: .idle, since: date(0), blinkDelay: delay, reduceMotion: false)
+        let clock = AvatarMoodClock(mood: .idle, since: date(0), blinkDelay: delay, loadingSeed: testSeed, reduceMotion: false)
         let ticks = entries(clock, over: 21)
         #expect(ticks.count <= 1 + 5 * 13)
         for tick in ticks.dropFirst() {
@@ -280,14 +207,14 @@ struct ScheduleTests {
 
     @Test("loading animates every frame")
     func loadingTicks() {
-        let clock = AvatarMoodClock(mood: .work, since: date(0), blinkDelay: 0, reduceMotion: false)
+        let clock = AvatarMoodClock(mood: .work, since: date(0), blinkDelay: 0, loadingSeed: testSeed, reduceMotion: false)
         #expect(entries(clock, over: 1).count >= 60)
     }
 
     @Test("done animates until it lands, then only blinks")
     func doneTicks() {
         let delay = noBlinkDelay(around: (done + 0.1)...(done + 3))
-        let clock = AvatarMoodClock(mood: .done, since: date(0), blinkDelay: delay, reduceMotion: false)
+        let clock = AvatarMoodClock(mood: .done, since: date(0), blinkDelay: delay, loadingSeed: testSeed, reduceMotion: false)
         let ticks = entries(clock, over: done + 3)
         #expect(ticks.filter { $0 <= date(done) }.count >= Int(done * 60) - 1)
         #expect(ticks.filter { $0 > date(done + 0.1) }.isEmpty)
@@ -296,7 +223,7 @@ struct ScheduleTests {
 
     @Test("reduced done wakes once to return to idle")
     func reducedDone() {
-        let clock = AvatarMoodClock(mood: .done, since: date(0), blinkDelay: 0, reduceMotion: true)
+        let clock = AvatarMoodClock(mood: .done, since: date(0), blinkDelay: 0, loadingSeed: testSeed, reduceMotion: true)
         let ticks = entries(clock, over: 10)
         #expect(ticks.count == 2)
         #expect(clock.pose(at: ticks[1]) == .rest)

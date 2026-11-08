@@ -53,6 +53,7 @@ struct AvatarRig {
     var dots: [AvatarDrawing.Element] = []
     var pivot: CGPoint
     var span: Double
+    let surface: EyeSurface
 
     init(
         viewBox: CGSize,
@@ -70,6 +71,7 @@ struct AvatarRig {
         let box = bounds ?? Self.bounds(of: body)
         pivot = CGPoint(x: box.midX, y: box.midY)
         span = (box.width + box.height) / 2
+        surface = EyeSurface.shared(mask: eyes.mask)
     }
 
     static let facingHeight = 0.34
@@ -97,10 +99,7 @@ struct AvatarRig {
     func eyePaths(_ pose: AvatarPose) -> [Path] {
         let placements = zip(eyes.rest, eyes.facing).map { $0.blended(to: $1, pose.front) }
         guard !placements.isEmpty else { return [] }
-        let mid = CGPoint(
-            x: placements.map(\.centre.x).reduce(0, +) / Double(placements.count),
-            y: placements.map(\.centre.y).reduce(0, +) / Double(placements.count)
-        )
+        let mid = Self.centroid(placements)
         let roll = pose.eyeRoll * Double.pi / 180
         let shape = eyeShape(pose)
         let travel = eyes.travel ?? span
@@ -112,8 +111,16 @@ struct AvatarRig {
                 y: mid.y + dx * sin(roll) + dy * cos(roll) + pose.eyeY * travel
             )
             let moved = EyePlacement(centre: centre, angle: placement.angle + roll, scale: placement.scale * pose.eyeScale)
-            return shape.applying(moved.transform)
+            return surface.project(shape.applying(moved.transform), around: centre)
         }
+    }
+
+    private static func centroid(_ placements: [EyePlacement]) -> CGPoint {
+        let count = Double(placements.count)
+        return CGPoint(
+            x: placements.map(\.centre.x).reduce(0, +) / count,
+            y: placements.map(\.centre.y).reduce(0, +) / count
+        )
     }
 
     private func eyeShape(_ pose: AvatarPose) -> Path {

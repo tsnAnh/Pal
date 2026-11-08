@@ -20,7 +20,6 @@ struct HermesBotsApp: App {
         WindowGroup {
             RootView(model: model, roster: roster)
                 .overlay { ReachOfferOverlay(model: offers) }
-                .preferredColorScheme(.dark)
                 .task { await model.restore() }
                 .task { await offers.listen() }
                 .onChange(of: scenePhase) { _, phase in

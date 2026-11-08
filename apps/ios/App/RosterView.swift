@@ -41,10 +41,9 @@ struct RosterView: View {
                 .accessibilityLabel(Text("Account and settings"))
                 .accessibilityIdentifier("userAvatarButton")
             }
-            .sharedBackgroundVisibility(.hidden)
         }
         .toolbarTitleDisplayMode(.inline)
-        .background(Color(white: 0.07))
+        .background(Color.canvas)
         .safeAreaBar(edge: .bottom) {
             SearchField(text: $roster.query)
         }
@@ -82,14 +81,13 @@ private struct UserAvatarView: View {
     var body: some View {
         Text(initial)
             .font(.headline)
-            .foregroundStyle(.white)
-            .frame(width: 44, height: 44)
-            .background(Color(white: 0.28), in: Circle())
+            .foregroundStyle(Color.onCard)
+            .frame(width: 32, height: 32)
             .overlay(alignment: .bottomTrailing) {
                 Circle()
                     .fill(presenceColor)
                     .frame(width: 12, height: 12)
-                    .overlay(Circle().stroke(Color.black, lineWidth: 2))
+                    .overlay(Circle().stroke(Color.badgeRing, lineWidth: 2))
             }
             .accessibilityElement(children: .ignore)
             .accessibilityValue(Text(presenceLabel))
@@ -111,7 +109,7 @@ private struct HeroView: View {
                         .foregroundStyle(.white)
                         .frame(width: 32, height: 32)
                         .background(Color.orange, in: Circle())
-                        .overlay(Circle().stroke(Color.black, lineWidth: 3))
+                        .overlay(Circle().stroke(Color.badgeRing, lineWidth: 3))
                         .offset(x: 4, y: 4)
                 }
             Text(bot.displayName)

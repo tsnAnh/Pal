@@ -30,7 +30,7 @@ private struct ReachOfferBanner: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(verbatim: offer.title)
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.onCard)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                     if !offer.body.isEmpty {
@@ -58,8 +58,8 @@ private struct ReachOfferBanner: View {
             .accessibilityIdentifier("reach-offer-dismiss")
         }
         .padding(16)
-        .background(Color(white: 0.14), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(white: 0.24), lineWidth: 1))
+        .background(Color.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color.cardOutline, lineWidth: 1))
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .gesture(

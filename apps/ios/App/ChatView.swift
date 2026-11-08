@@ -52,7 +52,7 @@ struct ChatView: View {
             .sharedBackgroundVisibility(.hidden)
         }
         .toolbarTitleDisplayMode(.inline)
-        .background(Color(white: 0.07))
+        .background(Color.canvas)
         .task { model.start() }
         .onDisappear { model.stop() }
         .alert(
@@ -130,9 +130,9 @@ private struct Composer: View {
                 Button(action: send) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(Color.onAction)
                         .frame(width: 42, height: 42)
-                        .background(.white, in: Circle())
+                        .background(Color.action, in: Circle())
                 }
                 .disabled(!canSend)
                 .opacity(canSend ? 1 : 0.4)
@@ -200,13 +200,13 @@ private struct AssistantBubble: View {
                 } else {
                     Text(Markdown.attributed(text))
                         .font(.body)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.onCard)
                         .textSelection(.enabled)
                 }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 11)
-            .background(Color(white: 0.14), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(Color.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .containerRelativeFrame(.horizontal, alignment: .leading) { width, _ in width * 0.85 }
             Spacer(minLength: 0)
         }
@@ -222,14 +222,24 @@ private struct UserBubble: View {
     let accent: BotAccent?
     let retry: (String) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var paint: (foreground: Color, background: Color) {
+        guard let accent else { return (.white, .blue) }
+        guard colorScheme == .light, AvatarColor(css: accent.accentHex)?.isWhite == true,
+              let ink = AvatarColor(css: AvatarColor.darkEyeFillCSS), let onInk = AvatarColor(css: AvatarColor.lightEyeFillCSS)
+        else { return (accent.foreground, accent.accent) }
+        return (onInk.swiftUIColor, ink.swiftUIColor)
+    }
+
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             Text(Markdown.attributed(text))
                 .font(.body)
-                .foregroundStyle(accent?.foreground ?? .white)
+                .foregroundStyle(paint.foreground)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 11)
-                .background(accent?.accent ?? Color.blue, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .background(paint.background, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .opacity(delivery == .sent ? 1 : 0.75)
                 .accessibilityIdentifier("userBubble")
             status
@@ -301,7 +311,7 @@ private struct ClarifyCard: View {
                 HStack(alignment: .top) {
                     Text(prompt.question ?? String(localized: "Question"))
                         .font(.headline)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.onCard)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Button { answer("") } label: {
                         Image(systemName: "xmark")
@@ -319,16 +329,16 @@ private struct ClarifyCard: View {
                         HStack(spacing: 14) {
                             Text(Self.letter(index))
                                 .font(.footnote)
-                                .foregroundStyle(selection.contains(index) ? Color.black : Color.secondary)
+                                .foregroundStyle(selection.contains(index) ? Color.onAction : Color.secondary)
                                 .frame(width: 30, height: 30)
                                 .background(
-                                    selection.contains(index) ? Color.white : Color(white: 0.22),
+                                    selection.contains(index) ? Color.action : Color.chip,
                                     in: RoundedRectangle(cornerRadius: 8, style: .continuous)
                                 )
-                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color(white: 0.32), lineWidth: 1))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.chipOutline, lineWidth: 1))
                             Text(choice)
                                 .font(.body)
-                                .foregroundStyle(.white)
+                                .foregroundStyle(Color.onCard)
                                 .multilineTextAlignment(.leading)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -348,8 +358,8 @@ private struct ClarifyCard: View {
                 }
             }
             .padding(16)
-            .background(Color(white: 0.14), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(white: 0.24), lineWidth: 1))
+            .background(Color.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color.cardOutline, lineWidth: 1))
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("clarifyCard")
             Text("Or answer in the chat below")
@@ -384,7 +394,7 @@ private struct ApprovalCard: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(prompt.description ?? String(localized: "Approval needed"))
                 .font(.headline)
-                .foregroundStyle(.white)
+                .foregroundStyle(Color.onCard)
             if let command = prompt.command {
                 Text(command)
                     .font(.footnote.monospaced())
@@ -398,8 +408,8 @@ private struct ApprovalCard: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(white: 0.14), in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color(white: 0.24), lineWidth: 1))
+        .background(Color.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color.cardOutline, lineWidth: 1))
     }
 }
 

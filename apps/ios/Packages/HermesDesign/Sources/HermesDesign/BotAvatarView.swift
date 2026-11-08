@@ -9,6 +9,7 @@ public struct BotAvatarView: View {
     private let animated: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @State private var clock: AvatarMoodClock
 
     public init(spec: BotAvatarSpec, size: CGFloat, mood: AvatarMood = .idle, animated: Bool = true) {
@@ -17,12 +18,16 @@ public struct BotAvatarView: View {
         self.mood = mood
         self.animated = animated
         _clock = State(initialValue: AvatarMoodClock(
-            mood: mood, since: Date(), blinkDelay: AvatarBlink.delaySeconds(for: spec.blinkKey), reduceMotion: false
+            mood: mood,
+            since: Date(),
+            blinkDelay: AvatarBlink.delaySeconds(for: spec.blinkKey),
+            loadingSeed: LoadingSequence.seed(for: spec.blinkKey),
+            reduceMotion: false
         ))
     }
 
     public var body: some View {
-        let content = AvatarContent(spec)
+        let content = AvatarContent(spec).toned(for: colorScheme)
         Group {
             if animated {
                 let clock = resolvedClock
@@ -43,6 +48,7 @@ public struct BotAvatarView: View {
     private var resolvedClock: AvatarMoodClock {
         var resolved = clock
         resolved.blinkDelay = AvatarBlink.delaySeconds(for: spec.blinkKey)
+        resolved.loadingSeed = LoadingSequence.seed(for: spec.blinkKey)
         resolved.reduceMotion = reduceMotion
         return resolved
     }

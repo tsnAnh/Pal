@@ -55,12 +55,8 @@ class E2ETestCase: XCTestCase {
         let userField = web.textFields.firstMatch
         XCTAssertTrue(userField.waitForExistence(timeout: 20), app.debugDescription)
         userField.tap()
-        userField.typeText(env.username)
-        let passwordField = web.secureTextFields.firstMatch
-        let done = app.buttons["Done"]
-        if done.waitForExistence(timeout: 3) { done.tap() }
-        passwordField.tap()
-        passwordField.typeText(env.password)
+        userField.typeText(env.username + "\t")
+        web.secureTextFields.firstMatch.typeText(env.password)
         web.buttons.matching(NSPredicate(format: "label ==[c] %@", "Sign in")).firstMatch.tap()
         XCTAssertTrue(roster(app).waitForExistence(timeout: 40), app.debugDescription)
     }
