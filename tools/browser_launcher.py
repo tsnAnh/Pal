@@ -297,13 +297,13 @@ def _wait_for_devtools(proc: subprocess.Popen, user_data_dir: str, deadline: flo
 def _singleton_pid(user_data_dir: str) -> Optional[int]:
     """Pid of the Chromium holding ``user_data_dir``: the ``SingletonLock`` symlink (POSIX), else (Windows
     has no symlink, only a locked ``lockfile``) the browser process whose argv names the dir."""
-    owner = _singleton_owner(user_data_dir)
+    owner = singleton_owner(user_data_dir)
     if owner is None:
         return chromium_pid_on(user_data_dir) if os.name == "nt" else None
     return owner[1]
 
 
-def _singleton_owner(user_data_dir: str) -> Optional[tuple[str, int]]:
+def singleton_owner(user_data_dir: str) -> Optional[tuple[str, int]]:
     """``(hostname, pid)`` Chromium wrote into ``user_data_dir``'s ``SingletonLock`` symlink (POSIX), else None."""
     try:
         target = os.readlink(os.path.join(user_data_dir, "SingletonLock"))
@@ -313,13 +313,13 @@ def _singleton_owner(user_data_dir: str) -> Optional[tuple[str, int]]:
     return (host, int(pid_text)) if pid_text.isdigit() else None
 
 
-def _foreign_holder(user_data_dir: str) -> Optional[int]:
+def foreign_holder(user_data_dir: str) -> Optional[int]:
     """The ``SingletonLock`` pid of a Chromium on ``user_data_dir`` that runs in an environment this process cannot
     verify, else None. Foreign: the lock is not a live process here whose argv names the dir, and it was written
     under another hostname (another host or container; Chromium too refuses such a lock) or names the browser
     of a launch record from another PID namespace. A lock of this hostname with no such record is stale (this
     environment's crashed browser): Chromium itself takes it over, and so does a launch."""
-    owner = _singleton_owner(user_data_dir)
+    owner = singleton_owner(user_data_dir)
     if owner is None:
         return None
     host, pid = owner
@@ -533,7 +533,7 @@ def _start_shared(key: str, executable: str, udd: str, home_key: str, prepare,
     profile instead of waiting (:func:`_reap_shared_profiles`). A browser another environment holds is attached
     through its endpoint, or refused; never launched over."""
     with shared_profile_lock(udd):
-        foreign = _foreign_holder(udd)
+        foreign = foreign_holder(udd)
         if foreign is not None:
             attached = _attach_foreign(key, udd, home_key, foreign)
             if attached is None:

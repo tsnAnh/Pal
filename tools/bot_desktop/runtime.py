@@ -702,21 +702,23 @@ def running_screen_sockets() -> set[str]:
     return found
 
 
-def _refuse_over_cap(own_socket: Path) -> None:
+def _refuse_over_cap(own_socket: Optional[Path]) -> None:
     limit = max_screens()
     if limit <= 0:
         return
-    others = running_screen_sockets() - {str(own_socket)}
-    if len(others) >= limit:
+    from tools.bot_desktop import sandbox_computer
+    others = len(running_screen_sockets() - {str(own_socket)})
+    others += sandbox_computer.running_sandbox_screens(exclude=get_hermes_home())
+    if others >= limit:
         raise ScreenCapReached(
-            f"{len(others)} bot screens are already running on this machine, the limit set by "
+            f"{others} bot screens are already running on this machine, the limit set by "
             f"bot_desktop.max_screens ({limit}). Stop another bot's screen, or raise the limit.")
 
 
 def _sandbox_status(profile: Optional[str], where) -> DesktopStatus:
     """Status of a sandbox-placed screen. Package presence is only known once the sandbox exists; before
     that the pane shows "installed" with the image hint carried in ``install_command`` so Start can explain."""
-    from tools.bot_desktop import sandbox_host
+    from tools.bot_desktop import sandbox_computer, sandbox_host
     env = _owned_sandbox_env() or _sandbox_env(create=False)
     missing = sandbox_host.missing_binaries(env) if env is not None else []
     published = sandbox_host.published_env(env, profile or _profile_name()) if env is not None else {}
@@ -760,6 +762,7 @@ def _sandbox_status(profile: Optional[str], where) -> DesktopStatus:
         placement=f"{placement.TERMINAL}:{where.backend}",
         image_switch=image_switch,
         screen=SCREEN_RUNNING if running else SCREEN_STOPPED,
+        **sandbox_computer.status_fields(),
     )
 
 
@@ -933,7 +936,14 @@ def _start_in_sandbox(wait_seconds: float) -> DesktopStatus:
     sd = state_dir()
     sd.mkdir(parents=True, exist_ok=True)
     os.chmod(sd, 0o700)
-    with _flocked(sd / "start.lock"):
+    with _flocked(sd / "start.lock"), contextlib.ExitStack() as alloc:
+        from tools.bot_desktop import sandbox_computer
+        if not sandbox_host.published_env(env, _profile_name()).get("DISPLAY"):
+            _ALLOC_LOCK.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            alloc.enter_context(_flocked(_ALLOC_LOCK))
+            _refuse_over_cap(None)
+            if sandbox_computer.active(env):
+                sandbox_computer.prepare_launch(env)
         # The dock's Browser icon runs the sandbox's own Playwright Chromium on the profile the agent's browser
         # uses there: the human's browser is the bot's browser, as on the host.
         from tools.bot_desktop.browser import dock_exec_line
@@ -970,6 +980,9 @@ def stop(still_due: Optional[Callable[[], bool]] = None, *, write_back: bool = T
         sandbox_host._marker().unlink(missing_ok=True)
         for name in ("env", "activity"):
             (state_dir() / name).unlink(missing_ok=True)
+        from tools.bot_desktop import sandbox_computer
+        if sandbox_computer.enabled():
+            sandbox_computer.shutdown(env, write=write_back)
         return stopped
     if not is_supported_host():
         return False
@@ -983,7 +996,11 @@ def stop(still_due: Optional[Callable[[], bool]] = None, *, write_back: bool = T
 
 
 def reconcile() -> None:
-    from tools.bot_desktop import chrome_profile, sandbox_host
+    from tools.bot_desktop import chrome_profile, sandbox_computer, sandbox_host
+    if sandbox_computer.enabled():
+        sandbox_computer.reap_orphans_once()
+        sandbox_computer.reconcile(_owned_sandbox_env(), screen_up=sandbox_screen_running())
+        return
     if not is_supported_host() or sandbox_host._read_marker():
         return
     sd = state_dir()
@@ -1007,7 +1024,7 @@ class ResetRefused(RuntimeError):
 def reset() -> list[str]:
     from tools.bot_desktop import sandbox_host
     if sandbox_host._read_marker() or placement.resolve().where == placement.TERMINAL:
-        raise ResetRefused("This bot's screen runs in a sandbox; reset it from there.")
+        return _reset_sandbox()
     stop(write_back=False)
     if is_running():
         raise ResetRefused("The screen is still shutting down. Try again in a moment.")
@@ -1024,6 +1041,27 @@ def reset() -> list[str]:
             else:
                 continue
             removed.append(name)
+    return removed
+
+
+def _reset_sandbox() -> list[str]:
+    from tools.bot_desktop import chrome_profile, sandbox_computer, sandbox_host
+    from tools.browser_launcher import shared_profile_lock
+    if not sandbox_computer.enabled():
+        raise ResetRefused("This bot's screen runs in a sandbox it does not have to itself; reset it from there.")
+    stop(write_back=False)
+    if is_running():
+        raise ResetRefused("The screen is still shutting down. Try again in a moment.")
+    env = _sandbox_env(create=False)
+    sd = state_dir()
+    sd.mkdir(parents=True, exist_ok=True)
+    removed: list[str] = []
+    with _flocked(sd / "start.lock"), shared_profile_lock(str(chrome_profile.copy_dir())):
+        if not sandbox_computer.release_stale_lock(env) or chrome_profile.chrome_running(chrome_profile.copy_dir()):
+            raise ResetRefused("This bot's Chrome is still closing. Try again in a moment.")
+        if env is not None and sandbox_host.wipe_desktop_settings(env, _profile_name()):
+            removed.append("xdg")
+        removed.extend(sandbox_computer.reset_copy())
     return removed
 
 
