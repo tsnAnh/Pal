@@ -34,9 +34,8 @@ final class SiriVoiceControlE2ETests: SiriE2ETestCase {
         signInIfNeeded(app)
         let alpha = try await bot("bot-alpha")
         try await resetBot(alpha, app: app)
-        showChat(app, "bot-alpha")
-        let finishedBefore = bubbles(app, "assistantBubble", containing: "slow-39").count
-        _ = try await definitions.intents["TellBotIntent"].makeIntent(bot: alpha, request: unique("SLOW task to stop")).run()
+        let request = unique("SLOW task to stop")
+        _ = try await definitions.intents["TellBotIntent"].makeIntent(bot: alpha, request: request).run()
         try await waitForStatus("working", of: alpha, timeout: 20)
         let stopped = Date()
         _ = try await definitions.intents["StopBotIntent"].makeIntent(bot: alpha).run()
@@ -44,7 +43,11 @@ final class SiriVoiceControlE2ETests: SiriE2ETestCase {
         XCTAssertLessThan(Date().timeIntervalSince(stopped), 20, "stopping must not wait for the 10s slow stream to end")
         showChat(app, "bot-alpha")
         try await Task.sleep(for: .seconds(3))
-        XCTAssertEqual(bubbles(app, "assistantBubble", containing: "slow-39").count, finishedBefore, "the stopped turn must not run to its end")
+        let asked = bubbles(app, "userBubble", containing: request).firstMatch
+        waitFor(asked, timeout: 10, "the stopped task's message")
+        let finished = app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex
+            .filter { $0.frame.minY > asked.frame.minY && $0.label.contains("slow-39") }
+        XCTAssertTrue(finished.isEmpty, "the stopped turn must not run to its end")
         shot(app, "siri-stop-chat")
         _ = try await definitions.intents["StopBotIntent"].makeIntent(bot: alpha).run()
     }

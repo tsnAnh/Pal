@@ -160,6 +160,31 @@ final class BotChatE2ETests: E2ETestCase {
         XCTAssertLessThanOrEqual(reply.frame.maxY, composer.frame.minY, "the end of the new reply sits above the composer")
     }
 
+    func test9ScrollingBackWhileAReplyStreamsStaysPut() throws {
+        let app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-alpha")
+        for index in 1...6 {
+            let text = String(format: "read-%02d", index)
+            send(app, text)
+            waitFor(bubbles(app, "userBubble", containing: text).firstMatch, timeout: 10, "user bubble \(text)")
+            waitForReply(app, below: text)
+        }
+        let marker = "SLOW read back " + UUID().uuidString.prefix(6)
+        send(app, marker)
+        waitFor(app.descendants(matching: .any)["assistantBubble-streaming"], timeout: 30, "reply starts streaming")
+        let chat = app.descendants(matching: .any)["chatScreen"]
+        chat.swipeDown()
+        chat.swipeDown()
+        Thread.sleep(forTimeInterval: 1)
+        let anchor = try XCTUnwrap((1...6).map { bubbles(app, "userBubble", containing: String(format: "read-%02d", $0)).firstMatch }.first { $0.isHittable }, "an earlier message is on screen after scrolling back")
+        let before = anchor.frame.minY
+        waitForReply(app, below: marker)
+        shot(app, "chat-read-back-while-streaming")
+        XCTAssertTrue(anchor.isHittable, "the message being read stays on screen")
+        XCTAssertEqual(anchor.frame.minY, before, accuracy: 2, "the reply streaming in does not move what the user is reading")
+    }
+
     private func waitForReply(_ app: XCUIApplication, below text: String) {
         let userBubble = bubbles(app, "userBubble", containing: text).firstMatch
         let deadline = Date().addingTimeInterval(60)
