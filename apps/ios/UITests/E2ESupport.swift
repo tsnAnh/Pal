@@ -31,9 +31,13 @@ class E2ETestCase: XCTestCase {
         env = try E2EEnvironment.load()
     }
 
+    private static var signedInToThisRunsGateway = false
+
     func launch(resetCredentials: Bool = false, extraArguments: [String] = []) -> XCUIApplication {
+        let reset = resetCredentials || !Self.signedInToThisRunsGateway
+        Self.signedInToThisRunsGateway = true
         let app = XCUIApplication()
-        app.launchArguments = (resetCredentials ? ["-hermes-reset-credentials"] : []) + extraArguments
+        app.launchArguments = (reset ? ["-hermes-reset-credentials"] : []) + extraArguments
         app.launch()
         return app
     }
@@ -61,17 +65,24 @@ class E2ETestCase: XCTestCase {
         let passwordField = web.secureTextFields.firstMatch
         let done = app.buttons["Done"]
         if done.waitForExistence(timeout: 3) { done.tap() }
-        for attempt in 0..<5 {
-            if attempt == 2 {
+        for attempt in 0..<8 {
+            if attempt % 3 == 2 {
                 userField.tap()
                 userField.typeText("\t")
             } else {
                 passwordField.tap()
             }
-            if passwordField.value(forKey: "hasKeyboardFocus") as? Bool == true { break }
+            guard passwordField.value(forKey: "hasKeyboardFocus") as? Bool == true else {
+                Thread.sleep(forTimeInterval: 0.7)
+                continue
+            }
+            let leftover = (passwordField.value as? String)?.count ?? 0
+            if leftover > 0 { passwordField.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: leftover)) }
+            passwordField.typeText(env.password)
+            if (passwordField.value as? String)?.count == env.password.count { break }
             Thread.sleep(forTimeInterval: 0.7)
         }
-        passwordField.typeText(env.password)
+        XCTAssertEqual((passwordField.value as? String)?.count, env.password.count, "password typed into the sign-in page")
         web.buttons.matching(NSPredicate(format: "label ==[c] %@", "Sign in")).firstMatch.tap()
         XCTAssertTrue(roster(app).waitForExistence(timeout: 40), app.debugDescription)
     }
