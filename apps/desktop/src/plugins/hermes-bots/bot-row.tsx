@@ -8,7 +8,6 @@
 
 import {
   cn,
-  coarseElapsed,
   Codicon,
   ContextMenu,
   ContextMenuCheckboxItem,
@@ -40,7 +39,7 @@ import {
   saveSelectedRosterBot
 } from './bot-state'
 import { BotShareSubmenu } from './bot-template-export'
-import { ensureBotMetadata } from './canonical-chat'
+import { ensureBotMetadata, ensureBotProfile } from './canonical-chat'
 import {
   $botAttention,
   $botMeta,
@@ -68,6 +67,7 @@ import { botRecentSession, openBotRecentSession } from './recent-session'
 import { openRosterBot } from './roster-actions'
 import { rosterPreview } from './roster-preview'
 import { botRosterMeta, botWorkspaceOwnerKey, setBotsWorkspaceOwner } from './routing'
+import { rowAge } from './row-age'
 import {
   botRowOwnsWorkspace,
   botWorkingMood,
@@ -75,7 +75,7 @@ import {
   workerActiveAt
 } from './row-helpers'
 import { openBotScreen } from './screen-open'
-import type { GroupMember, RosterRow, SidebarRowLabels } from './types'
+import type { GroupMember, RosterRow } from './types'
 import {
   $botSections,
   $draggingBot,
@@ -88,17 +88,6 @@ import {
 } from './user-sections'
 
 // ── bot row ──────────────────────────────────────────────────────────────────
-
-/** Row age in the sidebar's compact form ("now", "52m", "3h", "18d").
- *  Deliberately the same `coarseElapsed` + suffix pair the session rows
- *  directly above use, so the two lists in one rail don't disagree about how
- *  an age is spelled. Not `relativeTime` — that's the bidirectional Intl form
- *  ("in 14 hr"), which belongs on a scheduled next-run. */
-function rowAge(ms: number, r: SidebarRowLabels): string {
-  const { unit, value } = coarseElapsed(Date.now() - ms)
-
-  return unit === 'second' ? r.ageNow : `${value}${unit === 'day' ? r.ageDay : unit === 'hour' ? r.ageHour : r.ageMin}`
-}
 
 interface BotRowProps {
   bot: RosterRow
@@ -496,8 +485,8 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
         <ContextMenuSeparator />
         <ContextMenuItem
           onSelect={() =>
-            void ensureBotMetadata(bot)
-              .then(() => onEdit(bot))
+            void ensureBotProfile(bot)
+              .then(onEdit)
               .catch(error => host.notifyError?.(error, b.bot.loadFailed))
           }
         >
@@ -692,7 +681,7 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
     <ContextMenu>
       <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onSelect={() => onOpen(group)}>Open Group Chat</ContextMenuItem>
+        <ContextMenuItem onSelect={() => onOpen(group)}>{b.canonical.openGroup}</ContextMenuItem>
         <ContextMenuSeparator />
         {/* Same affordance as a bot row's pin; pinned rooms lead the roster
             band, and the flag lives on the room record. */}
@@ -701,11 +690,11 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
             const pinned = toggleGroupChatPinned(group)
 
             if (pinned !== null) {
-              host.notify({ kind: 'info', message: `${group} ${pinned ? 'pinned to top' : 'unpinned'}` })
+              host.notify({ kind: 'info', message: pinned ? b.group.groupPinned(group) : b.group.groupUnpinned(group) })
             }
           }}
         >
-          {room.pinned ? 'Unpin' : 'Pin to top'}
+          {room.pinned ? b.group.unpinGroup : b.group.pinGroup}
         </ContextMenuItem>
         {/* Filing — the same submenu a bot row gets, driving the room-record
             assignment instead of profile meta. */}
@@ -745,7 +734,7 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
             })
           }
         >
-          {b.group.deleteAction}
+          {b.group.disbandAction}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

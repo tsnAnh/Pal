@@ -163,6 +163,9 @@ class _FakeEvent:
     def get_command(self) -> str | None:
         return None
 
+    def stamp_typed_text(self) -> None:
+        return None
+
 
 @pytest.mark.asyncio
 async def test_gateway_new_turn_gets_paused_reply(hermes_home):

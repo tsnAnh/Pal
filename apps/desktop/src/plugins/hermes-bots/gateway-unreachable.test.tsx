@@ -1,4 +1,5 @@
 import type * as HermesSdk from '@hermes/plugin-sdk'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { atom } from 'nanostores'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -29,7 +30,12 @@ vi.mock('@hermes/plugin-sdk', async importOriginal => {
   }
 })
 
-import { $canonicalGroupBindings, $canonicalGroupLink, CanonicalGroupList } from './canonical-group-registry'
+import {
+  $canonicalGroupBindings,
+  $canonicalGroupLink,
+  refreshGatewayGroupRooms,
+  useGatewayGroupRooms
+} from './canonical-group-registry'
 import { useBots } from './i18n'
 import { GatewayRetryButton, GatewayUnreachableNotice } from './roster-pane-toolbar'
 
@@ -46,15 +52,30 @@ class RpcError extends Error {
   }
 }
 
+function GatewayRooms() {
+  const rooms = useGatewayGroupRooms()
+
+  return (
+    <>
+      <button onClick={refreshGatewayGroupRooms} type="button">
+        Refresh gateway groups
+      </button>
+      {rooms.map(room => (
+        <span key={room.key}>{room.name}</span>
+      ))}
+    </>
+  )
+}
+
 function Harness() {
   const b = useBots()
 
   return (
-    <>
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <GatewayRetryButton b={b} />
       <GatewayUnreachableNotice b={b} />
-      <CanonicalGroupList onOpen={() => undefined} />
-    </>
+      <GatewayRooms />
+    </QueryClientProvider>
   )
 }
 
@@ -94,8 +115,23 @@ it('an unreachable gateway shows a calm notice and a Retry button, never the raw
 
   expect(await screen.findByText(TITLE)).toBeTruthy()
   expect(screen.getByText('Reconnecting automatically…')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy()
   expect(screen.queryByText(RAW)).toBeNull()
   expect(screen.queryByRole('alert')).toBeNull()
+
+  reachable = true
+  gateway.set('open')
+
+  await waitFor(() => expect(requestProfile).toHaveBeenCalled())
+  await waitFor(() => expect(screen.queryByText(TITLE)).toBeNull())
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
+})
+
+it('Retry re-reads the groups of an open gateway that dropped a request', async () => {
+  gateway.set('open')
+  render(<Harness />)
+
+  expect(await screen.findByText(TITLE)).toBeTruthy()
 
   const calls = requestProfile.mock.calls.length
   reachable = true
@@ -103,7 +139,6 @@ it('an unreachable gateway shows a calm notice and a Retry button, never the raw
 
   await waitFor(() => expect(requestProfile.mock.calls.length).toBeGreaterThan(calls))
   await waitFor(() => expect(screen.queryByText(TITLE)).toBeNull())
-  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
 })
 
 describe('on a connected gateway a groups.list failure is not an unreachable gateway', () => {

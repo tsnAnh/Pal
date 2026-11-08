@@ -45,6 +45,7 @@ def build_cron_parser(subparsers, *, cmd_cron: Callable) -> None:
         help="Delivery target: origin, local, telegram, discord, signal, "
             "platform:chat_id, or bot-chat[:profile] (inject output into a "
             "local profile's canonical Bot Chat as a message the bot responds to), "
+            "room:<room_id>[@profile] (post into a Group Chat; wakes only the Bots it @mentions), "
             "or active (alert the device you are using, falling back to your recent "
             "messaging chat or home channel)")
     cron_create.add_argument("--failure-deliver", dest="failure_deliver",

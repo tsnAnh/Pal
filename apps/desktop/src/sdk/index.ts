@@ -110,6 +110,7 @@ import type { UsageStats } from '@/types/hermes'
 
 import type { SessionMutationSnapshot } from '../../../shared/src/session-http-mutations'
 
+import { logBotWake } from './bot-wake-log'
 import { pluginDecisions, profiles, skills, toolsets } from './bridge'
 import { composerHost } from './composer'
 import { i18nHost } from './i18n'
@@ -1118,7 +1119,7 @@ export const host = {
 
           // Logged per attempt so a support bundle shows the retry happened at
           // all; the terminal failure is reported once by the catch below.
-          console.warn('[bot-wake] hydration timed out, retrying', {
+          logBotWake('hydration timed out, retrying', {
             attempt,
             hydrationWaitMs: Date.now() - profileActiveAt,
             profile: targetProfile,
@@ -1135,7 +1136,7 @@ export const host = {
       ) {
         const timedOutAt = Date.now()
 
-        console.warn('[bot-wake] hydration timed out', {
+        logBotWake('hydration timed out', {
           attempts: wakePhase === 'hydration' ? maxAttempts : 1,
           hydrationWaitMs: wakePhase === 'hydration' ? timedOutAt - profileActiveAt : 0,
           phase: wakePhase,
@@ -1255,7 +1256,7 @@ export const host = {
       const openTab = $newSessionTabAction.get()
 
       if (!openTab) {
-        notify({ kind: 'error', message: 'Update Hermes Desktop to open another Bot chat.' })
+        notify({ kind: 'error', message: 'Update Hermes Desktop to open another bot chat.' })
 
         return
       }
@@ -1554,6 +1555,9 @@ export {
   type ComposerModelPillContext,
   type ComposerModelPillProvider
 } from '@/app/chat/composer/contrib'
+/** The main composer's surface pieces, so a plugin composer (Bot Mode rooms) reads as the
+ *  same input: the ring, the fill layer behind the editor, and the ghost / primary icon buttons. */
+export { GHOST_ICON_BTN, PRIMARY_ICON_BTN } from '@/app/chat/composer/control-classes'
 /** THE session status dot — the one primitive the sidebar row, the pane tabs
  *  and the session switcher render, so a session's status can never disagree
  *  between surfaces. Pass the STORED session id and it resolves the rest
@@ -1584,6 +1588,7 @@ export { WorkspacePageHeaderControl } from '@/app/contrib/workspace-page-header'
  *  that prints a next run switches its label on this (`t.cron.next` →
  *  `t.cron.overdueSince`) so a dead scheduler never reads as "Next: 7 hr ago". */
 export { nextRunOverdueMs } from '@/app/cron/job-state'
+
 /** Master-detail components for pane content; the overlay-bound Panel root is deliberately private. */
 export {
   PanelAction,
@@ -1603,7 +1608,6 @@ export {
   PanelRowMenu,
   PanelSectionLabel
 } from '@/app/overlays/panel'
-
 export {
   type ProfileGroupHeaderContribution,
   type ProfileGroupRoute,
@@ -1669,6 +1673,7 @@ export { ClarifyShell } from '@/components/assistant-ui/clarify/core/shell'
  * `MEDIA:` delivery directives) and the same rich Markdown/media components as
  * core chat. Prefer this over raw Streamdown for transcript-style messages. */
 export { MessageTextContent } from '@/components/assistant-ui/markdown-text'
+export { composerInputBacking, composerSurfaceRing } from '@/components/chat/composer-dock'
 /** The oversized Collapse lettering an empty chat is titled with — core writes
  *  "HERMES AGENT" with it, a `chat.empty` contribution writes its own name. */
 export { Wordmark } from '@/components/chat/wordmark'

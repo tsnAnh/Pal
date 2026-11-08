@@ -8,7 +8,7 @@ export interface WindowButtonPosition {
 }
 
 export const WINDOW_BUTTON_POSITION: WindowButtonPosition = {
-  x: 24,
+  x: 12,
   y: TITLEBAR_HEIGHT / 2 - MACOS_TRAFFIC_LIGHTS_HEIGHT / 2
 }
 

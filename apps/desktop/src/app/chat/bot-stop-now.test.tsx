@@ -7,6 +7,7 @@ import { BotStopNow, useChatHalt } from './bot-stop-now'
 
 vi.mock('@/store/notifications', () => ({ notifyError: vi.fn() }))
 vi.mock('@/store/composer-queue', () => ({ parkQueuedPrompts: vi.fn() }))
+vi.mock('@/app/session/hooks/use-session-actions/utils', () => ({ resolveSessionProfile: async () => undefined }))
 
 afterEach(() => {
   cleanup()

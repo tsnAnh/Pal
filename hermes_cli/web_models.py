@@ -505,6 +505,11 @@ class SkillToggle(BaseModel):
     enabled: bool
     profile: Optional[str] = None
 
+class SkillLock(BaseModel):
+    name: str
+    locked: bool
+    profile: Optional[str] = None
+
 class SkillCreate(BaseModel):
     name: str
     content: str
@@ -582,4 +587,7 @@ class _PluginProvidersPutBody(BaseModel):
 
 class _PluginVisibilityBody(BaseModel):
     hidden: bool
+
+class _PluginAutoUpdateBody(BaseModel):
+    enabled: bool
 
