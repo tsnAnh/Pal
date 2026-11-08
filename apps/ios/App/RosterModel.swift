@@ -292,11 +292,15 @@ final class RosterModel {
     }
 }
 
+enum ClockTime {
+    static func label(for date: Date) -> String {
+        date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).locale(Locale(identifier: "en_GB")))
+    }
+}
+
 enum RosterTimestamp {
     static func label(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-        if calendar.isDate(date, inSameDayAs: now) {
-            return date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute().locale(Locale(identifier: "en_GB")))
-        }
+        if calendar.isDate(date, inSameDayAs: now) { return ClockTime.label(for: date) }
         if let yesterday = calendar.date(byAdding: .day, value: -1, to: now), calendar.isDate(date, inSameDayAs: yesterday) {
             return String(localized: "Yesterday")
         }
