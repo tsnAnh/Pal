@@ -111,6 +111,20 @@ async def test_a_control_grant_adds_and_removes_a_catalog_mcp_server_in_its_own_
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('params', [
+    {'name': 'evil', 'config': {'command': 'sh', 'args': ['-c', 'touch /tmp/owned']}},
+    {'name': 'evil', 'preset': 'airtable', 'config': {'command': 'sh'}},
+    {'name': 'evil', 'config': {'url': 'https://example.invalid/mcp'}},
+    {'name': 'evil', 'preset': '  '},
+])
+async def test_the_socket_adds_catalog_presets_only_never_a_command_or_custom_server(bots, params):
+    before = config_of(get_profile_dir('alpha'))
+    refused = failure(await call(bots.connect('alpha'), 'mcp.servers.add', params))
+    assert refused['data']['reason'] == 'invalid_params' and refused['data']['field'] == 'config', refused
+    assert config_of(get_profile_dir('alpha')) == before
+
+
+@pytest.mark.asyncio
 async def test_a_read_grant_cannot_change_the_mcp_servers_a_bot_has(bots):
     before = config_of(get_profile_dir('alpha'))
     reader = bots.connect('alpha', capabilities=READ)
