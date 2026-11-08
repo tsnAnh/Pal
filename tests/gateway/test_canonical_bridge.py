@@ -98,6 +98,30 @@ async def test_skills_only_lists_and_never_installs_over_the_socket(bots):
 
 
 @pytest.mark.asyncio
+async def test_a_control_grant_adds_and_removes_a_catalog_mcp_server_in_its_own_profile(bots):
+    connection = bots.connect('alpha')
+    added = await call(connection, 'mcp.servers.add', {'name': 'airtable', 'preset': 'airtable'})
+    assert 'error' not in added, added
+    CANONICAL_METHODS['mcp.servers.add'].result.model_validate(added['result'])
+    assert 'airtable' in (config_of(get_profile_dir('alpha')).get('mcp_servers') or {})
+    assert 'airtable' not in (config_of(bots.root).get('mcp_servers') or {})
+    removed = await call(connection, 'mcp.servers.remove', {'name': 'airtable'})
+    assert removed['result']['removed'] is True, removed
+    assert 'airtable' not in (config_of(get_profile_dir('alpha')).get('mcp_servers') or {})
+
+
+@pytest.mark.asyncio
+async def test_a_read_grant_cannot_change_the_mcp_servers_a_bot_has(bots):
+    before = config_of(get_profile_dir('alpha'))
+    reader = bots.connect('alpha', capabilities=READ)
+    for method, params in (('mcp.servers.add', {'name': 'airtable', 'preset': 'airtable'}),
+                           ('mcp.servers.remove', {'name': 'airtable'}),
+                           ('mcp.servers.set_api_key', {'name': 'airtable', 'value': 'secret-value'})):
+        assert failure(await call(reader, method, params))['message'] == 'permission_denied', method
+    assert config_of(get_profile_dir('alpha')) == before
+
+
+@pytest.mark.asyncio
 async def test_a_routed_write_lands_in_the_owning_profiles_home_only(bots):
     connection = bots.connect(host=True)
     changed = await call(connection, 'permissions.set_auto_review', {'profile': 'alpha', 'enabled': False})
