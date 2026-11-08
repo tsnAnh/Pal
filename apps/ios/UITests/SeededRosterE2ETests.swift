@@ -14,7 +14,7 @@ final class SeededRosterE2ETests: E2ETestCase {
     }
 
     func test1RosterShowsTheEightParityBots() throws {
-        let app = launch(resetCredentials: true)
+        let app = launch(resetCredentials: true, extraArguments: ["-hermes-reset-preferences"])
         signInIfNeeded(app)
         for slug in Self.paritySlugs {
             waitFor(app.buttons["botRow-\(slug)"], timeout: 30, "row \(slug)")

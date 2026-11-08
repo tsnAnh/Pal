@@ -13,5 +13,8 @@ enum LaunchPreferences {
         for key in [AppearanceStore.defaultsKey, SettingsDefaults.hapticsKey, SettingsDefaults.pushKey] {
             defaults.removeObject(forKey: key)
         }
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(ChatLastSeenStore.keyPrefix) {
+            defaults.removeObject(forKey: key)
+        }
     }
 }

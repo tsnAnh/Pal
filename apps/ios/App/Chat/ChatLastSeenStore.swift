@@ -18,7 +18,9 @@ struct ChatLastSeenStore {
         defaults.set(date.timeIntervalSince1970, forKey: Self.key(botName))
     }
 
+    static let keyPrefix = "hermes.chat.lastSeen."
+
     static func key(_ botName: String) -> String {
-        "hermes.chat.lastSeen.\(botName)"
+        keyPrefix + botName
     }
 }

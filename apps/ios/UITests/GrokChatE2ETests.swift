@@ -10,7 +10,7 @@ final class GrokChatE2ETests: E2ETestCase {
     }
 
     private func openChat(_ slug: String, extra: [String] = []) -> XCUIApplication {
-        let app = launch(extraArguments: ["-\(AppearanceStore.defaultsKey)", AppearanceMode.dark.rawValue] + extra)
+        let app = launch(extraArguments: ["-hermes-reset-preferences", "-\(AppearanceStore.defaultsKey)", AppearanceMode.dark.rawValue] + extra)
         signInIfNeeded(app)
         openBot(app, slug)
         return app
