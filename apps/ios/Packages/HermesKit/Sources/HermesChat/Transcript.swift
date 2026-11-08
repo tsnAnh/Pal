@@ -38,6 +38,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         case user(text: String, delivery: Delivery)
         case assistant(text: String, reasoning: String, isStreaming: Bool)
         case tool(ToolCall)
+        case clarifyAnswered(ClarifyRecord)
         case clarify(PromptCard)
         case approval(PromptCard)
     }
@@ -124,7 +125,7 @@ public struct Transcript: Sendable, Equatable {
 
     public mutating func load(_ snapshot: SessionSnapshot) {
         sessionID = snapshot.sessionID
-        items = snapshot.messages.compactMap(Self.item(from:))
+        items = snapshot.messages.flatMap(Self.items(from:))
         for admission in snapshot.pending where admission.status == .queued {
             guard let text = admission.text, !text.isEmpty else { continue }
             items.append(TranscriptItem(
@@ -147,6 +148,7 @@ public struct Transcript: Sendable, Equatable {
             case .user(let text, _): Summary.Entry(kind: "user", text: text)
             case .assistant(let text, _, _): Summary.Entry(kind: "assistant", text: text)
             case .tool(let call): Summary.Entry(kind: "tool", text: call.name)
+            case .clarifyAnswered(let record): Summary.Entry(kind: "clarify-answered", text: record.summaryText)
             case .clarify(let card): Summary.Entry(kind: "clarify", text: card.prompt.question ?? "")
             case .approval(let card): Summary.Entry(kind: "approval", text: card.prompt.command ?? "")
             }
@@ -195,23 +197,32 @@ public struct Transcript: Sendable, Equatable {
         currentSegment = nil
     }
 
-    private static func item(from message: WireMessage) -> TranscriptItem? {
+    private static func items(from message: WireMessage) -> [TranscriptItem] {
         let id = message.rowID.map { "row:\($0)" } ?? UUID().uuidString
         switch message.role {
         case "user":
-            guard message.displayKind != "hidden" else { return nil }
-            return TranscriptItem(id: id, content: .user(text: message.plainText, delivery: .sent))
+            guard message.displayKind != "hidden" else { return [] }
+            return [TranscriptItem(id: id, content: .user(text: message.plainText, delivery: .sent))]
         case "assistant":
             let text = message.plainText
-            guard !text.isEmpty else { return nil }
-            return TranscriptItem(id: id, content: .assistant(text: text, reasoning: message.reasoning ?? "", isStreaming: false))
+            guard !text.isEmpty else { return [] }
+            return [TranscriptItem(id: id, content: .assistant(text: text, reasoning: message.reasoning ?? "", isStreaming: false))]
         case "tool":
             let toolID = message.toolCallID ?? id
-            return TranscriptItem(id: "tool:\(toolID)", content: .tool(ToolCall(
+            if message.name == nil || message.name == "clarify", let result = ClarifyResult(json: message.plainText) {
+                return answeredItems(toolID: toolID, records: result.records)
+            }
+            return [TranscriptItem(id: "tool:\(toolID)", content: .tool(ToolCall(
                 toolID: toolID, name: message.name ?? "tool", status: .finished, summary: nil
-            )))
+            )))]
         default:
-            return nil
+            return []
+        }
+    }
+
+    private static func answeredItems(toolID: String, records: [ClarifyRecord]) -> [TranscriptItem] {
+        records.enumerated().map { index, record in
+            TranscriptItem(id: "tool:\(toolID)#\(index)", content: .clarifyAnswered(record))
         }
     }
 
@@ -245,7 +256,11 @@ public struct Transcript: Sendable, Equatable {
             currentSegment = nil
             upsertTool(ToolCall(toolID: start.toolID, name: start.name, status: .running, summary: start.preview))
         case .toolComplete(let complete):
-            upsertTool(ToolCall(toolID: complete.toolID, name: complete.name, status: .finished, summary: complete.summary))
+            if complete.name == "clarify", let result = ClarifyResult(json: complete.result ?? complete.resultText) {
+                recordAnswers(toolID: complete.toolID, records: result.records)
+            } else {
+                upsertTool(ToolCall(toolID: complete.toolID, name: complete.name, status: .finished, summary: complete.summary))
+            }
         case .clarifyRequest(let prompt), .approvalRequest(let prompt):
             addCard(prompt)
         case .clarifySettled(let settled), .approvalSettled(let settled):
@@ -393,6 +408,16 @@ public struct Transcript: Sendable, Equatable {
             items[index].content = .tool(merged)
         } else {
             items.append(TranscriptItem(id: id, content: .tool(call)))
+        }
+    }
+
+    private mutating func recordAnswers(toolID: String, records: [ClarifyRecord]) {
+        let answered = Self.answeredItems(toolID: toolID, records: records)
+        guard !items.contains(where: { $0.id == answered.first?.id }) else { return }
+        if let index = items.firstIndex(where: { $0.id == "tool:\(toolID)" }) {
+            items.replaceSubrange(index...index, with: answered)
+        } else {
+            items.append(contentsOf: answered)
         }
     }
 

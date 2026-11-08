@@ -1,3 +1,4 @@
+import HermesChat
 import HermesDesign
 import HermesProtocol
 import HermesRoster
@@ -168,6 +169,8 @@ private struct ChatRowView: View {
                 UserBubble(text: text, delivery: delivery, accent: model.bot.accent) { id in model.retry(id) }
             case .assistant(let text, let streaming):
                 AssistantBubble(text: text, isStreaming: streaming)
+            case .clarifyAnswered(let question, let answer):
+                ClarifyAnsweredCard(question: question, answer: answer)
             case .clarify(let prompt):
                 ClarifyCard(prompt: prompt) { answer in model.answer(prompt, with: answer) }
             case .approval(let prompt):
@@ -358,6 +361,54 @@ private struct ClarifyCard: View {
 
     private static func letter(_ index: Int) -> String {
         String(Character(UnicodeScalar(UInt8(ascii: "A") + UInt8(index % 26))))
+    }
+}
+
+private struct ClarifyAnsweredCard: View {
+    let question: String
+    let answer: ClarifyRecord.Answer
+
+    private var picks: [String] {
+        if case .answered(let picks) = answer { picks } else { [] }
+    }
+
+    private var spokenAnswer: String {
+        picks.isEmpty ? String(localized: "Skipped") : picks.joined(separator: ", ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(question)
+                .font(.headline)
+                .foregroundStyle(Color.onCard)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if picks.isEmpty {
+                Text("Skipped")
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(picks.enumerated()), id: \.offset) { _, pick in
+                    HStack(spacing: 14) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Color.onAction)
+                            .frame(width: 30, height: 30)
+                            .background(Color.action, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        Text(pick)
+                            .font(.body)
+                            .foregroundStyle(Color.onCard)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.card, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous).stroke(Color.cardOutline, lineWidth: 1))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(question), \(spokenAnswer)"))
+        .accessibilityIdentifier("clarifyAnswered")
     }
 }
 

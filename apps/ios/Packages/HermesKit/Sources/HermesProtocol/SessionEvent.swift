@@ -18,6 +18,7 @@ public struct ToolComplete: Codable, Sendable, Hashable {
     public var toolID: String
     public var name: String
     public var summary: String?
+    public var result: String?
     public var resultText: String?
     public var durationSeconds: Double?
 
@@ -25,8 +26,19 @@ public struct ToolComplete: Codable, Sendable, Hashable {
         case toolID = "tool_id"
         case name
         case summary
+        case result
         case resultText = "result_text"
         case durationSeconds = "duration_s"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        toolID = try container.decode(String.self, forKey: .toolID)
+        name = try container.decode(String.self, forKey: .name)
+        summary = try? container.decodeIfPresent(String.self, forKey: .summary)
+        result = try? container.decodeIfPresent(String.self, forKey: .result)
+        resultText = try? container.decodeIfPresent(String.self, forKey: .resultText)
+        durationSeconds = try? container.decodeIfPresent(Double.self, forKey: .durationSeconds)
     }
 }
 

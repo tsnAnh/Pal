@@ -16,6 +16,7 @@ struct ChatRow: Identifiable, Equatable {
     enum Kind: Equatable {
         case user(text: String, delivery: BubbleDelivery)
         case assistant(text: String, isStreaming: Bool)
+        case clarifyAnswered(question: String, answer: ClarifyRecord.Answer)
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
     }
@@ -229,10 +230,12 @@ final class ChatModel {
                 if case .failed = byID[item.id]?.state, let entry = byID[item.id] { state = .failed(submissionID: entry.submissionID) }
                 append(item.id, .user(text: text, delivery: state))
             case .assistant(let text, _, let streaming):
-                if text.isEmpty, !streaming { continue }
-                append(item.id, .assistant(text: text, isStreaming: streaming))
+                if streaming || text.isEmpty { continue }
+                append(item.id, .assistant(text: text, isStreaming: false))
             case .tool:
                 continue
+            case .clarifyAnswered(let record):
+                append(item.id, .clarifyAnswered(question: record.question, answer: record.answer))
             case .clarify(let card):
                 append(item.id, .clarify(card.prompt))
             case .approval(let card):
@@ -248,7 +251,7 @@ final class ChatModel {
             case .admitted: continue
             }
         }
-        if shouldShowThinking(tail: built.last) { append(Self.thinkingRowID, .assistant(text: "", isStreaming: true)) }
+        if shouldShowThinking { append(Self.thinkingRowID, .assistant(text: "", isStreaming: true)) }
         rows = built
         isRunning = transcript.isRunning
         hasPendingClarify = pendingClarify != nil
@@ -257,10 +260,8 @@ final class ChatModel {
 
     private static let thinkingRowID = "thinking"
 
-    private func shouldShowThinking(tail: ChatRow?) -> Bool {
-        guard transcript.isRunning, transcript.pendingPrompts.isEmpty else { return false }
-        if case .assistant(_, true)? = tail?.kind { return false }
-        return true
+    private var shouldShowThinking: Bool {
+        transcript.isRunning && transcript.pendingPrompts.isEmpty
     }
 
     private static func outboxDirectory(for name: String) -> URL {

@@ -59,6 +59,72 @@ final class BotChatPresentationE2ETests: E2ETestCase {
         waitFor(bubbles(app, "assistantBubble", containing: "stub-tool-final").firstMatch, timeout: 60, "turn completes after deny")
     }
 
+    func test3AnsweredClarifyStaysOnScreenWithoutRawJSON() throws {
+        let app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-beta")
+        send(app, "CLARIFY pick one")
+        let card = app.descendants(matching: .any)["clarifyCard"]
+        waitFor(card, timeout: 60, "clarify card")
+        app.buttons["clarifyChoice-1"].tap()
+        waitFor(bubbles(app, "assistantBubble", containing: "chocolate").firstMatch, timeout: 60, "turn completes after the answer")
+
+        let answered = answeredCards(app, containing: "chocolate")
+        waitFor(answered.firstMatch, timeout: 10, "answered card shows the question and the pick")
+        XCTAssertTrue(answered.firstMatch.label.contains("Which flavor do you want?"), answered.firstMatch.label)
+        XCTAssertFalse(card.exists, "interactive card is gone")
+        XCTAssertTrue(bubbles(app, "assistantBubble", containing: "Got it, chocolate").firstMatch.exists, "reply is a plain sentence")
+        XCTAssertEqual(rawJSONBubbles(app).count, 0, "no raw JSON in any bubble\n" + app.debugDescription)
+        shot(app, "chat-clarify-answered")
+
+        app.terminate()
+        let relaunched = launch()
+        signInIfNeeded(relaunched)
+        openBot(relaunched, "bot-beta")
+        waitFor(answeredCards(relaunched, containing: "chocolate").firstMatch, timeout: 30, "answered card is still there after relaunch")
+        XCTAssertEqual(rawJSONBubbles(relaunched).count, 0, "no raw JSON after relaunch\n" + relaunched.debugDescription)
+        shot(relaunched, "chat-clarify-answered-reopened")
+    }
+
+    func test4ReplyAppearsWholeAfterThinking() throws {
+        let app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-alpha")
+        send(app, "SLOW show it whole")
+        let partial = bubbles(app, "assistantBubble", containing: "slow-")
+        let streamingPartial = bubbles(app, "assistantBubble-streaming", containing: "slow-")
+        let thinking = app.descendants(matching: .any).matching(identifier: "assistantBubble-streaming")
+            .matching(NSPredicate(format: "label == %@", "Thinking"))
+        let whole = bubbles(app, "assistantBubble", containing: "slow-39")
+
+        var thinkingSamples = 0
+        let deadline = Date().addingTimeInterval(90)
+        while Date() < deadline, !whole.firstMatch.exists {
+            if partial.firstMatch.exists, !whole.firstMatch.exists {
+                XCTFail("partial reply was shown while streaming: \(partial.firstMatch.label)")
+                return
+            }
+            XCTAssertFalse(streamingPartial.firstMatch.exists, "streaming text is not shown")
+            if thinking.firstMatch.exists { thinkingSamples += 1 }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        XCTAssertTrue(whole.firstMatch.exists, "whole reply arrived")
+        XCTAssertGreaterThanOrEqual(thinkingSamples, 5, "thinking bubble stays up until the reply is complete")
+        XCTAssertTrue(whole.firstMatch.label.contains("slow-00"), "reply starts at its first word")
+        waitGone(thinking.firstMatch, timeout: 15, "thinking bubble gone once the reply is shown")
+        shot(app, "chat-reply-whole")
+    }
+
+    private func answeredCards(_ app: XCUIApplication, containing text: String) -> XCUIElementQuery {
+        bubbles(app, "clarifyAnswered", containing: text)
+    }
+
+    private func rawJSONBubbles(_ app: XCUIApplication) -> XCUIElementQuery {
+        app.descendants(matching: .any).matching(NSPredicate(
+            format: "identifier BEGINSWITH %@ AND (label CONTAINS %@ OR label CONTAINS %@)", "assistantBubble", "{", "user_response"
+        ))
+    }
+
     private func toolRows(_ app: XCUIApplication) -> XCUIElementQuery {
         app.descendants(matching: .any).matching(NSPredicate(
             format: "label BEGINSWITH %@ OR label BEGINSWITH %@ OR label CONTAINS[c] %@", "Running ", "Used ", "terminal"
