@@ -17,6 +17,7 @@ const HSL = new RegExp(
 )
 
 const DARK_LUMINANCE = 110
+const WHITE_LUMINANCE = 230
 
 type Rgb = [number, number, number]
 
@@ -86,10 +87,22 @@ function colorRgb(value: string): null | Rgb {
   return hsl ? hslRgb(hsl[1], hsl[2], hsl[3]) : null
 }
 
-export function isDarkAvatarColor(value: string): boolean {
+function luminance(value: string): null | number {
   const rgb = colorRgb(value)
 
-  return rgb ? 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2] < DARK_LUMINANCE : false
+  return rgb ? 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2] : null
+}
+
+export function isDarkAvatarColor(value: string): boolean {
+  const level = luminance(value)
+
+  return level !== null && level < DARK_LUMINANCE
+}
+
+export function isWhiteAvatarColor(value: string): boolean {
+  const level = luminance(value)
+
+  return level !== null && level >= WHITE_LUMINANCE
 }
 
 export const LIGHT_EYE_FILL = '#f3f4fd'

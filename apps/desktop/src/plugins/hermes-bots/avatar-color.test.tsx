@@ -141,11 +141,11 @@ describe('eyes stay visible on any body', () => {
 
     const dark = render(<BotFace color="#1a1a2a" name="alpha" shape="circle" size={48} />)
 
-    expect(dark.container.querySelector('[data-hb-eye] rect')?.getAttribute('fill')).toBe('#f3f4fd')
+    expect(dark.container.querySelector('[data-hb-eye] path')?.getAttribute('fill')).toBe('#f3f4fd')
     dark.unmount()
 
     const light = render(<BotFace color="#fde68a" name="alpha" shape="circle" size={48} />)
 
-    expect(light.container.querySelector('[data-hb-eye] rect')?.getAttribute('fill')).toBe('#1b1b1b')
+    expect(light.container.querySelector('[data-hb-eye] path')?.getAttribute('fill')).toBe('#1b1b1b')
   })
 })
