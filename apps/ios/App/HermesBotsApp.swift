@@ -16,6 +16,7 @@ struct HermesBotsApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        LaunchPreferences.applyReset()
         let model = ConnectionModel.live()
         _model = State(initialValue: model)
         let roster = RosterModel(connection: model)
