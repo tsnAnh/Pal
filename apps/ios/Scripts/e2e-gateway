@@ -107,6 +107,7 @@ dashboard:
     password: $PASSWORD
     secret: $SECRET
 YAML
+[ "$SEED" = "parity" ] && printf 'timezone: Asia/Ho_Chi_Minh\n' >>"$HOME_DIR/config.yaml"
 chmod 600 "$HOME_DIR/config.yaml"
 
 hermes() {
