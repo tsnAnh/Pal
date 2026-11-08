@@ -30,7 +30,9 @@ TOOL_FINAL_PREFIX = "stub-tool-final "
 TOOL_COMMANDS = {
     "TOOLCALL": "sleep 6",
     "APPROVE": 'cd "$(mktemp -d)" && git reset --hard',
+    "STEER": "echo hermes-stub-steer-probe",
 }
+TOOL_PREAMBLE_CHUNKS = {"STEER": 60}
 
 log_lock = threading.Lock()
 
@@ -71,6 +73,22 @@ def tool_names(body):
         if isinstance(function, dict) and function.get("name"):
             names.append(function["name"])
     return names
+
+
+def image_parts(body):
+    found = []
+    for message in body.get("messages") or []:
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict) or part.get("type") not in ("image_url", "input_image"):
+                continue
+            url = part.get("image_url")
+            url = url.get("url") if isinstance(url, dict) else url
+            if isinstance(url, str):
+                found.append({"mime": url.split(";")[0].removeprefix("data:"), "length": len(url)})
+    return found
 
 
 def dm_replies():
@@ -153,7 +171,11 @@ def plan(body):
     if "terminal" in names and tool_trigger and last_role == "tool":
         return "text", [TOOL_FINAL_PREFIX + text_of(last.get("content"))], NORMAL_DELAY
     if "terminal" in names and tool_trigger and last_role == "user":
-        return "tool", {"name": "terminal", "arguments": {"command": TOOL_COMMANDS[tool_trigger]}}, 0
+        call = {"name": "terminal", "arguments": {"command": TOOL_COMMANDS[tool_trigger]}}
+        if tool_trigger in TOOL_PREAMBLE_CHUNKS:
+            preamble = words(tool_trigger.lower(), TOOL_PREAMBLE_CHUNKS[tool_trigger])
+            return "tool", {**call, "preamble": preamble}, SLOW_DELAY
+        return "tool", call, 0
     if "clarify" in names and last_role == "tool":
         return "final", "Clarify answered: " + text_of(last.get("content")), NORMAL_DELAY
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:
@@ -206,6 +228,7 @@ class Handler(BaseHTTPRequestHandler):
             "stream": bool(body.get("stream")),
             "plan": kind,
             "tools": tool_names(body),
+            "images": image_parts(body),
             "messages": [{"role": m.get("role"), "content": text_of(m.get("content"))} for m in body.get("messages") or []],
         }
         with log_lock, open(self.log_path, "a", encoding="utf-8") as handle:
@@ -238,6 +261,7 @@ class Handler(BaseHTTPRequestHandler):
             message["tool_calls"] = [{"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}]
             finish = "tool_calls"
         elif kind == "tool":
+            message["content"] = "".join(content.get("preamble", [])) or None
             message["tool_calls"] = [self.scripted_call(content)]
             finish = "tool_calls"
         else:
@@ -265,6 +289,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.chunk({"tool_calls": [{"index": 0, "function": {"arguments": arguments[half:]}}]}, None)
                 self.chunk({}, "tool_calls")
             elif kind == "tool":
+                for piece in content.get("preamble", []):
+                    self.chunk({"content": piece}, None)
+                    time.sleep(delay)
                 self.chunk({"tool_calls": [{"index": 0, **self.scripted_call(content)}]}, None)
                 self.chunk({}, "tool_calls")
             else:

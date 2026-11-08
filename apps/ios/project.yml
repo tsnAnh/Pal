@@ -105,6 +105,7 @@ targets:
       - target: HermesBots
       - package: HermesDesign
         product: HermesDesign
+      - sdk: AppIntentsTesting.framework
 schemes:
   HermesBots:
     build:

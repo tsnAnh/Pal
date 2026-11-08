@@ -40,6 +40,7 @@ final class RosterModel {
     private(set) var celebrating: Set<String> = []
     private(set) var capabilities = RosterCapabilities()
     private(set) var adminError: BotAdminError?
+    var drafts: [String: String] = [:]
 
     private let connection: ConnectionModel
     private var photos: [String: Data] = [:]
@@ -241,7 +242,7 @@ final class RosterModel {
         )
     }
 
-    static func displayName(name: String, displayName: String?, uiMeta: [String: Any]?) -> String {
+    nonisolated static func displayName(name: String, displayName: String?, uiMeta: [String: Any]?) -> String {
         let botMeta = uiMeta?["hermes-bots"] as? [String: Any]
         if let title = (botMeta?["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
             return title
@@ -256,7 +257,7 @@ final class RosterModel {
         return words.split(separator: " ").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }
 
-    private static func displayName(of profile: RosterProfile) -> String {
+    nonisolated static func displayName(of profile: RosterProfile) -> String {
         displayName(name: profile.name, displayName: profile.displayName, uiMeta: profile.uiMeta.flatMap(dictionary(from:)))
     }
 
@@ -286,7 +287,7 @@ final class RosterModel {
         return Data(base64Encoded: String(url[url.index(after: comma)...]))
     }
 
-    private static func dictionary(from value: JSONValue) -> [String: Any]? {
+    private nonisolated static func dictionary(from value: JSONValue) -> [String: Any]? {
         guard let data = try? JSONEncoder().encode(value) else { return nil }
         return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
     }

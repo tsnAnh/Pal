@@ -82,6 +82,12 @@ struct ChatView: View {
         .toolbarTitleDisplayMode(.inline)
         .background(Color(theme.palette.canvas))
         .task { model.start() }
+        .onChange(of: model.pendingDraft, initial: true) { _, pending in
+            guard let pending else { return }
+            draft = pending
+            model.clearPendingDraft()
+            composerFocused = true
+        }
         .onDisappear {
             dictation.stop()
             model.stop()

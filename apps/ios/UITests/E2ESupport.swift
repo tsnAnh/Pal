@@ -7,6 +7,7 @@ struct E2EEnvironment {
     let password: String
     let controlDirectory: String?
     let shotsDirectory: String?
+    let stubLogPath: String?
 
     static func load() throws -> E2EEnvironment {
         let env = ProcessInfo.processInfo.environment
@@ -15,7 +16,8 @@ struct E2EEnvironment {
             username: try XCTUnwrap(env["HERMES_UITEST_USERNAME"], "HERMES_UITEST_USERNAME not set"),
             password: try XCTUnwrap(env["HERMES_UITEST_PASSWORD"], "HERMES_UITEST_PASSWORD not set"),
             controlDirectory: env["HERMES_UITEST_CTL"],
-            shotsDirectory: env["HERMES_UITEST_SHOTS"]
+            shotsDirectory: env["HERMES_UITEST_SHOTS"],
+            stubLogPath: env["HERMES_UITEST_STUB_LOG"]
         )
     }
 }

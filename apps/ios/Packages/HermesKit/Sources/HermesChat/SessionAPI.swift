@@ -15,6 +15,7 @@ public struct StagedImage: Decodable, Sendable, Hashable {
     public var path: String
     public var mime: String
     public var name: String
+    public var text: String?
 
     public var promptAttachment: PromptAttachment { PromptAttachment(path: path, mime: mime) }
 }
@@ -41,6 +42,11 @@ public struct PromptAttachment: Codable, Sendable, Hashable {
         self.path = path
         self.mime = mime
     }
+}
+
+public enum SteerStatus: String, Sendable, Equatable {
+    case queued
+    case rejected
 }
 
 public protocol ChatConnector: Sendable {
@@ -172,6 +178,22 @@ public struct SessionAPI: Sendable {
             "choice": .string(choice),
         ])
         return try decode(PromptResponseResult.self, result, "approval.respond")
+    }
+
+    public func interrupt(sessionID: String, executionGeneration: Int) async throws {
+        _ = try await call("session.interrupt", [
+            "session_id": .string(sessionID),
+            "execution_generation": .int(executionGeneration),
+        ])
+    }
+
+    public func steer(sessionID: String, text: String, executionGeneration: Int) async throws -> SteerStatus {
+        let result = try await call("session.steer", [
+            "session_id": .string(sessionID),
+            "text": .string(text),
+            "execution_generation": .int(executionGeneration),
+        ])
+        return SteerStatus(rawValue: result["status"]?.stringValue ?? "") ?? .rejected
     }
 
     public func profiles() async throws -> ProfilesListResult {

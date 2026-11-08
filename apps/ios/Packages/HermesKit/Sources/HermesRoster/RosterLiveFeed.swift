@@ -188,17 +188,12 @@ public actor RosterLiveFeed {
 
     private func refresh(_ connection: GatewayConnection) async {
         do {
-            let result = try await connection.call("profiles.list", params: ["include_sessions": true])
-            let rows = result["profiles"]?.arrayValue ?? []
-            let live = await Self.liveStates(for: rows, on: connection)
-            try Task.checkCancellation()
-            busy = live.values.contains { state in
+            let snapshot = try await RosterSnapshotFetcher.fetch(on: connection)
+            busy = snapshot.live.values.contains { state in
                 state.sessions.contains { $0 == .working || $0 == .starting || $0 == .waiting }
             }
             lastRefresh = clock.now
-            continuation.yield(.snapshot(RosterSnapshot(
-                profiles: rows, live: live, receivedAt: Date(), capabilities: RosterCapabilities(listResult: result)
-            )))
+            continuation.yield(.snapshot(snapshot))
         } catch is CancellationError {
             return
         } catch GatewayTransportError.rpc(let error) {
@@ -210,45 +205,9 @@ public actor RosterLiveFeed {
         }
     }
 
-    private static func liveStates(for rows: [JSONValue], on connection: GatewayConnection) async -> [String: BotLiveState] {
-        await withTaskGroup(of: (String, BotLiveState).self) { group in
-            for row in rows {
-                guard let name = row["name"]?.stringValue else { continue }
-                let worker = row["worker_session"]?["last_active"]?.timeIntervalValue
-                let onboarding = row["onboarding_pending"]?.boolValue ?? false
-                group.addTask {
-                    let sessions = await activeSessions(of: name, on: connection)
-                    return (name, BotLiveState(sessions: sessions, workerLastActive: worker, onboardingPending: onboarding))
-                }
-            }
-            var states: [String: BotLiveState] = [:]
-            for await (name, state) in group { states[name] = state }
-            return states
-        }
-    }
-
-    private static func activeSessions(of profile: String, on connection: GatewayConnection) async -> [LiveSessionStatus] {
-        guard let result = try? await connection.call("session.active_list", params: ["profile": .string(profile)]),
-              let rows = result["sessions"]?.arrayValue
-        else { return [] }
-        return rows.map { row in
-            row["status"]?.stringValue.flatMap(LiveSessionStatus.init(rawValue:)) ?? .unknown
-        }
-    }
-
     private func publish(link next: GatewayLink) {
         guard link != next else { return }
         link = next
         continuation.yield(.link(next))
-    }
-}
-
-extension JSONValue {
-    fileprivate var timeIntervalValue: TimeInterval? {
-        switch self {
-        case .int(let value): TimeInterval(value)
-        case .double(let value): value
-        default: nil
-        }
     }
 }

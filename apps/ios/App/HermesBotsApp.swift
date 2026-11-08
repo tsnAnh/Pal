@@ -1,3 +1,4 @@
+import AppIntents
 import HermesClient
 import HermesDesign
 import SwiftUI
@@ -13,6 +14,8 @@ struct HermesBotsApp: App {
     @State private var appearance: AppearanceStore
     @State private var consent: DeviceConsentPresenter
     @State private var hostPool: DeviceHostPool
+    @State private var links: BotLinks
+    @State private var directory = BotDirectory()
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -30,11 +33,15 @@ struct HermesBotsApp: App {
         _offers = State(initialValue: ReachOfferModel(presence: model.presence) { sessionID in
             router.openChat(sessionID: sessionID, in: roster)
         })
+        let links = BotLinks(connection: model)
+        _links = State(initialValue: links)
+        let environment = IntentEnvironment(connection: model, roster: roster, router: router, links: links)
+        AppDependencyManager.shared.add(dependency: environment)
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(model: model, roster: roster, router: router, hostPool: hostPool)
+            RootView(model: model, roster: roster, router: router, hostPool: hostPool, links: links)
                 .overlay { ReachOfferOverlay(model: offers) }
                 .deviceConsentAlert(consent)
                 .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
@@ -48,6 +55,9 @@ struct HermesBotsApp: App {
                 }
                 .onChange(of: model.isConnected, initial: true) { _, connected in
                     if connected { Task { await appDelegate.push.ensureRegistered() } }
+                }
+                .onChange(of: roster.bots) { _, bots in
+                    Task { await directory.publish(bots) }
                 }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await model.restore() } }
@@ -67,14 +77,16 @@ struct RootView: View {
     let roster: RosterModel
     @Bindable var router: AppRouter
     let hostPool: DeviceHostPool
+    let links: BotLinks
     @State private var createBot = CreateBotModel()
     @State private var bots: BotsKit
 
-    init(model: ConnectionModel, roster: RosterModel, router: AppRouter, hostPool: DeviceHostPool) {
+    init(model: ConnectionModel, roster: RosterModel, router: AppRouter, hostPool: DeviceHostPool, links: BotLinks) {
         self.model = model
         self.roster = roster
         self.router = router
         self.hostPool = hostPool
+        self.links = links
         _bots = State(initialValue: BotsKit(connection: model))
     }
 
@@ -87,7 +99,7 @@ struct RootView: View {
                         switch route {
                         case .chat(let name):
                             if let bot = roster.bot(named: name) {
-                                ChatView(model: ChatModel(bot: bot, connection: model, roster: roster), router: router)
+                                ChatView(model: ChatModel(bot: bot, links: links, roster: roster), router: router)
                             }
                         case .botProfile(let name):
                             BotProfileView(
