@@ -7,6 +7,7 @@ import Synchronization
 
 public actor ReachPresence {
     public nonisolated let offers: AsyncStream<ReachOffer>
+    public nonisolated let deviceID: String
 
     private struct Route {
         weak var connection: GatewayConnection?
@@ -28,6 +29,7 @@ public actor ReachPresence {
 
     public init(identity: DeviceIdentity, attention: ReachAttention = .foreground, diagnostics: Diagnostics = .silent) {
         self.identity = identity
+        deviceID = identity.deviceID
         self.attention = attention
         self.diagnostics = diagnostics
         (offers, offerContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)

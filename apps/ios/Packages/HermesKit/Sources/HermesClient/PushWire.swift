@@ -56,3 +56,32 @@ public enum PushWire {
         ["device_id": .string(deviceID)]
     }
 }
+
+public struct PushTarget: Sendable, Equatable {
+    public let profile: String
+    public let sessionID: String?
+
+    public init(profile: String, sessionID: String?) {
+        self.profile = profile
+        self.sessionID = sessionID
+    }
+}
+
+extension PushWire {
+    private static let maximumProfileLength = 64
+    private static let maximumSessionIDLength = 128
+
+    public static func target(fromUserInfo userInfo: [AnyHashable: Any]) -> PushTarget? {
+        guard let profile = userInfo["profile"] as? String, isUsable(profile: profile) else { return nil }
+        let session = (userInfo["session_id"] as? String).flatMap { $0.isEmpty || $0.utf8.count > maximumSessionIDLength ? nil : $0 }
+        return PushTarget(profile: profile, sessionID: session)
+    }
+
+    private static func isUsable(profile: String) -> Bool {
+        guard (1...maximumProfileLength).contains(profile.utf8.count) else { return false }
+        return profile.utf8.allSatisfy { byte in
+            (byte >= 48 && byte <= 57) || (byte >= 65 && byte <= 90) || (byte >= 97 && byte <= 122)
+                || byte == 45 || byte == 46 || byte == 95
+        }
+    }
+}

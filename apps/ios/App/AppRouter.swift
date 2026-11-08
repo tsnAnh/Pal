@@ -1,3 +1,4 @@
+import HermesClient
 import HermesRoster
 import Observation
 
@@ -93,6 +94,19 @@ final class AppRouter {
         case .viewProfile: push(.botProfile(botName: botName))
         case .shareAsTemplate: shareAsTemplateHandler?(botName)
         }
+    }
+
+    func openChat(from target: PushTarget, in roster: RosterModel) {
+        let name = roster.bot(named: target.profile)?.name
+            ?? target.sessionID.flatMap { roster.botName(forSessionID: $0) }
+            ?? target.profile
+        sheet = nil
+        if path.last != .chat(botName: name) { path = [.chat(botName: name)] }
+    }
+
+    func dropUnresolvedChat(in roster: RosterModel) {
+        guard roster.isLoaded, case .chat(let name)? = path.last, roster.bot(named: name) == nil else { return }
+        popToRoot()
     }
 
     @discardableResult

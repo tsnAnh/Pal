@@ -1,9 +1,11 @@
 import HermesClient
 import HermesDesign
 import SwiftUI
+import UIKit
 
 @main
 struct HermesBotsApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model: ConnectionModel
     @State private var roster: RosterModel
     @State private var offers: ReachOfferModel
@@ -31,6 +33,14 @@ struct HermesBotsApp: App {
                 .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
                 .task { await model.restore() }
                 .task { await offers.listen() }
+                .task {
+                    appDelegate.push.attach(presence: model.presence) { target in
+                        router.openChat(from: target, in: roster)
+                    }
+                }
+                .onChange(of: model.isConnected, initial: true) { _, connected in
+                    if connected { Task { await appDelegate.push.ensureRegistered() } }
+                }
                 .onChange(of: scenePhase) { _, phase in
                     if phase == .active { Task { await model.restore() } }
                 }
@@ -98,6 +108,7 @@ struct RootView: View {
                     }
             }
             .task { await roster.runLive() }
+            .onChange(of: roster.bots, initial: true) { _, _ in router.dropUnresolvedChat(in: roster) }
             .onAppear {
                 router.registerShareAsTemplate { name in Task { await bots.sharer.share(botName: name) } }
             }

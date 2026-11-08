@@ -26,6 +26,10 @@ targets:
     platform: iOS
     sources:
       - App
+    entitlements:
+      path: App/HermesBots.entitlements
+      properties:
+        aps-environment: development
     info:
       path: App/Info.plist
       properties:

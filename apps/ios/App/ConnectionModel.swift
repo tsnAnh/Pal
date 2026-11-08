@@ -60,24 +60,26 @@ final class ConnectionModel {
             try? store.clear()
         }
         let transport = URLSessionHTTPTransport()
-        let auth: AuthSession
-        var keychainUnavailable = false
-        do {
-            auth = try AuthSession(store: store, transport: transport, diagnostics: diagnostics)
-        } catch KeychainError.corruptItem {
-            try? store.clear()
-            auth = Self.keychainSession(store: store, transport: transport, diagnostics: diagnostics)
-        } catch {
-            diagnostics.info("auth", "credentials unavailable at launch: \(Diagnostics.describe(error))")
-            keychainUnavailable = true
-            auth = try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics)
-        }
         let identity = DeviceIdentity.resolve(
             store: KeychainDeviceIDStore(),
             formFactor: Self.formFactor(of: UIDevice.current.userInterfaceIdiom),
             appVersion: DeviceIdentity.appVersion(of: .main),
+            model: Self.hardwareModel(),
+            os: "iOS \(UIDevice.current.systemVersion)",
             diagnostics: diagnostics
         )
+        let auth: AuthSession
+        var keychainUnavailable = false
+        do {
+            auth = try AuthSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: identity.deviceID)
+        } catch KeychainError.corruptItem {
+            try? store.clear()
+            auth = Self.keychainSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: identity.deviceID)
+        } catch {
+            diagnostics.info("auth", "credentials unavailable at launch: \(Diagnostics.describe(error))")
+            keychainUnavailable = true
+            auth = try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: identity.deviceID)
+        }
         return ConnectionModel(
             auth: auth,
             transport: transport,
@@ -96,14 +98,28 @@ final class ConnectionModel {
         }
     }
 
-    private static func keychainSession(store: KeychainCredentialStore, transport: any HTTPTransport, diagnostics: Diagnostics) -> AuthSession {
-        (try? AuthSession(store: store, transport: transport, diagnostics: diagnostics))
-            ?? (try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics))
+    private static func keychainSession(
+        store: KeychainCredentialStore,
+        transport: any HTTPTransport,
+        diagnostics: Diagnostics,
+        deviceID: String
+    ) -> AuthSession {
+        (try? AuthSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: deviceID))
+            ?? (try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: deviceID))
+    }
+
+    private static func hardwareModel() -> String {
+        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] { return simulated }
+        var system = utsname()
+        uname(&system)
+        return withUnsafeBytes(of: &system.machine) { buffer in
+            String(decoding: buffer.prefix { $0 != 0 }, as: UTF8.self)
+        }
     }
 
     private func reloadKeychainCredentialsIfNeeded() {
         guard keychainUnavailable else { return }
-        guard let reloaded = try? AuthSession(store: KeychainCredentialStore(), transport: transport, diagnostics: diagnostics) else { return }
+        guard let reloaded = try? AuthSession(store: KeychainCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID) else { return }
         auth = reloaded
         keychainUnavailable = false
     }
@@ -143,7 +159,7 @@ final class ConnectionModel {
         }
         phase = .signingIn
         do {
-            let credentials = try await NativeSignIn(transport: transport, diagnostics: diagnostics)
+            let credentials = try await NativeSignIn(transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID)
                 .signIn(baseURL: baseURL, browser: browser)
             try await auth.adopt(credentials)
         } catch {
@@ -193,6 +209,7 @@ final class ConnectionModel {
     }
 
     func signOut() async {
+        await presence.unregisterPush()
         await connection?.close()
         connection = nil
         client = nil

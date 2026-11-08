@@ -295,3 +295,44 @@ struct DeviceCodeExchangeTests {
         }
     }
 }
+
+@Suite("Push payload")
+struct PushPayloadTests {
+    private func payload(profile: Any? = "cho-ua", session: Any? = "20260508_101010_abc") -> [AnyHashable: Any] {
+        var info: [AnyHashable: Any] = ["aps": ["alert": ["title": "chó UA", "body": "Finished"], "thread-id": "cho-ua"]]
+        if let profile { info["profile"] = profile }
+        if let session { info["session_id"] = session }
+        return info
+    }
+
+    @Test("the payload the gateway builds opens that bot's chat")
+    func gatewayPayload() {
+        #expect(PushWire.target(fromUserInfo: payload()) == PushTarget(profile: "cho-ua", sessionID: "20260508_101010_abc"))
+    }
+
+    @Test("the session id is optional")
+    func noSession() {
+        #expect(PushWire.target(fromUserInfo: payload(session: nil)) == PushTarget(profile: "cho-ua", sessionID: nil))
+        #expect(PushWire.target(fromUserInfo: payload(session: 42))?.sessionID == nil)
+        #expect(PushWire.target(fromUserInfo: payload(session: String(repeating: "s", count: 200)))?.sessionID == nil)
+    }
+
+    @Test("a notification naming no usable bot opens nothing", arguments: ["", "../etc/passwd", "a b", "bot/other", String(repeating: "a", count: 65)])
+    func unusableProfile(profile: String) {
+        #expect(PushWire.target(fromUserInfo: payload(profile: profile)) == nil)
+    }
+
+    @Test("a notification without a text profile opens nothing")
+    func missingProfile() {
+        #expect(PushWire.target(fromUserInfo: payload(profile: nil)) == nil)
+        #expect(PushWire.target(fromUserInfo: payload(profile: 7)) == nil)
+        #expect(PushWire.target(fromUserInfo: ["aps": [:]]) == nil)
+    }
+
+    @Test("the default bot and dotted or underscored names are usable")
+    func usableNames() {
+        for name in ["default", "market_researcher", "a.b-c", "Bot9"] {
+            #expect(PushWire.target(fromUserInfo: payload(profile: name))?.profile == name)
+        }
+    }
+}
