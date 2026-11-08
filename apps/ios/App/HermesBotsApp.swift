@@ -28,7 +28,7 @@ struct HermesBotsApp: App {
         WindowGroup {
             RootView(model: model, roster: roster, router: router)
                 .overlay { ReachOfferOverlay(model: offers) }
-                .hermesTheme(mode: appearance.mode, botAccent: roster.hero?.accent)
+                .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
                 .task { await model.restore() }
                 .task { await offers.listen() }
                 .onChange(of: scenePhase) { _, phase in
@@ -45,12 +45,13 @@ struct RootView: View {
     let model: ConnectionModel
     let roster: RosterModel
     @Bindable var router: AppRouter
+    @State private var createBot = CreateBotModel()
 
     var body: some View {
         switch model.phase {
         case .connected:
             NavigationStack(path: $router.path) {
-                RosterView(roster: roster, connection: model) { router.present(.settings) }
+                HomeView(roster: roster, connection: model, router: router)
                     .navigationDestination(for: AppRoute.self) { route in
                         switch route {
                         case .chat(let name):
@@ -61,11 +62,16 @@ struct RootView: View {
                     }
             }
             .task { await roster.runLive() }
-            .sheet(item: $router.sheet) { sheet in
+            .sheet(item: $router.sheet, onDismiss: { createBot = CreateBotModel() }) { sheet in
                 switch sheet {
                 case .settings:
                     SettingsSheet(model: model) { router.dismissSheet() }
+                case .createBot:
+                    CreateBotSheet(model: createBot, roster: roster, router: router)
                 }
+            }
+            .fullScreenCover(isPresented: $router.isSearching) {
+                SearchHost(roster: roster, router: router)
             }
         case .connecting:
             ProgressView("Connecting")

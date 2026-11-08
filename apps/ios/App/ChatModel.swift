@@ -153,9 +153,10 @@ final class ChatModel {
         }
         await refreshOutbox()
         var delay = Duration.milliseconds(500)
+        let intro = roster.takeIntro(for: bot.name)
         while !Task.isCancelled {
             do {
-                try await session.start()
+                try await session.start(intro: intro)
                 return
             } catch {
                 isOffline = true
