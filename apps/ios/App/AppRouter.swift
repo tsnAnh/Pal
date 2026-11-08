@@ -100,8 +100,7 @@ final class AppRouter {
         let name = roster.bot(named: target.profile)?.name
             ?? target.sessionID.flatMap { roster.botName(forSessionID: $0) }
             ?? target.profile
-        sheet = nil
-        if path.last != .chat(botName: name) { path = [.chat(botName: name)] }
+        openChat(botName: name)
     }
 
     func dropUnresolvedChat(in roster: RosterModel) {
