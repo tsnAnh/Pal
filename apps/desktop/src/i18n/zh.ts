@@ -4396,6 +4396,11 @@ export const zhOverrides = {
       allowSession: '允许本会话',
       alwaysAllowMenu: '始终允许…',
       jumpToApproval: '需要审批',
+      botTitle: '需要你的同意',
+      botBody: '这可能会更改或删除某些内容。要允许吗？',
+      showDetails: '显示详情',
+      hideDetails: '隐藏详情',
+      botAlwaysDescription: '此机器人在任何聊天中执行此类操作前都不会再询问。',
       reject: '拒绝',
       alwaysTitle: '始终允许此命令？',
       alwaysDescription: pattern =>
