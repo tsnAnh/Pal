@@ -5,6 +5,7 @@ import HermesClient
 import HermesDiagnostics
 import HermesProtocol
 import HermesREST
+import HermesRFB
 import HermesTransport
 import Observation
 import UIKit
@@ -181,6 +182,14 @@ final class ConnectionModel {
         connection = fresh
         await previous?.close()
         return fresh
+    }
+
+    static let displayStreamPath = "/api/display/ws"
+
+    func displayTransport(path: String, ticket: String) async throws -> any RFBTransport {
+        guard path == Self.displayStreamPath, let baseURL = await auth.baseURL else { throw HermesClientError.notSignedIn }
+        let url = baseURL.webSocketEndpoint(path, query: [URLQueryItem(name: "display_ticket", value: ticket)])
+        return WebSocketRFBTransport(url: url, diagnostics: diagnostics)
     }
 
     func signOut() async {

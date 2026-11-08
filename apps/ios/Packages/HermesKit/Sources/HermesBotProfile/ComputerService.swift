@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import HermesDiagnostics
 import HermesProtocol
@@ -26,9 +27,19 @@ public struct ComputerLeaseSnapshot: Sendable, Equatable {
     public let humanHolds: Bool
     public let ask: String?
     public let askAt: Double?
+    private let holderHash: String?
+
+    public func isHeld(by viewerID: String) -> Bool {
+        humanHolds && holderHash == Self.hash(of: viewerID)
+    }
+
+    static func hash(of viewerID: String) -> String {
+        SHA256.hash(data: Data(viewerID.utf8)).map { String(format: "%02x", $0) }.joined().prefix(12).description
+    }
 
     init(_ wire: DisplayLeaseWire?) {
         humanHolds = wire?.holder == "human"
+        holderHash = wire?.viewerHash
         let ask = wire?.ask ?? ""
         self.ask = ask.isEmpty ? nil : ask
         askAt = ask.isEmpty ? nil : wire?.askAt

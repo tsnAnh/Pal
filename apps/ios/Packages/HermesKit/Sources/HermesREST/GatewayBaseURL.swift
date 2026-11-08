@@ -53,8 +53,8 @@ public struct GatewayBaseURL: Sendable, Hashable, Codable {
         return components.url!
     }
 
-    public func webSocketEndpoint(_ path: String) -> URL {
-        var components = URLComponents(url: endpoint(path), resolvingAgainstBaseURL: false)!
+    public func webSocketEndpoint(_ path: String, query: [URLQueryItem] = []) -> URL {
+        var components = URLComponents(url: endpoint(path, query: query), resolvingAgainstBaseURL: false)!
         components.scheme = components.scheme == "https" ? "wss" : "ws"
         return components.url!
     }

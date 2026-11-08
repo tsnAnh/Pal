@@ -8,6 +8,7 @@ enum AppRoute: Hashable {
     case library(botName: String)
     case routines(botName: String)
     case slack(botName: String)
+    case computer(botName: String)
 }
 
 enum AppSheet: String, Identifiable {

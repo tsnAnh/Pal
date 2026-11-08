@@ -114,12 +114,12 @@ struct BotProfileView: View {
                     icon: .symbol("books.vertical"),
                     accessibilityIdentifier: "profileLibraryRow"
                 ) { router.push(.library(botName: model.botName)) }
-                SettingsRow.value(
+                SettingsRow.navigate(
                     String(localized: "Computer"),
                     value: model.computer?.text ?? "",
                     icon: .symbol("display"),
                     accessibilityIdentifier: "profileComputerRow"
-                )
+                ) { router.push(.computer(botName: model.botName)) }
             }
             .padding(.top, ProfileMetrics.editToCards)
             SectionCaption(String(localized: "Configure bot"), accessibilityIdentifier: "profileConfigureCaption")

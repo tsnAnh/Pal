@@ -164,4 +164,15 @@ struct ComputerServiceTests {
         }
         #expect(bots.calls(to: "display.lease.resolve").isEmpty)
     }
+
+    @Test("control is mine only when the human holder's hash is my viewer id's hash")
+    func heldBy() async throws {
+        let bots = ScriptedBots()
+        let hash = "d4348d76f869"
+        bots.script("display.lease.acquire", ["lease": ["holder": "human", "viewer_hash": .string(hash), "ask": "", "ask_at": 0.0]])
+        let lease = try await ComputerService(gateway: bots.gateway).takeControl(for: "cho-ua", viewerID: "viewer-minted")
+        #expect(lease.humanHolds)
+        #expect(lease.isHeld(by: "someone-else") == false)
+        #expect(lease.isHeld(by: "viewer-minted"))
+    }
 }

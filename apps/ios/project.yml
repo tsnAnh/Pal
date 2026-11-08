@@ -70,6 +70,8 @@ targets:
         product: HermesRoster
       - package: HermesKit
         product: HermesBotProfile
+      - package: HermesKit
+        product: HermesRFB
       - package: HermesDesign
         product: HermesDesign
   HermesBotsUITests:

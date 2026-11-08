@@ -1,11 +1,14 @@
 import HermesBotProfile
 import HermesDiagnostics
+import HermesRFB
 
 struct BotsServices: Sendable {
     let profiles: BotProfileService
     let library: LibraryService
     let routines: RoutineService
     let slack: SlackService
+    let computer: ComputerService
+    let openDisplayStream: @Sendable (ComputerObservation) async throws -> any RFBTransport
 
     @MainActor
     init(connection: ConnectionModel) {
@@ -14,6 +17,10 @@ struct BotsServices: Sendable {
         library = LibraryService(gateway: gateway)
         routines = RoutineService(gateway: gateway)
         slack = SlackService(gateway: gateway)
+        computer = ComputerService(gateway: gateway)
+        openDisplayStream = { observation in
+            try await connection.displayTransport(path: observation.path, ticket: observation.ticket)
+        }
     }
 }
 

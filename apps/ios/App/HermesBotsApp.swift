@@ -77,6 +77,17 @@ struct RootView: View {
                             LibraryView(model: LibraryModel(botName: name, services: bots.services))
                         case .routines(let name):
                             RoutinesView(model: RoutinesModel(botName: name, services: bots.services))
+                        case .computer(let name):
+                            let bot = roster.bot(named: name)
+                            ComputerView(
+                                model: ComputerModel(
+                                    botName: name,
+                                    service: bots.services.computer,
+                                    openStream: bots.services.openDisplayStream
+                                ),
+                                title: bot?.displayName ?? name,
+                                spec: bot?.spec
+                            )
                         case .slack(let name):
                             SlackView(model: SlackModel(
                                 botName: name,
