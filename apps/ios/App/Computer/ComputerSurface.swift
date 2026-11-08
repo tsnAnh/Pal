@@ -25,7 +25,8 @@ struct ComputerSurface: UIViewRepresentable {
         view.canControl = canControl
         view.trackpad = trackpad && canControl
         view.recenter(token: recenterToken)
-        view.setKeyboard(shown: keyboardShown && canControl)
+        let shown = keyboardShown && canControl
+        DispatchQueue.main.async { view.setKeyboard(shown: shown) }
     }
 }
 
