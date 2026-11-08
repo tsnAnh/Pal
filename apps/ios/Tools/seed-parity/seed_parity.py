@@ -369,10 +369,10 @@ def require_sandbox_home(home):
     return resolved
 
 
-def seed(home, repo):
+def seed(home, repo, dm_replies):
     home = require_sandbox_home(home)
     os.environ["HERMES_HOME"] = str(home)
-    write_dm_replies(os.environ["HERMES_IOS_E2E_DM_REPLIES"])
+    write_dm_replies(dm_replies)
     sys.path.insert(0, str(repo))
     asyncio.run(seed_through_gateway(home, datetime.now().astimezone()))
     print(",".join(slugs()))
@@ -385,11 +385,12 @@ def main():
     seed_parser = commands.add_parser("seed", help="through the running gateway (HERMES_IOS_TEST_* env) write titles and looks, mint each Bot Chat, then write its transcript; profiles must already exist")
     seed_parser.add_argument("--home", required=True, type=Path)
     seed_parser.add_argument("--repo", required=True, type=Path)
+    seed_parser.add_argument("--dm-replies", required=True, type=Path)
     args = parser.parse_args()
     if args.command == "slugs":
         print(",".join(slugs()))
     else:
-        seed(args.home, args.repo)
+        seed(args.home, args.repo, args.dm_replies)
 
 
 if __name__ == "__main__":

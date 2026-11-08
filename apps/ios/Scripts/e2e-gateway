@@ -141,12 +141,11 @@ export HERMES_IOS_TEST_PASSWORD="$PASSWORD"
 export HERMES_IOS_E2E_HOME="$HOME_DIR"
 export HERMES_IOS_E2E_PROFILES="$(IFS=,; echo "${PROFILES[*]}")"
 export HERMES_IOS_E2E_STUB_LOG="$STUB_LOG"
-export HERMES_IOS_E2E_DM_REPLIES="$DM_REPLIES"
 export HERMES_IOS_E2E_STUB_URL="$STUB_URL"
 export HERMES_IOS_E2E_GATEWAY_LOG="$GATEWAY_LOG"
 
 if [ "$SEED" = "parity" ]; then
-  "$PYTHON" -I "$SEED_TOOL" seed --home "$HOME_DIR" --repo "$GATEWAY_REPO" >"$WORK_DIR/seed.log" 2>&1 \
+  "$PYTHON" -I "$SEED_TOOL" seed --home "$HOME_DIR" --repo "$GATEWAY_REPO" --dm-replies "$DM_REPLIES" >"$WORK_DIR/seed.log" 2>&1 \
     || { echo "seed parity failed" >&2; cat "$WORK_DIR/seed.log" >&2; exit 1; }
 fi
 
