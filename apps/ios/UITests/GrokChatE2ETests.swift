@@ -88,7 +88,7 @@ final class GrokChatE2ETests: E2ETestCase {
         let screenshot = app.screenshot()
         let scale = CGFloat(screenshot.image.cgImage?.width ?? Int(width)) / width
         let sample = try color(at: CGPoint(x: user.frame.minX + 5, y: user.frame.midY), in: screenshot, scale: scale)
-        let accent = try XCTUnwrap(RGB(hexString: "#d6264a"))
+        let accent = try XCTUnwrap(RGB(hexString: "#ed0a37"))
         let delta = max(abs(sample.red - accent.red), abs(sample.green - accent.green), abs(sample.blue - accent.blue))
         XCTAssertLessThan(delta, 0.05, "user bubble is filled with the bot accent, rendered \(sample.hexString)")
         shot(app, "send-accent")
