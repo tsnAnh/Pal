@@ -1,8 +1,10 @@
 import argparse
 import json
+import re
 import sys
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MODEL = "stub-model"
@@ -10,8 +12,16 @@ NORMAL_CHUNKS = 40
 NORMAL_DELAY = 0.02
 SLOW_CHUNKS = 40
 SLOW_DELAY = 0.25
+HOLD_SECONDS = 12
 CLARIFY_QUESTION = "Which flavor do you want?"
 CLARIFY_CHOICES = ["vanilla", "chocolate"]
+DM_PROMPT_PREFIX = "MESSAGE_AGENT "
+DM_BODY_MARKER = " :: "
+DM_STAMP = re.compile(r"\AMessage from \U0001f916 .+? \(@[A-Za-z0-9_-]+\): ?(.*)\Z", re.DOTALL)
+DM_REPLY_FIELD = re.compile(r'"reply":\s*("(?:[^"\\]|\\.)*")')
+DM_DEFAULT_REPLY = "Đã nhận, em xử lý ngay."
+DM_SENT_REPLY = "Đã nhắn."
+dm_replies_path = None
 
 log_lock = threading.Lock()
 
@@ -33,16 +43,49 @@ def tool_names(body):
     return names
 
 
+def dm_replies():
+    if not dm_replies_path:
+        return {}
+    try:
+        with open(dm_replies_path, encoding="utf-8") as handle:
+            return json.load(handle)
+    except (OSError, ValueError):
+        return {}
+
+
+def dm_plan(last_role, last, last_user, names):
+    if last_role == "tool" and "delivery_id" in text_of(last.get("content")):
+        return "final", DM_SENT_REPLY, NORMAL_DELAY
+    if last_role != "user":
+        return None
+    if last_user.startswith(DM_PROMPT_PREFIX) and "message_agent" in names:
+        target, _, message = last_user[len(DM_PROMPT_PREFIX):].partition(DM_BODY_MARKER)
+        return "tool", {"name": "message_agent", "arguments": {"target": target.strip(), "message": message}}, 0
+    stamped = DM_STAMP.match(last_user.strip())
+    if stamped:
+        return "final", dm_replies().get(stamped.group(1).strip(), DM_DEFAULT_REPLY), NORMAL_DELAY
+    if last_user.lstrip().startswith("[IMPORTANT: Background process") and '"reply"' in last_user:
+        found = DM_REPLY_FIELD.search(last_user)
+        reply = json.loads(found.group(1)) if found else ""
+        return "final", reply or DM_SENT_REPLY, NORMAL_DELAY
+    return None
+
+
 def plan(body):
     messages = body.get("messages") or []
     names = tool_names(body)
     last = messages[-1] if messages else {}
     last_role = last.get("role")
     last_user = next((text_of(m.get("content")) for m in reversed(messages) if m.get("role") == "user"), "")
+    scripted = dm_plan(last_role, last, last_user, names)
+    if scripted:
+        return scripted
     if "clarify" in names and last_role == "tool":
         return "final", "Clarify answered: " + text_of(last.get("content")), NORMAL_DELAY
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:
         return "clarify", None, 0
+    if names and last_role == "user" and "HOLD" in last_user:
+        return "hold", words("hold", 6), NORMAL_DELAY
     if names and last_role == "user" and "SLOW" in last_user:
         return "text", words("slow", SLOW_CHUNKS), SLOW_DELAY
     return "text", words("stub", NORMAL_CHUNKS), NORMAL_DELAY
@@ -101,12 +144,19 @@ class Handler(BaseHTTPRequestHandler):
     def clarify_arguments(self):
         return json.dumps({"questions": [{"question": CLARIFY_QUESTION, "choices": CLARIFY_CHOICES}]})
 
+    def tool_call(self, call):
+        return {"id": "call_stub_" + uuid.uuid4().hex[:8], "type": "function",
+                "function": {"name": call["name"], "arguments": json.dumps(call["arguments"])}}
+
     def complete(self, kind, content):
         message = {"role": "assistant", "content": None}
         finish = "stop"
         if kind == "clarify":
             message["tool_calls"] = [{"id": "call_stub_clarify", "type": "function",
                                       "function": {"name": "clarify", "arguments": self.clarify_arguments()}}]
+            finish = "tool_calls"
+        elif kind == "tool":
+            message["tool_calls"] = [self.tool_call(content)]
             finish = "tool_calls"
         else:
             message["content"] = content if isinstance(content, str) else "".join(content)
@@ -132,7 +182,12 @@ class Handler(BaseHTTPRequestHandler):
                 self.chunk({"tool_calls": [call]}, None)
                 self.chunk({"tool_calls": [{"index": 0, "function": {"arguments": arguments[half:]}}]}, None)
                 self.chunk({}, "tool_calls")
+            elif kind == "tool":
+                self.chunk({"tool_calls": [{"index": 0, **self.tool_call(content)}]}, None)
+                self.chunk({}, "tool_calls")
             else:
+                if kind == "hold":
+                    time.sleep(HOLD_SECONDS)
                 pieces = [content] if isinstance(content, str) else content
                 for piece in pieces:
                     self.chunk({"content": piece}, None)
@@ -161,8 +216,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--port", type=int, default=0)
     parser.add_argument("--log", required=True)
+    parser.add_argument("--dm-replies", help="JSON file mapping a bot message body to the reply the receiving bot gives")
     args = parser.parse_args()
     Handler.log_path = args.log
+    global dm_replies_path
+    dm_replies_path = args.dm_replies
     server = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
     server.daemon_threads = True
     print(f"listening {server.server_address[1]}", flush=True)

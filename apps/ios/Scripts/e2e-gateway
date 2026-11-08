@@ -45,6 +45,7 @@ esac
 WORK_DIR="$(mktemp -d /tmp/hermes-ios-e2e.XXXXXX)"
 HOME_DIR="$WORK_DIR/home"
 STUB_LOG="$WORK_DIR/stub-requests.jsonl"
+DM_REPLIES="$WORK_DIR/dm-replies.json"
 GATEWAY_LOG="$WORK_DIR/gateway.log"
 STUB_OUT="$WORK_DIR/stub.out"
 mkdir -p "$HOME_DIR"
@@ -72,7 +73,7 @@ free_port() {
   "$PYTHON" -I -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])'
 }
 
-"$PYTHON" -I "$IOS_DIR/Tools/stub-llm/stub_llm.py" --log "$STUB_LOG" >"$STUB_OUT" 2>&1 &
+"$PYTHON" -I "$IOS_DIR/Tools/stub-llm/stub_llm.py" --log "$STUB_LOG" --dm-replies "$DM_REPLIES" >"$STUB_OUT" 2>&1 &
 STUB_PID=$!
 for _ in $(seq 40); do
   grep -q '^listening ' "$STUB_OUT" 2>/dev/null && break
@@ -140,6 +141,7 @@ export HERMES_IOS_TEST_PASSWORD="$PASSWORD"
 export HERMES_IOS_E2E_HOME="$HOME_DIR"
 export HERMES_IOS_E2E_PROFILES="$(IFS=,; echo "${PROFILES[*]}")"
 export HERMES_IOS_E2E_STUB_LOG="$STUB_LOG"
+export HERMES_IOS_E2E_DM_REPLIES="$DM_REPLIES"
 export HERMES_IOS_E2E_STUB_URL="$STUB_URL"
 export HERMES_IOS_E2E_GATEWAY_LOG="$GATEWAY_LOG"
 
