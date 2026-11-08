@@ -18,6 +18,11 @@ public struct PreviewSender: Sendable, Equatable {
 public struct ClassifiedPreview: Sendable, Equatable {
     public var kind: PreviewKind
     public var text: String
+
+    public init(kind: PreviewKind, text: String) {
+        self.kind = kind
+        self.text = text
+    }
 }
 
 public enum PreviewClassifier {

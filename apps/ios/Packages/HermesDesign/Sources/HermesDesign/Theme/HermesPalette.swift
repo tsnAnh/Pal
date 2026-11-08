@@ -34,6 +34,8 @@ public struct HermesPalette: Equatable, Sendable {
     public var tileStroke: RGB
     public var primaryBadge: RGB
     public var primaryBadgeGlyph: RGB
+    public var selectionRing: RGB
+    public var workingDot: RGB
 }
 
 extension HermesPalette {
@@ -69,7 +71,9 @@ extension HermesPalette {
         toggleKnob: RGB(hex: 0xfefeff),
         tileStroke: RGB(hex: 0x222222),
         primaryBadge: RGB(hex: 0xf58903),
-        primaryBadgeGlyph: RGB(hex: 0xffffff)
+        primaryBadgeGlyph: RGB(hex: 0xffffff),
+        selectionRing: RGB(hex: 0x47474b),
+        workingDot: RGB(hex: 0x3fa75c)
     )
 
     public static let derivedBlack: HermesPalette = {
@@ -120,7 +124,9 @@ extension HermesPalette {
         toggleKnob: RGB(hex: 0xffffff),
         tileStroke: RGB(hex: 0xd1d1d6),
         primaryBadge: RGB(hex: 0xf58903),
-        primaryBadgeGlyph: RGB(hex: 0xffffff)
+        primaryBadgeGlyph: RGB(hex: 0xffffff),
+        selectionRing: RGB(hex: 0xc7c7cc),
+        workingDot: RGB(hex: 0x3fa75c)
     )
 
     struct Tint {
