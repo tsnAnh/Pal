@@ -35,7 +35,7 @@ final class HomeE2ETests: E2ETestCase {
         field.typeText("Zed Scout")
         XCTAssertTrue(confirm.isEnabled)
         shot(app, "create-bot-filled")
-        app.keyboards.buttons["return"].tap()
+        field.typeText("\n")
         confirm.tap()
         waitFor(app.descendants(matching: .any)["chatScreen"], timeout: 30, "the new bot's chat opens")
         shot(app, "create-bot-chat")
