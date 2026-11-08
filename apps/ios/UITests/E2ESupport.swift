@@ -39,7 +39,27 @@ class E2ETestCase: XCTestCase {
         return app
     }
 
+    private static var notificationPromptSettled = false
+
+    func allowNotificationsIfAsked() {
+        guard !Self.notificationPromptSettled else { return }
+        Self.notificationPromptSettled = true
+        let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
+        if allow.waitForExistence(timeout: 4) { allow.tap() }
+    }
+
+    func signalHost(_ name: String) {
+        guard let directory = env.shotsDirectory else { return }
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true)
+        FileManager.default.createFile(atPath: URL(fileURLWithPath: directory).appendingPathComponent(name).path, contents: Data())
+    }
+
     func signInIfNeeded(_ app: XCUIApplication) {
+        signInThenSettle(app)
+        allowNotificationsIfAsked()
+    }
+
+    private func signInThenSettle(_ app: XCUIApplication) {
         if roster(app).waitForExistence(timeout: 15) { return }
         let field = app.textFields["baseURLField"]
         XCTAssertTrue(field.waitForExistence(timeout: 15), app.debugDescription)

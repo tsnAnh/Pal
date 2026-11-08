@@ -128,6 +128,17 @@ async def submit(args, gateway):
         pump.cancel()
 
 
+async def call(args, gateway):
+    url, protocols = gateway.socket_url_and_protocols()
+    events = asyncio.Queue()
+    async with websockets.connect(url, subprotocols=protocols) as socket:
+        rpc = Rpc(socket, events)
+        pump = asyncio.create_task(rpc.pump())
+        await events.get()
+        print(json.dumps(await rpc.call(args.method, json.loads(args.params)), indent=2, sort_keys=True))
+        pump.cancel()
+
+
 async def watch(args, gateway):
     url, protocols = gateway.socket_url_and_protocols()
     async with websockets.connect(url, subprotocols=protocols) as socket:
@@ -146,11 +157,14 @@ def main():
     submit_parser.add_argument("--text", required=True)
     submit_parser.add_argument("--hold", type=float, default=120)
     commands.add_parser("watch", help="print every frame the gateway sends")
+    call_parser = commands.add_parser("call", help="call one canonical method and print its result")
+    call_parser.add_argument("method")
+    call_parser.add_argument("params", nargs="?", default="{}")
     args = parser.parse_args()
     if not (args.base_url and args.username and args.password):
         parser.error("base URL and credentials are required (HERMES_IOS_TEST_* or flags)")
     gateway = Gateway(args.base_url, args.username, args.password)
-    handler = {"submit": submit, "watch": watch}[args.command]
+    handler = {"submit": submit, "watch": watch, "call": call}[args.command]
     try:
         asyncio.run(handler(args, gateway))
     except KeyboardInterrupt:
