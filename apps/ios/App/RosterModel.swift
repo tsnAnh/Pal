@@ -184,6 +184,7 @@ final class RosterModel {
             lastActive: Date(),
             spec: spec,
             accent: nil,
+            usesPrimaryLook: false,
             sessionIDs: []
         )
         publish()
@@ -235,7 +236,8 @@ final class RosterModel {
         guard pinned != bot.isPinned || primary != bot.isPrimary else { return bot }
         return BotRow(
             name: bot.name, displayName: bot.displayName, isDefault: bot.isDefault, isPrimary: primary, isPinned: pinned,
-            preview: bot.preview, lastActive: bot.lastActive, spec: bot.spec, accent: bot.accent, sessionIDs: bot.sessionIDs
+            preview: bot.preview, lastActive: bot.lastActive, spec: bot.spec, accent: bot.accent,
+            usesPrimaryLook: bot.usesPrimaryLook, sessionIDs: bot.sessionIDs
         )
     }
 
