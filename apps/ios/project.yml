@@ -30,6 +30,7 @@ targets:
       path: App/HermesBots.entitlements
       properties:
         aps-environment: development
+        com.apple.developer.homekit: true
     info:
       path: App/Info.plist
       properties:
@@ -39,6 +40,12 @@ targets:
         NSSpeechRecognitionUsageDescription: Hermes Bots turns your speech into text on this device for dictation and voice mode.
         NSCameraUsageDescription: Hermes Bots can take a photo to send to a bot.
         UILaunchScreen: {}
+        NSCalendarsFullAccessUsageDescription: Hermes reads your calendar and adds events when you ask your bot to.
+        NSRemindersFullAccessUsageDescription: Hermes reads and adds your reminders when you ask your bot to.
+        NSContactsUsageDescription: Hermes looks up people in your contacts when you ask your bot to.
+        NSLocationWhenInUseUsageDescription: Hermes uses your location to tell your bot where you are and to find places near you.
+        NSHomeKitUsageDescription: Hermes controls your lights, locks and other home accessories when you ask your bot to.
+        NSAlarmKitUsageDescription: Hermes sets alarms and timers when you ask your bot to.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
@@ -76,6 +83,10 @@ targets:
         product: HermesBotProfile
       - package: HermesKit
         product: HermesRFB
+      - package: HermesKit
+        product: HermesDevice
+      - package: HermesKit
+        product: HermesConnect
       - package: HermesDesign
         product: HermesDesign
   HermesBotsUITests:

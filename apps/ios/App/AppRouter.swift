@@ -15,6 +15,7 @@ enum AppRoute: Hashable {
 enum AppSheet: String, Identifiable {
     case settings
     case createBot
+    case connectApps
 
     var id: String { rawValue }
 }
@@ -40,6 +41,7 @@ final class AppRouter {
     var isSearching = false
     let searchScopes: [SearchScope] = [.all, .messages, .bots]
     private(set) var capabilities: Set<AppCapability>
+    private(set) var connectAppsProfile: String?
     @ObservationIgnored private var shareAsTemplateHandler: ((String) -> Void)?
 
     init(capabilities: Set<AppCapability> = []) {
@@ -52,6 +54,11 @@ final class AppRouter {
 
     func present(_ sheet: AppSheet) {
         self.sheet = sheet
+    }
+
+    func presentConnectApps(profile: String? = nil) {
+        connectAppsProfile = profile
+        sheet = .connectApps
     }
 
     func dismissSheet() {

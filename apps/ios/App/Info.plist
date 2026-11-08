@@ -28,6 +28,18 @@
 	<string>Hermes Bots listens while you dictate a message or talk to a bot in voice mode.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Hermes Bots turns your speech into text on this device for dictation and voice mode.</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Hermes sets alarms and timers when you ask your bot to.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Hermes reads your calendar and adds events when you ask your bot to.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Hermes looks up people in your contacts when you ask your bot to.</string>
+	<key>NSHomeKitUsageDescription</key>
+	<string>Hermes controls your lights, locks and other home accessories when you ask your bot to.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Hermes uses your location to tell your bot where you are and to find places near you.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Hermes reads and adds your reminders when you ask your bot to.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
