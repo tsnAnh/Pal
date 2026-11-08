@@ -205,7 +205,7 @@ async def backfill(home: Path, db) -> bool:
 
 
 def start_backfill(authority) -> None:
-    home = Path(authority.db.db_path).resolve().parent
+    home = Path(authority.profile_id)
 
     async def run() -> None:
         try:
