@@ -272,7 +272,7 @@ ProviderAccount = namedtuple("ProviderAccount", "provider label auth_type base_p
 PROVIDER_ACCOUNTS = (
     ProviderAccount("openai-codex", "Personal", "oauth", "/backend-api/codex", None),
     ProviderAccount("copilot", "Personal", "oauth", "", None),
-    ProviderAccount("openai", "Default key", "api_key", "", (182_400, 56_300, 4.27)),
+    ProviderAccount("openai-api", "Default key", "api_key", "", (182_400, 56_300, 4.27)),
 )
 SPEND_SOURCE = "api_server"
 

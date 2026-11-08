@@ -32,7 +32,6 @@ struct SettingsSheet: View {
                         .toolbar(.hidden, for: .navigationBar)
                 }
         }
-        .environment(hub)
         .task { await hub.refresh() }
     }
 }

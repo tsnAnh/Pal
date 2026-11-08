@@ -202,10 +202,10 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         waitFor(element(app, "usageMeter-e2e-copilot/Chat"), timeout: 10, "copilot chat meter")
         XCTAssertTrue((element(app, "usageMeter-e2e-copilot/Chat").value as? String ?? "").hasPrefix("60%"))
         XCTAssertTrue((element(app, "usageMeter-e2e-copilot/Completions").value as? String ?? "").hasPrefix("25%"))
-        let spend = scrollTo(app, "usageSpend-e2e-openai")
+        let spend = scrollTo(app, "usageSpend-e2e-openai-api")
         XCTAssertTrue(spend.label.contains("$4.27"), spend.label)
-        XCTAssertTrue(element(app, "usageNoLimits-e2e-openai").exists, "an API key shows no limits")
-        for account in ["e2e-openai-codex", "e2e-copilot", "e2e-openai"] {
+        XCTAssertTrue(element(app, "usageNoLimits-e2e-openai-api").exists, "an API key shows no limits")
+        for account in ["e2e-openai-codex", "e2e-copilot", "e2e-openai-api"] {
             XCTAssertTrue(element(app, "usageCaption-\(account)").exists, account)
         }
         shot(app, "usage-all-subscriptions")
