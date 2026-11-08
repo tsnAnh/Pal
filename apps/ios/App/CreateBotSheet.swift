@@ -58,6 +58,8 @@ struct CreateBotSheet: View {
                 RoundedRectangle(cornerRadius: 21, style: .continuous)
                     .strokeBorder(Color(theme.palette.cardStroke), lineWidth: HermesMetrics.circleButtonStrokeWidth)
             )
+            .contentShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
+            .onTapGesture { nameFocused = true }
             .accessibilityLabel(Text("Bot name"))
             .accessibilityIdentifier("botNameField")
             if let message = errorMessage {

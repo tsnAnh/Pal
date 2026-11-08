@@ -44,13 +44,15 @@ class Bot:
     look: Look | None
     last_message: Recency
     conversation: tuple[tuple[str, str], ...]
+    pinned: bool = False
 
 
 BOTS = (
     Bot(
         slug="default",
         title="chó grok bot",
-        look=None,
+        look=Look(shape="blobatar:grok:round", color="#ffffff"),
+        pinned=True,
         last_message=Recency(minutes_ago=45),
         conversation=(
             ("user", "Chào em, hôm nay anh cần em gom lại việc của cả đội bot giúp anh."),
@@ -64,7 +66,7 @@ BOTS = (
     Bot(
         slug="cho-ua",
         title="chó UA",
-        look=Look(shape="blobatar:ua:organic", color="#d6264a"),
+        look=Look(shape="blobatar:ua:organic", color="#ed0a37"),
         last_message=Recency(minutes_ago=12),
         conversation=(
             ("user", "Em ơi, anh cần ảnh banner cho chiến dịch UA tháng 12, test creative cho app học tiếng Anh. Làm được mấy bộ?"),
@@ -80,7 +82,7 @@ BOTS = (
     Bot(
         slug="cho-ai-image-gen",
         title="chó ai image gen",
-        look=Look(shape="blobatar:ai-image-gen:boxy", color="#ef4444"),
+        look=Look(shape="blobatar:ai-image-gen:round", color="#ed0a37"),
         last_message=Recency(days_back=1, clock="22:48"),
         conversation=(
             ("user", "Gen cho anh logo mascot con chó cầm điện thoại, style flat, nền trong."),
@@ -88,13 +90,13 @@ BOTS = (
             ("user", "Số 2, đổi tông sang xanh mint."),
             ("assistant", "Xong rồi anh, bản mint đây. Em lưu PNG 2048px và SVG trong thư mục chung của đội."),
             ("user", "Em xem tin nhắn từ chó UA đi, có brief mới."),
-            ("assistant", "Message from chó UA: Anh CHỐT mới: 6 ảnh mỗi bộ, bỏ bộ C tối giản, giữ bộ A và B. Em sẽ gen lại theo brief này, ước tính 20 phút. Chi tiết xem [brief mới](https://www.notion.so/creative-ua-t12)."),
+            ("user", "Message from 🤖 chó UA (@cho-ua): Anh CHỐT mới: 6 ảnh mỗi bộ, bỏ bộ C tối giản, giữ bộ A và B. Em sẽ gen lại theo brief này, ước tính 20 phút. Chi tiết xem [brief mới](https://www.notion.so/creative-ua-t12)."),
         ),
     ),
     Bot(
         slug="upwork-hunter",
         title="Upwork Hunter",
-        look=Look(shape="blobatar:upwork:round", color="#22c55e"),
+        look=Look(shape="blobatar:upwork:capsule", color="#10dc69"),
         last_message=Recency(days_back=1, clock="18:20"),
         conversation=(
             ("user", "Quét Upwork giúp anh job React Native, budget từ $2000, đăng trong 24 giờ qua."),
@@ -110,7 +112,7 @@ BOTS = (
     Bot(
         slug="cho-research-app",
         title="chó research app",
-        look=Look(shape="hexagon", color="#ff2d95"),
+        look=Look(shape="blobatar:research:hexagon", color="#ee0d8f"),
         last_message=Recency(days_back=2, clock="16:05"),
         conversation=(
             ("user", "Nghiên cứu giúp anh các app journaling đang top ở App Store Việt Nam."),
@@ -126,7 +128,7 @@ BOTS = (
     Bot(
         slug="cho-hong-hot",
         title="chó hóng hớt",
-        look=Look(shape="blobatar:hong-hot:cloud", color="#f97316"),
+        look=Look(shape="blobatar:hong-hot:organic", color="#f15105"),
         last_message=Recency(days_back=2, clock="08:12"),
         conversation=(
             ("user", "Mỗi sáng 8 giờ gửi anh bản tin AI, tối đa 5 ý, có link nguồn."),
@@ -140,7 +142,7 @@ BOTS = (
     Bot(
         slug="market-researcher",
         title="Market Researcher",
-        look=Look(shape="blobatar:market:droplet", color="#9333ea"),
+        look=Look(shape="blobatar:market:hexagon", color="#833cf8"),
         last_message=Recency(days_back=3, clock="11:40"),
         conversation=(
             ("user", "Chốt cho anh định vị Soully, đừng lan man."),
@@ -154,7 +156,7 @@ BOTS = (
     Bot(
         slug="cho-dinh",
         title="chó Định",
-        look=Look(shape="blobatar:dinh:capsule", color="#14b8a6"),
+        look=Look(shape="blobatar:dinh:triangle", color="#0ec79b"),
         last_message=Recency(days_back=4, clock="09:25"),
         conversation=(
             ("user", "Định ơi, gộp việc check crash Crashlytics vào routine sáng của em."),
@@ -195,6 +197,8 @@ def bot_meta(bot):
     meta = {"title": bot.title}
     if bot.look is not None:
         meta.update(shape=bot.look.shape, color=bot.look.color, custom=True)
+    if bot.pinned:
+        meta["pinned"] = True
     return meta
 
 

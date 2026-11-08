@@ -50,6 +50,7 @@ struct SearchView: View {
                 autoFocus: true
             )
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("searchScreen")
         .task { model.start() }
         .onDisappear { model.stop() }
