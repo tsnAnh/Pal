@@ -99,7 +99,7 @@ final class GrokChatE2ETests: E2ETestCase {
         app.buttons["attachButton"].tap()
         waitFor(app.buttons["attachPhotos"], timeout: 10, "attach menu")
         app.buttons["attachPhotos"].tap()
-        let image = app.scrollViews.images.firstMatch
+        let image = app.images.matching(NSPredicate(format: "label BEGINSWITH %@", "Photo,")).firstMatch
         waitFor(image, timeout: 30, "photo library picker")
         image.tap()
         let add = app.buttons["Add"]
@@ -122,7 +122,7 @@ final class GrokChatE2ETests: E2ETestCase {
         let app = openChat("cho-ua")
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow", "OK", "Allow While Using App"] where alert.buttons[label].exists {
-                alert.buttons[label].tap()
+                alert.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch.tap()
                 return true
             }
             return false
@@ -174,7 +174,7 @@ final class GrokChatE2ETests: E2ETestCase {
         let app = openChat("cho-ua")
         addUIInterruptionMonitor(withDescription: "permissions") { alert in
             for label in ["Allow", "OK", "Allow While Using App"] where alert.buttons[label].exists {
-                alert.buttons[label].tap()
+                alert.buttons.matching(NSPredicate(format: "label == %@", label)).firstMatch.tap()
                 return true
             }
             return false
