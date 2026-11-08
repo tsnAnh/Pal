@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import json
 import re
 import sys
@@ -23,6 +24,8 @@ DM_REPLY_FIELD = re.compile(r'"reply":\s*("(?:[^"\\]|\\.)*")')
 DM_DEFAULT_REPLY = "Đã nhận, em xử lý ngay."
 DM_SENT_REPLY = "Đã nhắn."
 dm_replies_path = None
+IPHONE_TRIGGER = "IPHONE"
+IPHONE_RESULT_LIMIT = 600
 
 log_lock = threading.Lock()
 
@@ -72,6 +75,41 @@ def dm_plan(last_role, last, last_user, names):
     return None
 
 
+def last_tool_name(messages):
+    for message in reversed(messages):
+        calls = message.get("tool_calls") if message.get("role") == "assistant" else None
+        if calls:
+            return (calls[-1].get("function") or {}).get("name")
+    return None
+
+
+def iphone_arguments(user_text):
+    after = user_text.split(IPHONE_TRIGGER, 1)[1].split()
+    kind, rest = (after[0].upper() if after else ""), " ".join(after[1:])
+    now = datetime.datetime.now(datetime.UTC)
+    window = {
+        "start": (now - datetime.timedelta(hours=12)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "end": (now + datetime.timedelta(hours=36)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    actions = {
+        "CALENDAR": {"action": "calendar.list_events", "args": window},
+        "REMINDERS": {"action": "reminders.list", "args": {}},
+        "CONTACTS": {"action": "contacts.search", "args": {"query": rest or "a"}},
+        "LOCATION": {"action": "location.current", "args": {}},
+    }
+    return actions.get(kind)
+
+
+def iphone_answer(tool_content):
+    try:
+        payload = json.loads(tool_content)
+    except ValueError:
+        return "iPhone answered with something unreadable"
+    if payload.get("success"):
+        return "iPhone data: " + json.dumps(payload.get("data"), ensure_ascii=False)[:IPHONE_RESULT_LIMIT]
+    return "iPhone refused: " + str(payload.get("code") or "unknown")
+
+
 def plan(body):
     messages = body.get("messages") or []
     names = tool_names(body)
@@ -81,6 +119,10 @@ def plan(body):
     scripted = dm_plan(last_role, last, last_user, names)
     if scripted:
         return scripted
+    if "iphone" in names and last_role == "tool" and last_tool_name(messages) == "iphone":
+        return "final", iphone_answer(text_of(last.get("content"))), NORMAL_DELAY
+    if "iphone" in names and last_role == "user" and IPHONE_TRIGGER in last_user and (call := iphone_arguments(last_user)):
+        return "iphone", call, 0
     if "clarify" in names and last_role == "tool":
         return "final", "Clarify answered: " + text_of(last.get("content")), NORMAL_DELAY
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:
@@ -145,19 +187,23 @@ class Handler(BaseHTTPRequestHandler):
     def clarify_arguments(self):
         return json.dumps({"questions": [{"question": CLARIFY_QUESTION, "choices": CLARIFY_CHOICES}]})
 
-    def tool_call(self, call):
+    def scripted_call(self, call):
         return {"id": "call_stub_" + uuid.uuid4().hex[:8], "type": "function",
                 "function": {"name": call["name"], "arguments": json.dumps(call["arguments"])}}
+    def tool_call(self, kind, content):
+        if kind == "iphone":
+            return "call_stub_iphone", "iphone", json.dumps(content)
+        return "call_stub_clarify", "clarify", self.clarify_arguments()
 
     def complete(self, kind, content):
         message = {"role": "assistant", "content": None}
         finish = "stop"
-        if kind == "clarify":
-            message["tool_calls"] = [{"id": "call_stub_clarify", "type": "function",
-                                      "function": {"name": "clarify", "arguments": self.clarify_arguments()}}]
+        if kind in ("clarify", "iphone"):
+            call_id, name, arguments = self.tool_call(kind, content)
+            message["tool_calls"] = [{"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}]
             finish = "tool_calls"
         elif kind == "tool":
-            message["tool_calls"] = [self.tool_call(content)]
+            message["tool_calls"] = [self.scripted_call(content)]
             finish = "tool_calls"
         else:
             message["content"] = content if isinstance(content, str) else "".join(content)
@@ -175,16 +221,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         try:
             self.chunk({"role": "assistant", "content": ""}, None)
-            if kind == "clarify":
-                arguments = self.clarify_arguments()
+            if kind in ("clarify", "iphone"):
+                call_id, name, arguments = self.tool_call(kind, content)
                 half = len(arguments) // 2
-                call = {"index": 0, "id": "call_stub_clarify", "type": "function",
-                        "function": {"name": "clarify", "arguments": arguments[:half]}}
+                call = {"index": 0, "id": call_id, "type": "function",
+                        "function": {"name": name, "arguments": arguments[:half]}}
                 self.chunk({"tool_calls": [call]}, None)
                 self.chunk({"tool_calls": [{"index": 0, "function": {"arguments": arguments[half:]}}]}, None)
                 self.chunk({}, "tool_calls")
             elif kind == "tool":
-                self.chunk({"tool_calls": [{"index": 0, **self.tool_call(content)}]}, None)
+                self.chunk({"tool_calls": [{"index": 0, **self.scripted_call(content)}]}, None)
                 self.chunk({}, "tool_calls")
             else:
                 if kind == "hold":
