@@ -13,7 +13,7 @@ The pstack, team-workflows, thermos, advisor, continual-learning, agent-compatib
 | Hooks, such as `afterFileEdit` and `stop` | Plugin hooks, through each plugin's `agent-hooks/` |
 | Cloud agents, `environment: "cloud"` (overrides the adapter's worktree row) | A Claude Code cloud session, started with `claude --cloud`. A Hermes project bot starts one with `faker-kit launch --brief-file`, from the brief it wrote, per `.agents/dispatch.json` |
 | Automations, Grok Bot (overrides the adapter's skip row) | Hermes cron and webhook jobs, which run while the gateway runs |
-| Bugbot, agentic security review (overrides the adapter's Bugbot row) | The Claude GitHub review app, set up with `setup-faker-kit` (Review bots) |
+| Bugbot, agentic security review (overrides the adapter's Bugbot row) | Whatever review comments the repository's pull requests receive, from people or an app the team installed. The kit installs none. The default branch's security is reviewed per push by `review-main-security` |
 
 Spawn `faker-agent` with the task brief and the absolute path of the `faker-mode` skill's `SKILL.md`; it reads that file itself, so the prompt does not need to start with `/faker-mode`. The cloud session `faker-kit launch` starts for a Hermes project bot is a top-level session, so its brief still starts with `/faker-mode`.
 

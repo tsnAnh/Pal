@@ -6,7 +6,6 @@
   "trusted_dispatchers": ["<project bot's GitHub login>", "<owner's GitHub login>"],
   "verification_skill": "<verify-* skill name; delete the key if the repository has none>",
   "risk_paths_high": [],
-  "risk_paths_medium": [],
   "incidents": {
     "main_checks": true,
     "health": [],
