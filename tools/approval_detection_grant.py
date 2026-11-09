@@ -84,9 +84,9 @@ def bound_name(binding: _GrantBinding, later_args: list[str]) -> str | None:
 
 
 def _python_api_scope(text: str) -> set[tuple[str, str | None]]:
-    from tools import approval_detection as detection
+    from tools import approval_detection_human as human
     scope = set()
-    for match in detection._HUMAN_REQUIRED_PYTHON_API.finditer(text):
+    for match in human._HUMAN_REQUIRED_PYTHON_API.finditer(text):
         action = _PYTHON_API_ACTIONS.get(re.search(r"[A-Za-z_]\w*", match.group(0)).group(0))
         if action:
             scope.add((action, None))
@@ -95,20 +95,21 @@ def _python_api_scope(text: str) -> set[tuple[str, str | None]]:
 
 def _command_grant_scope(command: str) -> set[tuple[str, str | None]]:
     from tools import approval_detection as detection
+    from tools import approval_detection_human as human
     if detection._command_parser_limit_exceeded(command):
         return set()
-    command, python_bodies = detection._split_heredocs(command)
+    command, python_bodies = human._split_heredocs(command)
     scope = set()
     for body in python_bodies:
         scope |= _code_grant_scope(body)
     launches_python = False
-    for argv in detection._iter_command_argvs(command):
-        hit = detection._human_required_hit(argv)
+    for argv in human._iter_command_argvs(command):
+        hit = human._human_required_hit(argv)
         if hit and hit[1]:
             scope.add(hit[1:])
         launches_python = launches_python or (
-            os.path.basename(argv[0]).lower() not in detection._TEXT_ONLY_COMMANDS
-            and detection._launches_python(argv))
+            os.path.basename(argv[0]).lower() not in human._TEXT_ONLY_COMMANDS
+            and human._launches_python(argv))
     if launches_python and "hermes_cli" in command:
         scope |= _python_api_scope(command)
     return scope
@@ -116,10 +117,11 @@ def _command_grant_scope(command: str) -> set[tuple[str, str | None]]:
 
 def _code_grant_scope(code: str) -> set[tuple[str, str | None]]:
     from tools import approval_detection as detection
+    from tools import approval_detection_human as human
     if detection._command_parser_limit_exceeded(code):
         return set()
     scope = _python_api_scope(code) if "hermes_cli" in code else set()
-    for candidate in itertools.islice(detection._code_command_candidates(code), detection._MAX_CODE_LITERALS):
+    for candidate in itertools.islice(human._code_command_candidates(code), human._MAX_CODE_LITERALS):
         scope |= _command_grant_scope(candidate)
     return scope
 

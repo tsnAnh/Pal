@@ -270,6 +270,8 @@ def _preflight_check_delivery(job: dict) -> Optional[str]:
                 continue
             if _delivery._reach.is_active_token(part):
                 continue
+            if _delivery.parse_room_deliver_token(part) is not None:
+                continue
             platform_parts.append(part.split(":", 1)[0].strip())
     if not platform_parts:
         return None

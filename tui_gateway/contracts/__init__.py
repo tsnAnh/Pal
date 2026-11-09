@@ -29,6 +29,6 @@ from . import (
 )
 from . import canonical, canonical_bot_threads, canonical_bridge, canonical_device, canonical_devices, canonical_reach, canonical_search
 from .base import JsonValue, Params, Payload, Result, WireEnum
-from .registry import CANONICAL_METHODS, EVENTS, METHODS, SERVER_REQUESTS
+from .registry import CANONICAL_METHODS, CANONICAL_NAMESPACES, EVENTS, METHODS, SERVER_REQUESTS
 
-__all__ = ["CANONICAL_METHODS", "EVENTS", "METHODS", "SERVER_REQUESTS", "JsonValue", "Params", "Payload", "Result", "WireEnum"]
+__all__ = ["CANONICAL_METHODS", "CANONICAL_NAMESPACES", "EVENTS", "METHODS", "SERVER_REQUESTS", "JsonValue", "Params", "Payload", "Result", "WireEnum"]

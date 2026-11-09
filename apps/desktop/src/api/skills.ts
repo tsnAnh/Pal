@@ -1,13 +1,11 @@
+import type { OfficialSkillInfo, SkillInfo, StarmapGraph } from '@/types/hermes'
+import type { ActionResponse } from '@/types/hermes'
 import type {
-  OfficialSkillInfo,
   SkillHubPreview,
   SkillHubScanResult,
   SkillHubSearchResponse,
-  SkillHubSourcesResponse,
-  SkillInfo,
-  StarmapGraph
-} from '@/types/hermes'
-import type { ActionResponse } from '@/types/hermes'
+  SkillHubSourcesResponse
+} from '@/types/skills-hub'
 
 import { capabilityScoped, hermesApi, type ProfileScope, profileScoped } from './client'
 
@@ -40,6 +38,20 @@ export function setSkillEnabled(
     path: '/api/skills/toggle',
     method: 'PUT',
     body: { name, enabled }
+  })
+}
+
+/** Lock/unlock a skill against AGENT edits (`hermes curator lock`); the user's own edits stay allowed. */
+export function setSkillLocked(
+  name: string,
+  locked: boolean,
+  profile?: ProfileScope
+): Promise<{ ok: boolean; name: string; locked: boolean }> {
+  return window.hermesDesktop.api<{ ok: boolean; name: string; locked: boolean }>({
+    ...capabilityScoped(profile),
+    path: '/api/skills/lock',
+    method: 'PUT',
+    body: { name, locked }
   })
 }
 

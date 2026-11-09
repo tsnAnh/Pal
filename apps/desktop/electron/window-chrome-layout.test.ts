@@ -14,7 +14,7 @@ function setup(platform: NodeJS.Platform, hasWindow = true) {
 
 test('default keeps the shipped traffic-light position', () => {
   expect(WINDOW_CHROME_POSITIONS.default).toEqual(WINDOW_BUTTON_POSITION)
-  expect(WINDOW_BUTTON_POSITION).toEqual({ x: 24, y: 10 })
+  expect(WINDOW_BUTTON_POSITION).toEqual({ x: 12, y: 10 })
 })
 
 test('relaxed centres the traffic lights on a 52px row', () => {

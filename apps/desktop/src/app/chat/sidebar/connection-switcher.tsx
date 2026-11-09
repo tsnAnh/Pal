@@ -47,11 +47,7 @@ export function useConnectionSwitch() {
 
     void (async () => {
       if (connection?.kind === 'local' && connectionId !== activeConnectionId) {
-        const accepted = await requestLocalDevice({
-          connectionId,
-          label: connection.label,
-          replaceCenter: true
-        })
+        const accepted = await requestLocalDevice({ connectionId, label: connection.label })
 
         if (!accepted) {
           return

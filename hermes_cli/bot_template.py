@@ -831,7 +831,7 @@ def _export_skills(profile_dir: Path) -> dict[str, bytes]:
 
 
 def _scrub_member(name: str, blob: bytes) -> bytes:
-    from hermes_cli.profile_export_scrub import should_redact_export_file
+    from hermes_cli.profiles_export_scrub import should_redact_export_file
 
     if not should_redact_export_file(Path(name)):
         return blob

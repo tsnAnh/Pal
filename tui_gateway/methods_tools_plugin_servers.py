@@ -58,6 +58,12 @@ def _plugin_server_rows(
     return rows
 
 
+def _portable_server_names(plugin_dir: Path, key: str) -> set[str]:
+    package = _tools_mod("hermes_cli.agent_plugins").load_agent_plugin(plugin_dir, plugin_dir)
+    name_for = _tools_mod("hermes_cli.plugins_manifest").portable_mcp_server_name
+    return {name_for(key, server) for server in package.mcp_servers}
+
+
 def _server_identity(cfg: object) -> tuple:
     """What a server config runs: a same-name native entry that runs the same thing is the user
     widening the package server's trust; anything else is the user's own, different server. Both
