@@ -673,7 +673,7 @@ def _persist_session_row_for_submit(rid, session, text=None, display_kind=None):
 
 def _run_after_agent_ready(
     rid, sid, session, text, display_kind, display_metadata, hosted_terminal_callback, turn_author=None,
-    hosted_images=None,
+    hosted_images=None, turn_context="",
 ):
     """Turn thread body: patient wait for a deferred build (a slow build must not eat the
     accepted in-flight message), then run."""
@@ -704,7 +704,8 @@ def _run_after_agent_ready(
             return
     _run_prompt_submit(
         rid, sid, session, text, display_kind=display_kind, display_metadata=display_metadata,
-        image_paths=hosted_images, terminal_callback=hosted_terminal_callback, turn_author=turn_author)
+        image_paths=hosted_images, terminal_callback=hosted_terminal_callback, turn_author=turn_author,
+        turn_context=turn_context)
 
 
 _TRUNCATION_PARAMS = (
@@ -745,7 +746,8 @@ def _submit_to_ledger_owner(rid, sid, session, text, params, refusal) -> dict:
             why = "an image cannot join its queue, so it was removed from this message"
     else:
         try:
-            receipt = owner_forward.forward_prompt(sid, session, text)
+            receipt = owner_forward.forward_prompt(
+                sid, session, text, turn_context=_submitted_turn_context(params))
         except owner_forward.OwnerNotRunning:
             return not_owned  # no gateway runs the ledger's work: it will not end on its own
         except owner_forward.OwnerUnconfirmed:
@@ -817,12 +819,7 @@ def _lock_in_submit_turn(
 from gateway.session_surface import SURFACES as _CLIENT_SURFACES
 
 
-@method("prompt.submit")
-def _(rid, params: dict) -> dict:
-    from hermes_cli.input_sanitize import sanitize_user_prompt_text
-    sid = params.get("session_id", "")
-    raw_text = params.get("text", "")
-    text = sanitize_user_prompt_text(raw_text) if isinstance(raw_text, str) else raw_text
+def _submitted_display(params: dict) -> tuple[str | None, dict | None]:
     # Off-screen sends (widget intents) type the row so no client renders a bubble;
     # whitelisted to "hidden" — this RPC must not mint kinds.
     display_kind = "hidden" if params.get("display_kind") == "hidden" else None
@@ -832,8 +829,30 @@ def _(rid, params: dict) -> dict:
         if isinstance(title_preview, str) and title_preview.strip()
         else None
     )
-    if (stopped := _typed_stop_phrase_response(rid, text, sid)) is not None:
-        return stopped
+    return display_kind, display_metadata
+
+
+def _submit_early_reply(rid, params: dict, text, sid):
+    if params.get("turn_context") is not None and not isinstance(params["turn_context"], str):
+        return _err(rid, 4000, "invalid params for prompt.submit: turn_context: must be a string")
+    return _typed_stop_phrase_response(rid, text, sid)
+
+
+def _submitted_turn_context(params: dict) -> str:
+    from gateway.session_cli_turn import clean_turn_context
+    value = params.get("turn_context")
+    return clean_turn_context(value) if isinstance(value, str) else ""
+
+
+@method("prompt.submit")
+def _(rid, params: dict) -> dict:
+    from hermes_cli.input_sanitize import sanitize_user_prompt_text
+    sid = params.get("session_id", "")
+    raw_text = params.get("text", "")
+    text = sanitize_user_prompt_text(raw_text) if isinstance(raw_text, str) else raw_text
+    display_kind, display_metadata = _submitted_display(params)
+    if (early_reply := _submit_early_reply(rid, params, text, sid)) is not None:
+        return early_reply
     if params.get("interrupted"):
         # Client-side barge-in: latch so this turn's model message carries the note.
         from tools.tts_streaming import mark_speech_interrupted
@@ -870,6 +889,7 @@ def _(rid, params: dict) -> dict:
     session["voice_live_context"] = (
         voice_context[:6000] if session["client_surface"] == "voice-live" and isinstance(voice_context, str) else "")
     session["voice_turn"] = params.get("voice_turn") is True
+    turn_context = _submitted_turn_context(params)
     has_truncation = any(params.get(k) is not None for k in _TRUNCATION_PARAMS)
     if has_truncation and isinstance(text, str):
         # A rewind replays what the transcript shows: re-expand a skill invocation or
@@ -909,7 +929,7 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 4009, "session busy")
         busy_response = _handle_busy_submit(
             rid, sid, session, text, busy_transport, queued=bool(params.get("queued")), turn_author=turn_author,
-            display_kind=display_kind)
+            display_kind=display_kind, turn_context=turn_context)
         if busy_response is not None:
             return busy_response
     raw_rebind_ids = params.get("rebind_survivor_row_ids")
@@ -936,7 +956,7 @@ def _(rid, params: dict) -> dict:
                          sid, exc_info=True)
         isolated_response = _submit_prompt_to_compute_host(
             rid, sid, session, text, display_kind=display_kind, display_metadata=display_metadata,
-            turn_author=turn_author, synthetic_turn=bool(display_kind))
+            turn_author=turn_author, synthetic_turn=bool(display_kind), turn_context=turn_context)
         if not isolated_response.get("error"):
             # The truncation already happened inline above (memory + DB).
             isolated_response["result"].update(survivor_fields)
@@ -964,7 +984,7 @@ def _(rid, params: dict) -> dict:
     run_thread = threading.Thread(
         target=lambda: _run_after_agent_ready(
             rid, sid, session, text, display_kind, display_metadata, hosted_terminal_callback, turn_author,
-            hosted_images),
+            hosted_images, turn_context),
         daemon=True)
     # Handle lets session.interrupt tell a live turn from a stuck `running` flag.
     session["_run_thread"] = run_thread

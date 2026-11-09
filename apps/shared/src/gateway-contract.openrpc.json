@@ -14011,6 +14011,18 @@
             "default": null,
             "title": "Api Text"
           },
+          "turn_context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Turn Context"
+          },
           "model_override": {
             "anyOf": [
               {
@@ -38721,6 +38733,18 @@
             ],
             "default": null,
             "title": "Voice Turn"
+          },
+          "turn_context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Turn Context"
           },
           "title_preview": {
             "anyOf": [

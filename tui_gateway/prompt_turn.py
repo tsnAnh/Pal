@@ -509,6 +509,7 @@ class _TurnRun:
     marker_key: str = ""
     receipt_attempted: bool = False
     context_expanded: bool = True
+    turn_context: str = ""
 
 
 def _adopt_out_of_band_turns(session: dict) -> None:
@@ -753,7 +754,9 @@ def _prepare_turn_input(sid: str, session: dict, st: _TurnRun, text: Any, images
         run_message = _prepend_note(run_message, SPEECH_INTERRUPTED_NOTE)
     reaction_notes = _pending_reaction_notes(session)
     run_message = _prepend_note(run_message, reaction_notes)
-    st.context_expanded = st.context_expanded or bool(reaction_notes) or _carries_voice_transcript(session)
+    run_message = _append_note(run_message, st.turn_context)
+    st.context_expanded = (
+        st.context_expanded or bool(reaction_notes) or bool(st.turn_context) or _carries_voice_transcript(session))
     voice_turn = bool(session.pop("voice_turn", False))
     st.context_expanded = st.context_expanded or voice_turn
     agent._voice_turn_pending = voice_turn  # auxiliary.voice_chat route
@@ -1172,7 +1175,7 @@ def _run_prompt_submit(
     queued_prompt_generation: int | None = None,
     terminal_callback: Callable[[dict[str, Any]], None] | None = None,
     turn_author: dict | None = None, report_ownership_refusal: bool = True,
-    synthetic_turn: bool = False) -> bool:
+    synthetic_turn: bool = False, turn_context: str = "") -> bool:
     synthetic_turn = synthetic_turn or bool(display_kind) or terminal_callback is not None
     # Every dispatch binds the session's own row (session_key, real source) before the turn writes:
     # the synthesized turns that enter here directly (crash auto-continue, queued-prompt drain,
@@ -1223,7 +1226,7 @@ def _run_prompt_submit(
         runtime_session_token = _current_runtime_session_record.set(session)
         st = _TurnRun(
             session["agent"], session.pop("one_turn_model_restore", None), terminal_callback,
-            receipt_committed=terminal_callback is None)
+            receipt_committed=terminal_callback is None, turn_context=turn_context)
         st.marker_key = _record_turn_marker(session, text, auto_continue=terminal_callback is None,
             notification_category=(display_metadata or {}).get("notification_category"))
         goal_followup = None

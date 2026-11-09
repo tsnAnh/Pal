@@ -278,7 +278,8 @@ class ComputeHost:
                 display_metadata=(frame.get("display_metadata")
                                   if isinstance(frame.get("display_metadata"), dict) else None),
                 turn_author=frame.get("turn_author") if isinstance(frame.get("turn_author"), dict) else None,
-                synthetic_turn=frame.get("synthetic_turn") is True)
+                synthetic_turn=frame.get("synthetic_turn") is True,
+                turn_context=frame["turn_context"] if isinstance(frame.get("turn_context"), str) else "")
             run_thread = session.get("_run_thread")
             if run_thread is not None and hasattr(run_thread, "join"):
                 while run_thread.is_alive():

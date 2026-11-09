@@ -2,7 +2,9 @@
 
 Main's HermesCLI calls ``AIAgent.run_conversation`` with an API-only message (voice prefix,
 model-switch / skills-reload notes) while persisting the clean text, names the turn's author for
-memory attribution, and runs ``/model --once`` and ``/moa`` as a one-turn runtime swap. Over the
+memory attribution, and runs ``/model --once`` and ``/moa`` as a one-turn runtime swap. A client's own
+hidden note for the model (Desktop's Bot Mode @mention roster) is ``turn_context``: appended after the
+typed text for the model, never in the persisted row. Over the
 session authority those are facts about ONE admitted turn, committed with the admission row as
 ``cli_turn_v1`` so a retry or a queued drain runs exactly what was admitted, and bound for that
 admission's execution only, never for a later turn.
@@ -12,9 +14,14 @@ from contextvars import ContextVar
 
 from hermes_state_runtime import RuntimeStoreError
 
-_SUBMIT_FIELDS = ('turn_author', 'api_text', 'model_override', 'clarify_batch')
+_SUBMIT_FIELDS = ('turn_author', 'api_text', 'turn_context', 'model_override', 'clarify_batch')
 _API_TEXT_LIMIT = 1_000_000
+TURN_CONTEXT_LIMIT = 4000
 _cli_turn: ContextVar[tuple | None] = ContextVar('cli_turn', default=None)
+
+
+def clean_turn_context(value):
+    return value.strip()[:TURN_CONTEXT_LIMIT]
 
 
 def submit_cli_turn_fields(params):
@@ -37,6 +44,12 @@ def admit_cli_turn(params):
             raise RuntimeStoreError('invalid_params')
         if api_text:
             committed['api_text'] = api_text
+    turn_context = params.get('turn_context')
+    if turn_context is not None:
+        if not isinstance(turn_context, str):
+            raise RuntimeStoreError('invalid_params')
+        if cleaned := clean_turn_context(turn_context):
+            committed['turn_context'] = cleaned
     override = params.get('model_override')
     if override is not None:
         from hermes_constants import parse_reasoning_effort
