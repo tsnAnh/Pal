@@ -105,6 +105,24 @@ def test_a_bot_is_created_with_the_launching_profiles_model_and_nothing_else_whe
     assert all(p.read_text(encoding="utf-8").strip() == "" for p in memory_files)
 
 
+def test_a_bot_created_from_a_chat_runs_the_model_that_chat_runs_rather_than_the_config_default(attached) -> None:
+    from hermes_state import SessionDB
+
+    w, srv = attached()
+    live_route = {"provider": "openai-codex", "base_url": "https://chatgpt.com/backend-api/codex",
+                  "api_mode": "codex_responses"}
+    db = SessionDB(db_path=w.default / "state.db")
+    db.create_session("e2e-bot-session", "desktop", model="gpt-live-e2e",
+                      model_config={"model": "gpt-live-e2e", **live_route, "follow_profile_config": True})
+    db.close()
+
+    run_attached_turn(w, srv, "hermes bot create evo", Human("once"))
+
+    assert w.profile_exists("evo")
+    model = w.config("evo")["model"]
+    assert {key: model.get(key) for key in ("default", *live_route)} == {"default": "gpt-live-e2e", **live_route}
+
+
 @pytest.mark.parametrize("command", CREATE_COMMANDS + ["hermes profile delete victim --yes"],
                          ids=[*CREATE_IDS, "profile-delete"])
 @pytest.mark.parametrize("mode", ["manual", "approvals-off", "session-yolo"])
