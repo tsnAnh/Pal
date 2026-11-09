@@ -88,7 +88,7 @@ final class SiriIntentsE2ETests: E2ETestCase {
         waitFor(card, timeout: 30, "clarify card in chat")
         shot(app, "siri-clarify-chat")
         app.buttons["clarifyChoice-0"].tap()
-        waitFor(bubbles(app, "assistantBubble", containing: "\"user_response\": \"vanilla\"").firstMatch, timeout: 60, "answering in the chat completes the turn")
+        waitFor(bubbles(app, "assistantBubble", containing: "Got it, vanilla").firstMatch, timeout: 60, "answering in the chat completes the turn")
     }
 
     func test6AskWaitsForASlowReplyWithoutGivingUp() async throws {

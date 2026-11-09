@@ -33,7 +33,7 @@ final class AppearanceE2ETests: E2ETestCase {
             waitFor(app.descendants(matching: .any)["clarifyCard"], timeout: 60, "clarify card")
             shot(app, "appearance-\(appearance.name)-chat-clarify")
             app.buttons["clarifyChoice-0"].tap()
-            waitFor(bubbles(app, "assistantBubble", containing: "user_response").firstMatch, timeout: 60, "answer")
+            waitFor(bubbles(app, "assistantBubble", containing: "Got it").firstMatch, timeout: 60, "answer")
             app.navigationBars.buttons.element(boundBy: 0).tap()
 
             waitFor(roster(app), timeout: 15, "roster again")

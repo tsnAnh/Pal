@@ -36,6 +36,8 @@ struct ChatRowView: View {
             }
         case .assistant(let text, let streaming):
             AssistantBubble(text: text, isStreaming: streaming, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+        case .clarifyAnswered(let question, let answer):
+            ClarifyAnsweredCard(question: question, answer: answer)
         case .clarify(let prompt):
             ClarifyCard(prompt: prompt) { answer in model.answer(prompt, with: answer) }
         case .approval(let prompt):

@@ -177,7 +177,7 @@ def plan(body):
             return "tool", {**call, "preamble": preamble}, SLOW_DELAY
         return "tool", call, 0
     if "clarify" in names and last_role == "tool":
-        return "final", "Clarify answered: " + text_of(last.get("content")), NORMAL_DELAY
+        return "final", clarify_reply(text_of(last.get("content"))), NORMAL_DELAY
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:
         return "clarify", None, 0
     if names and last_role == "user" and "HOLD" in last_user:
@@ -185,6 +185,21 @@ def plan(body):
     if names and last_role == "user" and "SLOW" in last_user:
         return "text", words("slow", SLOW_CHUNKS), SLOW_DELAY
     return "text", words("stub", NORMAL_CHUNKS), NORMAL_DELAY
+
+
+def clarify_reply(tool_result):
+    try:
+        responses = json.loads(tool_result)["responses"]
+    except (ValueError, KeyError, TypeError):
+        return "Got it."
+    picks = []
+    for response in responses:
+        answer = response.get("user_response")
+        if response.get("status") == "answered" and answer:
+            picks.extend(answer if isinstance(answer, list) else [answer])
+    if not picks:
+        return "No problem, I'll pick for you."
+    return "Got it, " + ", ".join(picks) + "."
 
 
 def words(prefix, count):

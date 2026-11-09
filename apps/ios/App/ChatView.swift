@@ -11,6 +11,7 @@ struct ChatView: View {
     @State private var isVoiceModePresented = false
     @State private var isNearBottom = true
     @State private var scrollPosition = ScrollPosition(edge: .bottom)
+    @State private var followsLatest = true
     @FocusState private var composerFocused: Bool
 
     let router: AppRouter
@@ -51,6 +52,15 @@ struct ChatView: View {
                 geometry.visibleRect.maxY >= geometry.contentSize.height - 120
             } action: { _, nearBottom in
                 isNearBottom = nearBottom
+            }
+            .onScrollPhaseChange { _, phase, context in
+                guard phase == .idle else { return }
+                let geometry = context.geometry
+                followsLatest = geometry.visibleRect.maxY - geometry.contentInsets.bottom >= geometry.contentSize.height - 48
+            }
+            .onChange(of: model.rows.last, initial: true) {
+                guard followsLatest else { return }
+                scrollPosition.scrollTo(edge: .bottom)
             }
             .accessibilityIdentifier("chatScreen")
             .overlay(alignment: .bottom) {
@@ -196,6 +206,7 @@ struct ChatView: View {
     }
 
     private func scrollToBottom() {
+        followsLatest = true
         withAnimation(.easeOut(duration: 0.2)) { scrollPosition.scrollTo(edge: .bottom) }
     }
 
