@@ -4,6 +4,7 @@ import contextlib
 import io
 import json
 import logging
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -86,6 +87,64 @@ def _discard_profile(name: str) -> None:
               file=sys.stderr)
 
 
+def _creating_session_route() -> dict[str, str]:
+    from gateway.session_context import get_session_env
+    from hermes_state import SessionDB
+
+    session_id = get_session_env("HERMES_SESSION_ID", "").strip()
+    if not session_id:
+        return {}
+    try:
+        db = SessionDB(read_only=True)
+        try:
+            row = db.get_session(session_id) or {}
+        finally:
+            db.close()
+    except sqlite3.Error:
+        logger.warning("could not read the creating session's model; the bot keeps the profile's model",
+                       exc_info=True)
+        return {}
+    try:
+        config = json.loads(row.get("model_config") or "{}")
+    except (TypeError, json.JSONDecodeError):
+        return {}
+    if not isinstance(config, dict):
+        return {}
+    runtime = config.get("gateway_runtime")
+    if isinstance(runtime, dict) and runtime.get("provider"):
+        route, model = runtime, row.get("model")
+    else:
+        route, model = config, config.get("model")
+    model, provider = str(model or "").strip(), str(route.get("provider") or "").strip()
+    if not (model and provider):
+        return {}
+    block = {"default": model, "provider": provider}
+    for key in ("base_url", "api_mode"):
+        if isinstance(route.get(key), str) and route[key].strip():
+            block[key] = route[key].strip()
+    return block
+
+
+def _pin_creating_session_model(profile_dir: Path) -> None:
+    from hermes_cli.config import atomic_config_replace, read_user_config_raw
+    from hermes_cli.profile_model_seed import launch_model_seed, merge_endpoint_seed
+    from hermes_constants import get_hermes_home
+
+    route = _creating_session_route()
+    if not route:
+        return
+    source = read_user_config_raw(get_hermes_home() / "config.yaml")
+    current = source.get("model") if isinstance(source.get("model"), dict) else {}
+    same_endpoint = (current.get("provider"), current.get("base_url")) == (route["provider"], route.get("base_url"))
+    carried = {key: value for key, value in current.items()
+               if key != "context_length" or current.get("default") == route["default"]} if same_endpoint else {}
+    seed = launch_model_seed({**source, "model": {**carried, **route}})
+    path = profile_dir / "config.yaml"
+    config = merge_endpoint_seed(read_user_config_raw(path), seed)
+    config["model"] = seed["model"]
+    atomic_config_replace(path, config)
+
+
 def create_bot(name: str, *, display_name: str | None = None, description: str | None = None) -> tuple[str, Path]:
     from hermes_cli.bot_onboarding import mark_onboarding_pending
     from hermes_cli.profiles import create_profile, set_profile_display_name
@@ -101,6 +160,7 @@ def create_bot(name: str, *, display_name: str | None = None, description: str |
     try:
         if cleaned_display:
             set_profile_display_name(canon, cleaned_display)
+        _pin_creating_session_model(profile_dir)
         _disable_all_skills(profile_dir)
         mark_onboarding_pending(profile_dir)
     except BaseException:

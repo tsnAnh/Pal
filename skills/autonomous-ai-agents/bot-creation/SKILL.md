@@ -44,7 +44,7 @@ hermes bot create <name> --display-name "<Display Name>" --description "<what it
 
 ## What the New Bot Inherits
 
-- Model and provider only, copied once.
+- The model and provider this conversation runs on, copied once (the profile's configured model when the chat never picked another).
 - No connectors or messaging channels, no MCP servers, no memory.
 - Every skill visible at creation is disabled. The user enables the ones it needs.
 
