@@ -1179,7 +1179,9 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
 
                 try {
                   return await requestGateway<SubmitReceipt>('prompt.submit', params, PROMPT_SUBMIT_REQUEST_TIMEOUT_MS)
-                } catch (error) {
+                } catch (firstError) {
+                  let error = firstError
+
                   // A retry whose payload no longer matches its admitted original (an attachment send
                   // offered back as text) is that original: settled as the dedupe it is, no new turn.
                   if (isAdmittedSubmissionConflict(error)) {
@@ -1187,11 +1189,15 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
                   }
 
                   if (isUnsupportedTurnContext(error)) {
-                    return await requestGateway<SubmitReceipt>(
-                      'prompt.submit',
-                      withTurnContextInText(params),
-                      PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
-                    )
+                    try {
+                      return await requestGateway<SubmitReceipt>(
+                        'prompt.submit',
+                        withTurnContextInText(params),
+                        PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
+                      )
+                    } catch (foldedError) {
+                      error = foldedError
+                    }
                   }
 
                   // 4094 is an explicit PRE-admission capability refusal; 4000 is the

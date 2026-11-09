@@ -132,4 +132,24 @@ describe('turn context on prompt.submit', () => {
     expect(submits[1]).not.toHaveProperty('turn_context')
     expect(submits[1]).not.toHaveProperty('submission_id')
   })
+
+  it('still reaches the identityless send when the backend names turn_context first and submission_id next', async () => {
+    const { accepted, submits } = await send('ask @bot', { submission_id: 'sub-5', turnContext: 'NOTE' }, params => {
+      if ('turn_context' in params) {
+        throw refusal('turn_context')
+      }
+
+      if ('submission_id' in params) {
+        throw refusal('submission_id')
+      }
+
+      return { session_id: 'runtime-a', status: 'streaming' }
+    })
+
+    expect(accepted).toBe(true)
+    expect(submits).toHaveLength(3)
+    expect(submits[2]).toMatchObject({ text: 'ask @bot\n\nNOTE' })
+    expect(submits[2]).not.toHaveProperty('turn_context')
+    expect(submits[2]).not.toHaveProperty('submission_id')
+  })
 })
