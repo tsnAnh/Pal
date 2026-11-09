@@ -831,6 +831,7 @@ export interface SubmitTextOptions {
   /** A spoken turn from the chained voice conversation: the gateway runs it on
    *  `auxiliary.voice_chat` (the session model when that slot is on auto). */
   voiceTurn?: boolean
+  turnContext?: string
   fromQueue?: boolean
   /** Called once with the EXACT session identity the backend accepted the
    *  prompt into — the live runtime id after any stale-runtime recovery, plus
