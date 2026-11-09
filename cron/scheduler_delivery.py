@@ -1824,45 +1824,6 @@ def _unresolved_delivery_outcome(job: dict, for_failure: bool) -> Optional[str]:
     return msg
 
 
-def _external_worker_execution(job: dict, adapters, targets: list) -> str:
-    external_execution = os.environ.get("_HERMES_CRON_EXTERNAL_WORKER", "")
-    if (external_execution and adapters is None
-            and external_execution == str(job.get("execution_id") or "")
-            and any(target["platform"] not in (BOT_CHAT_PLATFORM, ROOM_PLATFORM) for target in targets)):
-        return external_execution
-    return ""
-
-
-def _deliver_via_external_queue(job: dict, content: str, external_execution: str, for_failure: bool) -> Optional[str]:
-    from cron.delivery_queue import enqueue_and_wait
-
-    _record_delivery_verification(job, [])
-    error = enqueue_and_wait(external_execution, job, content, for_failure=for_failure)
-    from cron.delivery_queue import get_status
-    delivery_status = get_status(external_execution)
-    if delivery_status and delivery_status["status"] == "suppressed":
-        job["_notification_all_targets_suppressed"] = True
-    from cron.jobs import get_job
-    refreshed = get_job(job["id"]) or {}
-    job["last_delivery_queued"] = refreshed.get("last_delivery_queued")
-    return error
-
-
-def _deliver_bot_chat_target(
-    job: dict, content: str, target: dict, for_failure: bool, delivery_errors: list, unverified_targets: list
-) -> int:
-    bot_chat_error = _deliver_to_bot_chat(job, content, target["chat_id"], for_failure=for_failure)
-    suppressed = job.pop("_notification_all_targets_suppressed", False)
-    if bot_chat_error:
-        receipt_target = f"bot-chat:{target['chat_id'] or '(own)'}"
-        receipt = job.get("_bot_chat_delivery_receipts", {}).get(receipt_target)
-        if not receipt or receipt["status"] not in ("queued", "claimed"):
-            delivery_errors.append(bot_chat_error)
-        if receipt and receipt["status"] == "ambiguous":
-            unverified_targets.append(bot_chat_error)
-    return suppressed
-
-
 def _deliver_result(
     job: dict, content: str, adapters=None, loop=None, *, for_failure: bool = False
 ) -> Optional[str]:
@@ -1882,9 +1843,10 @@ def _deliver_result(
     # id is the idempotency key (the queue never retries an uncertain claimed send). Match on THIS
     # job's own attempt: a worker's script may dispatch another job in-process (`hermes cron run`),
     # and that nested delivery must not be keyed under the outer execution id.
-    external_execution = _external_worker_execution(job, adapters, targets)
+    from cron.scheduler_delivery_external import deliver_via_external_queue, external_worker_execution
+    external_execution = external_worker_execution(job, adapters, targets)
     if external_execution:
-        return _deliver_via_external_queue(job, content, external_execution, for_failure)
+        return deliver_via_external_queue(job, content, external_execution, for_failure)
 
     from gateway.config import load_gateway_config
 
@@ -1972,7 +1934,8 @@ def _deliver_result(
             continue
         # Bot Chat owns admission; never concurrently resume a live owner's transcript.
         if target["platform"] == BOT_CHAT_PLATFORM:
-            suppressed_targets += _deliver_bot_chat_target(
+            from cron.scheduler_delivery_external import deliver_bot_chat_target
+            suppressed_targets += deliver_bot_chat_target(
                 job, content, target, for_failure, delivery_errors, unverified_targets)
             continue
         if target["platform"] == ROOM_PLATFORM:
