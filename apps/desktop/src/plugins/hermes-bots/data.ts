@@ -1059,6 +1059,39 @@ export function cachedUnionRoster(): RosterSnapshot | null {
   return null
 }
 
+function scopeUnlistedActiveRows(
+  rows: Iterable<RosterRow>,
+  sources: GatewaySource[] | undefined,
+  activeId: string
+) {
+  const source = activeId
+    ? (Array.isArray(sources) ? sources : []).find(entry => String(entry?.connectionId || '').trim() === activeId)
+    : undefined
+
+  if (!source) {
+    return
+  }
+
+  for (const row of rows) {
+    if (row.sourceScoped || row.connectionId) {
+      continue
+    }
+
+    const targetProfile = row.targetProfile || row.name
+    row.connectionId = activeId
+    row.connectionKind = source.kind
+    row.connectionLabel = source.label
+    row.targetProfile = targetProfile
+    row.route = {
+      connectionId: activeId,
+      mode: source.kind === 'local' ? 'local' : 'remote',
+      profile: row.name,
+      targetProfile
+    }
+    row.sourceScoped = true
+  }
+}
+
 /** Merge the union agent roster (host.agents) over the active gateway's
  *  profiles.list. Active-source rows — matched by the LIVE connection id,
  *  falling back to the roster's primaryConnectionId, then the legacy
@@ -1211,6 +1244,8 @@ export function mergeMultiSourceRoster(
       ...unservedFlag(agent)
     })
   }
+
+  scopeUnlistedActiveRows(activeByName.values(), union?.sources, activeId)
 
   // SSH sources drop to connect-on-demand the moment their tunnel is not
   // the live gateway. Keep previously painted remote rows so clicking the
