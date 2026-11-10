@@ -1,0 +1,15 @@
+{
+  "originHash" : "ff86157e9affd281cfb151fd4f9a14b4451a7de4e3d96bfaa65bb69dbbfa01f2",
+  "pins" : [
+    {
+      "identity" : "swiftdraw",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swhitty/SwiftDraw.git",
+      "state" : {
+        "revision" : "82699f4bdf2f075793cfa0d392eb27c59b41a3fe",
+        "version" : "0.29.0"
+      }
+    }
+  ],
+  "version" : 3
+}

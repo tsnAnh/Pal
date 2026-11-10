@@ -1,3 +1,4 @@
+import SwiftDraw
 import SwiftUI
 
 public enum ConnectRowMetrics {
@@ -61,6 +62,53 @@ public struct PluginGlyphTile: View {
     }
 }
 
+public struct LoadedLogo: View {
+    fileprivate enum Source {
+        case vector(SVG)
+        case raster(Image)
+    }
+
+    fileprivate let source: Source
+
+    public var body: some View {
+        switch source {
+        case .vector(let svg): SVGView(svg: svg).resizable().aspectRatio(contentMode: .fit)
+        case .raster(let image): image.resizable().scaledToFit()
+        }
+    }
+}
+
+public struct RemoteLogo<Content: View, Placeholder: View>: View {
+    public let url: URL
+    private let content: (LoadedLogo) -> Content
+    private let placeholder: () -> Placeholder
+
+    public init(url: URL, @ViewBuilder content: @escaping (LoadedLogo) -> Content, @ViewBuilder placeholder: @escaping () -> Placeholder) {
+        self.url = url
+        self.content = content
+        self.placeholder = placeholder
+    }
+
+    public var body: some View {
+        AsyncSVGView(url: url) { phase in
+            switch phase {
+            case .success(let svg):
+                content(LoadedLogo(source: .vector(svg)))
+            case .failure:
+                AsyncImage(url: url) { raster in
+                    if case .success(let image) = raster {
+                        content(LoadedLogo(source: .raster(image)))
+                    } else {
+                        placeholder()
+                    }
+                }
+            case .empty:
+                placeholder()
+            }
+        }
+    }
+}
+
 public struct RemoteLogoTile: View {
     public let url: URL?
 
@@ -70,15 +118,10 @@ public struct RemoteLogoTile: View {
 
     public var body: some View {
         if let url {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    AppTile(style: .filled(RGB(hex: 0xffffff))) {
-                        image.resizable().scaledToFit().padding(7)
-                    }
-                default:
-                    PluginGlyphTile()
-                }
+            RemoteLogo(url: url) { logo in
+                AppTile(style: .filled(RGB(hex: 0xffffff))) { logo.padding(7) }
+            } placeholder: {
+                PluginGlyphTile()
             }
         } else {
             PluginGlyphTile()
