@@ -211,6 +211,8 @@ class TurnFacadeMixin:
                     # that skip finalize_turn. Keep ts.
                     with suppress(Exception):
                         self._reset_activity_labels_after_turn()
+                    from agent.bot_chain import clear_bot_turn
+                    clear_bot_turn(self)
                     if getattr(self, "_relay_pending_turn_id", None) == relay_turn_id:
                         self._relay_pending_turn_id = None
                     if acct_token is not None:

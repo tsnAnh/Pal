@@ -16,7 +16,9 @@ def outcome_line(to: str, entry: dict) -> str:
     """The sentence for one request's final record (``status`` plus ``reply``/``error``/``detail``)."""
     status = entry.get("status")
     if status == "settled":
-        return f"{to} answered." if entry.get("reply") else f"{to} finished its turn without replying."
+        return (f"{to} answered." if entry.get("reply") else
+                f"{to} finished its turn with no reply text (turn ended with no reply). The request was received; "
+                "do not resend it. Tell your user, and message them again only with something new.")
     why = str(entry.get("error") or entry.get("detail") or "").strip().rstrip(".")
     if status == "cancelled":
         return f"{to} never answered: the request was cancelled."

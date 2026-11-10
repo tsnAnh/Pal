@@ -1780,7 +1780,10 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
         if len(_raw) > _LIMIT:
             _tail = _raw[-_LIMIT:]
             _nl = _tail.find("\n")
-            _tail = _tail[_nl + 1:] if _nl != -1 else _tail
+            # A single long line (a delivery receipt's JSON) has only its trailing newline: snapping
+            # there would cut the whole payload to "last 0 chars", so keep the unsnapped tail.
+            if _nl != -1 and _tail[_nl + 1:].strip():
+                _tail = _tail[_nl + 1:]
             _out = f"[… output truncated — showing last {len(_tail)} chars]\n{_tail}"
         else:
             _out = _raw
