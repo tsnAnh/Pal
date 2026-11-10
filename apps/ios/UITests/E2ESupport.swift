@@ -115,6 +115,11 @@ class E2ETestCase: XCTestCase {
 
     func enterAddress(_ app: XCUIApplication) {
         let field = app.textFields["baseURLField"]
+        if !field.exists {
+            let options = app.buttons["otherOptionsButton"]
+            XCTAssertTrue(options.waitForExistence(timeout: 15), app.debugDescription)
+            options.hit()
+        }
         XCTAssertTrue(field.waitForExistence(timeout: 15), app.debugDescription)
         field.hit()
         if let existing = field.value as? String, !existing.isEmpty, existing != "https://your-host.tailnet.ts.net" {

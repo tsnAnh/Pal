@@ -9,6 +9,7 @@ public struct BotAvatarView: View {
     private let animated: Bool
     private let outline: AvatarOutline?
     private let pointerReach: CGFloat
+    private let eyeInk: AvatarColor?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
@@ -22,13 +23,15 @@ public struct BotAvatarView: View {
         mood: AvatarMood = .idle,
         animated: Bool = true,
         outline: AvatarOutline? = nil,
-        pointerReach: CGFloat? = nil
+        pointerReach: CGFloat? = nil,
+        eyeInk: AvatarColor? = nil
     ) {
         self.spec = spec
         self.size = size
         self.mood = mood
         self.animated = animated
         self.outline = outline
+        self.eyeInk = eyeInk
         self.pointerReach = pointerReach ?? (size >= 72 ? (size * 0.4).rounded() : 0)
         _clock = State(initialValue: AvatarMoodClock(
             mood: mood,
@@ -41,7 +44,7 @@ public struct BotAvatarView: View {
 
     public var body: some View {
         AvatarStage(
-            content: cache.resolve(spec, colorScheme),
+            content: cache.resolve(spec, colorScheme, eyeInk: eyeInk),
             size: size,
             clock: animated ? resolvedClock : nil,
             staticPose: AvatarMotion.staticPose(mood),
@@ -71,13 +74,19 @@ public struct BotAvatarView: View {
 private final class AvatarContentCache {
     private var spec: BotAvatarSpec?
     private var scheme: ColorScheme?
+    private var eyeInk: AvatarColor?
     private var content: AvatarContent?
 
-    func resolve(_ spec: BotAvatarSpec, _ scheme: ColorScheme) -> AvatarContent {
-        if let content, self.spec == spec, self.scheme == scheme { return content }
-        let built = AvatarContent(spec).toned(for: scheme)
+    func resolve(_ spec: BotAvatarSpec, _ scheme: ColorScheme, eyeInk: AvatarColor?) -> AvatarContent {
+        if let content, self.spec == spec, self.scheme == scheme, self.eyeInk == eyeInk { return content }
+        var built = AvatarContent(spec).toned(for: scheme)
+        if let eyeInk, case .rig(var rig) = built {
+            rig.eyes.fill = eyeInk
+            built = .rig(rig)
+        }
         self.spec = spec
         self.scheme = scheme
+        self.eyeInk = eyeInk
         content = built
         return built
     }

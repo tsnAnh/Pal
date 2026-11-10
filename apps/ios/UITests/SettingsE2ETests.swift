@@ -418,6 +418,6 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         let confirm = app.popovers.buttons["Sign Out"]
         waitFor(confirm, timeout: 10, "confirm sign out")
         confirm.tap()
-        waitFor(app.buttons["signInButton"], timeout: 30, "sign in form")
+        waitFor(app.buttons["continueButton"], timeout: 30, "sign-in screen")
     }
 }
