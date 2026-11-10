@@ -15,7 +15,8 @@ struct AppIconArtifact {
     private static let avatarScale: CGFloat = 1.367
     private static let avatarOffset = CGPoint(x: -0.03, y: 0.233)
     private static let eyeScale = 0.96
-    private static let gaze = CGPoint(x: 0.04, y: -0.06)
+    private static let gaze = CGPoint(x: 0.04, y: -0.085)
+    private static let rightEyeTurn = -3.5 * Double.pi / 180
 
     @Test func render() throws {
         let package = URL(fileURLWithPath: try #require(iconPackage), isDirectory: true)
@@ -31,11 +32,18 @@ struct AppIconArtifact {
         pose.eyeY = Self.gaze.y
         return ZStack(alignment: .topLeading) {
             Color.black
-            AvatarFrame(content: AvatarContent(spec), pose: pose, size: canvas * Self.avatarScale)
+            AvatarFrame(content: Self.turningRightEye(AvatarContent(spec)), pose: pose, size: canvas * Self.avatarScale)
                 .offset(x: canvas * Self.avatarOffset.x, y: canvas * Self.avatarOffset.y)
         }
         .frame(width: canvas, height: canvas)
         .clipped()
+    }
+
+    private static func turningRightEye(_ content: AvatarContent) -> AvatarContent {
+        guard case .rig(var rig) = content, rig.eyes.rest.count == 2 else { return content }
+        rig.eyes.rest[1].angle += rightEyeTurn
+        if rig.eyes.facing.count == 2 { rig.eyes.facing[1].angle += rightEyeTurn }
+        return .rig(rig)
     }
 
     private static func image(_ view: some View) throws -> CGImage {
