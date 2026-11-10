@@ -195,6 +195,17 @@ event("message.interim", MessageInterimPayload,
       doc="Interim assistant commentary (text beside tool calls) sealed as its own segment.")
 
 
+class InputAbsorbedPayload(Payload):
+    turn_id: str
+    admission_ids: list[str]
+    message_uid: str
+    text: str
+
+
+event("input.absorbed", InputAbsorbedPayload,
+      doc="The owner's mid-turn message reached the running turn as its own user row.")
+
+
 class TurnStatus(WireEnum):
     """``prompt_turn._result_status``."""
 

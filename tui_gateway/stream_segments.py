@@ -45,6 +45,12 @@ class TurnSegments:
         self.offset = 0
         return stamp
 
+    def absorb(self) -> dict[str, Any]:
+        stamp = {"turn_id": self.turn_id}
+        self.segment += 1
+        self.offset = 0
+        return stamp
+
 
 #: Where a tui_gateway session holds its running prompt turn's cursor (set at turn start, dropped at
 #: turn end): ``server._emit`` reads it, so every road that emits a turn's frames stamps them the same.
@@ -67,6 +73,8 @@ def stamp_reply_frame(segments: TurnSegments | None, event: str, payload: dict |
         return {**payload, **segments.seal()}
     if event == "message.delta" and payload is not None and isinstance(payload.get("text"), str):
         return {**payload, **segments.delta(payload["text"])}
+    if event == "input.absorbed" and payload is not None:
+        return {**payload, **segments.absorb()}
     return payload
 
 

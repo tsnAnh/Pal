@@ -46,6 +46,7 @@ from agent.inline_tool_executors import (
 )
 from agent.message_metadata import stamp_data_use
 from agent.session_persistence import sync_rewritten_tool_rows
+from agent.tool_yield_budget import batch_yield_budget
 from agent.tool_dispatch_helpers import (
     _NEVER_PARALLEL_TOOLS,
     _is_destructive_command,
@@ -948,7 +949,8 @@ def _run_sequential_tool_execution_middleware(
     started = time.monotonic()
     abandoned = False
     try:
-        state, result = _poll_sequential_future(agent, future, function_name, deadline, started, authorization_gate)
+        with batch_yield_budget(agent, authorization_gate.excluded_seconds):
+            state, result = _poll_sequential_future(agent, future, function_name, deadline, started, authorization_gate)
         if state == "done":
             return result
         if state == "interrupted":
@@ -1507,8 +1509,9 @@ class _ConcurrentBatch:
         executor = DaemonThreadPoolExecutor(max_workers=max_workers)
         abandon_executor = False
         try:
-            futures, future_to_index = self.submit_all(executor, runnable)
-            abandon_executor = self.await_completion(futures, future_to_index, deadline)
+            with batch_yield_budget(self.agent, self.authorization_gate.excluded_seconds):
+                futures, future_to_index = self.submit_all(executor, runnable)
+                abandon_executor = self.await_completion(futures, future_to_index, deadline)
         finally:
             # Every abandoning exit releases gate-parked workers and leaves wedged threads
             # detached rather than joining them; normal completion joins.

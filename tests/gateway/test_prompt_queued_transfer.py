@@ -10,7 +10,7 @@ import time
 import pytest
 
 from agent.interrupt_control import InterruptControlMixin
-from gateway import session_finite, session_queued_controls
+from gateway import session_absorb, session_finite, session_queued_controls
 from gateway.session_contract import SessionRef
 from hermes_state_runtime import (
     begin_runtime_epoch, claim_session_input, find_session_admission, get_session_admission,
@@ -304,12 +304,12 @@ async def test_a_steer_write_that_committed_but_reported_failure_is_still_settle
     db, authority = _authority(tmp_path, monkeypatch)
     interactive(db)
     turn = Turn(monkeypatch)
-    original = session_queued_controls.steer_session_input
+    original = session_absorb.steer_session_input
 
     def committed_then_failed(*args, **kwargs):
         original(*args, **kwargs)
         raise sqlite3.OperationalError('disk I/O error')
-    monkeypatch.setattr(session_queued_controls, 'steer_session_input', committed_then_failed)
+    monkeypatch.setattr(session_absorb, 'steer_session_input', committed_then_failed)
     with db:
         await _submit(authority, 'running')
         await asyncio.wait_for(turn.claimed.wait(), 30)
@@ -338,14 +338,14 @@ async def test_a_turn_that_ends_between_the_steer_commit_and_delivery_gets_its_p
     interactive(db)
     turn = Turn(monkeypatch)
     loop = asyncio.get_running_loop()
-    original = session_queued_controls.steer_session_input
+    original = session_absorb.steer_session_input
 
     def committed_then_turn_ends(*args, **kwargs):
         committed = original(*args, **kwargs)
         loop.call_soon_threadsafe(turn.release.set)
         wait_until(lambda: authority.executing.get('s') is None, timeout=30, what='the receiving execution returned')
         return committed
-    monkeypatch.setattr(session_queued_controls, 'steer_session_input', committed_then_turn_ends)
+    monkeypatch.setattr(session_absorb, 'steer_session_input', committed_then_turn_ends)
     with db:
         await _submit(authority, 'running')
         await asyncio.wait_for(turn.claimed.wait(), 30)
@@ -371,7 +371,7 @@ def test_an_owner_restart_mid_transfer_settles_the_steered_admission_interrupted
                                 request_id=request_id, payload={'text': request_id})
         running = claim_session_input(db, epoch=authority.epoch, session_id='s')
         follow = find_session_admission(db, principal_id='human', session_id='s', request_id='follow-up')
-        session_queued_controls.steer_session_input(db, epoch=authority.epoch, admission_id=follow['admission_id'],
+        session_absorb.steer_session_input(db, epoch=authority.epoch, admission_id=follow['admission_id'],
                                                     generation=running['generation'])
         epoch = begin_runtime_epoch(db, instance_id='next')
         recover_session_inputs(db, epoch=epoch)
@@ -405,7 +405,7 @@ async def test_a_held_sqlite_writer_never_stalls_the_owner_loop_behind_a_queued_
                 done.set()
         # The control's own store write starts (and then waits on the held writer).
         from gateway import session_authority
-        target, name = ((session_queued_controls, 'steer_session_input') if verb == 'steer'
+        target, name = ((session_absorb, 'steer_session_input') if verb == 'steer'
                         else (session_authority, 'admit_session_input'))
         original = getattr(target, name)
 

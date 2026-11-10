@@ -4,11 +4,13 @@ Soft/hard interrupt requests, tool-thread interrupt propagation, pending steer/r
 Extracted from ``run_agent.py``; every method resolves through ``AIAgent``'s MRO unchanged.
 """
 import contextlib
+import enum
 import logging
 import threading
-from typing import Optional
+from typing import Any, Optional
 
 from agent.interrupt_compat import request_hard_interrupt
+from tools.interrupt import YieldReason
 from tools.interrupt import request_yield as _request_yield
 from tools.interrupt import set_interrupt as _set_interrupt
 
@@ -120,6 +122,67 @@ def requeue_drained_steer(agent, steer_text: str) -> None:
         _set_steer_parts(agent, _steer_parts(agent) + parts)
 
 
+RESTART_ONLY: Any = object()
+
+
+class AbsorbPhase(enum.Enum):
+    TOOLS = "tools"
+    MODEL_SILENT = "model_silent"
+    MODEL_VISIBLE = "model_visible"
+
+
+def absorb_phase(agent) -> AbsorbPhase:
+    if getattr(agent, "_executing_tools", False):
+        return AbsorbPhase.TOOLS
+    model_active = getattr(agent, "_model_request_active", None)
+    answering = bool(getattr(agent, "_streamed_assistant_text_parts", None))
+    if (model_active is not None and model_active.is_set() and not answering
+            and getattr(agent, "_api_call_count", 0) > 1):
+        return AbsorbPhase.MODEL_SILENT
+    return AbsorbPhase.MODEL_VISIBLE
+
+
+def _yield_tool_workers(agent, reason: YieldReason = YieldReason.OWNER_MESSAGE) -> None:
+    tracker = getattr(agent, "_tool_worker_threads", None)
+    tracker_lock = getattr(agent, "_tool_worker_threads_lock", None)
+    if tracker is None or tracker_lock is None:
+        return
+    with tracker_lock:
+        for tid in tracker:
+            _request_yield(tid, reason)
+
+
+def _merge_correction(existing, correction):
+    if correction is RESTART_ONLY:
+        return existing or RESTART_ONLY
+    if not existing or existing is RESTART_ONLY:
+        return correction
+    return f"{existing}\n\n[Additional user correction]\n{correction}"
+
+
+def _restart_model_request(agent, correction) -> bool:
+    model_active = getattr(agent, "_model_request_active", None)
+    with _ic_lock(agent, "_pending_redirect_lock"):
+        if model_active is None or not model_active.is_set():
+            return False
+        existing = _ic_slot(agent, "_pending_redirect_lock", "_pending_redirect")
+        if agent._interrupt_requested and not existing:
+            return False
+        agent._pending_redirect = _merge_correction(existing, correction)
+        agent._interrupt_requested = True
+        agent._interrupt_message = None
+        agent._turn_user_intervened = True
+
+    execution_thread_id = getattr(agent, "_execution_thread_id", None)
+    if execution_thread_id is not None:
+        _set_interrupt(True, execution_thread_id)
+        agent._interrupt_thread_signal_pending = False
+    else:
+        agent._interrupt_thread_signal_pending = True
+    _ic_abort_active_request(agent, "redirect_abort", "Failed to abort request for redirect")
+    return True
+
+
 def _ic_codex_method(agent, name: str):
     """Codex app-server owns its model/tool loop; return its ``name`` hook or None."""
     if getattr(agent, "api_mode", None) != "codex_app_server":
@@ -159,6 +222,9 @@ def _ic_signal_tool_workers(agent, active: bool, **kw) -> None:
 
 class InterruptControlMixin:
     """interrupt()/hard_interrupt()/clear_interrupt()/steer()/redirect() (see module docstring)."""
+
+    yield_policy = None
+    input_absorbed_callback = None
 
     def interrupt(
         self, message: Optional[str] = None, *, hard_cancel: bool = False,
@@ -350,37 +416,19 @@ class InterruptControlMixin:
         if getattr(self, "_executing_tools", False):
             accepted = self.steer(cleaned)
             if accepted:
-                tracker = getattr(self, "_tool_worker_threads", None)
-                tracker_lock = getattr(self, "_tool_worker_threads_lock", None)
-                if tracker is not None and tracker_lock is not None:
-                    with tracker_lock:
-                        worker_tids = list(tracker)
-                    for tid in worker_tids:
-                        _request_yield(tid)
+                _yield_tool_workers(self)
             return accepted
 
-        _model_active = getattr(self, "_model_request_active", None)
-        with _ic_lock(self, "_pending_redirect_lock"):
-            if _model_active is None or not _model_active.is_set():
-                return False  # response completed before we got the lock: surface queues a new turn
-            existing = _ic_slot(self, "_pending_redirect_lock", "_pending_redirect")
-            if self._interrupt_requested and not existing:
-                return False
-            self._pending_redirect = (
-                f"{existing}\n\n[Additional user correction]\n{cleaned}" if existing else cleaned
-            )
-            self._interrupt_requested = True
-            self._interrupt_message = None
-            self._turn_user_intervened = True
+        return _restart_model_request(self, cleaned)
 
-        # Interrupt only the model request — no fan-out to tool workers / child agents as interrupt() does.
-        _execution_thread_id = getattr(self, "_execution_thread_id", None)
-        if _execution_thread_id is not None:
-            _set_interrupt(True, _execution_thread_id)
-            self._interrupt_thread_signal_pending = False
-        else:
-            self._interrupt_thread_signal_pending = True
-        _ic_abort_active_request(self, "redirect_abort", "Failed to abort request for redirect")
+    def absorb(self, text: str, *, ticket) -> bool:
+        if not self.steer(text, ticket=ticket):
+            return False
+        phase = absorb_phase(self)
+        if phase is AbsorbPhase.TOOLS:
+            _yield_tool_workers(self)
+        elif phase is AbsorbPhase.MODEL_SILENT:
+            _restart_model_request(self, RESTART_ONLY)
         return True
 
     def _has_pending_redirect(self) -> bool:
@@ -393,7 +441,7 @@ class InterruptControlMixin:
         with _ic_lock(self, "_pending_redirect_lock"):
             text = _ic_slot(self, "_pending_redirect_lock", "_pending_redirect")
             self._pending_redirect = None
-        return text
+        return None if text is RESTART_ONLY else text
 
     def _drain_pending_steer(self) -> Optional[str]:
         """Return the pending steer text (if any) and clear the slot; None when nothing is pending."""

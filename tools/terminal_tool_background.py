@@ -10,6 +10,9 @@ import logging
 import sys
 from typing import Any, List, Optional
 
+from tools.interrupt import YieldReason
+from tools.yield_contract import TERMINAL_JOB_LABEL, Adopter, BackgroundJob, Yielded
+
 logger = logging.getLogger("tools.terminal_tool")
 
 # A silent background process (no notify_on_complete / watch_patterns) is right
@@ -243,38 +246,26 @@ _SUBAGENT_NOTIFY_NOTE = (
     "watchers prefer returning the fact (PR number, SHA) and letting the parent watch."
 )
 
-_YIELDED_NOTE = (
-    "The user sent a message while this command was running, so it was moved to the "
-    "background WITHOUT being killed and is still running. You will be notified when it "
-    "exits (notify_on_complete). Read the user's message and respond to it now; use "
-    "process(action='poll'|'wait'|'log', session_id=...) to check on this command."
-)
 
+class LocalTerminalAdopter:
+    def __init__(self, *, command: str, cwd: Optional[str], effective_task_id: str,
+                 task_id: Optional[str], session_key: str) -> None:
+        self._command, self._cwd, self._session_key = command, cwd, session_key
+        self._effective_task_id, self._owner_task_id = effective_task_id, task_id or effective_task_id
 
-def yield_to_background_handler(
-    *, command: str, env_type: str, cwd: Optional[str], effective_task_id: str,
-    task_id: Optional[str], session_key: str,
-):
-    """Build the ``yield_handler`` a foreground ``env.execute`` calls when the tool thread is
-    asked to yield (a user message arrived mid-command). Local backend only: the live Popen
-    is adopted by the process registry as a notify-on-complete background session and the
-    partial output is returned to the model right away. Other backends return None (no
-    adoptable host process) and the foreground wait continues."""
-    if env_type != "local":
-        return None
-
-    def _handler(proc, output_so_far: str) -> dict:
+    def adopt(self, proc, partial_output: str, reason: YieldReason) -> Yielded:
         from tools.process_registry import process_registry
         session = process_registry.adopt_local(
-            proc, command=command, cwd=cwd, task_id=effective_task_id,
-            owner_task_id=task_id or effective_task_id, session_key=session_key,
-            output_so_far=output_so_far)
-        _stamp_routing_if_gateway(process_registry, session, session_key)
-        logger.info("foreground command yielded to background as %s (pid %s)", session.id, session.pid)
-        return {
-            "output": output_so_far, "returncode": None, "yielded_session_id": session.id, "pid": session.pid,
-        }
-    return _handler
+            proc, command=self._command, cwd=self._cwd, task_id=self._effective_task_id,
+            owner_task_id=self._owner_task_id, session_key=self._session_key, output_so_far=partial_output)
+        _stamp_routing_if_gateway(process_registry, session, self._session_key)
+        logger.info("foreground command yielded to background as %s (pid %s, %s)", session.id, session.pid, reason.value)
+        job = BackgroundJob(job_id=session.id, label=TERMINAL_JOB_LABEL, notifies=bool(session.notify_on_complete))
+        return Yielded(job, partial_output, reason, {"pid": session.pid})
+
+
+def local_terminal_adopter(*, env_type: str, **context) -> Optional[Adopter]:
+    return LocalTerminalAdopter(**context) if env_type == "local" else None
 
 
 def _stamp_routing_if_gateway(process_registry, session, session_key) -> None:

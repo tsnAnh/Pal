@@ -4,6 +4,7 @@ process). The agent passes its execution thread id to set_interrupt(); tools cal
 is_interrupted(), which checks the CURRENT thread."""
 
 import contextvars
+import enum
 import logging
 import threading
 from collections.abc import Callable
@@ -22,9 +23,17 @@ if _DEBUG_INTERRUPT:
 # Interrupted thread idents + optional user-safe cause (never the user's message text).
 _interrupted_threads: set[int] = set()
 _interrupt_reasons: dict[int, str] = {}
+
+
+class YieldReason(enum.Enum):
+    BUDGET = "budget"
+    OWNER_MESSAGE = "owner_message"
+
+
+_YIELD_STRENGTH = {reason: rank for rank, reason in enumerate(YieldReason)}
 # Threads asked to YIELD: hand a long-running foreground command to the background
 # instead of killing it, so a mid-turn user message is not parked behind it.
-_yield_threads: set[int] = set()
+_yield_threads: dict[int, YieldReason] = {}
 _lock = threading.Lock()
 # Tool-worker tid a deadline worker acts for. ``run_bounded_sync`` runs its worker under
 # ``contextvars.copy_context()``, so a guard chain moved onto that worker still honours
@@ -45,7 +54,7 @@ def set_interrupt(active: bool, thread_id: int | None = None, *, reason: str | N
         else:
             _interrupt_reasons.pop(tid, None)
         if not active:
-            _yield_threads.discard(tid)
+            _yield_threads.pop(tid, None)
         _snapshot = set(_interrupted_threads) if _DEBUG_INTERRUPT else None
     if _DEBUG_INTERRUPT:
         logger.info(
@@ -71,13 +80,15 @@ def is_thread_interrupted(thread_id: int | None) -> bool:
         return thread_id in _interrupted_threads
 
 
-def request_yield(thread_id: int) -> None:
-    """Ask the tool running on *thread_id* to yield: a foreground terminal command hands
-    its live process to the background registry and returns at once, so a user's mid-turn
-    message (``redirect()`` during tool execution) is delivered instead of parked behind it.
-    The command itself is never killed; that is what ``set_interrupt`` is for."""
+def request_yield(thread_id: int, reason: YieldReason = YieldReason.OWNER_MESSAGE) -> None:
+    """Ask the tool running on *thread_id* to yield: a foreground terminal command hands its live process
+    to the background registry and returns at once, so a user's mid-turn message (``redirect()`` during
+    tool execution) is delivered instead of parked behind it. The command itself is never killed; that
+    is what ``set_interrupt`` is for. The stronger of two pending reasons wins."""
     with _lock:
-        _yield_threads.add(thread_id)
+        pending = _yield_threads.get(thread_id)
+        if pending is None or _YIELD_STRENGTH[reason] > _YIELD_STRENGTH[pending]:
+            _yield_threads[thread_id] = reason
 
 
 def is_thread_yield_requested(thread_id: int | None) -> bool:
@@ -88,15 +99,11 @@ def is_thread_yield_requested(thread_id: int | None) -> bool:
         return thread_id in _yield_threads
 
 
-def consume_yield(thread_id: int | None) -> bool:
-    """Atomically take the pending yield for *thread_id*; True if one was pending."""
+def take_yield(thread_id: int | None) -> YieldReason | None:
     if thread_id is None:
-        return False
+        return None
     with _lock:
-        if thread_id in _yield_threads:
-            _yield_threads.discard(thread_id)
-            return True
-        return False
+        return _yield_threads.pop(thread_id, None)
 
 
 def run_if_not_interrupted(callback: Callable[[], None]) -> bool:

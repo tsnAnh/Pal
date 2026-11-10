@@ -275,10 +275,14 @@ class CanonicalVoiceStopped(Result):
     voice_stopped: Literal[True]
 
 
+class CanonicalSubmitReceipt(AdmissionStatus):
+    status: Literal['queued', 'started', 'unknown', 'terminal', 'turn', 'steered']
+
+
 class CanonicalSubmitResult(RootModel):
     """``prompt.submit``: the admission receipt, or ``{voice_stopped: true}``."""
 
-    root: AdmissionStatus | CanonicalVoiceStopped
+    root: CanonicalSubmitReceipt | CanonicalVoiceStopped
 
 
 class CanonicalSteerQueuedParams(CanonicalSessionParams):

@@ -953,7 +953,7 @@ from tools.terminal_tool_guards import (
     _foreground_background_guidance, _safe_command_preview, _validate_workdir,
     gateway_lifecycle_block, locked_skill_block, self_repo_block, trailing_amp_background_command,
 )
-from tools.terminal_tool_background import _YIELDED_NOTE, spawn_background_process, yield_to_background_handler
+from tools.terminal_tool_background import local_terminal_adopter, spawn_background_process
 from tools.terminal_tool_result import finalize_foreground_result
 
 
@@ -1337,8 +1337,8 @@ def _acquire_env(plan: _ExecPlan, task_id: Optional[str]) -> Any:
 
 def _yield_kwargs(command: str, **ctx) -> dict:
     """``env.execute`` kwargs enabling yield-to-background (local backend only)."""
-    handler = yield_to_background_handler(command=command, **ctx)
-    return {"yield_handler": handler} if handler is not None else {}
+    adopter = local_terminal_adopter(command=command, **ctx)
+    return {"yield_adopter": adopter} if adopter is not None else {}
 
 
 def _run_foreground(
@@ -1394,12 +1394,8 @@ def _run_foreground(
                          max_retries, _safe_command_preview(command), type(e).__name__, e, eff, env_type)
             return _error_json(_redact_terminal_error_text(f"Command execution failed: {type(e).__name__}: {e}"))
 
-    if result.get("yielded_session_id"):  # handed to the background: no exit status yet
-        return json.dumps({
-            "output": result.get("output", ""), "exit_code": None, "error": None,
-            "status": "yielded_to_background", "session_id": result["yielded_session_id"],
-            "pid": result.get("pid"), "notify_on_complete": True, "note": _YIELDED_NOTE,
-        }, ensure_ascii=False)
+    if result.get("yielded") is not None:  # handed to the background: no exit status yet
+        return json.dumps(result["yielded"].as_tool_result(), ensure_ascii=False)
     if metered:
         record_terminal_outcome(command, env_type, result)
     return finalize_foreground_result(
