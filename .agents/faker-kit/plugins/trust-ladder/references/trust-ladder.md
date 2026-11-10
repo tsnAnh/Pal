@@ -8,7 +8,7 @@ You can only run many agents at once when you trust what they do unattended. Tha
 |---|---|---|---|
 | 1. Codebase | Types, module boundaries, one blessed API per concern, deleted alternatives | The compiler and the build | Never, if the bad state cannot be written |
 | 2. Static analysis | Lint rules, compiler flags, CI checks, ratchets | CI on every change | Someone disables or baselines the rule |
-| 3. Rules and review bots | AGENTS.md, nested AGENTS.md, `.claude/rules/`, review-bot guidelines | Agents reading instructions; Claude PR review | An agent skips the file or the bot misses it |
+| 3. Rules | AGENTS.md, nested AGENTS.md, `.claude/rules/` | Agents reading instructions | An agent skips the file |
 | 4. Skills | Verification skills, workflow skills, playbooks | Agents choosing to load them | Nobody loads the skill |
 | 5. Style guide | STYLE.md entries | Humans in review | The reviewer is busy or new |
 
@@ -39,7 +39,7 @@ Agents copy the code around them. A codebase with one clean pattern per concern 
 | "Every user-facing string needs all locales" | 2 | A CI check that every locale file has the same keys |
 | "Prove it works before saying done" | 4, then 3 | A verification skill that drives the real app (`/create-verification-skill`), and an AGENTS.md rule that PRs carry its evidence |
 | "Screens must match the design system spacing" | 1, then 4 | Spacing tokens as the only public API, plus the visual-parity playbook with screenshots |
-| "Our error copy should sound calm, not alarming" | 5, then 3 | STYLE.md entry with bad and good examples; once stable, a review-bot guideline |
+| "Our error copy should sound calm, not alarming" | 5, then 3 | STYLE.md entry with bad and good examples; once stable, a rule in AGENTS.md |
 
 ## Measuring the climb
 

@@ -1,7 +1,7 @@
 {
   "name": "trust-ladder",
-  "version": "0.4.2",
-  "description": "Route every agent correction to the strongest layer (codebase, lint/CI, rules and review bots, skills, style guide), set up repos for agents, and connect them to Hermes dispatch. Installs the vendored upstream plugins as dependencies.",
+  "version": "0.5.2",
+  "description": "Route every agent correction to the strongest layer (codebase, lint/CI, rules, skills, style guide), set up repos for agents, and connect them to Hermes dispatch. Installs the vendored upstream plugins as dependencies.",
   "author": {
     "name": "tsnAnh"
   },

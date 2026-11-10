@@ -54,12 +54,3 @@ Each concern has one blessed way. The alternatives are deleted and banned by lin
 
 | Rule | Enforced by |
 |---|---|
-
-## Review guidelines
-
-The Claude review workflow reads this section with REVIEW.md.
-
-- Treat the rules in REVIEW.md as the review checklist.
-- Treat every rule under Blocking in REVIEW.md as P1.
-- Do not comment on formatting or anything CI already enforces.
-- Mark each finding `[blocking]` or `[nit]`.

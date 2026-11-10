@@ -1,6 +1,6 @@
 ---
 name: style-guide-from-reviews
-description: Build or update STYLE.md from what reviewers actually say. Mines human review comments on merged pull requests, clusters the repeated ones into rules with bad and good examples, and names the layer each rule should move to next (type, lint, review bot, skill, or style-only). Use for /style-guide-from-reviews, when STYLE.md is empty or stale, or when reviewers keep repeating themselves.
+description: Build or update STYLE.md from what reviewers actually say. Mines human review comments on merged pull requests, clusters the repeated ones into rules with bad and good examples, and names the layer each rule should move to next (type, lint, rules file, skill, or style-only). Use for /style-guide-from-reviews, when STYLE.md is empty or stale, or when reviewers keep repeating themselves.
 ---
 
 # Style guide from reviews
@@ -31,7 +31,7 @@ For each cluster, write an entry in the STYLE.md format (`templates/STYLE.md` in
 - Why, in the reviewers' own terms.
 - Bad and good examples taken from the real diffs, trimmed to the smallest form.
 - The source links.
-- `Promotion`: the strongest layer that could hold it. Use `type` or `lint:<id>` when a tool could check it, `review` when only judgment can, `skill:<name>` when it is a procedure, and `style-only` for taste.
+- `Promotion`: the strongest layer that could hold it. Use `type` or `lint:<id>` when a tool could check it, `review` when only a human reviewer's judgment can, `skill:<name>` when it is a procedure, and `style-only` for taste.
 
 Do not duplicate what a linter already enforces. If reviewers repeat a comment that a rule already covers, the rule is misconfigured; report that instead.
 
@@ -41,7 +41,7 @@ Update entries that already exist instead of adding near-duplicates. Keep ids st
 
 ## 5. Promote the easy ones
 
-For every new entry whose promotion is `type` or `lint:*`, fix it now the way the pstack `correct` skill does (read it and apply its fix order), or list it for `/correct` if there are many. For `review` entries, make sure REVIEW.md's blocking or nit list covers them.
+For every new entry whose promotion is `type` or `lint:*`, fix it now the way the pstack `correct` skill does (read it and apply its fix order), or list it for `/correct` if there are many. `review` entries stay in STYLE.md for human reviewers to cite.
 
 ## Report
 
