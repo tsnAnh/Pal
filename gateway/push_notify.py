@@ -11,6 +11,7 @@ from pathlib import Path
 
 from gateway import device_registry, push_apns
 from gateway.device_presence import anyone_attentive, served_authorities
+from gateway.response_filters import is_intentional_silence_response
 from hermes_state_keys import CRON_PRINCIPAL_ID
 
 logger = logging.getLogger(__name__)
@@ -77,7 +78,10 @@ def turn_finished(authority, session_id: str, row, complete: dict) -> None:
     if kind is None or not admission_id or _field(row, "principal_id") == CRON_PRINCIPAL_ID:
         return
     text = complete.get("text")
-    _submit(authority, Notice(kind, session_id, f"{session_id}:turn:{admission_id}", text if isinstance(text, str) else ""))
+    reply = text if isinstance(text, str) else ""
+    if kind is Kind.FINISHED and is_intentional_silence_response(reply):
+        return
+    _submit(authority, Notice(kind, session_id, f"{session_id}:turn:{admission_id}", reply))
 
 
 def waiting_on_user(authority, session_id: str, prompt_id: str, kind: Kind) -> None:

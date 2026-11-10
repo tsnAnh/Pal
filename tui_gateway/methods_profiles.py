@@ -106,20 +106,26 @@ def _clean_revisions(raw: dict) -> dict:
     return {str(k): max(0, int(v)) for k, v in raw.items() if isinstance(v, int) and not isinstance(v, bool)}
 
 
+_PREVIEW_SILENCE_SCAN = 16
+
+
 def _latest_message_preview(db, session_id):
-    """≤80-char excerpt of the NEWEST active user/assistant message, or "" (roster semantics).
-    Same query shape as ``SessionDB.latest_message_row_id``; keep them in step."""
+    """≤80-char excerpt of the NEWEST active user/assistant message that is not a bare silence
+    marker, or "" (roster semantics). Same query shape as ``SessionDB.latest_message_row_id``;
+    keep them in step."""
+    from gateway.response_filters import is_silent_assistant_row
     try:
         with db._lock:
-            row = db._conn.execute(
-                "SELECT content FROM messages"
+            rows = db._conn.execute(
+                "SELECT role, content FROM messages"
                 " WHERE session_id = ? AND role IN ('user', 'assistant')"
                 " AND active = 1 AND content IS NOT NULL AND TRIM(content) != ''"
-                " ORDER BY id DESC LIMIT 1",
-                (session_id,)).fetchone()
+                " ORDER BY id DESC LIMIT ?",
+                (session_id, _PREVIEW_SILENCE_SCAN)).fetchall()
     except Exception:
         return ""
-    text = " ".join(str(row[0] or "").split()).strip() if row else ""
+    row = next((r for r in rows if not is_silent_assistant_row(r[0], r[1])), None)
+    text = " ".join(str(row[1] or "").split()).strip() if row else ""
     return text[:80] + "..." if len(text) > 80 else text
 
 
