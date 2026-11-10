@@ -176,3 +176,37 @@ def admit_send(agent: Any, recipients: list[str], body: str) -> Admission:
             state["sent"] = max(state["sent"], hop)
         state["updated"] = time.monotonic()
     return admission
+
+
+BOT_TURN_NOTICE_KEY = "bot-turn.working"
+_WORKING_LABEL_CHARS = 80
+
+
+def _working_label(user_message: Any) -> str:
+    """``taking this: <what>`` from the first line of the sender's message, else plain ``working``."""
+    from tools.bot_dm_wire import split_sender_stamp
+
+    stamp = split_sender_stamp(user_message if isinstance(user_message, str) else "")
+    first = next((line.strip() for line in (stamp.body if stamp else "").splitlines() if line.strip()), "")
+    if not first:
+        return "working"
+    return "taking this: " + (first if len(first) <= _WORKING_LABEL_CHARS else first[:_WORKING_LABEL_CHARS - 1] + "…")
+
+
+def announce_bot_turn(agent: Any, turn_author: Optional[dict], user_message: Any = None) -> None:
+    """Show the owner what a bot-authored turn is doing: a sticky out-of-band notice (the driver's
+    ``notice_callback``), never a transcript row and never a ``message_agent`` call, so it is not a hop.
+    Cleared by ``clear_bot_turn`` when the turn ends."""
+    if getattr(agent, "_turn_origin", None) or not (isinstance(turn_author, dict) and turn_author.get("is_bot")):
+        return
+    from agent.credits_tracker import AgentNotice
+
+    agent._bot_turn_notice = True
+    agent._emit_notice(AgentNotice(text=_working_label(user_message), level="info", kind="sticky",
+                                   key=BOT_TURN_NOTICE_KEY, id=BOT_TURN_NOTICE_KEY))
+
+
+def clear_bot_turn(agent: Any) -> None:
+    if getattr(agent, "_bot_turn_notice", False):
+        agent._bot_turn_notice = False
+        agent._emit_notice_clear(BOT_TURN_NOTICE_KEY)

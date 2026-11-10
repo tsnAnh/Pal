@@ -18,6 +18,8 @@ import threading
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
+from cron.constants import BOT_CHAT_TURN_PREFIX
+
 
 # Log-record parity with the origin module.
 logger = logging.getLogger("cron.scheduler")
@@ -707,7 +709,7 @@ def bot_chat_message(job: dict, content: str) -> str:
     content = _redact_cron_payload(content, "bot-chat payload")
     job_name = _redact_cron_payload(job.get("name", job.get("id", "?")), "job name")
     return (
-        f'[Cronjob "{job_name}" output — '
+        f'{BOT_CHAT_TURN_PREFIX}{job_name}" output — '
         f"scheduled job, not the user. Review it, act on anything that needs action, and "
         f"summarize for the chat.]\n\n{content}"
     )

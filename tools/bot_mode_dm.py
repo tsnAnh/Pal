@@ -85,7 +85,12 @@ def message_agent_tool_schema() -> dict:
                 "then follow its process(action=\"wait\") instruction first. COMPOSE the message yourself "
                 "(lead with the point and the concrete ask); never paste the user's words verbatim or share "
                 "private 1:1 content. Targets: a roster name ('researcher'), '<peer>/<agent>' or '<peer>' for "
-                "a peer gateway, '<handle>@<connection>' when a handle exists on several machines."
+                "a peer gateway, '<handle>@<connection>' when a handle exists on several machines. "
+                "target_state in the ack is a snapshot taken at hand-off: 'idle' can mean the turn has not "
+                "started yet, so rely on `status` and the later `outcome` line, never on it alone. "
+                "When YOU receive such a message: your first output is ONE short line to your owner saying "
+                "what you received and what you will do; your final text is the reply to the sender; do NOT "
+                "call message_agent to answer it (that spends a hop of the max_hops limit)."
             ),
             "parameters": {
                 "type": "object",
@@ -1052,6 +1057,8 @@ def _delivery_main(args: list[str]) -> int:
         return run_fan_out(args[1]) if len(args) == 2 else 2
     parsed = _runner_argv(args)
     if parsed is None:
+        print(json.dumps({"status": "failed", "delivery_id": "",
+                          "error": "The delivery runner got malformed arguments; nothing was sent."}))
         return 2
     author_json, mode, dm_file, argv = parsed
     author = None
@@ -1060,21 +1067,55 @@ def _delivery_main(args: list[str]) -> int:
 
         author = parse_turn_author(author_json)
         if author is None:
+            print(_runner_fallback(dm_file, "The delivery runner got an unreadable author; nothing was sent."))
             return 2
+    seen = _SeenOutput(sys.stdout)
     try:
         homes: dict[str, Path] = {}
         while len(argv) >= 2 and argv[0] in ("--profile-home", "--ledger-home") and argv[0] not in homes:
             homes[argv[0]], argv = Path(argv[1]), argv[2:]
-        return _run_delivery(argv, dm_file, stdin_file=mode == "stdin", profile_home=homes.get("--profile-home"),
-                             author=author, ledger_home=homes.get("--ledger-home"))
+        with contextlib.redirect_stdout(seen):
+            code = _run_delivery(argv, dm_file, stdin_file=mode == "stdin", profile_home=homes.get("--profile-home"),
+                                 author=author, ledger_home=homes.get("--ledger-home"))
+        # A stdin transport's child writes to the real stdout itself, so only the live lane can be judged silent.
+        if mode != "stdin" and not seen.wrote:
+            print(_runner_fallback(dm_file, f"The delivery runner ended (exit code {code}) without reporting a result."))
+        return code
     except Exception as exc:
         # Every refusal ships a typed reason on stdout so the completion notification carries it
         # back to the sender (#93091), with the same vocabulary-guarded classification the relay
         # lane applies.
         from tools.bot_failure_reasons import delivery_failure_reason
 
-        print(json.dumps({"error": str(exc), "reason": delivery_failure_reason(exc)}))
+        print(_runner_fallback(dm_file, str(exc), reason=delivery_failure_reason(exc)))
         return 1
+
+
+class _SeenOutput:
+    """stdout stand-in that remembers whether the runner printed anything."""
+
+    def __init__(self, stream: Any):
+        self._stream, self.wrote = stream, False
+
+    def write(self, text: str) -> int:
+        self.wrote = self.wrote or bool(text.strip())
+        return self._stream.write(text)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._stream, name)
+
+
+def _runner_fallback(dm_file: str, error: str, *, reason: str | None = None) -> str:
+    """The runner's last-resort stdout: always a non-empty ``status`` and the ``delivery_id``. A pinned
+    live intent means the DM may already be admitted, so the outcome is unknown and resending is wrong."""
+    admitted = os.path.exists(_live_intent_file(dm_file))
+    payload: dict[str, Any] = {"status": "ambiguous" if admitted else "failed",
+                               "delivery_id": _dm_delivery_id(dm_file), "error": error}
+    if reason:
+        payload["reason"] = reason
+    if admitted:
+        payload["detail"] = "Delivery remains pending or its outcome is unknown. Do not resend; receipt is retained."
+    return json.dumps(payload)
 
 
 # agent-context helpers (mirror system_prompt.py's resolution)

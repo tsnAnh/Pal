@@ -39,7 +39,7 @@ One question at a time, only what you do not know yet. Use AskUserQuestion.
 
 1. **The repository**, as `OWNER/REPO`.
 2. **The project slug and the bot's name**: lowercase letters, digits, `-` and `_`, never `default`. Offer the repository name for both.
-3. **The fallback cadence**, only if the owner wants other than heartbeat every `1h`, security every `6h`, and incidents every `10m` (GitHub events wake the bot sooner).
+3. **The fallback cadence**, only if the owner wants other than heartbeat every `1h` (GitHub events wake the bot sooner).
 4. **Where the bot's own model runs**: on the owner's Claude subscription (`--claude-subscription`), or the provider Hermes already uses.
 
 ## 3. Create the project bot
@@ -48,10 +48,10 @@ Run this from the owner's own shell, with the `CLAUDE_CONFIG_DIR` their `claude`
 
 ```bash
 ~/.hermes/bin/faker-kit add-project OWNER/REPO [--bot <bot>] [--project <project>] \
-  [--heartbeat-every 1h] [--incidents-every 10m] [--security-every 6h] [--model <model>] [--claude-subscription]
+  [--heartbeat-every 1h] [--model <model>] [--claude-subscription]
 ```
 
-It creates the bot's profile, its four agent jobs, the andon and bug-report labels in the repository, and the **launch checkout**: one kept clone of the repository that every Claude Code session for this project starts from. It prints that path as `launch_checkout`. The jobs start once `gh` is signed in on this machine; if the output says they are paused, the owner runs `gh auth login` once and you run `add-project` again.
+It creates the bot's profile, its one agent job (`faker-kit-babysit`), the andon and bug-report labels in the repository, and the **launch checkout**: one kept clone of the repository that every Claude Code session for this project starts from. It prints that path as `launch_checkout`. The jobs start once `gh` is signed in on this machine; if the output says they are paused, the owner runs `gh auth login` once and you run `add-project` again.
 
 ## 4. The checkout is trusted for you
 
@@ -132,7 +132,7 @@ Copy `templates/dispatch/dispatch.json` and fill it:
 - `trusted_dispatchers` from the values. Coding agents follow only issues these logins wrote.
 - `verification_skill`: the name of the repository's verification skill, a `verify-*` folder under `.agents/skills/` or `.claude/skills/`. The project bot names it in every brief, and before a pull request merges it has a separate verifier session (never the author) run it, and any other `verify-*` skill the repository has, on the exact head and comment a verdict. If there is none and the repository has a user-facing surface, delete the key and list `/create-verification-skill` under "Owner to do": without it, agents prove changes with tests only, never on screen. For logic where a missed case is costly, list `/create-formal-verification-skill` there too.
 - `risk_paths_high`: the repository's own high-risk paths, such as authentication, secrets, migrations, or deployment. The review and verifier prompts treat a pull request that touches one as high risk. A pattern ending in `/` matches that directory anywhere, such as `apps/ledger/`; others are globs.
-- `incidents`: what Hermes polls every 10 minutes, from its own machine and outbound only, so nothing needs a public address. `main_checks` (default `true`) opens an incident when the default branch's checks fail. `health` lists `{"name": "api", "url": "https://..."}` endpoints that must answer 2xx; two failed polls in a row open an incident. `andon_on_red` pulls the project's andon cord while the branch is red. The project bot launches a `triage-incident` session when something is red. Ask the owner for the health URLs; leave `health` empty without them.
+- `incidents`: what `faker-kit incidents` polls when the owner asks a project bot to check for incidents (no job polls it on a schedule), from the bot's own machine and outbound only, so nothing needs a public address. `main_checks` (default `true`) opens an incident when the default branch's checks fail. `health` lists `{"name": "api", "url": "https://..."}` endpoints that must answer 2xx; two failed polls in a row open an incident. `andon_on_red` pulls the project's andon cord while the branch is red. The project bot launches a `triage-incident` session when a check it ran on request finds something red. Ask the owner for the health URLs; leave `health` empty without them.
 - `upstream_sync`: only in a repository that vendors plugins from another repository through `upstream/source.json` and `scripts/sync-upstream.mjs`, such as the kit itself. Set it to `true`, and Hermes checks once a week whether that upstream repository has moved and, if so, dispatches one unit that runs the sync script and opens the pull request. Leave the key out everywhere else.
 
 `kit_ref` must equal the vendored kit's commit in `.agents/faker-kit/KIT.json`; the vendored `--check` fails otherwise. To move to another kit commit later, vendor it again: that pull request updates both.

@@ -106,25 +106,22 @@ def _clean_revisions(raw: dict) -> dict:
     return {str(k): max(0, int(v)) for k, v in raw.items() if isinstance(v, int) and not isinstance(v, bool)}
 
 
-_PREVIEW_SILENCE_SCAN = 16
-
-
 def _latest_message_preview(db, session_id):
-    """≤80-char excerpt of the NEWEST active user/assistant message that is not a bare silence
-    marker, or "" (roster semantics). Same query shape as ``SessionDB.latest_message_row_id``;
+    """≤80-char excerpt of the NEWEST active user/assistant message the owner's transcript shows,
+    or "" (roster semantics). Same query shape as ``SessionDB.latest_message_row_id``;
     keep them in step."""
-    from gateway.response_filters import is_silent_assistant_row
+    from gateway.response_filters import PREVIEW_HIDDEN_SCAN, is_hidden_from_owner_row
     try:
         with db._lock:
             rows = db._conn.execute(
-                "SELECT role, content FROM messages"
+                "SELECT role, content, display_kind FROM messages"
                 " WHERE session_id = ? AND role IN ('user', 'assistant')"
                 " AND active = 1 AND content IS NOT NULL AND TRIM(content) != ''"
                 " ORDER BY id DESC LIMIT ?",
-                (session_id, _PREVIEW_SILENCE_SCAN)).fetchall()
+                (session_id, PREVIEW_HIDDEN_SCAN)).fetchall()
     except Exception:
         return ""
-    row = next((r for r in rows if not is_silent_assistant_row(r[0], r[1])), None)
+    row = next((r for r in rows if not is_hidden_from_owner_row(r[0], r[1], r[2])), None)
     text = " ".join(str(row[1] or "").split()).strip() if row else ""
     return text[:80] + "..." if len(text) > 80 else text
 
@@ -214,6 +211,7 @@ def _latest_profile_session_rows(db):
     any failure (missing state.db, locked db, older schema) degrades to (None, None) rather than failing the
     whole profiles.list call.
     """
+    from gateway.response_filters import owner_visible_prompt
     try:
         human = worker = None
         for s in db.list_sessions_rich(source=None, limit=20, order_by_last_active=True, compact_rows=True):
@@ -224,7 +222,7 @@ def _latest_profile_session_rows(db):
                               "title": title, "last_active": last_active}
             elif human is None:  # rosters want "where the conversation IS": prefer the newest text
                 human = {"id": s["id"], "title": title,
-                         "preview": _latest_message_preview(db, s["id"]) or s.get("preview") or "",
+                         "preview": _latest_message_preview(db, s["id"]) or owner_visible_prompt(s.get("preview")),
                          "started_at": s.get("started_at") or 0, "last_active": last_active,
                          "message_count": s.get("message_count") or 0,
                          **_live_count_field(db, s["id"])}
