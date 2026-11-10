@@ -389,12 +389,10 @@ private struct MacAppTile: View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         Group {
             if let url {
-                AsyncImage(url: url) { phase in
-                    if case .success(let image) = phase {
-                        image.resizable().scaledToFit().padding(size * 0.18).background(.white)
-                    } else {
-                        glyph
-                    }
+                RemoteLogo(url: url) { logo in
+                    logo.padding(size * 0.18).background(.white)
+                } placeholder: {
+                    glyph
                 }
             } else {
                 glyph
