@@ -33,7 +33,7 @@ async def _bot(home: Path, replies: dict, monkeypatch):
     from gateway.config import GatewayConfig
     from gateway.session import SessionStore
     from gateway.session_authority import initialize_session_authority
-    from gateway.session_contract import Principal
+    from gateway.session_contract import SessionActor
     from gateway.session_controls import AuthorityConnection
     from gateway.session_local import create_local_session
     from gateway.session_local_title import title_new_session
@@ -46,7 +46,7 @@ async def _bot(home: Path, replies: dict, monkeypatch):
     runner._adapter_for_source = lambda source: runner.adapters.get(source.platform)
     authority = await initialize_session_authority(runner, profile_id=str(home), instance_id=f"i-{home.name}")
     reader = AuthorityConnection(authority, object(), {"user_id": "uid:1000"})
-    owner = Principal(reader.actor.subject, str(home), frozenset({"session:create", "session:read", "session:submit"}),
+    owner = SessionActor(reader.actor.subject, str(home), frozenset({"session:create", "session:read", "session:submit"}),
                       "native")
     chat = create_local_session(authority, owner, {"request_id": "bot", "source": "gui", "cwd": str(home),
                                                     "model": "fixture", "toolsets": []})
@@ -145,8 +145,9 @@ async def test_both_directions_read_whole_from_each_side_with_links_that_survive
     beta.replies.append("Revenue is up 4%.")
     ack, delivered, completion = await _send(alpha, beta, "How did Q3 go?", monkeypatch, process_id="proc_a1")
     assert delivered["message"] == "Message from 🤖 Alpha (@alpha): How did Q3 go?"
-    assert set(ack) == {"status", "delivery_id", "to", "detail", "process_id", "reply_delivery"}
-    assert json.loads(completion) == {"reply": "Revenue is up 4%.", "status": "settled", "delivery_id": ack["delivery_id"]}
+    assert set(ack) == {"status", "delivery_id", "to", "detail", "process_id", "reply_delivery", "target_state"}
+    assert json.loads(completion) == {"reply": "Revenue is up 4%.", "status": "settled", "delivery_id": ack["delivery_id"],
+                                        "outcome": "@beta answered."}
     alpha.replies.append("Thanks, noted.")
     await _send(beta, alpha, "Sharing the deck next.", monkeypatch, process_id="proc_b1")
 
@@ -199,6 +200,40 @@ async def test_a_human_turn_between_exchanges_keeps_two_entry_rows(pair, monkeyp
     await _send(alpha, beta, "second", monkeypatch, process_id="proc_h2")
     links = (await _call(alpha, "bot.thread.links", session_id=alpha.chat))["links"]
     assert [(lk["kind"], lk["count"]) for lk in links] == [("messaged", 2), ("messaged", 2)]
+
+
+def _owner_turn(bot, text):
+    import uuid
+    bot.db.append_message(bot.chat, "user", content=text, platform_message_id=uuid.uuid4().hex)
+    bot.db.append_message(bot.chat, "assistant", content=f"re: {text}")
+
+
+@pytest.mark.asyncio
+async def test_an_inbound_exchange_never_covers_the_owners_turns_after_it(pair, monkeypatch):
+    alpha, beta = pair.alpha, pair.beta
+    alpha.replies.append("pong")
+    await _send(beta, alpha, "ping", monkeypatch, process_id="proc_i1")
+    _owner_turn(alpha, "thanks")
+    _owner_turn(alpha, "one more thing")
+    [link] = (await _call(alpha, "bot.thread.links", session_id=alpha.chat))["links"]
+    rows = _rows(alpha.db, alpha.chat)
+    first_owner_turn = next(i for i, row in enumerate(rows) if row["content"] == "thanks")
+    after_owner = {row["message_uid"] for row in rows[first_owner_turn:]}
+    assert len(after_owner) == 4 and not after_owner & set(link["covered_uids"])
+
+
+@pytest.mark.asyncio
+async def test_inbound_exchanges_either_side_of_an_owner_turn_stay_separate_entries(pair, monkeypatch):
+    alpha, beta = pair.alpha, pair.beta
+    alpha.replies.append("pong")
+    await _send(beta, alpha, "ping", monkeypatch, process_id="proc_i2")
+    _owner_turn(alpha, "thanks")
+    alpha.replies.append("pong again")
+    await _send(beta, alpha, "ping again", monkeypatch, process_id="proc_i3")
+    links = (await _call(alpha, "bot.thread.links", session_id=alpha.chat))["links"]
+    owner_uid = next(row["message_uid"] for row in _rows(alpha.db, alpha.chat) if row["content"] == "thanks")
+    assert len(links) == 2
+    assert not any(owner_uid in link["covered_uids"] or owner_uid == link["anchor_uid"] for link in links)
 
 
 @pytest.mark.asyncio

@@ -105,7 +105,7 @@ def _index(rows: Sequence[ChatRow]) -> _RowIndex:
                 call = index.lone_calls.pop(row.tool_call_id, None) if row.tool_call_id else None
                 index.acks.setdefault(ack[0], (row, ack[1], call))
         elif row.role == "user":
-            key = DeliveryKey.parse(row.platform_message_id)
+            key = DeliveryKey.from_request_id(row.platform_message_id)
             if key is not None:
                 index.dm_turns.setdefault(key.delivery_id, []).append(row)
             elif (process_id := completion_process_id(row.probe or "")) is not None:
@@ -118,7 +118,7 @@ def _index(rows: Sequence[ChatRow]) -> _RowIndex:
 def _turn_rows(rows: Sequence[ChatRow], start: ChatRow, anchors: set[int]) -> list[ChatRow]:
     covered = []
     for row in rows[start.position + 1:]:
-        if row.role == "user" and DeliveryKey.parse(row.platform_message_id) is None:
+        if row.role == "user" and DeliveryKey.from_request_id(row.platform_message_id) is None:
             break
         if row.position not in anchors:
             covered.append(row)
