@@ -1,4 +1,4 @@
-import HermesChat
+@testable import HermesChat
 import HermesProtocol
 import Testing
 
