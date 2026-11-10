@@ -23,12 +23,13 @@ def _last_reply(candidates):
     assistant row shows nothing, so the reply before it stands; a carrier shows the reply it wraps."""
     from agent.compaction_display import project_compaction_message_for_display
     from agent.message_content import flatten_message_text
+    from gateway.response_filters import is_silent_assistant_row
     from hermes_state_common import _shape_preview
     for content, summary in candidates:
         shown = project_compaction_message_for_display(
             {'role': 'assistant', 'content': content, '_compressed_summary': summary})
         text = _shape_preview(flatten_message_text(shown['content'])) if shown is not None else ''
-        if text:
+        if text and not is_silent_assistant_row('assistant', text):
             return text
     return None
 
