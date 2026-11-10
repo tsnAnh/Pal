@@ -82,6 +82,12 @@ def is_intentional_silence_response(response: Any) -> bool:
     return any(c in LIVE_GATEWAY_SILENT_MARKERS for c in _canonical_silence_candidates(response))
 
 
+def is_silent_assistant_row(role: Any, content: Any) -> bool:
+    """True for a stored assistant row that is only a silence marker: nothing a client shows as the
+    chat's latest message. The row stays in history; this only decides what a preview skips."""
+    return role == "assistant" and is_intentional_silence_response(content)
+
+
 def _split_trailing_line(text: str) -> tuple[str, str]:
     """``(head, last line)`` of ``text`` with trailing blank space ignored; head is ``""`` when
     there is only one line."""

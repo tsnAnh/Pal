@@ -407,11 +407,13 @@ def _read_bot_sessions(db, subject, operator):
         def summary(root):
             tip = db._compression_tip_on(conn, root['id'])
             target = conn.execute('SELECT * FROM sessions WHERE id=?', (tip,)).fetchone() or root
-            message = conn.execute(
-                "SELECT content FROM messages WHERE session_id=? AND active=1 "
+            from gateway.response_filters import is_silent_assistant_row
+            recent = conn.execute(
+                "SELECT role, content FROM messages WHERE session_id=? AND active=1 "
                 "AND role IN ('user','assistant') AND TRIM(COALESCE(content,''))!='' "
-                "ORDER BY id DESC LIMIT 1", (tip,)).fetchone()
-            text = ' '.join(str(message[0] or '').split()) if message else ''
+                "ORDER BY id DESC LIMIT 16", (tip,)).fetchall()
+            message = next((m for m in recent if not is_silent_assistant_row(m[0], m[1])), None)
+            text = ' '.join(str(message[1] or '').split()) if message else ''
             return {'id': root['id'], 'resolved_id': tip, 'title': target['title'] or '',
                     'root_title': root['title'] or '',
                     'preview': text[:80] + '...' if len(text) > 80 else text,
