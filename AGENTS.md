@@ -168,8 +168,9 @@ Per `REVIEW.md`: its Blocking rules are P1. Mark findings `[blocking]` or `[nit]
 
 ## Learned
 
-- Pal = `apps/ios` (Mac+iOS); origin tsnAnh/Pal (ex hermes-agent); no review bot; no parallel macOS UI tests.
-- Pal: Mac/iOS full parity; Liquid Glass via ToolbarItem, no custom buttons; top = pinned bots; no other brands in code
-- Owner Hermes = Raspberry Pi gateway (host in ~/.hermes/gateway-connections.json); Claude + Codex subs, $0 marginal: token $ = API-equivalent.
-- faker-kit src `~/AIProjects/faker-kit`; Pi kit tracks faker-kit `main`: `install.sh --ref <main sha> --no-vendor --no-gateway`.
-- faker-kit routines minimal: event-driven babysit only; no issues/incidents/security jobs.
+- Pal = `apps/ios` (Mac+iOS); origin tsnAnh/Pal; no review bot; no parallel Mac UI tests.
+- Pal: Mac/iOS parity; Liquid Glass via ToolbarItem, no custom buttons; pinned bots on top; no other brands
+- Owner Hermes = Pi gateway (host: ~/.hermes/gateway-connections.json); Claude+Codex subs: token $ = API-equivalent.
+- faker-kit src `~/AIProjects/faker-kit`; Pi kit tracks its `main`: `install.sh --ref <sha> --no-vendor --no-gateway`.
+- faker-kit routines: event-driven babysit only; no issues/incidents/security jobs.
+- Bot chats: never queue owner msgs; reply at once, long work in background.
