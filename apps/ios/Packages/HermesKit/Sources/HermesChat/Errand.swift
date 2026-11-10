@@ -40,7 +40,7 @@ extension Transcript {
         guard case .user(_, .sent) = item.content else { return nil }
         let start = min(turnOutputStart(after: item.id, anchoredAt: anchor), items.count)
         let tail = items[start...]
-        let output = tail.prefix { !$0.isUser }
+        let output = tail.prefix { !$0.isUser || absorbedItemIDs.contains($0.id) }
         let turnIsClosed = output.count < tail.count
         if let prompt = output.lazy.compactMap(\.prompt).first { return .needsInput(prompt) }
         guard turnIsClosed || !isRunning else { return nil }

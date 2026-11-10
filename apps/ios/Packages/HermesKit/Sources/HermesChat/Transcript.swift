@@ -91,9 +91,19 @@ public struct Transcript: Sendable, Equatable {
 
     private var segmentLengths: [Int: Int] = [:]
     private var currentSegment: Int?
+    private var streamingID: String?
     private var turnOpenings: [String: String] = [:]
+    private var admissionInputs: [String: String] = [:]
+    private var absorbedAdmissions: Set<String> = []
+    private(set) var absorbedItemIDs: Set<String> = []
 
     public init() {}
+
+    static let absorbedPrefix = "absorbed:"
+
+    public var absorbedWithoutEcho: [TranscriptItem] {
+        items.filter { $0.id.hasPrefix(Self.absorbedPrefix) }
+    }
 
     public mutating func echoUser(submissionID: String, text: String) {
         let id = Self.echoID(submissionID)
@@ -147,7 +157,11 @@ public struct Transcript: Sendable, Equatable {
     public mutating func load(_ snapshot: SessionSnapshot) {
         sessionID = snapshot.sessionID
         items = snapshot.messages.flatMap(Self.items(from:))
+        admissionInputs = [:]
+        absorbedAdmissions = []
+        absorbedItemIDs = []
         for admission in snapshot.pending where admission.status == .queued {
+            if let inputID = admission.inputID { admissionInputs[admission.admissionID] = inputID }
             guard let text = admission.text, !text.isEmpty else { continue }
             items.append(TranscriptItem(
                 id: Self.echoID(admission.inputID ?? admission.admissionID),
@@ -162,6 +176,7 @@ public struct Transcript: Sendable, Equatable {
         resyncRequested = false
         segmentLengths = [:]
         currentSegment = nil
+        streamingID = nil
         turnOpenings = [:]
     }
 
@@ -216,9 +231,28 @@ public struct Transcript: Sendable, Equatable {
     }
 
     private mutating func dropStreamingTail() {
-        if let last = items.last, case .assistant(_, _, true) = last.content { items.removeLast() }
+        if let index = streamingIndex { items.remove(at: index) }
+        streamingID = nil
         segmentLengths = [:]
         currentSegment = nil
+    }
+
+    private var streamingIndex: Int? {
+        guard let streamingID,
+              let index = items.lastIndex(where: { $0.id == streamingID }),
+              case .assistant(_, _, true) = items[index].content
+        else { return nil }
+        return index
+    }
+
+    private func uniqueStreamID(_ base: String) -> String {
+        var candidate = base
+        var ordinal = 1
+        while items.contains(where: { $0.id == candidate }) {
+            ordinal += 1
+            candidate = "\(base)#\(ordinal)"
+        }
+        return candidate
     }
 
     private static func serverDate(_ timestamp: Double?) -> Date? {
@@ -291,6 +325,8 @@ public struct Transcript: Sendable, Equatable {
             currentSegment = nil
         case .messageComplete(let complete):
             finishTurn(complete)
+        case .inputAbsorbed(let absorbed):
+            absorb(absorbed)
         case .reasoningDelta(let text):
             appendReasoning(text)
         case .toolStart(let start):
@@ -323,7 +359,79 @@ public struct Transcript: Sendable, Equatable {
         }
     }
 
+    private mutating func absorb(_ event: InputAbsorbed) {
+        let fresh = event.admissionIDs.filter { !absorbedAdmissions.contains($0) }
+        guard event.admissionIDs.isEmpty || !fresh.isEmpty else { return }
+        sealStreaming()
+        segmentLengths = [:]
+        currentSegment = nil
+        var echoes = fresh.compactMap(echoIndex(forAdmission:))
+        var remainder = echoes.reduce(event.text) { Self.removing(userText(at: $1), from: $0) }
+        if !Self.isBlank(remainder) {
+            let unsent = items.indices.filter { !echoes.contains($0) && isUnsentEcho(at: $0) }
+            var trial = remainder
+            let taken = unsent.filter { index in
+                guard let range = trial.range(of: userText(at: index)), !userText(at: index).isEmpty else { return false }
+                trial.removeSubrange(range)
+                return true
+            }
+            if !taken.isEmpty, Self.isBlank(trial) {
+                echoes += taken
+                remainder = ""
+            }
+        }
+        let placed = echoes.sorted().map { items[$0] }
+        for index in echoes.sorted(by: >) { items.remove(at: index) }
+        for var item in placed {
+            item.content = .user(text: userText(of: item), delivery: .sent)
+            item.uid = event.messageUID ?? item.uid
+            items.append(item)
+            absorbedItemIDs.insert(item.id)
+        }
+        if !Self.isBlank(remainder) {
+            let text = placed.isEmpty ? event.text : remainder.trimmingCharacters(in: .whitespacesAndNewlines)
+            let id = "\(Self.absorbedPrefix)\(fresh.first ?? event.messageUID ?? String(items.count))"
+            items.append(TranscriptItem(
+                id: id,
+                content: .user(text: text, delivery: .sent),
+                inbound: InboundKind.classify(text: text, displayKind: nil),
+                uid: event.messageUID
+            ))
+            absorbedItemIDs.insert(id)
+        }
+        absorbedAdmissions.formUnion(fresh)
+    }
+
+    private func echoIndex(forAdmission admissionID: String) -> Int? {
+        let ids = Set([admissionInputs[admissionID].map(Self.echoID), Self.echoID(admissionID)].compactMap { $0 })
+        return items.firstIndex { ids.contains($0.id) && $0.isUser }
+    }
+
+    private func isUnsentEcho(at index: Int) -> Bool {
+        guard case .user(_, let delivery) = items[index].content else { return false }
+        return delivery != .sent && items[index].deliveryFailure == nil
+    }
+
+    private func userText(at index: Int) -> String { userText(of: items[index]) }
+
+    private func userText(of item: TranscriptItem) -> String {
+        if case .user(let text, _) = item.content { text } else { "" }
+    }
+
+    private static func removing(_ text: String, from source: String) -> String {
+        guard !text.isEmpty, let range = source.range(of: text) else { return source }
+        var result = source
+        result.removeSubrange(range)
+        return result
+    }
+
+    private static func isBlank(_ text: String) -> Bool {
+        text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private mutating func materialize(_ admission: PendingAdmission) {
+        if let inputID = admission.inputID { admissionInputs[admission.admissionID] = inputID }
+        guard !absorbedAdmissions.contains(admission.admissionID) else { return }
         guard let text = admission.text, !text.isEmpty else { return }
         let id = Self.echoID(admission.inputID ?? admission.admissionID)
         if let index = items.firstIndex(where: { $0.id == id }) {
@@ -377,37 +485,35 @@ public struct Transcript: Sendable, Equatable {
         let applied = segmentLengths[segment] ?? 0
         if let offset = delta.offset, offset < applied { return }
         segmentLengths[segment] = applied + text.utf16.count
-        if let last = items.indices.last, case .assistant(let existing, let reasoning, true) = items[last].content {
-            items[last].content = .assistant(text: existing + text, reasoning: reasoning, isStreaming: true)
+        if let index = streamingIndex, case .assistant(let existing, let reasoning, true) = items[index].content {
+            items[index].content = .assistant(text: existing + text, reasoning: reasoning, isStreaming: true)
         } else {
-            items.append(TranscriptItem(
-                id: "stream:\(delta.turnID ?? "turn"):\(segment)",
-                content: .assistant(text: text, reasoning: "", isStreaming: true)
-            ))
+            let id = uniqueStreamID("stream:\(delta.turnID ?? "turn"):\(segment)")
+            items.append(TranscriptItem(id: id, content: .assistant(text: text, reasoning: "", isStreaming: true)))
+            streamingID = id
         }
     }
 
     private mutating func appendReasoning(_ text: String) {
         guard !text.isEmpty else { return }
-        if let last = items.indices.last, case .assistant(let existing, let reasoning, true) = items[last].content {
-            items[last].content = .assistant(text: existing, reasoning: reasoning + text, isStreaming: true)
+        if let index = streamingIndex, case .assistant(let existing, let reasoning, true) = items[index].content {
+            items[index].content = .assistant(text: existing, reasoning: reasoning + text, isStreaming: true)
         } else {
-            items.append(TranscriptItem(
-                id: "stream:reasoning:\(items.count)",
-                content: .assistant(text: "", reasoning: text, isStreaming: true)
-            ))
+            let id = uniqueStreamID("stream:reasoning:\(items.count)")
+            items.append(TranscriptItem(id: id, content: .assistant(text: "", reasoning: text, isStreaming: true)))
+            streamingID = id
         }
     }
 
     private mutating func finishTurn(_ complete: MessageComplete) {
         isRunning = false
         if let error = complete.error, !error.isEmpty { lastError = error }
-        if let last = items.indices.last, case .assistant(let existing, let reasoning, true) = items[last].content {
+        if let index = streamingIndex, case .assistant(let existing, let reasoning, true) = items[index].content {
             let final = complete.text.isEmpty ? existing : complete.text
             if final.isEmpty, reasoning.isEmpty {
-                items.removeLast()
+                items.remove(at: index)
             } else {
-                items[last].content = .assistant(text: final, reasoning: reasoning, isStreaming: false)
+                items[index].content = .assistant(text: final, reasoning: reasoning, isStreaming: false)
             }
         } else if !complete.text.isEmpty, !hasAssistantInCurrentTurn(text: complete.text) {
             items.append(TranscriptItem(
@@ -421,16 +527,18 @@ public struct Transcript: Sendable, Equatable {
                 items[index].content = .tool(call)
             }
         }
+        streamingID = nil
         segmentLengths = [:]
         currentSegment = nil
     }
 
     private mutating func sealStreaming() {
-        guard let last = items.indices.last, case .assistant(let text, let reasoning, true) = items[last].content else { return }
+        defer { streamingID = nil }
+        guard let index = streamingIndex, case .assistant(let text, let reasoning, true) = items[index].content else { return }
         if text.isEmpty, reasoning.isEmpty {
-            items.removeLast()
+            items.remove(at: index)
         } else {
-            items[last].content = .assistant(text: text, reasoning: reasoning, isStreaming: false)
+            items[index].content = .assistant(text: text, reasoning: reasoning, isStreaming: false)
         }
     }
 

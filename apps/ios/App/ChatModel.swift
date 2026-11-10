@@ -9,7 +9,7 @@ import Observation
 enum BubbleDelivery: Equatable {
     case sent
     case sending
-    case queued
+    case waitingForConnection
     case failed(submissionID: String)
 }
 
@@ -131,6 +131,7 @@ final class ChatModel {
     private var running: Task<Void, Never>?
     private var delivering = false
     private var retried: Set<String> = []
+    private var absorbedEchoes = AbsorbedEchoLedger()
     private var hasHydrated = false
     private var cachedItems: [TranscriptItem] = []
     private var lastCached: CachedTranscript?
@@ -581,15 +582,18 @@ final class ChatModel {
     private func allItems() -> [TranscriptItem] {
         var items = BotThreadFolding.fold(displayedItems, links: botThreadLinks)
         let known = Set(items.map(\.id))
+        let awaiting = outboxEntries.filter { entry in
+            entry.state == .pending && !retried.contains(entry.submissionID) && !known.contains("submission:\(entry.submissionID)")
+        }
+        let absorbed = absorbedEchoes.hiddenSubmissions(
+            pending: awaiting.map { AbsorbedEchoLedger.Pending(submissionID: $0.submissionID, text: displayText(for: $0)) },
+            absorbed: transcript.absorbedWithoutEcho
+        )
         for entry in outboxEntries where !retried.contains(entry.submissionID) {
             let id = "submission:\(entry.submissionID)"
-            guard !known.contains(id) else { continue }
-            let delivery: TranscriptItem.Delivery
-            switch entry.state {
-            case .pending, .failed: delivery = .queued
-            case .admitted: continue
-            }
-            var item = TranscriptItem(id: id, content: .user(text: displayText(for: entry), delivery: delivery), timestamp: entry.createdAt)
+            guard !known.contains(id), !absorbed.contains(entry.submissionID) else { continue }
+            if case .admitted = entry.state { continue }
+            var item = TranscriptItem(id: id, content: .user(text: displayText(for: entry), delivery: .sending), timestamp: entry.createdAt)
             if case .failed(let reason) = entry.state { item.deliveryFailure = reason }
             items.append(item)
         }
@@ -633,9 +637,8 @@ final class ChatModel {
             switch item.inbound {
             case .person:
                 var state: BubbleDelivery = switch delivery {
-                case .sent: .sent
-                case .sending: .sending
-                case .queued: .queued
+                case .sent, .queued: .sent
+                case .sending: isOffline ? .waitingForConnection : .sending
                 }
                 if let entry, case .failed = entry.state { state = .failed(submissionID: entry.submissionID) }
                 return .user(text: text, delivery: state)
