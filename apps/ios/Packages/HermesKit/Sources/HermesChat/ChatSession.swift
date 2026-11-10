@@ -176,6 +176,11 @@ public actor ChatSession: OutboxSubmitter {
         )
     }
 
+    public func slashCommands() async throws -> [SlashItem] {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        return try await api.slashCommands(sessionID: sessionID)
+    }
+
     public func attachImage(_ data: Data, filename: String) async throws -> StagedImage {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         return try await api.attachImage(sessionID: sessionID, data: data, filename: filename)

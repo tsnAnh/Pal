@@ -133,6 +133,12 @@ public struct SessionAPI: Sendable {
         return try decode(AdmissionStatus.self, result, "prompt.submit")
     }
 
+    /// The commands and skills the `/` picker offers; `session_id` scopes project-local skills to the chat.
+    public func slashCommands(sessionID: String) async throws -> [SlashItem] {
+        let result = try await call("commands.catalog", ["session_id": .string(sessionID)])
+        return SlashCatalog.parse(result)
+    }
+
     public func attachImage(sessionID: String, data: Data, filename: String) async throws -> StagedImage {
         let result = try await call("image.attach_bytes", [
             "session_id": .string(sessionID),

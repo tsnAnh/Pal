@@ -101,6 +101,7 @@ final class ChatModel {
     private(set) var hasPendingClarify = false
     private(set) var sendError: String?
     private(set) var attachments: [PendingAttachment] = []
+    private(set) var slashItems: [SlashItem] = []
     private(set) var reactions: [String: String] = [:]
     private(set) var replyTarget: ReplyTarget?
     var isFinding = false
@@ -390,6 +391,14 @@ final class ChatModel {
     func findPrevious() {
         guard !findMatches.isEmpty else { return }
         findPosition = (findPosition - 1 + findMatches.count) % findMatches.count
+    }
+
+    /// Fetches the `/` picker's commands and skills once per chat; a failed fetch retries on the next `/`.
+    func loadSlashItems() {
+        guard slashItems.isEmpty, let session else { return }
+        Task {
+            if let items = try? await session.slashCommands() { slashItems = items }
+        }
     }
 
     private func stage(
