@@ -294,6 +294,9 @@ _CRON_HINT = (
     "FAILURE: If a delegated child fails and this cron run must be "
     "recorded as failed, put [CRON_FAILURE] on the first line by itself, "
     "then explain the child failure on following lines. "
+    "CONTEXT: this run's time and data blocks follow the task prompt "
+    "below, under their own headings; where the task says \"above\" or "
+    "\"the following data\", it means those blocks. "
     "RECURSION: This is a run of an EXISTING scheduled job — execute "
     "the task now. NEVER create or update a cron job because of "
     "recurring or future-schedule language in the task prompt below; "
@@ -304,13 +307,54 @@ _CRON_HINT = (
 
 def _run_time_line() -> str:
     """This fire's wall-clock time in the configured zone. The system prompt is date-only (byte-stable
-    for caching), so without it a 07:00 brief can't tell itself from a 19:00 retry. Kept outside
-    ``_CRON_HINT`` and after it: the hint stays byte-stable, and cron sessions are fresh per fire."""
+    for caching), so without it a 07:00 brief can't tell itself from a 19:00 retry. It leads the per-run
+    tail, after the stable scaffold, so consecutive fires share a cached prefix."""
     from hermes_time import safe_strftime
     now = _hermes_now()
     offset = now.strftime("%z")
     zone = f" (UTC{offset[:3]}:{offset[3:]})" if offset else ""
     return f"[CURRENT RUN TIME: {safe_strftime(now, '%A, %Y-%m-%d %H:%M %Z').strip()}{zone}]\n\n"
+
+
+def _run_context_sections(extra_prompt: Optional[str], runtime_data_prompt: Optional[str]) -> str:
+    return "\n\n".join(
+        f"## Run Context\n{body}" for body in (extra_prompt, runtime_data_prompt) if body)
+
+
+def _per_run_tail(
+    job: dict, prerun_script: Optional[tuple], extra_prompt: Optional[str],
+    runtime_data_prompt: Optional[str],
+) -> tuple[Optional[str], bool]:
+    script_block = ""
+    script_path = job.get("script")
+    if script_path:
+        success, script_output = (
+            prerun_script if prerun_script is not None
+            else _script._run_job_script(
+                script_path, workdir=_sched._resolve_job_workdir(job, str(job.get("id") or "")),
+                interpreter=job.get("interpreter")))
+        if success and not script_output:
+            return None, False
+        heading, intro = (
+            ("Script Output", "The following data was collected by a pre-run script. "
+                              "Use it as context for your analysis.")
+            if success
+            else ("Script Error", "The data-collection script failed. Report this to the user.")
+        )
+        script_block = _prepend_context_block("", heading, intro, script_output)
+    earlier_output, context_injected = _inject_context_from(job, "")
+    # Durable per-job notepad; empty renders as "" so unused → byte-identical prompt.
+    from cron import notepad as cron_notepad
+    notepad_section = cron_notepad.render_notepad_section(str(job.get("id") or ""))
+    tail = (
+        _run_time_line() + notepad_section + earlier_output + script_block
+        + _run_context_sections(extra_prompt, runtime_data_prompt)
+    ).rstrip()
+    # Runtime DATA (script stdout, upstream output) legitimately quotes command-shape strings, so it
+    # must not be scanned with the strict user-prompt set — see _scan_assembled_cron_prompt.
+    has_injected_data = bool(
+        script_path or context_injected or notepad_section or runtime_data_prompt)
+    return tail, has_injected_data
 
 
 def _build_job_prompt(
@@ -327,70 +371,32 @@ def _build_job_prompt(
     omitted, the script (if any) runs inline as before. extra_prompt: Optional per-run context (from
     ``cronjob(action='run')``, 57331 — salvaged from #57342 by @liuhao1024).
     """
-    user_prompt = str(job.get("prompt") or "")
-    if extra_prompt:
-        user_prompt = f"{user_prompt}\n\n## Run Context\n{extra_prompt}"
-    prompt = user_prompt
-    # Runtime DATA (script stdout, upstream output) legitimately quotes command-shape strings, so it
-    # must not be scanned with the strict user-prompt set — see _scan_assembled_cron_prompt.
-    has_injected_data = False
-    if runtime_data_prompt:
-        prompt = f"{prompt}\n\n## Run Context\n{runtime_data_prompt}"
-        has_injected_data = True
-
-    script_path = job.get("script")
-    if script_path:
-        success, script_output = (
-            prerun_script if prerun_script is not None
-            else _script._run_job_script(
-                script_path, workdir=_sched._resolve_job_workdir(job, str(job.get("id") or "")),
-                interpreter=job.get("interpreter")))
-        if success and not script_output:
-            return None  # no output → nothing to report, skip the AI call
-        heading, intro = (
-            ("Script Output", "The following data was collected by a pre-run script. "
-                              "Use it as context for your analysis.")
-            if success
-            else ("Script Error", "The data-collection script failed. Report this to the user.")
-        )
-        prompt = _prepend_context_block(prompt, heading, intro, script_output)
-        has_injected_data = True
-
-    prompt, _ctx_injected = _inject_context_from(job, prompt)
-    has_injected_data = has_injected_data or _ctx_injected
-
-    # Durable per-job notepad; empty renders as "" so unused → byte-identical prompt.
-    from cron import notepad as cron_notepad
-    notepad_section = cron_notepad.render_notepad_section(str(job.get("id") or ""))
-    if notepad_section:
-        prompt = f"{notepad_section}{prompt}"
-        has_injected_data = True
-
-    prompt = _CRON_HINT + _run_time_line() + prompt
+    job_prompt = str(job.get("prompt") or "")
+    user_prompt = f"{job_prompt}\n\n## Run Context\n{extra_prompt}" if extra_prompt else job_prompt
+    tail, has_injected_data = _per_run_tail(job, prerun_script, extra_prompt, runtime_data_prompt)
+    if tail is None:
+        return None  # no output → nothing to report, skip the AI call
+    scaffold = f"{_CRON_HINT}{job_prompt}\n\n" if job_prompt else _CRON_HINT
     skill_names = _job_skill_names(job)
     if not skill_names:
-        return _scan_assembled_cron_prompt(
-            prompt, job, has_skills=False, has_injected_data=has_injected_data,
+        assembled = _scan_assembled_cron_prompt(
+            scaffold + tail, job, has_skills=False, has_injected_data=has_injected_data,
             user_prompt=user_prompt,
         )
+        return _declare_stable_prefix(assembled, scaffold)
 
+    from agent.skill_commands import append_user_instruction
     parts = _load_cron_skill_parts(job, skill_names)
-    stable_prefix = None
-    if prompt:
-        from agent.skill_commands import append_user_instruction
-        parts.append("")
-        # Skill blocks are stable per job config; the appended instruction is volatile per-run.
-        # Declare that boundary for the Anthropic cache planner.
-        # The skill blocks (and any skipped-skill notice) above are stable per job config; the appended
-        # instruction carries the volatile per-run data (cron hint + prompt + script output + run context).
-        # See #81867.
-        stable_prefix = append_user_instruction(parts, prompt)
+    parts.append("")
+    # Skill blocks, any skipped-skill notice and the job prompt are stable per job config; the per-run
+    # tail follows them. See #81867.
+    skill_prefix = append_user_instruction(parts, scaffold + tail)
     assembled = _scan_assembled_cron_prompt("\n".join(parts), job, has_skills=True)
-    if (
-        stable_prefix
-        and len(assembled) > len(stable_prefix)
-        and assembled.startswith(stable_prefix)
-    ):
+    return _declare_stable_prefix(assembled, skill_prefix + scaffold)
+
+
+def _declare_stable_prefix(assembled: str, stable_prefix: str) -> str:
+    if len(assembled) > len(stable_prefix) and assembled.startswith(stable_prefix):
         # Guarded: the scanner may mutate the bytes; mismatch → whole-message caching.
         from agent.prompt_cache_boundary import register_stable_prefix
         register_stable_prefix(stable_prefix)

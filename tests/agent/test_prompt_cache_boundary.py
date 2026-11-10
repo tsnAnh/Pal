@@ -358,7 +358,7 @@ class TestRealBuilders:
 
 
 class TestCronBuilder:
-    def _prompts(self, jobs):
+    def _prompts(self, job, script_outputs):
         from cron.scheduler import _build_job_prompt
 
         with patch(
@@ -368,7 +368,7 @@ class TestCronBuilder:
         ), patch(
             "tools.skill_usage.bump_use"
         ):
-            return [_build_job_prompt(job) for job in jobs]
+            return [_build_job_prompt(job, prerun_script=(True, out)) for out in script_outputs]
 
     @staticmethod
     def _skill_view(name: str) -> str:
@@ -379,13 +379,11 @@ class TestCronBuilder:
         return json.dumps({"success": True, "content": f"Stable content for {name}."})
 
     def test_cron_runs_share_the_marked_scaffold(self):
-        common = {"id": "job-cache", "name": "cache boundary", "skills": ["alpha", "beta"]}
-        first, second = self._prompts(
-            [
-                {**common, "prompt": "ticket=one time=10:00"},
-                {**common, "prompt": "ticket=two time=10:01"},
-            ]
-        )
+        job = {
+            "id": "job-cache", "name": "cache boundary", "skills": ["alpha", "beta"],
+            "prompt": "Triage the queue.", "script": "queue.py",
+        }
+        first, second = self._prompts(job, ["ticket=one time=10:00", "ticket=two time=10:01"])
 
         first_blocks = apply_anthropic_cache_control(
             [{"role": "user", "content": first}]
@@ -399,14 +397,16 @@ class TestCronBuilder:
         assert first_blocks[0] == second_blocks[0]
         assert first_blocks[0]["cache_control"] == MARKER
         assert "Stable content for alpha." in first_blocks[0]["text"]
+        assert "Triage the queue." in first_blocks[0]["text"]
         assert "ticket=one" not in first_blocks[0]["text"]
-        assert first_blocks[1]["text"].endswith("ticket=one time=10:00")
+        assert "ticket=one time=10:00" in first_blocks[1]["text"]
 
     def test_missing_skill_notice_stays_in_the_stable_prefix(self):
-        common = {"id": "job-skip", "name": "skip notice", "skills": ["missing", "alpha"]}
-        first, second = self._prompts(
-            [{**common, "prompt": "ticket=one"}, {**common, "prompt": "ticket=two"}]
-        )
+        job = {
+            "id": "job-skip", "name": "skip notice", "skills": ["missing", "alpha"],
+            "prompt": "Triage the queue.", "script": "queue.py",
+        }
+        first, second = self._prompts(job, ["ticket=one", "ticket=two"])
 
         first_blocks = apply_anthropic_cache_control(
             [{"role": "user", "content": first}]
@@ -417,4 +417,4 @@ class TestCronBuilder:
 
         assert first_blocks[0] == second_blocks[0]
         assert "could not be found" in first_blocks[0]["text"]
-        assert first_blocks[1]["text"].endswith("ticket=one")
+        assert "ticket=one" in first_blocks[1]["text"]

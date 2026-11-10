@@ -131,8 +131,8 @@ class TestBuildJobPromptContextFrom:
         assert "News: AI boom" in prompt
         assert "Weather: Sunny" in prompt
 
-    def test_context_injected_before_prompt(self, cron_env):
-        """Context should appear before the job's own prompt."""
+    def test_context_follows_the_job_prompt(self, cron_env):
+        """The job's own prompt leads (stable, cacheable); the volatile context follows it."""
         from cron.jobs import create_job, OUTPUT_DIR
         from cron.scheduler import _build_job_prompt
 
@@ -149,7 +149,7 @@ class TestBuildJobPromptContextFrom:
         prompt = _build_job_prompt(job_b)
         context_pos = prompt.find("Context data")
         prompt_pos = prompt.find("Process the data above")
-        assert context_pos < prompt_pos
+        assert 0 <= prompt_pos < context_pos
 
     def test_output_truncated_at_8k_chars(self, cron_env):
         """Output longer than the 8000-char budget is clipped head+tail (#117290)."""
