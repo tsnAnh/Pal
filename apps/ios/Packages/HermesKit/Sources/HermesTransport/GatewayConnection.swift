@@ -125,6 +125,7 @@ final class SocketObserver: NSObject, URLSessionWebSocketDelegate, URLSessionTas
 public actor GatewayConnection {
     public static let subprotocol = "hermes-gateway-v1"
     public static let ticketSubprotocolPrefix = "hermes-gateway-ticket."
+    static let maximumMessageBytes = 64 * 1024 * 1024
 
     public nonisolated let events: AsyncStream<GatewayEvent>
     public nonisolated let serverRequests: AsyncStream<RPCRequest>
@@ -175,6 +176,7 @@ public actor GatewayConnection {
         configuration.urlCache = nil
         let session = URLSession(configuration: configuration, delegate: observer, delegateQueue: nil)
         let task = session.webSocketTask(with: url, protocols: [subprotocol, ticketSubprotocolPrefix + ticket])
+        task.maximumMessageSize = maximumMessageBytes
         let connection = GatewayConnection(
             session: session,
             task: task,
