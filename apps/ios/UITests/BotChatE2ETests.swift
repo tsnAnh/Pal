@@ -94,11 +94,11 @@ final class BotChatE2ETests: E2ETestCase {
         try control("kill-gateway")
         waitFor(app.descendants(matching: .any)["reconnectingIndicator"], timeout: 30, "reconnecting indicator")
         send(app, "OFFLINE-PING-7731")
-        let queued = app.descendants(matching: .any)["deliveryQueued"]
-        waitFor(queued, timeout: 15, "queued state")
-        shot(app, "chat-queued")
+        let waiting = app.descendants(matching: .any)["deliveryWaitingForConnection"]
+        waitFor(waiting, timeout: 15, "waiting for connection state")
+        shot(app, "chat-waiting-for-connection")
         try control("start-gateway")
-        waitGone(queued, timeout: 90, "queued state clears after reconnect")
+        waitGone(waiting, timeout: 90, "waiting state clears after reconnect")
         waitFor(bubbles(app, "assistantBubble", containing: "stub-").firstMatch, timeout: 60)
         XCTAssertEqual(bubbles(app, "userBubble", containing: "OFFLINE-PING-7731").count, 1)
         XCTAssertFalse(app.descendants(matching: .any)["reconnectingIndicator"].exists)

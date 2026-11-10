@@ -2019,7 +2019,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         mid-turn user message (steer/redirect → ``request_yield``) releases the wait.
         ``timeout`` defaults to (and is clamped by) TERMINAL_TIMEOUT. Returns a dict
         with status exited|timeout|interrupted|not_found|error and an output snapshot."""
-        from tools.interrupt import consume_yield as _consume_yield, is_interrupted as _is_interrupted
+        from tools.interrupt import is_interrupted as _is_interrupted, take_yield as _take_yield
 
         try:
             max_timeout = int(os.getenv("TERMINAL_TIMEOUT", "180"))
@@ -2051,16 +2051,15 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
                 result = {
                     "status": "interrupted", "command": session.command, "output": _output_tail(session, 1000),
                     "note": "User sent a new message -- wait interrupted"}
-            elif _consume_yield(threading.current_thread().ident):
-                # A steer/redirect landed mid-turn: redirect() asks tool workers to YIELD so
-                # the user's message is delivered instead of parked behind this wait. The
-                # process is untouched and still notify-tracked; the model should read the
-                # steer text and respond, not re-issue the wait (kimi-code#3697 class).
+            elif (yield_reason := _take_yield(threading.current_thread().ident)) is not None:
+                # A steer/redirect landed mid-turn (or the background budget ran out): the tool workers were
+                # asked to YIELD so the user's message is delivered instead of parked behind this wait. The
+                # process is untouched and keeps its notify routing; respond now, do not re-issue the wait.
+                from tools.yield_contract import TERMINAL_JOB_LABEL, BackgroundJob, render_yield_note
+                job = BackgroundJob(session.id, TERMINAL_JOB_LABEL, bool(session.notify_on_complete))
                 result = {
                     "status": "interrupted", "command": session.command, "output": _output_tail(session, 1000),
-                    "process_running": True,
-                    "note": ("User sent a new message -- wait released; the process is still "
-                             "running and you will be notified on exit. Respond to the user now.")}
+                    "process_running": True, "notify_on_complete": job.notifies, "note": render_yield_note(job, yield_reason)}
             if result is not None:
                 if timeout_note:
                     result["timeout_note"] = timeout_note

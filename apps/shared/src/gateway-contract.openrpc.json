@@ -14047,10 +14047,75 @@
         "title": "CanonicalSubmitParams",
         "type": "object"
       },
+      "CanonicalSubmitReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "admission_id": {
+            "title": "Admission Id",
+            "type": "string"
+          },
+          "ref": {
+            "$ref": "#/components/schemas/CanonicalSessionRef"
+          },
+          "sequence": {
+            "title": "Sequence",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "started",
+              "unknown",
+              "terminal",
+              "turn",
+              "steered"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "authority_epoch": {
+            "title": "Authority Epoch",
+            "type": "integer"
+          },
+          "execution_generation": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Execution Generation"
+          }
+        },
+        "required": [
+          "admission_id",
+          "ref",
+          "sequence",
+          "status",
+          "outcome",
+          "authority_epoch",
+          "execution_generation"
+        ],
+        "title": "CanonicalSubmitReceipt",
+        "type": "object"
+      },
       "CanonicalSubmitResult": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/AdmissionStatus"
+            "$ref": "#/components/schemas/CanonicalSubmitReceipt"
           },
           {
             "$ref": "#/components/schemas/CanonicalVoiceStopped"
@@ -25731,6 +25796,38 @@
           }
         },
         "title": "InflightTurn",
+        "type": "object"
+      },
+      "InputAbsorbedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "turn_id": {
+            "title": "Turn Id",
+            "type": "string"
+          },
+          "admission_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Admission Ids",
+            "type": "array"
+          },
+          "message_uid": {
+            "title": "Message Uid",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "turn_id",
+          "admission_ids",
+          "message_uid",
+          "text"
+        ],
+        "title": "InputAbsorbedPayload",
         "type": "object"
       },
       "InputDetectDropParams": {
@@ -58198,6 +58295,18 @@
           "name": "payload",
           "schema": {
             "$ref": "#/components/schemas/GatewayReadyPayload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "input.absorbed",
+      "summary": "The owner's mid-turn message reached the running turn as its own user row.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "$ref": "#/components/schemas/InputAbsorbedPayload"
           }
         }
       ]

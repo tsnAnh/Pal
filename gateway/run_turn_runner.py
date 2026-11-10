@@ -490,6 +490,12 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
         # A platform send can't be retracted; a local viewer withdraws the keyed notice.
         agent.notice_clear_callback = self._local_notice_clear_callback_sync if local_viewer_turn(self) else None
         agent.event_callback = ctx._event_callback_sync
+        from functools import partial
+        from gateway.local_viewer_events import publish_input_absorbed
+        agent.input_absorbed_callback = (
+            partial(publish_input_absorbed, self) if self._approval_owner is not None else None)
+        from agent.tool_yield_budget import resolve_yield_policy
+        agent.yield_policy = resolve_yield_policy(agent, ctx.user_config)
         agent.reasoning_config, agent.service_tier = reasoning_config, runner._service_tier
         _load_daybreak = getattr(runner, "_load_daybreak", None)  # absent on minimal test runners
         agent.daybreak = callable(_load_daybreak) and _load_daybreak(ctx.source) is True

@@ -155,11 +155,11 @@ struct UserBubble: View {
                 .font(.caption)
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("deliverySending")
-        case .queued:
-            Label("Queued, will send when online", systemImage: "clock")
+        case .waitingForConnection:
+            Label("Waiting for connection", systemImage: "clock")
                 .font(.caption)
                 .foregroundStyle(Color(theme.palette.textSecondary))
-                .accessibilityIdentifier("deliveryQueued")
+                .accessibilityIdentifier("deliveryWaitingForConnection")
         case .failed(let id):
             Button { retry(id) } label: {
                 Label("Not sent. Tap to retry", systemImage: "exclamationmark.circle.fill")

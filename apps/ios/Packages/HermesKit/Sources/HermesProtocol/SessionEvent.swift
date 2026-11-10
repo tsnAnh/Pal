@@ -97,6 +97,28 @@ public struct MessageComplete: Codable, Sendable, Hashable {
     }
 }
 
+public struct InputAbsorbed: Codable, Sendable, Hashable {
+    public var turnID: String?
+    public var admissionIDs: [String]
+    public var messageUID: String?
+    public var text: String
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        turnID = try? container.decodeIfPresent(String.self, forKey: .turnID)
+        admissionIDs = (try? container.decodeIfPresent([String].self, forKey: .admissionIDs)) ?? []
+        messageUID = try? container.decodeIfPresent(String.self, forKey: .messageUID)
+        text = (try? container.decodeIfPresent(String.self, forKey: .text)) ?? ""
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case turnID = "turn_id"
+        case admissionIDs = "admission_ids"
+        case messageUID = "message_uid"
+        case text
+    }
+}
+
 public struct SessionInfoUpdate: Codable, Sendable, Hashable {
     public var running: Bool?
     public var pending: [PendingAdmission]?
@@ -134,6 +156,7 @@ public enum SessionEvent: Sendable, Hashable {
     case messageDelta(MessageDelta)
     case messageInterim(MessageInterim)
     case messageComplete(MessageComplete)
+    case inputAbsorbed(InputAbsorbed)
     case reasoningDelta(String)
     case toolStart(ToolStart)
     case toolComplete(ToolComplete)
@@ -154,6 +177,10 @@ public enum SessionEvent: Sendable, Hashable {
         case "message.delta": decoded = (try? value.decoded(as: MessageDelta.self)).map(SessionEvent.messageDelta)
         case "message.interim": decoded = (try? value.decoded(as: MessageInterim.self)).map(SessionEvent.messageInterim)
         case "message.complete": decoded = (try? value.decoded(as: MessageComplete.self)).map(SessionEvent.messageComplete)
+        case "input.absorbed":
+            decoded = (try? value.decoded(as: InputAbsorbed.self))
+                .flatMap { $0.admissionIDs.isEmpty && $0.text.isEmpty ? nil : $0 }
+                .map(SessionEvent.inputAbsorbed)
         case "reasoning.delta":
             decoded = (try? value.decoded(as: TextPayload.self)).flatMap(\.text).map(SessionEvent.reasoningDelta)
         case "tool.start": decoded = (try? value.decoded(as: ToolStart.self)).map(SessionEvent.toolStart)

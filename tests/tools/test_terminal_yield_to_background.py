@@ -94,5 +94,5 @@ def test_yield_request_without_steer_leaves_foreground_wait_alone():
         assert result["returncode"] == 0
         assert "omega" in result["output"]
     finally:
-        interrupt_mod.consume_yield(threading.current_thread().ident)
+        interrupt_mod.take_yield(threading.current_thread().ident)
         env.cleanup()

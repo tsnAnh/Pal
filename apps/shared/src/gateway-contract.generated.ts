@@ -5891,7 +5891,16 @@ export interface CanonicalModelOverride {
   reasoning?: string | null
 }
 /** ``prompt.submit``: the admission receipt, or ``{voice_stopped: true}``. */
-export type CanonicalSubmitResult = AdmissionStatus | CanonicalVoiceStopped
+export type CanonicalSubmitResult = CanonicalSubmitReceipt | CanonicalVoiceStopped
+export interface CanonicalSubmitReceipt {
+  admission_id: string
+  ref: CanonicalSessionRef
+  sequence: number
+  status: 'queued' | 'started' | 'unknown' | 'terminal' | 'turn' | 'steered'
+  outcome: string | null
+  authority_epoch: number
+  execution_generation: number | null
+}
 export interface CanonicalApprovalParams {
   profile?: string | null
   session_id: string
@@ -6644,6 +6653,12 @@ export interface MessageInterimPayload {
   already_streamed: boolean
   turn_id?: string | null
   segment?: number | null
+}
+export interface InputAbsorbedPayload {
+  turn_id: string
+  admission_ids: string[]
+  message_uid: string
+  text: string
 }
 /** ``prompt_turn._complete_turn_payload`` / ``session_auto_continue._emit_terminal_turn_error`` / ``agent_callbacks._mirror_subagent_to_child`` (child watch mirror: ``text`` only) / ``compute_host_bridge`` (``text`` + ``status``). */
 export interface MessageCompletePayload {
@@ -8397,6 +8412,8 @@ export interface BackendGatewayEventMap {
   'free_tier.challenge': FreeTierChallengePayload
   /** First frame of a connection: the resolved skin, the change-event capability and the replay epoch. */
   'gateway.ready': GatewayReadyPayload
+  /** The owner's mid-turn message reached the running turn as its own user row. */
+  'input.absorbed': InputAbsorbedPayload
   /** The turn ended: final text, usage and outcome. */
   'message.complete': MessageCompletePayload
   /** One streamed chunk of the assistant reply (null text: segment boundary). */
@@ -8543,6 +8560,7 @@ export const GATEWAY_EVENT_TYPES = [
   'error',
   'free_tier.challenge',
   'gateway.ready',
+  'input.absorbed',
   'message.complete',
   'message.delta',
   'message.interim',

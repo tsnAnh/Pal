@@ -104,12 +104,18 @@ public enum SlashCatalog {
     public static func filter(_ items: [SlashItem], query: String) -> [SlashItem] {
         let normalized = normalize(query)
         guard !normalized.isEmpty else { return items.filter { !$0.isUnusedBundled } }
-        let ranked = items.enumerated()
-            .map { (index: $0.offset, item: $0.element, score: score($0.element, normalized)) }
-            .filter { $0.score != .max }
-            .sorted { $0.score != $1.score ? $0.score < $1.score : $0.index < $1.index }
-            .map(\.item)
-        return ranked.filter { $0.group == .commands } + ranked.filter { $0.group == .skills }
+        var scored: [(index: Int, item: SlashItem, score: Int)] = []
+        for (index, item) in items.enumerated() {
+            let itemScore: Int = score(item, normalized)
+            if itemScore != .max { scored.append((index, item, itemScore)) }
+        }
+        scored.sort { lhs, rhs in
+            lhs.score != rhs.score ? lhs.score < rhs.score : lhs.index < rhs.index
+        }
+        let ranked: [SlashItem] = scored.map(\.item)
+        let commands: [SlashItem] = ranked.filter { $0.group == .commands }
+        let skills: [SlashItem] = ranked.filter { $0.group == .skills }
+        return commands + skills
     }
 
     static func normalize(_ query: String) -> String {

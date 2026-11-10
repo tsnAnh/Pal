@@ -176,13 +176,16 @@ def test_a_command_yielded_to_background_keeps_its_group_until_the_job_ends(monk
     gate, started = tmp_path / "gate", tmp_path / "started"
     adopted = []
 
-    def handler(proc, output_so_far):
-        adopted.append(registry.adopt_local(proc, command="wait for gate", cwd=str(tmp_path)))
-        return {"output": output_so_far, "returncode": None}
+    class Adopter:
+        def adopt(self, proc, output_so_far, reason):
+            from tools.yield_contract import BackgroundJob, Yielded
+            session = registry.adopt_local(proc, command="wait for gate", cwd=str(tmp_path))
+            adopted.append(session)
+            return Yielded(BackgroundJob(session.id, "the task", True), output_so_far, reason)
 
     result = {}
     worker = threading.Thread(target=lambda: result.update(env.execute(
-        f"touch {started}; while [ ! -e {gate} ]; do sleep 0.05; done", yield_handler=handler)))
+        f"touch {started}; while [ ! -e {gate} ]; do sleep 0.05; done", yield_adopter=Adopter())))
     calls.clear()
     worker.start()
     wait_until(started.exists, timeout=15, what="the foreground command to start")
