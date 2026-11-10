@@ -134,7 +134,7 @@ struct AvatarRig {
         let squash = 1 - 1.3 * pose.eyeHappy
         let shownHeight = max(0.01, rounded * pose.eyeOpen * squash)
         let rect = CGRect(x: -width / 2, y: -shownHeight / 2, width: width, height: shownHeight)
-        return Path(roundedRect: rect, cornerRadius: min(width, shownHeight) / 2)
+        return Path(roundedRect: rect, cornerRadius: min(width, shownHeight) / 2, style: .circular)
     }
 
     private func happyArc(width: Double, height: Double) -> Path {

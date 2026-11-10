@@ -12,15 +12,26 @@ private let iconOutput = ProcessInfo.processInfo.environment["APP_ICON_OUTPUT"]
 @MainActor
 struct AppIconArtifact {
     private static let side = 1024
+    private static let avatarScale: CGFloat = 1.367
+    private static let avatarOffset = CGPoint(x: -0.03, y: 0.233)
+    private static let eyeScale = 0.96
+    private static let gaze = CGPoint(x: 0.04, y: -0.06)
 
     @Test func render() throws {
-        let spec = BotAvatarSpec(name: "Hermes", meta: BotAvatarMeta(shape: "blobatar:k7q2m9x0:round", color: "#f4f4f4", custom: true))
+        let spec = BotAvatarSpec(name: "Hermes", meta: BotAvatarMeta(shape: "blobatar:k7q2m9x0:round", color: "#ffffff", custom: true))
         let canvas = CGFloat(Self.side)
-        let view = ZStack {
-            Color(white: 0.11)
-            AvatarFrame(content: AvatarContent(spec), pose: AvatarMotion.staticPose(.idle), size: canvas * 0.8)
+        let avatar = canvas * Self.avatarScale
+        var pose = AvatarMotion.staticPose(.idle)
+        pose.eyeScale = Self.eyeScale
+        pose.eyeX = Self.gaze.x
+        pose.eyeY = Self.gaze.y
+        let view = ZStack(alignment: .topLeading) {
+            Color.black
+            AvatarFrame(content: AvatarContent(spec), pose: pose, size: avatar)
+                .offset(x: canvas * Self.avatarOffset.x, y: canvas * Self.avatarOffset.y)
         }
         .frame(width: canvas, height: canvas)
+        .clipped()
         let renderer = ImageRenderer(content: view)
         renderer.scale = 1
         let rendered = try #require(renderer.cgImage)
