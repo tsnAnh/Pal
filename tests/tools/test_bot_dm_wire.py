@@ -60,6 +60,13 @@ def test_a_retry_is_the_same_delivery(raw):
     assert wire.DeliveryKey.parse(raw) == wire.DeliveryKey("a" * 64)
 
 
+@pytest.mark.parametrize("raw, expected", [("bot:" + "a" * 64, "a" * 64), ("bot:" + "a" * 32 + ":retry", "a" * 32),
+                                           ("a" * 32, None), ("a" * 64 + ":retry", None)])
+def test_only_a_bot_prefixed_request_id_is_a_delivery_turn(raw, expected):
+    key = wire.DeliveryKey.from_request_id(raw)
+    assert (key.delivery_id if key else None) == expected
+
+
 @pytest.mark.parametrize("raw", ["bot-chat:default", "cron:job", "bot:xyz", "", None])
 def test_non_delivery_request_ids_are_not_deliveries(raw):
     assert wire.DeliveryKey.parse(raw) is None

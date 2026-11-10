@@ -12,6 +12,7 @@ _STAMP_RE = re.compile(rf"^Message from 🤖 (?P<name>.+?) \(@(?P<handle>{_HANDL
 _STAMP_HANDLE_RE = re.compile(r"^(Message from 🤖 .+? \(@)([A-Za-z0-9_-]+)(\): )", re.DOTALL)
 _LEGACY_RE = re.compile(r"^\[Message from agent '(?P<name>[^']{1,64})'\]\s*(?P<body>.*)$", re.DOTALL)
 _DELIVERY_KEY_RE = re.compile(rf"^(?:bot:)?(?P<id>{_DELIVERY_ID})(?P<retry>:retry)?$")
+_DELIVERY_REQUEST_ID_RE = re.compile(rf"^bot:(?P<id>{_DELIVERY_ID})(?::retry)?$")
 _RELAY_REPLY_RE = re.compile(r"^Reply from (?P<label>.+?):\n(?P<reply>.*?)\n?$", re.DOTALL)
 _RELAY_FAILURE_RE = re.compile(r"^Delivery to (?P<label>.+?) failed(?: \[reason: (?P<reason>[a-z_]+)\])?: ", re.DOTALL)
 _TARGET_LABEL_RE = re.compile(rf"^@(?P<handle>{_HANDLE})(?: on peer '(?P<peer>[a-z0-9][a-z0-9_-]{{0,63}})'| on (?P<conn>.+))?$",
@@ -36,6 +37,11 @@ class DeliveryKey:
     @classmethod
     def parse(cls, raw: object) -> Optional[DeliveryKey]:
         match = _DELIVERY_KEY_RE.match(str(raw or "").strip())
+        return cls(match["id"]) if match else None
+
+    @classmethod
+    def from_request_id(cls, raw: object) -> Optional[DeliveryKey]:
+        match = _DELIVERY_REQUEST_ID_RE.match(str(raw or "").strip())
         return cls(match["id"]) if match else None
 
     @property
