@@ -280,7 +280,7 @@
   "plugins/trust-ladder/templates/nested-AGENTS.md": "787723aa1124841c97f141389360a8dcf222fd84f163120fc0ed75c2f92439db",
   "vendor_kit.py": "fc9e67578062da4084d35b5f8aebc789b3c9f9c9da1902b1be3e891da2db4a55"
  },
- "kit_ref": "a92204f78e7fe1e4cbd52e25a26c9f8bfd77d981",
+ "kit_ref": "9ee2e8c824995b0264f564f4f43026de1ff1e4c7",
  "links": {
   ".agents/skills/advisor": "../../.agents/faker-kit/plugins/advisor/skills/advisor",
   ".agents/skills/architect": "../../.agents/faker-kit/plugins/pstack/skills/architect",
