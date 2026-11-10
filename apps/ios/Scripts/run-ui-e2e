@@ -4,11 +4,39 @@ set -euo pipefail
 IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="$(cd "$IOS_DIR/../.." && pwd)"
 
-if [ "${1:-}" != "--inner" ]; then
-  exec "$IOS_DIR/Scripts/e2e-gateway" -- "$IOS_DIR/Scripts/run-ui-e2e" --inner
+usage() {
+  cat <<USAGE
+usage: run-ui-e2e [--platform ios|macos]
+Runs the UI tests against a sandbox gateway (stub LLM, temp HERMES_HOME).
+  ios    (default) the iOS Simulator; artifacts in Artifacts/ui-e2e
+  macos  the native Mac app on this Mac: SignInFlowTests, BotChatE2ETests, ComputerE2ETests, MacShellE2ETests, MacModalsE2ETests, MacChatDetailsE2ETests, MacPinnedHeroE2ETests, MacBotManagementE2ETests against the
+         sandbox gateway and an rfb-test-server on bot-alpha; artifacts in Artifacts/mac-e2e/<timestamp>
+HERMES_UI_E2E_ONLY narrows the run to one -only-testing selector. The artifact path is printed last.
+USAGE
+}
+
+PLATFORM="${HERMES_UI_E2E_PLATFORM:-ios}"
+INNER=0
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --inner) INNER=1; shift ;;
+    --platform) [ "$#" -ge 2 ] || { usage >&2; exit 2; }; PLATFORM="$2"; shift 2 ;;
+    --platform=*) PLATFORM="${1#--platform=}"; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+done
+case "$PLATFORM" in ios|macos) ;; *) echo "unknown platform: $PLATFORM (ios or macos)" >&2; exit 2 ;; esac
+
+if [ "$INNER" != 1 ]; then
+  exec "$IOS_DIR/Scripts/e2e-gateway" -- "$IOS_DIR/Scripts/run-ui-e2e" --inner --platform "$PLATFORM"
 fi
 
-ART="${HERMES_UI_E2E_ARTIFACTS:-$IOS_DIR/Artifacts/ui-e2e}"
+if [ "$PLATFORM" = macos ]; then
+  ART="${HERMES_UI_E2E_ARTIFACTS:-$IOS_DIR/Artifacts/mac-e2e/$(date +%Y%m%d-%H%M%S)}"
+else
+  ART="${HERMES_UI_E2E_ARTIFACTS:-$IOS_DIR/Artifacts/ui-e2e}"
+fi
 OWNER="${HERMES_UI_E2E_OWNER:-ios-roster-chat}"
 UDID="${HERMES_IOS_SIM_UDID:-1447BE57-ADEB-41D7-94AC-D106E772CBCD}"
 PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
@@ -17,11 +45,21 @@ BUNDLE_ID="dev.tsnanh.hermes.bot"
 RUNNER_ID="dev.tsnanh.hermes.bot.uitests.xctrunner"
 BASE_URL="$HERMES_IOS_TEST_BASE_URL"
 PORT="${BASE_URL##*:}"
-CTL_DIR="$(mktemp -d /tmp/hermes-ui-e2e-ctl.XXXXXX)"
+RUNNER_CONTAINER_TMP="$HOME/Library/Containers/$RUNNER_ID/Data/tmp"
+if [ "$PLATFORM" = macos ]; then
+  mkdir -p "$RUNNER_CONTAINER_TMP"
+  CTL_DIR="$(mktemp -d "$RUNNER_CONTAINER_TMP/hermes-ui-e2e-ctl.XXXXXX")"
+else
+  CTL_DIR="$(mktemp -d /tmp/hermes-ui-e2e-ctl.XXXXXX)"
+fi
 PROBE_TEXT="OFFLINE-PING-7731"
 RECORD_PID=""
 WATCHER_PID=""
 BOOTED_BY_US=0
+MAC_DERIVED="$IOS_DIR/build/DerivedDataMac"
+MAC_APP_BINARY="$MAC_DERIVED/Build/Products/Debug/HermesBots.app/Contents/MacOS/HermesBots"
+RFB_STATE="$CTL_DIR/rfb"
+MAC_TESTS=(SignInFlowTests BotChatE2ETests ComputerE2ETests MacShellE2ETests MacModalsE2ETests MacChatDetailsE2ETests MacPinnedHeroE2ETests MacBotManagementE2ETests)
 
 disk_report() {
   du -sh "$HOME/.android/avd" "$HOME/Library/Developer/CoreSimulator/Devices" "$HOME/Library/Developer/XCTestDevices" 2>&1
@@ -120,13 +158,27 @@ control_loop() {
   done
 }
 
+terminate_mac_app() {
+  local pid
+  for pid in $(pgrep -x HermesBots 2>/dev/null); do
+    [ "$(ps -o comm= -p "$pid" 2>/dev/null)" = "$MAC_APP_BINARY" ] && stop_pid "$pid"
+  done
+  return 0
+}
+
 cleanup() {
   set +e
+  if [ "$PLATFORM" = macos ]; then
+    terminate_mac_app
+    "$IOS_DIR/Scripts/rfb-test-server" stop "$RFB_STATE" >/dev/null 2>&1
+  fi
   [ -n "$WATCHER_PID" ] && kill "$WATCHER_PID" 2>/dev/null
   stop_external
   [ -n "$RECORD_PID" ] && kill -INT "$RECORD_PID" 2>/dev/null && wait "$RECORD_PID" 2>/dev/null
-  xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null
-  xcrun simctl uninstall "$UDID" "$RUNNER_ID" 2>/dev/null
+  if [ "$PLATFORM" = ios ]; then
+    xcrun simctl uninstall "$UDID" "$BUNDLE_ID" 2>/dev/null
+    xcrun simctl uninstall "$UDID" "$RUNNER_ID" 2>/dev/null
+  fi
   if [ "$BOOTED_BY_US" = 1 ]; then
     bash "$LEDGER" cleanup --owner "$OWNER"
     xcrun simctl list devices | grep "$UDID" | grep -q Booted && xcrun simctl shutdown "$UDID"
@@ -137,14 +189,83 @@ cleanup() {
   rm -rf "$CTL_DIR"
   echo "== disk after" | tee -a "$ART/disk.txt"
   disk_report | tee -a "$ART/disk.txt"
+  echo "artifacts: $ART"
 }
 trap cleanup EXIT
 
 mkdir -p "$ART"
 rm -rf "$ART/ui-e2e.xcresult" "$ART/ui-e2e.mov" "$ART"/*.png "$ART"/*.txt "$ART"/*.log
 
+run_macos() {
+  echo "== xcodegen + build (macOS)"
+  ( cd "$IOS_DIR" && xcodegen generate >/dev/null )
+  ( cd "$IOS_DIR" && xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+    -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" \
+    build-for-testing ) >"$ART/xcodebuild-build.log" 2>&1
+
+  terminate_mac_app
+  mkdir -p "$ART/shots" "$CTL_DIR/shots"
+  "$IOS_DIR/Scripts/rfb-test-server" start "$HERMES_IOS_E2E_HOME/profiles/bot-alpha" "$RFB_STATE" | tee "$ART/rfb-server.txt"
+
+  local only=()
+  if [ -n "${HERMES_UI_E2E_ONLY:-}" ]; then
+    only=("-only-testing:$HERMES_UI_E2E_ONLY")
+  else
+    local suite
+    for suite in "${MAC_TESTS[@]}"; do only+=("-only-testing:HermesBotsUITests/$suite"); done
+  fi
+
+  control_loop &
+  WATCHER_PID=$!
+
+  echo "== XCUITest (macOS)"
+  set +e
+  ( cd "$IOS_DIR" &&
+    TEST_RUNNER_HERMES_UITEST_BASE_URL="$BASE_URL" \
+    TEST_RUNNER_HERMES_UITEST_USERNAME="$HERMES_IOS_TEST_USERNAME" \
+    TEST_RUNNER_HERMES_UITEST_PASSWORD="$HERMES_IOS_TEST_PASSWORD" \
+    TEST_RUNNER_HERMES_UITEST_CTL="$CTL_DIR" \
+    TEST_RUNNER_HERMES_UITEST_SHOTS="$CTL_DIR/shots" \
+    TEST_RUNNER_HERMES_UITEST_COMPUTER_SLUG=bot-alpha \
+    TEST_RUNNER_HERMES_UITEST_RFB_LOG="$RFB_STATE/input.log" \
+    xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
+      -destination 'platform=macOS,arch=arm64' -derivedDataPath "$MAC_DERIVED" \
+      "${only[@]}" -resultBundlePath "$ART/ui-e2e.xcresult" \
+      -parallel-testing-enabled NO -maximum-parallel-testing-workers 1 \
+      test-without-building ) >"$ART/xcodebuild-test.log" 2>&1
+  local status=$?
+  set -e
+  terminate_mac_app
+
+  cp "$CTL_DIR/shots/"* "$ART/shots/" 2>/dev/null || true
+  cp "$RFB_STATE/input.log" "$ART/rfb-input.log" 2>/dev/null || true
+  cp "$HERMES_IOS_E2E_GATEWAY_LOG" "$ART/gateway.log" 2>/dev/null || true
+  cp "$HERMES_IOS_E2E_STUB_LOG" "$ART/fake-llm-requests.jsonl" 2>/dev/null || true
+  local summary passed failed skipped
+  summary="$(xcrun xcresulttool get test-results summary --path "$ART/ui-e2e.xcresult" 2>/dev/null || true)"
+  printf '%s' "$summary" >"$ART/result-summary.json"
+  read -r passed failed skipped < <(printf '%s' "$summary" | "$PYTHON" -I -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+except ValueError:
+    data = {}
+print(data.get("passedTests", 0), data.get("failedTests", 1), data.get("skippedTests", 1))')
+  local verdict=FAIL
+  if [ "$status" = 0 ] && [ "$passed" -ge 1 ] && [ "$failed" = 0 ] && [ "$skipped" = 0 ]; then verdict=PASS; fi
+  printf 'verdict=%s passed=%s failed=%s skipped=%s xcodebuild_exit=%s\n' "$verdict" "$passed" "$failed" "$skipped" "$status" | tee "$ART/verdict.txt"
+  grep -E "Test Case .*(passed|failed)|Executed|TEST (EXECUTE|BUILD)" "$ART/xcodebuild-test.log" | tail -12
+  [ "$verdict" = PASS ]
+}
+
 echo "== disk before" | tee "$ART/disk.txt"
 disk_report | tee -a "$ART/disk.txt"
+
+if [ "$PLATFORM" = macos ]; then
+  run_macos
+  exit $?
+fi
+
 xcrun simctl list devices | grep -E "Booted|hermes-ios" | tee "$ART/devices-before.txt" || true
 
 echo "== xcodegen + build"
@@ -190,5 +311,4 @@ kill -INT "$RECORD_PID" 2>/dev/null || true
 wait "$RECORD_PID" 2>/dev/null || true
 RECORD_PID=""
 grep -E "Test Case .*(passed|failed)|Executed|TEST (EXECUTE|BUILD)" "$ART/xcodebuild-test.log" | tail -12
-echo "artifacts: $ART"
 exit "$STATUS"

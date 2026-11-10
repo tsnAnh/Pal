@@ -12,7 +12,7 @@ public enum HermesMetrics {
     public static let captionToCardGap: CGFloat = 8
     public static let separatorThickness: CGFloat = 1
 
-    public static let cardRadius: CGFloat = 17
+    public static let cardRadius: CGFloat = 12
     public static let tileRadius: CGFloat = 15
     public static let sheetRadius: CGFloat = 39
 
@@ -26,7 +26,7 @@ public enum HermesMetrics {
     public static let chipHorizontalPadding: CGFloat = 13
     public static let chipSpacing: CGFloat = 8
 
-    public static let pillHeight: CGFloat = 34
+    public static let pillHeight: CGFloat = 32
     public static let pillHorizontalPadding: CGFloat = 13
     public static let largePillHeight: CGFloat = 48
     public static let largePillHorizontalPadding: CGFloat = 40
@@ -36,9 +36,10 @@ public enum HermesMetrics {
     public static let searchBarBottomPadding: CGFloat = -4
     public static let searchBarLeadingButtonGap: CGFloat = 12
 
-    public static let toggleTrackSize = CGSize(width: 63, height: 28)
-    public static let toggleKnobSize = CGSize(width: 36, height: 24)
+    public static let toggleTrackSize = CGSize(width: 46, height: 28)
+    public static let toggleKnobSize = CGSize(width: 24, height: 24)
     public static let toggleKnobInset: CGFloat = 2
+    public static let toggleTouchTarget = CGSize(width: 52, height: 44)
 
     public static let homeHeaderTopPadding: CGFloat = 0
     public static let heroDiameter: CGFloat = 88
@@ -46,11 +47,11 @@ public enum HermesMetrics {
     public static let heroNameGap: CGFloat = 10
     public static let heroRowSpacing: CGFloat = 22
     public static let heroTopPadding: CGFloat = 36
-    public static let homeRowPitch: CGFloat = 80
-    public static let homeRowAvatarFrame: CGFloat = 63
-    public static let homeRowAvatarSlot: CGFloat = 48
-    public static let homeRowInset: CGFloat = 20
-    public static let homeRowTextGap: CGFloat = 4
+    public static let homeRowPitch: CGFloat = 66
+    public static let homeRowAvatarFrame: CGFloat = 53
+    public static let homeRowAvatarSlot: CGFloat = 44
+    public static let homeRowInset: CGFloat = 16
+    public static let homeRowTextGap: CGFloat = 2
 
     public static let pickerCell: CGFloat = 60
     public static let pickerShapeFrame: CGFloat = 51
@@ -95,6 +96,24 @@ public enum HermesTextStyle: CaseIterable, Sendable {
     case chatCode
 
     public var size: CGFloat {
+        #if os(macOS)
+        switch self {
+        case .chatBody: 14
+        case .composerField: 13
+        case .chatStatus: 13
+        case .botName: 13
+        case .botPreview: 12
+        case .timestamp: 11
+        case .chatCode: 12.5
+        case .heroName: 11
+        default: iosSize
+        }
+        #else
+        iosSize
+        #endif
+    }
+
+    private var iosSize: CGFloat {
         switch self {
         case .rowTitle, .rowValue, .sheetTitle: 15
         case .rowSubtitle, .version: 11
@@ -154,14 +173,22 @@ extension View {
 
 public enum ChatMetrics {
     public static let edgeMargin: CGFloat = 16
-    public static let bubbleHorizontalPadding: CGFloat = 14
-    public static let bubbleVerticalPadding: CGFloat = 7
-    public static let bubbleRadius: CGFloat = 19
+    public static let bubbleHorizontalPadding: CGFloat = 12
+    public static let bubbleVerticalPadding: CGFloat = 8.5
+    public static let bubbleRadius: CGFloat = 18
+    #if os(macOS)
+    public static let bubbleMaxWidth: CGFloat = 516
+    #else
+    public static let bubbleWidthFraction: CGFloat = 0.78
+    public static let padColumn: CGFloat = 720
+    #endif
+    public static let sameSenderGap: CGFloat = 2
+    public static let senderSwitchGap: CGFloat = 15
     public static let bubbleTrailingGap: CGFloat = 60
     public static let rowSpacing: CGFloat = 12
     public static let bodyLineHeight: CGFloat = 20.3
-    public static let separatorTopPadding: CGFloat = 14
-    public static let separatorBottomPadding: CGFloat = 6
+    public static let separatorTopPadding: CGFloat = 18
+    public static let separatorBottomPadding: CGFloat = 11
     public static let unreadTopPadding: CGFloat = 2
     public static let unreadBottomPadding: CGFloat = 9
     public static let unreadLabelGap: CGFloat = 11.5
@@ -171,7 +198,6 @@ public enum ChatMetrics {
     public static let statusLeadingInset: CGFloat = 23
     public static let statusTextGap: CGFloat = 11
     public static let composerHeight: CGFloat = 50
-    public static let composerHorizontalMargin: CGFloat = 30
     public static let composerButtonDiameter: CGFloat = 34
     public static let composerInset: CGFloat = 8
     public static let headerButtonDiameter: CGFloat = 44

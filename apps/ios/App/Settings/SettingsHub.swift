@@ -41,6 +41,9 @@ final class SettingsHub {
     let roster: RosterModel
 
     private(set) var usageHeadline: String?
+    private(set) var usageOverview: UsageOverview?
+    private var usageDismissals = 0
+    private var lastUsageRefresh: Date?
     private(set) var permissions: PermissionsSummary?
     private(set) var aboutYou: SettingsWire.AboutYou?
     var message: String?
@@ -65,6 +68,22 @@ final class SettingsHub {
         return identifier.isEmpty ? deviceTimeZone : identifier
     }
 
+    var usageNotice: UsageNotice? {
+        _ = usageDismissals
+        return UsageNoticeStore(account: connection.accountKey).visible(usageOverview.flatMap(UsageNotice.init))
+    }
+
+    func dismissUsageNotice() {
+        guard let notice = usageNotice else { return }
+        UsageNoticeStore(account: connection.accountKey).dismiss(notice)
+        usageDismissals += 1
+    }
+
+    func refreshUsageIfStale(maxAge: TimeInterval = 300) async {
+        if let last = lastUsageRefresh, Date().timeIntervalSince(last) < maxAge { return }
+        await refreshUsageHeadline()
+    }
+
     func refresh() async {
         async let headline: Void = refreshUsageHeadline()
         async let state: Void = refreshAccountState()
@@ -73,7 +92,9 @@ final class SettingsHub {
 
     private func refreshUsageHeadline() async {
         let subscriptions = try? await api.subscriptions(refresh: true)
-        usageHeadline = subscriptions.flatMap { UsageOverview($0).headlineText }
+        lastUsageRefresh = Date()
+        usageOverview = subscriptions.map(UsageOverview.init)
+        usageHeadline = usageOverview?.headlineText
     }
 
     private func refreshAccountState() async {

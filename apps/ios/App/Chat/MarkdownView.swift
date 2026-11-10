@@ -74,17 +74,25 @@ private struct CodeBlockView: View {
 
     @Environment(\.hermesTheme) private var theme
 
+    private var codeFont: Font {
+        #if os(macOS)
+        .system(size: 12, design: .monospaced)
+        #else
+        .system(.footnote, design: .monospaced)
+        #endif
+    }
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             Text(text)
                 .hermesText(.chatCode)
-                .font(.system(.footnote, design: .monospaced))
-                .foregroundStyle(Color(theme.palette.textPrimary))
+                .font(codeFont)
+                .foregroundStyle(PalTokens.textPrimary)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: true, vertical: true)
                 .padding(10)
         }
-        .background(Color(theme.palette.canvas), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(PalTokens.textPrimary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .accessibilityIdentifier("codeBlock")
     }
 }
@@ -104,11 +112,13 @@ struct InlineText: View {
         composed
             .hermesText(style)
             .fontWeight(weight)
-            .lineSpacing(2.3)
-            .foregroundStyle(foreground ?? Color(theme.palette.textPrimary))
-            .tint(foreground ?? Color(theme.palette.textPrimary))
+            .lineSpacing(3.2)
+            .foregroundStyle(foreground ?? defaultInk)
+            .tint(foreground ?? defaultInk)
             .fixedSize(horizontal: false, vertical: true)
     }
+
+    private var defaultInk: Color { PalTokens.textPrimary }
 
     private var composed: Text {
         let highlighted = Self.applyHighlight(to: text, query: highlight, current: isCurrentMatch, theme: theme)
@@ -117,7 +127,7 @@ struct InlineText: View {
             let slice = AttributedString(highlighted[run.range])
             if let link = run.link {
                 let icon = FaviconCache.shared.image(for: link, pointSize: iconSize)
-                let iconText = icon.map { Text(Image(uiImage: $0)) } ?? Text(Image(systemName: "globe")).foregroundStyle(Color(theme.palette.textSecondary))
+                let iconText = icon.map { Text(Image(platformImage: $0)) } ?? Text(Image(systemName: "globe")).foregroundStyle(Color(theme.palette.textSecondary))
                 result = Text("\(result)\(iconText)\(Text(" "))\(Text(slice).underline())")
             } else {
                 result = Text("\(result)\(Text(slice))")

@@ -48,7 +48,7 @@ struct BotIdentityTests {
     }
 
     @Test func validityMatchesTheServersProfileIdRules() {
-        #expect(BotIdentity(entered: "Grok Helper").isValid)
+        #expect(BotIdentity(entered: "Nova Helper").isValid)
         #expect(!BotIdentity(entered: "_hidden").isValid)
         for reserved in ["Hermes", "Default", "test", "root", "sudo", "tmp"] {
             #expect(!BotIdentity(entered: reserved).isValid, "\(reserved) is reserved by the gateway")

@@ -11,13 +11,21 @@ struct ChatView: View {
     @State private var isVoiceModePresented = false
     @State private var isNearBottom = true
     @State private var scrollPosition = ScrollPosition(edge: .bottom)
-    @State private var followsLatest = true
+    @State private var shownRowLimit = ChatView.rowWindow
+    @State private var pinnedToBottom = true
+    @State private var connectionIsSlow = false
     @FocusState private var composerFocused: Bool
 
     let router: AppRouter
 
     @Environment(\.hermesTheme) private var theme
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(SettingsHub.self) private var hub
+    #if os(macOS)
+    @Environment(MacShell.self) private var shell
+    #else
+    @State private var messageMenu: MessageMenuRequest?
+    #endif
 
     init(model: ChatModel, router: AppRouter) {
         _model = State(initialValue: model)
@@ -27,9 +35,10 @@ struct ChatView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: ChatMetrics.rowSpacing) {
-                    ForEach(model.rows) { row in
-                        ChatRowView(row: row, model: model) { link in
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(shownRowIndices, id: \.self) { index in
+                        let row = model.rows[index]
+                        ChatRowView(row: row, previous: index > 0 ? model.rows[index - 1] : nil, model: model) { link in
                             router.push(.botThread(BotThreadRoute(
                                 botName: model.bot.name,
                                 threadID: link.threadID,
@@ -42,25 +51,33 @@ struct ChatView: View {
                 }
                 .padding(.horizontal, ChatMetrics.edgeMargin)
                 .padding(.top, 8)
+                .chatColumn()
             }
             .scrollPosition($scrollPosition)
             .defaultScrollAnchor(.bottom)
             .defaultScrollAnchor(.bottom, for: .sizeChanges)
             .scrollDismissesKeyboard(.interactively)
-            .scrollEdgeEffectStyle(.soft, for: .top)
+            .scrollEdgeEffectHidden(true, for: .top)
+            .overlay(alignment: .top) { topFade }
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.visibleRect.maxY >= geometry.contentSize.height - 120
             } action: { _, nearBottom in
                 isNearBottom = nearBottom
             }
-            .onScrollPhaseChange { _, phase, context in
-                guard phase == .idle else { return }
-                let geometry = context.geometry
-                followsLatest = geometry.visibleRect.maxY - geometry.contentInsets.bottom >= geometry.contentSize.height - 48
+            .onScrollGeometryChange(for: Bool.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top < 600
+            } action: { _, nearTop in
+                if nearTop, !pinnedToBottom { revealOlderRows() }
             }
-            .onChange(of: model.rows.last, initial: true) {
-                guard followsLatest else { return }
-                scrollPosition.scrollTo(edge: .bottom)
+            .onScrollGeometryChange(for: ChatLayoutKey.self) { geometry in
+                ChatLayoutKey(geometry)
+            } action: { _, _ in
+                if pinnedToBottom { scrollPosition.scrollTo(edge: .bottom) }
+            }
+            .onScrollPhaseChange { oldPhase, newPhase, context in
+                guard newPhase == .idle, oldPhase == .interacting || oldPhase == .decelerating else { return }
+                let geometry = context.geometry
+                pinnedToBottom = geometry.contentSize.height + geometry.contentInsets.bottom - geometry.visibleRect.maxY < 40
             }
             .accessibilityIdentifier("chatScreen")
             .overlay(alignment: .bottom) {
@@ -71,32 +88,67 @@ struct ChatView: View {
                 }
             }
             .animation(.snappy(duration: 0.2), value: isNearBottom)
-            .safeAreaBar(edge: .bottom) { bottomBar() }
-            .onChange(of: model.isCatchingUp) { _, catchingUp in
-                if catchingUp, isNearBottom { scrollToBottom() }
+            .safeAreaBar(edge: .bottom) { bottomBar().chatColumn() }
+            #if os(macOS)
+            .safeAreaBar(edge: .top) {
+                MacChatHeader(bot: model.bot, activity: model.activity, mood: model.avatarMood, router: router)
             }
+            #endif
             .onChange(of: model.currentFindRowID) { _, id in
                 guard let id else { return }
+                pinnedToBottom = false
+                if let index = model.rows.firstIndex(where: { $0.id == id }) {
+                    shownRowLimit = max(shownRowLimit, model.rows.count - index)
+                }
                 withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
             }
         }
+        #if os(iOS)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 BotCapsule(bot: model.bot, activity: model.activity, mood: model.avatarMood)
             }
             .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .trailingBar) {
                 menu
             }
         }
         .toolbarTitleDisplayMode(.inline)
+        #else
+        .macChatActions(
+            find: {
+                composerFocused = false
+                model.beginFinding()
+            },
+            focusComposer: {
+                model.endFinding()
+                Task { composerFocused = true }
+            }
+        )
+        #endif
+        #if os(macOS)
+        .background(PalTokens.content)
+        #else
         .background(Color(theme.palette.canvas))
+        .environment(\.presentMessageMenu) { messageMenu = $0 }
+        .overlay { MessageMenuHost(request: $messageMenu) }
+        #endif
         .task { model.start() }
+        .task(id: model.connection) {
+            connectionIsSlow = false
+            guard model.connection != .live else { return }
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            connectionIsSlow = model.connection != .live
+        }
         .onChange(of: model.pendingDraft, initial: true) { _, pending in
             guard let pending else { return }
             draft = pending
             model.clearPendingDraft()
             composerFocused = true
+        }
+        .onChange(of: model.replyTarget) { _, target in
+            if target != nil { composerFocused = true }
         }
         .onDisappear {
             dictation.stop()
@@ -105,7 +157,7 @@ struct ChatView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { model.markViewed() }
         }
-        .fullScreenCover(isPresented: $isVoiceModePresented) {
+        .fullCover(isPresented: $isVoiceModePresented) {
             VoiceModeView(model: model) { isVoiceModePresented = false }
         }
         .alert(
@@ -128,6 +180,14 @@ struct ChatView: View {
 
     @ViewBuilder
     private var statusLine: some View {
+        if connectionIsSlow {
+            connectionStatus
+                .padding(.top, 12)
+        }
+    }
+
+    @ViewBuilder
+    private var connectionStatus: some View {
         switch model.connection {
         case .reconnecting:
             ChatStatusLine(text: String(localized: "Reconnecting…"), dotColor: dotColor)
@@ -140,6 +200,17 @@ struct ChatView: View {
         }
     }
 
+    private static let rowWindow = 60
+
+    private var shownRowIndices: Range<Int> {
+        max(0, model.rows.count - shownRowLimit)..<model.rows.count
+    }
+
+    private func revealOlderRows() {
+        guard shownRowLimit < model.rows.count else { return }
+        shownRowLimit += Self.rowWindow
+    }
+
     private var dotColor: Color {
         model.chatAccent?.accent ?? Color(theme.palette.chipSelectedFill)
     }
@@ -149,31 +220,73 @@ struct ChatView: View {
         if model.isFinding {
             FindBar(model: model)
         } else {
-            ChatComposer(
-                botName: model.bot.displayName,
-                accent: model.chatAccent,
-                attachments: model.attachments,
-                canSend: model.canSendAttachments,
-                dictation: dictation,
-                draft: $draft,
-                focused: $composerFocused,
-                send: {
-                    dictation.stop()
-                    model.send(draft)
-                    draft = ""
-                    scrollToBottom()
-                },
-                openVoiceMode: {
-                    dictation.stop()
-                    composerFocused = false
-                    isVoiceModePresented = true
-                },
-                removeAttachment: { model.removeAttachment($0) },
-                attachPhotos: { items in Task { await loadPhotos(items) } },
-                attachCapture: { image in Task { await stage(image: image) } },
-                attachFiles: { urls in Task { await loadFiles(urls) } }
-            )
+            VStack(spacing: 0) {
+                if let notice = hub.usageNotice {
+                    UsageBanner(notice: notice) {
+                        reviewUsage()
+                    } dismiss: {
+                        hub.dismissUsageNotice()
+                    }
+                    .padding(.horizontal, ChatMetrics.edgeMargin)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+                composer
+            }
+            .animation(.snappy(duration: 0.2), value: hub.usageNotice)
+            .task { await hub.refreshUsageIfStale() }
         }
+    }
+
+    private func reviewUsage() {
+        #if os(macOS)
+        shell.settingsSection = .usage
+        router.present(.settings)
+        #else
+        router.presentSettings(route: .usage)
+        #endif
+    }
+
+    private var topFade: some View {
+        #if os(macOS)
+        ChatTopFade(color: PalTokens.content, height: MacMetrics.topBarHeight + 10)
+            .ignoresSafeArea(.container, edges: .top)
+        #else
+        GeometryReader { proxy in
+            ChatTopFade(color: Color(theme.palette.canvas), height: proxy.safeAreaInsets.top + 14)
+                .ignoresSafeArea(.container, edges: .top)
+        }
+        .allowsHitTesting(false)
+        #endif
+    }
+
+    private var composer: some View {
+        ChatComposer(
+            botName: model.bot.displayName,
+            accent: model.chatAccent,
+            attachments: model.attachments,
+            replyTarget: model.replyTarget,
+            cancelReply: { model.cancelReply() },
+            canSend: model.canSendAttachments,
+            dictation: dictation,
+            draft: $draft,
+            focused: $composerFocused,
+            send: {
+                dictation.stop()
+                model.send(draft)
+                draft = ""
+                scrollToBottom()
+            },
+            openVoiceMode: {
+                dictation.stop()
+                composerFocused = false
+                isVoiceModePresented = true
+            },
+            removeAttachment: { model.removeAttachment($0) },
+            attachPhotos: { items in Task { await loadPhotos(items) } },
+            attachCapture: { image in Task { await stage(image: image) } },
+            attachImageData: { data in Task { await stage(imageData: data) } },
+            attachFiles: { urls in Task { await loadFiles(urls) } }
+        )
     }
 
     private var menu: some View {
@@ -206,7 +319,7 @@ struct ChatView: View {
     }
 
     private func scrollToBottom() {
-        followsLatest = true
+        pinnedToBottom = true
         withAnimation(.easeOut(duration: 0.2)) { scrollPosition.scrollTo(edge: .bottom) }
     }
 
@@ -229,7 +342,7 @@ struct ChatView: View {
         }
     }
 
-    private func stage(image: UIImage) async {
+    private func stage(image: PlatformImage) async {
         do {
             let upload = try await Task.detached { try AttachmentPreparer.prepareImage(from: image) }.value
             model.attachPhoto(upload)
@@ -275,5 +388,19 @@ private struct BotCapsule: View {
         .accessibilityLabel(Text(bot.displayName))
         .accessibilityValue(Text(activity.accessibilityValue))
         .accessibilityIdentifier("chatTitle")
+    }
+}
+
+private struct ChatLayoutKey: Equatable {
+    let contentHeight: CGFloat
+    let containerHeight: CGFloat
+    let topInset: CGFloat
+    let bottomInset: CGFloat
+
+    init(_ geometry: ScrollGeometry) {
+        contentHeight = geometry.contentSize.height
+        containerHeight = geometry.containerSize.height
+        topInset = geometry.contentInsets.top
+        bottomInset = geometry.contentInsets.bottom
     }
 }

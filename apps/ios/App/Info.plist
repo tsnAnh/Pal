@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Hermes Bots</string>
+	<string>Pal</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -13,7 +13,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>$(PRODUCT_NAME)</string>
+	<string>Pal</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -22,24 +22,24 @@
 	<string>1</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<key>NSCameraUsageDescription</key>
-	<string>Hermes Bots can take a photo to send to a bot.</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>Hermes Bots listens while you dictate a message or talk to a bot in voice mode.</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Hermes Bots turns your speech into text on this device for dictation and voice mode.</string>
 	<key>NSAlarmKitUsageDescription</key>
-	<string>Hermes sets alarms and timers when you ask your bot to.</string>
+	<string>Pal sets alarms and timers when you ask your bot to.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Hermes reads your calendar and adds events when you ask your bot to.</string>
+	<string>Pal reads your calendar and adds events when you ask your bot to.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Pal can take a photo to send to a bot.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>Hermes looks up people in your contacts when you ask your bot to.</string>
+	<string>Pal looks up people in your contacts when you ask your bot to.</string>
 	<key>NSHomeKitUsageDescription</key>
-	<string>Hermes controls your lights, locks and other home accessories when you ask your bot to.</string>
+	<string>Pal controls your lights, locks and other home accessories when you ask your bot to.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Hermes uses your location to tell your bot where you are and to find places near you.</string>
+	<string>Pal uses your location to tell your bot where you are and to find places near you.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Pal listens while you dictate a message or talk to a bot in voice mode.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
-	<string>Hermes reads and adds your reminders when you ask your bot to.</string>
+	<string>Pal reads and adds your reminders when you ask your bot to.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Pal turns your speech into text on this device for dictation and voice mode.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

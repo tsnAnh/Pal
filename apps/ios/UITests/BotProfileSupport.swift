@@ -21,10 +21,15 @@ class BotProfileTestCase: E2ETestCase {
     func openProfile(_ app: XCUIApplication, _ slug: String) {
         let row = app.buttons["botRow-\(slug)"]
         waitFor(row, timeout: 30, "roster row \(slug)")
+        #if os(macOS)
+        row.rightClick()
+        let viewProfile = app.menuItems["View Profile"]
+        #else
         row.press(forDuration: 1.2)
         let viewProfile = app.buttons["View Profile"]
+        #endif
         waitFor(viewProfile, timeout: 10, "context menu View Profile")
-        viewProfile.tap()
+        viewProfile.hit()
         waitFor(element(app, "botProfileScreen"), timeout: 20, "profile screen")
         waitFor(element(app, "profileAvatar"), timeout: 20, "profile avatar")
     }
@@ -32,7 +37,7 @@ class BotProfileTestCase: E2ETestCase {
     func goBack(_ app: XCUIApplication) {
         let back = app.navigationBars.buttons.element(boundBy: 0)
         waitFor(back, timeout: 10, "back button")
-        back.tap()
+        back.hit()
     }
 
     func waitUntil(_ timeout: TimeInterval = 20, _ message: String, file: StaticString = #filePath, line: UInt = #line, _ condition: () -> Bool) {
@@ -51,7 +56,7 @@ class BotProfileTestCase: E2ETestCase {
     func confirmReplace(_ app: XCUIApplication) {
         let confirm = app.buttons.matching(NSPredicate(format: "label == %@", "Replace")).firstMatch
         waitFor(confirm, timeout: 10, "replace confirmation")
-        confirm.tap()
+        confirm.hit()
     }
 
     func toggleIsOn(_ toggle: XCUIElement) -> Bool {

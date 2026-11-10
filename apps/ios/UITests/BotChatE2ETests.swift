@@ -5,24 +5,34 @@ final class BotChatE2ETests: E2ETestCase {
     func test1RosterShowsBothBots() throws {
         let app = launch(resetCredentials: true)
         signInIfNeeded(app)
-        for name in ["bot-alpha", "bot-beta"] {
+        for (name, title) in [("bot-alpha", "Bot Alpha"), ("bot-beta", "Bot Beta")] {
             let row = app.buttons["botRow-\(name)"]
             waitFor(row, timeout: 30, "row \(name)")
+            #if os(macOS)
+            XCTAssertGreaterThanOrEqual(row.frame.height, 50)
+            #else
             XCTAssertGreaterThanOrEqual(row.frame.height, 56)
-            XCTAssertTrue(row.label.contains(name), row.label)
+            #endif
+            XCTAssertTrue(row.label.contains(title), row.label)
         }
         shot(app, "roster")
         let launcher = app.buttons["rosterSearchField"]
         waitFor(launcher, timeout: 10, "search launcher")
-        launcher.tap()
+        launcher.hit()
         let search = app.descendants(matching: .any)["searchField"]
         waitFor(search, timeout: 10, "search field")
+        #if os(iOS)
         waitFor(app.keyboards.firstMatch, timeout: 10, "keyboard")
+        #endif
         search.typeText("alpha")
         waitFor(app.buttons["searchResult-bot-bot-alpha"], timeout: 10, "search finds the bot")
         waitGone(app.buttons["searchResult-bot-bot-beta"], timeout: 10, "search filters bots")
         shot(app, "roster-search")
-        app.buttons["searchClose"].tap()
+        #if os(macOS)
+        app.typeKey(.escape, modifierFlags: [])
+        #else
+        app.buttons["searchClose"].hit()
+        #endif
         waitFor(app.buttons["botRow-bot-alpha"], timeout: 10, "roster after closing search")
     }
 
@@ -47,7 +57,7 @@ final class BotChatE2ETests: E2ETestCase {
         XCTAssertTrue(app.staticTexts["Which flavor do you want?"].exists)
         XCTAssertTrue(app.staticTexts["Or answer in the chat below"].exists)
         shot(app, "chat-clarify")
-        app.buttons["clarifyChoice-0"].tap()
+        app.buttons["clarifyChoice-0"].hit()
         waitFor(bubbles(app, "assistantBubble", containing: "Got it, vanilla").firstMatch, timeout: 60, "card answer completes the turn")
         waitGone(card, timeout: 15, "interactive card removed after answer")
         waitFor(bubbles(app, "clarifyAnswered", containing: "vanilla").firstMatch, timeout: 10, "answered card stays")
@@ -104,7 +114,7 @@ final class BotChatE2ETests: E2ETestCase {
         send(app, "CLARIFY large text")
         waitFor(app.descendants(matching: .any)["clarifyCard"], timeout: 60, "clarify card")
         shot(app, "chat-clarify-dynamic-type-xl")
-        app.buttons["clarifySkip"].tap()
+        app.buttons["clarifySkip"].hit()
         waitGone(app.descendants(matching: .any)["clarifyCard"], timeout: 15, "card skipped so the chat is left clean")
     }
 
@@ -125,7 +135,7 @@ final class BotChatE2ETests: E2ETestCase {
         signInIfNeeded(app)
         let row = app.buttons["botRow-bot-alpha"]
         waitFor(row, timeout: 30, "roster row")
-        row.tap()
+        row.hit()
 
         let chat = app.descendants(matching: .any)["chatScreen"]
         XCTAssertTrue(chat.waitForExistence(timeout: 20), app.debugDescription)

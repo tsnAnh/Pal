@@ -31,7 +31,9 @@ struct ComputerView: View {
                     recenterToken: model.recenterToken,
                     model: model
                 )
+                #if os(iOS)
                 .ignoresSafeArea(.container)
+                #endif
                 .accessibilityLabel(Text("Computer screen"))
             } else {
                 overlayState
@@ -40,11 +42,17 @@ struct ComputerView: View {
                 .frame(width: 1, height: 1)
                 .accessibilityElement()
                 .accessibilityIdentifier("computerStatus")
+                #if os(macOS)
+                .accessibilityLabel(Text(model.statusLabel))
+                #else
                 .accessibilityValue(Text(model.statusLabel))
+                #endif
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .allowsHitTesting(false)
         }
         .overlay(alignment: .bottom) { bottomBar }
         .navigationBarBackButtonHidden()
-        .toolbarBackground(.hidden, for: .navigationBar)
+        .clearNavigationBackground()
         .toolbar { toolbar }
         .toolbarTitleDisplayMode(.inline)
         .task(id: model.attempt) { await model.run() }
@@ -54,13 +62,14 @@ struct ComputerView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            Button { dismiss() } label: { ComputerChromeCircle(systemName: "chevron.left") }
-                .buttonStyle(.plain)
+        #if os(iOS)
+        ToolbarItem(placement: .leadingBar) {
+            Button { dismiss() } label: { Image(systemName: "chevron.left") }
                 .accessibilityLabel(Text("Back"))
                 .accessibilityIdentifier("computerBackButton")
+                .tint(.primary)
         }
-        .sharedBackgroundVisibility(.hidden)
+        #endif
         ToolbarItem(placement: .principal) {
             HStack(spacing: ComputerMetrics.avatarToName) {
                 if let spec { BotAvatarView(spec: spec, size: ComputerMetrics.avatarSize) }
@@ -74,13 +83,12 @@ struct ComputerView: View {
             .accessibilityIdentifier("computerTitle")
         }
         .sharedBackgroundVisibility(.hidden)
-        ToolbarItem(placement: .topBarTrailing) {
-            Button { model.showsHelp = true } label: { ComputerChromeCircle(systemName: "questionmark") }
-                .buttonStyle(.plain)
+        ToolbarItem(placement: .trailingBar) {
+            Button { model.showsHelp = true } label: { Image(systemName: "questionmark") }
                 .accessibilityLabel(Text("Help"))
                 .accessibilityIdentifier("computerHelpButton")
+                .tint(.primary)
         }
-        .sharedBackgroundVisibility(.hidden)
     }
 
     private var overlayState: some View {
@@ -160,28 +168,32 @@ struct ComputerView: View {
 
     private var controlTools: some View {
         HStack(spacing: ComputerMetrics.barSpacing) {
-            Button { model.keyboardShown.toggle() } label: { ComputerToolIcon(systemName: "keyboard") }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Keyboard"))
-                .accessibilityIdentifier("computerKeyboardButton")
+            if PlatformCapabilities.hasTouchScreen {
+                Button { model.keyboardShown.toggle() } label: { ComputerToolIcon(systemName: "keyboard") }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Keyboard"))
+                    .accessibilityIdentifier("computerKeyboardButton")
+            }
             Menu {
-                Button("Copy to Phone", systemImage: "iphone") { Task { await model.copyToPhone() } }
+                Button(DeviceWording.copyToDevice, systemImage: DeviceWording.deviceSystemImage) { Task { await model.copyToPhone() } }
                     .accessibilityIdentifier("computerCopyToPhone")
-                Button("Paste from Phone", systemImage: "doc.on.clipboard") { model.pasteFromPhone() }
+                Button(DeviceWording.pasteFromDevice, systemImage: "doc.on.clipboard") { model.pasteFromPhone() }
                     .accessibilityIdentifier("computerPasteFromPhone")
             } label: { ComputerToolIcon(systemName: "list.clipboard") }
                 .accessibilityLabel(Text("Clipboard"))
                 .accessibilityIdentifier("computerClipboardButton")
-            Menu {
-                Toggle("Trackpad mode", systemImage: "rectangle.and.hand.point.up.left", isOn: $model.trackpad)
-                    .accessibilityIdentifier("computerTrackpadToggle")
-                if model.trackpad {
-                    Button("Recenter pointer", systemImage: "scope") { model.recenterPointer() }
-                        .accessibilityIdentifier("computerRecenter")
-                }
-            } label: { ComputerToolIcon(systemName: "ellipsis") }
-                .accessibilityLabel(Text("More"))
-                .accessibilityIdentifier("computerMoreButton")
+            if PlatformCapabilities.hasTouchScreen {
+                Menu {
+                    Toggle("Trackpad mode", systemImage: "rectangle.and.hand.point.up.left", isOn: $model.trackpad)
+                        .accessibilityIdentifier("computerTrackpadToggle")
+                    if model.trackpad {
+                        Button("Recenter pointer", systemImage: "scope") { model.recenterPointer() }
+                            .accessibilityIdentifier("computerRecenter")
+                    }
+                } label: { ComputerToolIcon(systemName: "ellipsis") }
+                    .accessibilityLabel(Text("More"))
+                    .accessibilityIdentifier("computerMoreButton")
+            }
         }
     }
 }
@@ -192,7 +204,6 @@ enum ComputerMetrics {
     static let titleSize: CGFloat = 15
     static let statusSize: CGFloat = 12.5
     static let spinnerToText: CGFloat = 14
-    static let chromeDiameter: CGFloat = 44
     static let pillHeight: CGFloat = 38
     static let pillTextSize: CGFloat = 12
     static let pillPadding: CGFloat = 13
@@ -203,19 +214,6 @@ enum ComputerMetrics {
 
 enum ComputerChrome {
     static let fill = Color(red: 29 / 255, green: 29 / 255, blue: 29 / 255)
-}
-
-struct ComputerChromeCircle: View {
-    let systemName: String
-
-    var body: some View {
-        Image(systemName: systemName)
-            .font(.system(size: 18, weight: .medium))
-            .foregroundStyle(.white)
-            .frame(width: ComputerMetrics.chromeDiameter, height: ComputerMetrics.chromeDiameter)
-            .background(ComputerChrome.fill, in: Circle())
-            .contentShape(Circle())
-    }
 }
 
 struct ComputerToolIcon: View {

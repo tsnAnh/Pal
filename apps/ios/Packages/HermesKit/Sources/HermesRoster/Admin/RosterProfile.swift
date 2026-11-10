@@ -4,6 +4,7 @@ import HermesProtocol
 public struct BotMeta: Sendable, Equatable {
     public static let namespace = "hermes-bots"
     public static let pinnedKey = "pinned"
+    public static let hiddenKey = "hidden"
 
     public var fields: [String: JSONValue]
     public var revision: Int?
@@ -14,6 +15,8 @@ public struct BotMeta: Sendable, Equatable {
     }
 
     public var isPinned: Bool { fields[Self.pinnedKey]?.boolValue ?? false }
+
+    public var isHidden: Bool { fields[Self.hiddenKey]?.boolValue ?? false }
 
     public var title: String? {
         fields["title"]?.stringValue

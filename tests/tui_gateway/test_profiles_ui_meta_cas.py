@@ -96,6 +96,25 @@ def test_profiles_list_normalizes_yaml_timestamps_in_ui_meta(home):
     json.dumps(row)
 
 
+def test_sidebar_state_hidden_pinned_and_title_round_trip_through_one_namespace(home):
+    first = _configure({"hermes-bots": {"title": "Atlas", "pinned": True}})
+    assert first["ui_meta_revisions"] == {"hermes-bots": 1}
+
+    hidden = _configure({"hermes-bots": {"title": "Atlas", "pinned": True, "hidden": True}}, {"hermes-bots": 1})
+    assert hidden["ui_meta"] is True and hidden["ui_meta_revisions"] == {"hermes-bots": 2}
+    row = _default_profile()
+    assert row["ui_meta"]["hermes-bots"] == {"title": "Atlas", "pinned": True, "hidden": True}
+    assert row["ui_meta_revisions"] == {"hermes-bots": 2}
+
+    renamed_from_stale_read = _configure({"hermes-bots": {"title": "Zed", "pinned": True}}, {"hermes-bots": 1})
+    assert renamed_from_stale_read["ui_meta"] is False
+    assert _default_profile()["ui_meta"]["hermes-bots"]["hidden"] is True
+
+    shown = _configure({"hermes-bots": {"title": "Zed", "pinned": True, "hidden": False}}, {"hermes-bots": 2})
+    assert shown["ui_meta"] is True
+    assert _default_profile()["ui_meta"]["hermes-bots"] == {"title": "Zed", "pinned": True, "hidden": False}
+
+
 def test_two_concurrent_writers_cannot_both_replace_the_same_revision(home):
     def write(label):
         return _configure(

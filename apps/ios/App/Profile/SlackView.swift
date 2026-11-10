@@ -47,14 +47,10 @@ struct SlackView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { action }
         .task { await model.load() }
         .onDisappear { model.stop() }
-        .fullScreenCover(
-            item: Binding(get: { model.safariURL.map(SlackTarget.init) }, set: { if $0 == nil { model.safariURL = nil } }),
-            onDismiss: { model.safariDismissed() }
-        ) { target in
-            SafariView(url: target.url).ignoresSafeArea()
-        }
+        .inAppBrowser(url: $model.safariURL) { model.safariDismissed() }
         .sheet(isPresented: $model.isEnteringTokens, onDismiss: { model.cancelTokenEntry() }) {
             SlackTokenSheet(model: model)
+                .macSheetFrame()
         }
         .confirmationDialog(
             Text("Disconnect Slack?"),
@@ -159,12 +155,6 @@ struct SlackView: View {
     }
 }
 
-private struct SlackTarget: Identifiable {
-    let url: URL
-
-    var id: URL { url }
-}
-
 private struct SlackTokenSheet: View {
     @Bindable var model: SlackModel
 
@@ -209,7 +199,7 @@ private struct SlackTokenSheet: View {
 
     private func tokenField(_ prompt: String, text: Binding<String>, identifier: String) -> some View {
         SecureField("", text: text, prompt: Text(prompt))
-            .textInputAutocapitalization(.never)
+            .neverAutocapitalized()
             .autocorrectionDisabled()
             .textContentType(.oneTimeCode)
             .padding(.horizontal, HermesMetrics.rowInset)

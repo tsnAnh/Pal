@@ -30,6 +30,7 @@ struct BotProfileView: View {
         .toast($model.toast)
         .sheet(item: Binding(get: { model.editing }, set: { if $0 == nil { model.endEditing() } })) { editing in
             EditBotSheet(model: editing) { model.endEditing() }
+                .macSheetFrame()
         }
         .confirmationDialog(
             Text("Replace Primary Bot?"),
@@ -46,17 +47,16 @@ struct BotProfileView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .trailingBar) {
             Button { Task { await model.shareTemplate() } } label: {
-                CircleIcon(systemName: "square.and.arrow.up")
+                Image(systemName: "square.and.arrow.up")
             }
-            .buttonStyle(.plain)
             .disabled(model.isSharing)
             .accessibilityLabel(Text("Share as Template"))
             .accessibilityIdentifier("profileShareButton")
+            .tint(.primary)
         }
-        .sharedBackgroundVisibility(.hidden)
-        ToolbarItem(placement: .topBarTrailing) {
+        ToolbarItem(placement: .trailingBar) {
             Menu {
                 if !model.isPrimary {
                     Button("Replace Primary Bot…", systemImage: "star") { model.confirmsReplacePrimary = true }
@@ -65,13 +65,12 @@ struct BotProfileView: View {
                 Button("Copy ID", systemImage: "doc.on.doc") { model.copyID() }
                     .accessibilityIdentifier("profileCopyID")
             } label: {
-                CircleIcon(systemName: "ellipsis")
+                Image(systemName: "ellipsis")
             }
-            .buttonStyle(.plain)
             .accessibilityLabel(Text("More"))
             .accessibilityIdentifier("profileMoreButton")
+            .tint(.primary)
         }
-        .sharedBackgroundVisibility(.hidden)
     }
 
     private var hero: some View {
@@ -108,7 +107,7 @@ struct BotProfileView: View {
 
     private var configureCards: some View {
         VStack(spacing: 0) {
-            GroupedCard(separatorInset: HermesMetrics.iconRowSeparatorInset, accessibilityIdentifier: "profileLibraryCard") {
+            GroupedCard(accessibilityIdentifier: "profileLibraryCard") {
                 SettingsRow.navigate(
                     String(localized: "Library"),
                     icon: .symbol("books.vertical"),
@@ -125,7 +124,7 @@ struct BotProfileView: View {
             SectionCaption(String(localized: "Configure bot"), accessibilityIdentifier: "profileConfigureCaption")
                 .padding(.top, ProfileMetrics.cardToCaption)
                 .padding(.bottom, ProfileMetrics.captionToCard)
-            GroupedCard(separatorInset: HermesMetrics.iconRowSeparatorInset, accessibilityIdentifier: "profileConfigureCard") {
+            GroupedCard(accessibilityIdentifier: "profileConfigureCard") {
                 SettingsRow.navigate(
                     String(localized: "Add to Slack"),
                     icon: .custom(SlackMark(style: .mono(Color(theme.palette.textSecondary))).frame(width: 18, height: 18)),

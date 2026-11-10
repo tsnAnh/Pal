@@ -11,9 +11,13 @@ SILENT_TRANSPORT_SECONDS = 45.0
 class ClientKind(StrEnum):
     DESKTOP = "desktop"
     IOS = "ios"
+    MAC = "mac"
     TUI = "tui"
     CLI = "cli"
     WEB = "web"
+
+
+PUSH_CLIENT_KINDS = frozenset({ClientKind.IOS, ClientKind.MAC})
 
 
 class AttentionState(StrEnum):

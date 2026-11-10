@@ -10,30 +10,30 @@ enum SettingsCopy {
 
 struct SettingsSheet: View {
     @Bindable var model: ConnectionModel
-    let roster: RosterModel
+    let hub: SettingsHub
     let openConnectApps: () -> Void
     let onClose: () -> Void
 
-    @State private var hub: SettingsHub
-    @State private var path: [SettingsRoute] = []
+    @State private var path: [SettingsRoute]
 
-    init(model: ConnectionModel, roster: RosterModel, openConnectApps: @escaping () -> Void, onClose: @escaping () -> Void) {
+    init(model: ConnectionModel, hub: SettingsHub, initialRoute: SettingsRoute?, openConnectApps: @escaping () -> Void, onClose: @escaping () -> Void) {
         self.model = model
-        self.roster = roster
+        self.hub = hub
         self.openConnectApps = openConnectApps
         self.onClose = onClose
-        _hub = State(initialValue: SettingsHub(connection: model, roster: roster))
+        _path = State(initialValue: initialRoute.map { [$0] } ?? [])
     }
 
     var body: some View {
         NavigationStack(path: $path) {
             SettingsRootView(hub: hub, connection: model, openConnectApps: openConnectApps, onClose: onClose) { path.append($0) }
-                .toolbar(.hidden, for: .navigationBar)
+                .environment(\.sheetChromeHostedInNavigation, true)
                 .navigationDestination(for: SettingsRoute.self) { route in
                     SettingsDestination(route: route, hub: hub, connection: model) { path.removeLast() }
-                        .toolbar(.hidden, for: .navigationBar)
+                        .environment(\.sheetChromeHostedInNavigation, true)
                 }
         }
+        .tint(.primary)
         .task { await hub.refresh() }
     }
 }
@@ -86,7 +86,7 @@ struct SettingsRootView: View {
                     preferencesCard
                     feedbackCard
                     signOutCard
-                    BrandMarkFooter(name: "Hermes Bots", version: AppVersion.display)
+                    BrandMarkFooter(name: "Pal", version: AppVersion.display)
                         .padding(.top, 8)
                         .padding(.bottom, 24)
                 }
@@ -95,11 +95,8 @@ struct SettingsRootView: View {
             .accessibilityIdentifier("settingsScroll")
         }
         .task { await notifications.refresh() }
-        .sheet(isPresented: $sharingFeedback) {
-            ShareSheet(items: [FeedbackReport.text(connection: connection)])
-                .presentationDetents([.medium, .large])
-        }
-        .confirmationDialog("Sign out of Hermes Bots on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+        .shareSheet(isPresented: $sharingFeedback) { [FeedbackReport.text(connection: connection)] }
+        .confirmationDialog("Sign out of Pal on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive) { Task { await connection.signOut() } }
             Button("Cancel", role: .cancel) {}
         }
@@ -217,6 +214,6 @@ struct SettingsRootView: View {
     }
 
     private func openSystemSettings() {
-        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+        if let url = SystemSettings.notificationSettingsURL { openURL(url) }
     }
 }

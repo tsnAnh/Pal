@@ -38,6 +38,7 @@ public struct DeviceEntry: Identifiable, Sendable, Equatable {
 
     private static let kinds: [String: (label: String, symbol: String)] = [
         "ios": ("iOS", "iphone"),
+        "mac": ("Mac", "laptopcomputer"),
         "desktop": ("Computer", "desktopcomputer"),
         "web": ("Browser", "globe"),
         "tui": ("Terminal", "terminal"),

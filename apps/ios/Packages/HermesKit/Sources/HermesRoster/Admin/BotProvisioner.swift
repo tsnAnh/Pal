@@ -6,11 +6,13 @@ public struct NewBotRequest: Sendable, Equatable {
     public var name: String
     public var kind: String
     public var colorHex: String
+    public var seed: String?
 
-    public init(name: String, kind: String, colorHex: String) {
+    public init(name: String, kind: String, colorHex: String, seed: String? = nil) {
         self.name = name
         self.kind = kind
         self.colorHex = colorHex
+        self.seed = seed
     }
 }
 
@@ -49,7 +51,7 @@ public actor BotProvisioner {
 
     public func create(_ request: NewBotRequest) async throws -> CreatedBot {
         let identity = BotIdentity(entered: request.name)
-        guard identity.isValid, Self.isColor(request.colorHex), Self.isKind(request.kind) else {
+        guard identity.isValid, Self.isColor(request.colorHex), Self.isKind(request.kind), Self.isSeed(request.seed) else {
             throw BotAdminError.invalidName
         }
         if let running = inFlight[identity.slug] { return try await running.value }
@@ -145,7 +147,7 @@ public actor BotProvisioner {
         [
             "title": .string(identity.displayName),
             "color": .string(request.colorHex),
-            "shape": .string("blobatar:\(identity.slug):\(request.kind)"),
+            "shape": .string("blobatar:\(request.seed ?? identity.slug):\(request.kind)"),
             "custom": true,
             "imageKind": "shape",
             "created": .int(created),
@@ -154,6 +156,12 @@ public actor BotProvisioner {
 
     private static func isColor(_ value: String) -> Bool {
         value.count == 7 && value.hasPrefix("#") && value.dropFirst().allSatisfy(\.isHexDigit)
+    }
+
+    private static func isSeed(_ value: String?) -> Bool {
+        guard let value else { return true }
+        return !value.isEmpty && value.count <= BotIdentity.maximumSlugLength
+            && value.unicodeScalars.allSatisfy { $0.isASCII && (Character($0).isLetter || Character($0).isNumber || $0 == "-" || $0 == "_") }
     }
 
     private static func isKind(_ value: String) -> Bool {

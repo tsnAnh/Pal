@@ -17,7 +17,7 @@ extension Transcript {
             if item.isUser {
                 if collected.isEmpty { continue } else { break }
             }
-            if let reply = item.finishedReply { collected.append(reply) }
+            if !TranscriptVisibility.isHidden(item), let reply = item.finishedReply { collected.append(reply) }
         }
         guard !collected.isEmpty else { return nil }
         return LastReply(text: collected.reversed().joined(separator: "\n\n"), botIsWorkingOnMore: isRunning)

@@ -39,9 +39,12 @@ final class AppRouter {
     var path: [AppRoute] = []
     var sheet: AppSheet?
     var isSearching = false
+    var renamingBot: String?
+    var deletingBot: String?
     let searchScopes: [SearchScope] = [.all, .messages, .bots]
     private(set) var capabilities: Set<AppCapability>
     private(set) var connectAppsProfile: String?
+    private(set) var settingsRoute: SettingsRoute?
     @ObservationIgnored private var shareAsTemplateHandler: ((String) -> Void)?
 
     init(capabilities: Set<AppCapability> = []) {
@@ -53,7 +56,13 @@ final class AppRouter {
     }
 
     func present(_ sheet: AppSheet) {
+        if sheet == .settings { settingsRoute = nil }
         self.sheet = sheet
+    }
+
+    func presentSettings(route: SettingsRoute) {
+        settingsRoute = route
+        sheet = .settings
     }
 
     func presentConnectApps(profile: String? = nil) {

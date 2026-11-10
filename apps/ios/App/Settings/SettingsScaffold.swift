@@ -1,6 +1,5 @@
 import HermesDesign
 import SwiftUI
-import UIKit
 
 struct SettingsPage<Trailing: View, Content: View>: View {
     let title: String
@@ -105,6 +104,6 @@ enum SettingsHaptics {
     @MainActor
     static func selection() {
         guard UserDefaults.standard.object(forKey: SettingsDefaults.hapticsKey) as? Bool ?? true else { return }
-        UISelectionFeedbackGenerator().selectionChanged()
+        Haptics.selection()
     }
 }

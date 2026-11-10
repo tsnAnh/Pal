@@ -12,14 +12,14 @@ struct ConnectionForm: View {
         Form {
             if !model.isConnected {
                 Section("Hermes address") {
-                    TextField("https://your-host.tailnet.ts.net", text: $model.baseURLText)
-                        .keyboardType(.URL)
-                        .textContentType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
+                    addressField
+                        .urlEntry()
                         .accessibilityIdentifier("baseURLField")
                         .disabled(model.isBusy)
                         .listRowBackground(cardFill)
+                    if model.usesPasswordSignIn {
+                        credentialFields
+                    }
                     Button {
                         Task { await model.signIn() }
                     } label: {
@@ -48,7 +48,39 @@ struct ConnectionForm: View {
                 }
             }
         }
+        .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+    }
+
+    @ViewBuilder
+    private var credentialFields: some View {
+        #if os(macOS)
+        TextField("Username", text: $model.username, prompt: Text(verbatim: "Username"))
+            .labelsHidden()
+            .textContentType(.username)
+            .autocorrectionDisabled()
+            .disabled(model.isBusy)
+            .accessibilityIdentifier("usernameField")
+            .listRowBackground(cardFill)
+        SecureField("Password", text: $model.password, prompt: Text(verbatim: "Password"))
+            .labelsHidden()
+            .textContentType(.password)
+            .disabled(model.isBusy)
+            .onSubmit { Task { await model.signIn() } }
+            .accessibilityIdentifier("passwordField")
+            .listRowBackground(cardFill)
+        #endif
+    }
+
+    @ViewBuilder
+    private var addressField: some View {
+        #if os(macOS)
+        TextField("Hermes address", text: $model.baseURLText, prompt: Text(verbatim: "https://your-host.tailnet.ts.net"))
+            .labelsHidden()
+            .onChange(of: model.baseURLText) { model.addressChanged() }
+        #else
+        TextField("https://your-host.tailnet.ts.net", text: $model.baseURLText)
+        #endif
     }
 
     @ViewBuilder
@@ -92,7 +124,7 @@ struct ConnectionView: View {
         NavigationStack {
             ConnectionForm(model: model)
                 .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
-                .navigationTitle("Hermes Bots")
+                .navigationTitle("Pal")
         }
     }
 }

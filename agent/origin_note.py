@@ -18,6 +18,7 @@ _LABEL_NOISE = re.compile(r"[\[\]]")
 _APP_NAMES = {
     "desktop": "Hermes desktop app",
     "ios": "Hermes iOS app",
+    "mac": "Hermes Mac app",
     "tui": "Hermes terminal UI",
     "cli": "Hermes command line",
     "web": "Hermes web dashboard",
@@ -27,6 +28,7 @@ _CAVEATS = {
     "desktop": "Markdown renders in full on this device and files can be delivered as MEDIA: cards.",
     "ios": "This is a phone: only inline Markdown renders, so keep replies compact, skip tables, "
            "headings and code fences, and give file paths as plain text.",
+    "mac": "Markdown renders in full on this device; give file paths as plain text.",
     "tui": "This is a terminal: Markdown does not render and files are given as plain paths.",
     "cli": "This is a terminal: Markdown does not render and files are given as plain paths.",
     "web": "Assume plain Markdown; no desktop-app-only widgets or panes.",

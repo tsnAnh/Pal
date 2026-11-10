@@ -14662,6 +14662,7 @@
             "enum": [
               "desktop",
               "ios",
+              "mac",
               "tui",
               "cli",
               "web"
@@ -19983,6 +19984,7 @@
             "enum": [
               "desktop",
               "ios",
+              "mac",
               "tui",
               "cli",
               "web"

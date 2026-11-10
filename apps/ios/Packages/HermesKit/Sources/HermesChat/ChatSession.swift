@@ -196,6 +196,11 @@ public actor ChatSession: OutboxSubmitter {
         )
     }
 
+    public func react(to target: ReactionTarget, emoji: String?) async throws -> String? {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        return try await api.react(sessionID: sessionID, target: target, emoji: emoji)
+    }
+
     public func answerApproval(_ prompt: PendingPrompt, choice: String) async throws {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         _ = try await api.respondToApproval(

@@ -72,7 +72,16 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         Color(surface == .grouped ? theme.palette.sheetBackground : theme.palette.canvas)
     }
 
+    @Environment(\.sheetChromeHostedInNavigation) private var hostedInNavigation
+
     public var body: some View {
+        #if os(iOS)
+        if hostedInNavigation {
+            navigationContent
+        } else {
+            NavigationStack { navigationContent }
+        }
+        #else
         VStack(spacing: 0) {
             header
             content
@@ -82,7 +91,50 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         .presentationBackground(background)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(accessibilityIdentifier)
+        #endif
     }
+
+    #if os(iOS)
+    private var usesSystemBack: Bool { hostedInNavigation && leading == .back }
+
+    private var navigationContent: some View {
+        content
+            .environment(\.sheetChromeHostedInNavigation, false)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(background.ignoresSafeArea())
+            .navigationTitle(title ?? "")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(!usesSystemBack)
+            .toolbar {
+                if !usesSystemBack {
+                    ToolbarItem(placement: .topBarLeading) { leadingButton }
+                }
+                if Trailing.self != EmptyView.self {
+                    ToolbarItem(placement: .topBarTrailing) { trailing }
+                }
+            }
+            .presentationBackground(background)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    @ViewBuilder
+    private var leadingButton: some View {
+        switch leading {
+        case .close:
+            Button(role: .close, action: onLeading)
+                .accessibilityIdentifier("\(accessibilityIdentifier)-close")
+                .tint(.primary)
+        case .back:
+            Button(action: onLeading) {
+                Image(systemName: "chevron.left")
+            }
+            .accessibilityLabel(Text(leading.accessibilityLabel))
+            .accessibilityIdentifier("\(accessibilityIdentifier)-back")
+            .tint(.primary)
+        }
+    }
+    #endif
 
     private var header: some View {
         ZStack {
@@ -90,12 +142,14 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
                 titleText(title)
             }
             HStack(spacing: 0) {
-                CircleIconButton(
-                    systemName: leading.systemName,
-                    accessibilityLabel: leading.accessibilityLabel,
-                    accessibilityIdentifier: "\(accessibilityIdentifier)-\(leading.identifierSuffix)",
-                    action: onLeading
-                )
+                Button(action: onLeading) {
+                    Image(systemName: leading.systemName)
+                        .frame(width: 20, height: 20)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .accessibilityLabel(Text(leading.accessibilityLabel))
+                .accessibilityIdentifier("\(accessibilityIdentifier)-\(leading.identifierSuffix)")
                 if let title, titleAlignment == .afterLeadingButton {
                     titleText(title).padding(.leading, 16)
                 }
@@ -139,4 +193,8 @@ extension SheetChrome where Trailing == EmptyView {
             content: content
         )
     }
+}
+
+extension EnvironmentValues {
+    @Entry public var sheetChromeHostedInNavigation = false
 }

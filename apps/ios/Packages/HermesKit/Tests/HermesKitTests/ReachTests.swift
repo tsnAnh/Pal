@@ -162,6 +162,16 @@ struct ReachWireTests {
         #expect(DeviceIdentity.isValid(deviceID: "0B7F3F2E-5A4B-4E5E-9D1C-1F2E3D4C5B6A"))
     }
 
+    @Test func aMacDeclaresItselfAsAMacAndPhonesStayIOS() {
+        let mac = DeviceIdentity(deviceID: "0B7F3F2E-5A4B-4E5E-9D1C-1F2E3D4C5B6A", formFactor: .mac, appVersion: "0.1.0 (7)")
+        #expect(ReachWire.helloParams(identity: mac, acceptsOffers: true, attention: .foreground)["kind"] == "mac")
+        #expect(ReachWire.helloParams(identity: mac, acceptsOffers: true, attention: .foreground)["label"] == "Mac")
+        for factor in [DeviceFormFactor.phone, .pad, .other] {
+            let identity = DeviceIdentity(deviceID: "0B7F3F2E-5A4B-4E5E-9D1C-1F2E3D4C5B6A", formFactor: factor, appVersion: "1")
+            #expect(ReachWire.helloParams(identity: identity, acceptsOffers: false, attention: .background)["kind"] == "ios")
+        }
+    }
+
     @Test func attentionAndOutcomePayloads() {
         #expect(ReachWire.attentionParams(.background) == ["state": "background"])
         #expect(ReachWire.outcomeParams(offerID: "o1", outcome: .acted) == ["offer_id": "o1", "outcome": "acted"])
@@ -241,6 +251,31 @@ struct ReachPresenceTests {
         defer { Task { await connection.close() } }
         #expect(script.calls("client.hello").isEmpty)
         #expect(connection.negotiatedRuntime != nil)
+    }
+
+    @Test func aGatewayThatDoesNotKnowTheMacKindStillRecordsTheDeviceAsIOS() async throws {
+        let kinds = Mutex<[String]>([])
+        let gateway = try await FakeGateway.start { method, params, _ in
+            switch method {
+            case "runtime.describe":
+                return .result([
+                    "instance_id": "i1", "profile_id": "p1", "authority_epoch": 1, "capabilities": ["durable-admission-v1", "reach-v1"],
+                    "session_create": ["sources": ["cli", "ios"]],
+                ])
+            case "client.hello":
+                let kind = params?["kind"]?.stringValue ?? ""
+                kinds.withLock { $0.append(kind) }
+                return kind == "mac" ? .failure(RPCError(code: -32602, message: "invalid_params")) : .result(["recorded": true, "same_host": false])
+            default:
+                return .result(["ok": true])
+            }
+        }
+        defer { gateway.stop() }
+        let mac = DeviceIdentity(deviceID: "0B7F3F2E-5A4B-4E5E-9D1C-1F2E3D4C5B6A", formFactor: .mac, appVersion: "1")
+        let presence = ReachPresence(identity: mac)
+        let connection = try await client(for: gateway, presence: presence).connect(reach: .offerTarget)
+        defer { Task { await connection.close() } }
+        #expect(kinds.withLock { $0 } == ["mac", "ios"])
     }
 
     @Test func refusedHelloLeavesTheConnectionUsable() async throws {

@@ -86,20 +86,33 @@ public struct HermesClient: Sendable {
 
     public func connect(profile: String? = nil, reach role: ReachRole = .passive) async throws -> GatewayConnection {
         guard let baseURL = await auth.baseURL else { throw HermesClientError.notSignedIn }
+        let clock = ContinuousClock()
+        let begin = clock.now
         let ticket = try await mintSocketTicket(profile: profile)
+        let ticketed = clock.now
         let connection = try await GatewayConnection.dial(
             url: baseURL.webSocketEndpoint("/api/ws"),
             ticket: ticket.ticket,
             options: dialOptions,
             diagnostics: diagnostics
         )
+        let dialed = clock.now
         do {
             try await negotiate(connection, role: role)
         } catch {
             await connection.close()
             throw error
         }
+        let done = clock.now
+        diagnostics.info(
+            "launch",
+            "gateway connect \(role) ticket=\(Self.milliseconds(ticketed - begin))ms dial=\(Self.milliseconds(dialed - ticketed))ms negotiate=\(Self.milliseconds(done - dialed))ms at +\(LaunchClock.elapsedMilliseconds)ms"
+        )
         return connection
+    }
+
+    private static func milliseconds(_ duration: Duration) -> Int {
+        Int(duration.components.seconds * 1000 + duration.components.attoseconds / 1_000_000_000_000_000)
     }
 
     public func describeRuntime(on connection: GatewayConnection) async throws -> RuntimeDescription {

@@ -1,4 +1,27 @@
 import XCTest
+#if os(macOS)
+import AppKit
+#endif
+
+extension XCUIElement {
+    func hit() {
+        #if os(macOS)
+        click()
+        #else
+        tap()
+        #endif
+    }
+}
+
+extension XCUICoordinate {
+    func hit() {
+        #if os(macOS)
+        click()
+        #else
+        tap()
+        #endif
+    }
+}
 
 @MainActor
 struct E2EEnvironment {
@@ -38,16 +61,32 @@ class E2ETestCase: XCTestCase {
         Self.credentialsResetThisRun = true
         app.launchArguments = (reset ? ["-hermes-reset-credentials"] : []) + extraArguments
         app.launch()
+        #if os(macOS)
+        presentMainWindow(app)
+        #endif
         return app
     }
+
+    #if os(macOS)
+    private func presentMainWindow(_ app: XCUIApplication) {
+        guard !app.windows.firstMatch.waitForExistence(timeout: 3) else { return }
+        guard let url = NSRunningApplication.runningApplications(withBundleIdentifier: "dev.tsnanh.hermes.bot").first?.bundleURL else { return }
+        let reopened = expectation(description: "app reopened")
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration()) { _, _ in reopened.fulfill() }
+        wait(for: [reopened], timeout: 10)
+        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 15), "the app opened no window\n" + app.debugDescription)
+    }
+    #endif
 
     private static var notificationPromptSettled = false
 
     func allowNotificationsIfAsked() {
+        #if os(iOS)
         guard !Self.notificationPromptSettled else { return }
         Self.notificationPromptSettled = true
         let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Allow"]
-        if allow.waitForExistence(timeout: 4) { allow.tap() }
+        if allow.waitForExistence(timeout: 4) { allow.hit() }
+        #endif
     }
 
     func signalHost(_ name: String) {
@@ -63,17 +102,42 @@ class E2ETestCase: XCTestCase {
 
     private func signInThenSettle(_ app: XCUIApplication) {
         if roster(app).waitForExistence(timeout: 15) { return }
+        enterAddress(app)
+        #if os(macOS)
+        enterNativeCredentials(app, password: env.password)
+        app.buttons["signInButton"].hit()
+        #else
+        app.buttons["signInButton"].hit()
+        signInThroughWebSession(app)
+        #endif
+        XCTAssertTrue(roster(app).waitForExistence(timeout: 40), app.debugDescription)
+    }
+
+    func enterAddress(_ app: XCUIApplication) {
         let field = app.textFields["baseURLField"]
         XCTAssertTrue(field.waitForExistence(timeout: 15), app.debugDescription)
-        field.tap()
+        field.hit()
         if let existing = field.value as? String, !existing.isEmpty, existing != "https://your-host.tailnet.ts.net" {
             field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
         }
         field.typeText(env.baseURL)
-        app.buttons["signInButton"].tap()
+    }
 
+    #if os(macOS)
+    func enterNativeCredentials(_ app: XCUIApplication, password: String) {
+        let userField = app.textFields["usernameField"]
+        XCTAssertTrue(userField.waitForExistence(timeout: 20), app.debugDescription)
+        userField.hit()
+        userField.typeText(env.username)
+        let passwordField = app.secureTextFields["passwordField"]
+        XCTAssertTrue(passwordField.waitForExistence(timeout: 5), app.debugDescription)
+        passwordField.hit()
+        passwordField.typeText(password)
+    }
+    #else
+    private func signInThroughWebSession(_ app: XCUIApplication) {
         let consent = XCUIApplication(bundleIdentifier: "com.apple.springboard").alerts.buttons["Continue"]
-        if consent.waitForExistence(timeout: 5) { consent.tap() }
+        if consent.waitForExistence(timeout: 5) { consent.hit() }
 
         let web = app.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 20), app.debugDescription)
@@ -81,16 +145,16 @@ class E2ETestCase: XCTestCase {
         XCTAssertTrue(userField.waitForExistence(timeout: 20), app.debugDescription)
         let passwordField = web.secureTextFields.firstMatch
         XCTAssertTrue(passwordField.waitForExistence(timeout: 20), app.debugDescription)
-        passwordField.tap()
+        passwordField.hit()
         passwordField.typeText(env.password)
-        userField.tap()
+        userField.hit()
         userField.typeText(env.username + "\n")
         if !roster(app).waitForExistence(timeout: 8) {
             let submit = web.buttons.matching(NSPredicate(format: "label ==[c] %@", "Sign in")).firstMatch
-            if submit.exists, submit.isHittable { submit.tap() }
+            if submit.exists, submit.isHittable { submit.hit() }
         }
-        XCTAssertTrue(roster(app).waitForExistence(timeout: 40), app.debugDescription)
     }
+    #endif
 
     func roster(_ app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)["rosterScreen"]
@@ -99,16 +163,16 @@ class E2ETestCase: XCTestCase {
     func openBot(_ app: XCUIApplication, _ name: String) {
         let row = app.buttons["botRow-\(name)"]
         XCTAssertTrue(row.waitForExistence(timeout: 30), app.debugDescription)
-        row.tap()
+        row.hit()
         XCTAssertTrue(app.descendants(matching: .any)["chatScreen"].waitForExistence(timeout: 20), app.debugDescription)
         XCTAssertTrue(app.descendants(matching: .any)["composerField"].waitForExistence(timeout: 20), app.debugDescription)
     }
 
     func send(_ app: XCUIApplication, _ text: String) {
         let field = app.descendants(matching: .any)["composerField"]
-        field.tap()
+        field.hit()
         field.typeText(text)
-        app.buttons["sendButton"].tap()
+        app.buttons["sendButton"].hit()
     }
 
     func bubbles(_ app: XCUIApplication, _ identifier: String, containing text: String) -> XCUIElementQuery {
@@ -125,7 +189,9 @@ class E2ETestCase: XCTestCase {
         let userBubble = bubbles(app, "userBubble", containing: text).firstMatch
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            let reply = app.descendants(matching: .any).matching(identifier: "assistantBubble").allElementsBoundByIndex.last
+            let replies = app.descendants(matching: .any).matching(identifier: "assistantBubble")
+            let replyCount = replies.count
+            let reply = replyCount > 0 ? replies.element(boundBy: replyCount - 1) : nil
             if let reply, userBubble.exists, reply.frame.minY > userBubble.frame.minY,
                !app.descendants(matching: .any)["assistantBubble-streaming"].exists {
                 return reply
@@ -142,7 +208,11 @@ class E2ETestCase: XCTestCase {
     }
 
     func shot(_ app: XCUIApplication, _ name: String) {
+        #if os(macOS)
+        store(app.windows.firstMatch.screenshot(), named: name)
+        #else
         store(app.screenshot(), named: name)
+        #endif
     }
 
     func screenShot(_ name: String) {

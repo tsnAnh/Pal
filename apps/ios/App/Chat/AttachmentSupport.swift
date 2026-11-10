@@ -1,6 +1,5 @@
 import ImageIO
 import SwiftUI
-import UIKit
 import UniformTypeIdentifiers
 
 enum AttachmentError: Error {
@@ -16,13 +15,13 @@ enum AttachmentPreparer {
     nonisolated static func prepareImage(from data: Data, name: String? = nil) throws -> PreparedUpload {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let image = thumbnail(of: source, maxPixels: maximumImageDimension),
-              let jpeg = UIImage(cgImage: image).jpegData(compressionQuality: 0.85)
+              let jpeg = PlatformImage(cgImage: image).jpegData(compressionQuality: 0.85)
         else { throw AttachmentError.unreadable }
-        let preview = thumbnail(of: source, maxPixels: thumbnailDimension).flatMap { UIImage(cgImage: $0).jpegData(compressionQuality: 0.7) }
+        let preview = thumbnail(of: source, maxPixels: thumbnailDimension).flatMap { PlatformImage(cgImage: $0).jpegData(compressionQuality: 0.7) }
         return PreparedUpload(data: jpeg, filename: jpegName(name), thumbnail: preview)
     }
 
-    nonisolated static func prepareImage(from image: UIImage) throws -> PreparedUpload {
+    nonisolated static func prepareImage(from image: PlatformImage) throws -> PreparedUpload {
         guard let data = image.jpegData(compressionQuality: 0.95) else { throw AttachmentError.unreadable }
         return try prepareImage(from: data)
     }
@@ -56,40 +55,5 @@ enum AttachmentPreparer {
         let stem = (name?.isEmpty == false ? name! : "photo-\(Int(Date().timeIntervalSince1970))")
         let cleaned = stem.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_" ? Character($0) : "-" }
         return String(cleaned) + ".jpg"
-    }
-}
-
-struct CameraPicker: UIViewControllerRepresentable {
-    let onCapture: (UIImage) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    static var isAvailable: Bool { UIImagePickerController.isSourceTypeAvailable(.camera) }
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(_ controller: UIImagePickerController, context: Context) {}
-
-    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        private let parent: CameraPicker
-
-        init(_ parent: CameraPicker) {
-            self.parent = parent
-        }
-
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage { parent.onCapture(image) }
-            parent.dismiss()
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
-        }
     }
 }

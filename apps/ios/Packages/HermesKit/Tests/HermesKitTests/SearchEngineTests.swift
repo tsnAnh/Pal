@@ -6,7 +6,7 @@ import Synchronization
 import Testing
 
 private let bots = [
-    SearchBot(name: "default", displayName: "chó grok bot", sessionIDs: ["s-default"]),
+    SearchBot(name: "default", displayName: "chó pal bot", sessionIDs: ["s-default"]),
     SearchBot(name: "cho-ua", displayName: "chó UA", sessionIDs: ["s-ua", "s-ua-tip"]),
     SearchBot(name: "upwork-hunter", displayName: "Upwork Hunter", sessionIDs: ["s-upwork"]),
 ]

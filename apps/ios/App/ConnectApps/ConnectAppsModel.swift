@@ -5,7 +5,6 @@ import HermesDevice
 import HermesDiagnostics
 import HermesProtocol
 import Observation
-import UIKit
 
 struct ConnectionRPC: ConnectRPC {
     let model: ConnectionModel
@@ -173,7 +172,7 @@ final class ConnectAppsModel {
     }
 
     private func rebuildDeviceRows() {
-        deviceRows = DeviceConnectorID.allCases.map { id in
+        deviceRows = PlatformCapabilities.deviceConnectors.map { id in
             let status = statuses.first { $0.id == id }
             let defaults = DeviceConnectorDefaults.entry(for: id)
             let local = localPermissions[id]
@@ -224,8 +223,8 @@ final class ConnectAppsModel {
     }
 
     func openSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
+        guard let url = SystemSettings.appSettingsURL else { return }
+        SystemSettings.open(url)
     }
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {

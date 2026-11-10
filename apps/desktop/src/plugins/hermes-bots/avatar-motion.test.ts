@@ -149,7 +149,7 @@ describe('the loading sequence', () => {
   })
 
   it('plays every clip exactly once per bag', () => {
-    for (const key of ['alpha', 'chó grok bot', '', 'Nova']) {
+    for (const key of ['alpha', 'chó pal bot', '', 'Nova']) {
       const keyed = createLoadingSequence(loadingSeed(key), clips)
 
       for (let index = 0; index < 60; index++) {
@@ -227,7 +227,7 @@ describe('the loading sequence', () => {
   })
 
   it('opens each loading session of the same bot with different clips', () => {
-    const seed = loadingSeed('chó grok bot')
+    const seed = loadingSeed('chó pal bot')
 
     const openers = new Set(
       Array.from(

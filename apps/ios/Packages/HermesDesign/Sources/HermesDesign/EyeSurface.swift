@@ -78,6 +78,24 @@ struct EyeSurface: Sendable {
         return projected
     }
 
+    func clearance(at point: CGPoint) -> Double {
+        guard cell.width > 0, cell.height > 0 else { return -1 }
+        let x = (point.x - origin.x) / cell.width
+        let y = (point.y - origin.y) / cell.height
+        guard x >= 0, y >= 0, x <= Double(Self.cells), y <= Double(Self.cells) else { return -1 }
+        let column = min(Int(x), Self.cells - 1)
+        let row = min(Int(y), Self.cells - 1)
+        let fx = x - Double(column)
+        let fy = y - Double(row)
+        let stride = Self.cells + 1
+        let corner = row * stride + column
+        return domes.reduce(-1) { best, dome in
+            let top = dome.depths[corner] * (1 - fx) + dome.depths[corner + 1] * fx
+            let bottom = dome.depths[corner + stride] * (1 - fx) + dome.depths[corner + stride + 1] * fx
+            return max(best, top * (1 - fy) + bottom * fy)
+        }
+    }
+
     func height(at point: CGPoint) -> Double {
         guard cell.width > 0, cell.height > 0 else { return 0 }
         let x = (point.x - origin.x) / cell.width

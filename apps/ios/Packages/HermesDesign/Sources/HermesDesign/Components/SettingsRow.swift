@@ -22,7 +22,8 @@ public struct HermesToggleStyle: ToggleStyle {
                     .offset(x: HermesMetrics.toggleKnobInset + (configuration.isOn ? travel : 0))
             }
             .frame(width: track.width, height: track.height)
-            .contentShape(Capsule())
+            .frame(width: HermesMetrics.toggleTouchTarget.width, height: HermesMetrics.toggleTouchTarget.height)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(.isToggle)
@@ -46,7 +47,6 @@ extension HermesMetrics {
     public static let rowIconLeadingInset: CGFloat = 22
     public static let rowIconWidth: CGFloat = 19
     public static let rowIconSpacing: CGFloat = 12.5
-    public static var iconRowSeparatorInset: CGFloat { rowIconLeadingInset + rowIconWidth + rowIconSpacing }
 }
 
 public struct SettingsRow: View {
@@ -155,7 +155,7 @@ public struct SettingsRow: View {
                         .toggleStyle(HermesToggleStyle())
                         .accessibilityLabel(Text(title))
                         .accessibilityIdentifier(accessibilityIdentifier)
-                        .padding(.trailing, HermesMetrics.rowInset)
+                        .padding(.trailing, HermesMetrics.rowInset - (HermesMetrics.toggleTouchTarget.width - HermesMetrics.toggleTrackSize.width) / 2)
                 }
         default:
             if let action {

@@ -1,3 +1,4 @@
+#if os(iOS)
 import HermesRFB
 import SwiftUI
 import UIKit
@@ -392,3 +393,4 @@ final class ScreenSurfaceView: UIView, UIKeyInput, UIGestureRecognizerDelegate {
         .keyboardDeleteForward: RFBKeysym.delete,
     ]
 }
+#endif

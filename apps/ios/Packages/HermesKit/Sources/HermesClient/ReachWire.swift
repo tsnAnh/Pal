@@ -76,10 +76,11 @@ public enum ReachWire {
         identity: DeviceIdentity,
         acceptsOffers: Bool,
         attention: ReachAttention,
-        deviceTools: Bool = false
+        deviceTools: Bool = false,
+        kind: String? = nil
     ) -> JSONValue {
         var params: [String: JSONValue] = [
-            "kind": .string(DeviceIdentity.kind),
+            "kind": .string(kind ?? identity.kind),
             "device_id": .string(identity.deviceID),
             "label": .string(identity.label),
             "app_version": .string(identity.appVersion),

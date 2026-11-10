@@ -58,10 +58,12 @@ struct VaultScreen: View {
         SettingsPage(
             title: "Vault", identifier: "vaultScreen", back: back,
             trailing: {
-                CircleIconButton(
-                    systemName: "plus", accessibilityLabel: "Add to vault", accessibilityIdentifier: "vaultAddButton",
-                    action: { adding = true }
-                )
+                Button { adding = true } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel(Text("Add to vault"))
+                .accessibilityIdentifier("vaultAddButton")
+                .tint(.primary)
             },
             content: {
                 switch model.state {
@@ -79,6 +81,7 @@ struct VaultScreen: View {
         .task { await model.load(api: hub.api) }
         .sheet(isPresented: $adding) {
             AddVaultLoginSheet(model: model, hub: hub) { adding = false }
+                .macSheetFrame()
         }
         .alert("Vault", isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
             Button("OK", role: .cancel) {}
@@ -133,7 +136,7 @@ private struct VaultEntryRow: View {
     }
 }
 
-private struct AddVaultLoginSheet: View {
+struct AddVaultLoginSheet: View {
     let model: VaultModel
     let hub: SettingsHub
     let close: () -> Void
@@ -177,10 +180,10 @@ private struct AddVaultLoginSheet: View {
         )
     }
 
-    private func field(_ title: String, text: Binding<String>, identifier: String, content: UITextContentType?) -> some View {
+    private func field(_ title: String, text: Binding<String>, identifier: String, content: PlatformTextContentType?) -> some View {
         TextField(title, text: text)
             .textContentType(content)
-            .textInputAutocapitalization(.never)
+            .neverAutocapitalized()
             .autocorrectionDisabled()
             .hermesText(.rowTitle)
             .foregroundStyle(Color(theme.palette.textPrimary))

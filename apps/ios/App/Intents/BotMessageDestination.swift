@@ -3,7 +3,7 @@ import Foundation
 import GeoToolbox
 import HermesChat
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @UnionValue
 enum BotMessageDestination {
     case people([IntentPerson])
@@ -24,7 +24,7 @@ enum BotMessageDestination {
     }
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 struct BotMessageContent {
     let text: String
     let files: [OutgoingFile]

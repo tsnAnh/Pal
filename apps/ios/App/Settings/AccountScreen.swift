@@ -50,7 +50,7 @@ struct AccountScreen: View {
                 SettingsRow.destructive("Sign Out", accessibilityIdentifier: "accountSignOutRow", action: { confirmingSignOut = true })
             }
         }
-        .confirmationDialog("Sign out of Hermes Bots on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
+        .confirmationDialog("Sign out of Pal on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
             Button("Sign Out", role: .destructive) { Task { await connection.signOut() } }
             Button("Cancel", role: .cancel) {}
         }

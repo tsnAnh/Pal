@@ -1,6 +1,5 @@
 import AuthenticationServices
 import HermesAuth
-import UIKit
 
 @MainActor
 final class WebAuthenticationBrowser: NSObject, AuthorizationBrowser, ASWebAuthenticationPresentationContextProviding {
@@ -21,7 +20,9 @@ final class WebAuthenticationBrowser: NSObject, AuthorizationBrowser, ASWebAuthe
                 let session = ASWebAuthenticationSession(
                     url: url,
                     callback: .customScheme("dev.tsnanh.hermes.bot")
-                ) { _, _ in complete() }
+                ) { @Sendable [weak self] _, _ in
+                    Task { @MainActor in self?.finish?() }
+                }
                 session.prefersEphemeralWebBrowserSession = true
                 session.presentationContextProvider = self
                 self.session = session
@@ -48,9 +49,6 @@ final class WebAuthenticationBrowser: NSObject, AuthorizationBrowser, ASWebAuthe
     }
 
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        let active = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
-        if let window = active?.keyWindow ?? active?.windows.first { return window }
-        return ASPresentationAnchor(windowScene: active!)
+        PresentationAnchor.current()
     }
 }

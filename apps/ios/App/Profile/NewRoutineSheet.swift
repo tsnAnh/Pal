@@ -56,7 +56,7 @@ struct NewRoutineSheet: View {
 
     private func field(_ label: String, text: Binding<String>, prompt: String, identifier: String) -> some View {
         TextField("", text: text, prompt: Text(prompt))
-            .textInputAutocapitalization(identifier == "newRoutineSchedule" ? .never : .sentences)
+            .autocapitalization(sentences: identifier != "newRoutineSchedule")
             .autocorrectionDisabled(identifier == "newRoutineSchedule")
             .padding(.horizontal, HermesMetrics.rowInset)
             .frame(height: HermesMetrics.rowMinimumHeight)

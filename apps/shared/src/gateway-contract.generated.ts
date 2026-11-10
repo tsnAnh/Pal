@@ -6219,7 +6219,7 @@ export interface DeviceToolRespondResult {
   recorded: boolean
 }
 export interface ClientHelloParams {
-  kind: 'desktop' | 'ios' | 'tui' | 'cli' | 'web'
+  kind: 'desktop' | 'ios' | 'mac' | 'tui' | 'cli' | 'web'
   device_id: string
   label: string
   app_version?: string
@@ -6249,7 +6249,7 @@ export interface DevicesListResult {
 }
 export interface DeviceRow {
   device_id: string
-  kind: 'desktop' | 'ios' | 'tui' | 'cli' | 'web'
+  kind: 'desktop' | 'ios' | 'mac' | 'tui' | 'cli' | 'web'
   label: string
   model?: string | null
   os?: string | null

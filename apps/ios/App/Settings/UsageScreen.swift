@@ -71,7 +71,7 @@ struct UsageScreen: View {
     }
 }
 
-private struct UsageAccountSection: View {
+struct UsageAccountSection: View {
     let account: UsageAccount
 
     var body: some View {

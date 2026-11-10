@@ -182,6 +182,16 @@ struct DeviceAndPermissionMappingTests {
         #expect(entries.map(\.symbolName) == ["iphone", "desktopcomputer", "desktopcomputer", "globe"])
     }
 
+    @Test func aMacRegisteredAsItsOwnKindShowsAsAMacWithALaptop() throws {
+        let wire = try Self.devices("""
+        {"devices": [{"device_id": "FFFFFFFF-6", "kind": "mac", "label": "Mac", "this_device": true,
+          "online": true, "last_seen_at": "2026-11-08T10:00:00Z", "push_enabled": false}]}
+        """)
+        let entry = DeviceEntry(wire[0])
+        #expect(entry.symbolName == "laptopcomputer")
+        #expect(entry.subtitle(now: Self.now, calendar: Self.utc, locale: Self.locale) == "Mac · This device")
+    }
+
     @Test func unknownKindsStillRender() throws {
         let wire = try Self.devices("""
         {"devices": [{"device_id": "EEEEEEEE-5", "kind": "toaster", "label": "Kitchen", "this_device": false,

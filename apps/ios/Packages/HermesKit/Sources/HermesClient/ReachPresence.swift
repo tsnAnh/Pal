@@ -42,27 +42,36 @@ public actor ReachPresence {
     @discardableResult
     public func declare(on connection: GatewayConnection, acceptsOffers: Bool, deviceTools: Bool = false) async -> Bool {
         let declared = attention
-        do {
-            let result = try await connection.call(
-                "client.hello",
-                params: ReachWire.helloParams(identity: identity, acceptsOffers: acceptsOffers, attention: declared, deviceTools: deviceTools),
-                timeout: Self.callTimeout
-            )
-            guard result["recorded"]?.boolValue == true else {
-                diagnostics.info("reach", "client.hello was not recorded")
-                return false
-            }
-        } catch is CancellationError {
-            return false
-        } catch {
-            diagnostics.info("reach", "client.hello refused: \(Diagnostics.describe(error))")
-            return false
-        }
+        guard await hello(on: connection, acceptsOffers: acceptsOffers, deviceTools: deviceTools, attention: declared) else { return false }
         routes.removeAll { $0.connection == nil || $0.connection === connection }
         routes.append(Route(connection: connection, acceptsOffers: acceptsOffers, delivered: declared))
-        await registerPush(on: connection)
-        await flush()
+        async let registered: Void = registerPush(on: connection)
+        async let flushed: Void = flush()
+        _ = await (registered, flushed)
         return true
+    }
+
+    private func hello(on connection: GatewayConnection, acceptsOffers: Bool, deviceTools: Bool, attention: ReachAttention) async -> Bool {
+        let kinds = identity.kind == DeviceIdentity.legacyKind ? [identity.kind] : [identity.kind, DeviceIdentity.legacyKind]
+        for kind in kinds {
+            do {
+                let result = try await connection.call(
+                    "client.hello",
+                    params: ReachWire.helloParams(identity: identity, acceptsOffers: acceptsOffers, attention: attention, deviceTools: deviceTools, kind: kind),
+                    timeout: Self.callTimeout
+                )
+                guard result["recorded"]?.boolValue == true else {
+                    diagnostics.info("reach", "client.hello was not recorded")
+                    return false
+                }
+                return true
+            } catch is CancellationError {
+                return false
+            } catch {
+                diagnostics.info("reach", "client.hello refused: \(Diagnostics.describe(error))")
+            }
+        }
+        return false
     }
 
     public func setPushRegistration(_ registration: PushRegistration?) async {

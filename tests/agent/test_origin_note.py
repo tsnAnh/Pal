@@ -16,6 +16,7 @@ from run_agent import AIAgent
 SESSION = "origin-session"
 DESKTOP = {"kind": "desktop", "label": "Desktop (macOS)", "same_host": True}
 IPHONE = {"kind": "ios", "label": "iPhone", "same_host": False}
+MAC_APP = {"kind": "mac", "label": "Mac", "same_host": False}
 STORED_PROMPT = "Identity.\n\nConversation started: Monday\nPlatform: desktop"
 
 
@@ -85,6 +86,14 @@ def test_phone_session_announces_the_phone_once(db, warm):
     assert [_noted(content) for _system, content in sent] == [True, False, False]
     assert "Platform: ios" in sent[0][0]
     assert "Hermes iOS app on an iPhone" in sent[0][0] and "::preview{" not in sent[0][0]
+
+
+@pytest.mark.parametrize("warm", [False, True], ids=["fresh-agent-per-turn", "warm-agent"])
+def test_a_mac_app_is_announced_as_itself_and_not_as_a_phone(db, warm):
+    sent = _drive(db, [MAC_APP, MAC_APP, IPHONE], warm=warm)
+    assert [_noted(content) for _system, content in sent] == [True, False, True]
+    assert "Mac (Hermes Mac app). It is not the machine your tools run on" in sent[0][1]
+    assert "This is a phone" not in sent[0][1]
 
 
 @pytest.mark.parametrize("warm", [False, True], ids=["fresh-agent-per-turn", "warm-agent"])

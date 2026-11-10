@@ -1,7 +1,6 @@
 import Foundation
 import HermesBotProfile
 import Observation
-import UIKit
 
 @MainActor
 @Observable

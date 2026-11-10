@@ -3,7 +3,6 @@ import Foundation
 import ImageIO
 import Observation
 import HermesChat
-import UIKit
 
 private final class FaviconRedirectGuard: NSObject, URLSessionTaskDelegate {
     func urlSession(
@@ -116,7 +115,7 @@ actor FaviconFetcher {
             kCGImageSourceThumbnailMaxPixelSize: 96,
         ]
         guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, CGImageSourceGetCount(source) - 1, options as CFDictionary) else { return nil }
-        return UIImage(cgImage: thumbnail).pngData()
+        return PlatformImage(cgImage: thumbnail).pngData()
     }
 
     private func path(_ host: String) -> URL {
@@ -144,30 +143,18 @@ actor FaviconFetcher {
 final class FaviconCache {
     static let shared = FaviconCache()
 
-    private var images: [String: UIImage] = [:]
+    private var images: [String: PlatformImage] = [:]
     @ObservationIgnored private var requested: Set<String> = []
 
-    func image(for url: URL, pointSize: CGFloat) -> UIImage? {
+    func image(for url: URL, pointSize: CGFloat) -> PlatformImage? {
         guard let host = FaviconOrigin.host(of: url) else { return nil }
-        if let image = images[host] { return image.sized(pointSize) }
+        if let image = images[host] { return image.roundedIcon(points: pointSize) }
         if requested.insert(host).inserted {
             Task {
-                guard let data = await FaviconFetcher.shared.iconData(forHost: host), let image = UIImage(data: data) else { return }
+                guard let data = await FaviconFetcher.shared.iconData(forHost: host), let image = PlatformImage(data: data) else { return }
                 images[host] = image
             }
         }
         return nil
-    }
-}
-
-private extension UIImage {
-    func sized(_ points: CGFloat) -> UIImage {
-        let format = UIGraphicsImageRendererFormat.preferred()
-        let renderer = UIGraphicsImageRenderer(size: CGSize(width: points, height: points), format: format)
-        return renderer.image { _ in
-            let rect = CGRect(x: 0, y: 0, width: points, height: points)
-            UIBezierPath(roundedRect: rect, cornerRadius: points * 0.22).addClip()
-            draw(in: rect)
-        }
     }
 }

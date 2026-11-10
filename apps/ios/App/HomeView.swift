@@ -19,36 +19,34 @@ struct HomeView: View {
                         .padding(.bottom, HermesMetrics.heroRowSpacing)
                 }
                 ForEach(roster.rows) { bot in
-                    NavigationLink(value: AppRoute.chat(botName: bot.name)) {
-                        HomeRow(bot: bot, activity: roster.activity(for: bot.name), mood: roster.avatarMood(for: bot.name))
-                            .botContextMenu(bot, roster: roster, router: router)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("botRow-\(bot.name)")
-                    .accessibilityValue(Text(roster.activity(for: bot.name).accessibilityValue))
+                    HomeBotLink(bot: bot, roster: roster, router: router)
+                }
+                if !roster.hiddenBots.isEmpty {
+                    HiddenBotsSection(roster: roster, router: router)
                 }
             }
+            .padding(.horizontal, 8)
             .padding(.bottom, 24)
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .accessibilityIdentifier("rosterScreen")
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .leadingBar) {
                 Button { router.present(.settings) } label: {
                     UserAvatarView(initial: connection.userInitial, link: roster.link)
                 }
                 .accessibilityLabel(Text("Account and settings"))
                 .accessibilityIdentifier("userAvatarButton")
+                .tint(.primary)
             }
-            .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .topBarTrailing) {
-                CircleIconButton(
-                    systemName: "plus",
-                    accessibilityLabel: String(localized: "Create New Bot"),
-                    accessibilityIdentifier: "createBotButton"
-                ) { router.present(.createBot) }
+            ToolbarItem(placement: .trailingBar) {
+                Button { router.present(.createBot) } label: {
+                    Image(systemName: "plus")
+                }
+                .accessibilityLabel(Text("Create New Bot"))
+                .accessibilityIdentifier("createBotButton")
+                .tint(.primary)
             }
-            .sharedBackgroundVisibility(.hidden)
         }
         .toolbarTitleDisplayMode(.inline)
         .background(Color(theme.palette.canvas))
@@ -73,14 +71,88 @@ struct HomeView: View {
                 ContentUnavailableView("No bots yet", systemImage: "face.smiling", description: Text("Bots you create appear here."))
             }
         }
-        .alert(
-            Text("Couldn't update the bot"),
-            isPresented: Binding(get: { roster.adminError != nil }, set: { if !$0 { roster.dismissAdminError() } })
+        .botManagementDialogs(roster: roster, router: router)
+    }
+}
+
+private struct HomeBotLink: View {
+    let bot: BotRow
+    let roster: RosterModel
+    let router: AppRouter
+
+    var body: some View {
+        RouteLink(
+            value: AppRoute.chat(botName: bot.name),
+            isSelected: router.path.first == .chat(botName: bot.name),
+            select: { router.openChat(botName: bot.name) }
         ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(AdminErrorCopy.message(roster.adminError))
+            HomeRow(bot: bot, activity: roster.activity(for: bot.name), mood: roster.avatarMood(for: bot.name))
+                .botContextMenu(bot, roster: roster, router: router)
         }
+        .buttonStyle(HomeRowButtonStyle(radius: 10))
+        .accessibilityIdentifier("botRow-\(bot.name)")
+        .accessibilityValue(Text(roster.activity(for: bot.name).accessibilityValue))
+    }
+}
+
+private struct HomeRowButtonStyle: ButtonStyle {
+    let radius: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                configuration.isPressed ? PalTokens.selected : Color.clear,
+                in: RoundedRectangle(cornerRadius: radius, style: .continuous)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+    }
+}
+
+private struct HiddenBotsSection: View {
+    let roster: RosterModel
+    let router: AppRouter
+
+    @AppStorage("home.hiddenExpanded") private var expanded = false
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Button { withAnimation(.snappy(duration: 0.18)) { expanded.toggle() } } label: {
+                HStack(spacing: 6) {
+                    Text("Hidden Bots")
+                        .font(.system(size: 13))
+                        .foregroundStyle(PalTokens.textTertiary)
+                    Spacer(minLength: 0)
+                    Text("\(roster.hiddenBots.count)")
+                        .font(.system(size: 13))
+                        .foregroundStyle(PalTokens.textTertiary)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(PalTokens.textTertiary)
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+                .padding(.horizontal, HermesMetrics.homeRowInset - 8)
+                .frame(height: 44)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Hidden Bots"))
+            .accessibilityValue(Text("\(roster.hiddenBots.count)"))
+            .accessibilityHint(Text(expanded ? "Collapses the hidden bots" : "Shows the hidden bots"))
+            .accessibilityIdentifier("hiddenBotsHeader")
+            if expanded {
+                VStack(spacing: 0) {
+                    ForEach(roster.hiddenBots) { bot in
+                        HomeBotLink(bot: bot, roster: roster, router: router)
+                    }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("hiddenBotsList")
+                .transition(.opacity)
+            }
+        }
+        .padding(.top, 6)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("hiddenBots")
     }
 }
 
@@ -90,6 +162,7 @@ enum AdminErrorCopy {
         case .permissionDenied: "This device isn't allowed to change bots."
         case .botNotFound: "That bot no longer exists."
         case .conflict: "Another device changed this bot at the same time. Try again."
+        case .invalidName: "Choose a name between 1 and 60 characters."
         default: "Try again in a moment."
         }
     }
@@ -121,14 +194,11 @@ private struct UserAvatarView: View {
         Text(initial)
             .font(.headline)
             .foregroundStyle(Color(theme.palette.textPrimary))
-            .frame(width: HermesMetrics.circleButtonDiameter, height: HermesMetrics.circleButtonDiameter)
-            .background(Color(theme.palette.circleButtonFill), in: Circle())
-            .overlay(Circle().strokeBorder(Color(theme.palette.circleButtonStroke), lineWidth: HermesMetrics.circleButtonStrokeWidth))
             .overlay(alignment: .bottomTrailing) {
                 Circle()
                     .fill(presenceColor)
-                    .frame(width: 12, height: 12)
-                    .overlay(Circle().stroke(Color(theme.palette.canvas), lineWidth: 2))
+                    .frame(width: 8, height: 8)
+                    .offset(x: 6, y: 4)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityValue(Text(presenceLabel))
@@ -139,26 +209,29 @@ private struct PinnedHero: View {
     let roster: RosterModel
     let router: AppRouter
 
-    private static let cellWidth: CGFloat = 112
-
     var body: some View {
         ViewThatFits(in: .horizontal) {
             cells.frame(maxWidth: .infinity)
             ScrollView(.horizontal, showsIndicators: false) {
-                cells.padding(.horizontal, HermesMetrics.homeRowInset)
+                cells.padding(.horizontal, 8)
             }
         }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("pinnedHero")
     }
 
     private var cells: some View {
         HStack(alignment: .top, spacing: 12) {
             ForEach(roster.pinned) { bot in
-                NavigationLink(value: AppRoute.chat(botName: bot.name)) {
+                RouteLink(
+                    value: AppRoute.chat(botName: bot.name),
+                    isSelected: router.path.first == .chat(botName: bot.name),
+                    select: { router.openChat(botName: bot.name) }
+                ) {
                     HeroCell(bot: bot, activity: roster.activity(for: bot.name), mood: roster.avatarMood(for: bot.name))
-                        .frame(width: Self.cellWidth)
                         .botContextMenu(bot, roster: roster, router: router)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HomeRowButtonStyle(radius: 12))
                 .accessibilityIdentifier("botRow-\(bot.name)")
                 .accessibilityValue(Text(roster.activity(for: bot.name).accessibilityValue))
             }
@@ -173,6 +246,11 @@ private struct HeroCell: View {
 
     @Environment(\.hermesTheme) private var theme
 
+    private var heroLabel: String {
+        let base = bot.isPrimary ? "\(bot.displayName), primary bot" : "\(bot.displayName), pinned"
+        return bot.isUnread ? "\(base), unread" : base
+    }
+
     var body: some View {
         VStack(spacing: HermesMetrics.heroNameGap) {
             AvatarBadge(
@@ -186,12 +264,23 @@ private struct HeroCell: View {
             .frame(width: HermesMetrics.heroDiameter, height: HermesMetrics.heroDiameter)
             Text(bot.displayName)
                 .hermesText(.heroName)
-                .foregroundStyle(Color(theme.palette.textPrimary))
+                .foregroundStyle(PalTokens.textPrimary.opacity(0.9))
                 .lineLimit(1)
         }
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(bot.isPrimary ? "\(bot.displayName), primary bot" : "\(bot.displayName), pinned"))
+        .padding(.vertical, 8)
+        .frame(width: 112)
+        .overlay(alignment: .topTrailing) {
+            if bot.isUnread {
+                Circle()
+                    .fill(Color(theme.palette.accentBlue))
+                    .frame(width: 10, height: 10)
+                    .padding(8)
+                    .accessibilityHidden(true)
+            }
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(heroLabel))
     }
 }
 
@@ -203,25 +292,31 @@ struct HomeRow: View {
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
-        HStack(spacing: 15) {
+        HStack(spacing: 12) {
             BotRowAvatar(bot: bot, activity: activity, mood: mood)
             VStack(alignment: .leading, spacing: HermesMetrics.homeRowTextGap) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(bot.displayName)
                         .hermesText(.botName)
-                        .foregroundStyle(Color(theme.palette.textPrimary))
+                        .foregroundStyle(PalTokens.textPrimary)
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     if let lastActive = bot.lastActive {
                         Text(RosterTimestamp.label(for: lastActive))
                             .hermesText(.timestamp)
-                            .foregroundStyle(Color(theme.palette.textTertiary))
+                            .foregroundStyle(PalTokens.textTertiary)
+                    }
+                    if bot.isUnread {
+                        Circle()
+                            .fill(Color(theme.palette.accentBlue))
+                            .frame(width: 9, height: 9)
+                            .accessibilityHidden(true)
                     }
                 }
                 PreviewLine(bot: bot, activity: activity)
             }
         }
-        .padding(.horizontal, HermesMetrics.homeRowInset)
+        .padding(.horizontal, HermesMetrics.homeRowInset - 8)
         .frame(height: HermesMetrics.homeRowPitch)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
@@ -230,6 +325,7 @@ struct HomeRow: View {
 
     private var accessibilityText: String {
         var parts = [bot.displayName]
+        if bot.isUnread { parts.append(String(localized: "unread")) }
         if bot.isPrimary { parts.append(String(localized: "primary bot")) }
         if !bot.preview.text.isEmpty { parts.append(bot.preview.text) }
         if let lastActive = bot.lastActive { parts.append(RosterTimestamp.label(for: lastActive)) }
@@ -288,7 +384,7 @@ struct PreviewLine: View {
             }
             Text(bot.preview.text.isEmpty ? " " : bot.preview.text)
                 .hermesText(.botPreview)
-                .foregroundStyle(Color(theme.palette.textSecondary))
+                .foregroundStyle(PalTokens.textSecondary)
                 .lineLimit(1)
         }
     }

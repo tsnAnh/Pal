@@ -6,24 +6,35 @@ import Synchronization
 public enum DeviceFormFactor: Sendable, Equatable {
     case phone
     case pad
+    case mac
     case other
 
     public var label: String {
         switch self {
         case .phone: "iPhone"
         case .pad: "iPad"
+        case .mac: "Mac"
         case .other: "iOS device"
+        }
+    }
+
+    public var kind: String {
+        switch self {
+        case .mac: DeviceIdentity.macKind
+        case .phone, .pad, .other: DeviceIdentity.legacyKind
         }
     }
 }
 
 public struct DeviceIdentity: Sendable, Equatable {
-    public static let kind = "ios"
+    public static let legacyKind = "ios"
+    public static let macKind = "mac"
     public static let maximumLabelLength = 40
     public static let maximumVersionLength = 32
     public static let maximumHardwareLength = 40
 
     public let deviceID: String
+    public let kind: String
     public let label: String
     public let appVersion: String
     public let model: String
@@ -31,6 +42,7 @@ public struct DeviceIdentity: Sendable, Equatable {
 
     public init(deviceID: String, formFactor: DeviceFormFactor, appVersion: String, model: String = "", os: String = "") {
         self.deviceID = deviceID
+        kind = formFactor.kind
         self.label = formFactor.label
         self.appVersion = String(appVersion.prefix(Self.maximumVersionLength))
         self.model = String(model.prefix(Self.maximumHardwareLength))

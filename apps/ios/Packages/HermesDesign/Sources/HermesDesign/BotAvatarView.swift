@@ -7,16 +7,29 @@ public struct BotAvatarView: View {
     private let size: CGFloat
     private let mood: AvatarMood
     private let animated: Bool
+    private let outline: AvatarOutline?
+    private let pointerReach: CGFloat
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @State private var clock: AvatarMoodClock
+    @State private var cache = AvatarContentCache()
+    @State private var look = AvatarLook.zero
 
-    public init(spec: BotAvatarSpec, size: CGFloat, mood: AvatarMood = .idle, animated: Bool = true) {
+    public init(
+        spec: BotAvatarSpec,
+        size: CGFloat,
+        mood: AvatarMood = .idle,
+        animated: Bool = true,
+        outline: AvatarOutline? = nil,
+        pointerReach: CGFloat? = nil
+    ) {
         self.spec = spec
         self.size = size
         self.mood = mood
         self.animated = animated
+        self.outline = outline
+        self.pointerReach = pointerReach ?? (size >= 72 ? (size * 0.4).rounded() : 0)
         _clock = State(initialValue: AvatarMoodClock(
             mood: mood,
             since: Date(),
@@ -27,18 +40,19 @@ public struct BotAvatarView: View {
     }
 
     public var body: some View {
-        let content = AvatarContent(spec).toned(for: colorScheme)
-        Group {
-            if animated {
-                let clock = resolvedClock
-                TimelineView(AvatarSchedule(clock: clock, frameInterval: reduceMotion ? 1.0 / 20 : 1.0 / 60)) { context in
-                    AvatarFrame(content: content, pose: clock.pose(at: context.date), size: size)
-                }
-            } else {
-                AvatarFrame(content: content, pose: AvatarMotion.staticPose(mood), size: size)
-            }
-        }
+        AvatarStage(
+            content: cache.resolve(spec, colorScheme),
+            size: size,
+            clock: animated ? resolvedClock : nil,
+            staticPose: AvatarMotion.staticPose(mood),
+            frameInterval: reduceMotion ? 1.0 / 20 : 1.0 / 60,
+            outline: outline,
+            reduceMotion: reduceMotion,
+            look: look
+        )
+        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.7), value: look)
         .frame(width: size, height: size)
+        .modifier(PointerLook(look: $look, size: size, reach: pointerReach))
         .accessibilityHidden(true)
         .onChange(of: mood) { _, next in
             clock = resolvedClock.changing(to: next, at: Date())
@@ -51,6 +65,75 @@ public struct BotAvatarView: View {
         resolved.loadingSeed = LoadingSequence.seed(for: spec.blinkKey)
         resolved.reduceMotion = reduceMotion
         return resolved
+    }
+}
+
+private final class AvatarContentCache {
+    private var spec: BotAvatarSpec?
+    private var scheme: ColorScheme?
+    private var content: AvatarContent?
+
+    func resolve(_ spec: BotAvatarSpec, _ scheme: ColorScheme) -> AvatarContent {
+        if let content, self.spec == spec, self.scheme == scheme { return content }
+        let built = AvatarContent(spec).toned(for: scheme)
+        self.spec = spec
+        self.scheme = scheme
+        content = built
+        return built
+    }
+}
+
+private struct PointerLook: ViewModifier {
+    @Binding var look: AvatarLook
+    let size: CGFloat
+    let reach: CGFloat
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content.background {
+            Color.clear
+                .frame(width: size + 2 * reach, height: size + 2 * reach)
+                .contentShape(Rectangle())
+                .onContinuousHover { phase in
+                    switch phase {
+                    case .active(let point): look = .toward(point, size: size, reach: reach)
+                    case .ended: look = look.released
+                    }
+                }
+        }
+        #else
+        content
+        #endif
+    }
+}
+
+struct AvatarStage: View, @MainActor Animatable {
+    let content: AvatarContent
+    let size: CGFloat
+    let clock: AvatarMoodClock?
+    let staticPose: AvatarPose
+    let frameInterval: TimeInterval
+    let outline: AvatarOutline?
+    let reduceMotion: Bool
+    var look: AvatarLook
+
+    var animatableData: AvatarLook {
+        get { look }
+        set { look = newValue }
+    }
+
+    var body: some View {
+        if let clock {
+            TimelineView(AvatarSchedule(clock: clock, frameInterval: frameInterval)) { context in
+                frame(pose: clock.pose(at: context.date))
+            }
+        } else {
+            frame(pose: staticPose)
+        }
+    }
+
+    private func frame(pose: AvatarPose) -> some View {
+        AvatarFrame(content: content, pose: pose, size: size, look: look, outline: outline, reduceMotion: reduceMotion)
     }
 }
 
@@ -108,11 +191,14 @@ struct AvatarFrame: View {
     let content: AvatarContent
     let pose: AvatarPose
     let size: CGFloat
+    var look = AvatarLook.zero
+    var outline: AvatarOutline?
+    var reduceMotion = false
 
     var body: some View {
         switch content {
         case .rig(let rig):
-            AvatarCanvas(rig: rig, pose: pose, size: size)
+            AvatarCanvas(rig: rig, pose: pose, size: size, look: look, outline: outline, reduceMotion: reduceMotion)
         case .photo(let image):
             Image(decorative: image, scale: 1)
                 .resizable()
@@ -120,10 +206,14 @@ struct AvatarFrame: View {
                 .frame(width: size, height: size)
                 .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
                 .scaleEffect(x: pose.bodyScaleX, y: pose.bodyScaleY)
-                .rotationEffect(.degrees(pose.bodyRotation))
+                .rotationEffect(.degrees(pose.bodyRotation + photoLean))
                 .offset(x: pose.bodyX * size, y: pose.bodyY * size)
                 .opacity(pose.opacity)
         }
+    }
+
+    private var photoLean: Double {
+        reduceMotion ? 0 : AvatarRig.leanDegrees * look.x * look.amount
     }
 }
 
@@ -131,12 +221,16 @@ private struct AvatarCanvas: View {
     let rig: AvatarRig
     let pose: AvatarPose
     let size: CGFloat
+    let look: AvatarLook
+    let outline: AvatarOutline?
+    let reduceMotion: Bool
 
     var body: some View {
         let inset = (size * 0.3).rounded()
         let side = size + 2 * inset
         Canvas { context, _ in
-            AvatarPainter(rig: rig, size: size, inset: inset).paint(pose, in: &context)
+            AvatarPainter(rig: rig, size: size, inset: inset, look: look, outline: outline)
+                .paint(rig.posed(pose, look: look, reduceMotion: reduceMotion), in: &context)
         }
         .frame(width: side, height: side)
         .frame(width: size, height: size)
@@ -147,6 +241,8 @@ private struct AvatarPainter {
     let rig: AvatarRig
     let size: CGFloat
     let inset: CGFloat
+    let look: AvatarLook
+    let outline: AvatarOutline?
 
     private var scale: CGFloat { size / max(rig.viewBox.width, rig.viewBox.height) }
 
@@ -173,13 +269,14 @@ private struct AvatarPainter {
 
     private func paintFigure(_ pose: AvatarPose, in context: inout GraphicsContext) {
         let place = placement
+        if let outline { paintOutline(outline, in: &context) }
         if rig.clipsToViewBox {
             context.clip(to: Path(CGRect(x: inset, y: inset, width: size, height: size)))
         }
         for element in rig.body {
             draw(element, in: &context)
         }
-        let eyes = rig.eyePaths(pose).map { $0.applying(place) }
+        let eyes = rig.eyePaths(pose, look: look).map { $0.applying(place) }
         let eyeColor = rig.eyes.fill.swiftUIColor
         context.drawLayer { layer in
             layer.clipToLayer { mask in
@@ -191,6 +288,19 @@ private struct AvatarPainter {
             var shown = dot
             shown.opacity = pose.dots[index]
             draw(shown, in: &context)
+        }
+    }
+
+    private func paintOutline(_ outline: AvatarOutline, in context: inout GraphicsContext) {
+        var silhouette = Path()
+        for element in rig.body { silhouette.addPath(element.path.applying(placement)) }
+        let style = { (width: CGFloat) in StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round) }
+        context.drawLayer { layer in
+            layer.stroke(silhouette, with: .color(outline.color), style: style(2 * (outline.gap + outline.thickness)))
+            layer.fill(silhouette, with: .color(outline.color))
+            layer.blendMode = .destinationOut
+            layer.stroke(silhouette, with: .color(.black), style: style(2 * outline.gap))
+            layer.fill(silhouette, with: .color(.black))
         }
     }
 

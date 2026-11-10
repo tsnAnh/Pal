@@ -171,7 +171,7 @@ struct TimeZoneScreen: View {
         ) {
             VStack(spacing: 12) {
                 TextField("Search time zones", text: $query)
-                    .textInputAutocapitalization(.never)
+                    .neverAutocapitalized()
                     .autocorrectionDisabled()
                     .hermesText(.rowTitle)
                     .padding(.horizontal, HermesMetrics.rowInset)

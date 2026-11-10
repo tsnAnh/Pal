@@ -1,12 +1,16 @@
 import AppIntents
 import HermesClient
 import HermesDesign
+import HermesDiagnostics
 import SwiftUI
-import UIKit
 
 @main
 struct HermesBotsApp: App {
+    #if os(iOS)
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #endif
     @State private var model: ConnectionModel
     @State private var roster: RosterModel
     @State private var offers: ReachOfferModel
@@ -16,9 +20,13 @@ struct HermesBotsApp: App {
     @State private var hostPool: DeviceHostPool
     @State private var links: BotLinks
     @State private var directory = BotDirectory()
+    #if os(macOS)
+    @State private var shell = MacShell()
+    #endif
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        LaunchClock.begin()
         LaunchPreferences.applyReset()
         let model = ConnectionModel.live()
         _model = State(initialValue: model)
@@ -37,6 +45,7 @@ struct HermesBotsApp: App {
         _links = State(initialValue: links)
         let environment = IntentEnvironment(connection: model, roster: roster, router: router, links: links)
         AppDependencyManager.shared.add(dependency: environment)
+        LaunchClock.mark("app initialised", on: .osLog())
     }
 
     var body: some Scene {
@@ -46,6 +55,10 @@ struct HermesBotsApp: App {
                 .deviceConsentAlert(consent)
                 .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
                 .environment(appearance)
+                #if os(macOS)
+                .environment(shell)
+                #endif
+                .macWindowSizing()
                 .task { await model.restore() }
                 .task { await offers.listen() }
                 .task {
@@ -63,12 +76,21 @@ struct HermesBotsApp: App {
                     if phase == .active { Task { await model.restore() } }
                 }
                 .onChange(of: model.phase) { _, phase in
-                    if phase == .signedOut { Task { await hostPool.reset() } }
+                    guard phase == .signedOut else { return }
+                    roster.reset()
+                    router.popToRoot()
+                    Task { await hostPool.reset() }
                 }
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     model.report(attention: ReachAttention(sceneIsActive: phase == .active))
                 }
         }
+        #if os(macOS)
+        .defaultSize(width: 1280, height: 830)
+        .windowResizability(.contentMinSize)
+        .windowStyle(.hiddenTitleBar)
+        .commands { MacCommands(shell: shell, roster: roster, router: router, connection: model) }
+        #endif
     }
 }
 
@@ -80,6 +102,12 @@ struct RootView: View {
     let links: BotLinks
     @State private var createBot = CreateBotModel()
     @State private var bots: BotsKit
+    @State private var hub: SettingsHub
+    #if os(iOS)
+    @SceneStorage("pal.openChat") private var restoredChat = ""
+    @State private var didRestoreChat = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
 
     init(model: ConnectionModel, roster: RosterModel, router: AppRouter, hostPool: DeviceHostPool, links: BotLinks) {
         self.model = model
@@ -88,63 +116,103 @@ struct RootView: View {
         self.hostPool = hostPool
         self.links = links
         _bots = State(initialValue: BotsKit(connection: model))
+        _hub = State(initialValue: SettingsHub(connection: model, roster: roster))
+    }
+
+    private var showsWorkspace: Bool {
+        model.isConnected || (model.phase == .connecting && roster.hasContent)
+    }
+
+    @ViewBuilder
+    private var navigation: some View {
+        #if os(iOS)
+        AdaptiveNavigation(path: $router.path) {
+            HomeView(roster: roster, connection: model, router: router)
+        } destination: { route in
+            destination(route)
+        } placeholder: {
+            ContentUnavailableView("Pick a bot", systemImage: "bubble.left.and.bubble.right", description: Text("Choose a bot from the list to start chatting."))
+        }
+        #else
+        MacShellView(roster: roster, connection: model, router: router, bots: bots) { route in
+            destination(route)
+        }
+        #endif
+    }
+
+    @ViewBuilder
+    private func destination(_ route: AppRoute) -> some View {
+        switch route {
+        case .chat(let name):
+            if let bot = roster.bot(named: name) {
+                ChatView(model: ChatModel(bot: bot, links: links, roster: roster), router: router)
+            }
+        case .botProfile(let name):
+            BotProfileView(
+                model: BotProfileModel(botName: name, services: bots.services, roster: roster, sharer: bots.sharer),
+                router: router
+            )
+        case .botThread(let thread):
+            BotThreadView(model: BotThreadModel(route: thread, connection: model, roster: roster))
+        case .library(let name):
+            LibraryView(model: LibraryModel(botName: name, services: bots.services))
+        case .routines(let name):
+            RoutinesView(model: RoutinesModel(botName: name, services: bots.services))
+        case .computer(let name):
+            let bot = roster.bot(named: name)
+            ComputerView(
+                model: ComputerModel(
+                    botName: name,
+                    service: bots.services.computer,
+                    openStream: bots.services.openDisplayStream
+                ),
+                title: bot?.displayName ?? name,
+                spec: bot?.spec
+            )
+        case .slack(let name):
+            SlackView(model: SlackModel(
+                botName: name,
+                displayName: roster.bot(named: name)?.displayName ?? name,
+                services: bots.services
+            ))
+        }
     }
 
     var body: some View {
-        switch model.phase {
-        case .connected:
-            NavigationStack(path: $router.path) {
-                HomeView(roster: roster, connection: model, router: router)
-                    .navigationDestination(for: AppRoute.self) { route in
-                        switch route {
-                        case .chat(let name):
-                            if let bot = roster.bot(named: name) {
-                                ChatView(model: ChatModel(bot: bot, links: links, roster: roster), router: router)
-                            }
-                        case .botProfile(let name):
-                            BotProfileView(
-                                model: BotProfileModel(botName: name, services: bots.services, roster: roster, sharer: bots.sharer),
-                                router: router
-                            )
-                        case .botThread(let thread):
-                            BotThreadView(model: BotThreadModel(route: thread, connection: model, roster: roster))
-                        case .library(let name):
-                            LibraryView(model: LibraryModel(botName: name, services: bots.services))
-                        case .routines(let name):
-                            RoutinesView(model: RoutinesModel(botName: name, services: bots.services))
-                        case .computer(let name):
-                            let bot = roster.bot(named: name)
-                            ComputerView(
-                                model: ComputerModel(
-                                    botName: name,
-                                    service: bots.services.computer,
-                                    openStream: bots.services.openDisplayStream
-                                ),
-                                title: bot?.displayName ?? name,
-                                spec: bot?.spec
-                            )
-                        case .slack(let name):
-                            SlackView(model: SlackModel(
-                                botName: name,
-                                displayName: roster.bot(named: name)?.displayName ?? name,
-                                services: bots.services
-                            ))
-                        }
-                    }
-            }
+        if showsWorkspace {
+            workspace
+        } else if model.phase == .connecting {
+            ProgressView("Connecting")
+                .accessibilityIdentifier("connectingIndicator")
+        } else {
+            ConnectionView(model: model)
+        }
+    }
+
+    @ViewBuilder
+    private var workspace: some View {
+        navigation
+            .environment(hub)
             .task { await roster.runLive() }
             .onChange(of: roster.bots, initial: true) { _, _ in router.dropUnresolvedChat(in: roster) }
             .onAppear {
                 router.registerShareAsTemplate { name in Task { await bots.sharer.share(botName: name) } }
             }
-            .task {
+            .task(id: model.isConnected) {
+                guard model.isConnected else { return }
                 await hostPool.resumeSavedHosts()
                 if ProcessInfo.processInfo.arguments.contains(ConnectAppsLaunch.argument) { router.presentConnectApps() }
             }
+            #if os(iOS)
+            .onChange(of: roster.bots, initial: true) { _, _ in settleOpenConversation() }
+            .onChange(of: roster.isLoaded) { _, _ in settleOpenConversation() }
+            .onChange(of: router.path.isEmpty) { _, _ in settleOpenConversation() }
+            .onChange(of: sizeClass) { _, _ in settleOpenConversation() }
+            .onChange(of: router.currentBotName) { _, name in rememberOpenConversation(name) }
             .sheet(item: $router.sheet, onDismiss: { createBot = CreateBotModel() }) { sheet in
                 switch sheet {
                 case .settings:
-                    SettingsSheet(model: model, roster: roster, openConnectApps: { router.presentConnectApps() }) { router.dismissSheet() }
+                    SettingsSheet(model: model, hub: hub, initialRoute: router.settingsRoute, openConnectApps: { router.presentConnectApps() }) { router.dismissSheet() }
                 case .createBot:
                     CreateBotSheet(model: createBot, roster: roster, router: router)
                 case .connectApps:
@@ -159,14 +227,48 @@ struct RootView: View {
                     ) { router.dismissSheet() }
                 }
             }
-            .fullScreenCover(isPresented: $router.isSearching) {
+            .fullCover(isPresented: $router.isSearching) {
                 SearchHost(roster: roster, router: router)
             }
-        case .connecting:
-            ProgressView("Connecting")
-                .accessibilityIdentifier("connectingIndicator")
-        default:
-            ConnectionView(model: model)
-        }
+            #else
+            .overlay {
+                MacModalHost(connection: model, roster: roster, router: router, hostPool: hostPool, createBot: createBot, hub: hub)
+            }
+            .onChange(of: router.sheet) { _, sheet in
+                if sheet == nil { createBot = CreateBotModel() }
+            }
+            #endif
     }
 }
+
+#if os(iOS)
+extension RootView {
+    private func settleOpenConversation() {
+        guard router.path.isEmpty else {
+            didRestoreChat = true
+            return
+        }
+        if ShellLayout.usesSplit(sizeClass) {
+            if let bot = roster.launchBot { router.openChat(botName: bot.name) }
+            return
+        }
+        guard !didRestoreChat else { return }
+        guard !restoredChat.isEmpty else {
+            didRestoreChat = true
+            return
+        }
+        if roster.bot(named: restoredChat) != nil {
+            didRestoreChat = true
+            router.openChat(botName: restoredChat)
+        } else if roster.isLoaded {
+            didRestoreChat = true
+            restoredChat = ""
+        }
+    }
+
+    private func rememberOpenConversation(_ name: String?) {
+        restoredChat = name ?? ""
+        if let name, roster.bot(named: name) != nil { roster.rememberOpened(bot: name) }
+    }
+}
+#endif

@@ -61,7 +61,8 @@ enum BlobFaceDrawing {
                 facing: AvatarRig.facing(rest, size: eyeSize, bounds: bounds),
                 mask: body
             ),
-            bounds: bounds
+            bounds: bounds,
+            restTilt: -14
         )
     }
 

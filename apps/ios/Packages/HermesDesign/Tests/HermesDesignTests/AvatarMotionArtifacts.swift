@@ -48,7 +48,7 @@ private func photoData() throws -> Data {
 @MainActor
 struct AvatarMotionArtifacts {
     private static let featured: [(String, BotAvatarSpec)] = [
-        ("blob", spec("chó grok bot", shape: "blobatar:k7q2m9x0:round", color: "#f4f4f4")),
+        ("blob", spec("chó pal bot", shape: "blobatar:k7q2m9x0:round", color: "#f4f4f4")),
         ("classic", spec("Atlas", shape: "squircle", color: "#3e8ef7")),
         ("sigil", spec("Rune", shape: "sigil-3", color: "#f5a524")),
     ]

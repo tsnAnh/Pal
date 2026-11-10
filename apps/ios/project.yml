@@ -3,6 +3,7 @@ options:
   bundleIdPrefix: dev.tsnanh.hermes
   deploymentTarget:
     iOS: "26.0"
+    macOS: "26.0"
   createIntermediateGroups: true
   generateEmptyDirectories: false
 settings:
@@ -23,29 +24,25 @@ packages:
 targets:
   HermesBots:
     type: application
-    platform: iOS
+    supportedDestinations: [iOS, macOS]
     sources:
       - App
-    entitlements:
-      path: App/HermesBots.entitlements
-      properties:
-        aps-environment: development
-        com.apple.developer.homekit: true
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Hermes Bots
+        CFBundleDisplayName: Pal
+        CFBundleName: Pal
         ITSAppUsesNonExemptEncryption: false
-        NSMicrophoneUsageDescription: Hermes Bots listens while you dictate a message or talk to a bot in voice mode.
-        NSSpeechRecognitionUsageDescription: Hermes Bots turns your speech into text on this device for dictation and voice mode.
-        NSCameraUsageDescription: Hermes Bots can take a photo to send to a bot.
+        NSMicrophoneUsageDescription: Pal listens while you dictate a message or talk to a bot in voice mode.
+        NSSpeechRecognitionUsageDescription: Pal turns your speech into text on this device for dictation and voice mode.
+        NSCameraUsageDescription: Pal can take a photo to send to a bot.
         UILaunchScreen: {}
-        NSCalendarsFullAccessUsageDescription: Hermes reads your calendar and adds events when you ask your bot to.
-        NSRemindersFullAccessUsageDescription: Hermes reads and adds your reminders when you ask your bot to.
-        NSContactsUsageDescription: Hermes looks up people in your contacts when you ask your bot to.
-        NSLocationWhenInUseUsageDescription: Hermes uses your location to tell your bot where you are and to find places near you.
-        NSHomeKitUsageDescription: Hermes controls your lights, locks and other home accessories when you ask your bot to.
-        NSAlarmKitUsageDescription: Hermes sets alarms and timers when you ask your bot to.
+        NSCalendarsFullAccessUsageDescription: Pal reads your calendar and adds events when you ask your bot to.
+        NSRemindersFullAccessUsageDescription: Pal reads and adds your reminders when you ask your bot to.
+        NSContactsUsageDescription: Pal looks up people in your contacts when you ask your bot to.
+        NSLocationWhenInUseUsageDescription: Pal uses your location to tell your bot where you are and to find places near you.
+        NSHomeKitUsageDescription: Pal controls your lights, locks and other home accessories when you ask your bot to.
+        NSAlarmKitUsageDescription: Pal sets alarms and timers when you ask your bot to.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
@@ -62,6 +59,12 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        CODE_SIGN_ENTITLEMENTS: App/HermesBots.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: App/HermesBots-macOS.entitlements
+        ENABLE_APP_SANDBOX: NO
+        ENABLE_HARDENED_RUNTIME: YES
     dependencies:
       - package: HermesKit
         product: HermesProtocol
@@ -93,9 +96,35 @@ targets:
         product: HermesDesign
   HermesBotsUITests:
     type: bundle.ui-testing
-    platform: iOS
+    supportedDestinations: [iOS, macOS]
     sources:
-      - UITests
+      - path: UITests
+        includes:
+          - E2ESupport.swift
+          - BotProfileSupport.swift
+          - ComputerSupport.swift
+          - SignInFlowTests.swift
+          - BotChatE2ETests.swift
+          - ComputerE2ETests.swift
+          - MacShellE2ETests.swift
+          - MacModalsE2ETests.swift
+          - MacChatDetailsE2ETests.swift
+          - MacPinnedHeroE2ETests.swift
+          - MacBotManagementE2ETests.swift
+      - path: UITests
+        excludes:
+          - E2ESupport.swift
+          - BotProfileSupport.swift
+          - ComputerSupport.swift
+          - SignInFlowTests.swift
+          - BotChatE2ETests.swift
+          - ComputerE2ETests.swift
+          - MacShellE2ETests.swift
+          - MacModalsE2ETests.swift
+          - MacChatDetailsE2ETests.swift
+          - MacPinnedHeroE2ETests.swift
+          - MacBotManagementE2ETests.swift
+        destinationFilters: [iOS]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot.uitests
@@ -106,6 +135,7 @@ targets:
       - package: HermesDesign
         product: HermesDesign
       - sdk: AppIntentsTesting.framework
+        destinationFilters: [iOS]
 schemes:
   HermesBots:
     build:

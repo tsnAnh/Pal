@@ -34,7 +34,7 @@ struct PreviewClassifierTests {
 
     private let roster = [
         PreviewSender(name: "cho-ua", displayName: "chó UA"),
-        PreviewSender(name: "default", displayName: "chó grok bot"),
+        PreviewSender(name: "default", displayName: "chó pal bot"),
     ]
 
     @Test func botToBotPreviewShowsTheSendersDisplayName() {
@@ -59,9 +59,9 @@ struct PreviewClassifierTests {
     @Test func legacyAgentFormResolvesThePrimaryAliasToItsDisplayName() {
         let result = PreviewClassifier.classify("Message from agent 'default': deploy is green", senders: roster)
         #expect(result.kind == .fromBot(handle: "hermes"))
-        #expect(result.text == "Message from chó grok bot: deploy is green")
+        #expect(result.text == "Message from chó pal bot: deploy is green")
         let hermes = PreviewClassifier.classify("Message from 🤖 Hermes (@hermes): up", senders: roster)
-        #expect(hermes.text == "Message from chó grok bot: up")
+        #expect(hermes.text == "Message from chó pal bot: up")
     }
 
     @Test func aRealHermesProfileKeepsItsOwnHandle() {

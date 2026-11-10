@@ -8,7 +8,6 @@ import HermesREST
 import HermesRFB
 import HermesTransport
 import Observation
-import UIKit
 
 @MainActor
 @Observable
@@ -22,11 +21,15 @@ final class ConnectionModel {
     }
 
     var baseURLText: String
+    var username = ""
+    var password = ""
+    private(set) var signInMethod: SignInMethod = .browser
     private(set) var phase: Phase = .signedOut
     private(set) var client: HermesClient?
     private(set) var userInitial = "H"
     private(set) var userName = ""
     let localDeviceID: String?
+    let cache: CacheStore
 
     private var auth: AuthSession
     private var keychainUnavailable: Bool
@@ -37,6 +40,8 @@ final class ConnectionModel {
     private var connection: GatewayConnection?
     private var reopening: Task<GatewayConnection, any Error>?
     private var attentionChain: Task<Void, Never>?
+    private var methodProbe: Task<Void, Never>?
+    private var pendingRestore = false
 
     init(
         auth: AuthSession,
@@ -45,7 +50,8 @@ final class ConnectionModel {
         initialBaseURL: String,
         presence: ReachPresence,
         localDeviceID: String? = nil,
-        keychainUnavailable: Bool = false
+        keychainUnavailable: Bool = false,
+        cache: CacheStore? = nil
     ) {
         self.localDeviceID = localDeviceID
         self.auth = auth
@@ -55,6 +61,20 @@ final class ConnectionModel {
         self.diagnostics = diagnostics
         self.browser = WebAuthenticationBrowser()
         self.baseURLText = initialBaseURL
+        self.cache = cache ?? CacheStore.standard(diagnostics: diagnostics)
+        if let identity = auth.restoredIdentity {
+            baseURLText = identity.baseURL.displayString
+            adopt(userName: identity.userID)
+            pendingRestore = true
+            phase = .connecting
+            client = makeClient()
+        }
+    }
+
+    private func adopt(userName userID: String?) {
+        guard let userID, !userID.isEmpty else { return }
+        userName = userID
+        if let first = userID.first(where: \.isLetter) { userInitial = String(first).uppercased() }
     }
 
     static func live() -> ConnectionModel {
@@ -66,10 +86,10 @@ final class ConnectionModel {
         let transport = URLSessionHTTPTransport()
         let identity = DeviceIdentity.resolve(
             store: KeychainDeviceIDStore(),
-            formFactor: Self.formFactor(of: UIDevice.current.userInterfaceIdiom),
+            formFactor: DeviceInfo.formFactor,
             appVersion: DeviceIdentity.appVersion(of: .main),
-            model: Self.hardwareModel(),
-            os: "iOS \(UIDevice.current.systemVersion)",
+            model: DeviceInfo.hardwareIdentifier,
+            os: DeviceInfo.osDescription,
             diagnostics: diagnostics
         )
         let auth: AuthSession
@@ -95,14 +115,6 @@ final class ConnectionModel {
         )
     }
 
-    private static func formFactor(of idiom: UIUserInterfaceIdiom) -> DeviceFormFactor {
-        switch idiom {
-        case .phone: .phone
-        case .pad: .pad
-        default: .other
-        }
-    }
-
     private static func keychainSession(
         store: KeychainCredentialStore,
         transport: any HTTPTransport,
@@ -111,15 +123,6 @@ final class ConnectionModel {
     ) -> AuthSession {
         (try? AuthSession(store: store, transport: transport, diagnostics: diagnostics, deviceID: deviceID))
             ?? (try! AuthSession(store: InMemoryCredentialStore(), transport: transport, diagnostics: diagnostics, deviceID: deviceID))
-    }
-
-    private static func hardwareModel() -> String {
-        if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] { return simulated }
-        var system = utsname()
-        uname(&system)
-        return withUnsafeBytes(of: &system.machine) { buffer in
-            String(decoding: buffer.prefix { $0 != 0 }, as: UTF8.self)
-        }
     }
 
     private func reloadKeychainCredentialsIfNeeded() {
@@ -138,6 +141,8 @@ final class ConnectionModel {
         }
     }
 
+    var accountKey: String { "\(baseURLText)|\(userName)" }
+
     var isConnected: Bool {
         if case .connected = phase { true } else { false }
     }
@@ -148,14 +153,46 @@ final class ConnectionModel {
 
     func restore() async {
         reloadKeychainCredentialsIfNeeded()
-        guard case .signedOut = phase, let baseURL = await auth.baseURL else { return }
+        let launching = pendingRestore
+        guard launching || phase == .signedOut else { return }
+        pendingRestore = false
+        LaunchClock.mark("restore begin", on: diagnostics)
+        guard let baseURL = await auth.baseURL else {
+            if launching { phase = .signedOut }
+            return
+        }
+        guard launching || phase == .signedOut else { return }
         baseURLText = baseURL.displayString
-        await connect()
+        await connect(reusingClient: launching)
     }
 
     func retryConnection() async {
         guard case .failed = phase else { return }
         await connect()
+    }
+
+    var usesPasswordSignIn: Bool {
+        if case .password = signInMethod { true } else { false }
+    }
+
+    func addressChanged() {
+        #if os(macOS)
+        methodProbe?.cancel()
+        signInMethod = .browser
+        guard let baseURL = try? GatewayBaseURL(validating: baseURLText) else { return }
+        let signIn = nativeSignIn
+        methodProbe = Task {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled else { return }
+            let method = await signIn.discoverMethod(baseURL: baseURL)
+            guard !Task.isCancelled else { return }
+            signInMethod = method
+        }
+        #endif
+    }
+
+    private var nativeSignIn: NativeSignIn {
+        NativeSignIn(transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID)
     }
 
     func signIn() async {
@@ -168,14 +205,30 @@ final class ConnectionModel {
             return
         }
         phase = .signingIn
+        #if os(macOS)
+        await methodProbe?.value
+        #endif
         do {
-            let credentials = try await NativeSignIn(transport: transport, diagnostics: diagnostics, deviceID: presence.deviceID)
-                .signIn(baseURL: baseURL, browser: browser)
+            let credentials: StoredCredentials
+            if case .password(let provider) = signInMethod {
+                let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
+                let secret = password
+                password = ""
+                guard !name.isEmpty, !secret.isEmpty else {
+                    phase = .failed("Enter your username and password.")
+                    return
+                }
+                credentials = try await nativeSignIn.signIn(baseURL: baseURL, provider: provider, username: name, password: secret)
+            } else {
+                credentials = try await nativeSignIn.signIn(baseURL: baseURL, browser: browser)
+            }
             try await auth.adopt(credentials)
+            baseURLText = baseURL.displayString
         } catch {
             phase = .failed(Self.message(for: error))
             return
         }
+        password = ""
         await connect()
     }
 
@@ -224,27 +277,37 @@ final class ConnectionModel {
         connection = nil
         client = nil
         try? await auth.signOut()
+        cache.removeAll()
         userName = ""
         userInitial = "H"
         phase = .signedOut
     }
 
-    private func connect() async {
+    private func makeClient() -> HermesClient {
+        HermesClient(auth: auth, transport: transport, diagnostics: diagnostics, presence: presence)
+    }
+
+    private func connect(reusingClient: Bool = false) async {
         phase = .connecting
-        let client = HermesClient(auth: auth, transport: transport, diagnostics: diagnostics, presence: presence)
+        let client = reusingClient ? (self.client ?? makeClient()) : makeClient()
         self.client = client
         do {
+            adopt(userName: await auth.userID)
             await connection?.close()
             let connection = try await client.connect()
             self.connection = connection
             let description = try await client.describeRuntime(on: connection)
-            if let userID = await auth.userID {
-                userName = userID
-                if let first = userID.first(where: \.isLetter) { userInitial = String(first).uppercased() }
-            }
+            adopt(userName: await auth.userID)
             phase = .connected(instanceID: description.instanceID)
+            cache.removeAll(except: accountKey)
+            LaunchClock.mark("connected", on: diagnostics)
         } catch {
-            phase = await auth.isSignedIn ? .failed(Self.message(for: error)) : .signedOut
+            if await auth.isSignedIn {
+                phase = .failed(Self.message(for: error))
+            } else {
+                cache.removeAll()
+                phase = .signedOut
+            }
         }
     }
 
@@ -261,6 +324,9 @@ final class ConnectionModel {
             case .cancelled: "Sign-in was cancelled."
             case .sessionExpired: "Your session expired. Sign in again."
             case .authorizationDenied: "Sign-in was declined."
+            case .invalidCredentials: "Wrong username or password."
+            case .rateLimited: "Too many attempts. Try again in a moment."
+            case .serverUnavailable: "Hermes is unavailable right now. Try again shortly."
             default: "Sign-in could not be completed."
             }
         case let error as GatewayTransportError:

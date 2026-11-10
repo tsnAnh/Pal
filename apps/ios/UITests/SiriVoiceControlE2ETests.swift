@@ -59,7 +59,7 @@ final class SiriVoiceControlE2ETests: SiriE2ETestCase {
         try await resetBot(alpha, app: app)
         let spoken = try await ask(alpha, unique("CLARIFY pick one"))
         XCTAssertTrue(spoken.contains("Which flavor do you want?"), spoken)
-        XCTAssertTrue(spoken.contains("Answer ") && spoken.contains("in Hermes Bots"), "voice path is named: \(spoken)")
+        XCTAssertTrue(spoken.contains("Answer ") && spoken.contains("in Pal"), "voice path is named: \(spoken)")
         try await waitForStatus("needsInput", of: alpha, timeout: 20)
         let reply = try await definitions.intents["AnswerBotIntent"].makeIntent(bot: alpha, answer: "Chocolate.").run()
         let text: String = try reply.value

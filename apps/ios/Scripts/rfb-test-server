@@ -3,7 +3,7 @@ set -euo pipefail
 
 IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="$(cd "$IOS_DIR/../.." && pwd)"
-MAIN_CHECKOUT="$(cd "$(git -C "$REPO" rev-parse --git-common-dir)/.." && pwd)"
+MAIN_CHECKOUT="$(cd "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/.." && pwd)"
 PYTHON="${HERMES_IOS_PYTHON:-}"
 for candidate in "$REPO/.venv/bin/python" "$MAIN_CHECKOUT/.venv/bin/python"; do
   [ -n "$PYTHON" ] && break

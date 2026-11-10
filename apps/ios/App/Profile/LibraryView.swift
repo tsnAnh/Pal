@@ -1,55 +1,90 @@
 import HermesBotProfile
 import HermesDesign
 import QuickLook
-import SafariServices
 import SwiftUI
 
 struct LibraryView: View {
     @State private var model: LibraryModel
+    private let showsChrome: Bool
+    private let filters: [LibraryFilter]
 
     @Environment(\.hermesTheme) private var theme
 
-    init(model: LibraryModel) {
+    init(model: LibraryModel, showsChrome: Bool = true, filters: [LibraryFilter] = LibraryFilter.allCases) {
         _model = State(initialValue: model)
+        self.showsChrome = showsChrome
+        self.filters = filters
     }
 
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                FilterChipBar(
-                    items: LibraryFilter.allCases.map { FilterChipItem(id: $0, title: $0.title) },
-                    selection: $model.filter,
-                    accessibilityIdentifier: "libraryFilter"
-                )
-                .padding(.bottom, LibraryMetrics.chipsToContent)
+                chips
                 content
             }
             .padding(.bottom, 32)
+            #if os(macOS)
+            .padding(.leading, showsChrome ? 0 : 12)
+            .padding(.trailing, showsChrome ? 0 : 15)
+            #endif
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
+        .background {
+            if showsChrome { Color(theme.palette.sheetBackground).ignoresSafeArea() }
+        }
         .accessibilityIdentifier("libraryScreen")
         .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Library")
-                    .hermesText(.sheetTitle)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("libraryTitle")
+            if showsChrome {
+                ToolbarItem(placement: .principal) {
+                    Text("Library")
+                        .hermesText(.sheetTitle)
+                        .foregroundStyle(Color(theme.palette.textPrimary))
+                        .accessibilityAddTraits(.isHeader)
+                        .accessibilityIdentifier("libraryTitle")
+                }
+                .sharedBackgroundVisibility(.hidden)
             }
-            .sharedBackgroundVisibility(.hidden)
         }
         .toolbarTitleDisplayMode(.inline)
         .task { model.start() }
         .onDisappear { model.stop() }
-        .fullScreenCover(item: Binding(get: { model.safariURL.map(SafariTarget.init) }, set: { if $0 == nil { model.safariURL = nil } })) { target in
-            SafariView(url: target.url).ignoresSafeArea()
-        }
+        .inAppBrowser(url: $model.safariURL)
         .quickLookPreview($model.previewURL)
         .onChange(of: model.previewURL) { model.cleanUpPreview() }
         .alert(Text("This item can't be opened right now"), isPresented: Binding(get: { model.previewFailed }, set: { if !$0 { model.dismissPreviewFailure() } })) {
             Button("OK", role: .cancel) {}
         }
+    }
+
+    @ViewBuilder
+    private var chips: some View {
+        #if os(macOS)
+        if showsChrome { standardChips } else { MacLibraryChips(filters: filters, selection: $model.filter) }
+        #else
+        standardChips
+        #endif
+    }
+
+    private var standardChips: some View {
+        FilterChipBar(
+            items: filters.map { FilterChipItem(id: $0, title: $0.title) },
+            selection: $model.filter,
+            accessibilityIdentifier: "libraryFilter"
+        )
+        .padding(.bottom, LibraryMetrics.chipsToContent)
+    }
+
+    @ViewBuilder
+    private var readySections: some View {
+        #if os(macOS)
+        if showsChrome {
+            ForEach(model.sections) { section in standardSection(section) }
+        } else {
+            ForEach(MacLibraryGroup.groups(model.entries)) { group in macSection(group) }
+        }
+        #else
+        ForEach(model.sections) { section in standardSection(section) }
+        #endif
     }
 
     @ViewBuilder
@@ -74,16 +109,7 @@ struct LibraryView: View {
                 accessibilityIdentifier: "libraryEmpty"
             )
         case .ready:
-            ForEach(model.sections) { section in
-                SectionCaption(section.id.title, accessibilityIdentifier: "librarySection-\(section.id.rawValue)")
-                    .padding(.top, LibraryMetrics.sectionGap)
-                    .padding(.bottom, HermesMetrics.captionToCardGap)
-                GroupedCard(separatorInset: LibraryMetrics.separatorInset, accessibilityIdentifier: "libraryCard-\(section.id.rawValue)") {
-                    ForEach(section.entries) { entry in
-                        LibraryRow(entry: entry, model: model)
-                    }
-                }
-            }
+            readySections
             if model.isIndexing || model.isLoadingMore {
                 ProgressView()
                     .padding(.top, 24)
@@ -93,23 +119,128 @@ struct LibraryView: View {
     }
 }
 
-private struct SafariTarget: Identifiable {
-    let url: URL
-
-    var id: URL { url }
-}
-
-struct SafariView: UIViewControllerRepresentable {
-    let url: URL
-
-    func makeUIViewController(context: Context) -> SFSafariViewController {
-        let configuration = SFSafariViewController.Configuration()
-        configuration.entersReaderIfAvailable = false
-        return SFSafariViewController(url: url, configuration: configuration)
+extension LibraryView {
+    @ViewBuilder
+    fileprivate func standardSection(_ section: LibrarySection) -> some View {
+        SectionCaption(section.id.title, accessibilityIdentifier: "librarySection-\(section.id.rawValue)")
+            .padding(.top, LibraryMetrics.sectionGap)
+            .padding(.bottom, HermesMetrics.captionToCardGap)
+        GroupedCard(accessibilityIdentifier: "libraryCard-\(section.id.rawValue)") {
+            ForEach(section.entries) { entry in
+                LibraryRow(entry: entry, model: model)
+            }
+        }
     }
 
-    func updateUIViewController(_ controller: SFSafariViewController, context: Context) {}
+    #if os(macOS)
+    fileprivate func macSection(_ group: MacLibraryGroup) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(group.title)
+                .font(.system(size: 12))
+                .foregroundStyle(PalTokens.textSecondary)
+                .padding(.horizontal, 11)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("librarySection-\(group.id)")
+            VStack(spacing: 0) {
+                ForEach(group.entries) { entry in
+                    MacLibraryRow(entry: entry, model: model)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("libraryCard-\(group.id)")
+        }
+        .padding(.top, 24)
+    }
+    #endif
 }
+
+#if os(macOS)
+struct MacLibraryGroup: Identifiable {
+    let id: String
+    let title: String
+    let entries: [LibraryEntry]
+
+    static func groups(_ entries: [LibraryEntry], now: Date = Date(), calendar: Calendar = .current) -> [MacLibraryGroup] {
+        let today = entries.filter { calendar.isDate($0.occurredAt, inSameDayAs: now) }
+        let older = entries.filter { !calendar.isDate($0.occurredAt, inSameDayAs: now) }
+        return [
+            today.isEmpty ? nil : MacLibraryGroup(id: "today", title: String(localized: "Today"), entries: today),
+            older.isEmpty ? nil : MacLibraryGroup(id: "older", title: String(localized: "Older"), entries: older),
+        ].compactMap { $0 }
+    }
+}
+
+private struct MacLibraryChips: View {
+    let filters: [LibraryFilter]
+    @Binding var selection: LibraryFilter
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(filters, id: \.self) { filter in
+                let isSelected = selection == filter
+                Button { selection = filter } label: {
+                    Text(filter.title)
+                        .font(.system(size: 12))
+                        .foregroundStyle(isSelected ? PalTokens.inverseText : PalTokens.textSecondary)
+                        .padding(.horizontal, 11)
+                        .frame(height: 24)
+                        .background(isSelected ? PalTokens.inverseFill : PalTokens.elevated, in: Capsule())
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+                .accessibilityIdentifier("libraryFilter-\(filter.rawValue)")
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 6)
+        .padding(.top, 14)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("libraryFilter")
+    }
+}
+
+private struct MacLibraryRow: View {
+    let entry: LibraryEntry
+    let model: LibraryModel
+
+    var body: some View {
+        if entry.isOpenable {
+            Button { model.open(entry) } label: { rowContent }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("libraryRow-\(entry.id)")
+                .accessibilityValue(Text(entry.kind.rawValue))
+        } else {
+            rowContent
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("libraryRow-\(entry.id)")
+                .accessibilityValue(Text(entry.kind.rawValue))
+        }
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 8) {
+            LibraryIcon(entry: entry, model: model, size: 20, glyph: 12)
+                .frame(width: 20, height: 20)
+            Text(entry.title)
+                .font(.system(size: 12))
+                .foregroundStyle(PalTokens.textPrimary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+            if model.preparingEntryID == entry.id {
+                ProgressView().controlSize(.small)
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 33)
+        .contentShape(Rectangle())
+        .help(entry.subtitle())
+        .onAppear { model.loadMoreIfNeeded(after: entry) }
+    }
+}
+#endif
 
 private struct LibraryRow: View {
     let entry: LibraryEntry
@@ -162,9 +293,11 @@ private struct LibraryRow: View {
 private struct LibraryIcon: View {
     let entry: LibraryEntry
     let model: LibraryModel
+    var size = LibraryMetrics.iconSize
+    var glyph: CGFloat = 20
 
     @Environment(\.hermesTheme) private var theme
-    @State private var thumbnail: UIImage?
+    @State private var thumbnail: PlatformImage?
 
     var body: some View {
         switch entry.kind {
@@ -179,8 +312,8 @@ private struct LibraryIcon: View {
 
     @ViewBuilder
     private var linkIcon: some View {
-        if let url = entry.url, let image = FaviconCache.shared.image(for: url, pointSize: LibraryMetrics.iconSize) {
-            Image(uiImage: image)
+        if let url = entry.url, let image = FaviconCache.shared.image(for: url, pointSize: size) {
+            Image(platformImage: image)
         } else {
             symbol("globe")
         }
@@ -189,16 +322,16 @@ private struct LibraryIcon: View {
     @ViewBuilder
     private var mediaIcon: some View {
         if let thumbnail {
-            Image(uiImage: thumbnail)
+            Image(platformImage: thumbnail)
                 .resizable()
                 .scaledToFill()
-                .frame(width: LibraryMetrics.iconSize, height: LibraryMetrics.iconSize)
-                .clipShape(RoundedRectangle(cornerRadius: LibraryMetrics.iconSize * 0.22, style: .continuous))
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
         } else {
             symbol("photo")
                 .task(id: entry.id) {
                     guard let data = await model.thumbnail(for: entry),
-                          let image = await UIImage(data: data)?.byPreparingThumbnail(ofSize: CGSize(width: 96, height: 96))
+                          let image = await PlatformImage.thumbnail(from: data, side: 96)
                     else { return }
                     thumbnail = image
                 }
@@ -207,7 +340,7 @@ private struct LibraryIcon: View {
 
     private func symbol(_ name: String) -> some View {
         Image(systemName: name)
-            .font(.system(size: 20, weight: .light))
+            .font(.system(size: glyph, weight: .light))
             .foregroundStyle(Color(theme.palette.textSecondary))
     }
 }
@@ -247,7 +380,6 @@ enum LibraryMetrics {
     static let iconSize: CGFloat = 24
     static let leadingInset: CGFloat = 18
     static let iconToText: CGFloat = 10
-    static let separatorInset: CGFloat = leadingInset + iconSize + iconToText
     static let rowHeight: CGFloat = 65
     static let rowVerticalPadding: CGFloat = 12
     static let chipsToContent: CGFloat = 4
