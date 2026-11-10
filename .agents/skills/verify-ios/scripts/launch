@@ -39,5 +39,5 @@ trap 'fail' INT TERM
 "$HERE/backend-up"
 "$HERE/build"
 "$HERE/sim-up"
-trap - ERR INT TERM
 "$HERE/doctor"
+trap - ERR INT TERM

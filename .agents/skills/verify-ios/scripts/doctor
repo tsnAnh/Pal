@@ -33,9 +33,9 @@ if [ "$STATE" = "Booted" ]; then ok "simulator ${UDID} booted"; else bad "simula
 check "simulator ${UDID:-none} is claimed by $OWNER" bash -c ". '$SKILL_DIR/scripts/common.sh'; OWNER='$OWNER'; owned_udids | grep -qx '${UDID:-none}'"
 if [ "$(booted_count)" -le "$MAX_SIMS" ]; then ok "machine simulators running: $(booted_count)/$MAX_SIMS"; else bad "machine simulators running: $(booted_count)/$MAX_SIMS"; fi
 
-APP="$DERIVED/Build/Products/Debug-iphonesimulator/HermesBots.app"
+APP="$DERIVED/Build/Products/Debug-iphonesimulator/Pal.app"
 if [ -d "$APP" ]; then
-  NEWER="$(find "$IOS_DIR/App" "$IOS_DIR/Packages/HermesKit/Sources" "$IOS_DIR/Packages/HermesDesign/Sources" "$IOS_DIR/UITests" -name '*.swift' -newer "$APP/HermesBots" 2>/dev/null | head -3)"
+  NEWER="$(find "$IOS_DIR/App" "$IOS_DIR/Packages/HermesKit/Sources" "$IOS_DIR/Packages/HermesDesign/Sources" "$IOS_DIR/UITests" -name '*.swift' -newer "$APP/Pal" 2>/dev/null | head -3)"
   if [ -z "$NEWER" ]; then ok "built app is newer than all sources"; else bad "sources changed since the build; rerun scripts/build: $(echo $NEWER | tr '\n' ' ')"; fi
 else
   bad "no built app at $APP; run scripts/build"

@@ -1,11 +1,11 @@
 ---
 name: verify-ios
-description: Drive and prove the Hermes Bots iOS app (apps/ios, native Bot Mode client, bundle dev.tsnanh.hermes.bot) on an iOS Simulator against an isolated local Hermes gateway with a fake LLM. Use after any change under apps/ios (App/, Packages/HermesKit, Packages/HermesDesign, UITests/) to sign in, list bots, chat, and check avatars with real XCUITest runs, video, screenshots, and logs.
+description: Drive and prove the Pal iOS app (apps/ios, native Bot Mode client, bundle dev.tsnanh.hermes.bot) on an iOS Simulator against an isolated local Hermes gateway with a fake LLM. Use after any change under apps/ios (App/, Packages/HermesKit, Packages/HermesDesign, UITests/) to sign in, list bots, chat, and check avatars with real XCUITest runs, video, screenshots, and logs.
 ---
 
 # verify-ios
 
-The app is a thin client: with no gateway it only shows the sign-in form. So every run starts a sandbox gateway (temp `HERMES_HOME`, two bot profiles `bot-alpha` and `bot-beta`, auth enabled) whose model is a local fake LLM. No real model is ever called. Read `features/README.md`, then the feature file you are proving.
+The app is a thin client: with no gateway it only shows the sign-in form. So every run starts a sandbox gateway (temp `HERMES_HOME`, two bot profiles `bot-alpha` and `bot-beta`, auth enabled; `VERIFY_IOS_SEED=parity` swaps them for the eight-bot parity roster) whose model is a local fake LLM. No real model is ever called. Read `features/README.md`, then the feature file you are proving.
 
 Everything below runs from the repo root. Helpers live in `.agents/skills/verify-ios/scripts/` (call them as `S=.agents/skills/verify-ios/scripts; $S/launch`).
 
@@ -26,7 +26,7 @@ VERIFY_IOS_OWNER=<your-task-slug> $S/launch
 
 `launch` runs, in order, and runs `cleanup` itself if any step fails:
 
-1. `baseline`. Saves `xcrun simctl list devices`, `du -sh` of `~/Library/Developer/CoreSimulator/Devices` and `~/Library/Developer/XCTestDevices`, the ledger, and the XCTestDevices clone list under the run's evidence dir. Picks the simulator: one you already own in the ledger, else `VERIFY_IOS_UDID`, else a shutdown iPhone (prefers "iPhone 17" on the newest runtime).
+1. `baseline`. Saves `xcrun simctl list devices`, `du -sh` of `~/Library/Developer/CoreSimulator/Devices` and `~/Library/Developer/XCTestDevices`, the ledger, and the XCTestDevices clone list under the run's evidence dir. Picks the simulator: one you already own in the ledger, else `VERIFY_IOS_UDID`, else a shutdown simulator whose name contains "iPhone" (prefers a name ending "iPhone 17", newest runtime; renamed simulators such as "Hermes iPhone 17" qualify).
 2. `backend-up`. Starts `apps/ios/Scripts/e2e-gateway` (stub LLM from `apps/ios/Tools/stub-llm/stub_llm.py` plus an auth-gated `hermes gateway run`) in a credential-stripped env. The first start of a fresh `HERMES_HOME` provisions an isolated runtime (Python and Node dependencies, a desktop build) and takes several minutes; `VERIFY_IOS_BACKEND_READY_SECONDS` (default 1200) bounds the wait. Ready means the script printed its `export HERMES_IOS_TEST_*` lines (it prints them only after `/api/auth/providers` answers), the fake LLM answers `/v1/models`, and both profile configs exist. Sandbox credentials (random per run) go to `$STATE_ROOT/backend.env`, mode 600.
 3. `build`. `xcodegen generate` (the `.xcodeproj` is generated and gitignored) then `xcodebuild build-for-testing` into `apps/ios/build/DerivedData`.
 4. `sim-up`. Waits for a slot, boots, `bootstatus`, claims the device in `~/.claude/hooks/device-ledger.sh`, records whether the app was already installed.
@@ -42,11 +42,11 @@ State for the run lives in `/tmp/verify-ios-state-<uid>/<checkout-hash>/` (`run.
 $S/doctor
 ```
 
-Read-only. Answers "is this instance worth driving": backend wrapper alive and is `e2e-gateway`, port owned by our gateway process, `/api/auth/providers` and the fake LLM answer, `HERMES_HOME` is under `/tmp` and points at the fake LLM, both profiles exist, real `~/.hermes` has no `bot-*` profile, simulator booted and claimed by this owner, machine simulator count within the cap, built app newer than every Swift source (stale build means rerun `$S/build`), `.xctestrun` present, evidence dir gitignored. Exits 1 with a `FAIL` line per problem. Run it first whenever anything looks off. <!-- no-tmp: ok — describes doctor's /tmp sandbox guard -->
+Read-only. Answers "is this instance worth driving": backend wrapper alive and is `e2e-gateway`, port owned by our gateway process, `/api/auth/providers` and the fake LLM answer, `HERMES_HOME` is under `/tmp` and points at the fake LLM, both profiles exist, real `~/.hermes` has no `bot-*` profile, simulator booted and claimed by this owner, machine simulator count within the cap, built `Pal.app` newer than every Swift source (stale build means rerun `$S/build`), `.xctestrun` present, evidence dir gitignored. Exits 1 with a `FAIL` line per problem. Run it first whenever anything looks off. <!-- no-tmp: ok — describes doctor's /tmp sandbox guard -->
 
 ## Drive
 
-Pairing needs no human. The app signs in through `ASWebAuthenticationSession` against the gateway's basic-auth login page. The UI tests type the base URL into `baseURLField`, tap `signInButton`, accept the system consent alert (SpringBoard "Continue"), fill the web form with the sandbox username and password from env, and wait for `rosterScreen`. Passing `-hermes-reset-credentials` as a launch argument clears the keychain first.
+Pairing needs no human. The app signs in through `ASWebAuthenticationSession` against the gateway's basic-auth login page. The UI tests open `otherOptionsButton` on the Pal landing, type the base URL into `baseURLField`, tap `signInButton`, accept the system consent alert (SpringBoard "Continue"), fill the web form with the sandbox username and password from env, and wait for `rosterScreen`. Passing `-hermes-reset-credentials` as a launch argument clears the keychain first.
 
 Primary driver is XCUITest, because the app exposes accessibility identifiers and the shipped suite in `apps/ios/UITests/` already scripts sign-in and chat:
 
@@ -76,10 +76,10 @@ Simulator slots are shared machine-wide, so a run costs every other agent time.
 - Run the cross-unit regression (other features' suites) once, at the end, not per iteration. When the coordinator integrates branches it runs it again on the combined tree.
 - Rebuild (`$S/build`) only after Swift edits; `doctor` reports a stale build.
 
-Host-only package tests (no simulator, no backend needed):
+Host-only package tests (no simulator, no backend, no launch needed; without an active run the log goes to a fresh `swift-test-<time>` evidence dir):
 
 ```
-$S/swift-test HermesDesign                        # avatar parity and motion
+$S/swift-test HermesDesign                        # avatar parity, motion, tone, pointer look
 $S/swift-test HermesDesign --filter AvatarMotionTests
 ```
 
@@ -90,7 +90,7 @@ $S/snap roster-after-signin     # simctl io screenshot of the claimed simulator
 $S/logs 5m                      # app os_log (subsystem dev.tsnanh.hermes.bot)
 ```
 
-Stable handles from the code (`apps/ios/App/`): `baseURLField`, `signInButton`, `signOutButton`, `statusLabel`, `instanceIDLabel`, `errorLabel`, `rosterScreen`, `botRow-<profile>` (value is the activity: `idle`, `working`, `needs-input`, `offline`), `rosterSearchField`, `userAvatarButton` (value `Connected` when the live link is up), `chatScreen`, `chatTitle`, `composerField`, `sendButton`, `userBubble`, `assistantBubble`, `assistantBubble-streaming`, `clarifyCard`, `clarifyChoice-<n>`, `deliveryQueued`, `deliveryFailed`, `reconnectingIndicator`, `reach-offer-banner`. To drive something the shipped tests do not cover, add a test to `apps/ios/UITests/` using `E2ETestCase` helpers in `E2ESupport.swift`; do not tap by coordinates.
+Stable handles from the code (`apps/ios/App/`): landing `signInTitle`, `continueButton`, `otherOptionsButton`, `signInErrorMessage`, `signInOptionsClose`; options sheet `baseURLField`, `signInButton`, `statusLabel`, `instanceIDLabel`, `errorLabel`, `signOutButton` (the sheet only opens while signed out); `rosterScreen`, `pinnedHero`, `heroAvatar-<profile>`, `botRow-<profile>` (value is the activity: `idle`, `working`, `needs-input`, `offline`, `attention`; label ends `primary bot` for the primary), `rosterSearchField` (the search launcher), `searchField`, `searchResult-bot-<profile>`, `searchResult-message-<profile>`, `searchClose`, `userAvatarButton` (value `Connected` when the live link is up), `createBotButton`, Settings `settingsSheet`, `settingsAccountRow`, `settingsSignOutRow`, `accountScreen`, `accountAddRow`; context menu `pinAction`, `unpinAction`, `makePrimaryAction`, `hideBotAction`, `markUnreadAction`; chat `chatScreen`, `chatTitle`, `composerField`, `sendButton`, `userBubble`, `assistantBubble`, `assistantBubble-streaming` (the thinking row), `clarifyCard`, `clarifyChoice-<n>`, `clarifySkip`, `clarifyAnswered`, `deliveryQueued`, `deliveryFailed`, `reconnectingIndicator`, `chatMenuButton`, `findField`, `botThreadLink`, `reach-offer-banner`. To drive something the shipped tests do not cover, add a test to `apps/ios/UITests/` using `E2ETestCase` helpers in `E2ESupport.swift`; do not tap by coordinates.
 
 ## Evidence
 
@@ -135,7 +135,7 @@ Run it after every drive session, pass or fail, and after any failed attempt. It
 | `logs` | `$S/logs [window]` | app os_log extract |
 | `cleanup` | `$S/cleanup` | teardown, never evidence |
 
-Env knobs: `VERIFY_IOS_OWNER`, `VERIFY_IOS_UDID`, `VERIFY_IOS_SLOT_WAIT_SECONDS`, `VERIFY_IOS_BACKEND_READY_SECONDS`, `HERMES_IOS_PYTHON` (default `<repo>/.venv/bin/python`).
+Env knobs: `VERIFY_IOS_OWNER`, `VERIFY_IOS_UDID`, `VERIFY_IOS_SEED` (`parity`), `VERIFY_IOS_SLOT_WAIT_SECONDS`, `VERIFY_IOS_BACKEND_READY_SECONDS`, `HERMES_IOS_PYTHON` (default `<repo>/.venv/bin/python`).
 
 ## Rules and what enforces them
 
