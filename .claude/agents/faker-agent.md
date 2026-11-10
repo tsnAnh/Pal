@@ -1,1 +1,0 @@
-../../.agents/faker-kit/plugins/pstack/agents/faker-agent.md
