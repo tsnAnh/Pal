@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 CORE_RUNTIME_KEYS: dict[str, str] = {
     "computer_use.backend": "plugins/computer_use/__init__.py configured_backend_name() (unset = cua)",
     "dashboard.kanban": "plugins/kanban/dashboard/plugin_api.py (bundled dashboard tab preferences)",
+    "updates.post_update_steps": "hermes_cli/update_cmd_post_steps.py declared_post_update_steps() (operator-declared update steps)",
 }
 
 

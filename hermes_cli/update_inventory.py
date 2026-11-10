@@ -43,6 +43,7 @@ class UpdatePlan:
     expected_version: Optional[str] = None
     profiles: list = field(default_factory=list)
     runtimes: list = field(default_factory=list)  # list[RuntimeRecord]
+    post_update_steps: list = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)  # recursive: RuntimeRecord entries become dicts
@@ -346,6 +347,11 @@ def collect_runtime_inventory() -> UpdatePlan:
 
         profile_homes = _profile_homes()
         plan.profiles = [name for name, _ in profile_homes]
+    with _probe("Post-update step declarations"):
+        from hermes_cli.update_cmd_post_steps import plan_post_update_steps
+        from hermes_constants import get_default_hermes_root
+
+        plan.post_update_steps = plan_post_update_steps(get_default_hermes_root())
     seen: set[int] = set()
     _collect_gateway_runtimes(plan, profile_homes, seen)
     _collect_ledger_runtimes(plan, seen)
@@ -363,6 +369,10 @@ def print_update_plan(plan: UpdatePlan) -> None:
         print("  ⚠ This install is NOT updatable in place.")
         print(f"    Update via: {plan.update_mechanism}")
     print(f"  Profiles: {', '.join(plan.profiles) if plan.profiles else '(none found)'}")
+    if plan.post_update_steps:
+        print(f"  Post-update steps ({len(plan.post_update_steps)}), after the code and dependencies, before the gateway restart:")
+        for step in plan.post_update_steps:
+            print(f"    • {step['name']}: {' '.join(step['command'])}")
     if not plan.runtimes:
         print("  Running Hermes services: none detected — code swap only.")
         return
