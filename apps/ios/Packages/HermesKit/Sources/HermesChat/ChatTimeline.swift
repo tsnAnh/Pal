@@ -18,6 +18,7 @@ public enum ChatTimeline {
         lastSeen: Date?,
         calendar: Calendar = .current
     ) -> [TimelineEntry] {
+        let items = TranscriptVisibility.visible(items)
         let dates = items.map(date)
         let separators = separators(for: dates, calendar: calendar)
         var dividerPlaced = false

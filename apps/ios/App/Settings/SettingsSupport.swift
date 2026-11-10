@@ -2,7 +2,6 @@ import HermesAuth
 import HermesSettings
 import Observation
 import SwiftUI
-import UIKit
 import UserNotifications
 
 enum AppVersion {
@@ -29,28 +28,17 @@ extension ConnectionModel {
 enum FeedbackReport {
     @MainActor
     static func text(connection: ConnectionModel) -> String {
-        let device = UIDevice.current
         return """
-        Hermes Bots feedback
+        Pal feedback
 
         App: \(AppVersion.display)
-        System: \(device.systemName) \(device.systemVersion)
-        Device: \(device.model)
+        System: \(DeviceInfo.systemName) \(DeviceInfo.systemVersion)
+        Device: \(DeviceInfo.model)
 
         What happened:
 
         """
     }
-}
-
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
 
 @MainActor

@@ -3283,6 +3283,7 @@ export interface PromptSubmitParams {
   surface?: string | null
   voice_context?: string | null
   voice_turn?: boolean | null
+  turn_context?: string | null
   title_preview?: string | null
   truncate_before_user_ordinal?: number | null
   truncate_before_row_id?: number | null
@@ -5870,6 +5871,7 @@ export interface CanonicalSubmitParams {
   title_preview?: string | null
   turn_author?: CanonicalTurnAuthor | null
   api_text?: string | null
+  turn_context?: string | null
   model_override?: CanonicalModelOverride | null
   clarify_batch?: boolean
 }
@@ -6217,7 +6219,7 @@ export interface DeviceToolRespondResult {
   recorded: boolean
 }
 export interface ClientHelloParams {
-  kind: 'desktop' | 'ios' | 'tui' | 'cli' | 'web'
+  kind: 'desktop' | 'ios' | 'mac' | 'tui' | 'cli' | 'web'
   device_id: string
   label: string
   app_version?: string
@@ -6247,7 +6249,7 @@ export interface DevicesListResult {
 }
 export interface DeviceRow {
   device_id: string
-  kind: 'desktop' | 'ios' | 'tui' | 'cli' | 'web'
+  kind: 'desktop' | 'ios' | 'mac' | 'tui' | 'cli' | 'web'
   label: string
   model?: string | null
   os?: string | null

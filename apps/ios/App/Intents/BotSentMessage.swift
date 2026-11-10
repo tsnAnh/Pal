@@ -3,7 +3,7 @@ import Foundation
 import GeoToolbox
 import LinkPresentation
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppEnum(schema: .messages.messageEffect)
 enum BotMessageEffect: String, AppEnum {
     case unspecified
@@ -11,7 +11,7 @@ enum BotMessageEffect: String, AppEnum {
     static let caseDisplayRepresentations: [BotMessageEffect: DisplayRepresentation] = [.unspecified: "Unspecified"]
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppEnum(schema: .messages.customReaction)
 enum BotCustomReaction: String, AppEnum {
     case unspecified
@@ -19,14 +19,14 @@ enum BotCustomReaction: String, AppEnum {
     static let caseDisplayRepresentations: [BotCustomReaction: DisplayRepresentation] = [.unspecified: "Unspecified"]
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @UnionValue
 enum BotReadReaction {
     case customReaction(BotCustomReaction)
     case attributedString(AttributedString)
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppEntity(schema: .messages.customAttachment)
 struct BotCustomAttachment: AppEntity {
     static let defaultQuery = BotCustomAttachmentQuery()
@@ -40,12 +40,12 @@ struct BotCustomAttachment: AppEntity {
     }
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 struct BotCustomAttachmentQuery: EntityQuery {
     func entities(for identifiers: [String]) async throws -> [BotCustomAttachment] { [] }
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppEntity(schema: .messages.message)
 struct BotSentMessage: AppEntity {
     static let defaultQuery = BotSentMessageQuery()
@@ -94,7 +94,7 @@ struct BotSentMessage: AppEntity {
     }
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 struct BotSentMessageQuery: EntityQuery {
     func entities(for identifiers: [String]) async throws -> [BotSentMessage] { [] }
 }

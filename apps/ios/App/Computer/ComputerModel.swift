@@ -3,7 +3,6 @@ import Foundation
 import HermesBotProfile
 import HermesRFB
 import Observation
-import UIKit
 
 enum ComputerPhase: Equatable {
     case connecting
@@ -195,7 +194,7 @@ final class ComputerModel {
     }
 
     func pasteFromPhone() {
-        guard hasControl, let text = UIPasteboard.general.string, !text.isEmpty else {
+        guard hasControl, let text = Pasteboard.string, !text.isEmpty else {
             toast = String(localized: "Nothing to paste")
             return
         }
@@ -214,8 +213,8 @@ final class ComputerModel {
         input?.yield(.key(Self.controlLeft, down: false))
         let copied = await awaitClipboard()
         if let copied, !copied.isEmpty {
-            UIPasteboard.general.string = copied
-            toast = String(localized: "Copied to phone")
+            Pasteboard.string = copied
+            toast = DeviceWording.copiedToDevice
         } else {
             toast = String(localized: "Nothing to copy")
         }

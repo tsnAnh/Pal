@@ -170,7 +170,7 @@ private struct BotThreadMessageRow: View {
             }
             HStack(alignment: .bottom, spacing: ChatMetrics.threadAvatarGap) {
                 avatar
-                ChatBubble(fill: Color(theme.palette.assistantBubble)) {
+                ChatBubble(style: BubblePalette.agentBubble) {
                     MarkdownView(document: MarkdownDocument(parsing: row.message.text), highlight: "", isCurrentMatch: false)
                         .textSelection(.enabled)
                 }

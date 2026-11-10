@@ -3,7 +3,7 @@ import SwiftUI
 
 enum BlobFaceDrawing {
     private static let bodyRounding = 26.0
-    private static let pill = (width: 10.0, height: 23.0, gap: 28.0, slant: -11.0, shiftX: 15.0, shiftY: -18.0, reach: 9.0)
+    private static let pill = (width: 14.2, height: 33.0, gap: 43.0, slant: -20.0, twist: -3.5, shiftX: 18.0, shiftY: -18.0, stagger: 8.0, reach: 11.0)
     private static let figure = CGAffineTransform.svgList([
         .svgRotate(-14, aroundX: 50, y: 50),
         .svgTranslate(50, 50),
@@ -45,8 +45,8 @@ enum BlobFaceDrawing {
             )
         }
 
-        let rest = pillCentres(figure).map { centre in
-            EyePlacement(CGAffineTransform.svgList([.svgTranslate(centre.x, centre.y), .svgRotate(pill.slant)]).concatenating(Self.figure))
+        let rest = zip(pillCentres(figure), [pill.slant, pill.slant + pill.twist]).map { centre, slant in
+            EyePlacement(CGAffineTransform.svgList([.svgTranslate(centre.x, centre.y), .svgRotate(slant)]).concatenating(Self.figure))
         }
         let eyeSize = CGSize(width: pill.width, height: pill.height)
         let bounds = AvatarRig.bounds(of: body)
@@ -61,7 +61,8 @@ enum BlobFaceDrawing {
                 facing: AvatarRig.facing(rest, size: eyeSize, bounds: bounds),
                 mask: body
             ),
-            bounds: bounds
+            bounds: bounds,
+            restTilt: -14
         )
     }
 
@@ -104,6 +105,6 @@ enum BlobFaceDrawing {
             )
         }
 
-        return [centre(midX - pill.gap / 2, midY, left), centre(midX + pill.gap / 2, midY, right)]
+        return [centre(midX - pill.gap / 2, midY + pill.stagger / 2, left), centre(midX + pill.gap / 2, midY - pill.stagger / 2, right)]
     }
 }

@@ -120,8 +120,9 @@ def _payload_for(event_type: str, payload: Any) -> dict | None:
 
 
 class _Relay:
-    def __init__(self, sid: str, session: dict, key: str, home: Path, endpoint, text: str, emit):
+    def __init__(self, sid: str, session: dict, key: str, home: Path, endpoint, text: str, emit, turn_context: str = ""):
         self.sid, self.session, self.key, self.home, self.text, self.emit = sid, session, key, home, text, emit
+        self.turn_context = turn_context
         self.endpoint, self.listed = endpoint, None
         self.admitted: Future = Future()
         self.request_id = "desktop-forward-" + uuid.uuid4().hex
@@ -162,7 +163,8 @@ class _Relay:
         from hermes_cli.gateway_client import GatewayRPCError
         try:
             return await client.rpc("prompt.submit", session_id=target, text=self.text,
-                                    submission_id=self.request_id)
+                                    submission_id=self.request_id,
+                                    **({"turn_context": self.turn_context} if self.turn_context else {}))
         except Exception as exc:
             # The owner names its refusal in ``data.reason``; ``message`` may be a display string.
             reason = exc.data.get("reason", str(exc)) if isinstance(exc, GatewayRPCError) else None
@@ -232,8 +234,10 @@ def forward_rpc(home: Path, endpoint, method: str, params: dict) -> Any:
     return asyncio.run(call())
 
 
-def forward_prompt(sid: str, session: dict, text: str, *, emit=None, home: Path | None = None) -> dict:
-    """Admit ``text`` into the owner's FIFO for this session; the owner's receipt.
+def forward_prompt(sid: str, session: dict, text: str, *, emit=None, home: Path | None = None,
+                   turn_context: str = "") -> dict:
+    """Admit ``text`` (with the client's hidden ``turn_context``, model input only) into the owner's FIFO
+    for this session; the owner's receipt.
 
     Raises ``OwnerNotRunning`` when no gateway serves the home, ``OwnerUnavailable`` (or the
     client's refusal) when the owner did not take it, and ``OwnerUnconfirmed`` when the prompt may
@@ -243,7 +247,7 @@ def forward_prompt(sid: str, session: dict, text: str, *, emit=None, home: Path 
     if not key:
         raise OwnerUnavailable("the chat has no stored session yet")
     home = Path(home or session.get("profile_home") or server._hermes_home).resolve()
-    relay = _Relay(sid, session, key, home, discover_owner(home), text, emit or server._emit)
+    relay = _Relay(sid, session, key, home, discover_owner(home), text, emit or server._emit, turn_context)
     from agent.memory_provider import spawn_context_thread
     spawn_context_thread(relay.run, name=f"owner-forward-{key[:24]}").start()
     try:

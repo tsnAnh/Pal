@@ -16,6 +16,8 @@ TOPIC = "dev.example.hermes"
 APNS_TOKEN = "ab" * 32
 IPHONE = {"kind": "ios", "device_id": "iphone-0001", "label": "iPhone", "app_version": "1.0 (7)",
           "model": "iPhone 16", "os": "iOS 26.1", "accepts_offers": True, "attention": "background"}
+MAC_APP = {"kind": "mac", "device_id": "mac-app-0001", "label": "Mac", "app_version": "1.0 (7)",
+           "model": "Mac14,2", "os": "macOS 26.1", "accepts_offers": True, "attention": "background"}
 MAC = {"kind": "desktop", "device_id": "mac-desktop-01", "label": "Desktop (macOS)", "app_version": "2.0"}
 
 

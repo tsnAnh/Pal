@@ -5,6 +5,7 @@ import SwiftUI
 
 struct ChatRowView: View {
     let row: ChatRow
+    var previous: ChatRow?
     let model: ChatModel
     let openThread: (BotThreadLink) -> Void
 
@@ -13,18 +14,42 @@ struct ChatRowView: View {
     private var findQuery: String { model.isFinding ? model.findQuery : "" }
     private var isCurrentMatch: Bool { model.currentFindRowID == row.id }
 
+    private var leadingGap: CGFloat {
+        guard let previous, row.separator == nil, !row.showsUnreadDivider else { return 0 }
+        guard let sender = row.sender, sender == previous.sender else { return ChatMetrics.senderSwitchGap }
+        return ChatMetrics.sameSenderGap
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: ChatMetrics.rowSpacing) {
+        VStack(alignment: .leading, spacing: 0) {
             if row.showsUnreadDivider {
                 UnreadDivider(label: String(localized: "NEW"))
                     .accessibilityIdentifier("unreadDivider")
             }
             if let separator = row.separator {
-                ChatTimeSeparator(text: ChatTimestamp.label(for: separator))
+                timeSeparator(separator)
                     .accessibilityIdentifier("timeSeparator")
             }
             content
         }
+        .padding(.top, leadingGap)
+    }
+
+    private func timeSeparator(_ date: Date) -> some View {
+        ChatTimeSeparator(text: ChatTimestamp.label(for: date))
+    }
+
+    private func messageActions(for text: String) -> MessageActions {
+        let id = row.id
+        let model = model
+        return MessageActions(
+            rowID: id,
+            text: text,
+            reaction: model.reactions[id],
+            canReact: { model.canReact(to: id) },
+            react: { model.react(to: id, with: $0) },
+            reply: { model.beginReply(to: id) }
+        )
     }
 
     @ViewBuilder
@@ -34,8 +59,12 @@ struct ChatRowView: View {
             UserBubble(text: text, delivery: delivery, accent: model.chatAccent, highlight: findQuery, isCurrentMatch: isCurrentMatch) { id in
                 model.retry(id)
             }
-        case .assistant(let text, let streaming):
-            AssistantBubble(text: text, isStreaming: streaming, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+            .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
+        case .assistant(let text):
+            AssistantBubble(text: text, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+                .environment(\.messageActions, messageActions(for: text))
+        case .working(let status):
+            ChatWorkingRow(status: status, accent: model.chatAccent)
         case .clarifyAnswered(let question, let answer):
             ClarifyAnsweredCard(question: question, answer: answer)
         case .clarify(let prompt):
@@ -50,33 +79,22 @@ struct ChatRowView: View {
     }
 }
 
-private let bubbleGapInsideMargins = ChatMetrics.bubbleTrailingGap - ChatMetrics.edgeMargin
-
 struct AssistantBubble: View {
     let text: String
-    let isStreaming: Bool
     let highlight: String
     let isCurrentMatch: Bool
 
-    @Environment(\.hermesTheme) private var theme
-
     var body: some View {
         HStack(spacing: 0) {
-            ChatBubble(fill: Color(theme.palette.assistantBubble)) {
-                if text.isEmpty {
-                    ProgressView()
-                        .controlSize(.small)
-                        .tint(Color(theme.palette.textSecondary))
-                } else {
-                    MarkdownView(document: MarkdownDocument(parsing: text), highlight: highlight, isCurrentMatch: isCurrentMatch)
-                        .textSelection(.enabled)
-                }
+            ChatBubble(style: BubblePalette.agentBubble) {
+                MarkdownView(document: MarkdownDocument(parsing: text), highlight: highlight, isCurrentMatch: isCurrentMatch)
+                    .bubbleTextSelection()
             }
-            Spacer(minLength: bubbleGapInsideMargins)
+            .bubbleAccessibility(text: text, identifier: "assistantBubble")
+            .messageActions(side: .assistant)
+            Spacer(minLength: 0)
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(text.isEmpty ? String(localized: "Thinking") : text))
-        .accessibilityIdentifier(isStreaming ? "assistantBubble-streaming" : "assistantBubble")
+        .bubbleWidth(.leading)
     }
 }
 
@@ -92,31 +110,36 @@ struct UserBubble: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private var paint: (foreground: Color, background: Color) {
-        guard let accent else { return (Color(theme.palette.userBubbleText), Color(theme.palette.userBubble)) }
-        guard colorScheme == .light, AvatarColor(css: accent.accentHex)?.isWhite == true,
-              let ink = AvatarColor(css: AvatarColor.darkEyeFillCSS), let onInk = AvatarColor(css: AvatarColor.lightEyeFillCSS)
-        else { return (accent.foreground, accent.accent) }
-        return (onInk.swiftUIColor, ink.swiftUIColor)
+        (BubblePalette.userText, BubblePalette.userFill(accent: accent, isDark: colorScheme == .dark))
     }
+
+    private var message: UserMessageParts { UserMessageParts(text) }
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
             HStack(spacing: 0) {
-                Spacer(minLength: bubbleGapInsideMargins)
+                Spacer(minLength: 0)
                 ChatBubble(fill: paint.background) {
-                    InlineText(
-                        text: AttributedString(text),
-                        highlight: highlight,
-                        isCurrentMatch: isCurrentMatch,
-                        foreground: paint.foreground
-                    )
-                    .textSelection(.enabled)
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let quote = message.quote {
+                            UserQuoteBlock(text: quote, foreground: paint.foreground)
+                        }
+                        if !message.body.isEmpty {
+                            InlineText(
+                                text: AttributedString(message.body),
+                                highlight: highlight,
+                                isCurrentMatch: isCurrentMatch,
+                                foreground: paint.foreground
+                            )
+                        }
+                    }
+                    .bubbleTextSelection()
                 }
                 .opacity(delivery == .sent ? 1 : 0.75)
+                .bubbleAccessibility(text: message.spoken, identifier: "userBubble")
+                .messageActions(side: .user)
             }
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(Text(text))
-            .accessibilityIdentifier("userBubble")
+            .bubbleWidth(.trailing)
             status
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -227,6 +250,49 @@ struct BotThreadLinkRow: View {
     }
 }
 
+struct UserMessageParts: Equatable {
+    let quote: String?
+    let body: String
+
+    init(_ text: String) {
+        guard text.hasPrefix(">"), let split = text.range(of: "\n\n") else {
+            quote = nil
+            body = text
+            return
+        }
+        let head = text[..<split.lowerBound]
+        let lines = head.split(separator: "\n", omittingEmptySubsequences: false)
+        guard lines.allSatisfy({ $0.hasPrefix(">") }) else {
+            quote = nil
+            body = text
+            return
+        }
+        quote = lines.map { $0.dropFirst().drop(while: { $0 == " " }) }.joined(separator: " ")
+        body = String(text[split.upperBound...])
+    }
+
+    var spoken: String { [quote, body.isEmpty ? nil : body].compactMap { $0 }.joined(separator: "\n") }
+}
+
+struct UserQuoteBlock: View {
+    let text: String
+    let foreground: Color
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Capsule()
+                .fill(foreground.opacity(0.55))
+                .frame(width: 3)
+            Text(text)
+                .hermesText(.chatBody)
+                .foregroundStyle(foreground.opacity(0.72))
+                .lineLimit(4)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 enum ChatTimestamp {
     static func label(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
         let time = ClockTime.label(for: date)
@@ -238,5 +304,35 @@ enum ChatTimestamp {
             return "\(date.formatted(.dateTime.weekday(.wide))) \(time)"
         }
         return "\(date.formatted(.dateTime.month(.abbreviated).day())) \(time)"
+    }
+}
+
+extension ChatRow {
+    enum Sender {
+        case user
+        case assistant
+    }
+
+    var sender: Sender? {
+        switch kind {
+        case .user: .user
+        case .assistant: .assistant
+        default: nil
+        }
+    }
+}
+
+private extension View {
+    func bubbleAccessibility(text: String, identifier: String) -> some View {
+        accessibilityElement(children: .ignore).accessibilityLabel(Text(text)).accessibilityIdentifier(identifier)
+    }
+
+    @ViewBuilder
+    func bubbleTextSelection() -> some View {
+        #if os(macOS)
+        textSelection(.enabled)
+        #else
+        self
+        #endif
     }
 }

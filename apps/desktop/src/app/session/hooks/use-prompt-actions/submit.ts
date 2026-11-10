@@ -213,6 +213,26 @@ function isPreAdmissionRefusal(error: unknown): boolean {
   return code === 4094 || (code === 4000 && typeof message === 'string' && /submission_id/.test(message))
 }
 
+/** A backend predating `turn_context` refuses the key at contract admission (4000, handler never ran). */
+function isUnsupportedTurnContext(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('code' in error)) {
+    return false
+  }
+
+  const { code, message } = error as { code?: unknown; message?: unknown }
+
+  return code === 4000 && typeof message === 'string' && message.includes('invalid params for prompt.submit: turn_context:')
+}
+
+/** What such a backend gets instead: the model-only context back in the text it has always carried. */
+function withTurnContextInText(params: Record<string, unknown>): Record<string, unknown> {
+  const { turn_context: turnContext, ...rest } = params
+
+  return typeof turnContext === 'string' && typeof rest.text === 'string'
+    ? { ...rest, text: `${rest.text}\n\n${turnContext}` }
+    : rest
+}
+
 export function useSubmitPrompt(deps: SubmitPromptDeps) {
   const {
     activeSessionIdRef,
@@ -1099,6 +1119,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           ...(options?.surface && { surface: options.surface }),
           ...(options?.surface && options.voiceContext && { voice_context: options.voiceContext }),
           ...(options?.voiceTurn && { voice_turn: true }),
+          ...(options?.turnContext && { turn_context: options.turnContext }),
           // A queue drain is a "run after" message, never a live-turn
           // correction. The flag tells the gateway's busy path to hold it for
           // the next turn untouched — without it, losing the settle race
@@ -1158,11 +1179,25 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
 
                 try {
                   return await requestGateway<SubmitReceipt>('prompt.submit', params, PROMPT_SUBMIT_REQUEST_TIMEOUT_MS)
-                } catch (error) {
+                } catch (firstError) {
+                  let error = firstError
+
                   // A retry whose payload no longer matches its admitted original (an attachment send
                   // offered back as text) is that original: settled as the dedupe it is, no new turn.
                   if (isAdmittedSubmissionConflict(error)) {
                     return { status: 'terminal', submission_id: submissionId }
+                  }
+
+                  if (isUnsupportedTurnContext(error)) {
+                    try {
+                      return await requestGateway<SubmitReceipt>(
+                        'prompt.submit',
+                        withTurnContextInText(params),
+                        PROMPT_SUBMIT_REQUEST_TIMEOUT_MS
+                      )
+                    } catch (foldedError) {
+                      error = foldedError
+                    }
                   }
 
                   // 4094 is an explicit PRE-admission capability refusal; 4000 is the
@@ -1176,7 +1211,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
 
                   prepared.legacyAttempted = true
                   await writePreparedSubmission(retryKey, prepared)
-                  const { submission_id: _id, ...legacyParams } = params
+                  const { submission_id: _id, ...legacyParams } = withTurnContextInText(params)
 
                   const result = await requestGateway<SubmitReceipt>(
                     'prompt.submit',

@@ -2,7 +2,7 @@ import HermesDesign
 import XCTest
 
 @MainActor
-final class GrokChatE2ETests: E2ETestCase {
+final class SeededChatE2ETests: E2ETestCase {
     override func setUp() async throws {
         let seed = ProcessInfo.processInfo.environment["HERMES_UITEST_SEED"] ?? ""
         try XCTSkipUnless(seed == "parity", "needs a gateway started with --seed parity and HERMES_UITEST_SEED=parity")

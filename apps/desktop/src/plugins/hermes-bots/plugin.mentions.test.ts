@@ -32,6 +32,7 @@ interface MentionCompletionItem {
 
 interface ComposerDraft {
   text: string
+  turnContext?: string
 }
 
 interface Contribution {
@@ -350,13 +351,13 @@ describe('@-mention completions', () => {
       expect(inserts.filter(insert => insert === '@hermes')).toHaveLength(1)
 
       const qualified = await handler({ text: 'ask @cos-bot@wsl for the plan' })
-      expect(qualified.text).toMatch(/message_agent target: "default@wsl"/)
-      expect(qualified.text).not.toMatch(/default@vps/)
+      expect(qualified.turnContext).toMatch(/message_agent target: "default@wsl"/)
+      expect(qualified.turnContext).not.toMatch(/default@vps/)
 
       // A bare @hermes is this machine's default in either roster order.
       const local = await handler({ text: '@hermes summarize' })
-      expect(local.text).toMatch(/@hermes = agent profile "default"/)
-      expect(local.text).not.toMatch(/message_agent target: "default@/)
+      expect(local.turnContext).toMatch(/@hermes = agent profile "default"/)
+      expect(local.turnContext).not.toMatch(/message_agent target: "default@/)
     }
   )
 
@@ -366,7 +367,7 @@ describe('@-mention completions', () => {
     expect(provide('cos').map(item => item.insert)).toEqual(['@cos-bot'])
 
     const result = await handler({ text: '@cos-bot status?' })
-    expect(result.text).toMatch(/message_agent target: "default@vps"/)
+    expect(result.turnContext).toMatch(/message_agent target: "default@vps"/)
   })
 
   it('claims the raw profile name of a local row so the popover drops its gateway twin', async () => {
@@ -418,12 +419,28 @@ describe('the mention middleware', () => {
     const { handler } = await contributions()
     const result = await handler({ text: '@default-vera what is the disk space on the server?' })
 
-    expect(result.text).toMatch(/@mentions resolved from the Bot Mode roster/)
-    expect(result.text).toMatch(/@default-vera/)
+    expect(result.turnContext).toMatch(/@mentions resolved from the Bot Mode roster/)
+    expect(result.turnContext).toMatch(/@default-vera/)
     // No CLI handoff is composed and the renderer performs NO delivery — the
     // agent owns messaging via its message_agent tool.
-    expect(result.text).not.toMatch(/hermes -p '?default/)
+    expect(result.turnContext).not.toMatch(/hermes -p '?default/)
     expect(hostMock.requestProfile).not.toHaveBeenCalled()
+  })
+
+  it('leaves the typed text exactly as typed and keeps the note out of it', async () => {
+    const { handler } = await contributions()
+    const typed = 'ask @default-vera to say hi'
+    const result = await handler({ text: typed })
+
+    expect(result.text).toBe(typed)
+    expect(result.turnContext).toMatch(/^\[@mentions resolved from the Bot Mode roster/)
+  })
+
+  it('adds its note after the model-only context an earlier middleware left', async () => {
+    const { handler } = await contributions()
+    const result = await handler({ text: 'ping @default-vera', turnContext: 'earlier context' })
+
+    expect(result.turnContext).toMatch(/^earlier context\n\n\[@mentions resolved/)
   })
 
   it('hands the agent a relay-resolvable canonical target', async () => {
@@ -433,9 +450,9 @@ describe('the mention middleware', () => {
     // The UI alias ('default-vera') is not a relay identity: resolve_remote_target()
     // accepts only a roster row's handle/profile, optionally @connection-qualified.
     // The annotation must carry the canonical profile@connection form (#97678).
-    expect(result.text).toMatch(/message_agent target: "default@vera"/)
-    expect(result.text).not.toMatch(/message_agent target: "default-vera/)
-    expect(result.text).toMatch(/on Vera/)
+    expect(result.turnContext).toMatch(/message_agent target: "default@vera"/)
+    expect(result.turnContext).not.toMatch(/message_agent target: "default-vera/)
+    expect(result.turnContext).toMatch(/on Vera/)
   })
 
   it('annotates the resolvable handle for a local row whose UI alias differs', async () => {
@@ -452,9 +469,9 @@ describe('the mention middleware', () => {
 
     const result = await handler({ text: 'ping @default-this-device' })
 
-    expect(result.text).toMatch(/@default-this-device = agent profile "default"/)
-    expect(result.text).toMatch(/message_agent target: "hermes"/)
-    expect(result.text).not.toMatch(/message_agent target: "default-this-device/)
+    expect(result.turnContext).toMatch(/@default-this-device = agent profile "default"/)
+    expect(result.turnContext).toMatch(/message_agent target: "hermes"/)
+    expect(result.turnContext).not.toMatch(/message_agent target: "default-this-device/)
   })
 
   it('passes a draft with no mention straight through', async () => {
@@ -475,9 +492,9 @@ describe('the mention middleware', () => {
     const { handler } = await contributions({ focused: 'research', profiles: [{ name: 'research' }, { name: 'ops' }] })
     const result = await handler({ text: 'please @ops review the diff' })
 
-    expect(result.text).toMatch(/@ops = agent profile "ops"/)
-    expect(result.text).toMatch(/message_agent/)
-    expect(result.text).not.toMatch(/ — on /)
+    expect(result.turnContext).toMatch(/@ops = agent profile "ops"/)
+    expect(result.turnContext).toMatch(/message_agent/)
+    expect(result.turnContext).not.toMatch(/ — on /)
   })
 
   it('keeps a poisoned bot title inert prose', async () => {
@@ -493,7 +510,7 @@ describe('the mention middleware', () => {
 
     const result = await handler({ text: 'ping @research please' })
 
-    expect(result.text).not.toMatch(/`hermes/)
+    expect(result.turnContext).not.toMatch(/`hermes/)
   })
 
   it('resolves a cross-connection mention cold, before the Bots pane ever mounted (#94018)', async () => {
@@ -528,7 +545,7 @@ describe('the mention middleware', () => {
     const result = await handler({ text: '@cos-bot what is on the calendar?' })
 
     expect(hostMock.agents).toHaveBeenCalled()
-    expect(result.text).toMatch(/message_agent target: "default@vps"/)
+    expect(result.turnContext).toMatch(/message_agent target: "default@vps"/)
     // The prime filled the cache: the picker now completes the remote title slug too.
     expect(provide('cos').map(item => item.insert)).toEqual(['@cos-bot'])
   })
@@ -573,8 +590,8 @@ describe('the local default when a real hermes profile exists', () => {
       profiles: cache === 'warm' ? (claimDefaultHandles(RAW as RosterRow[]) as never) : null
     })
 
-    const toDefault = (await handler({ text: 'please ask @default to review' })).text
-    const toHermes = (await handler({ text: 'please ask @hermes to review' })).text
+    const toDefault = (await handler({ text: 'please ask @default to review' })).turnContext
+    const toHermes = (await handler({ text: 'please ask @hermes to review' })).turnContext
 
     // message_agent maps 'hermes' to the real hermes profile, so the default must never be handed it.
     expect(toDefault).toMatch(/@default = agent profile "default"/)

@@ -8,7 +8,7 @@ import pytest
 from gateway import device_registry
 from gateway.session_controls import AuthorityConnection
 from tests.gateway.devices_harness import (
-    APNS_TOKEN, IPHONE, MAC, call, configure_apns, make_authority, new_apns_stub, transport, write_profile_config,
+    APNS_TOKEN, IPHONE, MAC, MAC_APP, call, configure_apns, make_authority, new_apns_stub, transport, write_profile_config,
 )
 
 
@@ -68,6 +68,24 @@ async def test_hello_from_ios_and_desktop_lists_both_online_then_survives_a_gate
         assert epoch(row["last_seen_at"]) == pytest.approx(persisted[row["device_id"]].last_seen_at, abs=1.0)
         assert row["this_device"] is False
     await observer.close()
+
+
+@pytest.mark.asyncio
+async def test_a_mac_app_registers_as_its_own_kind_next_to_an_iphone(root):
+    authority = await make_authority(root)
+    mac, _ = connect(authority)
+    phone, _ = connect(authority)
+    assert (await call(mac, "client.hello", MAC_APP))["result"]["recorded"] is True
+    await call(phone, "client.hello", IPHONE, rid=2)
+
+    listed = (await call(mac, "devices.list", {}, rid=3))["result"]["devices"]
+    by_id = {row["device_id"]: row for row in listed}
+    assert by_id[MAC_APP["device_id"]]["kind"] == "mac" and by_id[MAC_APP["device_id"]]["this_device"] is True
+    assert by_id[MAC_APP["device_id"]]["os"] == "macOS 26.1"
+    assert by_id[IPHONE["device_id"]]["kind"] == "ios"
+    assert {record.kind for record in device_registry.list_devices(root)} == {"mac", "ios"}
+    await mac.close()
+    await phone.close()
 
 
 @pytest.mark.asyncio

@@ -26,7 +26,7 @@ struct AnswerBotIntent: AppIntent {
         let target = bot
         let reply = answer
         let report: ErrandReport
-        if #available(iOS 27.0, *) {
+        if #available(iOS 27.0, macOS 27.0, *) {
             Diagnostics.osLog().info("intents", "answer runs as a long-running intent")
             report = try await performBackgroundTask { @Sendable in
                 try await Self.answer(reply, for: target, deadline: AskBotIntent.longRunningReplyDeadline, in: environment)
@@ -55,5 +55,5 @@ struct AnswerBotIntent: AppIntent {
     }
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 extension AnswerBotIntent: LongRunningIntent {}

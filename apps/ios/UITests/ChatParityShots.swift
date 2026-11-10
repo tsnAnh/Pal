@@ -55,7 +55,7 @@ final class ChatParityShots: E2ETestCase {
     func test9CheckingMessages() throws {
         let app = openChat("cho-ua")
         send(app, "HOLD checking")
-        waitFor(app.descendants(matching: .any)["chatStatusLine"], timeout: 20, "status line while the bot works")
+        waitFor(app.descendants(matching: .any)["assistantBubble-streaming"], timeout: 20, "working row while the bot works")
         dismissKeyboard(app)
         parityShot("11-chat-checking-messages")
     }

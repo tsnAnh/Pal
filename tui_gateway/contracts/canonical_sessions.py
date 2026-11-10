@@ -261,6 +261,7 @@ class CanonicalSubmitParams(CanonicalSessionParams):
     # (voice prefix, model-switch / skills-reload notes) and a one-turn ``/model --once`` override.
     turn_author: CanonicalTurnAuthor | None = None
     api_text: str | None = None
+    turn_context: str | None = None
     model_override: CanonicalModelOverride | None = None
     # The submitter answers the clarify tool's whole batch in one ``clarify`` server request (main's
     # batch panel); without it the turn's viewers get one ``clarify.request`` card per question.

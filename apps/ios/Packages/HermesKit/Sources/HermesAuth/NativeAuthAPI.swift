@@ -13,6 +13,10 @@ public enum SignInError: Error, Sendable, Equatable {
     case browserUnavailable
     case sessionExpired
     case notSignedIn
+    case invalidCredentials
+    case rateLimited
+    case serverUnavailable
+    case rejected
 }
 
 struct NativeAuthAPI: Sendable {
@@ -54,13 +58,15 @@ struct NativeAuthAPI: Sendable {
         RESTClient(baseURL: baseURL, transport: transport, diagnostics: diagnostics)
     }
 
-    func authorizeURL(challenge: String, redirectURI: String, state: String) -> URL {
-        baseURL.endpoint("/auth/native/authorize", query: [
+    func authorizeURL(challenge: String, redirectURI: String, state: String, provider: String? = nil) -> URL {
+        var query = [
             URLQueryItem(name: "code_challenge", value: challenge),
             URLQueryItem(name: "code_challenge_method", value: "S256"),
             URLQueryItem(name: "redirect_uri", value: redirectURI),
             URLQueryItem(name: "state", value: state),
-        ])
+        ]
+        if let provider { query.insert(URLQueryItem(name: "provider", value: provider), at: 0) }
+        return baseURL.endpoint("/auth/native/authorize", query: query)
     }
 
     func exchange(code: String, verifier: String) async throws -> TokenSet {

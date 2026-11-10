@@ -186,7 +186,7 @@ def push_targets(root) -> list[PushTarget]:
     with _read(root) as conn:
         rows = conn.execute(
             "SELECT device_id, push_token, push_environment, push_bundle_id FROM devices "
-            "WHERE kind = 'ios' AND push_token IS NOT NULL ORDER BY device_id").fetchall()
+            "WHERE kind IN ('ios', 'mac') AND push_token IS NOT NULL ORDER BY device_id").fetchall()
     return [PushTarget(row["device_id"], row["push_token"], row["push_environment"], row["push_bundle_id"])
             for row in rows]
 

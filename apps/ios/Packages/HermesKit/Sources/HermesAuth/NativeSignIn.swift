@@ -8,11 +8,11 @@ public protocol AuthorizationBrowser: Sendable {
 }
 
 public struct NativeSignIn: Sendable {
-    private let transport: any HTTPTransport
-    private let diagnostics: Diagnostics
-    private let callbackTimeout: Duration
-    private let now: @Sendable () -> Date
-    private let deviceID: String?
+    let transport: any HTTPTransport
+    let diagnostics: Diagnostics
+    let callbackTimeout: Duration
+    let now: @Sendable () -> Date
+    let deviceID: String?
 
     public init(
         transport: any HTTPTransport,

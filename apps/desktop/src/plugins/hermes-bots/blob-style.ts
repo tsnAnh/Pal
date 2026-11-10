@@ -5,7 +5,17 @@ const BLOB_PARTS = /^(<svg[^>]*>)<g fill="([^"]+)">(.*?)<\/g><g fill="([^"]+)">(
 
 const FIGURE_TRANSFORM = 'rotate(-14 50 50) translate(50 50) scale(0.77) translate(-50 -50)'
 const BODY_ROUNDING = 26
-const PILL = { width: 10, height: 23, gap: 28, slant: -11, shiftX: 15, shiftY: -18, reach: 9 }
+const PILL = {
+  width: 14.2,
+  height: 33,
+  gap: 43,
+  slant: -20,
+  twist: -3.5,
+  shiftX: 18,
+  shiftY: -18,
+  stagger: 8,
+  reach: 11
+}
 const PILL_SIZE: EyeSize = { height: PILL.height, width: PILL.width }
 const PATH_DATA = /\sd="([^"]+)"/g
 const NUMBER = /-?\d+(?:\.\d+)?/g
@@ -143,7 +153,7 @@ function pillCentre(x: number, y: number, box: Box): [number, number] {
 }
 
 function pill([x, y]: [number, number], side: 'l' | 'r', spec: SurfaceSpec) {
-  const rest = `translate(${x} ${y}) rotate(${PILL.slant})`
+  const rest = `translate(${x} ${y}) rotate(${side === 'r' ? PILL.slant + PILL.twist : PILL.slant})`
   const d = curveEye(spec, PILL_SIZE, parseTransform(rest))
 
   return (
@@ -163,8 +173,8 @@ function pills(eyes: string, spec: SurfaceSpec): null | string {
   const midY = (left.minY + left.maxY + right.minY + right.maxY) / 4 + PILL.shiftY
 
   return (
-    pill(pillCentre(midX - PILL.gap / 2, midY, left), 'l', spec) +
-    pill(pillCentre(midX + PILL.gap / 2, midY, right), 'r', spec)
+    pill(pillCentre(midX - PILL.gap / 2, midY + PILL.stagger / 2, left), 'l', spec) +
+    pill(pillCentre(midX + PILL.gap / 2, midY - PILL.stagger / 2, right), 'r', spec)
   )
 }
 

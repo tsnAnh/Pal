@@ -8,7 +8,7 @@ final class AppearanceE2ETests: E2ETestCase {
         for appearance in appearances {
             XCUIDevice.shared.appearance = appearance.value
             let app = launch(resetCredentials: true)
-            waitFor(app.textFields["baseURLField"], timeout: 15, "sign-in form")
+            waitFor(app.buttons["continueButton"], timeout: 15, "sign-in screen")
             shot(app, "appearance-\(appearance.name)-connection-signed-out")
             app.terminate()
         }

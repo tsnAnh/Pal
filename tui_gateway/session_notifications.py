@@ -954,6 +954,14 @@ def _prepend_note(run_message: Any, note: str) -> Any:
     return run_message
 
 
+def _append_note(run_message: Any, note: str) -> Any:
+    if note and isinstance(run_message, str):
+        return f"{run_message}\n\n{note}"
+    if note and isinstance(run_message, list):
+        return [*run_message, {"type": "text", "text": note}]
+    return run_message
+
+
 def register(server) -> None:
     """Publish this module's helpers + handlers onto ``server``, rebound to its globals."""
     bind_module(globals(), server, skip=("_",))

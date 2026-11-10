@@ -1,7 +1,6 @@
 import Foundation
 import HermesClient
 import HermesDiagnostics
-import UIKit
 import UserNotifications
 
 @MainActor
@@ -47,7 +46,7 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
         default:
             return
         }
-        UIApplication.shared.registerForRemoteNotifications()
+        PlatformApplication.registerForRemoteNotifications()
     }
 
     func didRegister(deviceToken: Data) async {
@@ -92,18 +91,5 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
             return
         }
         open(target)
-    }
-}
-
-@MainActor
-final class AppDelegate: NSObject, UIApplicationDelegate {
-    let push = PushNotifications()
-
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        Task { await push.didRegister(deviceToken: deviceToken) }
-    }
-
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: any Error) {
-        push.didFailToRegister(error)
     }
 }

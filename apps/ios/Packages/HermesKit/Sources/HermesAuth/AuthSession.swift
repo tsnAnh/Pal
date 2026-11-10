@@ -2,7 +2,13 @@ import Foundation
 import HermesDiagnostics
 import HermesREST
 
+public struct RestoredIdentity: Sendable, Equatable {
+    public let baseURL: GatewayBaseURL
+    public let userID: String?
+}
+
 public actor AuthSession: AccessTokenProvider {
+    public nonisolated let restoredIdentity: RestoredIdentity?
     private let store: any CredentialStore
     private let transport: any HTTPTransport
     private let diagnostics: Diagnostics
@@ -26,7 +32,9 @@ public actor AuthSession: AccessTokenProvider {
         self.refreshLeeway = refreshLeeway
         self.deviceID = deviceID
         self.now = now
-        self.credentials = try store.load()
+        let loaded = try store.load()
+        self.credentials = loaded
+        restoredIdentity = loaded.map { RestoredIdentity(baseURL: $0.baseURL, userID: $0.tokens.userID) }
     }
 
     public var baseURL: GatewayBaseURL? { credentials?.baseURL }

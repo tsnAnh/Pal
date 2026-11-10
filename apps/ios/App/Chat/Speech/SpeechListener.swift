@@ -46,10 +46,8 @@ final class SpeechListener {
         box.request.requiresOnDeviceRecognition = true
         box.request.shouldReportPartialResults = true
         box.request.taskHint = .dictation
-        let session = AVAudioSession.sharedInstance()
         do {
-            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothHFP])
-            try session.setActive(true, options: .notifyOthersOnDeactivation)
+            try AudioSession.activateForRecording()
         } catch {
             throw SpeechListenerError.audioFailure
         }
@@ -103,7 +101,7 @@ final class SpeechListener {
 extension SpeechListenerError {
     var userMessage: String {
         switch self {
-        case .permissionDenied: String(localized: "Allow microphone and speech recognition for Hermes Bots in Settings to use voice.")
+        case .permissionDenied: String(localized: "Allow microphone and speech recognition for Pal in Settings to use voice.")
         case .recognizerUnavailable: String(localized: "Speech recognition isn't available right now.")
         case .onDeviceUnsupported: String(localized: "On-device speech recognition isn't available for your language on this device.")
         case .noMicrophone: String(localized: "No microphone is available on this device.")

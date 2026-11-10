@@ -20,7 +20,52 @@ struct ComputerHelpSection: Identifiable {
 }
 
 extension ComputerHelpSection {
-    static let all: [ComputerHelpSection] = [
+    static var all: [ComputerHelpSection] {
+        PlatformCapabilities.hasTouchScreen ? touch : desktop
+    }
+
+    static let desktop: [ComputerHelpSection] = [
+        ComputerHelpSection(id: "moving", caption: String(localized: "Moving around"), topics: [
+            ComputerHelpTopic(
+                id: "takeControl", icon: .symbol("eye"), title: String(localized: "Take control"),
+                detail: String(localized: "You start out watching. Click Take control in the bottom bar to click and type. When the Bot asks for help, you start in control.")
+            ),
+            ComputerHelpTopic(
+                id: "scroll", icon: .symbol("arrow.up.arrow.down"), title: String(localized: "Scroll"),
+                detail: String(localized: "Use the scroll wheel or two fingers on the trackpad.")
+            ),
+            ComputerHelpTopic(
+                id: "clickAndDrag", icon: .symbol("location"), title: String(localized: "Click and drag"),
+                detail: String(localized: "Click where you want to click. Hold the button down to drag.")
+            ),
+            ComputerHelpTopic(
+                id: "rightClick", icon: .symbol("list.bullet"), title: String(localized: "Right-click"),
+                detail: String(localized: "Right-click, or click with two fingers.")
+            ),
+            ComputerHelpTopic(
+                id: "zoom", icon: .symbol("plus.magnifyingglass"), title: String(localized: "Zoom in"),
+                detail: String(localized: "Pinch on the trackpad, or hold Option and scroll. Zoomed in, drag with the watch view to pan.")
+            ),
+        ]),
+        ComputerHelpSection(id: "typing", caption: String(localized: "Typing and the clipboard"), topics: [
+            ComputerHelpTopic(
+                id: "type", icon: .symbol("keyboard"), title: String(localized: "Type"),
+                detail: String(localized: "Just type. Your keys go to the computer while you are in control. Command shortcuts act as Control there.")
+            ),
+            ComputerHelpTopic(
+                id: "clipboard", icon: .symbol("list.clipboard"), title: String(localized: "Copy and paste"),
+                detail: String(localized: "Click the clipboard button in the bottom bar for Copy to Mac and Paste from Mac.")
+            ),
+        ]),
+        ComputerHelpSection(id: "handBack", caption: String(localized: "Handing it back"), topics: [
+            ComputerHelpTopic(
+                id: "imDone", icon: .symbol("arrow.uturn.backward"), title: String(localized: "I'm done"),
+                detail: String(localized: "Click I'm done when the Bot is waiting. Going back leaves it waiting.")
+            ),
+        ]),
+    ]
+
+    static let touch: [ComputerHelpSection] = [
         ComputerHelpSection(id: "moving", caption: String(localized: "Moving around"), topics: [
             ComputerHelpTopic(
                 id: "takeControl", icon: .symbol("eye"), title: String(localized: "Take control"),
@@ -85,7 +130,7 @@ struct ComputerHelpSheet: View {
                         SectionCaption(section.caption, accessibilityIdentifier: "computerHelpCaption-\(section.id)")
                             .padding(.top, index == 0 ? 0 : HermesMetrics.cardGap)
                             .padding(.bottom, HermesMetrics.captionToCardGap)
-                        GroupedCard(separatorInset: HermesMetrics.iconRowSeparatorInset, accessibilityIdentifier: "computerHelpCard-\(section.id)") {
+                        GroupedCard(accessibilityIdentifier: "computerHelpCard-\(section.id)") {
                             ForEach(section.topics) { topic in
                                 ComputerHelpRow(topic: topic)
                             }
@@ -98,6 +143,7 @@ struct ComputerHelpSheet: View {
         }
         .presentationDetents([.fraction(0.955)])
         .presentationDragIndicator(.hidden)
+        .macSheetFrame()
     }
 }
 

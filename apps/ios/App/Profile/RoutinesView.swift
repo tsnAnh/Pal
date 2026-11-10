@@ -32,15 +32,14 @@ struct RoutinesView: View {
                     .accessibilityIdentifier("routinesTitle")
             }
             .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .trailingBar) {
                 Button { creation = model.creationModel() } label: {
-                    CircleIcon(systemName: "plus")
+                    Image(systemName: "plus")
                 }
-                .buttonStyle(.plain)
                 .accessibilityLabel(Text("New Routine"))
                 .accessibilityIdentifier("routinesNewButton")
+                .tint(.primary)
             }
-            .sharedBackgroundVisibility(.hidden)
         }
         .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
@@ -48,6 +47,7 @@ struct RoutinesView: View {
         .toast($model.toast)
         .sheet(item: $creation) { created in
             NewRoutineSheet(model: created) { creation = nil }
+                .macSheetFrame()
         }
         .confirmationDialog(
             Text("Delete this routine?"),

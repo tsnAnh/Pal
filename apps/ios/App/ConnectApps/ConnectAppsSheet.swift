@@ -76,6 +76,7 @@ struct ConnectAppsSheet: View {
             CredentialSheet(prompt: prompt) { values in
                 Task { await model.connect(prompt.app, credentials: values) }
             }
+            .macSheetFrame()
         }
     }
 
@@ -249,7 +250,7 @@ struct ConnectAppsSheet: View {
     }
 }
 
-private struct DeviceTile: View {
+struct DeviceTile: View {
     let connector: DeviceConnectorID
 
     var body: some View {
@@ -283,7 +284,7 @@ private struct DeviceTile: View {
     }
 }
 
-private struct CredentialSheet: View {
+struct CredentialSheet: View {
     let prompt: CredentialPrompt
     let submit: ([String: String]) -> Void
 
@@ -303,7 +304,7 @@ private struct CredentialSheet: View {
                     ForEach(prompt.keys, id: \.self) { key in
                         SecureField(key, text: Binding(get: { values[key] ?? "" }, set: { values[key] = $0 }))
                             .textContentType(.password)
-                            .textInputAutocapitalization(.never)
+                            .neverAutocapitalized()
                             .autocorrectionDisabled()
                             .padding(.horizontal, 16)
                             .frame(height: 48)

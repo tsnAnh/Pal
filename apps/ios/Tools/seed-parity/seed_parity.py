@@ -81,8 +81,8 @@ class Bot:
 BOTS = (
     Bot(
         slug="default",
-        title="chó grok bot",
-        look=Look(shape="blobatar:grok:round", color="#ffffff"),
+        title="chó pal bot",
+        look=Look(shape="blobatar:pal:round", color="#ffffff"),
         pinned=True,
         last_message=Recency(minutes_ago=45),
         conversation=(

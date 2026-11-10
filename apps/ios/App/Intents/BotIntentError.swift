@@ -20,21 +20,21 @@ enum BotIntentError: Error, CustomLocalizedStringResourceConvertible {
 
     var localizedStringResource: LocalizedStringResource {
         switch self {
-        case .signedOut: "Sign in to Hermes Bots first."
-        case .unreachable: "Hermes Bots can't reach your Hermes right now."
-        case .notSaved: "Hermes Bots couldn't save your message."
+        case .signedOut: "Sign in to Pal first."
+        case .unreachable: "Pal can't reach your Hermes right now."
+        case .notSaved: "Pal couldn't save your message."
         case .refused: "Hermes didn't accept that message."
         case .unknownBot: "That bot isn't available any more."
-        case .oneBotAtATime: "Hermes Bots can message one bot at a time."
-        case .unsupportedMessage: "Hermes Bots can't send that kind of message yet."
+        case .oneBotAtATime: "Pal can message one bot at a time."
+        case .unsupportedMessage: "Pal can't send that kind of message yet."
         case .notAccepted: "Hermes didn't accept that. It may already have been handled."
         case .fileTooLarge(let name): "\(name) is too large to send. Files can be up to 25 MB."
         case .fileEmpty(let name): "\(name) is empty, so there is nothing to send."
-        case .fileUnsupported(let name): "Hermes Bots can't send \(name). Try an image, a PDF or a text file."
-        case .fileUnreadable(let name): "Hermes Bots couldn't read \(name)."
-        case .tooManyFiles: "Hermes Bots can send up to 10 files at a time."
+        case .fileUnsupported(let name): "Pal can't send \(name). Try an image, a PDF or a text file."
+        case .fileUnreadable(let name): "Pal couldn't read \(name)."
+        case .tooManyFiles: "Pal can send up to 10 files at a time."
         case .nothingToSend: "Add a file or a note to send."
-        case .draftHasNoFiles: "Hermes Bots can't keep files in a draft. Send the message instead."
+        case .draftHasNoFiles: "Pal can't keep files in a draft. Send the message instead."
         }
     }
 

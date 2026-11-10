@@ -7,7 +7,6 @@ struct CreateBotSheet: View {
     let roster: RosterModel
     let router: AppRouter
 
-    @Environment(\.hermesTheme) private var theme
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -22,7 +21,7 @@ struct CreateBotSheet: View {
                     CreateBotPreview(spec: model.spec)
                         .frame(width: HermesMetrics.createPreviewBox, height: HermesMetrics.createPreviewBox)
                         .padding(.top, 33)
-                    nameField
+                    CreateBotNameField(model: model, focused: $nameFocused)
                         .padding(.top, 60)
                     BotLookPicker(shape: $model.shape, colorHex: $model.colorHex, seed: model.seed)
                         .padding(.top, 26)
@@ -31,35 +30,43 @@ struct CreateBotSheet: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom) { createButton }
+            .safeAreaInset(edge: .bottom) {
+                CreateBotConfirmButton(model: model, roster: roster, router: router) { nameFocused = false }
+            }
         }
         .presentationDetents([.fraction(HermesMetrics.createSheetDetentFraction)])
         .presentationCornerRadius(HermesMetrics.sheetRadius)
         .presentationDragIndicator(.hidden)
         .interactiveDismissDisabled(model.isCreating)
     }
+}
 
-    private var nameField: some View {
+private struct CreateBotNameField: View {
+    @Bindable var model: CreateBotModel
+    var focused: FocusState<Bool>.Binding
+
+    @Environment(\.hermesTheme) private var theme
+
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 12, style: .continuous) }
+
+    var body: some View {
         VStack(spacing: 8) {
             TextField(
                 "",
                 text: $model.name,
-                prompt: Text("Name your Bot").foregroundStyle(Color(theme.palette.textTertiary))
+                prompt: Text("Name your Bot").foregroundStyle(PalTokens.textTertiary)
             )
             .hermesText(.nameField)
             .multilineTextAlignment(.center)
-            .foregroundStyle(Color(theme.palette.textPrimary))
-            .focused($nameFocused)
+            .foregroundStyle(PalTokens.textPrimary)
+            .focused(focused)
             .submitLabel(.done)
-            .onSubmit { nameFocused = false }
+            .onSubmit { focused.wrappedValue = false }
             .frame(height: HermesMetrics.nameFieldHeight)
-            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: 21, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 21, style: .continuous)
-                    .strokeBorder(Color(theme.palette.cardStroke), lineWidth: HermesMetrics.circleButtonStrokeWidth)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 21, style: .continuous))
-            .onTapGesture { nameFocused = true }
+            .background(PalTokens.elevated, in: shape)
+            .overlay(shape.strokeBorder(PalTokens.fieldBorder, lineWidth: 1))
+            .contentShape(shape)
+            .onTapGesture { focused.wrappedValue = true }
             .accessibilityLabel(Text("Bot name"))
             .accessibilityIdentifier("botNameField")
             if let message = errorMessage {
@@ -82,10 +89,17 @@ struct CreateBotSheet: View {
         case nil: return nil
         }
     }
+}
 
-    private var createButton: some View {
+private struct CreateBotConfirmButton: View {
+    let model: CreateBotModel
+    let roster: RosterModel
+    let router: AppRouter
+    let willCreate: () -> Void
+
+    var body: some View {
         Button {
-            nameFocused = false
+            willCreate()
             Task {
                 guard let created = await model.create(in: roster) else { return }
                 router.openChat(botName: created.name)

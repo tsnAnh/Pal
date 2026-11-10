@@ -91,7 +91,7 @@ struct LoadingSequenceTests {
 
     @Test("every bag plays each clip exactly once")
     func bagsAreComplete() {
-        for key in ["alpha", "chó grok bot", "", "Nova"] {
+        for key in ["alpha", "chó pal bot", "", "Nova"] {
             let sequence = LoadingSequence(key: key)
             for index in 0..<60 {
                 #expect(sequence.bag(index).sorted() == Array(0..<clips.count), "bag \(index) of \(key)")
@@ -167,7 +167,7 @@ struct LoadingSequenceTests {
 struct LoadingSessionTests {
     @Test("the same bot opens loading sessions with different clips")
     func sessionsVary() {
-        let seed = LoadingSequence.seed(for: "chó grok bot")
+        let seed = LoadingSequence.seed(for: "chó pal bot")
         let openers = Set((0..<12).map { minute in
             let clock = AvatarMoodClock(
                 mood: .work,

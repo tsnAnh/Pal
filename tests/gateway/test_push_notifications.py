@@ -16,7 +16,7 @@ from gateway import device_registry, push_apns, push_notify
 from gateway.session_controls import AuthorityConnection
 from hermes_state_keys import CRON_PRINCIPAL_ID
 from tests.gateway.devices_harness import (
-    APNS_TOKEN, IPHONE, KEY_ID, MAC, TEAM_ID, TOPIC, call, configure_apns, drain_push, install_apns_stub,
+    APNS_TOKEN, IPHONE, KEY_ID, MAC, MAC_APP, TEAM_ID, TOPIC, call, configure_apns, drain_push, install_apns_stub,
     make_authority, new_apns_stub, transport, write_profile_config,
 )
 
@@ -132,6 +132,23 @@ async def test_a_foreground_client_anywhere_suppresses_the_alert_until_it_looks_
     assert len(stub.requests) == 1
     await phone.close()
     await desktop.close()
+
+
+@pytest.mark.asyncio
+async def test_a_mac_app_with_a_push_token_is_alerted_like_a_phone_and_suppresses_alerts_while_foreground(root, stub):
+    write_profile_config(root, ENABLED)
+    configure_apns(root, stub)
+    authority = await make_authority(root, answer=answer)
+    mac = await phone_with_push(authority, device=MAC_APP)
+    await call(mac, "client.attention", {"state": "foreground"}, rid=5)
+    await finish_turn(authority, mac, "turn-1")
+    assert stub.requests == []
+
+    await call(mac, "client.attention", {"state": "background"}, rid=6)
+    await finish_turn(authority, mac, "turn-2")
+    assert len(stub.requests) == 1
+    assert [target.device_id for target in device_registry.push_targets(root)] == [MAC_APP["device_id"]]
+    await mac.close()
 
 
 @pytest.mark.asyncio

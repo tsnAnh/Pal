@@ -1,11 +1,16 @@
 import SwiftUI
 
 public struct ChatBubble<Content: View>: View {
-    public let fill: Color
+    public let fill: AnyShapeStyle
     private let content: Content
 
     public init(fill: Color, @ViewBuilder content: () -> Content) {
-        self.fill = fill
+        self.fill = AnyShapeStyle(fill)
+        self.content = content()
+    }
+
+    public init<Style: ShapeStyle>(style: Style, @ViewBuilder content: () -> Content) {
+        self.fill = AnyShapeStyle(style)
         self.content = content()
     }
 
@@ -20,8 +25,6 @@ public struct ChatBubble<Content: View>: View {
 public struct ChatTimeSeparator: View {
     public let text: String
 
-    @Environment(\.hermesTheme) private var theme
-
     public init(text: String) {
         self.text = text
     }
@@ -29,7 +32,7 @@ public struct ChatTimeSeparator: View {
     public var body: some View {
         Text(text)
             .hermesText(.timestamp)
-            .foregroundStyle(Color(theme.palette.textTertiary))
+            .foregroundStyle(PalTokens.textTertiary)
             .frame(maxWidth: .infinity)
             .padding(.top, ChatMetrics.separatorTopPadding)
             .padding(.bottom, ChatMetrics.separatorBottomPadding)

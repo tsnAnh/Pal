@@ -1,6 +1,7 @@
 import Foundation
 import HermesChat
 import HermesDesign
+import HermesDiagnostics
 import HermesProtocol
 import HermesRoster
 import Observation
@@ -18,10 +19,22 @@ enum ChatNotice: Equatable {
     case backgroundTaskFinished
 }
 
+struct ReplyTarget: Equatable {
+    enum Author: Equatable {
+        case you
+        case bot
+    }
+
+    let rowID: String
+    let author: Author
+    let quote: String
+}
+
 struct ChatRow: Identifiable, Equatable {
     enum Kind: Equatable {
         case user(text: String, delivery: BubbleDelivery)
-        case assistant(text: String, isStreaming: Bool)
+        case assistant(text: String)
+        case working(status: String?)
         case clarifyAnswered(question: String, answer: ClarifyRecord.Answer)
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
@@ -36,7 +49,7 @@ struct ChatRow: Identifiable, Equatable {
 
     var searchableText: String? {
         switch kind {
-        case .user(let text, _), .assistant(let text, _): text
+        case .user(let text, _), .assistant(let text): text
         case .notice(.botMessage(_, let body)): body
         default: nil
         }
@@ -88,6 +101,8 @@ final class ChatModel {
     private(set) var hasPendingClarify = false
     private(set) var sendError: String?
     private(set) var attachments: [PendingAttachment] = []
+    private(set) var reactions: [String: String] = [:]
+    private(set) var replyTarget: ReplyTarget?
     var isFinding = false
     var findQuery = "" {
         didSet { recomputeFind(resetPosition: true) }
@@ -115,6 +130,10 @@ final class ChatModel {
     private var running: Task<Void, Never>?
     private var delivering = false
     private var retried: Set<String> = []
+    private var hasHydrated = false
+    private var cachedItems: [TranscriptItem] = []
+    private var lastCached: CachedTranscript?
+    private var pendingCacheSave: Task<Void, Never>?
 
     private struct ActivitySignature: Equatable {
         let running: Bool
@@ -131,8 +150,7 @@ final class ChatModel {
     var isCatchingUp: Bool {
         switch connection {
         case .connecting: true
-        case .reconnecting: false
-        case .live: isRunning && !hasStreamingText && !hasPendingClarify
+        case .reconnecting, .live: false
         }
     }
 
@@ -167,11 +185,6 @@ final class ChatModel {
         return VoiceReply(text: parts.reversed().joined(separator: "\n\n"), isComplete: !transcript.isRunning, turn: voiceTurn)
     }
 
-    private var hasStreamingText: Bool {
-        guard let last = transcript.items.last, case .assistant(let text, _, let streaming) = last.content else { return false }
-        return streaming && !text.isEmpty
-    }
-
     init(bot: BotRow, links: BotLinks, roster: RosterModel, lastSeenStore: ChatLastSeenStore = ChatLastSeenStore()) {
         openedBot = bot
         self.links = links
@@ -180,7 +193,19 @@ final class ChatModel {
         lastSeenAtOpen = lastSeenStore.lastSeen(for: bot.name)
     }
 
+    private func hydrateFromCache() {
+        guard !hasHydrated else { return }
+        hasHydrated = true
+        guard transcript.sessionID == nil, let cached = roster.conversationCache.load(bot: openedBot.name) else { return }
+        lastCached = cached
+        cachedItems = cached.transcriptItems
+        rebuild()
+        LaunchClock.mark("chat \(openedBot.name) shown from cache (\(cachedItems.count) items)", on: .osLog())
+    }
+
     func start() {
+        hydrateFromCache()
+        roster.markRead(bot.name)
         guard running == nil else { return }
         let link: BotLink
         do {
@@ -196,6 +221,7 @@ final class ChatModel {
 
     func stop() {
         markViewed()
+        saveCache()
         running?.cancel()
         running = nil
         let session = self.session
@@ -208,6 +234,7 @@ final class ChatModel {
     }
 
     func markViewed() {
+        saveCache()
         guard hasBaseline else { return }
         lastSeenStore.record(Date(), for: bot.name)
     }
@@ -224,6 +251,10 @@ final class ChatModel {
         }
         guard let outbox else { return }
         var body = trimmed
+        if let replyTarget, !body.isEmpty {
+            body = Self.quoted(replyTarget.quote) + "\n\n" + body
+        }
+        replyTarget = nil
         var images: [PromptAttachment] = []
         for item in staged {
             switch item {
@@ -240,6 +271,36 @@ final class ChatModel {
                 await refreshOutbox()
             } catch {
                 sendError = String(localized: "Your message could not be saved.")
+            }
+        }
+    }
+
+    func beginReply(to rowID: String) {
+        guard let row = rows.first(where: { $0.id == rowID }), let text = row.searchableText else { return }
+        let author: ReplyTarget.Author = if case .user = row.kind { .you } else { .bot }
+        let flattened = text.split(whereSeparator: \.isNewline).joined(separator: " ")
+        replyTarget = ReplyTarget(rowID: rowID, author: author, quote: String(flattened.prefix(Self.quoteLimit)))
+    }
+
+    func cancelReply() {
+        replyTarget = nil
+    }
+
+    func canReact(to rowID: String) -> Bool {
+        reactionTarget(for: rowID) != nil
+    }
+
+    func react(to rowID: String, with emoji: String) {
+        guard let session, let target = reactionTarget(for: rowID) else { return }
+        let previous = reactions[rowID]
+        let outgoing: String? = previous == emoji ? nil : emoji
+        reactions[rowID] = outgoing
+        Task {
+            do {
+                reactions[rowID] = try await session.react(to: target, emoji: outgoing)
+            } catch {
+                reactions[rowID] = previous
+                sendError = String(localized: "Your reaction could not be sent. Try again.")
             }
         }
     }
@@ -357,6 +418,39 @@ final class ChatModel {
         attachments[index].state = state
     }
 
+    private static let quoteLimit = 160
+
+    private static func quoted(_ text: String) -> String {
+        "> " + text
+    }
+
+    private func reactionTarget(for rowID: String) -> ReactionTarget? {
+        guard let row = rows.first(where: { $0.id == rowID }) else { return nil }
+        let role: String
+        switch row.kind {
+        case .user: role = "user"
+        case .assistant: role = "assistant"
+        default: return nil
+        }
+        if rowID.hasPrefix("row:"), let id = Int(rowID.dropFirst(4)) { return .row(id) }
+        let newest = rows.last { candidate in
+            switch candidate.kind {
+            case .user: role == "user"
+            case .assistant: role == "assistant"
+            default: false
+            }
+        }
+        return newest?.id == rowID ? .newest(role: role) : nil
+    }
+
+    private var runningToolName: String? {
+        guard transcript.isRunning else { return nil }
+        for item in transcript.items.reversed() {
+            if case .tool(let call) = item.content, call.status == .running { return call.name }
+        }
+        return nil
+    }
+
     private var pendingClarify: PendingPrompt? {
         transcript.pendingPrompts.first { $0.kind == .clarify }
     }
@@ -403,6 +497,7 @@ final class ChatModel {
     }
 
     private func noteLive() {
+        if !hasBeenLive { LaunchClock.mark("chat \(openedBot.name) live", on: .osLog()) }
         hasBeenLive = true
         connection = .live
     }
@@ -414,6 +509,7 @@ final class ChatModel {
                 if case .live = phase { noteLive() } else { noteDisconnected() }
             case .transcript(let next):
                 transcript = next
+                scheduleCacheSave()
                 if case .live = await session.phase { noteLive() }
             case .botThreadLinks(let links):
                 botThreadLinks = links
@@ -446,12 +542,35 @@ final class ChatModel {
         if signature != lastSignature { roster.nudge() }
     }
 
+    private func scheduleCacheSave() {
+        guard transcript.sessionID != nil, pendingCacheSave == nil else { return }
+        pendingCacheSave = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.saveCache()
+        }
+    }
+
+    private func saveCache() {
+        pendingCacheSave?.cancel()
+        pendingCacheSave = nil
+        guard let snapshot = CachedTranscript(sessionID: transcript.sessionID, items: transcript.items, date: effectiveDate),
+              snapshot != lastCached
+        else { return }
+        lastCached = snapshot
+        roster.conversationCache.save(snapshot, bot: openedBot.name)
+    }
+
+    private var displayedItems: [TranscriptItem] {
+        transcript.sessionID == nil && !cachedItems.isEmpty ? cachedItems : transcript.items
+    }
+
     private func effectiveDate(_ item: TranscriptItem) -> Date? {
         item.timestamp ?? arrivals[item.id]
     }
 
     private func allItems() -> [TranscriptItem] {
-        var items = BotThreadFolding.fold(transcript.items, links: botThreadLinks)
+        var items = BotThreadFolding.fold(displayedItems, links: botThreadLinks)
         let known = Set(items.map(\.id))
         for entry in outboxEntries where !retried.contains(entry.submissionID) {
             let id = "submission:\(entry.submissionID)"
@@ -490,7 +609,7 @@ final class ChatModel {
             built.append(ChatRow(id: entry.item.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider))
         }
         if shouldShowThinking {
-            built.append(ChatRow(id: Self.thinkingRowID, kind: .assistant(text: "", isStreaming: true), separator: nil, showsUnreadDivider: false))
+            built.append(ChatRow(id: Self.thinkingRowID, kind: .working(status: runningToolName.map(ToolActivity.label(for:))), separator: nil, showsUnreadDivider: false))
         }
         rows = built
         isRunning = transcript.isRunning
@@ -520,7 +639,7 @@ final class ChatModel {
             }
         case .assistant(let text, _, let streaming):
             if streaming || text.isEmpty { return nil }
-            return .assistant(text: text, isStreaming: false)
+            return .assistant(text: text)
         case .tool:
             return nil
         case .clarifyAnswered(let record):

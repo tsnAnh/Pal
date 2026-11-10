@@ -25,7 +25,7 @@ struct FindBar: View {
                 .focused($fieldFocused)
                 .submitLabel(.search)
                 .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
+                .neverAutocapitalized()
                 .onSubmit { model.findPrevious() }
                 .accessibilityLabel(Text("Find in Chat"))
                 .accessibilityIdentifier("findField")
@@ -48,8 +48,9 @@ struct FindBar: View {
         }
         .padding(.horizontal, 16)
         .frame(minHeight: ChatMetrics.composerHeight)
-        .glassEffect(.regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.55)), in: .capsule)
-        .padding(.horizontal, ChatMetrics.composerHorizontalMargin)
+        .background(PalTokens.elevated, in: Capsule())
+        .overlay(Capsule().strokeBorder(PalTokens.panelBorder, lineWidth: 1))
+        .padding(.horizontal, ChatMetrics.edgeMargin)
         .padding(.vertical, 8)
         .onAppear { fieldFocused = true }
     }

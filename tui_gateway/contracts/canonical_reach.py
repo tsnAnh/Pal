@@ -7,7 +7,7 @@ from pydantic import Field
 from .base import Params, Payload, Result
 from .registry import canonical_method, event
 
-ClientKind = Literal["desktop", "ios", "tui", "cli", "web"]
+ClientKind = Literal["desktop", "ios", "mac", "tui", "cli", "web"]
 AttentionState = Literal["foreground", "background", "idle"]
 
 

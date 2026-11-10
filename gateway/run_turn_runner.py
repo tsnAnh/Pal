@@ -900,13 +900,18 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
         ctx = self._ctx
         persist_override: Optional[Any] = ctx.persist_user_message
         from gateway.session_cli_turn import cli_turn
-        api_text = cli_turn(ctx.inbound_message_id).get('api_text')
-        if api_text is not None:
+        committed_turn = cli_turn(ctx.inbound_message_id)
+        api_text, turn_context = committed_turn.get('api_text'), committed_turn.get('turn_context')
+        model_only_input = api_text is not None or bool(turn_context)
+        if model_only_input:
             # The classic CLI's model-facing message (voice prefix, its own model-switch and
             # skills-reload notes); the admitted text stays the persisted user row.
             clean_text = persist_override if persist_override is not None else ctx.message
             persist_override = clean_text
-            ctx.message = api_text
+            if api_text is not None:
+                ctx.message = api_text
+            if turn_context:
+                ctx.message = f"{ctx.message}\n\n{turn_context}"
         self._prepend_pending_note("_pending_model_notes")
         # Auto-continue: history ending with a tool result means the previous turn was cut off
         # (restart, crash, SIGTERM). Session-level resume_pending (drain-timeout shutdown) uses
@@ -941,7 +946,7 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
                 + ctx.message
             )
         self._prepend_pending_note("_pending_skills_reload_notes")
-        if api_text is not None:
+        if model_only_input:
             persist_override = clean_text  # recovery wording is API-only too, never the stored row
         # Safety net: a startup auto-resume event carries empty text; if the resume_pending branch
         # did not fire (freshness signals disagreed, marker cleared) we must NOT hand the model a blank

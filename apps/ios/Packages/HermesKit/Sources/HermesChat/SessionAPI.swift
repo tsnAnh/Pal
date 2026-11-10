@@ -65,6 +65,11 @@ public struct HermesClientConnector: ChatConnector {
     }
 }
 
+public enum ReactionTarget: Sendable, Hashable {
+    case row(Int)
+    case newest(role: String)
+}
+
 public struct SessionAPI: Sendable {
     public let connection: GatewayConnection
     public let profile: String
@@ -178,6 +183,17 @@ public struct SessionAPI: Sendable {
             "choice": .string(choice),
         ])
         return try decode(PromptResponseResult.self, result, "approval.respond")
+    }
+
+    public func react(sessionID: String, target: ReactionTarget, emoji: String?) async throws -> String? {
+        var params: [String: JSONValue] = ["session_id": .string(sessionID), "emoji": emoji.map(JSONValue.string) ?? .null]
+        switch target {
+        case .row(let id): params["row_id"] = .int(id)
+        case .newest(let role): params["newest_role"] = .string(role)
+        }
+        let result = try await call("message.react", params)
+        let reactions = result["reactions"]?.arrayValue ?? []
+        return reactions.first { $0["author"]?.stringValue == "user" }?["emoji"]?.stringValue
     }
 
     public func interrupt(sessionID: String, executionGeneration: Int) async throws {

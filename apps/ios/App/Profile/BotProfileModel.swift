@@ -2,7 +2,6 @@ import Foundation
 import HermesBotProfile
 import HermesDesign
 import Observation
-import UIKit
 
 @MainActor
 @Observable
@@ -77,7 +76,7 @@ final class BotProfileModel {
     }
 
     func copyID() {
-        UIPasteboard.general.string = botName
+        Pasteboard.string = botName
         toast = String(localized: "Copied")
     }
 

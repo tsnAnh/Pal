@@ -53,6 +53,7 @@ struct AvatarRig {
     var dots: [AvatarDrawing.Element] = []
     var pivot: CGPoint
     var span: Double
+    var restTilt: Double
     let surface: EyeSurface
 
     init(
@@ -61,7 +62,8 @@ struct AvatarRig {
         body: [AvatarDrawing.Element],
         eyes: Eyes,
         dots: [AvatarDrawing.Element] = [],
-        bounds: CGRect? = nil
+        bounds: CGRect? = nil,
+        restTilt: Double = 0
     ) {
         self.viewBox = viewBox
         self.clipsToViewBox = clipsToViewBox
@@ -71,6 +73,7 @@ struct AvatarRig {
         let box = bounds ?? Self.bounds(of: body)
         pivot = CGPoint(x: box.midX, y: box.midY)
         span = (box.width + box.height) / 2
+        self.restTilt = restTilt
         surface = EyeSurface.shared(mask: eyes.mask)
     }
 
@@ -96,23 +99,57 @@ struct AvatarRig {
         }
     }
 
-    func eyePaths(_ pose: AvatarPose) -> [Path] {
+    func eyePaths(_ pose: AvatarPose, look: AvatarLook = .zero) -> [Path] {
         let placements = zip(eyes.rest, eyes.facing).map { $0.blended(to: $1, pose.front) }
         guard !placements.isEmpty else { return [] }
         let mid = Self.centroid(placements)
         let roll = pose.eyeRoll * Double.pi / 180
         let shape = eyeShape(pose)
         let travel = eyes.travel ?? span
-        return placements.map { placement in
+        let centres = placements.map { placement -> CGPoint in
             let dx = (placement.centre.x - mid.x) * pose.eyeSpread
             let dy = (placement.centre.y - mid.y) * pose.eyeSpread
-            let centre = CGPoint(
+            return CGPoint(
                 x: mid.x + dx * cos(roll) - dy * sin(roll) + pose.eyeX * travel,
                 y: mid.y + dx * sin(roll) + dy * cos(roll) + pose.eyeY * travel
             )
+        }
+        let gaze = gazeOffset(look, bodyRotation: pose.bodyRotation, centres: centres, clearance: eyeClearance(pose, placements))
+        return zip(placements, centres).map { placement, base in
+            let centre = CGPoint(x: base.x + gaze.dx, y: base.y + gaze.dy)
             let moved = EyePlacement(centre: centre, angle: placement.angle + roll, scale: placement.scale * pose.eyeScale)
             return surface.project(shape.applying(moved.transform), around: centre)
         }
+    }
+
+    private func eyeClearance(_ pose: AvatarPose, _ placements: [EyePlacement]) -> Double {
+        let scale = placements.map(\.scale).max() ?? 1
+        return eyes.size.height * scale * pose.eyeScale * 0.5
+    }
+
+    private func gazeOffset(_ look: AvatarLook, bodyRotation: Double, centres: [CGPoint], clearance: Double) -> CGVector {
+        let strength = look.amount
+        guard strength > 0, look.x != 0 || look.y != 0 else { return .zero }
+        let turn = -bodyRotation * Double.pi / 180
+        let reach = (eyes.travel ?? span) * Self.lookReach * strength
+        let wanted = CGVector(
+            dx: (look.x * cos(turn) - look.y * sin(turn)) * reach,
+            dy: (look.x * sin(turn) + look.y * cos(turn)) * reach
+        )
+        let floor = min(clearance, centres.map { surface.clearance(at: $0) }.min() ?? clearance)
+        func fits(_ fraction: Double) -> Bool {
+            centres.allSatisfy {
+                surface.clearance(at: CGPoint(x: $0.x + wanted.dx * fraction, y: $0.y + wanted.dy * fraction)) >= floor
+            }
+        }
+        guard !fits(1) else { return wanted }
+        var low = 0.0
+        var high = 1.0
+        for _ in 0..<10 {
+            let middle = (low + high) / 2
+            if fits(middle) { low = middle } else { high = middle }
+        }
+        return CGVector(dx: wanted.dx * low, dy: wanted.dy * low)
     }
 
     private static func centroid(_ placements: [EyePlacement]) -> CGPoint {
@@ -134,7 +171,7 @@ struct AvatarRig {
         let squash = 1 - 1.3 * pose.eyeHappy
         let shownHeight = max(0.01, rounded * pose.eyeOpen * squash)
         let rect = CGRect(x: -width / 2, y: -shownHeight / 2, width: width, height: shownHeight)
-        return Path(roundedRect: rect, cornerRadius: min(width, shownHeight) / 2)
+        return Path(roundedRect: rect, cornerRadius: min(width, shownHeight) / 2, style: .circular)
     }
 
     private func happyArc(width: Double, height: Double) -> Path {

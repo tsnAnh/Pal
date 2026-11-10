@@ -40,11 +40,11 @@ describe('grokifyBlob', () => {
     expect(wrappers.map(wrapper => wrapper.getAttribute('data-hb-eye'))).toEqual(['l', 'r'])
 
     for (const wrapper of wrappers) {
-      expect(wrapper.getAttribute('transform')).toMatch(/^translate\([-\d.]+ [-\d.]+\) rotate\(-11\)$/)
+      expect(wrapper.getAttribute('transform')).toMatch(/^translate\([-\d.]+ [-\d.]+\) rotate\(-(20|23\.5)\)$/)
 
       const pill = wrapper.querySelector(':scope > path')!
 
-      expect(wrapper.getAttribute('data-hb-size')).toBe('10 23')
+      expect(wrapper.getAttribute('data-hb-size')).toBe('14.2 33')
       expect(pill.getAttribute('d')).toMatch(/^M-?[\d.]+ -?[\d.]+L/)
       expect(pill.hasAttribute('transform')).toBe(false)
       expect(wrapper.querySelector('rect')).toBeNull()
@@ -88,7 +88,7 @@ const eyeAreas = (svg: string) =>
   })
 
 describe('grokifyBlob eyes', () => {
-  const flatPill = 10 * 23 - (4 - Math.PI) * 5 ** 2
+  const flatPill = 14.2 * 33 - (4 - Math.PI) * 7.1 ** 2
 
   it('paints the eyes on a round body, foreshortened where it curves away', () => {
     const round = grokifyBlob(blobatar('alpha', { size: 48, traits: { shape: 0.11 } }), { circle: true })

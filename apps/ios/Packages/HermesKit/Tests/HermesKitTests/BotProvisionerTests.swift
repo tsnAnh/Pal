@@ -42,6 +42,21 @@ struct BotProvisionerTests {
         #expect(fake.calls("profiles.configure").count == 1)
     }
 
+    @Test func theLookKeepsTheSeedThePreviewWasDrawnWith() async throws {
+        let fake = FakeRoster(names: ["default"])
+        let (provisioner, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        _ = try await provisioner.create(NewBotRequest(name: "Atlas", kind: "cloud", colorHex: "#10dc69", seed: "3f9a02bc"))
+
+        #expect(fake.meta("atlas")?["shape"] == "blobatar:3f9a02bc:cloud")
+        for seed in ["", "a:b", "x y", String(repeating: "a", count: 65)] {
+            await #expect(throws: BotAdminError.invalidName) {
+                try await provisioner.create(NewBotRequest(name: "Other", kind: "cloud", colorHex: "#10dc69", seed: seed))
+            }
+        }
+    }
+
     @Test func theBirthNoticeFlagDecidesWhetherTheBotGreetsUnprompted() async throws {
         let fake = FakeRoster(names: ["default"])
         fake.state.withLock { $0.birthNotice = false }
@@ -59,15 +74,15 @@ struct BotProvisionerTests {
         let (provisioner, gateway, connection) = try await start(fake)
         defer { gateway.stop(); Task { await connection.close() } }
 
-        await #expect(throws: BotAdminError.incomplete(profile: "grok")) { try await provisioner.create(request("Grok")) }
+        await #expect(throws: BotAdminError.incomplete(profile: "nova")) { try await provisioner.create(request("Nova")) }
         #expect(fake.calls("profiles.create").count == 1)
-        #expect(fake.meta("grok") == nil)
+        #expect(fake.meta("nova") == nil)
 
-        let created = try await provisioner.create(request("Grok"))
+        let created = try await provisioner.create(request("Nova"))
 
-        #expect(created.name == "grok")
+        #expect(created.name == "nova")
         #expect(fake.calls("profiles.create").count == 1)
-        #expect(fake.meta("grok")?["shape"] == "blobatar:grok:boxy")
+        #expect(fake.meta("nova")?["shape"] == "blobatar:nova:boxy")
     }
 
     @Test func aRetryKeepsTheOriginalCreationTimestamp() async throws {
@@ -79,11 +94,11 @@ struct BotProvisionerTests {
         defer { gateway.stop(); Task { await connection.close() } }
         let provisioner = BotProvisioner(gateway: rpc, now: { clock.withLock { $0 } })
 
-        _ = try? await provisioner.create(request("Grok"))
+        _ = try? await provisioner.create(request("Nova"))
         clock.withLock { $0 = Self.stamp.addingTimeInterval(90) }
-        _ = try await provisioner.create(request("Grok"))
+        _ = try await provisioner.create(request("Nova"))
 
-        #expect(fake.meta("grok")?["created"] == .int(1_800_000_000_000))
+        #expect(fake.meta("nova")?["created"] == .int(1_800_000_000_000))
     }
 
     @Test func renamingAfterAnIncompleteCreateDiscardsTheUnfinishedBot() async throws {
@@ -92,12 +107,12 @@ struct BotProvisionerTests {
         let (provisioner, gateway, connection) = try await start(fake)
         defer { gateway.stop(); Task { await connection.close() } }
 
-        _ = try? await provisioner.create(request("Grok"))
-        let created = try await provisioner.create(request("Grok Two"))
+        _ = try? await provisioner.create(request("Nova"))
+        let created = try await provisioner.create(request("Nova Two"))
 
-        #expect(created.name == "grok-two")
+        #expect(created.name == "nova-two")
         let names = fake.state.withLock { $0.names }
-        #expect(names == ["default", "grok-two"])
+        #expect(names == ["default", "nova-two"])
         #expect(fake.calls("profiles.delete").count == 1)
     }
 
@@ -121,10 +136,10 @@ struct BotProvisionerTests {
         }
         let (rpc, connection) = try await rosterGateway(gateway)
         defer { gateway.stop(); Task { await connection.close() } }
-        fake.seed("grok", meta: [:], revision: 0)
+        fake.seed("nova", meta: [:], revision: 0)
         let provisioner = BotProvisioner(gateway: rpc)
 
-        await #expect(throws: BotAdminError.nameTaken) { try await provisioner.create(request("Grok")) }
+        await #expect(throws: BotAdminError.nameTaken) { try await provisioner.create(request("Nova")) }
     }
 
     @Test func unusableNamesAreRefusedBeforeAnyCall() async throws {
@@ -146,11 +161,11 @@ struct BotProvisionerTests {
         let (provisioner, gateway, connection) = try await start(fake)
         defer { gateway.stop(); Task { await connection.close() } }
 
-        await #expect(throws: BotAdminError.rejected) { try await provisioner.create(request("Grok")) }
-        #expect(fake.meta("grok") == nil)
+        await #expect(throws: BotAdminError.rejected) { try await provisioner.create(request("Nova")) }
+        #expect(fake.meta("nova") == nil)
 
-        let created = try await provisioner.create(request("Grok"))
-        #expect(created.name == "grok")
+        let created = try await provisioner.create(request("Nova"))
+        #expect(created.name == "nova")
         #expect(fake.calls("profiles.create").count == 2)
     }
 
@@ -159,8 +174,8 @@ struct BotProvisionerTests {
         let (provisioner, gateway, connection) = try await start(fake)
         defer { gateway.stop(); Task { await connection.close() } }
 
-        async let first = provisioner.create(request("Grok"))
-        async let second = provisioner.create(request("Grok"))
+        async let first = provisioner.create(request("Nova"))
+        async let second = provisioner.create(request("Nova"))
         let results = try await [first, second]
 
         #expect(results[0] == results[1])

@@ -115,6 +115,7 @@ interface MentionCompletionItem {
 interface ComposerDraftPayload {
   attachments?: unknown[]
   text: string
+  turnContext?: string
 }
 
 export default {
@@ -899,13 +900,13 @@ export default {
           })
 
           const note =
-            '\n\n[@mentions resolved from the Bot Mode roster — the user is referring to: ' +
+            '[@mentions resolved from the Bot Mode roster — the user is referring to: ' +
             lines.join('; ') +
             '. If they want one of these agents contacted, compose your own message and send it with your message_agent tool (agents on other connected machines are reachable too — the Desktop relays it); never forward the user\u2019s text verbatim. If this session has no message_agent tool, agent messaging is unavailable here — say so.]'
 
           return {
             ...draft,
-            text: text + note
+            turnContext: [draft.turnContext, note].filter(Boolean).join('\n\n')
           }
         }
       }

@@ -1,7 +1,7 @@
 import AppIntents
 import Foundation
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppEnum(schema: .messages.conversationAttribute)
 enum BotConversationAttribute: String, AppEnum {
     case unspecified
@@ -9,7 +9,7 @@ enum BotConversationAttribute: String, AppEnum {
     static let caseDisplayRepresentations: [BotConversationAttribute: DisplayRepresentation] = [.unspecified: "Unspecified"]
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppEnum(schema: .messages.messageAttribute)
 enum BotMessageAttribute: String, AppEnum {
     case unspecified
@@ -17,7 +17,7 @@ enum BotMessageAttribute: String, AppEnum {
     static let caseDisplayRepresentations: [BotMessageAttribute: DisplayRepresentation] = [.unspecified: "Unspecified"]
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppEnum(schema: .messages.messageType)
 enum BotMessageType: String, AppEnum {
     case unspecified
@@ -27,7 +27,7 @@ enum BotMessageType: String, AppEnum {
     ]
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppEntity(schema: .messages.messagePerson)
 struct BotMessagePerson: AppEntity {
     static let defaultQuery = BotMessagePersonQuery()
@@ -54,7 +54,7 @@ struct BotMessagePerson: AppEntity {
     }
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 struct BotMessagePersonQuery: EntityStringQuery {
     @Dependency var environment: IntentEnvironment
 
@@ -75,7 +75,7 @@ struct BotMessagePersonQuery: EntityStringQuery {
     }
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppEntity(schema: .messages.conversation)
 struct BotConversationEntity: AppEntity {
     static let defaultQuery = BotConversationQuery()
@@ -105,7 +105,7 @@ struct BotConversationEntity: AppEntity {
     }
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 struct BotConversationQuery: EntityStringQuery {
     @Dependency var environment: IntentEnvironment
 

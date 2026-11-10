@@ -4,7 +4,7 @@ import HermesProtocol
 
 enum VoicePhrase {
     static var appName: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Hermes Bots"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Pal"
     }
 
     static func answer(_ bot: String) -> String { "Answer \(bot) in \(appName)" }

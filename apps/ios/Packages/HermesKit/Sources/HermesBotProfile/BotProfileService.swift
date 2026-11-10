@@ -69,19 +69,9 @@ public struct BotProfileService: Sendable {
     }
 
     public func rename(_ profile: BotProfile, to proposed: String) async throws {
-        let title = proposed.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty, title.count <= Self.maximumTitleLength else { throw BotsError.rejected(reason: "invalid_name") }
         do {
-            try await writer.update(profile.name) { fields in
-                var next = fields
-                next["title"] = .string(title)
-                return next
-            }
-            if profile.isPrimary {
-                _ = try await gateway.call("profiles.rename", ["name": .string(profile.name), "new_name": .string(title)])
-            }
+            try await admin.rename(profile.name, isPrimary: profile.isPrimary, to: proposed)
         } catch {
-            diagnostics.warning("bots", "rename failed: \(Diagnostics.describe(error))")
             throw BotsError.surface(error)
         }
     }
@@ -130,6 +120,4 @@ public struct BotProfileService: Sendable {
         guard !leaf.isEmpty, leaf != ".", leaf != ".." else { throw BotsError.invalidResponse }
         return TemplateFile(filename: leaf, data: data)
     }
-
-    static let maximumTitleLength = 60
 }

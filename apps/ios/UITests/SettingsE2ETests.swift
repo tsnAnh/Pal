@@ -44,7 +44,11 @@ class SettingsE2ETestCase: E2ETestCase {
     }
 
     func goBack(_ app: XCUIApplication, from screen: String) {
+        #if os(iOS)
+        let back = app.navigationBars.buttons.firstMatch
+        #else
         let back = app.buttons["\(screen)-back"]
+        #endif
         waitFor(back, timeout: 10, "\(screen) back")
         back.tap()
         waitFor(element(app, "settingsSheet"), timeout: 10, "settings sheet after back")
@@ -95,7 +99,7 @@ class SettingsE2ETestCase: E2ETestCase {
 }
 
 final class SettingsE2ETests: SettingsE2ETestCase {
-    private static let hiddenRows = ["The X Subscription", "Delete Account", "Help Center", "Privacy Policy", "Terms of Service", "Hermes Bots Terms"]
+    private static let hiddenRows = ["The X Subscription", "Delete Account", "Help Center", "Privacy Policy", "Terms of Service", "Pal Terms"]
 
     func test01RootShowsEveryRowAndHidesTheDroppedOnes() throws {
         let app = signedIn(resetCredentials: true)
@@ -414,6 +418,6 @@ final class SettingsE2ETests: SettingsE2ETestCase {
         let confirm = app.popovers.buttons["Sign Out"]
         waitFor(confirm, timeout: 10, "confirm sign out")
         confirm.tap()
-        waitFor(app.buttons["signInButton"], timeout: 30, "sign in form")
+        waitFor(app.buttons["continueButton"], timeout: 30, "sign-in screen")
     }
 }

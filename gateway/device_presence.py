@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from gateway.reach_presence import Attention, AttentionState, ClientKind, attention_of, last_frame_at, slot_of
+from gateway.reach_presence import PUSH_CLIENT_KINDS, Attention, AttentionState, attention_of, last_frame_at, slot_of
 from gateway.session_authorities import all_authorities
 
 
@@ -38,7 +38,7 @@ def anyone_attentive(authorities, now: float) -> bool:
             slot = slot_of(transport)
             if slot is None or attention_of(slot, last_frame=last_frame_at(transport), now=now) is not Attention.ENGAGED:
                 continue
-            if slot.device.kind is ClientKind.IOS and slot.attention is not AttentionState.FOREGROUND:
+            if slot.device.kind in PUSH_CLIENT_KINDS and slot.attention is not AttentionState.FOREGROUND:
                 continue
             return True
     return False

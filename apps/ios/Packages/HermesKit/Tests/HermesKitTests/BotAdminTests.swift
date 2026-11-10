@@ -156,6 +156,75 @@ struct BotAdminTests {
         #expect(fake.calls("profiles.configure").isEmpty)
     }
 
+    @Test func hidingAndShowingKeepsEveryOtherKeyAndIsIndependentOfPinning() async throws {
+        let fake = FakeRoster(names: ["cho-ua"])
+        fake.seed("cho-ua", meta: ["title": "chó UA", "pinned": true, "color": "#d6264a"])
+        let (admin, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        let hidden = try await admin.setHidden("cho-ua", hidden: true)
+        #expect(hidden.isHidden && hidden.isPinned)
+        #expect(fake.meta("cho-ua")?["hidden"] == true)
+        #expect(fake.meta("cho-ua")?["title"] == "chó UA" && fake.meta("cho-ua")?["color"] == "#d6264a")
+
+        try await admin.setHidden("cho-ua", hidden: false)
+        #expect(fake.meta("cho-ua")?["hidden"] == false)
+        #expect(fake.meta("cho-ua")?["pinned"] == true)
+    }
+
+    @Test func hidingAnAlreadyHiddenBotWritesNothing() async throws {
+        let fake = FakeRoster(names: ["a"])
+        fake.seed("a", meta: ["hidden": true])
+        let (admin, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        try await admin.setHidden("a", hidden: true)
+
+        #expect(fake.calls("profiles.configure").isEmpty)
+    }
+
+    @Test func renamingWritesTheTrimmedTitleAndLeavesTheRest() async throws {
+        let fake = FakeRoster(names: ["cho-ua", "default"])
+        fake.seed("cho-ua", meta: ["title": "chó UA", "pinned": true])
+        let (admin, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        try await admin.rename("cho-ua", isPrimary: false, to: "  Ads bot \n")
+
+        #expect(fake.meta("cho-ua")?["title"] == "Ads bot" && fake.meta("cho-ua")?["pinned"] == true)
+        #expect(fake.calls("profiles.rename").isEmpty)
+    }
+
+    @Test(arguments: ["", "   ", String(repeating: "x", count: 61)])
+    func renamingToAnInvalidNameIsRefusedBeforeAnyWrite(proposed: String) async throws {
+        let fake = FakeRoster(names: ["a"])
+        let (admin, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        await #expect(throws: BotAdminError.invalidName) { try await admin.rename("a", isPrimary: false, to: proposed) }
+        #expect(fake.calls("profiles.configure").isEmpty)
+    }
+
+    @Test func deletingRemovesTheProfile() async throws {
+        let fake = FakeRoster(names: ["default", "cho-ua"])
+        let (admin, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        try await admin.delete("cho-ua")
+
+        #expect(fake.state.withLock { $0.names } == ["default"])
+        let call = try #require(fake.calls("profiles.delete").first ?? nil)
+        #expect(call == ["name": "cho-ua"])
+    }
+
+    @Test func deletingAnUnknownBotIsBotNotFound() async throws {
+        let fake = FakeRoster(names: ["default"])
+        let (admin, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        await #expect(throws: BotAdminError.botNotFound) { try await admin.delete("ghost") }
+    }
+
     @Test func makingAPrimaryMovesTheCanonicalPointer() async throws {
         let fake = FakeRoster(names: ["default", "cho-ua"])
         let (admin, gateway, connection) = try await start(fake)

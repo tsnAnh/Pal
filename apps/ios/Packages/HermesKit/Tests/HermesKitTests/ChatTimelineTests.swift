@@ -86,7 +86,7 @@ struct ChatTimelineTests {
         var bot = user("b", at: 500)
         bot.inbound = .botMessage(BotSender(name: "A", handle: "a"), body: "hi")
         var done = user("c", at: 600)
-        done.inbound = .processCompletion
+        done.inbound = .systemNotification
         #expect(entries([assistant("a", at: 0), bot, done], lastSeen: Self.base.addingTimeInterval(100)).map(\.showsNewDivider) == [false, true, false])
         #expect(entries([assistant("a", at: 0), done], lastSeen: Self.base.addingTimeInterval(100)).map(\.showsNewDivider) == [false, true])
     }

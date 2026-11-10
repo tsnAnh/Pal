@@ -1,3 +1,4 @@
+import Foundation
 import HermesDesign
 import HermesRoster
 import Observation
@@ -15,7 +16,10 @@ final class CreateBotModel {
     var name = "" {
         didSet {
             if name.count > BotIdentity.maximumDisplayNameLength { name = String(name.prefix(BotIdentity.maximumDisplayNameLength)) }
-            if name != oldValue { failure = nil }
+            if name != oldValue {
+                failure = nil
+                identity = BotIdentity(entered: name)
+            }
         }
     }
 
@@ -24,15 +28,13 @@ final class CreateBotModel {
     private(set) var isCreating = false
     private(set) var failure: Failure?
 
-    private static let placeholderSeed = "agent"
+    let seed = String(UUID().uuidString.lowercased().prefix(8))
 
-    var identity: BotIdentity { BotIdentity(entered: name) }
+    private(set) var identity = BotIdentity(entered: "")
 
     var canCreate: Bool { identity.isValid && !isCreating }
 
     var isNameRejected: Bool { !identity.displayName.isEmpty && !identity.isValid }
-
-    var seed: String { identity.isValid ? identity.slug : Self.placeholderSeed }
 
     var spec: BotAvatarSpec {
         BotAvatarSpec(
@@ -51,7 +53,7 @@ final class CreateBotModel {
         isCreating = true
         failure = nil
         defer { isCreating = false }
-        let request = NewBotRequest(name: name, kind: shape.rawValue, colorHex: colorHex)
+        let request = NewBotRequest(name: name, kind: shape.rawValue, colorHex: colorHex, seed: seed)
         do {
             return try await roster.create(request, spec: spec)
         } catch BotAdminError.incomplete(let profile) {

@@ -57,7 +57,8 @@ enum ClassicDrawing {
                 mask: body
             ),
             dots: dots,
-            bounds: bounds
+            bounds: bounds,
+            restTilt: -14
         )
     }
 

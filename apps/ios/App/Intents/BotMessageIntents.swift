@@ -2,7 +2,7 @@ import AppIntents
 import Foundation
 import GeoToolbox
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppIntent(schema: .messages.sendMessage)
 struct SendBotMessageIntent {
     var content: AttributedString?
@@ -41,7 +41,7 @@ struct SendBotMessageIntent {
     }
 }
 
-@available(iOS 27.0, *)
+@available(iOS 27.0, macOS 27.0, *)
 @AppIntent(schema: .messages.draftMessage)
 struct DraftBotMessageIntent {
     var destination: BotMessageDestination?

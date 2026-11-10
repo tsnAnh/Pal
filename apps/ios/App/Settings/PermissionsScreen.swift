@@ -75,6 +75,7 @@ struct PermissionsScreen: View {
         .sheet(item: $addingTo) { list in
             AddRuleSheet(list: list, model: model, hub: hub) { addingTo = nil }
                 .presentationDetents([.medium])
+                .macSheetFrame()
         }
         .confirmationDialog(
             "Remove this rule?",
@@ -152,7 +153,7 @@ struct PermissionsScreen: View {
     }
 }
 
-private struct AddRuleSheet: View {
+struct AddRuleSheet: View {
     let list: PermissionList
     let model: PermissionsModel
     let hub: SettingsHub

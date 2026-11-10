@@ -5,7 +5,7 @@ IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="$(cd "$IOS_DIR/../.." && pwd)"
 MAIN_CHECKOUT="$(cd "$(git -C "$REPO" rev-parse --git-common-dir)/.." && pwd)"
 DRIVE="$REPO/.claude/skills/verify-ios/scripts/drive"
-REFERENCE_DIR="${HERMES_IOS_PARITY_REFERENCE_DIR:-$MAIN_CHECKOUT/apps/ios/Artifacts/grok-reference}"
+REFERENCE_DIR="${HERMES_IOS_PARITY_REFERENCE_DIR:-$MAIN_CHECKOUT/apps/ios/Artifacts/reference-ios}"
 OUT_DIR="$IOS_DIR/Artifacts/parity"
 PYTHON="${HERMES_IOS_PYTHON:-}"
 for candidate in "$REPO/.venv/bin/python" "$MAIN_CHECKOUT/.venv/bin/python"; do
@@ -20,7 +20,7 @@ usage: parity-shots TEST...            run UI tests through verify-ios drive, th
 
 TEST is a UI test class or Class/testMethod (default: ParityShots). Tests save full-screen screenshots
 named parity-<ref-name> (for example parity-01-home); each is placed next to
-Artifacts/grok-reference/<ref-name>.jpg at the reference height and written to
+Artifacts/reference-ios/<ref-name>.jpg at the reference height and written to
 apps/ios/Artifacts/parity/<ref-name>.png, plus index.png.
 Needs a launched verify-ios run (.claude/skills/verify-ios/scripts/launch). Artifacts are gitignored.
 USAGE
