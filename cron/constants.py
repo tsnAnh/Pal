@@ -1,4 +1,4 @@
-"""Fire-claim timing bounds shared by the job store and its siblings.
+"""Fire-claim timing bounds and the Bot Chat turn prefix shared by the job store and its siblings.
 
 Import-free on purpose: a sibling loaded fresh from a newer on-disk tree must resolve
 these without going through the ``cron.jobs`` object a long-lived process cached at boot.
@@ -15,6 +15,8 @@ FIRE_CLAIM_SKEW_SECONDS = 60
 # wall-clock cap, so healthy runs may legitimately exceed it and a TTL of exactly the timeout
 # would expire live claims.
 CLAIM_TTL_INACTIVITY_HEADROOM = 3
+
+BOT_CHAT_TURN_PREFIX = '[Cronjob "'
 
 
 def is_recurring(job: dict) -> bool:
