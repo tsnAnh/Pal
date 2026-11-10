@@ -23,13 +23,13 @@ def _last_reply(candidates):
     assistant row shows nothing, so the reply before it stands; a carrier shows the reply it wraps."""
     from agent.compaction_display import project_compaction_message_for_display
     from agent.message_content import flatten_message_text
-    from gateway.response_filters import is_silent_assistant_row
+    from gateway.response_filters import is_hidden_from_owner_row
     from hermes_state_common import _shape_preview
     for content, summary in candidates:
         shown = project_compaction_message_for_display(
             {'role': 'assistant', 'content': content, '_compressed_summary': summary})
         text = _shape_preview(flatten_message_text(shown['content'])) if shown is not None else ''
-        if text and not is_silent_assistant_row('assistant', text):
+        if text and not is_hidden_from_owner_row('assistant', text):
             return text
     return None
 
@@ -37,6 +37,7 @@ def _last_reply(candidates):
 def fill_picker_fields(db, items):
     """Set the picker fields on each ``(row, root, segment, listed)``: *listed* is the segment's
     ``list_sessions_rich`` row (its ``preview`` / ``last_active`` / branch / pin), None to read them."""
+    from gateway.response_filters import owner_visible_prompt
     from hermes_state_common import _shape_preview
     from hermes_state_sessions import workspace_key
     roots, segments, replies = db.picker_session_facts(
@@ -50,7 +51,7 @@ def fill_picker_fields(db, items):
                 continue  # deleted since it was listed: the row keeps what the feed read
             listed = {**listed, 'preview': _shape_preview(listed['_preview_raw'])}
         first = roots.get(root) or {}
-        row.update(preview=listed.get('preview') or None, cwd=first.get('cwd') or None,
+        row.update(preview=owner_visible_prompt(listed.get('preview')) or None, cwd=first.get('cwd') or None,
                    workspace=workspace_key(first), git_branch=listed.get('git_branch') or None,
                    last_active_at=listed.get('_effective_last_active') or listed.get('last_active'),
                    pinned=bool(listed.get('pinned')), last_reply=replies[segment])

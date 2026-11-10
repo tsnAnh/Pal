@@ -82,10 +82,30 @@ def is_intentional_silence_response(response: Any) -> bool:
     return any(c in LIVE_GATEWAY_SILENT_MARKERS for c in _canonical_silence_candidates(response))
 
 
-def is_silent_assistant_row(role: Any, content: Any) -> bool:
-    """True for a stored assistant row that is only a silence marker: nothing a client shows as the
-    chat's latest message. The row stays in history; this only decides what a preview skips."""
-    return role == "assistant" and is_intentional_silence_response(content)
+_PROCESS_COMPLETION_DISPLAY_KINDS = frozenset({"process_complete", "async_delegation_complete"})
+_BACKGROUND_PROCESS_PREFIX = "[IMPORTANT: Background process"
+PREVIEW_HIDDEN_SCAN = 64
+
+
+def is_hidden_from_owner_row(role: Any, content: Any, display_kind: Any = None) -> bool:
+    """True for a stored row the owner's transcript never shows: an assistant row that is only a
+    silence marker, or an inbound user turn that is cron or process-completion plumbing (the rule
+    of Pal's ``TranscriptVisibility``). The row stays in history; this only decides what a
+    preview skips."""
+    if role == "assistant":
+        return is_intentional_silence_response(content)
+    if role != "user":
+        return False
+    if display_kind in _PROCESS_COMPLETION_DISPLAY_KINDS:
+        return True
+    from cron.constants import BOT_CHAT_TURN_PREFIX
+    text = content.strip() if isinstance(content, str) else ""
+    return text.startswith((BOT_CHAT_TURN_PREFIX, _BACKGROUND_PROCESS_PREFIX))
+
+
+def owner_visible_prompt(text: Any) -> str:
+    """``text`` (a stored first-prompt preview) unless it is owner-hidden plumbing, then ``""``."""
+    return "" if is_hidden_from_owner_row("user", text) else str(text or "")
 
 
 def _split_trailing_line(text: str) -> tuple[str, str]:
