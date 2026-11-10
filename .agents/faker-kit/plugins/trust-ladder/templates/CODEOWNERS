@@ -3,7 +3,6 @@
 /.github/              @<platform-owner>
 /.agents/              @<platform-owner>
 /AGENTS.md             @<platform-owner>
-/REVIEW.md             @<platform-owner>
 /STYLE.md              @<design-or-platform-owner>
 /<app>/src/**/ui/      @<ui-owner>
 /<app>/src/**/l10n/    @<localization-owner>

@@ -7,9 +7,9 @@ Turn these on for the default branch in the repository's settings (Rules, then R
 - [ ] Require a pull request before merging.
 - [ ] Require at least one approval, and require review from Code Owners.
 - [ ] Dismiss stale approvals when new commits are pushed.
-- [ ] Require status checks to pass: the repository's CI jobs. Add the `review` and `security` jobs of `claude-review` too.
+- [ ] Require status checks to pass: the repository's CI jobs, the ones that build and test every pull request.
 - [ ] Require branches to be up to date before merging.
-- [ ] Require conversation resolution before merging. The Claude review posts comments, not status checks, so this is what makes every `[blocking]` or P1 finding get fixed or answered before merge.
+- [ ] Require conversation resolution before merging, so every review comment is fixed or answered first.
 - [ ] Block force pushes and deletions.
 - [ ] Do not allow bypassing the rules above, including for administrators.
 
