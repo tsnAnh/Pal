@@ -165,3 +165,11 @@ process) live in the `hermes-agent-dev` skill, not here.
 ## Review guidelines
 
 Per `REVIEW.md`: its Blocking rules are P1. Mark findings `[blocking]` or `[nit]`. Skip what CI enforces.
+
+## Learned
+
+- Pal = `apps/ios` (Mac+iOS); origin tsnAnh/Pal (ex hermes-agent); no review bot; no parallel macOS UI tests.
+- Pal: Mac/iOS full parity; Liquid Glass via ToolbarItem, no custom buttons; top = pinned bots; no other brands in code
+- Owner Hermes = Raspberry Pi gateway (host in ~/.hermes/gateway-connections.json); Claude + Codex subs, $0 marginal: token $ = API-equivalent.
+- faker-kit src `~/AIProjects/faker-kit`; Pi kit tracks faker-kit `main`: `install.sh --ref <main sha> --no-vendor --no-gateway`.
+- faker-kit routines minimal: event-driven babysit only; no issues/incidents/security jobs.

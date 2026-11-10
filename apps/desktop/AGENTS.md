@@ -177,5 +177,5 @@ names. Long form: `ENGINEERING.md`.
   ensure deadline otherwise kills the cold per-home PM sync and the retry starts a second sync.
 - Hermes Bots avatar eyes curve over each body shape's own surface (never flat, never one sphere for
   all); iOS parity tests diff desktop renders: rerun `apps/ios/Tools/avatar-parity/regenerate.sh`.
-- Bot chats (desktop Bot Mode, iOS) never show tool lines, raw JSON or technical text; answered
-  clarify cards stay as cards.
+- Bot chats (desktop Bot Mode, iOS) never show tool lines, raw JSON, technical text, system notices
+  or injected notes in user bubbles; answered clarify cards stay cards.
