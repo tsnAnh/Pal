@@ -6,9 +6,9 @@ import Testing
 import UniformTypeIdentifiers
 @testable import HermesDesign
 
-private let iconOutput = ProcessInfo.processInfo.environment["APP_ICON_OUTPUT"]
+private let iconPackage = ProcessInfo.processInfo.environment["APP_ICON_OUTPUT"]
 
-@Suite("App icon", .enabled(if: iconOutput != nil))
+@Suite("App icon", .enabled(if: iconPackage != nil))
 @MainActor
 struct AppIconArtifact {
     private static let side = 1024
@@ -18,32 +18,46 @@ struct AppIconArtifact {
     private static let gaze = CGPoint(x: 0.04, y: -0.06)
 
     @Test func render() throws {
+        let package = URL(fileURLWithPath: try #require(iconPackage), isDirectory: true)
+        let art = try Self.image(artwork(canvas: CGFloat(Self.side)))
+        try Self.write(art, to: package.appendingPathComponent("Assets/pal.png"))
+    }
+
+    private func artwork(canvas: CGFloat) -> some View {
         let spec = BotAvatarSpec(name: "Hermes", meta: BotAvatarMeta(shape: "blobatar:k7q2m9x0:round", color: "#ffffff", custom: true))
-        let canvas = CGFloat(Self.side)
-        let avatar = canvas * Self.avatarScale
         var pose = AvatarMotion.staticPose(.idle)
         pose.eyeScale = Self.eyeScale
         pose.eyeX = Self.gaze.x
         pose.eyeY = Self.gaze.y
-        let view = ZStack(alignment: .topLeading) {
+        return ZStack(alignment: .topLeading) {
             Color.black
-            AvatarFrame(content: AvatarContent(spec), pose: pose, size: avatar)
+            AvatarFrame(content: AvatarContent(spec), pose: pose, size: canvas * Self.avatarScale)
                 .offset(x: canvas * Self.avatarOffset.x, y: canvas * Self.avatarOffset.y)
         }
         .frame(width: canvas, height: canvas)
         .clipped()
+    }
+
+    private static func image(_ view: some View) throws -> CGImage {
         let renderer = ImageRenderer(content: view)
         renderer.scale = 1
         let rendered = try #require(renderer.cgImage)
+        return try redraw(rendered, side: side)
+    }
+
+    private static func redraw(_ image: CGImage, side: Int) throws -> CGImage {
         let context = try #require(CGContext(
-            data: nil, width: Self.side, height: Self.side, bitsPerComponent: 8, bytesPerRow: 0,
+            data: nil, width: side, height: side, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
         ))
-        context.draw(rendered, in: CGRect(x: 0, y: 0, width: Self.side, height: Self.side))
-        let opaque = try #require(context.makeImage())
-        let url = URL(fileURLWithPath: try #require(iconOutput))
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side))
+        return try #require(context.makeImage())
+    }
+
+    private static func write(_ image: CGImage, to url: URL) throws {
         let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
-        CGImageDestinationAddImage(destination, opaque, nil)
+        CGImageDestinationAddImage(destination, image, nil)
         #expect(CGImageDestinationFinalize(destination))
     }
 }
