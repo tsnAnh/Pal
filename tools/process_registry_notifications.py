@@ -4,6 +4,7 @@ watch_match, watch_disabled, watch_overflow_*, async_delegation) into the
 TUI inject into the agent conversation."""
 
 import re
+import shlex
 import time
 from dataclasses import dataclass
 from contextlib import suppress
@@ -503,9 +504,29 @@ def format_process_notification(evt: dict) -> str | None:
         # Say so where the output is the payload (a teammate's reply): a silent tail reads as whole.
         _out = (f"...(first {evt['output_cut']} characters cut — process(action=\"log\", "
                 f"session_id=\"{_sid}\") has the full output)\n{_out}")
+    if not str(_out).strip():
+        _out = _empty_output_note(_cmd)
     return (
         f"[IMPORTANT: Background process {_sid} {_completion_status(evt)} (exit code {_exit}{_signal}).\n"
         f"{attribution}Command: {_cmd}\nOutput:\n{_out}]")
+
+
+def _empty_output_note(command: str) -> str:
+    """What a completion with no output says instead of a blank: an exit 0 with nothing printed reads
+    as success, and for a ``message_agent`` delivery it hides whether the target took the message."""
+    from tools.bot_mode_dm import _dm_delivery_id, _runner_argv
+
+    try:
+        argv = shlex.split(command)
+    except ValueError:
+        argv = []
+    parsed = _runner_argv(argv[argv.index("--run-delivery"):]) if "--run-delivery" in argv else None
+    if parsed is None:
+        return "(no output was captured: the process printed nothing before it ended)"
+    return ("(no output was captured from this message_agent delivery process, so its outcome is UNKNOWN: "
+            "this is not a reply and not a confirmation. "
+            f"Delivery id: {_dm_delivery_id(parsed[2])}. Do not resend; the delivery receipt is retained "
+            "on the target's side. Tell your user the delivery is unconfirmed.)")
 
 
 _SINGLE_COMPLETION_RE = re.compile(r"^\[IMPORTANT: Background process (\S+) (?!matched watch pattern )[^\n]*\(exit code [^\n]*\)\.\n")
