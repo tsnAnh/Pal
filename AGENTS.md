@@ -168,9 +168,9 @@ Per `REVIEW.md`: its Blocking rules are P1. Mark findings `[blocking]` or `[nit]
 
 ## Learned
 
-- Pal = `apps/ios` (Mac+iOS); origin tsnAnh/Pal; no review bot; no parallel Mac UI tests.
-- Pal: Mac/iOS parity; Liquid Glass via ToolbarItem, no custom buttons; pinned bots on top; no other brands
-- Owner Hermes = Pi gateway (host: ~/.hermes/gateway-connections.json); Claude+Codex subs: token $ = API-equivalent.
-- faker-kit src `~/AIProjects/faker-kit`; Pi kit tracks its `main`: `install.sh --ref <sha> --no-vendor --no-gateway`.
-- faker-kit routines: event-driven babysit only; no issues/incidents/security jobs.
-- Bot chats: never queue owner msgs; reply at once, long work in background.
+- Pal=`apps/ios` (Mac+iOS; owner desktop, not Electron), repo tsnAnh/Pal, no review bot; Mac UI tests: shared keychain, serial.
+- Pal: Mac/iOS parity; Liquid Glass via ToolbarItem, no custom buttons; pinned bots top; no other brands
+- Hermes=Pi gateway (host: gateway-connections.json); Claude+Codex subs: token $=API-equiv.
+- faker-kit `~/AIProjects/faker-kit`: Pi kit `install.sh --ref <main sha> --no-vendor --no-gateway`; routines: event babysit only.
+- Bot chats: never queue owner msgs; reply now, long work async.
+- CLAUDE_CONFIG_DIR=~/.claude here: unset in tests writing Claude config.
