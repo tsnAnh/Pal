@@ -264,6 +264,8 @@ struct ChatView: View {
             botName: model.bot.displayName,
             accent: model.chatAccent,
             attachments: model.attachments,
+            slashItems: model.slashItems,
+            loadSlashItems: { model.loadSlashItems() },
             replyTarget: model.replyTarget,
             cancelReply: { model.cancelReply() },
             canSend: model.canSendAttachments,

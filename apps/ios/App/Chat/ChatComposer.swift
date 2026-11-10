@@ -1,3 +1,4 @@
+import HermesChat
 import HermesDesign
 import PhotosUI
 import SwiftUI
@@ -7,6 +8,8 @@ struct ChatComposer: View {
     let botName: String
     let accent: BotAccent?
     let attachments: [PendingAttachment]
+    let slashItems: [SlashItem]
+    let loadSlashItems: () -> Void
     let replyTarget: ReplyTarget?
     let cancelReply: () -> Void
     let canSend: Bool
@@ -29,6 +32,13 @@ struct ChatComposer: View {
     @State private var isCameraPresented = false
     @State private var isFileImporterPresented = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
+    /// The draft the user dismissed the picker on; it stays closed until the draft changes.
+    @State private var dismissedDraft: String?
+
+    private var slashMatches: [SlashItem] {
+        guard let query = SlashCatalog.query(in: draft), dismissedDraft != draft else { return [] }
+        return SlashCatalog.filter(slashItems, query: query)
+    }
 
     private var hasContent: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
@@ -65,6 +75,7 @@ struct ChatComposer: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            if !slashMatches.isEmpty { SlashPicker(items: slashMatches, pick: pickSlash) }
             if let replyTarget { ReplyBar(target: replyTarget, botName: botName, accent: accent, cancel: cancelReply) }
             if !attachments.isEmpty { AttachmentTray(attachments: attachments, remove: removeAttachment) }
             composerRow
@@ -72,6 +83,12 @@ struct ChatComposer: View {
         .padding(.horizontal, ChatMetrics.edgeMargin)
         .padding(.top, 8)
         .padding(.bottom, bottomMargin)
+        .onChange(of: draft) { _, text in
+            if SlashCatalog.query(in: text) != nil { loadSlashItems() }
+        }
+        .onChange(of: focused.wrappedValue) { _, isFocused in
+            if !isFocused { dismissedDraft = draft }
+        }
         .photosPicker(isPresented: $isPhotoPickerPresented, selection: $pickedPhotos, maxSelectionCount: 4, matching: .images)
         .onChange(of: pickedPhotos) { _, items in
             guard !items.isEmpty else { return }
@@ -83,6 +100,12 @@ struct ChatComposer: View {
         .fileImporter(isPresented: $isFileImporterPresented, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { attachFiles(urls) }
         }
+    }
+
+    private func pickSlash(_ item: SlashItem) {
+        draft = SlashCatalog.insertion(for: item)
+        dismissedDraft = nil
+        focused.wrappedValue = true
     }
 
     private var composerRow: some View {
@@ -159,6 +182,11 @@ struct ChatComposer: View {
             #if os(macOS)
             .textFieldStyle(.plain)
             .focusEffectDisabled()
+            .onKeyPress(.escape, phases: .down) { _ in
+                guard !slashMatches.isEmpty else { return .ignored }
+                dismissedDraft = draft
+                return .handled
+            }
             .onKeyPress(.return, phases: .down) { press in
                 if press.modifiers.contains(.shift) {
                     draft += "\n"
@@ -226,6 +254,59 @@ struct ChatComposer: View {
             .frame(width: buttonDiameter, height: buttonDiameter)
             .background(actionFill, in: Circle())
             .contentShape(Circle())
+    }
+}
+
+private struct SlashPicker: View {
+    let items: [SlashItem]
+    let pick: (SlashItem) -> Void
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(items) { item in
+                    if item.id == firstOfGroup(item.group)?.id {
+                        Text(item.group.title)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(PalTokens.textTertiary)
+                            .padding(.horizontal, 14)
+                            .padding(.top, 8)
+                            .padding(.bottom, 2)
+                    }
+                    Button { pick(item) } label: { row(item) }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("slashItem-\(item.command)")
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .frame(maxHeight: 240)
+        .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(PalTokens.panelBorder, lineWidth: 1))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("slashPicker")
+    }
+
+    private func firstOfGroup(_ group: SlashItem.Group) -> SlashItem? {
+        items.first { $0.group == group }
+    }
+
+    private func row(_ item: SlashItem) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(item.command)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(PalTokens.textPrimary)
+            if !item.description.isEmpty {
+                Text(item.description)
+                    .font(.system(size: 12))
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
     }
 }
 
