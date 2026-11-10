@@ -1,14 +1,12 @@
 {
   "backend": "claude",
-  "kit_ref": "0d275c94f6631dba87b464f25d0312b97034fd0c",
   "max_in_flight": 1,
   "forbidden_paths": [
     ".github/workflows/",
     "infra/",
     "*.lock",
     "package-lock.json",
-    "tests/fixtures/prompt_surface/",
-    ".agents/faker-kit/"
+    "tests/fixtures/prompt_surface/"
   ],
   "trusted_dispatchers": [
     "tsnAnh"

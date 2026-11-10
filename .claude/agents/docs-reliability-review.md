@@ -1,1 +1,0 @@
-../../.agents/faker-kit/plugins/agent-compatibility/agents/docs-reliability-review.md

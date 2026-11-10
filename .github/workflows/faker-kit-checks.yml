@@ -7,4 +7,3 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/link-skills.sh --check .
-      - run: python3 .agents/faker-kit/vendor_kit.py --check .

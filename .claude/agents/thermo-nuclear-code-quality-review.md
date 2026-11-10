@@ -1,1 +1,0 @@
-../../.agents/faker-kit/plugins/team-workflows/agents/thermo-nuclear-code-quality-review.md
