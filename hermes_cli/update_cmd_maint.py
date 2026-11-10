@@ -1084,6 +1084,10 @@ def _run_post_update_maintenance(
 
     owed_step("profile_sync", _sync_profiles_after_update)
 
+    from hermes_cli.update_cmd_post_steps import run_post_update_steps
+    with _best_effort('Post-update steps failed: %s'):
+        run_post_update_steps()
+
     owed_step("config_migration", lambda: _check_and_apply_config_migration(
         assume_yes=assume_yes, gateway_mode=gateway_mode, pre_update_snapshot_id=pre_update_snapshot_id,
     ))
