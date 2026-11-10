@@ -7,6 +7,31 @@ CLASS = re.compile(r'\bclass\s+(\w+)\s*:[^{]*\{')
 TEST = re.compile(r'\bfunc\s+(test\w*)\s*\(')
 CONTROL = re.compile(r'\bcontrol\s*\(')
 CONTROL_ENV = 'HERMES_UITEST_CTL'
+OS_CONDITION = re.compile(r'#if\s+(!?)\s*os\((\w+)\)\s*$')
+IOS_ONLY_TARGET = 'iOS'
+
+
+def ios_source(source):
+    kept = []
+    stack = []
+    for line in source.splitlines():
+        stripped = line.strip()
+        condition = OS_CONDITION.match(stripped)
+        if condition:
+            stack.append([(condition.group(2) == IOS_ONLY_TARGET) != bool(condition.group(1))])
+            kept.append('')
+        elif stripped.startswith('#if'):
+            stack.append([True])
+            kept.append('')
+        elif stripped.startswith('#else') and stack:
+            stack[-1][0] = not stack[-1][0]
+            kept.append('')
+        elif stripped.startswith('#endif') and stack:
+            stack.pop()
+            kept.append('')
+        else:
+            kept.append(line if all(active[0] for active in stack) else '')
+    return '\n'.join(kept)
 
 
 def matching_brace(source, start):
@@ -36,7 +61,7 @@ def lanes_in(source):
 def catalog(ui_tests):
     found = {}
     for path in sorted(ui_tests.glob('*.swift')):
-        found.update(lanes_in(path.read_text(encoding='utf-8')))
+        found.update(lanes_in(ios_source(path.read_text(encoding='utf-8'))))
     return found
 
 

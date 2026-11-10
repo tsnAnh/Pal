@@ -95,10 +95,10 @@ pick_sim() {
   if [ -n "$owned" ]; then printf '%s\n' "$owned"; return; fi
   xcrun simctl list devices available -j | "$JQ" -r '
     [ .devices | to_entries[] | select(.key | test("iOS")) | .key as $rt
-      | .value[] | select(.name | test("^iPhone ")) | select(.name | test("Duo|Air|e$") | not)
+      | .value[] | select(.name | test("iPhone")) | select(.name | test("Duo|Air|e$") | not)
       | select(.state == "Shutdown") | {udid, name, rt: $rt} ]
     | sort_by(.rt) | reverse
-    | (map(select(.name == "iPhone 17")) + .)[0].udid // empty'
+    | (map(select(.name | test("iPhone 17$"))) + .)[0].udid // empty'
 }
 
 disk_report() {
