@@ -12,6 +12,7 @@ from typing import Any, Optional
 
 RESTORE_KEY = "manual_run_restore_at"  # trigger_job's overwritten next_run_at
 _CLAIM_KEY = "extra_slot"
+_RUN_NOW_KEY = "run_now"
 
 
 def queued(job: dict[str, Any]) -> bool:
@@ -51,6 +52,18 @@ def stamp_claim(job: dict[str, Any], slot: str) -> None:
     job["fire_claim"][_CLAIM_KEY] = slot
     job["next_run_at"] = slot
     job.pop(RESTORE_KEY, None)
+
+
+def stamp_run_now(job: dict[str, Any]) -> None:
+    """Mark the fresh ``fire_claim`` as a person's run-now (CLI, dashboard, ``cronjob`` tool), so
+    the pre-agent script gate lets the turn run: an event trigger (webhook cron route) never gets
+    this stamp and stays gated, because its bursts are what the gate dedupes."""
+    job["fire_claim"][_RUN_NOW_KEY] = True
+
+
+def is_run_now(job: dict[str, Any]) -> bool:
+    claim = job.get("fire_claim")
+    return isinstance(claim, dict) and bool(claim.get(_RUN_NOW_KEY))
 
 
 def is_extra(job: dict[str, Any]) -> bool:

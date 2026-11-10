@@ -237,12 +237,13 @@ _ALREADY_RUNNING_ERROR = (
     "manual run is executing it); not started again.")
 
 
-def _claim_for_manual_run(job_id: str, log_label: str):
+def _claim_for_manual_run(job_id: str, log_label: str, *, event: bool = False):
     """At-most-once claim shared by the sync and background run paths: ``(claimed_job, None)`` or
     ``(None, error_dict)`` in the ``_execute_job_now`` shape. A lost claim is labelled precisely —
     claim_job_for_fire also returns False for paused/disabled/missing jobs, not just in-flight ones."""
     try:
-        claimed_job = claim_job_for_fire(job_id, manual=True, return_job=True)
+        claimed_job = claim_job_for_fire(
+            job_id, manual=True, return_job=True, **({"event": True} if event else {}))
         if isinstance(claimed_job, dict):
             return claimed_job, None
         refreshed = get_job(job_id)
@@ -260,11 +261,13 @@ def _claim_for_manual_run(job_id: str, log_label: str):
         return None, {"claimed": True, "success": False, "error": str(e)}
 
 
-def _execute_job_now(job: dict[str, Any], extra_prompt: Optional[str] = None) -> dict[str, Any]:
+def _execute_job_now(
+    job: dict[str, Any], extra_prompt: Optional[str] = None, *, event: bool = False,
+) -> dict[str, Any]:
     """Run a job now, outside the scheduler tick: claim via ``claim_job_for_fire`` (the ticker's
     CAS, so a concurrent tick cannot double-fire and next_run_at advances), then fire through
     the shared ``run_one_job`` body. Returns {"claimed", "success", "error"}."""
-    claimed_job, err = _claim_for_manual_run(job["id"], "immediate run")
+    claimed_job, err = _claim_for_manual_run(job["id"], "immediate run", event=event)
     return err if err is not None else _run_claimed_job(claimed_job, extra_prompt=extra_prompt)
 
 
@@ -445,7 +448,7 @@ def execute_job_for_event(
             "success": False,
             "error": f"Cron job '{job_ref}' not found.",
         }
-    return _execute_job_now(job, extra_prompt=extra_prompt)
+    return _execute_job_now(job, extra_prompt=extra_prompt, event=True)
 
 
 RUN_REFUSED_NOT_FOUND = "not_found"

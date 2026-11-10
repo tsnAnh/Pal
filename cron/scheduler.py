@@ -523,7 +523,7 @@ from cron.jobs import (
     _ensure_cron_dir, advance_next_runs, claim_dispatch, claim_job_for_fire, fire_claim_fence,
     clear_run_claim, get_due_jobs, heartbeat_fire_claim, heartbeat_run_claim, mark_job_run,
     save_job_output, self_removal_delivery_allowed, self_removal_delivery_scope, use_cron_store)
-from cron import store_health
+from cron import extra_fire, store_health
 from cron.execution_identity import enter_cron_execution, exit_cron_execution
 from cron.executions import (
     FIRER_FINISHED_STATES, _TERMINAL_STATES, HANDOFF_ADOPTION_GRACE_SECONDS, create_execution, finish_execution,
@@ -2279,15 +2279,18 @@ def _prepare_job_prompt(
         )
         _ran_ok, _script_output = prerun_script
         if _ran_ok and not _parse_wake_gate(_script_output):
-            logger.info("Job '%s' (ID: %s): wakeAgent=false, skipping agent run", job_name, job_id)
-            note_cron_skipped(job)
-            silent_doc = (
-                f"# Cron Job: {job_name}\n\n"
-                f"**Job ID:** {job_id}\n"
-                f"**Run Time:** {_hermes_now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-                "Script gate returned `wakeAgent=false` — agent skipped.\n"
-            )
-            return (True, silent_doc, SILENT_MARKER, None), None
+            if extra_fire.is_run_now(job):
+                logger.info("Job '%s' (ID: %s): wakeAgent=false ignored for an explicit run-now", job_name, job_id)
+            else:
+                logger.info("Job '%s' (ID: %s): wakeAgent=false, skipping agent run", job_name, job_id)
+                note_cron_skipped(job)
+                silent_doc = (
+                    f"# Cron Job: {job_name}\n\n"
+                    f"**Job ID:** {job_id}\n"
+                    f"**Run Time:** {_hermes_now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                    "Script gate returned `wakeAgent=false` — agent skipped.\n"
+                )
+                return (True, silent_doc, SILENT_MARKER, None), None
 
     try:
         prompt = _build_job_prompt(
