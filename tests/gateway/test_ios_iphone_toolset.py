@@ -36,5 +36,5 @@ def test_other_surfaces_drop_the_iphone_tool_whatever_their_toolsets_resolve_to(
 
 def test_the_iphone_tool_belongs_to_a_toolset_and_to_no_default_bundle():
     from toolsets import TOOLSETS, resolve_toolset
-    assert resolve_toolset('iphone') == ['iphone']
-    assert all('iphone' not in resolve_toolset(name) for name in TOOLSETS if name.startswith('hermes-'))
+    assert sorted(resolve_toolset('iphone')) == ['device', 'devices_list', 'iphone']
+    assert all(not {'iphone', 'device', 'devices_list'} & set(resolve_toolset(name)) for name in TOOLSETS if name.startswith('hermes-'))

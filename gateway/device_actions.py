@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 
@@ -14,11 +15,21 @@ from tui_gateway.contracts.canonical_device import DeviceConnectorId as Connecto
 _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f  ‪-‮⁦-⁩]")
 
 
+APPLE_KINDS = frozenset({"ios", "mac"})
+MAC_ONLY = frozenset({"mac"})
+MAX_PATH_CHARS = 1000
+SHELL_DEFAULT_TIMEOUT_SECONDS = 30
+SHELL_MAX_TIMEOUT_SECONDS = 300
+TEXT_MARKER = "\n…[truncated, {omitted} characters omitted]"
+
+
 @dataclass(frozen=True, slots=True)
 class ConnectorInfo:
     connector: Connector
     title: str
     subtitle: str
+    kinds: frozenset[str] = APPLE_KINDS
+    on_by_default: bool = True
 
 
 CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
@@ -28,12 +39,25 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.CONTACTS, "Contacts", "Look up people you know"),
     ConnectorInfo(Connector.LOCATION, "Location", "Find places near you"),
     ConnectorInfo(Connector.ALARMS, "Alarms", "Set alarms and timers"),
+    ConnectorInfo(Connector.SHELL, "Run commands", "Let bots run commands on this Mac", MAC_ONLY, False),
+    ConnectorInfo(Connector.FILES, "Files", "Let bots read and change files on this Mac", MAC_ONLY, False),
 )
+
+
+def connector_info(connector: Connector) -> ConnectorInfo:
+    return next(info for info in CONNECTOR_CATALOG if info.connector is connector)
 
 
 def clean_text(value: str, limit: int) -> str:
     text = _CONTROL.sub("", strip_unicode_tags(value)).replace("\r\n", "\n").replace("\r", "\n")
     return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def cap_text(value: str, limit: int) -> tuple[str, bool]:
+    text = _CONTROL.sub("", strip_unicode_tags(value)).replace("\r\n", "\n").replace("\r", "\n")
+    if len(text) <= limit:
+        return text, False
+    return text[:limit] + TEXT_MARKER.format(omitted=len(text) - limit), True
 
 
 def _clipped(limit: int):
@@ -49,7 +73,16 @@ def _iso(value: str) -> str:
     return value
 
 
+def _absolute_path(value: str) -> str:
+    if "\x00" in value:
+        raise ValueError("path must not contain a NUL character")
+    if not (value.startswith("/") or value == "~" or value.startswith("~/")):
+        raise ValueError("path must be absolute or start with ~/")
+    return value
+
+
 Short = Annotated[str, _clipped(200)]
+FilePath = Annotated[str, Field(min_length=1, max_length=MAX_PATH_CHARS), AfterValidator(_absolute_path)]
 Long = Annotated[str, _clipped(1000)]
 Identifier = Annotated[str, Field(min_length=1, max_length=200)]
 IsoDateTime = Annotated[str, Field(min_length=10, max_length=40), AfterValidator(_iso)]
@@ -155,6 +188,34 @@ class HomeSetArgs(_Args):
         if self.characteristic == "target_temperature" and (boolean or not 5 <= self.value <= 40):
             raise ValueError("target_temperature takes degrees Celsius from 5 to 40")
         return self
+
+
+class ShellRunArgs(_Args):
+    command: str = Field(min_length=1, max_length=8000)
+    cwd: FilePath | None = None
+    timeout_seconds: int = Field(default=SHELL_DEFAULT_TIMEOUT_SECONDS, ge=1, le=SHELL_MAX_TIMEOUT_SECONDS)
+
+    @model_validator(mode="after")
+    def _has_command(self):
+        if not self.command.strip() or "\x00" in self.command:
+            raise ValueError("command must be a non-empty string without NUL characters")
+        return self
+
+
+class FilesReadArgs(_Args):
+    path: FilePath
+
+
+class FilesListArgs(_Args):
+    path: FilePath
+    limit: int = Field(default=200, ge=1, le=500)
+
+
+class FilesWriteArgs(_Args):
+    path: FilePath
+    content: str = Field(max_length=200_000)
+    append: bool = False
+    create_dirs: bool = False
 
 
 class CalendarEvent(_Data):
@@ -273,6 +334,68 @@ class AccessoryResult(_Data):
     accessory: Accessory
 
 
+class _Capped(_Data):
+    text_limits: ClassVar[dict[str, int]] = {}
+    truncated: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _cap(cls, raw):
+        if not isinstance(raw, dict):
+            return raw
+        data, cut = dict(raw), raw.get("truncated") is True
+        for name, limit in cls.text_limits.items():
+            if isinstance(data.get(name), str):
+                data[name], clipped = cap_text(data[name], limit)
+                cut = cut or clipped
+        data["truncated"] = cut
+        return data
+
+
+class ShellRunResult(_Capped):
+    text_limits: ClassVar[dict[str, int]] = {"stdout": 48_000, "stderr": 48_000}
+    exit_code: int | None = None
+    stdout: str = ""
+    stderr: str = ""
+    timed_out: bool = False
+
+
+class FilesReadResult(_Capped):
+    text_limits: ClassVar[dict[str, int]] = {"content": 96_000}
+    path: Long
+    content: str
+    size_bytes: int = Field(ge=0)
+
+
+class FileEntry(_Data):
+    name: Short
+    kind: Literal["file", "directory", "symlink", "other"] = "other"
+    size_bytes: int | None = Field(default=None, ge=0)
+    modified_at: IsoDateTime | None = None
+
+
+class FilesListResult(_Capped):
+    path: Long
+    entries: Annotated[list[FileEntry], _first(500)]
+
+
+class FilesWriteResult(_Data):
+    path: Long
+    bytes_written: int = Field(ge=0)
+
+
+def fit_result(data: dict, limit: int) -> dict:
+    fitted = dict(data)
+    while len(json.dumps(fitted, ensure_ascii=False)) > limit:
+        names = [name for name, value in fitted.items() if isinstance(value, str) and len(value) > 64]
+        if not names:
+            break
+        name = max(names, key=lambda key: len(fitted[key]))
+        fitted[name] = cap_text(fitted[name], len(fitted[name]) * 3 // 4)[0]
+        fitted["truncated"] = True
+    return fitted
+
+
 def _quoted(text: str) -> str:
     return f'"{clean_text(text, 80)}"'
 
@@ -286,11 +409,16 @@ class ActionSpec:
     args: type[_Args]
     result: type[_Data]
     describe: Callable[[Any], str]
+    kinds: frozenset[str] = APPLE_KINDS
+
+    @property
+    def truncates(self) -> bool:
+        return issubclass(self.result, _Capped)
 
 
 def _spec(name: str, connector: Connector, write: bool, purpose: str, args: type[_Args], result: type[_Data],
-          describe: Callable[[Any], str]) -> tuple[str, ActionSpec]:
-    return name, ActionSpec(name, connector, write, purpose, args, result, describe)
+          describe: Callable[[Any], str], kinds: frozenset[str] = APPLE_KINDS) -> tuple[str, ActionSpec]:
+    return name, ActionSpec(name, connector, write, purpose, args, result, describe, kinds)
 
 
 ACTIONS: dict[str, ActionSpec] = dict([
@@ -326,13 +454,24 @@ ACTIONS: dict[str, ActionSpec] = dict([
     _spec("home.set", Connector.HOME, True, "change one accessory characteristic",
           HomeSetArgs, AccessoryResult,
           lambda a: f"Set {a.characteristic} of home accessory {_quoted(a.accessory_id)} to {a.value}"),
+    _spec("shell.run", Connector.SHELL, True,
+          "run a shell command in the user's login shell and return exit code, stdout and stderr",
+          ShellRunArgs, ShellRunResult, lambda a: f"Run the command {_quoted(a.command)}", MAC_ONLY),
+    _spec("files.read", Connector.FILES, False, "read a text file by absolute or ~/ path",
+          FilesReadArgs, FilesReadResult, lambda a: f"Read the file {_quoted(a.path)}", MAC_ONLY),
+    _spec("files.list", Connector.FILES, False, "list the entries of a directory",
+          FilesListArgs, FilesListResult, lambda a: f"List the folder {_quoted(a.path)}", MAC_ONLY),
+    _spec("files.write", Connector.FILES, True, "write or append text to a file",
+          FilesWriteArgs, FilesWriteResult, lambda a: f"Write the file {_quoted(a.path)}", MAC_ONLY),
 ])
 
 
-def action_catalog_text() -> str:
+def action_catalog_text(kinds: frozenset[str] | None = None) -> str:
     lines = []
     for spec in ACTIONS.values():
+        if kinds is not None and not (spec.kinds & kinds):
+            continue
         fields = ", ".join(
             f"{name}{'' if field.is_required() else '?'}" for name, field in spec.args.model_fields.items())
-        lines.append(f"{spec.name}({fields}): {spec.purpose}" + (" [changes the phone]" if spec.write else ""))
+        lines.append(f"{spec.name}({fields}): {spec.purpose}" + (" [changes the device]" if spec.write else ""))
     return "\n".join(lines)

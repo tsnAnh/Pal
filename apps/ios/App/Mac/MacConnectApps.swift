@@ -324,7 +324,52 @@ struct MacConnectApps: View {
         ) { icon(for: app) }
     }
 
+    @ViewBuilder
     private func deviceRow(_ row: DeviceRow) -> some View {
+        if let warning = row.warning { switchRow(row, warning: warning) } else { buttonRow(row) }
+    }
+
+    private func switchRow(_ row: DeviceRow, warning: String) -> some View {
+        let isOn = Binding(get: { row.action == .connected }, set: { value in Task { await model.setEnabled(row, value) } })
+        let identifier = "deviceConnector-\(row.id.rawValue)"
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                DeviceTile(connector: row.id).scaleEffect(0.95).frame(width: 38, height: 38)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(row.title)
+                        .font(.system(size: 12))
+                        .foregroundStyle(PalTokens.textPrimary)
+                        .lineLimit(1)
+                    Text(row.subtitle)
+                        .font(.system(size: 11))
+                        .foregroundStyle(PalTokens.textSecondary)
+                        .lineLimit(2)
+                }
+                Spacer(minLength: 8)
+                if model.busy.contains("device:\(row.id.rawValue)") {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Toggle(isOn: isOn) { Text(row.title) }
+                        .labelsHidden()
+                        .toggleStyle(.macSwitch)
+                        .accessibilityIdentifier("\(identifier)-action")
+                }
+            }
+            .frame(height: 60.5)
+            if row.action == .connected {
+                Text(warning)
+                    .font(.system(size: 11))
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.bottom, 10)
+                    .accessibilityIdentifier("\(identifier)-warning")
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func buttonRow(_ row: DeviceRow) -> some View {
         let action: MacRowAction = switch row.action {
         case .allow: MacRowAction(title: String(localized: "Allow"), prominent: true) { Task { await model.allow(row) } }
         case .allowInSettings: MacRowAction(title: String(localized: "Allow in Settings"), prominent: true) { model.openSettings() }

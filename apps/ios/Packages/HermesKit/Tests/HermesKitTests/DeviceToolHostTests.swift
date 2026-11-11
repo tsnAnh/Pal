@@ -186,6 +186,7 @@ struct DeviceToolWireTests {
             "reminders.add": "reminders", "reminders.complete": "reminders", "contacts.search": "contacts",
             "location.current": "location", "location.search_nearby": "location", "alarms.set": "alarms",
             "alarms.list": "alarms", "timers.start": "alarms", "home.list_accessories": "home", "home.set": "home",
+            "shell.run": "shell", "files.read": "files", "files.list": "files", "files.write": "files",
         ]
         #expect(Set(DeviceToolAction.allCases.map(\.rawValue)) == Set(expected.keys))
         for action in DeviceToolAction.allCases { #expect(action.connector.rawValue == expected[action.rawValue]) }

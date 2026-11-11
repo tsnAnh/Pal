@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -79,17 +80,18 @@ def authorities(tmp_path):
 
 
 def device_id_for(label: str) -> str:
-    return f'device-{label}'.ljust(12, '0')
+    return re.sub(r'[^A-Za-z0-9-]', '-', f'device-{label}').ljust(12, '0')
 
 
 async def connect_phone(authority, label: str = 'iPhone', *, responder=None, device_tools: bool = True,
-                        attention: str = 'foreground', kind: str = 'ios') -> FakePhone:
+                        attention: str = 'foreground', kind: str = 'ios', model: str = '') -> FakePhone:
     from gateway.session_controls import AuthorityConnection
     phone = FakePhone(asyncio.get_running_loop(), responder)
     phone.connection = AuthorityConnection(authority, phone, {'user_id': 'owner'})
-    reply = await phone.call('client.hello', {**HELLO, 'kind': kind, 'label': label, 'device_id': device_id_for(label),
-                                              'device_tools': device_tools, 'attention': attention})
-    assert reply['result']['recorded'] is True, reply
+    reply = await phone.call('client.hello', {**HELLO, 'kind': kind, 'label': label, 'model': model,
+                                              'device_id': device_id_for(label), 'device_tools': device_tools,
+                                              'attention': attention})
+    assert 'result' in reply and reply['result']['recorded'] is True, reply
     return phone
 
 
@@ -116,6 +118,34 @@ async def call_iphone(authority, action: str, args: dict | None = None, *, sessi
             reset_hermes_home_override(token)
 
     return json.loads(await asyncio.to_thread(run))
+
+
+async def call_tool(authority, name: str, payload: dict, *, session_id: str = 'chat-1') -> dict:
+    from model_tools import handle_function_call
+    home = home_of(authority)
+
+    def run() -> str:
+        token = set_hermes_home_override(home)
+        try:
+            return handle_function_call(name, payload, task_id='t', session_id=session_id)
+        finally:
+            reset_hermes_home_override(token)
+
+    return json.loads(await asyncio.to_thread(run))
+
+
+async def call_device(authority, device: str | None, action: str, args: dict | None = None, *,
+                      session_id: str = 'chat-1') -> dict:
+    payload = {'action': action}
+    if device is not None:
+        payload['device'] = device
+    if args is not None:
+        payload['args'] = args
+    return await call_tool(authority, 'device', payload, session_id=session_id)
+
+
+async def call_devices_list(authority) -> dict:
+    return await call_tool(authority, 'devices_list', {})
 
 
 def contacts_answer(payload: dict) -> dict:

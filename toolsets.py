@@ -148,9 +148,10 @@ TOOLSETS = {
         platforms=frozenset({"desktop"}),
     ),
     "iphone": _ts(
-        "The user's own iPhone through the Hermes iOS app: calendar, reminders, contacts, location, alarms and "
-        "timers, Home accessories (iOS app sessions only; available once an iPhone connector is on)",
-        ["iphone"],
+        "The user's own iPhone and logged-in devices through the Hermes apps: calendar, reminders, contacts, "
+        "location, alarms and timers, Home accessories, and shell and files on a named Mac (iOS app sessions "
+        "only; available once a device connector is on)",
+        ["iphone", "devices_list", "device"],
         platforms=frozenset({"ios"}),
     ),
     "clarify": _ts("Ask the user clarifying questions (multiple-choice or open-ended)", ["clarify"]),

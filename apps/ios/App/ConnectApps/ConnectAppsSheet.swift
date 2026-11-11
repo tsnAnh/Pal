@@ -269,6 +269,8 @@ struct DeviceTile: View {
         case .contacts: "person.crop.circle.fill"
         case .location: "location.fill"
         case .alarms: "alarm.fill"
+        case .shell: "terminal.fill"
+        case .files: "folder.fill"
         }
     }
 
@@ -280,6 +282,8 @@ struct DeviceTile: View {
         case .contacts: RGB(hex: 0x8e8e93)
         case .location: RGB(hex: 0x1c65cb)
         case .alarms: RGB(hex: 0x2c2c2e)
+        case .shell: RGB(hex: 0x3a3a3c)
+        case .files: RGB(hex: 0x1c8ef0)
         }
     }
 }

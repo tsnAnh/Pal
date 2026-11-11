@@ -21,6 +21,7 @@ public struct SystemPermissions: DevicePermissions {
         case .location: Self.map(await LocationService.shared.authorizationStatus)
         case .alarms: Self.alarmsStatus()
         case .home: await Self.homeStatus()
+        case .shell, .files: Self.localAccessStatus
         }
     }
 
@@ -38,8 +39,18 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestAlarms()
         case .home:
             await Self.requestHome()
+        case .shell, .files:
+            break
         }
         return await status(of: connector)
+    }
+
+    private static var localAccessStatus: DeviceOSPermission {
+        #if os(macOS)
+        .granted
+        #else
+        .unsupported
+        #endif
     }
 
     static func map(_ status: EKAuthorizationStatus) -> DeviceOSPermission {
@@ -115,9 +126,16 @@ extension DeviceProviders {
         #else
         let home: (any HomeProviding)? = nil
         #endif
+        #if os(macOS)
+        let shell: (any ShellProviding)? = SystemShell()
+        let files: (any FilesProviding)? = SystemFiles()
+        #else
+        let shell: (any ShellProviding)? = nil
+        let files: (any FilesProviding)? = nil
+        #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files
         )
     }
 }

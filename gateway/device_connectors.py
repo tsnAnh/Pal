@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from gateway.device_actions import CONNECTOR_CATALOG, Connector
+from gateway.device_actions import APPLE_KINDS, CONNECTOR_CATALOG, Connector
 from tui_gateway.contracts.canonical_device import DeviceConnectorState as ConnectorState
 from tui_gateway.contracts.canonical_device import DeviceOsPermission as OsPermission
 from utils import atomic_json_write
@@ -69,21 +69,28 @@ def _entry(device: dict, connector: Connector) -> dict:
     return entry if isinstance(entry, dict) else {}
 
 
+def kind_of(device: dict) -> str:
+    kind = device.get("kind")
+    return kind if isinstance(kind, str) and kind else "ios"
+
+
 def _status(device: dict) -> list[ConnectorStatus]:
+    kind = kind_of(device)
     return [ConnectorStatus(
         info.connector, info.title, info.subtitle,
-        _enum_or(ConnectorState, _entry(device, info.connector).get("state"), ConnectorState.ASK),
+        _enum_or(ConnectorState, _entry(device, info.connector).get("state"),
+                 ConnectorState.ASK if info.on_by_default else ConnectorState.OFF),
         _enum_or(OsPermission, _entry(device, info.connector).get("os_permission"), OsPermission.NOT_DETERMINED))
-        for info in CONNECTOR_CATALOG]
+        for info in CONNECTOR_CATALOG if kind in info.kinds]
 
 
-def register_device(home: Path, device_id: str, label: str, *, now: float | None = None) -> None:
+def register_device(home: Path, device_id: str, label: str, *, kind: str = "ios", now: float | None = None) -> None:
     stamp = time.time() if now is None else now
     with _lock:
         devices = _load(home)
         known = devices.get(device_id)
         record = known if isinstance(known, dict) else {"connectors": {}, "registered_at": stamp}
-        record.update(label=label, last_seen_at=stamp)
+        record.update(label=label, kind=kind, last_seen_at=stamp)
         devices[device_id] = record
         for stale in sorted(devices, key=lambda key: devices[key].get("last_seen_at", 0))[: max(0, len(devices) - MAX_DEVICES)]:
             devices.pop(stale)
@@ -127,9 +134,16 @@ def open_devices(home: Path, connector: Connector) -> dict[str, ConnectorState]:
             devices = _load(home)
         except StoreUnreadable:
             return {}
-    states = {device_id: next(s.state for s in _status(device) if s.connector is connector)
+    states = {device_id: {status.connector: status.state for status in _status(device)}.get(connector)
               for device_id, device in devices.items() if isinstance(device, dict)}
-    return {device_id: state for device_id, state in states.items() if state is not ConnectorState.OFF}
+    return {device_id: state for device_id, state in states.items()
+            if state is not None and state is not ConnectorState.OFF}
+
+
+def device_kinds(home: Path) -> dict[str, str]:
+    with _lock:
+        devices = _load(home)
+    return {device_id: kind_of(device) for device_id, device in devices.items() if isinstance(device, dict)}
 
 
 def any_enabled(home: Path) -> bool:
@@ -140,3 +154,4 @@ def any_enabled(home: Path) -> bool:
             return False
     return any(status.state is not ConnectorState.OFF
                for device in devices.values() if isinstance(device, dict) for status in _status(device))
+

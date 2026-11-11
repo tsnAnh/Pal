@@ -6204,7 +6204,7 @@ export interface DeviceConnectorStatus {
   state: DeviceConnectorState
   os_permission: DeviceOsPermission
 }
-export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms'
+export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files'
 export type DeviceConnectorState = 'allowed' | 'ask' | 'off'
 export type DeviceOsPermission = 'granted' | 'denied' | 'not_determined' | 'unsupported'
 export interface DeviceConnectorsSetParams {
@@ -7042,7 +7042,7 @@ export interface DeviceToolRequestPayload {
   session_id?: string | null
   deadline_seconds: number
 }
-export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set'
+export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set' | 'shell.run' | 'files.read' | 'files.list' | 'files.write'
 export interface DeviceToolCancelPayload {
   request_id: string
   reason: DeviceToolCancelReason
@@ -8005,7 +8005,7 @@ export interface CanonicalRpcMethods {
   'cron.submit': { params: CronRunParams; result: CronSubmitResult }
   /** Answer a device.tool.request from the connection that received it: ok true carries result (an object shaped for the action), ok false carries error. recorded is false for an unknown, expired, already answered or foreign request. */
   'device.tool.respond': { params: DeviceToolRespondParams; result: DeviceToolRespondResult }
-  /** The iPhone connectors of one declared device (default: the calling connection's own, set by client.hello). state is the user's choice and defaults to ask; os_permission is what the phone last reported. */
+  /** The device connectors of one declared device (default: the calling connection's own, set by client.hello). state is the user's choice and defaults to ask; os_permission is what the phone last reported. */
   'device_connectors.list': { params: DeviceConnectorsListParams; result: DeviceConnectorsResult }
   /** Persist one connector's state and/or the OS permission the phone observed. At least one of state or os_permission is required; os_permission may only be reported for the calling connection's own device. */
   'device_connectors.set': { params: DeviceConnectorsSetParams; result: DeviceConnectorsResult }
