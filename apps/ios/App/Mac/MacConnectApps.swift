@@ -46,6 +46,10 @@ struct MacConnectApps: View {
         } message: { target in
             Text(disconnectMessage(target))
         }
+        .sheet(item: $model.accountsModel) { accounts in
+            ConnectorAccountsView(model: accounts, style: .mac)
+                .macSheetFrame()
+        }
         .sheet(item: $model.keyRequest) { request in
             CapabilityKeyEntrySheet(model: model, request: request)
                 .macSheetFrame()
@@ -395,7 +399,7 @@ struct MacConnectApps: View {
             switch app.state {
         case .disconnected: MacRowAction(title: String(localized: "Connect"), prominent: false) { Task { await model.connect(app) } }
         case .needsAuthorization: MacRowAction(title: String(localized: "Authorize"), prominent: true) { Task { await model.connect(app) } }
-        case .connected: MacRowAction(title: String(localized: "Connected"), checked: true) { model.disconnectTarget = .app(app) }
+        case .connected: MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manageAccounts(app) }
             }
         }
         return tileRow(

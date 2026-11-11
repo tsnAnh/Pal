@@ -205,6 +205,21 @@ struct ChatImageViewer: View {
         .accessibilityIdentifier("imageViewer")
     }
 
+    @ToolbarContentBuilder
+    private func imageActions(for image: CGImage) -> some ToolbarContent {
+        let shareable = Image(platformImage: PlatformImage(cgImage: image))
+        ToolbarItemGroup(placement: .primaryAction) {
+            ShareLink(item: shareable, preview: SharePreview(reference.name, image: shareable))
+                .accessibilityIdentifier("imageViewerShare")
+            Button { ImageActions.copy(image) } label: { Label("Copy", systemImage: "doc.on.doc") }
+                .accessibilityIdentifier("imageViewerCopy")
+            #if os(macOS)
+            Button { ImageActions.save(image, suggestedName: reference.name) } label: { Label("Save", systemImage: "square.and.arrow.down") }
+                .accessibilityIdentifier("imageViewerSave")
+            #endif
+        }
+    }
+
     @ViewBuilder
     private func content(_ phase: ChatImagePhase, retry: @escaping () -> Void) -> some View {
         switch phase {
@@ -217,6 +232,7 @@ struct ChatImageViewer: View {
                 .padding()
                 .accessibilityLabel(Text("Image \(reference.name)"))
                 .accessibilityIdentifier("imageViewerImage")
+                .toolbar { imageActions(for: image) }
         case .failed(let message):
             Button(action: retry) {
                 VStack(spacing: 8) {

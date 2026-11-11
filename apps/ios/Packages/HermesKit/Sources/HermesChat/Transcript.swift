@@ -21,6 +21,14 @@ public struct ToolCall: Sendable, Hashable {
     public var name: String
     public var status: Status
     public var summary: String?
+    public var prompt: String?
+    public var aspectRatio: String?
+    public var result: JSONValue?
+
+    public var imageGeneration: ImageGeneration? {
+        guard name == ImageGeneration.toolName else { return nil }
+        return ImageGeneration.resolve(status: status, prompt: prompt, aspectRatio: aspectRatio, result: result)
+    }
 }
 
 public struct PromptCard: Sendable, Hashable {
@@ -288,7 +296,7 @@ public struct Transcript: Sendable, Equatable {
             }
             return [TranscriptItem(
                 id: "tool:\(toolID)",
-                content: .tool(ToolCall(toolID: toolID, name: message.name ?? "tool", status: .finished, summary: nil)),
+                content: .tool(ToolCall(toolID: toolID, name: message.name ?? "tool", status: .finished, summary: nil, result: .string(message.plainText))),
                 timestamp: serverDate(message.timestamp),
                 uid: message.messageUID
             )]
@@ -333,12 +341,27 @@ public struct Transcript: Sendable, Equatable {
             sealStreaming()
             segmentLengths = [:]
             currentSegment = nil
-            upsertTool(ToolCall(toolID: start.toolID, name: start.name, status: .running, summary: start.preview))
+            upsertTool(ToolCall(
+                toolID: start.toolID,
+                name: start.name,
+                status: .running,
+                summary: start.preview,
+                prompt: start.args?["prompt"]?.stringValue,
+                aspectRatio: start.args?["aspect_ratio"]?.stringValue
+            ))
         case .toolComplete(let complete):
             if complete.name == "clarify", let result = ClarifyResult(json: complete.result ?? complete.resultText) {
                 recordAnswers(toolID: complete.toolID, records: result.records)
             } else {
-                upsertTool(ToolCall(toolID: complete.toolID, name: complete.name, status: .finished, summary: complete.summary))
+                upsertTool(ToolCall(
+                    toolID: complete.toolID,
+                    name: complete.name,
+                    status: .finished,
+                    summary: complete.summary,
+                    prompt: complete.args?["prompt"]?.stringValue,
+                    aspectRatio: complete.args?["aspect_ratio"]?.stringValue,
+                    result: complete.resultValue ?? complete.resultText.map(JSONValue.string)
+                ))
             }
         case .clarifyRequest(let prompt), .approvalRequest(let prompt):
             addCard(prompt)
@@ -564,7 +587,11 @@ public struct Transcript: Sendable, Equatable {
         let id = "tool:\(call.toolID)"
         if let index = items.firstIndex(where: { $0.id == id }) {
             var merged = call
-            if case .tool(let existing) = items[index].content, merged.summary == nil { merged.summary = existing.summary }
+            if case .tool(let existing) = items[index].content {
+                if merged.summary == nil { merged.summary = existing.summary }
+                if merged.prompt == nil { merged.prompt = existing.prompt }
+                if merged.aspectRatio == nil { merged.aspectRatio = existing.aspectRatio }
+            }
             items[index].content = .tool(merged)
         } else {
             items.append(TranscriptItem(id: id, content: .tool(call)))
