@@ -115,6 +115,7 @@ final class ConnectAppsModel {
     var keyRequest: CapabilityKeyRequest?
     private(set) var keyState: SecretEntryState = .idle
     var disconnectTarget: ConnectDisconnectTarget?
+    var showsSkills = false
     var accountsModel: ConnectorAccountsModel?
     private(set) var mode: Mode = .list
 
@@ -122,6 +123,7 @@ final class ConnectAppsModel {
     private let profile: String?
     private let service: ConnectAppsService
     private let capabilitiesService: CapabilitiesService
+    private let skillsService: SkillsCatalogService
     private let bots: [CustomConnectorBot]
     private let currentBot: String?
     private let pool: DeviceHostPool
@@ -145,6 +147,7 @@ final class ConnectAppsModel {
             rpc: ConnectionRPC(model: connection), profile: profile, browser: browser,
             systemBrowser: SystemBrowserAuthorization(), diagnostics: .osLog()
         )
+        skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
         capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
         rebuildDeviceRows()
     }
@@ -192,6 +195,8 @@ final class ConnectAppsModel {
             if case .ready = capabilitiesPhase {} else { capabilitiesPhase = .failed }
         }
     }
+
+    func makeSkillsModel() -> SkillsCatalogModel { SkillsCatalogModel(service: skillsService) }
 
     var canSetKeys: Bool { profile != nil }
 

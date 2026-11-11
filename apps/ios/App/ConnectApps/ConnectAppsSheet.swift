@@ -46,6 +46,10 @@ struct ConnectAppsSheet: View {
         } message: { target in
             Text(disconnectMessage(target))
         }
+        .sheet(isPresented: $model.showsSkills) {
+            SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
+                .macSheetFrame()
+        }
         .sheet(item: $model.accountsModel) { accounts in
             ConnectorAccountsView(model: accounts, style: .phone(theme))
                 .macSheetFrame()
@@ -179,6 +183,7 @@ struct ConnectAppsSheet: View {
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
             ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) }
         }
+        SkillsCatalogEntry { model.showsSkills = true }
         capabilitiesSection
     }
 
