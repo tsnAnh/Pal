@@ -79,9 +79,7 @@ struct ChatView: View {
             } action: { _, nearTop in
                 if nearTop, !pinnedToBottom { revealOlderRows() }
             }
-            .onScrollGeometryChange(for: ChatLayoutKey.self) { geometry in
-                ChatLayoutKey(geometry)
-            } action: { _, _ in
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, _ in
                 if pinnedToBottom { scrollPosition.scrollTo(edge: .bottom) }
             }
             .onScrollPhaseChange { oldPhase, newPhase, context in
@@ -407,19 +405,5 @@ private struct BotCapsule: View {
         .accessibilityLabel(Text(bot.displayName))
         .accessibilityValue(Text(activity.accessibilityValue))
         .accessibilityIdentifier("chatTitle")
-    }
-}
-
-private struct ChatLayoutKey: Equatable {
-    let contentHeight: CGFloat
-    let containerHeight: CGFloat
-    let topInset: CGFloat
-    let bottomInset: CGFloat
-
-    init(_ geometry: ScrollGeometry) {
-        contentHeight = geometry.contentSize.height
-        containerHeight = geometry.containerSize.height
-        topInset = geometry.contentInsets.top
-        bottomInset = geometry.contentInsets.bottom
     }
 }
