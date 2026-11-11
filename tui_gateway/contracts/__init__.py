@@ -18,6 +18,7 @@ from . import (
     liveness,
     library,
     machine,
+    model_providers,
     permissions,
     profile_templates,
     profiles_vault_complete_foreign_subagents,

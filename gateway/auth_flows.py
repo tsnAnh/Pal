@@ -371,6 +371,115 @@ class HostedConnectorFlow:
         self._started.set()
 
 
+class ProviderKeyFlow:
+    kind = "api_key"
+    user_code = None
+    verification_uri = None
+    expires_in = None
+    failure: Optional[str] = None
+
+    def __init__(self, provider: str) -> None:
+        self.provider = provider
+        self._stored = asyncio.Event()
+
+    async def store(self, value: str) -> bool:
+        from hermes_cli import model_provider_control as control
+        text = credential_text(value)
+        if text is None:
+            return False
+        await asyncio.to_thread(control.store_api_key, self.provider, text)
+        self._stored.set()
+        return True
+
+    async def begin(self) -> None:
+        return None
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def wait(self) -> bool:
+        await self._stored.wait()
+        return True
+
+    def cancel(self) -> None:
+        return None
+
+
+class ProviderDeviceFlow:
+    kind = "device_code"
+    POLL_SECONDS = 1.0
+    FAILURES = {"denied": "Sign-in was declined on the provider's page.",
+                "expired": "The sign-in code expired. Start again for a new one.",
+                "cancelled": "Sign-in was cancelled."}
+
+    def __init__(self, home: Path, provider: str) -> None:
+        self._home = home
+        self.provider = provider
+        self._session_id: Optional[str] = None
+        self.user_code: Optional[str] = None
+        self.verification_uri: Optional[str] = None
+        self.expires_in: Optional[int] = None
+        self.failure: Optional[str] = None
+
+    async def begin(self) -> None:
+        from hermes_cli.web_routers import oauth
+        from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+        scope = set_hermes_home_override(self._home)
+        try:
+            started = await oauth._start_device_code_flow(self.provider, None)
+        finally:
+            reset_hermes_home_override(scope)
+        self._session_id = started["session_id"]
+        self.user_code = started["user_code"]
+        self.verification_uri = started["verification_url"]
+        self.expires_in = int(started["expires_in"])
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    def _session(self) -> Optional[dict]:
+        from hermes_cli.web_routers import oauth
+        with oauth._oauth_sessions_lock:
+            return oauth._oauth_sessions.get(self._session_id)
+
+    async def wait(self) -> bool:
+        while True:
+            session = self._session()
+            status = "cancelled" if session is None or session.get("cancelled") else session["status"]
+            if status == "approved":
+                return True
+            if status != "pending":
+                self.failure = self.FAILURES.get(status) or self._error_copy(session)
+                return False
+            await asyncio.sleep(self.POLL_SECONDS)
+
+    @staticmethod
+    def _error_copy(session: Optional[dict]) -> str:
+        from agent.redact import redact_sensitive_text
+        detail = redact_sensitive_text(str((session or {}).get("error_message") or ""), force=True)[:200]
+        return detail or "The provider did not complete the sign-in."
+
+    def cancel(self) -> None:
+        from hermes_cli.web_routers import oauth
+        with oauth._oauth_sessions_lock:
+            session = oauth._oauth_sessions.pop(self._session_id, None)
+            if session is not None:
+                session["cancelled"] = True
+
+
+def provider_flow(home: Path, service: str) -> SigninFlow:
+    from hermes_cli import model_provider_control as control
+    provider = service.partition(":")[2]
+    pconfig = control.lookup(provider)
+    kind = control.kind_of(pconfig)[0] if pconfig is not None else "unsupported"
+    if kind == "api_key":
+        return ProviderKeyFlow(provider)
+    if kind == "device_code":
+        return ProviderDeviceFlow(home, provider)
+    return ManualFlow()
+
+
 register("github", GithubDeviceFlow)
 register("mcp", McpServerFlow)
 register("connector", HostedConnectorFlow)
+register("provider", provider_flow)

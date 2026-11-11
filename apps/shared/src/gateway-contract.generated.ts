@@ -2410,6 +2410,47 @@ export interface MachineInfo {
   wsl?: boolean | null
   container?: boolean | null
 }
+export interface ModelProvidersResult {
+  profile: string
+  providers: ModelProvider[]
+}
+/** One model provider's setup state for the bot profile. ``scope`` account means the login is shared by every profile on the host, so only the main profile may change it. ``base_url`` is the address override (plain, not a secret), ``default_base_url`` what applies without one. No credential value is ever carried. */
+export interface ModelProvider {
+  id: string
+  name: string
+  kind: ModelProviderKind
+  state: ModelProviderState
+  scope: ModelProviderScope
+  base_url_editable: boolean
+  base_url?: string | null
+  default_base_url?: string | null
+  reason?: string | null
+  can_remove: boolean
+}
+export type ModelProviderKind = 'api_key' | 'device_code' | 'unsupported'
+export type ModelProviderState = 'set' | 'not_set' | 'expired' | 'unsupported'
+export type ModelProviderScope = 'profile' | 'account'
+export interface ModelProviderRemoveParams {
+  profile?: string | null
+  provider: string
+}
+export interface ModelProviderRemoveResult {
+  outcome: ModelProviderRemoveOutcome
+  reason?: string | null
+  provider?: ModelProvider | null
+}
+export type ModelProviderRemoveOutcome = 'removed' | 'nothing_to_remove' | 'still_set' | 'refused' | 'unsupported' | 'failed'
+export interface ModelProviderBaseUrlParams {
+  profile?: string | null
+  provider: string
+  base_url?: string | null
+}
+export interface ModelProviderBaseUrlResult {
+  outcome: ModelProviderBaseUrlOutcome
+  reason?: string | null
+  provider?: ModelProvider | null
+}
+export type ModelProviderBaseUrlOutcome = 'saved' | 'reset' | 'invalid' | 'unsupported' | 'failed'
 /** ``auto_review`` is true only under the smart guardian; ``approval_mode`` is the profile's real setting so a client can say approvals are off, in which case rules are stored and not applied. */
 export interface PermissionsState {
   auto_review: boolean
@@ -6334,6 +6375,15 @@ export interface AuthSubmitCredentialResult {
   outcome: AuthCredentialOutcome
 }
 export type AuthCredentialOutcome = 'stored' | 'failed' | 'rejected'
+export interface AuthBeginParams {
+  service: string
+}
+export interface AuthBeginResult {
+  outcome: AuthBeginOutcome
+  request_id?: string | null
+  reason?: string | null
+}
+export type AuthBeginOutcome = 'started' | 'unsupported' | 'refused' | 'unavailable'
 export interface DeviceConnectorsListParams {
   device_id?: string | null
 }
@@ -7194,6 +7244,7 @@ export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual'
 export interface AuthResolvedPayload {
   request_id: string
   outcome: AuthOutcome
+  reason?: string | null
 }
 export type AuthOutcome = 'signed_in' | 'failed' | 'declined' | 'timed_out'
 export interface DeviceToolRequestPayload {
@@ -7508,6 +7559,12 @@ export interface RpcMethods {
   'model.disconnect': { params: ModelDisconnectParams; result: ModelDisconnectResult }
   /** Provider/model inventory for the picker, layered over the session's live provider when given. */
   'model.options': { params: ModelOptionsParams; result: ModelOptionsResult }
+  /** Every model provider with whether its credential is set, expired or missing for the profile. Setting or replacing a credential goes through auth.begin with service provider:<id>. */
+  'model.providers.list': { params: ProfileParams; result: ModelProvidersResult }
+  /** Remove a provider's stored credential for the profile, as `hermes auth remove` / `hermes logout` do. still_set: something outside Pal (the host's environment, a shared provider key) still supplies one. */
+  'model.providers.remove': { params: ModelProviderRemoveParams; result: ModelProviderRemoveResult }
+  /** Set the provider's address (an http(s) URL), or reset it to the default when base_url is null. */
+  'model.providers.set_base_url': { params: ModelProviderBaseUrlParams; result: ModelProviderBaseUrlResult }
   /** Save an API key for a provider and return its refreshed inventory row. */
   'model.save_key': { params: ModelSaveKeyParams; result: ModelSaveKeyResult }
   /** Write onboarding.run in the root profile's config.yaml; answers the new state. */
@@ -7969,6 +8026,9 @@ export const RPC_METHODS = [
   'messaging.slack.status',
   'model.disconnect',
   'model.options',
+  'model.providers.list',
+  'model.providers.remove',
+  'model.providers.set_base_url',
   'model.save_key',
   'onboarding.set_run',
   'onboarding.skip',
@@ -8136,6 +8196,8 @@ export interface CanonicalRpcMethods {
   /** Every model-provider credential the profile holds (credential pool plus standalone logins and keys), active provider first then subscriptions then API keys, each with its usage windows and recent spend. refresh=false answers from the usage cache with no network call; refresh=true fetches all accounts concurrently within a 10s bound. */
   'account.subscriptions': { params: AccountSubscriptionsParams; result: AccountSubscriptionsResult }
   'approval.respond': { params: CanonicalApprovalParams; result: PromptResponseResult }
+  /** The user chose to sign in to a model provider from Settings, before any call failed. The gateway opens the same auth.required request a failed call would (api_key or device_code) and returns its request_id; the answer then flows through auth.submit_credential / auth.signin / auth.decline and ends with auth.resolved. unsupported: the provider cannot be set up from an app (reason says why). refused: this connection may not change that credential. unavailable: no connected app can show the prompt. */
+  'auth.begin': { params: AuthBeginParams; result: AuthBeginResult }
   /** The user chose Not now on an auth.required request; the waiting bots are told the user declined sign-in. */
   'auth.decline': { params: AuthDeclineParams; result: AuthDeclineResult }
   /** Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record. */
@@ -8381,6 +8443,7 @@ export const CANONICAL_RPC_METHODS = [
   'a2a.forward',
   'account.subscriptions',
   'approval.respond',
+  'auth.begin',
   'auth.decline',
   'auth.revoke_self',
   'auth.signin',
@@ -8584,7 +8647,7 @@ export interface BackendGatewayEventMap {
   'approval.cancelled': ApprovalCancelledPayload
   /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential. */
   'auth.required': AuthRequiredPayload
-  /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. */
+  /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is the provider's failure in plain words when the flow has one; it never carries a credential. */
   'auth.resolved': AuthResolvedPayload
   /** A /background side agent finished. */
   'background.complete': SideAgentCompletePayload

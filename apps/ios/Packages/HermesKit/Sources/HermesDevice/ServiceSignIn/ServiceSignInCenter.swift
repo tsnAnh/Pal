@@ -48,6 +48,14 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     }
 }
 
+public struct ServiceSignInResolution: Sendable, Hashable {
+    public var sequence: Int
+    public var requestID: String
+    public var service: String?
+    public var outcome: ServiceSignInOutcome
+    public var reason: String?
+}
+
 @MainActor
 @Observable
 public final class ServiceSignInCenter {
@@ -56,6 +64,7 @@ public final class ServiceSignInCenter {
     public static let signedInDismissDelay = Duration.milliseconds(1500)
 
     public private(set) var dialogs: [ServiceSignInDialog] = []
+    public private(set) var lastResolution: ServiceSignInResolution?
 
     public var current: ServiceSignInDialog? { dialogs.first }
 
@@ -170,7 +179,12 @@ public final class ServiceSignInCenter {
     }
 
     private func apply(_ event: AuthResolvedEvent) {
-        guard let dialog = dialogs.first(where: { $0.requestID == event.requestID }) else { return }
+        let dialog = dialogs.first(where: { $0.requestID == event.requestID })
+        lastResolution = ServiceSignInResolution(
+            sequence: (lastResolution?.sequence ?? 0) + 1, requestID: event.requestID, service: dialog?.service,
+            outcome: event.outcome, reason: event.reason
+        )
+        guard let dialog else { return }
         switch event.outcome {
         case .signedIn:
             setPhase(.signedIn, for: dialog.service)
@@ -178,7 +192,7 @@ public final class ServiceSignInCenter {
         case .declined:
             remove(service: dialog.service)
         case .failed, .unknown:
-            setPhase(.failed(Self.didNotFinish), for: dialog.service)
+            setPhase(.failed(event.reason ?? Self.didNotFinish), for: dialog.service)
         case .timedOut:
             setPhase(dialog.takesKey ? .expired : .failed(Self.timedOut), for: dialog.service)
         }

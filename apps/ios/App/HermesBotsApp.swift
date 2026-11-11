@@ -67,6 +67,7 @@ struct HermesBotsApp: App {
                 .serviceSignInDialog(signIn) { roster.displayName(forProfile: $0) }
                 .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
                 .environment(appearance)
+                .environment(signIn)
                 #if os(macOS)
                 .environment(shell)
                 #endif

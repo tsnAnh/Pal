@@ -13,6 +13,7 @@ enum SettingsRoute: Hashable {
     case botComputer
     case devices
     case hermesService
+    case modelProviders
     case importMemory
     case botNotifications
     case appearance

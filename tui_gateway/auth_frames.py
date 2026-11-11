@@ -10,4 +10,4 @@ def required_frame(payload: AuthRequiredPayload) -> dict:
 
 def resolved_frame(payload: AuthResolvedPayload) -> dict:
     return {"jsonrpc": "2.0", "method": "event",
-            "params": {"type": "auth.resolved", "payload": payload.model_dump(mode="json")}}
+            "params": {"type": "auth.resolved", "payload": payload.model_dump(mode="json", exclude_none=True)}}

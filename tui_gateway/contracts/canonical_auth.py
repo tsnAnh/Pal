@@ -55,10 +55,12 @@ event("auth.required", AuthRequiredPayload,
 class AuthResolvedPayload(Payload):
     request_id: str
     outcome: AuthOutcome
+    reason: str | None = None
 
 
 event("auth.resolved", AuthResolvedPayload,
-      doc="The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out.")
+      doc="The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is "
+          "the provider's failure in plain words when the flow has one; it never carries a credential.")
 
 
 class AuthSigninParams(Params):
@@ -111,3 +113,29 @@ canonical_method("auth.submit_credential", params=AuthSubmitCredentialParams, re
                      "echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. "
                      "failed: not saved (invalid value or store error), the same request may be answered again. "
                      "rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored.")
+
+
+class AuthBeginOutcome(WireEnum):
+    STARTED = "started"
+    UNSUPPORTED = "unsupported"
+    REFUSED = "refused"
+    UNAVAILABLE = "unavailable"
+
+
+class AuthBeginParams(Params):
+    service: str = Field(pattern=r"^provider:[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+class AuthBeginResult(Result):
+    outcome: AuthBeginOutcome
+    request_id: str | None = None
+    reason: str | None = None
+
+
+canonical_method("auth.begin", params=AuthBeginParams, result=AuthBeginResult,
+                 doc="The user chose to sign in to a model provider from Settings, before any call failed. The "
+                     "gateway opens the same auth.required request a failed call would (api_key or device_code) "
+                     "and returns its request_id; the answer then flows through auth.submit_credential / "
+                     "auth.signin / auth.decline and ends with auth.resolved. unsupported: the provider cannot "
+                     "be set up from an app (reason says why). refused: this connection may not change that "
+                     "credential. unavailable: no connected app can show the prompt.")
