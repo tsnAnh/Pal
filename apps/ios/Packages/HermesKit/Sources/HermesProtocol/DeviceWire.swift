@@ -9,10 +9,11 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
     case alarms
     case shell
     case files
+    case browser
 
     public var needsOSPermission: Bool {
         switch self {
-        case .shell, .files: false
+        case .shell, .files, .browser: false
         case .calendar, .home, .reminders, .contacts, .location, .alarms: true
         }
     }
@@ -110,6 +111,12 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
     case filesRead = "files.read"
     case filesList = "files.list"
     case filesWrite = "files.write"
+    case browserOpen = "browser.open"
+    case browserRead = "browser.read"
+    case browserClick = "browser.click"
+    case browserType = "browser.type"
+    case browserWaitForText = "browser.wait_for_text"
+    case browserClose = "browser.close"
 
     public var connector: DeviceConnectorID {
         switch self {
@@ -121,6 +128,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
         case .homeListAccessories, .homeSet: .home
         case .shellRun: .shell
         case .filesRead, .filesList, .filesWrite: .files
+        case .browserOpen, .browserRead, .browserClick, .browserType, .browserWaitForText, .browserClose: .browser
         }
     }
 }
@@ -329,6 +337,26 @@ public struct ShellRunArgs: Decodable, Sendable {
     public var timeoutSeconds: Int?
 }
 
+public struct BrowserOpenArgs: Decodable, Sendable {
+    public var url: String
+}
+
+public struct BrowserClickArgs: Decodable, Sendable {
+    public var selector: String?
+    public var text: String?
+}
+
+public struct BrowserTypeArgs: Decodable, Sendable {
+    public var selector: String
+    public var text: String
+    public var submit: Bool?
+}
+
+public struct BrowserWaitForTextArgs: Decodable, Sendable {
+    public var text: String
+    public var timeoutSeconds: Int?
+}
+
 public struct FilesReadArgs: Decodable, Sendable {
     public var path: String
 }
@@ -513,6 +541,24 @@ public struct ShellRunWire: Encodable, Sendable, Equatable {
         try container.encode(stderr, forKey: .stderr)
         try container.encode(timedOut, forKey: .timedOut)
         try container.encode(truncated, forKey: .truncated)
+    }
+}
+
+public struct BrowserPageWire: Encodable, Sendable, Equatable {
+    public var url: String
+    public var title: String
+    public var text: String
+    public var loginRequired: Bool
+    public var truncated: Bool
+    public var matched: Bool?
+
+    public init(url: String, title: String, text: String, loginRequired: Bool, truncated: Bool, matched: Bool? = nil) {
+        self.url = url
+        self.title = title
+        self.text = text
+        self.loginRequired = loginRequired
+        self.truncated = truncated
+        self.matched = matched
     }
 }
 

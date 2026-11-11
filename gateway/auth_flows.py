@@ -82,6 +82,26 @@ class ManualFlow:
         self._cancelled.set()
 
 
+class SiteSigninFlow(ManualFlow):
+    def __init__(self, home: Path | None = None, service: str = "site") -> None:
+        super().__init__()
+        self._confirmed = asyncio.Event()
+
+    async def confirm(self) -> bool:
+        self._confirmed.set()
+        return True
+
+    async def wait(self) -> bool:
+        confirmed = asyncio.ensure_future(self._confirmed.wait())
+        cancelled = asyncio.ensure_future(self._cancelled.wait())
+        try:
+            await asyncio.wait({confirmed, cancelled}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            confirmed.cancel()
+            cancelled.cancel()
+        return self._confirmed.is_set() and not self._cancelled.is_set()
+
+
 class GithubDeviceFlow:
     kind = "device_code"
 
@@ -313,3 +333,4 @@ class HostedConnectorFlow:
 register("github", GithubDeviceFlow)
 register("mcp", McpServerFlow)
 register("connector", HostedConnectorFlow)
+register("site", SiteSigninFlow)

@@ -307,6 +307,7 @@ struct DeviceTile: View {
         case .alarms: "alarm.fill"
         case .shell: "terminal.fill"
         case .files: "folder.fill"
+        case .browser: "safari.fill"
         }
     }
 
@@ -320,6 +321,7 @@ struct DeviceTile: View {
         case .alarms: RGB(hex: 0x2c2c2e)
         case .shell: RGB(hex: 0x3a3a3c)
         case .files: RGB(hex: 0x1c8ef0)
+        case .browser: RGB(hex: 0x1d9bf0)
         }
     }
 }

@@ -41,6 +41,7 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.ALARMS, "Alarms", "Set alarms and timers"),
     ConnectorInfo(Connector.SHELL, "Run commands", "Let bots run commands on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.FILES, "Files", "Let bots read and change files on this Mac", MAC_ONLY, False),
+    ConnectorInfo(Connector.BROWSER, "Browser", "Let bots use your browser on this Mac", MAC_ONLY, False),
 )
 
 
@@ -218,6 +219,40 @@ class FilesWriteArgs(_Args):
     create_dirs: bool = False
 
 
+class BrowserOpenArgs(_Args):
+    url: str = Field(min_length=1, max_length=2000)
+
+
+class BrowserReadArgs(_Args):
+    pass
+
+
+class BrowserClickArgs(_Args):
+    selector: str | None = Field(default=None, min_length=1, max_length=300)
+    text: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def _one_target(self):
+        if (self.selector is None) == (self.text is None):
+            raise ValueError("pass exactly one of selector (CSS) or text (the visible label)")
+        return self
+
+
+class BrowserTypeArgs(_Args):
+    selector: str = Field(min_length=1, max_length=300)
+    text: str = Field(max_length=2000)
+    submit: bool = False
+
+
+class BrowserWaitForTextArgs(_Args):
+    text: str = Field(min_length=1, max_length=200)
+    timeout_seconds: int = Field(default=15, ge=1, le=60)
+
+
+class BrowserCloseArgs(_Args):
+    pass
+
+
 class CalendarEvent(_Data):
     id: Identifier
     title: Short
@@ -379,6 +414,19 @@ class FilesListResult(_Capped):
     entries: Annotated[list[FileEntry], _first(500)]
 
 
+class BrowserPageResult(_Capped):
+    text_limits: ClassVar[dict[str, int]] = {"text": 96_000}
+    url: Long
+    title: Short = ""
+    text: str = ""
+    login_required: bool = False
+    matched: bool | None = None
+
+
+class BrowserClosedResult(_Data):
+    closed: bool = True
+
+
 class FilesWriteResult(_Data):
     path: Long
     bytes_written: int = Field(ge=0)
@@ -410,6 +458,7 @@ class ActionSpec:
     result: type[_Data]
     describe: Callable[[Any], str]
     kinds: frozenset[str] = APPLE_KINDS
+    screen: Callable[[Any], str | None] | None = None
 
     @property
     def truncates(self) -> bool:
@@ -417,8 +466,14 @@ class ActionSpec:
 
 
 def _spec(name: str, connector: Connector, write: bool, purpose: str, args: type[_Args], result: type[_Data],
-          describe: Callable[[Any], str], kinds: frozenset[str] = APPLE_KINDS) -> tuple[str, ActionSpec]:
-    return name, ActionSpec(name, connector, write, purpose, args, result, describe, kinds)
+          describe: Callable[[Any], str], kinds: frozenset[str] = APPLE_KINDS,
+          screen: Callable[[Any], str | None] | None = None) -> tuple[str, ActionSpec]:
+    return name, ActionSpec(name, connector, write, purpose, args, result, describe, kinds, screen)
+
+
+def _browser_screen(args: Any) -> str | None:
+    from gateway.device_browser import screen_args
+    return screen_args(args)
 
 
 ACTIONS: dict[str, ActionSpec] = dict([
@@ -463,6 +518,27 @@ ACTIONS: dict[str, ActionSpec] = dict([
           FilesListArgs, FilesListResult, lambda a: f"List the folder {_quoted(a.path)}", MAC_ONLY),
     _spec("files.write", Connector.FILES, True, "write or append text to a file",
           FilesWriteArgs, FilesWriteResult, lambda a: f"Write the file {_quoted(a.path)}", MAC_ONLY),
+    _spec("browser.open", Connector.BROWSER, True,
+          "open an http(s) page in the user's own browser (their logins apply) in a tab you control, and return "
+          "its url, title and text",
+          BrowserOpenArgs, BrowserPageResult, lambda a: f"Open the page {_quoted(a.url)} in the browser",
+          MAC_ONLY, _browser_screen),
+    _spec("browser.read", Connector.BROWSER, False, "read the url, title and text of the tab browser.open made",
+          BrowserReadArgs, BrowserPageResult, lambda a: "Read the open browser page", MAC_ONLY),
+    _spec("browser.click", Connector.BROWSER, True,
+          "click an element of that tab, by CSS selector or by its visible label (text)",
+          BrowserClickArgs, BrowserPageResult, lambda a: "Click on the open browser page", MAC_ONLY,
+          _browser_screen),
+    _spec("browser.type", Connector.BROWSER, True,
+          "type text into a non-password field of that tab (a password field is refused: the user types it)",
+          BrowserTypeArgs, BrowserPageResult, lambda a: "Type into a field on the open browser page", MAC_ONLY,
+          _browser_screen),
+    _spec("browser.wait_for_text", Connector.BROWSER, False,
+          "wait until the tab shows the text, then return the page (matched says whether it appeared)",
+          BrowserWaitForTextArgs, BrowserPageResult, lambda a: f"Wait for {_quoted(a.text)} on the open browser page",
+          MAC_ONLY),
+    _spec("browser.close", Connector.BROWSER, False, "close the tab browser.open made",
+          BrowserCloseArgs, BrowserClosedResult, lambda a: "Close the browser tab", MAC_ONLY),
 ])
 
 
