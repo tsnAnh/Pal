@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from functools import partial
+from pathlib import Path
 
 from pydantic import ValidationError
 
 from gateway import auth_prompts
 from hermes_state_runtime import RuntimeStoreError
-from tui_gateway.contracts.canonical_auth import AuthDeclineParams, AuthSigninParams, AuthSubmitCredentialParams
+from tui_gateway.contracts.canonical_auth import (
+    AuthBeginParams, AuthDeclineParams, AuthSigninParams, AuthSubmitCredentialParams)
 
 
 def _parse(model, params):
@@ -44,6 +46,36 @@ async def submit_credential(connection, ref, params):
     return {'outcome': outcome.value}
 
 
+async def begin(connection, ref, params):
+    _require_control(connection)
+    parsed = _parse(AuthBeginParams, params)
+    from hermes_cli import model_provider_control as control
+    from hermes_constants import profile_name_for_home
+    from tools.auth_required import AuthNeed
+    home = Path(connection.authority.profile_id)
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    bot = profile_name_for_home(home) or 'default'
+    scope = set_hermes_home_override(home)
+    try:
+        pconfig = control.lookup(parsed.service.partition(':')[2])
+        if pconfig is None:
+            return {'outcome': 'unsupported', 'reason': 'Unknown provider.'}
+        kind, why = control.kind_of(pconfig)
+        if kind == 'unsupported':
+            return {'outcome': 'unsupported', 'reason': why}
+        if pconfig.slug in control.ACCOUNT_WIDE and bot != 'default':
+            return {'outcome': 'refused',
+                    'reason': 'This login is shared by every profile. Change it from the main profile.'}
+        state = control.row_for(pconfig).state
+    finally:
+        reset_hermes_home_override(scope)
+    opened = await auth_prompts.begin_signin(
+        connection.authority, home, AuthNeed(parsed.service, 'expired' if state == 'expired' else 'missing'), bot)
+    if isinstance(opened, auth_prompts.Resolution):
+        return {'outcome': 'unavailable', 'reason': 'Open Pal on a device that can show the sign-in prompt.'}
+    return {'outcome': 'started', 'request_id': opened.request_id}
+
+
 def handlers(connection):
-    return {'auth.signin': partial(signin, connection), 'auth.decline': partial(decline, connection),
+    return {'auth.begin': partial(begin, connection), 'auth.signin': partial(signin, connection), 'auth.decline': partial(decline, connection),
             'auth.submit_credential': partial(submit_credential, connection)}

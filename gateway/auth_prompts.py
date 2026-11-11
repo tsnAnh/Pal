@@ -127,8 +127,9 @@ async def _conclude(req: _Request, resolution: Resolution) -> None:
         req.flow.cancel()
     wire = {Resolution.SIGNED_IN: "signed_in", Resolution.DECLINED: "declined",
             Resolution.TIMED_OUT: "timed_out"}.get(resolution, "failed")
+    reason = None if resolution is Resolution.SIGNED_IN else getattr(req.flow, "failure", None)
     await _broadcast(list(req.transports),
-                     resolved_frame(AuthResolvedPayload(request_id=req.request_id, outcome=wire)))
+                     resolved_frame(AuthResolvedPayload(request_id=req.request_id, outcome=wire, reason=reason)))
     _finish(req, resolution)
 
 
@@ -145,6 +146,13 @@ async def request_signin(authority, home: Path, need: AuthNeed, bot: str) -> Res
             existing.bots.append(bot)
             await _broadcast(list(existing.transports), _required_frame(existing))
         return await asyncio.shield(existing.future)
+    opened = await _open(authority, home, need, bot, key)
+    if isinstance(opened, Resolution):
+        return opened
+    return await asyncio.shield(opened.future)
+
+
+async def _open(authority, home: Path, need: AuthNeed, bot: str, key: tuple) -> _Request | Resolution:
     routes = _routes(authority)
     if not routes:
         return Resolution.NO_APP
@@ -168,7 +176,17 @@ async def request_signin(authority, home: Path, need: AuthNeed, bot: str) -> Res
     except BaseException:
         _finish(req, Resolution.UNAVAILABLE)
         raise
-    return await asyncio.shield(req.future)
+    return req
+
+
+async def begin_signin(authority, home: Path, need: AuthNeed, bot: str) -> _Request | Resolution:
+    key = _key(home, need.service)
+    _declined_until.pop(key, None)
+    existing = _active.get(key)
+    if existing is not None:
+        existing.transports = await _broadcast(_routes(authority), _required_frame(existing)) or existing.transports
+        return existing
+    return await _open(authority, home, need, bot, key)
 
 
 def _new_id() -> str:

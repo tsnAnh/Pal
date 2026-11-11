@@ -2527,6 +2527,60 @@
       }
     },
     {
+      "name": "model.providers.list",
+      "summary": "Every model provider with whether its credential is set, expired or missing for the profile. Setting or replacing a credential goes through auth.begin with service provider:<id>.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ModelProvidersResult"
+        }
+      }
+    },
+    {
+      "name": "model.providers.remove",
+      "summary": "Remove a provider's stored credential for the profile, as `hermes auth remove` / `hermes logout` do. still_set: something outside Pal (the host's environment, a shared provider key) still supplies one.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ModelProviderRemoveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ModelProviderRemoveResult"
+        }
+      }
+    },
+    {
+      "name": "model.providers.set_base_url",
+      "summary": "Set the provider's address (an http(s) URL), or reset it to the default when base_url is null.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ModelProviderBaseUrlParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ModelProviderBaseUrlResult"
+        }
+      }
+    },
+    {
       "name": "model.save_key",
       "summary": "Save an API key for a provider and return its refreshed inventory row.",
       "params": [
@@ -6763,6 +6817,68 @@
         "title": "AttachedImageResult",
         "type": "object"
       },
+      "AuthBeginOutcome": {
+        "enum": [
+          "started",
+          "unsupported",
+          "refused",
+          "unavailable"
+        ],
+        "title": "AuthBeginOutcome",
+        "type": "string"
+      },
+      "AuthBeginParams": {
+        "additionalProperties": false,
+        "properties": {
+          "service": {
+            "pattern": "^provider:[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Service",
+            "type": "string"
+          }
+        },
+        "required": [
+          "service"
+        ],
+        "title": "AuthBeginParams",
+        "type": "object"
+      },
+      "AuthBeginResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/AuthBeginOutcome"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "AuthBeginResult",
+        "type": "object"
+      },
       "AuthCredentialOutcome": {
         "enum": [
           "stored",
@@ -6933,6 +7049,18 @@
           },
           "outcome": {
             "$ref": "#/components/schemas/AuthOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
           }
         },
         "required": [
@@ -31000,6 +31128,292 @@
           "free"
         ],
         "title": "ModelPricing",
+        "type": "object"
+      },
+      "ModelProvider": {
+        "additionalProperties": false,
+        "description": "One model provider's setup state for the bot profile. ``scope`` account means the login is shared by\nevery profile on the host, so only the main profile may change it. ``base_url`` is the address override\n(plain, not a secret), ``default_base_url`` what applies without one. No credential value is ever carried.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ModelProviderKind"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ModelProviderState"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/ModelProviderScope"
+          },
+          "base_url_editable": {
+            "title": "Base Url Editable",
+            "type": "boolean"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Base Url"
+          },
+          "default_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Default Base Url"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "can_remove": {
+            "title": "Can Remove",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "state",
+          "scope",
+          "base_url_editable",
+          "can_remove"
+        ],
+        "title": "ModelProvider",
+        "type": "object"
+      },
+      "ModelProviderBaseUrlOutcome": {
+        "enum": [
+          "saved",
+          "reset",
+          "invalid",
+          "unsupported",
+          "failed"
+        ],
+        "title": "ModelProviderBaseUrlOutcome",
+        "type": "string"
+      },
+      "ModelProviderBaseUrlParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Base Url"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ModelProviderBaseUrlParams",
+        "type": "object"
+      },
+      "ModelProviderBaseUrlResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/ModelProviderBaseUrlOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelProvider"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "ModelProviderBaseUrlResult",
+        "type": "object"
+      },
+      "ModelProviderKind": {
+        "enum": [
+          "api_key",
+          "device_code",
+          "unsupported"
+        ],
+        "title": "ModelProviderKind",
+        "type": "string"
+      },
+      "ModelProviderRemoveOutcome": {
+        "enum": [
+          "removed",
+          "nothing_to_remove",
+          "still_set",
+          "refused",
+          "unsupported",
+          "failed"
+        ],
+        "title": "ModelProviderRemoveOutcome",
+        "type": "string"
+      },
+      "ModelProviderRemoveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider"
+        ],
+        "title": "ModelProviderRemoveParams",
+        "type": "object"
+      },
+      "ModelProviderRemoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/ModelProviderRemoveOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelProvider"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "ModelProviderRemoveResult",
+        "type": "object"
+      },
+      "ModelProviderScope": {
+        "enum": [
+          "profile",
+          "account"
+        ],
+        "title": "ModelProviderScope",
+        "type": "string"
+      },
+      "ModelProviderState": {
+        "enum": [
+          "set",
+          "not_set",
+          "expired",
+          "unsupported"
+        ],
+        "title": "ModelProviderState",
+        "type": "string"
+      },
+      "ModelProvidersResult": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ModelProvider"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile",
+          "providers"
+        ],
+        "title": "ModelProvidersResult",
         "type": "object"
       },
       "ModelSaveKeyParams": {
@@ -56495,6 +56909,24 @@
       }
     },
     {
+      "name": "auth.begin",
+      "summary": "The user chose to sign in to a model provider from Settings, before any call failed. The gateway opens the same auth.required request a failed call would (api_key or device_code) and returns its request_id; the answer then flows through auth.submit_credential / auth.signin / auth.decline and ends with auth.resolved. unsupported: the provider cannot be set up from an app (reason says why). refused: this connection may not change that credential. unavailable: no connected app can show the prompt.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthBeginParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthBeginResult"
+        }
+      }
+    },
+    {
       "name": "auth.decline",
       "summary": "The user chose Not now on an auth.required request; the waiting bots are told the user declined sign-in.",
       "params": [
@@ -59142,7 +59574,7 @@
     },
     {
       "name": "auth.resolved",
-      "summary": "The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out.",
+      "summary": "The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is the provider's failure in plain words when the flow has one; it never carries a credential.",
       "params": [
         {
           "name": "payload",

@@ -109,17 +109,23 @@ public struct AuthResolvedEvent: Sendable, Hashable {
 
     public var requestID: String
     public var outcome: ServiceSignInOutcome
+    public var reason: String?
 
-    public init(requestID: String, outcome: ServiceSignInOutcome) {
+    public init(requestID: String, outcome: ServiceSignInOutcome, reason: String? = nil) {
         self.requestID = requestID
         self.outcome = outcome
+        self.reason = reason
     }
 
     public init?(event: GatewayEvent) {
         guard event.type == Self.eventType, let payload = event.payload,
               let requestID = payload["request_id"]?.stringValue, !requestID.isEmpty
         else { return nil }
-        self.init(requestID: requestID, outcome: ServiceSignInOutcome(wire: payload["outcome"]?.stringValue))
+        self.init(
+            requestID: requestID,
+            outcome: ServiceSignInOutcome(wire: payload["outcome"]?.stringValue),
+            reason: payload["reason"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+        )
     }
 }
 
@@ -157,6 +163,7 @@ public enum ServiceSignInWire {
     public static let signInMethod = "auth.signin"
     public static let declineMethod = "auth.decline"
     public static let submitCredentialMethod = "auth.submit_credential"
+    public static let beginMethod = "auth.begin"
 
     public static func requestParams(_ requestID: String) -> JSONValue {
         ["request_id": .string(requestID)]
