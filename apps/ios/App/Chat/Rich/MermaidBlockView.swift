@@ -69,13 +69,3 @@ struct MermaidBlockView: View {
         }
     }
 }
-
-private extension Image {
-    init(platformImage image: MermaidImage) {
-        #if canImport(UIKit)
-        self.init(uiImage: image)
-        #else
-        self.init(nsImage: image)
-        #endif
-    }
-}
