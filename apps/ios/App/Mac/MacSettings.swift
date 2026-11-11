@@ -8,6 +8,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
     case computer
     case permissions
     case vault
+    case shortcuts
     case usage
     case updates
 
@@ -19,6 +20,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .computer: String(localized: "Computer")
         case .permissions: String(localized: "Permissions")
         case .vault: String(localized: "Vault")
+        case .shortcuts: String(localized: "Keyboard Shortcuts")
         case .usage: String(localized: "Usage & Billing")
         case .updates: String(localized: "Updates")
         }
@@ -30,6 +32,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .computer: "display"
         case .permissions: "shield"
         case .vault: "circle.square"
+        case .shortcuts: "keyboard"
         case .usage: "chart.bar"
         case .updates: "icloud.and.arrow.down"
         }
@@ -51,6 +54,7 @@ struct MacSettingsModal: View {
                 case .computer: MacComputerSection(hub: hub, connection: connection)
                 case .permissions: MacPermissionsSection(hub: hub)
                 case .vault: MacVaultSection(hub: hub)
+                case .shortcuts: MacShortcutSettingsSection()
                 case .usage: MacUsageSection(hub: hub)
                 case .updates: MacUpdatesSection()
                 }
