@@ -24,7 +24,7 @@ struct CodeHighlighterTests {
         "<",
         "a { color: #fff; margin: -10px auto; content: \"x\" } @media (min-width: 1px) {}",
         "SELECT a, COUNT(*) FROM t WHERE x = 'it''s' -- c\nORDER BY 1;",
-        "#!/bin/bash\necho \"$HOME ${PATH} $1 $#\" # c\nif [ -f x ]; then ls; fi",
+        "\u{23}!/bin/bash\necho \"$HOME ${PATH} $1 $#\" # c\nif [ -f x ]; then ls; fi",
         "<?php $a = 'x'; echo \"$a\"; // c\n# d\n",
         "@Override\npublic static void main(String[] args) { int x = 0x1F + 1_000; }",
         "#include <stdio.h>\nint main(void) { return 0; }",
