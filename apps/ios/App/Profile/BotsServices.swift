@@ -13,6 +13,7 @@ struct BotsServices: Sendable {
     let gatewayService: GatewayServiceClient
     let connectCatalog: @Sendable (String) async throws -> ConnectCatalog
     let computer: ComputerService
+    let rooms: @Sendable (String) -> RoomsService
     let openDisplayStream: @Sendable (ComputerObservation) async throws -> any RFBTransport
     let models: @Sendable (String) -> BotModelClient
 
@@ -31,6 +32,7 @@ struct BotsServices: Sendable {
         }
         computer = ComputerService(gateway: gateway)
         models = { profile in BotModelClient(gateway: gateway, profile: profile) }
+        rooms = { RoomsService(gateway: gateway, profile: $0) }
         openDisplayStream = { observation in
             try await connection.displayTransport(path: observation.path, ticket: observation.ticket)
         }

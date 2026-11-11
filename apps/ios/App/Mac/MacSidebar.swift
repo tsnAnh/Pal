@@ -9,6 +9,7 @@ struct MacSidebar: View {
     let router: AppRouter
 
     @Environment(MacShell.self) private var shell
+    @Environment(RoomsModel.self) private var rooms
 
     var body: some View {
         Group {
@@ -33,6 +34,9 @@ struct MacSidebar: View {
                     }
                     ForEach(MacShell.ordered(roster).dropFirst(hero.count)) { bot in
                         MacBotRow(bot: bot, roster: roster, router: router)
+                    }
+                    if rooms.isAvailable, !rooms.rooms.isEmpty {
+                        MacRoomRows(rooms: rooms, roster: roster, router: router)
                     }
                     if !roster.hiddenBots.isEmpty {
                         MacHiddenBots(roster: roster, router: router)
@@ -73,6 +77,9 @@ struct MacSidebar: View {
             GlassEffectContainer(spacing: 10) {
                 HStack(spacing: 9) {
                     MacIconButton(systemName: "magnifyingglass", label: String(localized: "Search"), identifier: "rosterSearchField") { router.openSearch() }
+                    if rooms.canCreate {
+                        MacIconButton(systemName: "person.2", label: String(localized: "New Group Chat"), identifier: "createRoomButton") { rooms.showsCreate = true }
+                    }
                     MacIconButton(systemName: "plus", label: String(localized: "Create New Bot"), identifier: "createBotButton") { router.present(.createBot) }
                 }
             }
