@@ -199,12 +199,18 @@ final class RosterModel {
         }
     }
 
+    @ObservationIgnored var gatewayEventSink: (@Sendable (GatewayEvent) -> Void)?
+
     func runLive() async {
         guard feed == nil, let client = connection.client else { return }
         let presence = client.presence
+        let sink = gatewayEventSink
         let feed = RosterLiveFeed(
             connect: { try await client.connect(reach: .offerTarget) },
-            onEvent: { presence?.receive($0) },
+            onEvent: {
+                presence?.receive($0)
+                sink?($0)
+            },
             diagnostics: .osLog()
         )
         self.feed = feed
