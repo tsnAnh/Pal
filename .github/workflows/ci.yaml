@@ -69,7 +69,7 @@ jobs:
   # tag is not a meaningful applicability signal.
   # ─────────────────────────────────────────────────────────────────────
   detect:
-    name: Detect affected areas
+    name: Select CI lanes
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 3
     outputs:
@@ -100,7 +100,7 @@ jobs:
             .github/actions/detect-changes
             scripts/ci/classify_changes.py
           sparse-checkout-cone-mode: false
-      - name: Detect affected areas
+      - name: Classify changed files
         id: classify
         uses: ./.github/actions/detect-changes
         with:

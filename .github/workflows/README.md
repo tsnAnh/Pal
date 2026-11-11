@@ -206,7 +206,7 @@ of every suite that reads it.
 
 | Job (check name) | Workflow | Runs when | Skipped when |
 |---|---|---|---|
-| Detect affected areas | inline | always | never |
+| Select CI lanes (job `detect`; formerly "Detect affected areas") | inline | always | never |
 | Python tests | `tests.yml` | `python` or `e2e` or `e2e_upgrade` | none of those lanes |
 | ↳ `Run tests (1/2, 2/2)` | | always inside `tests.yml` | |
 | ↳ `e2e` | | `e2e` lane (release or dispatch) | every PR and every push to `main` |
