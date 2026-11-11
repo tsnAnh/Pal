@@ -274,6 +274,8 @@ struct ChatView: View {
             attachments: model.attachments,
             slashItems: model.slashItems,
             loadSlashItems: { model.loadSlashItems() },
+            fileRefResult: model.fileRefResult,
+            loadFileRefs: { model.loadFileRefs(word: $0) },
             replyTarget: model.replyTarget,
             cancelReply: { model.cancelReply() },
             canSend: model.canSendAttachments,
