@@ -4843,6 +4843,8 @@ export interface McpServerSummary {
   args: string[]
   env: string[]
   auth?: string | null
+  headers: string[]
+  client_id?: string | null
   oauth_tokens_present?: boolean | null
   enabled: boolean
   tools?: unknown | null
@@ -4867,26 +4869,30 @@ export interface McpServerRuntimeRow {
   needs_auth?: boolean
 }
 export type McpRuntimeStatus = 'connected' | 'disabled' | 'connecting' | 'failed' | 'lazy' | 'configured'
-/** ``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools); a ``bearer_token`` is written to the profile's .env, only the header template persists. */
+/** ``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools). ``headers`` {Name: Value} and ``bearer_token`` are written to the profile's .env, only ``${VAR}`` templates persist; ``client_id`` is a pre-registered OAuth client id (not a secret). */
 export interface McpServersAddParams {
   profile?: string | null
   name: string
   preset?: string | null
   config?: Record<string, unknown> | null
   bearer_token?: string | null
+  headers?: Record<string, string | null> | null
+  client_id?: string | null
 }
 export interface McpServersAddResult {
   ok: boolean
   name: string
   server: McpServerSummary
 }
-/** Edit a saved url server in place (the name is its key). ``auth`` ``none`` clears the Authorization header, ``bearer`` stores ``bearer_token`` in the profile's .env, ``oauth`` marks the server for OAuth. */
+/** Edit a saved url server in place (the name is its key). ``auth`` ``none`` clears the Authorization header, ``bearer`` stores ``bearer_token`` in the profile's .env, ``oauth`` marks the server for OAuth. ``headers`` replaces the whole set (omitted names are removed with their .env values; ``null`` keeps a stored value, a string replaces it) and cannot be combined with ``auth`` / ``bearer_token``; changing the server's origin needs every secret header re-sent (4063). ``client_id`` ``""`` clears it. */
 export interface McpServersUpdateParams {
   profile?: string | null
   name: string
   config?: McpServerEndpointEdit | null
   auth?: McpAuthMode | null
   bearer_token?: string | null
+  headers?: Record<string, string | null> | null
+  client_id?: string | null
 }
 /** ``transport`` is ``http`` or ``sse``; an unsupported one is refused with 4063 by the handler. */
 export interface McpServerEndpointEdit {
@@ -4940,6 +4946,7 @@ export interface McpOauthStartParams {
   profile?: string | null
   name: string
   client_redirect_uri?: string | null
+  client_id?: string | null
 }
 export interface McpOauthStartResult {
   ok: boolean

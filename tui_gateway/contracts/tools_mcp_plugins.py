@@ -390,6 +390,8 @@ class McpServerSummary(Result):
     args: list[str]
     env: list[str]
     auth: str | None = None
+    headers: list[str]
+    client_id: str | None = None
     oauth_tokens_present: bool | None = None
     enabled: bool
     tools: JsonValue | None = None
@@ -443,12 +445,15 @@ class McpServerNameParams(ProfileParams):
 
 
 class McpServersAddParams(McpServerNameParams):
-    """``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools); a
-    ``bearer_token`` is written to the profile's .env, only the header template persists."""
+    """``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools). ``headers``
+    {Name: Value} and ``bearer_token`` are written to the profile's .env, only ``${VAR}`` templates persist;
+    ``client_id`` is a pre-registered OAuth client id (not a secret)."""
 
     preset: str | None = None
     config: dict[str, JsonValue] | None = None
     bearer_token: str | None = None
+    headers: dict[str, str | None] | None = None
+    client_id: str | None = None
 
 
 class McpServersAddResult(Result):
@@ -476,11 +481,16 @@ class McpAuthMode(WireEnum):
 
 class McpServersUpdateParams(McpServerNameParams):
     """Edit a saved url server in place (the name is its key). ``auth`` ``none`` clears the Authorization
-    header, ``bearer`` stores ``bearer_token`` in the profile's .env, ``oauth`` marks the server for OAuth."""
+    header, ``bearer`` stores ``bearer_token`` in the profile's .env, ``oauth`` marks the server for OAuth.
+    ``headers`` replaces the whole set (omitted names are removed with their .env values; ``null`` keeps a
+    stored value, a string replaces it) and cannot be combined with ``auth`` / ``bearer_token``; changing the
+    server's origin needs every secret header re-sent (4063). ``client_id`` ``""`` clears it."""
 
     config: McpServerEndpointEdit | None = None
     auth: McpAuthMode | None = None
     bearer_token: str | None = None
+    headers: dict[str, str | None] | None = None
+    client_id: str | None = None
 
 
 class McpServersUpdateResult(Result):
@@ -552,6 +562,7 @@ class McpOauthStartParams(McpServerNameParams):
     ``mcp.servers.oauth.callback``."""
 
     client_redirect_uri: str | None = None
+    client_id: str | None = None
 
 
 class McpOauthStartResult(Result):

@@ -9,6 +9,8 @@ from __future__ import annotations
 import re
 from typing import Any, Mapping
 
+from tui_gateway import mcp_header_secrets as hs
+
 
 def server_configs_with_sources(config_servers: Mapping[str, dict]) -> tuple[dict[str, dict], dict[str, str | None]]:
     servers = {name: dict(cfg) for name, cfg in config_servers.items() if isinstance(cfg, dict)}
@@ -51,6 +53,8 @@ def summarize_server(name: str, cfg: dict, plugin: str | None = None) -> dict[st
         "args": list(cfg.get("args") or []),
         "env": sorted(str(k) for k in (cfg.get("env") or {})),
         "auth": auth,
+        "headers": [str(key) for key in headers] if isinstance(headers, dict) else [],
+        "client_id": (cfg.get("oauth") or {}).get("client_id") if isinstance(cfg.get("oauth"), dict) else None,
         "oauth_tokens_present": _oauth_tokens_present(name) if auth == "oauth" else None,
         "enabled": mcp_server_enabled(cfg),
         "tools": cfg.get("tools"),
@@ -92,19 +96,6 @@ def endpoint_error(cfg: Mapping[str, Any]) -> str | None:
     return None if transport is None or transport in ENDPOINT_TRANSPORTS else "unsupported transport"
 
 
-def _authorization_keys(headers: Any) -> list[str]:
-    return [k for k in headers if str(k).lower() == "authorization"] if isinstance(headers, dict) else []
-
-
-def _references_default_token_var(name: str) -> bool:
-    """Whether the profile's stored header for ``name`` points at the server's own ``.env`` variable."""
-    from hermes_cli.config import read_user_config_raw
-    from hermes_cli.mcp_config import _env_key_for_server
-
-    raw = ((read_user_config_raw().get("mcp_servers") or {}).get(name) or {}).get("headers")
-    return any(f"${{{_env_key_for_server(name)}}}" in str(raw[k]) for k in _authorization_keys(raw))
-
-
 def _plan_auth(entry: dict, params: Mapping[str, Any]) -> tuple[str | None, str | None, Failure | None]:
     """``(mode, normalized bearer token, error)`` for an update request."""
     from hermes_cli.mcp_config import _strip_bearer_prefix
@@ -120,16 +111,52 @@ def _plan_auth(entry: dict, params: Mapping[str, Any]) -> tuple[str | None, str 
         mode = mode or "bearer"
         if mode != "bearer":
             return None, None, (4063, "bearer_token requires auth bearer")
-    if mode == "bearer" and token is None and not _authorization_keys(entry.get("headers")):
+    if mode == "bearer" and token is None and not hs.authorization_keys(entry.get("headers")):
         return None, None, (4063, "bearer_token required")
     return mode, token, None
 
 
+def plan_add_headers(name: str, server_config: dict, params: Mapping[str, Any]) -> tuple[dict[str, str], Failure | None]:
+    client_id = params.get("client_id")
+    if client_id and (message := hs.client_id_error(client_id)):
+        return {}, (4063, message)
+    current = server_config.get("headers")
+    current = {str(k): str(v) for k, v in current.items()} if isinstance(current, dict) else {}
+    writes: dict[str, str] = {}
+    if (requested := params.get("headers")) is not None:
+        plan, failure = hs.plan_headers(name, current, requested, replace=False)
+        if failure:
+            return {}, failure
+        current, writes = plan.headers, plan.env_writes
+    if token := params.get("bearer_token"):
+        plan, failure = hs.bearer_plan(name, current, str(token))
+        if failure:
+            return {}, failure
+        current, writes = plan.headers, {**writes, **plan.env_writes}
+    if current:
+        server_config["headers"] = current
+    hs.with_client_id(server_config, client_id or None)
+    return writes, None
+
+
+def apply_client_id(cfg: dict, client_id: Any) -> str | None:
+    if not client_id:
+        return None
+    if message := hs.client_id_error(client_id):
+        return message
+    hs.with_client_id(cfg, client_id)
+    return None
+
+
+def add_server(name: str, server_config: dict, writes: Mapping[str, str]) -> bool:
+    return hs.commit(name, server_config, writes, [])
+
+
 def update_server(name: str, entry: dict, params: Mapping[str, Any]) -> tuple[dict | None, Failure | None]:
-    """Edit a saved url server (endpoint and/or auth) → ``(saved entry, None)`` or ``(None, (code, message))``.
-    Everything is validated before the first write so a refused edit leaves config and ``.env`` untouched."""
+    """Edit a saved url server (endpoint, auth, headers, client id) → ``(saved entry, None)`` or
+    ``(None, (code, message))``. Everything is validated before the first write so a refused edit
+    leaves config and ``.env`` untouched."""
     from hermes_cli import mcp_config as mc
-    from hermes_cli.config import remove_env_value
     from hermes_cli.mcp_security import validate_mcp_server_entry
 
     if not entry.get("url"):
@@ -141,25 +168,41 @@ def update_server(name: str, entry: dict, params: Mapping[str, Any]) -> tuple[di
     mode, token, failure = _plan_auth(entry, params)
     if failure:
         return None, failure
-    drops_header = mode in ("none", "oauth")
-    drop_env_var = drops_header and _references_default_token_var(name)
+    requested = params.get("headers")
+    if requested is not None and (mode is not None or token is not None):
+        return None, (4063, "headers cannot be combined with auth or bearer_token")
+    client_id = params.get("client_id")
+    if client_id and (message := hs.client_id_error(client_id)):
+        return None, (4063, message)
+    before = hs.stored_headers(name)
+    headers, writes = dict(before), {}
+    if requested is not None:
+        plan, failure = hs.plan_headers(name, before, requested, replace=True)
+        if failure:
+            return None, failure
+        headers, writes = plan.headers, plan.env_writes
     if mode in ("none", "bearer", "oauth"):
-        headers = {k: v for k, v in (cfg.get("headers") or {}).items() if str(k).lower() != "authorization"}
-        if headers:
-            cfg["headers"] = headers
-        else:
-            cfg.pop("headers", None)
+        if mode != "bearer":
+            headers = {k: v for k, v in headers.items() if k.lower() != "authorization"}
         cfg.pop("auth", None)
         if mode == "oauth":
             cfg["auth"] = "oauth"
+    if token is not None:
+        plan, failure = hs.bearer_plan(name, headers, token)
+        if failure:
+            return None, failure
+        headers, writes = plan.headers, {**writes, **plan.env_writes}
+    if headers:
+        cfg["headers"] = headers
+    else:
+        cfg.pop("headers", None)
+    hs.with_client_id(cfg, client_id)
+    if hs.origin(entry.get("url")) != hs.origin(cfg.get("url")) and hs.referenced_vars(headers) - set(writes):
+        return None, (4063, "re-enter headers for the new address")
     if validate_mcp_server_entry(name, cfg):
         return None, (4001, f"server '{name}' rejected: suspicious command/args configuration")
-    if token is not None:
-        cfg["headers"] = {**(cfg.get("headers") or {}), **mc._save_bearer_auth_token(name, token)}
-    if not mc._save_mcp_server(name, cfg):
+    if not hs.commit(name, cfg, writes, hs.stale_vars(name, before, headers)):
         return None, (4001, f"server '{name}' rejected: suspicious command/args configuration")
-    if drop_env_var:
-        remove_env_value(mc._env_key_for_server(name))
     return mc._get_mcp_servers().get(name, cfg), None
 
 
@@ -204,3 +247,21 @@ def classify_probe_failure(exc: BaseException) -> str:
     unreachable = any(isinstance(node, (TimeoutError, OSError)) or type(node).__name__ in _TRANSPORT_FAILURES
                       for node in nodes)
     return "unreachable" if unreachable else "server_error"
+
+
+def _bearer_challenged(nodes: list[BaseException]) -> bool:
+    for node in nodes:
+        headers = getattr(getattr(node, "response", None), "headers", None)
+        if headers is not None and re.match(r"\s*(bearer|oauth)\b", str(headers.get("www-authenticate", "")), re.IGNORECASE):
+            return True
+    return False
+
+
+def oauth_challenged(exc: BaseException, cfg: Mapping[str, Any]) -> bool:
+    from tools.mcp_tool_errors import _iter_exception_nodes
+
+    nodes = _iter_exception_nodes(exc)
+    headers = cfg.get("headers")
+    if 401 not in _http_statuses(nodes) or hs.authorization_keys(headers):
+        return False
+    return _bearer_challenged(nodes) or not headers

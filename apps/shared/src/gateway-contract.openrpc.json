@@ -27791,6 +27791,18 @@
             ],
             "default": null,
             "title": "Client Redirect Uri"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
           }
         },
         "required": [
@@ -28119,6 +28131,25 @@
             "default": null,
             "title": "Auth"
           },
+          "headers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Headers",
+            "type": "array"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
+          },
           "oauth_tokens_present": {
             "anyOf": [
               {
@@ -28166,6 +28197,7 @@
           "transport",
           "args",
           "env",
+          "headers",
           "enabled",
           "source"
         ],
@@ -28174,7 +28206,7 @@
       },
       "McpServersAddParams": {
         "additionalProperties": false,
-        "description": "``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools); a\n``bearer_token`` is written to the profile's .env, only the header template persists.",
+        "description": "``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools). ``headers``\n{Name: Value} and ``bearer_token`` are written to the profile's .env, only ``${VAR}`` templates persist;\n``client_id`` is a pre-registered OAuth client id (not a secret).",
         "properties": {
           "profile": {
             "anyOf": [
@@ -28228,6 +28260,40 @@
             ],
             "default": null,
             "title": "Bearer Token"
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Headers"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
           }
         },
         "required": [
@@ -28477,7 +28543,7 @@
       },
       "McpServersUpdateParams": {
         "additionalProperties": false,
-        "description": "Edit a saved url server in place (the name is its key). ``auth`` ``none`` clears the Authorization\nheader, ``bearer`` stores ``bearer_token`` in the profile's .env, ``oauth`` marks the server for OAuth.",
+        "description": "Edit a saved url server in place (the name is its key). ``auth`` ``none`` clears the Authorization\nheader, ``bearer`` stores ``bearer_token`` in the profile's .env, ``oauth`` marks the server for OAuth.\n``headers`` replaces the whole set (omitted names are removed with their .env values; ``null`` keeps a\nstored value, a string replaces it) and cannot be combined with ``auth`` / ``bearer_token``; changing the\nserver's origin needs every secret header re-sent (4063). ``client_id`` ``\"\"`` clears it.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -28528,6 +28594,40 @@
             ],
             "default": null,
             "title": "Bearer Token"
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Headers"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
           }
         },
         "required": [
