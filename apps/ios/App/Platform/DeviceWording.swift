@@ -38,9 +38,9 @@ enum DeviceWording {
 enum PlatformCapabilities {
     static var deviceConnectors: [DeviceConnectorID] {
         #if os(iOS)
-        DeviceConnectorID.allCases
+        [.calendar, .home, .reminders, .contacts, .location, .alarms]
         #else
-        [.calendar, .reminders, .contacts, .location]
+        [.calendar, .reminders, .contacts, .location, .shell, .files]
         #endif
     }
 

@@ -14,8 +14,8 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from gateway import device_connectors
-from gateway.device_actions import ActionSpec, clean_text
-from gateway.reach_presence import DEVICE_TOOL_KINDS, Attention, attention_of, last_frame_at, slot_of
+from gateway.device_actions import ActionSpec, clean_text, fit_result
+from gateway.reach_presence import DEVICE_TOOL_KINDS, Attention, ClientKind, attention_of, last_frame_at, slot_of
 from tui_gateway.contracts.canonical_device import (
     DeviceConnectorState as ConnectorState,
     DeviceOsPermission,
@@ -33,6 +33,9 @@ DEFAULT_CONSENT_TIMEOUT_SECONDS = 120.0
 MIN_TIMEOUT_SECONDS = 5.0
 MAX_TIMEOUT_SECONDS = 300.0
 MAX_RESULT_BYTES = 128 * 1024
+MAX_TRUNCATABLE_RAW_BYTES = 4 * 1024 * 1024
+PHONE_KINDS = DEVICE_TOOL_KINDS
+DEVICE_KINDS = DEVICE_TOOL_KINDS
 THREAD_WAIT_MARGIN_SECONDS = 10.0
 
 
@@ -115,11 +118,25 @@ def settings(home: Path) -> Timeouts:
                     _bounded(section.get("consent_timeout_seconds"), DEFAULT_CONSENT_TIMEOUT_SECONDS))
 
 
-def _routes(authority, states: dict[str, ConnectorState], now: float) -> list[_Route]:
+def live_device_ids(authority, now: float, kinds: frozenset = DEVICE_KINDS) -> set[str]:
+    found = set()
+    for transport in list(authority.events.values()):
+        slot = slot_of(transport)
+        if slot is None or not slot.device_tools or slot.device.kind not in kinds:
+            continue
+        if attention_of(slot, last_frame=last_frame_at(transport), now=now) is not Attention.PARKED:
+            found.add(slot.device.device_id)
+    return found
+
+
+def _routes(authority, states: dict[str, ConnectorState], now: float, *, kinds: frozenset = PHONE_KINDS,
+            device_id: str | None = None) -> list[_Route]:
     found = []
     for transport in list(authority.events.values()):
         slot = slot_of(transport)
-        if slot is None or not slot.device_tools or slot.device.kind not in DEVICE_TOOL_KINDS:
+        if slot is None or not slot.device_tools or slot.device.kind not in kinds:
+            continue
+        if device_id is not None and slot.device.device_id != device_id:
             continue
         state = states.get(slot.device.device_id)
         if state is None:
@@ -143,11 +160,14 @@ def _withdraw(request_id: str, route: _Route, reason: DeviceToolCancelReason) ->
 
 
 async def round_trip(authority, home: Path, spec: ActionSpec, args: BaseModel, *, session_id: str | None,
-                     timeouts: Timeouts) -> Outcome:
+                     timeouts: Timeouts, device_id: str | None = None) -> Outcome:
     states = await asyncio.to_thread(device_connectors.open_devices, home, spec.connector)
+    if device_id is not None:
+        states = {key: value for key, value in states.items() if key == device_id}
     if not states:
         return Outcome(failure=Failure.CONNECTOR_OFF)
-    routes = _routes(authority, states, time.time())
+    kinds = frozenset(ClientKind(kind) for kind in spec.kinds) if device_id is not None else PHONE_KINDS
+    routes = _routes(authority, states, time.time(), kinds=kinds, device_id=device_id)
     if not routes:
         return Outcome(failure=Failure.PHONE_OFFLINE)
     route = routes[0]
@@ -186,14 +206,20 @@ def _settle(pending: _Pending, outcome: Outcome) -> bool:
 def _interpret_result(spec: ActionSpec, result: Any) -> Outcome:
     if not isinstance(result, dict):
         return Outcome(failure=Failure.INVALID_RESULT, detail="the phone sent a result that is not an object")
-    if len(json.dumps(result, ensure_ascii=False)) > MAX_RESULT_BYTES:
+    allowed = MAX_TRUNCATABLE_RAW_BYTES if spec.truncates else MAX_RESULT_BYTES
+    if len(json.dumps(result, ensure_ascii=False)) > allowed:
         return Outcome(failure=Failure.INVALID_RESULT, detail="the phone sent more data than allowed")
     try:
         parsed = spec.result.model_validate(result)
     except ValidationError as exc:
         fields = ", ".join(sorted({".".join(str(part) for part in err["loc"]) for err in exc.errors()}))[:200]
         return Outcome(failure=Failure.INVALID_RESULT, detail=f"the phone sent a result that does not match ({fields})")
-    return Outcome(data=parsed.model_dump(mode="json", exclude_none=True))
+    data = parsed.model_dump(mode="json", exclude_none=True)
+    if spec.truncates:
+        data = fit_result(data, MAX_RESULT_BYTES)
+        if len(json.dumps(data, ensure_ascii=False)) > MAX_RESULT_BYTES:
+            return Outcome(failure=Failure.INVALID_RESULT, detail="the device sent more data than allowed")
+    return Outcome(data=data)
 
 
 async def respond(authority, transport, request_id: str, *, ok: bool, result: Any,
@@ -237,7 +263,7 @@ def preflight(home: Path, spec: ActionSpec) -> Outcome | None:
 
 
 def call_from_thread(home: Path, spec: ActionSpec, args: BaseModel, *, session_id: str | None,
-                     timeouts: Timeouts) -> Outcome:
+                     timeouts: Timeouts, device_id: str | None = None) -> Outcome:
     from gateway.session_cron import owner_for_home
     bound = owner_for_home(home)
     if bound is None:
@@ -250,7 +276,7 @@ def call_from_thread(home: Path, spec: ActionSpec, args: BaseModel, *, session_i
     if running is loop:
         return Outcome(failure=Failure.UNAVAILABLE)
     future = asyncio.run_coroutine_threadsafe(
-        round_trip(authority, home, spec, args, session_id=session_id, timeouts=timeouts), loop)
+        round_trip(authority, home, spec, args, session_id=session_id, timeouts=timeouts, device_id=device_id), loop)
     wait = max(timeouts.request, timeouts.consent) + THREAD_WAIT_MARGIN_SECONDS
     try:
         return future.result(wait)

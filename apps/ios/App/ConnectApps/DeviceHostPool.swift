@@ -55,6 +55,8 @@ extension ConsentAsk {
         case .contacts: "Contacts"
         case .location: "Location"
         case .alarms: "Alarms"
+        case .shell: "Run commands"
+        case .files: "Files"
         }
     }
 
@@ -73,6 +75,10 @@ extension ConsentAsk {
         case .timersStart: "start a timer"
         case .homeListAccessories: "see your home accessories"
         case .homeSet: "change a home accessory"
+        case .shellRun: "run a command on this Mac"
+        case .filesRead: "read a file on this Mac"
+        case .filesList: "look through a folder on this Mac"
+        case .filesWrite: "change a file on this Mac"
         }
     }
 }

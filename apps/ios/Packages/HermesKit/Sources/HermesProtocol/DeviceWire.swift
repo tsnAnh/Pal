@@ -7,6 +7,15 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
     case contacts
     case location
     case alarms
+    case shell
+    case files
+
+    public var needsOSPermission: Bool {
+        switch self {
+        case .shell, .files: false
+        case .calendar, .home, .reminders, .contacts, .location, .alarms: true
+        }
+    }
 }
 
 public enum DeviceConnectorState: String, Codable, Sendable, Hashable {
@@ -97,6 +106,10 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
     case timersStart = "timers.start"
     case homeListAccessories = "home.list_accessories"
     case homeSet = "home.set"
+    case shellRun = "shell.run"
+    case filesRead = "files.read"
+    case filesList = "files.list"
+    case filesWrite = "files.write"
 
     public var connector: DeviceConnectorID {
         switch self {
@@ -106,6 +119,8 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
         case .locationCurrent, .locationSearchNearby: .location
         case .alarmsSet, .alarmsList, .timersStart: .alarms
         case .homeListAccessories, .homeSet: .home
+        case .shellRun: .shell
+        case .filesRead, .filesList, .filesWrite: .files
         }
     }
 }
@@ -308,6 +323,28 @@ public struct HomeSetArgs: Decodable, Sendable {
     public var value: JSONValue
 }
 
+public struct ShellRunArgs: Decodable, Sendable {
+    public var command: String
+    public var cwd: String?
+    public var timeoutSeconds: Int?
+}
+
+public struct FilesReadArgs: Decodable, Sendable {
+    public var path: String
+}
+
+public struct FilesListArgs: Decodable, Sendable {
+    public var path: String
+    public var limit: Int?
+}
+
+public struct FilesWriteArgs: Decodable, Sendable {
+    public var path: String
+    public var content: String
+    public var append: Bool?
+    public var createDirs: Bool?
+}
+
 public struct CalendarEventWire: Encodable, Sendable, Equatable {
     public var id: String
     public var title: String
@@ -447,5 +484,84 @@ public struct AccessoryWire: Encodable, Sendable, Equatable {
         self.category = category
         self.reachable = reachable
         self.state = state
+    }
+}
+
+public struct ShellRunWire: Encodable, Sendable, Equatable {
+    public var exitCode: Int?
+    public var stdout: String
+    public var stderr: String
+    public var timedOut: Bool
+    public var truncated: Bool
+
+    public init(exitCode: Int?, stdout: String, stderr: String, timedOut: Bool, truncated: Bool) {
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.timedOut = timedOut
+        self.truncated = truncated
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case exitCode, stdout, stderr, timedOut, truncated
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(exitCode, forKey: .exitCode)
+        try container.encode(stdout, forKey: .stdout)
+        try container.encode(stderr, forKey: .stderr)
+        try container.encode(timedOut, forKey: .timedOut)
+        try container.encode(truncated, forKey: .truncated)
+    }
+}
+
+public struct FileReadWire: Encodable, Sendable, Equatable {
+    public var path: String
+    public var content: String
+    public var sizeBytes: Int
+    public var truncated: Bool
+
+    public init(path: String, content: String, sizeBytes: Int, truncated: Bool) {
+        self.path = path
+        self.content = content
+        self.sizeBytes = sizeBytes
+        self.truncated = truncated
+    }
+}
+
+public struct FileEntryWire: Encodable, Sendable, Equatable {
+    public var name: String
+    public var kind: String
+    public var sizeBytes: Int?
+    public var modifiedAt: String?
+
+    public init(name: String, kind: String, sizeBytes: Int?, modifiedAt: String?) {
+        self.name = name
+        self.kind = kind
+        self.sizeBytes = sizeBytes
+        self.modifiedAt = modifiedAt
+    }
+}
+
+public struct FileListWire: Encodable, Sendable, Equatable {
+    public var path: String
+    public var entries: [FileEntryWire]
+    public var truncated: Bool
+
+    public init(path: String, entries: [FileEntryWire], truncated: Bool) {
+        self.path = path
+        self.entries = entries
+        self.truncated = truncated
+    }
+}
+
+public struct FileWriteWire: Encodable, Sendable, Equatable {
+    public var path: String
+    public var bytesWritten: Int
+
+    public init(path: String, bytesWritten: Int) {
+        self.path = path
+        self.bytesWritten = bytesWritten
     }
 }

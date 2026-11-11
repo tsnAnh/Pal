@@ -25,6 +25,9 @@ struct DeviceRow: Identifiable, Equatable {
     let title: String
     let subtitle: String
     let action: Action
+    let warning: String?
+
+    var isSwitch: Bool { warning != nil }
 
     var renderID: String { "\(id.rawValue)-\(action)" }
 }
@@ -184,7 +187,10 @@ final class ConnectAppsModel {
             } else {
                 action = .allow
             }
-            return DeviceRow(id: id, title: status?.title ?? defaults.title, subtitle: status?.subtitle ?? defaults.subtitle, action: action)
+            return DeviceRow(
+                id: id, title: status?.title ?? defaults.title, subtitle: status?.subtitle ?? defaults.subtitle,
+                action: action, warning: DeviceConnectorDefaults.warning(for: id)
+            )
         }
     }
 
@@ -207,13 +213,17 @@ final class ConnectAppsModel {
             case .denied, .notDetermined:
                 try await ledger.set(row.id, osPermission: .denied)
             case .unsupported:
-                report("\(row.title) isn't available on this iPhone.")
+                report("\(row.title) isn't available on this device.")
             }
         } catch {
             diagnostics.info("device", "allow \(row.id.rawValue) failed: \(Diagnostics.describe(error))")
             report("Couldn't turn on \(row.title). Try again.")
         }
         rebuildDeviceRows()
+    }
+
+    func setEnabled(_ row: DeviceRow, _ isOn: Bool) async {
+        if isOn { await allow(row) } else { await turnOff(row) }
     }
 
     func turnOff(_ row: DeviceRow) async {

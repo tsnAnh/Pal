@@ -35,7 +35,7 @@ public actor DeviceToolExecutor {
     public func execute(_ request: DeviceToolRequest) async -> DeviceToolOutcome {
         let seconds = max(1, request.deadlineSeconds)
         let budget = Duration.seconds(seconds) - environment.deadlineMargin
-        return await Self.withDeadline(budget) { [self] in await run(request) }
+        return await Self.withDeadline(budget) { [self] in await run(request, budget: budget) }
     }
 
     private static func withDeadline(_ limit: Duration, _ work: @escaping @Sendable () async -> DeviceToolOutcome) async -> DeviceToolOutcome {
@@ -47,13 +47,13 @@ public actor DeviceToolExecutor {
             }
             let first = await group.next() ?? nil
             group.cancelAll()
-            return first ?? .failure(.failed, "The iPhone did not finish in time.")
+            return first ?? .failure(.failed, "The device did not finish in time.")
         }
     }
 
-    private func run(_ request: DeviceToolRequest) async -> DeviceToolOutcome {
+    private func run(_ request: DeviceToolRequest, budget: Duration) async -> DeviceToolOutcome {
         guard let action = DeviceToolAction(rawValue: request.action) else {
-            return .failure(.unsupported, "This iPhone does not do \(request.action).")
+            return .failure(.unsupported, "This device does not do \(request.action).")
         }
         guard action.connector.rawValue == request.connector else {
             return .failure(.invalidArgs, "\(request.action) does not belong to \(request.connector).")
@@ -62,7 +62,9 @@ public actor DeviceToolExecutor {
         if let refusal = await gate(connector, action: action, request: request) { return refusal }
         if let refusal = await osPermission(for: connector) { return refusal }
         do {
-            return .success(try await dispatch(action, request.args))
+            return .success(try await dispatch(action, request.args, budget: budget))
+        } catch DeviceProviderError.unsupported {
+            return .failure(.unsupported, "This device cannot do \(action.rawValue).")
         } catch let error as DeviceProviderError {
             return Self.outcome(for: error)
         } catch is CancellationError {
@@ -70,7 +72,7 @@ public actor DeviceToolExecutor {
         } catch is DecodingError {
             return .failure(.invalidArgs, "The arguments for \(action.rawValue) could not be read.")
         } catch {
-            return .failure(.failed, "The iPhone could not complete \(action.rawValue).")
+            return .failure(.failed, "This device could not complete \(action.rawValue).")
         }
     }
 
@@ -81,7 +83,7 @@ public actor DeviceToolExecutor {
             state = await ledger.state(for: connector)
         }
         guard let state, state.isEnabled else {
-            return .failure(.consentDeclined, "\(Self.title(connector)) is turned off on this iPhone.")
+            return .failure(.consentDeclined, "\(Self.title(connector)) is turned off on this device.")
         }
         guard request.needsConsent else { return nil }
         let granted = await consent.askConsent(ConsentAsk(connector: connector, action: action, profile: request.profile))
@@ -91,14 +93,15 @@ public actor DeviceToolExecutor {
     }
 
     private func osPermission(for connector: DeviceConnectorID) async -> DeviceToolOutcome? {
+        guard connector.needsOSPermission else { return nil }
         var status = await permissions.status(of: connector)
         if status == .notDetermined { status = await permissions.request(connector) }
         await ledger.reportOSPermission(status, for: connector)
         switch status {
         case .granted: return nil
-        case .unsupported: return .failure(.unsupported, "This iPhone cannot use \(Self.title(connector)).")
+        case .unsupported: return .failure(.unsupported, "This device cannot use \(Self.title(connector)).")
         case .denied, .notDetermined:
-            return .failure(.permissionDenied, "Allow \(Self.title(connector)) for Hermes in the iPhone's Settings.")
+            return .failure(.permissionDenied, "Allow \(Self.title(connector)) for Hermes in this device's Settings.")
         }
     }
 
@@ -110,14 +113,17 @@ public actor DeviceToolExecutor {
         case .contacts: "Contacts"
         case .location: "Location"
         case .alarms: "Alarms"
+        case .shell: "Run commands"
+        case .files: "Files"
         }
     }
 
     static func outcome(for error: DeviceProviderError) -> DeviceToolOutcome {
         switch error {
-        case .permissionDenied: .failure(.permissionDenied, "The iPhone refused access.")
-        case .notFound: .failure(.notFound, "Nothing on the iPhone matches that.")
-        case .unsupported: .failure(.unsupported, "This iPhone cannot do that.")
+        case .permissionDenied: .failure(.permissionDenied, "This device refused access.")
+        case .accessDenied(let path): .failure(.permissionDenied, "Permission denied for \(path).")
+        case .notFound: .failure(.notFound, "Nothing on this device matches that.")
+        case .unsupported: .failure(.unsupported, "This device cannot do that.")
         case .invalidArgs(let message): .failure(.invalidArgs, message)
         case .failed(let message): .failure(.failed, message)
         }
@@ -141,7 +147,7 @@ extension DeviceToolExecutor {
         return provider
     }
 
-    private func dispatch(_ action: DeviceToolAction, _ raw: JSONValue) async throws -> JSONValue {
+    private func dispatch(_ action: DeviceToolAction, _ raw: JSONValue, budget: Duration) async throws -> JSONValue {
         switch action {
         case .calendarListEvents: try await listEvents(raw)
         case .calendarAddEvent: try await addEvent(raw)
@@ -156,7 +162,60 @@ extension DeviceToolExecutor {
         case .timersStart: try await startTimer(raw)
         case .homeListAccessories: try await listAccessories(raw)
         case .homeSet: try await setAccessory(raw)
+        case .shellRun: try await runShell(raw, budget: budget)
+        case .filesRead: try await readFile(raw)
+        case .filesList: try await listFiles(raw)
+        case .filesWrite: try await writeFile(raw)
         }
+    }
+
+    private static let shellReserve: Duration = .seconds(3)
+    private static let maximumCommandLength = 8000
+
+    private func runShell(_ raw: JSONValue, budget: Duration) async throws -> JSONValue {
+        let args: ShellRunArgs = try DeviceWire.decodeArgs(raw)
+        guard !args.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw DeviceProviderError.invalidArgs("command is required.")
+        }
+        guard args.command.count <= Self.maximumCommandLength else {
+            throw DeviceProviderError.invalidArgs("command must be at most \(Self.maximumCommandLength) characters.")
+        }
+        let seconds = args.timeoutSeconds ?? 30
+        guard (1...300).contains(seconds) else { throw DeviceProviderError.invalidArgs("timeout_seconds must be between 1 and 300.") }
+        let cwd = try args.cwd.map { try DevicePath.resolve($0) }
+        let timeout = max(min(Duration.seconds(seconds), budget - Self.shellReserve), .milliseconds(500))
+        let record = try await provider(\.shell).run(command: args.command, workingDirectory: cwd, timeout: timeout, captureLimit: DeviceTextLimit.output)
+        let out = TextCap.finish(record.stdout, limit: DeviceTextLimit.output)
+        let err = TextCap.finish(record.stderr, limit: DeviceTextLimit.output)
+        return try DeviceWire.encode(ShellRunWire(
+            exitCode: record.exitCode, stdout: out.text, stderr: err.text, timedOut: record.timedOut, truncated: out.truncated || err.truncated
+        ))
+    }
+
+    private func readFile(_ raw: JSONValue) async throws -> JSONValue {
+        let args: FilesReadArgs = try DeviceWire.decodeArgs(raw)
+        let path = try DevicePath.resolve(args.path)
+        let record = try await provider(\.files).read(path: path, captureLimit: DeviceTextLimit.fileContent)
+        let content = TextCap.finish(record.content, limit: DeviceTextLimit.fileContent)
+        return try DeviceWire.encode(FileReadWire(path: record.path, content: content.text, sizeBytes: record.sizeBytes, truncated: content.truncated))
+    }
+
+    private func listFiles(_ raw: JSONValue) async throws -> JSONValue {
+        let args: FilesListArgs = try DeviceWire.decodeArgs(raw)
+        let path = try DevicePath.resolve(args.path)
+        let limit = Self.clamp(args.limit, 200, 1...500)
+        let record = try await provider(\.files).list(path: path, limit: limit)
+        let entries = record.entries.prefix(limit).map {
+            FileEntryWire(name: $0.name, kind: $0.kind.rawValue, sizeBytes: $0.sizeBytes, modifiedAt: $0.modified.map(iso))
+        }
+        return try DeviceWire.encode(FileListWire(path: record.path, entries: Array(entries), truncated: record.truncated || record.entries.count > limit))
+    }
+
+    private func writeFile(_ raw: JSONValue) async throws -> JSONValue {
+        let args: FilesWriteArgs = try DeviceWire.decodeArgs(raw)
+        let path = try DevicePath.resolve(args.path)
+        let record = try await provider(\.files).write(path: path, content: args.content, append: args.append ?? false, createDirs: args.createDirs ?? false)
+        return try DeviceWire.encode(FileWriteWire(path: record.path, bytesWritten: record.bytesWritten))
     }
 
     private func listEvents(_ raw: JSONValue) async throws -> JSONValue {

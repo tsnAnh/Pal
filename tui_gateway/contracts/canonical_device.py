@@ -16,6 +16,8 @@ class DeviceConnectorId(WireEnum):
     CONTACTS = "contacts"
     LOCATION = "location"
     ALARMS = "alarms"
+    SHELL = "shell"
+    FILES = "files"
 
 
 class DeviceConnectorState(WireEnum):
@@ -45,6 +47,10 @@ class DeviceToolAction(WireEnum):
     TIMERS_START = "timers.start"
     HOME_LIST_ACCESSORIES = "home.list_accessories"
     HOME_SET = "home.set"
+    SHELL_RUN = "shell.run"
+    FILES_READ = "files.read"
+    FILES_LIST = "files.list"
+    FILES_WRITE = "files.write"
 
 
 class DeviceToolErrorCode(WireEnum):
@@ -80,7 +86,7 @@ class DeviceConnectorsListParams(Params):
 
 
 canonical_method("device_connectors.list", params=DeviceConnectorsListParams, result=DeviceConnectorsResult,
-                 doc="The iPhone connectors of one declared device (default: the calling connection's own, set "
+                 doc="The device connectors of one declared device (default: the calling connection's own, set "
                      "by client.hello). state is the user's choice and defaults to ask; os_permission is what the "
                      "phone last reported.")
 

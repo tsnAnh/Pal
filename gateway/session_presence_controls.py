@@ -74,7 +74,7 @@ async def hello(connection, ref, params):
         from gateway import device_connectors
         try:
             await asyncio.to_thread(device_connectors.register_device, _authority_home(connection.authority),
-                                    device.device_id, device.label)
+                                    device.device_id, device.label, kind=device.kind.value)
         except device_connectors.StoreUnreadable as exc:
             raise RuntimeStoreError('storage_unavailable', detail=str(exc)) from exc
     return {'recorded': True, 'same_host': slot.same_host}

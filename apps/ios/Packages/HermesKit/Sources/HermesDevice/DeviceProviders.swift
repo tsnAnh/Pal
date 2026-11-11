@@ -3,6 +3,7 @@ import HermesProtocol
 
 public enum DeviceProviderError: Error, Sendable, Equatable {
     case permissionDenied
+    case accessDenied(String)
     case notFound
     case unsupported
     case invalidArgs(String)
@@ -252,6 +253,82 @@ public protocol HomeProviding: Sendable {
     func set(accessoryID: String, characteristic: HomeCharacteristic, value: JSONValue) async throws -> AccessoryRecord
 }
 
+public struct ShellRunRecord: Sendable, Equatable {
+    public var exitCode: Int?
+    public var stdout: CapturedText
+    public var stderr: CapturedText
+    public var timedOut: Bool
+
+    public init(exitCode: Int?, stdout: CapturedText = CapturedText(), stderr: CapturedText = CapturedText(), timedOut: Bool = false) {
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.timedOut = timedOut
+    }
+}
+
+public protocol ShellProviding: Sendable {
+    func run(command: String, workingDirectory: String?, timeout: Duration, captureLimit: Int) async throws -> ShellRunRecord
+}
+
+public enum FileEntryKind: String, Sendable, Hashable {
+    case file, directory, symlink, other
+}
+
+public struct FileEntryRecord: Sendable, Equatable {
+    public var name: String
+    public var kind: FileEntryKind
+    public var sizeBytes: Int?
+    public var modified: Date?
+
+    public init(name: String, kind: FileEntryKind, sizeBytes: Int? = nil, modified: Date? = nil) {
+        self.name = name
+        self.kind = kind
+        self.sizeBytes = sizeBytes
+        self.modified = modified
+    }
+}
+
+public struct FileReadRecord: Sendable, Equatable {
+    public var path: String
+    public var content: CapturedText
+    public var sizeBytes: Int
+
+    public init(path: String, content: CapturedText, sizeBytes: Int) {
+        self.path = path
+        self.content = content
+        self.sizeBytes = sizeBytes
+    }
+}
+
+public struct FileListRecord: Sendable, Equatable {
+    public var path: String
+    public var entries: [FileEntryRecord]
+    public var truncated: Bool
+
+    public init(path: String, entries: [FileEntryRecord], truncated: Bool = false) {
+        self.path = path
+        self.entries = entries
+        self.truncated = truncated
+    }
+}
+
+public struct FileWriteRecord: Sendable, Equatable {
+    public var path: String
+    public var bytesWritten: Int
+
+    public init(path: String, bytesWritten: Int) {
+        self.path = path
+        self.bytesWritten = bytesWritten
+    }
+}
+
+public protocol FilesProviding: Sendable {
+    func read(path: String, captureLimit: Int) async throws -> FileReadRecord
+    func list(path: String, limit: Int) async throws -> FileListRecord
+    func write(path: String, content: String, append: Bool, createDirs: Bool) async throws -> FileWriteRecord
+}
+
 public struct DeviceProviders: Sendable {
     public var calendar: (any CalendarProviding)?
     public var reminders: (any RemindersProviding)?
@@ -259,6 +336,8 @@ public struct DeviceProviders: Sendable {
     public var location: (any LocationProviding)?
     public var alarms: (any AlarmsProviding)?
     public var home: (any HomeProviding)?
+    public var shell: (any ShellProviding)?
+    public var files: (any FilesProviding)?
 
     public init(
         calendar: (any CalendarProviding)? = nil,
@@ -266,7 +345,9 @@ public struct DeviceProviders: Sendable {
         contacts: (any ContactsProviding)? = nil,
         location: (any LocationProviding)? = nil,
         alarms: (any AlarmsProviding)? = nil,
-        home: (any HomeProviding)? = nil
+        home: (any HomeProviding)? = nil,
+        shell: (any ShellProviding)? = nil,
+        files: (any FilesProviding)? = nil
     ) {
         self.calendar = calendar
         self.reminders = reminders
@@ -274,6 +355,8 @@ public struct DeviceProviders: Sendable {
         self.location = location
         self.alarms = alarms
         self.home = home
+        self.shell = shell
+        self.files = files
     }
 }
 

@@ -19893,7 +19893,9 @@
           "reminders",
           "contacts",
           "location",
-          "alarms"
+          "alarms",
+          "shell",
+          "files"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -20128,7 +20130,11 @@
           "alarms.list",
           "timers.start",
           "home.list_accessories",
-          "home.set"
+          "home.set",
+          "shell.run",
+          "files.read",
+          "files.list",
+          "files.write"
         ],
         "title": "DeviceToolAction",
         "type": "string"
@@ -56080,7 +56086,7 @@
     },
     {
       "name": "device_connectors.list",
-      "summary": "The iPhone connectors of one declared device (default: the calling connection's own, set by client.hello). state is the user's choice and defaults to ask; os_permission is what the phone last reported.",
+      "summary": "The device connectors of one declared device (default: the calling connection's own, set by client.hello). state is the user's choice and defaults to ask; os_permission is what the phone last reported.",
       "params": [
         {
           "name": "params",
