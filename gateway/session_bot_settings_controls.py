@@ -10,6 +10,8 @@ VERBS = {
     'messaging.telegram.status': Verb('session:read'),
     'messaging.telegram.connect': Verb('session:control'),
     'messaging.telegram.disconnect': Verb('session:control'),
+    'messaging.settings.get': Verb('session:read'),
+    'messaging.settings.update': Verb('session:control'),
     'bot_mode.about_you.get': Verb('session:read'),
     'bot_mode.about_you.set': Verb('session:control'),
     'memory.import': Verb('session:control'),

@@ -17,6 +17,7 @@ BRIDGED = (
     "cron.manage",
     "capabilities.status", "messaging.slack.status", "messaging.slack.manifest", "messaging.slack.connect", "messaging.slack.disconnect",
     "messaging.telegram.status", "messaging.telegram.connect", "messaging.telegram.disconnect",
+    "messaging.settings.get", "messaging.settings.update",
     "bot_mode.about_you.get", "bot_mode.about_you.set", "memory.import",
     "profiles.get_asset", "profiles.template.export", "profiles.create", "profiles.configure",
     "profiles.set_asset", "profiles.rename", "profiles.delete",

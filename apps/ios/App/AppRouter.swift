@@ -10,6 +10,7 @@ enum AppRoute: Hashable {
     case routines(botName: String)
     case slack(botName: String)
     case telegram(botName: String)
+    case messagingSettings(botName: String)
     case computer(botName: String)
 }
 

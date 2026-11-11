@@ -593,6 +593,51 @@ export interface MessagingSlackManifestResult {
   manifest: Record<string, unknown>
   create_url: string
 }
+export interface MessagingSettingsGetResult {
+  profile: string
+  gateway_running: boolean
+  platforms: MessagingSettingsPlatform[]
+}
+export interface MessagingSettingsPlatform {
+  id: string
+  name: string
+  enabled: boolean
+  configured: boolean
+  state?: string | null
+  error_message?: string | null
+  fields: MessagingSettingsField[]
+  secrets: MessagingSettingsSecret[]
+}
+/** One editable, non-secret setting. ``values`` is the allowlist's IDs; the single-value kinds (``home_channel``) hold zero or one. */
+export interface MessagingSettingsField {
+  key: string
+  kind: MessagingSettingsKind
+  label: string
+  values: string[]
+}
+export type MessagingSettingsKind = 'allowlist' | 'home_channel'
+/** A credential the platform needs: only whether it is set, never a value or a preview. */
+export interface MessagingSettingsSecret {
+  key: string
+  label: string
+  is_set: boolean
+}
+/** ``fields`` maps a setting key from ``messaging.settings.get`` to its new values (an empty list clears it); keys left out are untouched. Refused with 4101 and ``error.data.fields`` ({key: plain-words reason}) when any value is invalid; nothing is written then. */
+export interface MessagingSettingsUpdateParams {
+  profile?: string | null
+  platform: string
+  enabled?: boolean | null
+  fields?: Record<string, string[]> | null
+}
+/** ``changed`` is false for a repeat of the saved values. ``restart_needed`` means the gateway is running and no live multiplexer rebuilt the adapter (``hot_served``), so the change applies after a gateway restart. */
+export interface MessagingSettingsUpdateResult {
+  profile: string
+  gateway_running: boolean
+  settings: MessagingSettingsPlatform
+  changed: boolean
+  hot_served: boolean
+  restart_needed: boolean
+}
 /** ``text`` is pasted free text, one fact per line (bullets, numbering and dates are stripped); ``target`` is the profile notes (``user``, the default) or the agent's own notes (``memory``). */
 export interface MemoryImportParams {
   profile?: string | null
@@ -7480,6 +7525,10 @@ export interface RpcMethods {
   'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
   /** Set/clear one author's emoji reaction on a message; returns the row's full reaction list. */
   'message.react': { params: MessageReactParams; result: MessageReactResult }
+  /** Non-secret messaging settings of one bot (allowlists, home channel, enabled) for Slack and Telegram; credentials appear as set / not set only. */
+  'messaging.settings.get': { params: ProfileParams; result: MessagingSettingsGetResult }
+  /** Validate and save one platform's non-secret settings for a bot; idempotent, all-or-nothing. */
+  'messaging.settings.update': { params: MessagingSettingsUpdateParams; result: MessagingSettingsUpdateResult }
   /** Validate and save a bot's Slack tokens (either one alone replaces just that token), enable the adapter and reload it. */
   'messaging.slack.connect': { params: MessagingSlackConnectParams; result: MessagingSlackConnectResult }
   /** Remove a bot's Slack tokens and disable the adapter. */
@@ -7951,6 +8000,8 @@ export const RPC_METHODS = [
   'mcp.servers.update',
   'memory.import',
   'message.react',
+  'messaging.settings.get',
+  'messaging.settings.update',
   'messaging.slack.connect',
   'messaging.slack.disconnect',
   'messaging.slack.manifest',
@@ -8257,6 +8308,10 @@ export interface CanonicalRpcMethods {
   'mcp.servers.update': { params: McpServersUpdateParams; result: McpServersUpdateResult }
   /** Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned. */
   'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
+  /** Non-secret messaging settings of one bot (allowlists, home channel, enabled) for Slack and Telegram; credentials appear as set / not set only. */
+  'messaging.settings.get': { params: ProfileParams; result: MessagingSettingsGetResult }
+  /** Validate and save one platform's non-secret settings for a bot; idempotent, all-or-nothing. */
+  'messaging.settings.update': { params: MessagingSettingsUpdateParams; result: MessagingSettingsUpdateResult }
   /** Validate and save a bot's Slack tokens (either one alone replaces just that token), enable the adapter and reload it. */
   'messaging.slack.connect': { params: MessagingSlackConnectParams; result: MessagingSlackConnectResult }
   /** Remove a bot's Slack tokens and disable the adapter. */
@@ -8444,6 +8499,8 @@ export const CANONICAL_RPC_METHODS = [
   'mcp.servers.set_api_key',
   'mcp.servers.update',
   'memory.import',
+  'messaging.settings.get',
+  'messaging.settings.update',
   'messaging.slack.connect',
   'messaging.slack.disconnect',
   'messaging.slack.manifest',

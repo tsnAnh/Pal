@@ -162,6 +162,76 @@ method("messaging.slack.manifest", params=MessagingSlackManifestParams, result=M
        doc="Slack app manifest named after the bot, plus the api.slack.com link that creates the app from it.")
 
 
+class MessagingSettingsKind(WireEnum):
+    allowlist = "allowlist"
+    home_channel = "home_channel"
+
+
+class MessagingSettingsField(Result):
+    """One editable, non-secret setting. ``values`` is the allowlist's IDs; the single-value kinds
+    (``home_channel``) hold zero or one."""
+
+    key: str
+    kind: MessagingSettingsKind
+    label: str
+    values: list[str]
+
+
+class MessagingSettingsSecret(Result):
+    """A credential the platform needs: only whether it is set, never a value or a preview."""
+
+    key: str
+    label: str
+    is_set: bool
+
+
+class MessagingSettingsPlatform(Result):
+    id: str
+    name: str
+    enabled: bool
+    configured: bool
+    state: str | None = None
+    error_message: str | None = None
+    fields: list[MessagingSettingsField]
+    secrets: list[MessagingSettingsSecret]
+
+
+class MessagingSettingsGetResult(Result):
+    profile: str
+    gateway_running: bool
+    platforms: list[MessagingSettingsPlatform]
+
+
+method("messaging.settings.get", params=ProfileParams, result=MessagingSettingsGetResult,
+       doc="Non-secret messaging settings of one bot (allowlists, home channel, enabled) for Slack and Telegram; credentials appear as set / not set only.")
+
+
+class MessagingSettingsUpdateParams(ProfileParams):
+    """``fields`` maps a setting key from ``messaging.settings.get`` to its new values (an empty list clears it);
+    keys left out are untouched. Refused with 4101 and ``error.data.fields`` ({key: plain-words reason}) when any value is invalid;
+    nothing is written then."""
+
+    platform: str
+    enabled: bool | None = None
+    fields: dict[str, list[str]] | None = None
+
+
+class MessagingSettingsUpdateResult(Result):
+    """``changed`` is false for a repeat of the saved values. ``restart_needed`` means the gateway is running
+    and no live multiplexer rebuilt the adapter (``hot_served``), so the change applies after a gateway restart."""
+
+    profile: str
+    gateway_running: bool
+    settings: MessagingSettingsPlatform
+    changed: bool
+    hot_served: bool
+    restart_needed: bool
+
+
+method("messaging.settings.update", params=MessagingSettingsUpdateParams, result=MessagingSettingsUpdateResult,
+       doc="Validate and save one platform's non-secret settings for a bot; idempotent, all-or-nothing.")
+
+
 class MemoryImportTarget(WireEnum):
     user = "user"
     memory = "memory"

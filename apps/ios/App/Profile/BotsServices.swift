@@ -9,6 +9,7 @@ struct BotsServices: Sendable {
     let routines: RoutineService
     let slack: SlackService
     let telegram: TelegramService
+    let messagingSettings: MessagingSettingsService
     let gatewayService: GatewayServiceClient
     let connectCatalog: @Sendable (String) async throws -> ConnectCatalog
     let computer: ComputerService
@@ -22,6 +23,7 @@ struct BotsServices: Sendable {
         routines = RoutineService(gateway: gateway)
         slack = SlackService(gateway: gateway)
         telegram = TelegramService(gateway: gateway)
+        messagingSettings = MessagingSettingsService(gateway: gateway)
         gatewayService = GatewayServiceClient(gateway: gateway)
         connectCatalog = { profile in
             try await ConnectAppsService(rpc: ConnectionRPC(model: connection), profile: profile).load()
