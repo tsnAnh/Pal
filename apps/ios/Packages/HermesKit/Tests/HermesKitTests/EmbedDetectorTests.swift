@@ -1,5 +1,5 @@
 import Foundation
-import HermesChat
+@testable import HermesChat
 import Testing
 
 @Suite("Embed detector")
