@@ -27,19 +27,6 @@ public enum CustomConnectorType: String, Sendable, CaseIterable, Hashable {
     }
 }
 
-public struct ConnectorSecret: Sendable, Equatable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
-    let value: String
-
-    public init(_ value: String) {
-        self.value = value
-    }
-
-    public var isEmpty: Bool { value.isEmpty }
-    public var description: String { "<redacted>" }
-    public var debugDescription: String { "<redacted>" }
-    public var customMirror: Mirror { Mirror(self, children: []) }
-}
-
 public struct ConnectorTool: Sendable, Equatable, Identifiable {
     public var name: String
     public var description: String
@@ -272,7 +259,7 @@ public struct CustomConnectorDraft: Sendable, CustomStringConvertible, CustomDeb
                 result.append(ValidatedHeader(key: key, value: nil))
             } else {
                 guard isHeaderValue(row.value) else { throw .invalidHeader }
-                result.append(ValidatedHeader(key: key, value: ConnectorSecret(row.value)))
+                result.append(ValidatedHeader(key: key, value: SecretString(row.value)))
             }
         }
         return result
@@ -281,7 +268,7 @@ public struct CustomConnectorDraft: Sendable, CustomStringConvertible, CustomDeb
 
 public struct ValidatedHeader: Sendable, Equatable {
     public var key: String
-    var value: ConnectorSecret?
+    var value: SecretString?
 }
 
 public struct ValidatedConnector: Sendable, Equatable {

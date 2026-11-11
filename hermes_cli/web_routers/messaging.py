@@ -295,7 +295,8 @@ def _messaging_platform_payload(
         "id": platform_id, "name": entry["name"], "description": entry["description"],
         "docs_url": entry["docs_url"], "enabled": enabled, "configured": configured,
         "gateway_running": gateway_running, "state": state, "error_code": error_code,
-        "error_message": error_message, "updated_at": runtime_platform.get("updated_at"),
+        "error_message": error_message, "needed_scope": runtime_platform.get("needed_scope"),
+        "provided_scope": runtime_platform.get("provided_scope"), "updated_at": runtime_platform.get("updated_at"),
         "home_channel": home_channel, "env_vars": env_vars,
         "disabled_by_relay": not enabled and platform_id in relay_disabled,
         # Team Gateway's shared bot carries this platform: setup is linking an account to it, and a

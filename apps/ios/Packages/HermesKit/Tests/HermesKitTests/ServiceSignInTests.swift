@@ -55,6 +55,34 @@ private final class Opened: Sendable {
     var all: [URL] { urls.withLock { $0 } }
 }
 
+private actor Gate {
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var isOpen = false
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
+    }
+}
+
+@MainActor
+private func makeGatedCenter(_ recorder: Recorder, _ gate: Gate) -> ServiceSignInCenter {
+    ServiceSignInCenter(
+        call: { method, params in
+            await gate.wait()
+            return try recorder.handle(method, params)
+        },
+        openBrowser: { _ in },
+        dismissDelay: .seconds(30)
+    )
+}
+
 @MainActor
 private func makeCenter(_ recorder: Recorder, _ opened: Opened, delay: Duration = .milliseconds(1)) -> ServiceSignInCenter {
     ServiceSignInCenter(
@@ -262,74 +290,169 @@ struct ServiceSignInCenterTests {
         #expect(center.current == nil)
     }
 
-    @Test func saveKeySetsKeyThenSignsIn() async {
-        let secret = "sk-live-SECRET-123"
-        let recorder = Recorder()
+    @Test func submitStoresThroughOneCallAndKeepsTheValueOnlyInThatRequest() async {
+        let secret = "CANARY-\(UUID().uuidString)"
+        let recorder = Recorder(reply: ["outcome": "stored"])
         let center = makeCenter(recorder, Opened())
         center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
         #expect(center.current?.takesKey == true)
         await center.signIn()
         #expect(recorder.methods().isEmpty)
-        await center.saveKey("  \(secret)\n")
-        #expect(recorder.methods() == ["mcp.servers.set_api_key", "auth.signin"])
-        let sent = recorder.params("mcp.servers.set_api_key").first ?? nil
-        #expect(sent?["name"]?.stringValue == "linear")
+        await center.submitCredential(SecretString(secret))
+        #expect(recorder.methods() == ["auth.submit_credential"])
+        let sent = recorder.params("auth.submit_credential").first ?? nil
+        #expect(sent?["request_id"]?.stringValue == "r1")
         #expect(sent?["value"]?.stringValue == secret)
-        #expect(recorder.params("auth.signin").first??["request_id"]?.stringValue == "r1")
         #expect(center.current?.phase == .keySet)
         #expect(!String(reflecting: center.dialogs).contains(secret))
+        #expect(!"\(center.dialogs)".contains(secret))
         center.receive(resolvedEvent("r1", "signed_in"))
         #expect(center.current?.phase == .signedIn)
         #expect(await settle { center.current == nil })
     }
 
-    @Test func saveKeyFailureLeavesNoValueAndAllowsRetry() async {
-        let secret = "sk-live-SECRET-456"
-        let center = makeCenter(Recorder(failing: true), Opened())
+    @Test(arguments: [("failed", "retryable"), ("unknown", "retryable"), ("rejected", "expired")])
+    func submitOutcomesMapToPhases(outcome: String, kind: String) async {
+        let secret = "CANARY-\(UUID().uuidString)"
+        let center = makeCenter(Recorder(reply: ["outcome": .string(outcome)]), Opened())
         center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
-        await center.saveKey(secret)
-        #expect(center.current?.phase == .keyFailed("Couldn't save the key."))
-        #expect(center.current?.acceptsKey == true)
+        await center.submitCredential(SecretString(secret))
+        if kind == "expired" {
+            #expect(center.current?.phase == .expired)
+            #expect(center.current?.acceptsKey == false)
+        } else {
+            #expect(center.current?.phase == .keyFailed("Couldn't save that. Check it and try again."))
+            #expect(center.current?.acceptsKey == true)
+        }
         #expect(!String(reflecting: center.dialogs).contains(secret))
         var dumped = ""
         dump(center, to: &dumped)
         #expect(!dumped.contains(secret))
     }
 
-    @Test func saveKeyFailsWhenSignInNotRecorded() async {
-        let recorder = Recorder(reply: ["recorded": false])
+    @Test func aThrownSubmitIsRetryableAndLeavesNoValue() async {
+        let secret = "CANARY-\(UUID().uuidString)"
+        let recorder = Recorder(failing: true)
         let center = makeCenter(recorder, Opened())
         center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
-        await center.saveKey("abc")
-        #expect(recorder.methods() == ["mcp.servers.set_api_key", "auth.signin"])
-        #expect(center.current?.phase == .keyFailed("Couldn't save the key."))
+        await center.submitCredential(SecretString(secret))
+        #expect(center.current?.phase == .keyFailed("Couldn't save that. Check it and try again."))
+        #expect(center.current?.acceptsKey == true)
+        #expect(!String(reflecting: center.dialogs).contains(secret))
+        await center.submitCredential(SecretString(secret))
+        #expect(recorder.methods() == ["auth.submit_credential", "auth.submit_credential"])
     }
 
-    @Test func saveKeyIgnoredWithoutServerOrValueOrKeyFlow() async {
+    @Test func aSecondSubmitWhileOneIsInFlightIsIgnored() async {
+        let recorder = Recorder(reply: ["outcome": "stored"])
+        let gate = Gate()
+        let center = makeGatedCenter(recorder, gate)
+        center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
+        let first = Task { await center.submitCredential(SecretString("first")) }
+        #expect(await settle { center.current?.phase == .signingIn })
+        await center.submitCredential(SecretString("second"))
+        await gate.open()
+        await first.value
+        #expect(recorder.methods() == ["auth.submit_credential"])
+        #expect(recorder.params("auth.submit_credential").first??["value"]?.stringValue == "first")
+        #expect(center.current?.phase == .keySet)
+    }
+
+    @Test func aResolvedEventBeforeTheReplyWins() async {
+        let recorder = Recorder(reply: ["outcome": "stored"])
+        let gate = Gate()
+        let center = makeGatedCenter(recorder, gate)
+        center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
+        let submit = Task { await center.submitCredential(SecretString("value")) }
+        #expect(await settle { center.current?.phase == .signingIn })
+        center.receive(resolvedEvent("r1", "signed_in"))
+        await gate.open()
+        await submit.value
+        #expect(center.current?.phase == .signedIn)
+    }
+
+    @Test func submitIsIgnoredForEmptyValuesAndNonKeyFlows() async {
         let recorder = Recorder()
         let center = makeCenter(recorder, Opened())
-        center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil))
-        await center.saveKey("abc")
-        center.receive(requiredEvent("r2", service: "notion", flow: "api_key", code: nil, uri: nil, server: "notion"))
+        center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
+        await center.submitCredential(SecretString(""))
         await center.notNow()
-        await center.saveKey("   ")
-        let oauth = makeCenter(recorder, Opened())
-        oauth.receive(requiredEvent(flow: "oauth", code: nil, uri: nil, server: "linear"))
-        await oauth.saveKey("abc")
+        for flow in ["oauth", "device_code", "manual"] {
+            let other = makeCenter(recorder, Opened())
+            other.receive(requiredEvent(flow: flow))
+            #expect(other.current?.takesKey == false)
+            await other.submitCredential(SecretString("abc"))
+        }
         #expect(recorder.methods() == ["auth.decline"])
     }
 
-    @Test func headerFlowOffersNoSignInAction() async {
-        let recorder = Recorder()
+    @Test func headerFlowTakesTheBoxAndOffersNoSignIn() async {
+        let secret = "CANARY-\(UUID().uuidString)"
+        let recorder = Recorder(reply: ["outcome": "stored"])
         let center = makeCenter(recorder, Opened())
         center.receive(requiredEvent(flow: "header", code: nil, uri: nil, server: "docs"))
         #expect(center.current?.canSignIn == false)
-        #expect(center.current?.takesKey == false)
+        #expect(center.current?.takesKey == true)
         await center.signIn()
-        await center.saveKey("abc")
         #expect(recorder.methods().isEmpty)
+        await center.submitCredential(SecretString(secret))
+        #expect(recorder.methods() == ["auth.submit_credential"])
+        #expect(recorder.params("auth.submit_credential").first??["request_id"]?.stringValue == "r1")
+        #expect(center.current?.phase == .keySet)
+    }
+
+    @Test func timedOutExpiresKeyDialogsAndFailsTheRest() async {
+        let recorder = Recorder()
+        for flow in ["api_key", "header"] {
+            let center = makeCenter(recorder, Opened())
+            center.receive(requiredEvent("r1", flow: flow, code: nil, uri: nil, server: "linear"))
+            center.receive(resolvedEvent("r1", "timed_out"))
+            #expect(center.current?.phase == .expired)
+            #expect(center.current?.acceptsKey == false)
+            await center.notNow()
+            #expect(center.current == nil)
+        }
+        let oauth = makeCenter(recorder, Opened())
+        oauth.receive(requiredEvent("r2", flow: "oauth", code: nil, uri: nil))
+        oauth.receive(resolvedEvent("r2", "timed_out"))
+        #expect(oauth.current?.phase == .failed("Sign-in took too long and was stopped."))
+        #expect(recorder.methods().isEmpty)
+    }
+
+    @Test func cancellingDeclinesOnceAndRetainsNothing() async {
+        let secret = "CANARY-\(UUID().uuidString)"
+        let recorder = Recorder(reply: ["outcome": "failed"])
+        let center = makeCenter(recorder, Opened())
+        center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
+        await center.submitCredential(SecretString(secret))
         await center.notNow()
-        #expect(recorder.methods() == ["auth.decline"])
-        #expect(center.current == nil)
+        #expect(center.dialogs.isEmpty)
+        #expect(recorder.methods() == ["auth.submit_credential", "auth.decline"])
+        #expect(recorder.params("auth.decline").first??["value"] == nil)
+        var dumped = ""
+        dump(center, to: &dumped)
+        #expect(!dumped.contains(secret))
+    }
+}
+
+@Suite("Credential wire")
+struct CredentialWireTests {
+    @Test func methodAndParamsCarryTheValueOnlyInTheRequest() {
+        let secret = "CANARY-\(UUID().uuidString)"
+        #expect(ServiceSignInWire.submitCredentialMethod == "auth.submit_credential")
+        let params = ServiceSignInWire.submitCredentialParams(requestID: "req-12345678", value: SecretString(secret))
+        #expect(params["request_id"]?.stringValue == "req-12345678")
+        #expect(params["value"]?.stringValue == secret)
+        #expect(params.objectValue?.count == 2)
+    }
+
+    @Test(arguments: [("stored", AuthCredentialOutcome.stored), ("failed", AuthCredentialOutcome.failed), ("rejected", AuthCredentialOutcome.rejected), ("weird", AuthCredentialOutcome.unknown)])
+    func outcomeParsing(wire: String, expected: AuthCredentialOutcome) {
+        #expect(AuthCredentialOutcome(["outcome": .string(wire)]) == expected)
+    }
+
+    @Test func aMissingOutcomeIsUnknown() {
+        #expect(AuthCredentialOutcome([:]) == .unknown)
+        #expect(AuthCredentialOutcome(wire: nil) == .unknown)
     }
 }

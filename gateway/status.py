@@ -1091,7 +1091,7 @@ def _prepare_runtime_status_update(
     error_code: Any = _UNSET, error_message: Any = _UNSET, needs_attention: Any = _UNSET,
     retrying_since: Any = _UNSET, served_profiles: Any = _UNSET, session_store: Any = _UNSET,
     parked_profiles: Any = _UNSET, multiplex_standalone_reason: Any = _UNSET,
-    platform_metrics: Any = _UNSET,
+    platform_metrics: Any = _UNSET, needed_scope: Any = _UNSET, provided_scope: Any = _UNSET,
     ingress_url: Any = _UNSET, listener_base: Any = _UNSET, clear_profile_platforms: bool = False,
     drop_profile_platforms: Optional[str] = None, keep_platforms: Iterable[str] = (),
     load_existing: bool = True, reload_existing: bool = False,
@@ -1145,9 +1145,9 @@ def _prepare_runtime_status_update(
                 ("error_message", error_message, None),
                 ("needs_attention", needs_attention, bool),
                 ("retrying_since", retrying_since, None),
-                ("metrics", platform_metrics, None),
-                ("ingress_url", ingress_url, None),
-                ("listener_base", listener_base, None),
+                ("metrics", platform_metrics, None), *(((k, None if platform_state == "connected" else v, None)) for k, v in (
+                    ("needed_scope", needed_scope), ("provided_scope", provided_scope))),
+                ("ingress_url", ingress_url, None), ("listener_base", listener_base, None),
             ))
             platform_payload.update(
                 updated_at=_utc_now_iso(), writer_pid=current_record["pid"],

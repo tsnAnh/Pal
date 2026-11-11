@@ -12,6 +12,11 @@ final class SlackModel {
         case unavailable
     }
 
+    enum TokenEntry: Equatable {
+        case connect
+        case update
+    }
+
     enum Activity: Equatable {
         case preparing
         case connecting
@@ -21,6 +26,8 @@ final class SlackModel {
 
     private(set) var phase: Phase = .loading
     private(set) var notice: String?
+    private(set) var failure: SlackFailureReason?
+    private(set) var tokenEntry = TokenEntry.connect
     var isEnteringTokens = false
     var confirmsDisconnect = false
     var botToken = ""
@@ -45,7 +52,15 @@ final class SlackModel {
     }
 
     var canSubmitTokens: Bool {
-        SlackTokens(bot: botToken, app: appToken) != nil
+        SlackTokenUpdate(bot: botToken, app: appToken)?.isComplete == true
+    }
+
+    var canSubmitTokenUpdate: Bool {
+        SlackTokenUpdate(bot: botToken, app: appToken) != nil
+    }
+
+    var showsUpdateTokens: Bool {
+        connection?.allowsTokenUpdate == true
     }
 
     func load() async {
@@ -55,9 +70,9 @@ final class SlackModel {
 
     func refresh() async {
         do {
-            let connection = try await services.slack.status(profile: botName)
-            phase = .ready(connection)
-            if !connection.isSettled { startPolling() }
+            let status = try await services.slack.status(profile: botName)
+            show(status)
+            if !status.connection.isSettled { startPolling() }
         } catch is CancellationError {
         } catch {
             phase = .unavailable
@@ -78,6 +93,7 @@ final class SlackModel {
             let manifest = try await services.slack.manifest(profile: botName, displayName: displayName)
             phase = .ready(connection ?? .notConnected)
             if ExternalLink.open(manifest.createURL) {
+                tokenEntry = .connect
                 isEnteringTokens = true
             } else {
                 notice = String(localized: "Couldn't open Slack. Try again.")
@@ -94,24 +110,47 @@ final class SlackModel {
         clearTokens()
     }
 
+    func beginUpdateTokens() {
+        guard showsUpdateTokens else { return }
+        notice = nil
+        clearTokens()
+        tokenEntry = .update
+        isEnteringTokens = true
+    }
+
     func submitTokens() async {
-        guard let tokens = SlackTokens(bot: botToken, app: appToken) else { return }
+        guard let tokens = SlackTokenUpdate(bot: botToken, app: appToken), tokens.isComplete else { return }
+        await send(tokens, fallback: .notConnected)
+    }
+
+    func submitTokenUpdate() async {
+        guard let tokens = SlackTokenUpdate(bot: botToken, app: appToken), let fallback = connection else { return }
+        await send(tokens, fallback: fallback)
+    }
+
+    private func send(_ tokens: SlackTokenUpdate, fallback: SlackConnection) async {
         isEnteringTokens = false
         clearTokens()
+        let previous = (connection: fallback, failure: failure)
         phase = .busy(.connecting)
         notice = nil
         do {
-            let connection = try await services.slack.connect(profile: botName, tokens: tokens)
-            phase = .ready(connection)
-            apply(connection)
+            let status = try await services.slack.connect(profile: botName, tokens: tokens)
+            show(status)
+            apply(status)
         } catch is CancellationError {
         } catch BotsError.rejected(reason: SlackService.invalidTokensReason) {
-            phase = .ready(.notConnected)
+            restore(previous)
             notice = String(localized: "Slack didn't accept those tokens. Check them and try again.")
         } catch {
-            phase = .ready(.notConnected)
+            restore(previous)
             notice = String(localized: "Couldn't connect to Slack. Try again.")
         }
+    }
+
+    private func restore(_ previous: (connection: SlackConnection, failure: SlackFailureReason?)) {
+        failure = previous.failure
+        phase = .ready(previous.connection)
     }
 
     func disconnect() async {
@@ -119,9 +158,9 @@ final class SlackModel {
         phase = .busy(.disconnecting)
         notice = nil
         do {
-            let connection = try await services.slack.disconnect(profile: botName)
-            phase = .ready(connection)
-            apply(connection)
+            let status = try await services.slack.disconnect(profile: botName)
+            show(status)
+            apply(status)
         } catch is CancellationError {
         } catch {
             phase = .ready(.connected)
@@ -134,10 +173,16 @@ final class SlackModel {
         polling = nil
     }
 
-    private func apply(_ connection: SlackConnection) {
-        switch connection {
+    private func show(_ status: SlackStatus) {
+        failure = status.failure
+        phase = .ready(status.connection)
+    }
+
+    private func apply(_ status: SlackStatus) {
+        switch status.connection {
         case .starting: startPolling()
-        case .failed: notice = String(localized: "Slack saved your tokens but the connection didn't start.")
+        case .failed:
+            if status.failure == nil { notice = String(localized: "Slack saved your tokens but the connection didn't start.") }
         case .restartNeeded: notice = String(localized: "Hermes needs a restart to finish connecting. It can't restart while a chat is running.")
         case .notConnected, .connected: break
         }
@@ -149,10 +194,10 @@ final class SlackModel {
             for _ in 0..<Self.pollLimit {
                 try? await Task.sleep(for: Self.pollInterval)
                 guard let self, !Task.isCancelled else { return }
-                guard let connection = try? await services.slack.status(profile: botName) else { continue }
-                phase = .ready(connection)
-                if connection.isSettled {
-                    apply(connection)
+                guard let status = try? await services.slack.status(profile: botName) else { continue }
+                show(status)
+                if status.connection.isSettled {
+                    apply(status)
                     return
                 }
             }

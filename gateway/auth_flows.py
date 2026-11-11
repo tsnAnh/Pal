@@ -172,6 +172,25 @@ class McpOAuthFlow:
             mcp_oauth_sessions.cancel_flow(self._session_id, self._server, self._home_key())
 
 
+MAX_CREDENTIAL_CHARS = 4096
+
+
+def credential_text(value: object) -> Optional[str]:
+    """The single-line ASCII credential to save, or None when it cannot be one (HTTP header values are ASCII,
+    and ``save_env_value`` prints the offending characters of a non-ASCII value to stderr)."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or len(text) > MAX_CREDENTIAL_CHARS or not text.isascii() or not text.isprintable():
+        return None
+    return text
+
+
+async def save_credential(env_var: str, text: str) -> None:
+    from hermes_cli.config import save_env_value_secure
+    await asyncio.to_thread(save_env_value_secure, env_var, text)
+
+
 class KeyEntryFlow:
     kind = "api_key"
     user_code = None
@@ -181,6 +200,16 @@ class KeyEntryFlow:
     def __init__(self, server: str) -> None:
         self.server = server
         self._stored = asyncio.Event()
+
+    async def store(self, value: str) -> bool:
+        from hermes_cli.mcp_config import _env_key_for_server, _strip_bearer_prefix
+        text = credential_text(value)
+        text = _strip_bearer_prefix(text) if text else None
+        if not text or text.lower() == "bearer":
+            return False
+        await save_credential(_env_key_for_server(self.server), text)
+        self._stored.set()
+        return True
 
     async def begin(self) -> None:
         return None
@@ -204,12 +233,37 @@ class KeyEntryFlow:
         return None
 
 
-class HeaderFlow(ManualFlow):
+class HeaderFlow:
     kind = "header"
+    user_code = None
+    verification_uri = None
+    expires_in = None
 
-    def __init__(self, server: str) -> None:
-        super().__init__()
+    def __init__(self, server: str, env_var: str) -> None:
         self.server = server
+        self._env_var = env_var
+        self._stored = asyncio.Event()
+
+    async def begin(self) -> None:
+        return None
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def store(self, value: str) -> bool:
+        text = credential_text(value)
+        if text is None:
+            return False
+        await save_credential(self._env_var, text)
+        self._stored.set()
+        return True
+
+    async def wait(self) -> bool:
+        await self._stored.wait()
+        return True
+
+    def cancel(self) -> None:
+        return None
 
 
 class McpServerFlow:
@@ -239,10 +293,17 @@ class McpServerFlow:
         elif kind == "api_key":
             self._inner = KeyEntryFlow(self._server)
         elif kind == "header":
-            self._inner = HeaderFlow(self._server)
+            from tui_gateway.mcp_header_secrets import referenced_vars
+            names = referenced_vars(cfg.get("headers"))
+            if len(names) == 1:
+                self._inner = HeaderFlow(self._server, next(iter(names)))
 
     async def authorize_url(self) -> Optional[str]:
         return await self._inner.authorize_url()
+
+    @property
+    def store(self):
+        return getattr(self._inner, "store", None)
 
     async def confirm(self) -> bool:
         confirm = getattr(self._inner, "confirm", None)

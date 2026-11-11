@@ -1388,6 +1388,7 @@ class SlackAdapter(BasePlatformAdapter):
         except Exception:  # pragma: no cover - defensive logging
             logger.debug("[Slack] Could not inspect Socket Mode task exception", exc_info=True)
         if exc is not None:
+            self._publish_socket_refusal(exc)
             logger.warning("[Slack] Socket Mode task exited with error: %s", exc, exc_info=True)
         else:
             logger.warning("[Slack] Socket Mode task exited unexpectedly")
@@ -1396,6 +1397,21 @@ class SlackAdapter(BasePlatformAdapter):
         except RuntimeError:
             return
         loop.create_task(self._restart_socket_mode("socket task exited"))
+
+    def _publish_socket_refusal(self, exc: BaseException) -> None:
+        """Surface Slack's own refusal (``apps.connections.open``: missing_scope, invalid_auth, ...) in the
+        platform status, so a client can say why instead of only that the transport keeps dropping."""
+        response = getattr(exc, "response", None) or getattr(getattr(exc, "__cause__", None), "response", None)
+        if not hasattr(response, "get"):
+            return
+        code = str(response.get("error") or "").strip()
+        if not code:
+            return
+        self._write_runtime_status_safe(
+            "socket_refused", platform_state="retrying", error_code=code,
+            error_message=f"Slack refused the Socket Mode connection ({code})",
+            needed_scope=str(response.get("needed") or "").strip() or None,
+            provided_scope=str(response.get("provided") or "").strip() or None)
 
     def _describe_slack_api_error(
         self, response: Any, *, file_obj: Optional[dict[str, Any]] = None) -> Optional[str]:
