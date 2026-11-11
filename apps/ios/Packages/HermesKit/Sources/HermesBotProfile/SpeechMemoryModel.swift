@@ -26,6 +26,10 @@ public final class SpeechMemoryModel {
     public struct Target: Sendable, Equatable, Identifiable {
         public let area: SpeechMemoryArea
         public let provider: SpeechMemoryProvider
+        public init(area: SpeechMemoryArea, provider: SpeechMemoryProvider) {
+            self.area = area
+            self.provider = provider
+        }
         public var id: String { SpeechMemoryModel.rowID(area, provider.id) }
     }
 
