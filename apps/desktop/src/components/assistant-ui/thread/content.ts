@@ -11,7 +11,8 @@ const EMPTY_ATTACHMENT_REFS: string[] = []
 export const AGENT_MESSAGE_RE =
   /^(?:Message from (?:🤖\s*)?([^:\n(]{1,64}?)(?:\s*\(@([a-z0-9][a-z0-9_-]{0,63})(?:@[a-zA-Z0-9][a-zA-Z0-9_-]{0,63})?\))?:\s*|\[Message from agent '([^']{1,64})'\]\s*)([\s\S]*)$/u
 
-export const PROCESS_NOTIFICATION_RE = /^\[IMPORTANT: Background process [\s\S]*\]$/
+export const PROCESS_NOTIFICATION_RE =
+  /^\[IMPORTANT: (?:Background process |\d+ background process results arrived )[\s\S]*\]$/
 
 const CRONJOB_TURN_PREFIX = '[Cronjob "'
 

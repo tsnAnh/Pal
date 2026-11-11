@@ -16,7 +16,7 @@ enum BubbleDelivery: Equatable {
 enum ChatNotice: Equatable {
     case botMessage(senderName: String, body: String)
     case notification
-    case backgroundTaskFinished
+    case backgroundTaskFinished(count: Int, text: String)
 }
 
 struct ReplyTarget: Equatable {
@@ -666,7 +666,7 @@ final class ChatModel {
             case .systemNotification:
                 return (.notice(.notification), [])
             case .processCompletion:
-                return (.notice(.backgroundTaskFinished), [])
+                return (.notice(.backgroundTaskFinished(count: InboundKind.backgroundTaskCount(in: text), text: text)), [])
             }
         case .assistant(let text, _, let streaming):
             if streaming { return nil }
