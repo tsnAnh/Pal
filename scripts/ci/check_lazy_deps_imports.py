@@ -29,8 +29,7 @@ stdout), 2 = inventory/analysis error.
 Usage:
     python scripts/ci/check_lazy_deps_imports.py [repo_root]
 
-Wired unconditionally into .github/workflows/repo-guards.yml
-(blocking step); the contract tests driving this CLI against fixture
+Run by `scripts/check`; the contract tests driving this CLI against fixture
 repos live in tests/pm/test_no_lazy_deps.py.
 """
 

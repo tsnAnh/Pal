@@ -210,9 +210,7 @@ A cell whose fix is an open PR wraps only its final assertions in
 `known_failure` (`tests/e2e/core/_pending_fixes.py`), after every other assertion of
 the cell: it XFAILs on exactly that gap's message, fails on anything else, and passes
 once the fix lands, whichever merges first. An acceptance run of an integrated batch
-refuses that allowance: `HERMES_E2E_STRICT_ACCEPTANCE=<owner>` (the `strict_acceptance`
-dispatch input of `ci.yaml` and `windows-install-update-e2e.yml`, e.g.
-`gh workflow run windows-install-update-e2e.yml --ref <branch> -f strict_acceptance=upd-txn`)
+refuses that allowance: `HERMES_E2E_STRICT_ACCEPTANCE=<owner>` (set it when running the suite by hand)
 turns every gap whose reason starts with `<owner>:` into a failure (`1`: every gap). Kill points are observed states (a git child in the process tree by its argv, git held
 inside its checkout by a filter with `index.lock` present, HEAD read from the ref files, the hand-off's update child plus its marker), never sleeps.
 
@@ -225,14 +223,4 @@ inside its checkout by a filter with `index.lock` present, HEAD read from the re
 | Windows `orphaned_update` | only `windows.ps1` (no `/T`); its `hermes update` keeps running and must finish with the marker LIVE until it exits, then gone | `tests/e2e/core/windows_update/test_crash_cells.py::test_desktop_handoff_script_killed_alone_keeps_the_marker_live_until_its_update_ends` | #132354 + #132365 (line-4 delegate) |
 | POSIX commit points | per lane | `tests/e2e/core/upgrade/<area>/test_hostile_<lane>.py` | the lane that owns the file |
 
-The Windows cells run in the Windows install + update journey
-(`.github/workflows/windows-install-update-e2e.yml`); push a `wine2e-install/**`
-branch to run them on demand. Both real-update suites are required on a pull
-request whenever the change classifier's `e2e_upgrade` lane fires (any file on
-the update path: `scripts/ci/classify_changes.py`), and the Desktop update suite
-whenever `e2e_desktop_update` fires; they are skipped, and count as passing,
-otherwise. The update path is derived, not remembered:
-`tests/ci/test_update_ci_routing.py` reads every module the update entry points
-import (and every build script they run) and fails until each is routed or is a
-declared shared hub, and it replays the real classifier's output through the real
-workflow files so a set lane always reaches its job. Related: [macOS bundle updates](macos-bundle-updates.md).
+The Windows cells run by hand on a Windows host; no CI workflow runs them since the CI reset. Related: [macOS bundle updates](macos-bundle-updates.md).

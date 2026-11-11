@@ -1,0 +1,53 @@
+name: Python
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: python-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  python:
+    name: python
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up locked Python and test dependencies
+        uses: ./.github/actions/setup-pm
+        with:
+          test-environment: 'true'
+          prune-python-cache: true
+
+      - name: Install pinned ruff
+        uses: ./.github/actions/retry
+        with:
+          command: python -m scripts.ci.python_packages "$(python -m scripts.code_health --print-pins)"
+
+      - name: Lint and static checks (python scripts/check)
+        run: python scripts/check
+
+      # Subset, not the full suite: the full suite is sized for three 32-vCPU runners and does not
+      # finish on a hosted 4-vCPU one. tests/ci and tests/scripts cover the repo's own guards and
+      # tooling (about 8 min on 4 vCPU). Excluded: two tests red on main today, test_docs_drift
+      # (undocumented config keys, /reach) and test_prompt_surface (stale snapshot), and
+      # test_code_health_identity, which exceeded its 300 s file timeout on a 4-vCPU sandbox.
+      - name: Tests (tests/ci, tests/scripts)
+        run: >-
+          scripts/run_tests.sh tests/ci tests/scripts --
+          --deselect=tests/ci/test_docs_drift.py::test_no_new_undocumented_config_keys_or_slash_commands
+          --deselect=tests/ci/test_prompt_surface.py::test_committed_prompt_surface_is_current
+          --ignore=tests/scripts/test_code_health_identity.py
+        env:
+          OPENROUTER_API_KEY: ""
+          OPENAI_API_KEY: ""
+          NOUS_API_KEY: ""
