@@ -139,6 +139,11 @@ struct BotProfileView: View {
                     }
                 }
                 SettingsRow.navigate(
+                    String(localized: "Messaging"),
+                    icon: .symbol("bubble.left.and.bubble.right"),
+                    accessibilityIdentifier: "profileMessagingRow"
+                ) { router.push(.messagingSettings(botName: model.botName)) }
+                SettingsRow.navigate(
                     String(localized: "Routines"),
                     value: model.routinesText,
                     icon: .symbol("clock"),

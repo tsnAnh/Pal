@@ -2365,6 +2365,42 @@
       }
     },
     {
+      "name": "messaging.settings.get",
+      "summary": "Non-secret messaging settings of one bot (allowlists, home channel, webhook port, enabled) for every platform that has any; credentials appear as set / not set only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingSettingsGetResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.settings.update",
+      "summary": "Validate and save one platform's non-secret settings for a bot; idempotent, all-or-nothing.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingSettingsUpdateParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingSettingsUpdateResult"
+        }
+      }
+    },
+    {
       "name": "messaging.slack.connect",
       "summary": "Validate and save a bot's Slack tokens (either one alone replaces just that token), enable the adapter and reload it.",
       "params": [
@@ -29706,6 +29742,264 @@
           }
         },
         "title": "MessageStartPayload",
+        "type": "object"
+      },
+      "MessagingSettingsField": {
+        "additionalProperties": false,
+        "description": "One editable, non-secret setting. ``values`` is the allowlist's IDs; the single-value kinds\n(``home_channel``, ``port``) hold zero or one.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/MessagingSettingsKind"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "label",
+          "values"
+        ],
+        "title": "MessagingSettingsField",
+        "type": "object"
+      },
+      "MessagingSettingsGetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "gateway_running": {
+            "title": "Gateway Running",
+            "type": "boolean"
+          },
+          "platforms": {
+            "items": {
+              "$ref": "#/components/schemas/MessagingSettingsPlatform"
+            },
+            "title": "Platforms",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile",
+          "gateway_running",
+          "platforms"
+        ],
+        "title": "MessagingSettingsGetResult",
+        "type": "object"
+      },
+      "MessagingSettingsKind": {
+        "enum": [
+          "allowlist",
+          "home_channel",
+          "port"
+        ],
+        "title": "MessagingSettingsKind",
+        "type": "string"
+      },
+      "MessagingSettingsPlatform": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "State"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Message"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/MessagingSettingsField"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "secrets": {
+            "items": {
+              "$ref": "#/components/schemas/MessagingSettingsSecret"
+            },
+            "title": "Secrets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "enabled",
+          "configured",
+          "fields",
+          "secrets"
+        ],
+        "title": "MessagingSettingsPlatform",
+        "type": "object"
+      },
+      "MessagingSettingsSecret": {
+        "additionalProperties": false,
+        "description": "A credential the platform needs: only whether it is set, never a value or a preview.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "is_set": {
+            "title": "Is Set",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "is_set"
+        ],
+        "title": "MessagingSettingsSecret",
+        "type": "object"
+      },
+      "MessagingSettingsUpdateParams": {
+        "additionalProperties": false,
+        "description": "``fields`` maps a setting key from ``messaging.settings.get`` to its new values (an empty list clears it);\nkeys left out are untouched. Refused with 4101 and ``error.data.fields`` ({key: plain-words reason}) when any value is invalid;\nnothing is written then.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "platform": {
+            "title": "Platform",
+            "type": "string"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Enabled"
+          },
+          "fields": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fields"
+          }
+        },
+        "required": [
+          "platform"
+        ],
+        "title": "MessagingSettingsUpdateParams",
+        "type": "object"
+      },
+      "MessagingSettingsUpdateResult": {
+        "additionalProperties": false,
+        "description": "``changed`` is false for a repeat of the saved values. ``restart_needed`` means the gateway is running\nand no live multiplexer rebuilt the adapter (``hot_served``), so the change applies after a gateway restart.",
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "gateway_running": {
+            "title": "Gateway Running",
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/MessagingSettingsPlatform"
+          },
+          "changed": {
+            "title": "Changed",
+            "type": "boolean"
+          },
+          "hot_served": {
+            "title": "Hot Served",
+            "type": "boolean"
+          },
+          "restart_needed": {
+            "title": "Restart Needed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "profile",
+          "gateway_running",
+          "settings",
+          "changed",
+          "hot_served",
+          "restart_needed"
+        ],
+        "title": "MessagingSettingsUpdateResult",
         "type": "object"
       },
       "MessagingSlackConnectParams": {
@@ -57498,6 +57792,42 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/MemoryImportResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.settings.get",
+      "summary": "Non-secret messaging settings of one bot (allowlists, home channel, webhook port, enabled) for every platform that has any; credentials appear as set / not set only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingSettingsGetResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.settings.update",
+      "summary": "Validate and save one platform's non-secret settings for a bot; idempotent, all-or-nothing.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingSettingsUpdateParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingSettingsUpdateResult"
         }
       }
     },
