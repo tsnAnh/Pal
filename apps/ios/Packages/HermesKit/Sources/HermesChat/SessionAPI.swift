@@ -8,6 +8,7 @@ public enum ChatError: Error, Sendable, Equatable {
     case unexpectedResponse(method: String)
     case titleNotApplied
     case attachmentRefused
+    case noBotChat
 }
 
 struct LibraryAssetPayload: Decodable {

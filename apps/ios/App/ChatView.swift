@@ -17,6 +17,7 @@ struct ChatView: View {
     @State private var connectionIsSlow = false
     @FocusState private var composerFocused: Bool
 
+    let teach: TeachModel
     let router: AppRouter
 
     @Environment(\.hermesTheme) private var theme
@@ -28,8 +29,9 @@ struct ChatView: View {
     @State private var messageMenu: MessageMenuRequest?
     #endif
 
-    init(model: ChatModel, router: AppRouter) {
+    init(model: ChatModel, teach: TeachModel, router: AppRouter) {
         _model = State(initialValue: model)
+        self.teach = teach
         self.router = router
     }
 
@@ -69,6 +71,8 @@ struct ChatView: View {
             .scrollDismissesKeyboard(.interactively)
             .scrollEdgeEffectHidden(true, for: .top)
             .overlay(alignment: .top) { topFade }
+            .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
+            .teachPresentations(teach, surface: .chat)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.visibleRect.maxY >= geometry.contentSize.height - 120
             } action: { _, nearBottom in

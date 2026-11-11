@@ -1,4 +1,5 @@
 import HermesBotProfile
+import HermesChat
 import HermesConnect
 import HermesDiagnostics
 import HermesRFB
@@ -13,6 +14,7 @@ struct BotsServices: Sendable {
     let gatewayService: GatewayServiceClient
     let connectCatalog: @Sendable (String) async throws -> ConnectCatalog
     let computer: ComputerService
+    let teach: TeachService
     let openDisplayStream: @Sendable (ComputerObservation) async throws -> any RFBTransport
 
     @MainActor
@@ -29,6 +31,7 @@ struct BotsServices: Sendable {
             try await ConnectAppsService(rpc: ConnectionRPC(model: connection), profile: profile).load()
         }
         computer = ComputerService(gateway: gateway)
+        teach = TeachService(gateway: gateway)
         openDisplayStream = { observation in
             try await connection.displayTransport(path: observation.path, ticket: observation.ticket)
         }
@@ -39,10 +42,26 @@ struct BotsServices: Sendable {
 final class BotsKit {
     let services: BotsServices
     let sharer: TemplateSharer
+    private let connection: ConnectionModel
+    private var teachModels: [String: TeachModel] = [:]
 
     init(connection: ConnectionModel) {
         let services = BotsServices(connection: connection)
         self.services = services
+        self.connection = connection
         sharer = TemplateSharer(services: services)
+    }
+
+    func teach(for name: String, displayName: String) -> TeachModel {
+        if let existing = teachModels[name] { return existing }
+        let turn = BotChatHiddenTurn(connector: LiveChatConnector(connection: connection))
+        let model = TeachModel(
+            botName: name,
+            displayName: displayName,
+            service: services.teach,
+            deliver: { botName, prompt in try await turn.deliver(prompt, to: botName) }
+        )
+        teachModels[name] = model
+        return model
     }
 }

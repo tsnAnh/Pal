@@ -158,7 +158,11 @@ struct RootView: View {
         switch route {
         case .chat(let name):
             if let bot = roster.bot(named: name) {
-                ChatView(model: ChatModel(bot: bot, links: links, roster: roster), router: router)
+                ChatView(
+                    model: ChatModel(bot: bot, links: links, roster: roster),
+                    teach: bots.teach(for: name, displayName: bot.displayName),
+                    router: router
+                )
             }
         case .botProfile(let name):
             BotProfileView(
@@ -180,6 +184,7 @@ struct RootView: View {
                     service: bots.services.computer,
                     openStream: bots.services.openDisplayStream
                 ),
+                teach: bots.teach(for: name, displayName: bot?.displayName ?? name),
                 title: bot?.displayName ?? name,
                 spec: bot?.spec
             )
