@@ -10,7 +10,15 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from gateway import device_registry
-from gateway.reach_presence import AttentionState, ClientKind, Device, declare, report_attention, slot_of
+from gateway.reach_presence import (
+    DEVICE_TOOL_KINDS,
+    AttentionState,
+    ClientKind,
+    Device,
+    declare,
+    report_attention,
+    slot_of,
+)
 from hermes_state_runtime import RuntimeStoreError
 
 logger = logging.getLogger(__name__)
@@ -58,7 +66,7 @@ async def hello(connection, ref, params):
                     app_version=parsed.app_version.strip(), model=model, os_name=os_name)
     slot = declare(connection.transport, device, accepts_offers=parsed.accepts_offers,
                    same_host=_same_host(connection), attention=AttentionState(parsed.attention),
-                   device_tools=parsed.device_tools and device.kind is ClientKind.IOS)
+                   device_tools=parsed.device_tools and device.kind in DEVICE_TOOL_KINDS)
     await _persist(connection, device_registry.record_hello, device_id=device.device_id, kind=device.kind.value,
                    label=device.label, model=device.model, os_name=device.os_name,
                    app_version=device.app_version, now=time.time())
