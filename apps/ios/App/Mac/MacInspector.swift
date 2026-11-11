@@ -226,16 +226,6 @@ struct MacInspector: View {
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
                 }
             }
-            InspectorSection(title: String(localized: "Messaging"), identifier: "inspectorMessaging") {
-                EmptyView()
-            } content: {
-                InspectorRow(identifier: "profileMessagingRow", action: { router.push(.messagingSettings(botName: botName)) }) {
-                    Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
-                    Text("Messaging settings").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                    Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
-                }
-            }
             InspectorSection(title: String(localized: "Notifications"), identifier: "inspectorNotifications") {
                 EmptyView()
             } content: {
