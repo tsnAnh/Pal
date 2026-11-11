@@ -5,6 +5,7 @@ from . import (
     billing_delegation_pets,
     bot_settings,
     bot_teach,
+    capabilities,
     common,
     config_free_tier_control,
     connectors,
