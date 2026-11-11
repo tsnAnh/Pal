@@ -38,7 +38,7 @@ struct MacShortcutRecorder: NSViewRepresentable {
             guard monitor == nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self else { return event }
-                return MainActor.assumeIsolated { self.handle(event) ? nil : event }
+                return self.handle(event) ? nil : event
             }
         }
 
