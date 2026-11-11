@@ -176,8 +176,15 @@ final class BotProfileE2ETests: BotProfileTestCase {
         shot(app, "library-media-preview")
     }
 
-    func test9SlackScreenTokenEntryRequiresWellFormedTokens() throws {
+    func test9aSlackSuggestionIsHiddenWhenSlackIsNotConnected() throws {
         let app = signedInApp()
+        openProfile(app, Self.primarySlug)
+        waitFor(element(app, "profileComputerRow"), timeout: 20, "profile rows")
+        XCTAssertFalse(element(app, "profileSlackRow").waitForExistence(timeout: 3), "no Add to Slack while Slack is not connected")
+    }
+
+    func test9SlackScreenTokenEntryRequiresWellFormedTokens() throws {
+        let app = signedInApp(connectedServices: ["slack"])
         openProfile(app, Self.primarySlug)
         element(app, "profileSlackRow").tap()
         let connect = element(app, "slackConnectButton")
@@ -185,9 +192,9 @@ final class BotProfileE2ETests: BotProfileTestCase {
         XCTAssertTrue(element(app, "slackBody").label.contains("It'll respond with the same plugins, context, and memories it uses here."))
         shot(app, "slack-ready")
         connect.tap()
-        let done = safariDone()
-        waitFor(done, timeout: 30, "slack create page in the in-app browser")
-        done.tap()
+        let opened = element(app, "externalLinkProbe")
+        waitUntil(30, "slack create page handed to the system browser opener") { opened.value as? String == "1" }
+        XCTAssertTrue(opened.label.hasPrefix("https://api.slack.com/apps"), "opened \(opened.label)")
         waitFor(element(app, "slackTokenSheet"), timeout: 15, "token sheet")
         let submit = element(app, "slackTokenSubmit")
         XCTAssertFalse(submit.isEnabled)
