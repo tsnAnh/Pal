@@ -1,6 +1,6 @@
 import Foundation
-import HermesDesign
-import HermesProtocol
+import PalDesign
+import PalProtocol
 
 @MainActor
 struct ParticipantAvatars {

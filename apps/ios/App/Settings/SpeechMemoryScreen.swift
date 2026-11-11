@@ -1,6 +1,6 @@
-import HermesBotProfile
-import HermesDesign
-import HermesProtocol
+import PalBotProfile
+import PalDesign
+import PalProtocol
 import SwiftUI
 
 struct SpeechMemoryScreen: View {
@@ -67,7 +67,7 @@ struct SpeechMemoryScreen: View {
 
     private func areaSection(_ area: SpeechMemoryArea, title: String, group: SpeechProviderGroup) -> some View {
         let key = "speechMemory-\(area.rawValue)"
-        return VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+        return VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             SectionCaption(title, accessibilityIdentifier: "\(key)-caption")
             GroupedCard(accessibilityIdentifier: key) {
                 providerPicker(area, group: group, key: key)
@@ -93,8 +93,8 @@ struct SpeechMemoryScreen: View {
             ForEach(group.providers) { provider in Text(provider.name).tag(provider.id) }
         }
         .pickerStyle(.menu)
-        .padding(.horizontal, HermesMetrics.rowInset)
-        .frame(minHeight: HermesMetrics.rowMinimumHeight)
+        .padding(.horizontal, PalMetrics.rowInset)
+        .frame(minHeight: PalMetrics.rowMinimumHeight)
         .disabled(model.choice(area) == .working(.choosing))
         .accessibilityIdentifier("\(key)-provider")
     }
@@ -109,8 +109,8 @@ struct SpeechMemoryScreen: View {
             ForEach(voice.options) { option in Text(option.label).tag(option.id) }
         }
         .pickerStyle(.menu)
-        .padding(.horizontal, HermesMetrics.rowInset)
-        .frame(minHeight: HermesMetrics.rowMinimumHeight)
+        .padding(.horizontal, PalMetrics.rowInset)
+        .frame(minHeight: PalMetrics.rowMinimumHeight)
         .disabled(model.choice(.tts) == .working(.choosing))
         .accessibilityIdentifier("\(key)-voice")
     }
@@ -124,7 +124,7 @@ struct SpeechMemoryScreen: View {
         let key = "speechMemory-\(area.rawValue)-\(provider.id)"
         let target = SpeechMemoryModel.Target(area: area, provider: provider)
         let busy = model.isWorking(area, provider.id)
-        return VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+        return VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             GroupedCard(accessibilityIdentifier: key) {
                 SettingsRow.value(
                     "\(provider.name) key", value: provider.statusWord, subtitle: provider.note, accessibilityIdentifier: "\(key)-state")
@@ -156,7 +156,7 @@ struct SpeechMemoryScreen: View {
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(Color(theme.palette.destructive))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset - 3)
+                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset - 3)
                 .accessibilityIdentifier(identifier)
         }
     }

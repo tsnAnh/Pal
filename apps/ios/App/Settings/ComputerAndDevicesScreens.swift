@@ -1,5 +1,5 @@
-import HermesDesign
-import HermesSettings
+import PalDesign
+import PalSettings
 import Observation
 import SwiftUI
 
@@ -43,7 +43,7 @@ struct BotComputerScreen: View {
 
     var body: some View {
         SettingsPage(title: "Bot Computer", identifier: "botComputerScreen", back: back) {
-            VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+            VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
                 GroupedCard(accessibilityIdentifier: "botComputerResetCard") {
                     SettingsRow(
                         title: "Reset Computer",

@@ -1,10 +1,10 @@
 import Foundation
-import HermesChat
-import HermesClient
-import HermesDesign
-import HermesDiagnostics
-import HermesProtocol
-import HermesRoster
+import PalChat
+import PalClient
+import PalDesign
+import PalDiagnostics
+import PalProtocol
+import PalRoster
 import Observation
 
 struct BotRow: Identifiable, Equatable {

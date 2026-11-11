@@ -1,5 +1,5 @@
-import HermesDesign
-import HermesRoster
+import PalDesign
+import PalRoster
 import SwiftUI
 
 struct SearchHost: View {
@@ -132,9 +132,9 @@ private struct SearchResultRow: View {
             if let botName, let bot = roster.bot(named: botName) {
                 BotRowAvatar(bot: bot, activity: .idle, mood: .idle, showsPrimaryBadge: false)
             } else {
-                Color.clear.frame(width: HermesMetrics.homeRowAvatarSlot, height: HermesMetrics.homeRowAvatarSlot)
+                Color.clear.frame(width: PalMetrics.homeRowAvatarSlot, height: PalMetrics.homeRowAvatarSlot)
             }
-            VStack(alignment: .leading, spacing: HermesMetrics.homeRowTextGap) {
+            VStack(alignment: .leading, spacing: PalMetrics.homeRowTextGap) {
                 Text(title)
                     .hermesText(.botName)
                     .foregroundStyle(Color(theme.palette.textPrimary))
@@ -151,8 +151,8 @@ private struct SearchResultRow: View {
                 .hermesText(.timestamp)
                 .foregroundStyle(Color(theme.palette.textTertiary))
         }
-        .padding(.horizontal, HermesMetrics.homeRowInset)
-        .frame(minHeight: HermesMetrics.homeRowPitch)
+        .padding(.horizontal, PalMetrics.homeRowInset)
+        .frame(minHeight: PalMetrics.homeRowPitch)
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }

@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
-import HermesBotProfile
-import HermesRFB
+import PalBotProfile
+import PalRFB
 import Observation
 
 enum ComputerPhase: Equatable {

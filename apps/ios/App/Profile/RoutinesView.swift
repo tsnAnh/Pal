@@ -1,5 +1,5 @@
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import SwiftUI
 
 struct RoutinesView: View {
@@ -115,7 +115,7 @@ private struct RoutineRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: HermesMetrics.rowTextSpacing) {
+            VStack(alignment: .leading, spacing: PalMetrics.rowTextSpacing) {
                 Text(routine.title)
                     .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textPrimary))
@@ -128,11 +128,11 @@ private struct RoutineRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             Toggle(routine.title, isOn: $isOn)
                 .labelsHidden()
-                .toggleStyle(HermesToggleStyle())
+                .toggleStyle(PalToggleStyle())
                 .accessibilityLabel(Text(routine.title))
                 .accessibilityIdentifier("routineToggle-\(routine.id)")
         }
-        .padding(.horizontal, HermesMetrics.rowInset)
+        .padding(.horizontal, PalMetrics.rowInset)
         .padding(.vertical, RoutinesMetrics.rowVerticalPadding)
         .frame(minHeight: RoutinesMetrics.rowHeight)
         .contentShape(Rectangle())

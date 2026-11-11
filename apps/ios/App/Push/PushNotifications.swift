@@ -1,6 +1,6 @@
 import Foundation
-import HermesClient
-import HermesDiagnostics
+import PalClient
+import PalDiagnostics
 import UserNotifications
 
 @MainActor

@@ -1,5 +1,5 @@
-import HermesChat
-import HermesDesign
+import PalChat
+import PalDesign
 import SwiftUI
 
 struct GeneratedImageRow: View {
@@ -52,7 +52,7 @@ private struct GeneratingImagePlaceholder: View {
             .foregroundStyle(Color(theme.palette.textSecondary))
         }
         .frame(width: GeneratedImageMetrics.width, height: GeneratedImageMetrics.width / shape.ratio)
-        .clipShape(RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { dimmed = true }
@@ -77,7 +77,7 @@ private struct FailedImageNotice: View {
         }
         .foregroundStyle(Color(theme.palette.textSecondary))
         .padding(12)
-        .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
+        .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("imageGenerationFailed")
     }

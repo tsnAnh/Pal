@@ -1,7 +1,7 @@
 import AppIntents
 import Foundation
 import GeoToolbox
-import HermesChat
+import PalChat
 
 @available(iOS 27.0, macOS 27.0, *)
 @UnionValue

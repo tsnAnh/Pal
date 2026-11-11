@@ -1,5 +1,5 @@
-import HermesChat
-import HermesDesign
+import PalChat
+import PalDesign
 import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
@@ -32,7 +32,7 @@ private struct AttachmentIntakeModifier: ViewModifier {
             }
             .overlay {
                 if isTargeted {
-                    RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous)
+                    RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
                         .strokeBorder(Color(theme.palette.primaryBadge), lineWidth: 2)
                         .padding(2)
                         .allowsHitTesting(false)

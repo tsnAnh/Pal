@@ -1,7 +1,7 @@
-import HermesBotProfile
-import HermesConnect
-import HermesDesign
-import HermesProtocol
+import PalBotProfile
+import PalConnect
+import PalDesign
+import PalProtocol
 import SwiftUI
 
 struct ConnectAppsSheet: View {
@@ -396,7 +396,7 @@ struct CredentialSheet: View {
                             .autocorrectionDisabled()
                             .padding(.horizontal, 16)
                             .frame(height: 48)
-                            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
+                            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
                             .accessibilityIdentifier("connectCredential-\(key)")
                     }
                     PillButton("Connect", kind: complete ? .accent : .dimmed, size: .large, accessibilityIdentifier: "connectCredentialsSubmit") {
@@ -404,7 +404,7 @@ struct CredentialSheet: View {
                         dismiss()
                     }
                 }
-                .padding(.horizontal, HermesMetrics.screenMargin)
+                .padding(.horizontal, PalMetrics.screenMargin)
             }
         )
         .presentationDetents([.medium])

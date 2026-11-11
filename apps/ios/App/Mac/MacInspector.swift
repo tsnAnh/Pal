@@ -1,6 +1,6 @@
 #if os(macOS)
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import SwiftUI
 
 private enum InspectorTab: String, CaseIterable, Identifiable {

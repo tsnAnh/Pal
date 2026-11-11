@@ -1,6 +1,6 @@
-import HermesDesign
-import HermesProtocol
-import HermesSettings
+import PalDesign
+import PalProtocol
+import PalSettings
 import Observation
 import SwiftUI
 
@@ -24,16 +24,16 @@ struct AppearanceScreen: View {
 
     var body: some View {
         SettingsPage(title: "Appearance", identifier: "appearanceScreen", surface: .canvas, back: back) {
-            VStack(spacing: HermesMetrics.appearanceRowSpacing) {
+            VStack(spacing: PalMetrics.appearanceRowSpacing) {
                 row(Self.top)
                 row(Self.bottom)
             }
-            .padding(.horizontal, HermesMetrics.screenMargin)
+            .padding(.horizontal, PalMetrics.screenMargin)
         }
     }
 
     private func row(_ modes: [AppearanceMode]) -> some View {
-        HStack(alignment: .top, spacing: HermesMetrics.appearanceTileSpacing) {
+        HStack(alignment: .top, spacing: PalMetrics.appearanceTileSpacing) {
             ForEach(modes) { mode in
                 AppearanceTile(
                     title: mode.title, icon: Self.icon(for: mode), isSelected: appearance.mode == mode,
@@ -55,7 +55,7 @@ struct HapticsScreen: View {
 
     var body: some View {
         SettingsPage(title: "Haptics", identifier: "hapticsScreen", back: back) {
-            VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+            VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
                 GroupedCard(accessibilityIdentifier: "hapticsCard") {
                     SettingsRow.toggle(
                         "Haptics", subtitle: "Feel a tap when you change a setting.",
@@ -116,7 +116,7 @@ struct DataSharingScreen: View {
             case .failed(let message):
                 FailureCard(message: message, identifier: "dataSharingFailure") { Task { await model.load(api: hub.api) } }
             case .loaded(let metrics):
-                VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+                VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
                     GroupedCard(accessibilityIdentifier: "dataSharingCard") {
                         SettingsRow.toggle(
                             "Share usage data", subtitle: "Help improve Pal with anonymous usage information.",
@@ -174,10 +174,10 @@ struct TimeZoneScreen: View {
                     .neverAutocapitalized()
                     .autocorrectionDisabled()
                     .hermesText(.rowTitle)
-                    .padding(.horizontal, HermesMetrics.rowInset)
-                    .frame(minHeight: HermesMetrics.rowMinimumHeight)
-                    .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
-                    .padding(.horizontal, HermesMetrics.screenMargin)
+                    .padding(.horizontal, PalMetrics.rowInset)
+                    .frame(minHeight: PalMetrics.rowMinimumHeight)
+                    .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+                    .padding(.horizontal, PalMetrics.screenMargin)
                     .accessibilityIdentifier("timeZoneSearch")
                 List(matches, id: \.self) { identifier in
                     Button {
@@ -240,7 +240,7 @@ struct ImportMemoryScreen: View {
 
     var body: some View {
         SettingsPage(title: "Import Memory", identifier: "importMemoryScreen", back: back) {
-            VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+            VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
                 GroupedCard(accessibilityIdentifier: "importMemoryCard") {
                     TextEditor(text: $model.text)
                         .focused($focused)
@@ -248,7 +248,7 @@ struct ImportMemoryScreen: View {
                         .hermesText(.rowTitle)
                         .foregroundStyle(Color(theme.palette.textPrimary))
                         .frame(minHeight: 180)
-                        .padding(.horizontal, HermesMetrics.rowInset - 5)
+                        .padding(.horizontal, PalMetrics.rowInset - 5)
                         .padding(.vertical, 8)
                         .accessibilityIdentifier("importMemoryText")
                         .overlay(alignment: .topLeading) {
@@ -256,7 +256,7 @@ struct ImportMemoryScreen: View {
                                 Text("Paste what another assistant remembers about you")
                                     .hermesText(.rowTitle)
                                     .foregroundStyle(Color(theme.palette.sectionCaption))
-                                    .padding(.horizontal, HermesMetrics.rowInset)
+                                    .padding(.horizontal, PalMetrics.rowInset)
                                     .padding(.vertical, 16)
                                     .allowsHitTesting(false)
                                     .accessibilityHidden(true)

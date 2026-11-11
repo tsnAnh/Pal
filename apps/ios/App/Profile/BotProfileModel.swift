@@ -1,6 +1,6 @@
 import Foundation
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import Observation
 
 @MainActor

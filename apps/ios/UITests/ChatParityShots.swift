@@ -1,4 +1,4 @@
-import HermesDesign
+import PalDesign
 import XCTest
 
 @MainActor

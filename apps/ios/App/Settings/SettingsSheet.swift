@@ -1,5 +1,5 @@
-import HermesDesign
-import HermesSettings
+import PalDesign
+import PalSettings
 import SwiftUI
 
 enum SettingsCopy {
@@ -53,7 +53,7 @@ private struct SettingsDestination: View {
         case .timeZone: TimeZoneScreen(hub: hub, back: back)
         case .botComputer: BotComputerScreen(hub: hub, back: back)
         case .devices: DevicesScreen(hub: hub, connection: connection, back: back)
-        case .hermesService: HermesServiceScreen(hub: hub, back: back)
+        case .hermesService: PalServiceScreen(hub: hub, back: back)
         case .modelProviders: ModelProvidersScreen(hub: hub, back: back)
         case .speechMemory: SpeechMemoryScreen(hub: hub, back: back)
         case .importMemory: ImportMemoryScreen(hub: hub, back: back)
@@ -82,7 +82,7 @@ struct SettingsRootView: View {
     var body: some View {
         SheetChrome(accessibilityIdentifier: "settingsSheet", onLeading: onClose) {
             ScrollView {
-                VStack(spacing: HermesMetrics.cardGap) {
+                VStack(spacing: PalMetrics.cardGap) {
                     accountCard
                     connectAppsCard
                     botCard
@@ -140,7 +140,7 @@ struct SettingsRootView: View {
     }
 
     private var botCard: some View {
-        VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+        VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             SectionCaption("Bot", accessibilityIdentifier: "settingsBotCaption")
             GroupedCard(accessibilityIdentifier: "settingsBotCard") {
                 SettingsRow.navigate(

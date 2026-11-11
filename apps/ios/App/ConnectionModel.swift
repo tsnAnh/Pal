@@ -1,12 +1,12 @@
 import Foundation
-import HermesAuth
-import HermesChat
-import HermesClient
-import HermesDiagnostics
-import HermesProtocol
-import HermesREST
-import HermesRFB
-import HermesTransport
+import PalAuth
+import PalChat
+import PalClient
+import PalDiagnostics
+import PalProtocol
+import PalREST
+import PalRFB
+import PalTransport
 import Observation
 
 @MainActor
@@ -25,7 +25,7 @@ final class ConnectionModel {
     var password = ""
     private(set) var signInMethod: SignInMethod = .browser
     private(set) var phase: Phase = .signedOut
-    private(set) var client: HermesClient?
+    private(set) var client: PalClient?
     private(set) var userInitial = "H"
     private(set) var userName = ""
     let localDeviceID: String?
@@ -232,8 +232,8 @@ final class ConnectionModel {
         await connect()
     }
 
-    var chatConnector: HermesClientConnector? {
-        client.map(HermesClientConnector.init(client:))
+    var chatConnector: PalClientConnector? {
+        client.map(PalClientConnector.init(client:))
     }
 
     func rpc(_ method: String, _ params: JSONValue? = nil) async throws -> JSONValue {
@@ -252,7 +252,7 @@ final class ConnectionModel {
 
     private func reopen() async throws -> GatewayConnection {
         if let reopening { return try await reopening.value }
-        guard let client else { throw HermesClientError.notSignedIn }
+        guard let client else { throw PalClientError.notSignedIn }
         let previous = connection
         let task = Task { try await client.connect() }
         reopening = task
@@ -266,7 +266,7 @@ final class ConnectionModel {
     static let displayStreamPath = "/api/display/ws"
 
     func displayTransport(path: String, ticket: String) async throws -> any RFBTransport {
-        guard path == Self.displayStreamPath, let baseURL = await auth.baseURL else { throw HermesClientError.notSignedIn }
+        guard path == Self.displayStreamPath, let baseURL = await auth.baseURL else { throw PalClientError.notSignedIn }
         let url = baseURL.webSocketEndpoint(path, query: [URLQueryItem(name: "display_ticket", value: ticket)])
         return WebSocketRFBTransport(url: url, diagnostics: diagnostics)
     }
@@ -283,8 +283,8 @@ final class ConnectionModel {
         phase = .signedOut
     }
 
-    private func makeClient() -> HermesClient {
-        HermesClient(auth: auth, transport: transport, diagnostics: diagnostics, presence: presence)
+    private func makeClient() -> PalClient {
+        PalClient(auth: auth, transport: transport, diagnostics: diagnostics, presence: presence)
     }
 
     private func connect(reusingClient: Bool = false) async {

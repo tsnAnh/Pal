@@ -1,5 +1,5 @@
-import HermesDesign
-import HermesSettings
+import PalDesign
+import PalSettings
 import Observation
 import SwiftUI
 
@@ -76,7 +76,7 @@ struct UsageAccountSection: View {
 
     var body: some View {
         TimelineView(.everyMinute) { timeline in
-            VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+            VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
                 SectionCaption(caption, accessibilityIdentifier: "usageCaption-\(account.id)")
                 GroupedCard(accessibilityIdentifier: "usageCard-\(account.id)") {
                     ForEach(account.meters) { meter in

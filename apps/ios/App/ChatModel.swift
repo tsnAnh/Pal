@@ -1,9 +1,9 @@
 import Foundation
-import HermesChat
-import HermesDesign
-import HermesDiagnostics
-import HermesProtocol
-import HermesRoster
+import PalChat
+import PalDesign
+import PalDiagnostics
+import PalProtocol
+import PalRoster
 import Observation
 
 enum BubbleDelivery: Equatable {

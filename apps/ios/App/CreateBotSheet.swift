@@ -1,5 +1,5 @@
-import HermesDesign
-import HermesRoster
+import PalDesign
+import PalRoster
 import SwiftUI
 
 struct CreateBotSheet: View {
@@ -19,7 +19,7 @@ struct CreateBotSheet: View {
             ScrollView {
                 VStack(spacing: 0) {
                     CreateBotPreview(spec: model.spec)
-                        .frame(width: HermesMetrics.createPreviewBox, height: HermesMetrics.createPreviewBox)
+                        .frame(width: PalMetrics.createPreviewBox, height: PalMetrics.createPreviewBox)
                         .padding(.top, 33)
                     CreateBotNameField(model: model, focused: $nameFocused)
                         .padding(.top, 60)
@@ -34,8 +34,8 @@ struct CreateBotSheet: View {
                 CreateBotConfirmButton(model: model, roster: roster, router: router) { nameFocused = false }
             }
         }
-        .presentationDetents([.fraction(HermesMetrics.createSheetDetentFraction)])
-        .presentationCornerRadius(HermesMetrics.sheetRadius)
+        .presentationDetents([.fraction(PalMetrics.createSheetDetentFraction)])
+        .presentationCornerRadius(PalMetrics.sheetRadius)
         .presentationDragIndicator(.hidden)
         .interactiveDismissDisabled(model.isCreating)
     }
@@ -62,7 +62,7 @@ private struct CreateBotNameField: View {
             .focused(focused)
             .submitLabel(.done)
             .onSubmit { focused.wrappedValue = false }
-            .frame(height: HermesMetrics.nameFieldHeight)
+            .frame(height: PalMetrics.nameFieldHeight)
             .background(PalTokens.elevated, in: shape)
             .overlay(shape.strokeBorder(PalTokens.fieldBorder, lineWidth: 1))
             .contentShape(shape)
@@ -76,7 +76,7 @@ private struct CreateBotNameField: View {
                     .accessibilityIdentifier("createBotError")
             }
         }
-        .padding(.horizontal, HermesMetrics.nameFieldHorizontalMargin)
+        .padding(.horizontal, PalMetrics.nameFieldHorizontalMargin)
     }
 
     private var errorMessage: LocalizedStringKey? {
@@ -110,12 +110,12 @@ private struct CreateBotConfirmButton: View {
                 Text("Create").hermesText(.largePill)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: HermesMetrics.createButtonHeight)
+            .frame(height: PalMetrics.createButtonHeight)
         }
         .buttonStyle(CreateButtonStyle())
         .disabled(!model.canCreate)
         .padding(.horizontal, 29)
-        .padding(.bottom, HermesMetrics.createButtonBottomPadding)
+        .padding(.bottom, PalMetrics.createButtonBottomPadding)
         .accessibilityIdentifier("createBotConfirm")
     }
 }
@@ -140,7 +140,7 @@ struct CreateBotPreview: View {
                 EnteringDot(color: dotColor)
                     .transition(.opacity)
             case .live:
-                BotAvatarView(spec: spec, size: HermesMetrics.createPreviewFrame, mood: mood)
+                BotAvatarView(spec: spec, size: PalMetrics.createPreviewFrame, mood: mood)
                     .transition(.scale(scale: 0.2).combined(with: .opacity))
             }
         }

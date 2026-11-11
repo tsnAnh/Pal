@@ -1,5 +1,5 @@
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import SwiftUI
 
 struct MessagingSettingsView: View {
@@ -60,8 +60,8 @@ struct MessagingSettingsView: View {
         Label(String(localized: "Restart the gateway for these changes to take effect."), systemImage: "arrow.triangle.2.circlepath")
             .hermesText(.rowSubtitle)
             .foregroundStyle(Color(theme.palette.textPrimary))
-            .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset)
-            .padding(.bottom, HermesMetrics.cardGap)
+            .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
+            .padding(.bottom, PalMetrics.cardGap)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier("messagingRestartNeeded")
     }
@@ -69,8 +69,8 @@ struct MessagingSettingsView: View {
     private func platformSection(_ platform: MessagingPlatform) -> some View {
         VStack(spacing: 0) {
             SectionCaption(platform.displayName, accessibilityIdentifier: "messagingCaption-\(platform.id)")
-                .padding(.top, HermesMetrics.cardGap)
-                .padding(.bottom, HermesMetrics.captionToCardGap)
+                .padding(.top, PalMetrics.cardGap)
+                .padding(.bottom, PalMetrics.captionToCardGap)
             GroupedCard(accessibilityIdentifier: "messagingCard-\(platform.id)") {
                 SettingsRow.toggle(
                     String(localized: "Enabled"),
@@ -94,7 +94,7 @@ struct MessagingSettingsView: View {
                         settingField(setting)
                     }
                 }
-                .padding(.top, HermesMetrics.cardGap)
+                .padding(.top, PalMetrics.cardGap)
                 saveRow(platform)
             }
         }
@@ -117,7 +117,7 @@ struct MessagingSettingsView: View {
                     .accessibilityIdentifier("messagingFieldError-\(setting.key)")
             }
         }
-        .padding(.horizontal, HermesMetrics.rowInset)
+        .padding(.horizontal, PalMetrics.rowInset)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -152,6 +152,6 @@ struct MessagingSettingsView: View {
                 EmptyView()
             }
         }
-        .padding(.top, HermesMetrics.cardGap)
+        .padding(.top, PalMetrics.cardGap)
     }
 }

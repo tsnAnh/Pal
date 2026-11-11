@@ -1,5 +1,5 @@
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import SwiftUI
 
 struct BotModelView: View {
@@ -85,8 +85,8 @@ struct BotModelView: View {
             .disabled(model.isSaving)
         }
         SectionCaption(String(localized: "Backup models"), accessibilityIdentifier: "botFallbackCaption")
-            .padding(.top, HermesMetrics.cardGap)
-            .padding(.bottom, HermesMetrics.captionToCardGap)
+            .padding(.top, PalMetrics.cardGap)
+            .padding(.bottom, PalMetrics.captionToCardGap)
         GroupedCard(accessibilityIdentifier: "botFallbackCard") {
             ForEach(model.settings.fallbacks) { choice in
                 fallbackRow(choice)
@@ -121,7 +121,7 @@ struct BotModelView: View {
                 await model.removeFallback(choice)
             }
         }
-        .padding(.trailing, HermesMetrics.rowInset)
+        .padding(.trailing, PalMetrics.rowInset)
     }
 
     private func fallbackButton(
@@ -153,8 +153,8 @@ struct BotModelView: View {
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(Color(theme.palette.destructive))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset - 3)
-                .padding(.top, HermesMetrics.captionToCardGap)
+                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset - 3)
+                .padding(.top, PalMetrics.captionToCardGap)
                 .accessibilityIdentifier("botModelStatus")
         }
     }
@@ -180,16 +180,16 @@ private struct BotModelPicker: View {
             VStack(spacing: 0) {
                 TextField("Search models", text: $query)
                     .textFieldStyle(.plain)
-                    .padding(.horizontal, HermesMetrics.rowInset)
-                    .frame(minHeight: HermesMetrics.rowMinimumHeight)
+                    .padding(.horizontal, PalMetrics.rowInset)
+                    .frame(minHeight: PalMetrics.rowMinimumHeight)
                     .background(Color(theme.palette.groupedCard), in: Capsule())
-                    .padding(.horizontal, HermesMetrics.screenMargin)
+                    .padding(.horizontal, PalMetrics.screenMargin)
                     .accessibilityIdentifier("botModelSearch")
                 let matches = model.models(matching: query)
                 ForEach(matches) { provider in
                     SectionCaption(provider.name, accessibilityIdentifier: "botModelProvider-\(provider.id)")
-                        .padding(.top, HermesMetrics.cardGap)
-                        .padding(.bottom, HermesMetrics.captionToCardGap)
+                        .padding(.top, PalMetrics.cardGap)
+                        .padding(.bottom, PalMetrics.captionToCardGap)
                     GroupedCard(accessibilityIdentifier: "botModelProviderCard-\(provider.id)") {
                         ForEach(provider.models, id: \.self) { name in
                             let choice = ModelChoice(provider: provider.id, model: name)
@@ -206,13 +206,13 @@ private struct BotModelPicker: View {
                 }
                 if matches.isEmpty {
                     CardFootnote(String(localized: "No models match."), accessibilityIdentifier: "botModelNoMatch")
-                        .padding(.top, HermesMetrics.cardGap)
+                        .padding(.top, PalMetrics.cardGap)
                 }
                 let locked = model.providersNeedingKey
                 if !locked.isEmpty {
                     SectionCaption(String(localized: "Needs a key"), accessibilityIdentifier: "botModelKeyCaption")
-                        .padding(.top, HermesMetrics.cardGap)
-                        .padding(.bottom, HermesMetrics.captionToCardGap)
+                        .padding(.top, PalMetrics.cardGap)
+                        .padding(.bottom, PalMetrics.captionToCardGap)
                     GroupedCard(accessibilityIdentifier: "botModelKeyCard") {
                         ForEach(locked) { provider in
                             SettingsRow.navigate(

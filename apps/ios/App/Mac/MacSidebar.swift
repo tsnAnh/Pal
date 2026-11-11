@@ -1,6 +1,6 @@
 #if os(macOS)
-import HermesDesign
-import HermesRoster
+import PalDesign
+import PalRoster
 import SwiftUI
 
 struct MacSidebar: View {

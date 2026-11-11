@@ -1,5 +1,5 @@
-import HermesChat
-import HermesDesign
+import PalChat
+import PalDesign
 import ImageIO
 import SwiftUI
 
@@ -136,7 +136,7 @@ private struct ChatImageTile: View {
             AnyView(tile(phase, retry: retry))
         }
         .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
     }
 
     @ViewBuilder

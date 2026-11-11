@@ -1,5 +1,5 @@
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import SwiftUI
 
 struct TelegramView: View {
@@ -210,15 +210,15 @@ private struct TelegramTokenSheet: View {
                         Text(introText)
                             .hermesText(.rowSubtitle)
                             .foregroundStyle(Color(theme.palette.textSecondary))
-                            .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset)
-                            .padding(.bottom, HermesMetrics.cardGap)
+                            .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
+                            .padding(.bottom, PalMetrics.cardGap)
                         SectionCaption(String(localized: "Bot token"), accessibilityIdentifier: "telegramBotTokenCaption")
-                            .padding(.bottom, HermesMetrics.captionToCardGap)
+                            .padding(.bottom, PalMetrics.captionToCardGap)
                         SecretField(String(localized: "Bot token"), prompt: String(localized: "123456:ABC-DEF…"), text: $model.botToken, identifier: "telegramBotToken")
-                            .padding(.horizontal, HermesMetrics.rowInset)
-                            .frame(height: HermesMetrics.rowMinimumHeight)
-                            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
-                            .padding(.horizontal, HermesMetrics.screenMargin)
+                            .padding(.horizontal, PalMetrics.rowInset)
+                            .frame(height: PalMetrics.rowMinimumHeight)
+                            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+                            .padding(.horizontal, PalMetrics.screenMargin)
                     }
                     .padding(.bottom, 32)
                 }

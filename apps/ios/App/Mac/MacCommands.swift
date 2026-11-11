@@ -1,6 +1,6 @@
 #if os(macOS)
-import HermesDesign
-import HermesSettings
+import PalDesign
+import PalSettings
 import SwiftUI
 
 struct MacCommands: Commands {

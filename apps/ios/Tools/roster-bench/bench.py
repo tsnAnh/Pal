@@ -13,7 +13,7 @@ from pathlib import Path
 
 IOS_DIR = Path(__file__).resolve().parents[2]
 REPO = IOS_DIR.parents[1]
-PACKAGE = IOS_DIR / "Packages" / "HermesKit"
+PACKAGE = IOS_DIR / "Packages" / "PalKit"
 EXPORT_KEYS = ("HERMES_IOS_TEST_BASE_URL", "HERMES_IOS_TEST_USERNAME", "HERMES_IOS_TEST_PASSWORD", "HERMES_IOS_E2E_HOME")
 
 

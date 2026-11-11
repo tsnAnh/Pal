@@ -1,5 +1,5 @@
-import HermesDesign
-import HermesSettings
+import PalDesign
+import PalSettings
 import Observation
 import SwiftUI
 
@@ -162,7 +162,7 @@ struct AddVaultLoginSheet: View {
             },
             content: {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: HermesMetrics.cardGap) {
+                    VStack(alignment: .leading, spacing: PalMetrics.cardGap) {
                         GroupedCard(accessibilityIdentifier: "vaultAddFields") {
                             field("Name", text: $draft.label, identifier: "vaultNameField", content: .none)
                             field("Website", text: $draft.website, identifier: "vaultWebsiteField", content: .URL)
@@ -187,8 +187,8 @@ struct AddVaultLoginSheet: View {
             .autocorrectionDisabled()
             .hermesText(.rowTitle)
             .foregroundStyle(Color(theme.palette.textPrimary))
-            .padding(.horizontal, HermesMetrics.rowInset)
-            .frame(minHeight: HermesMetrics.rowMinimumHeight)
+            .padding(.horizontal, PalMetrics.rowInset)
+            .frame(minHeight: PalMetrics.rowMinimumHeight)
             .accessibilityIdentifier(identifier)
     }
 
@@ -197,8 +197,8 @@ struct AddVaultLoginSheet: View {
             .textContentType(.oneTimeCode)
             .hermesText(.rowTitle)
             .foregroundStyle(Color(theme.palette.textPrimary))
-            .padding(.horizontal, HermesMetrics.rowInset)
-            .frame(minHeight: HermesMetrics.rowMinimumHeight)
+            .padding(.horizontal, PalMetrics.rowInset)
+            .frame(minHeight: PalMetrics.rowMinimumHeight)
             .accessibilityIdentifier("vaultPasswordField")
     }
 }

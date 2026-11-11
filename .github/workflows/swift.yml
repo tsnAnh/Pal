@@ -62,5 +62,5 @@ jobs:
       # Compile only: the packages target macOS 26, which a macos-15 host cannot launch, so
       # `swift test` cannot run the tests here.
       - name: Build HermesKit and its tests
-        working-directory: apps/ios/Packages/HermesKit
+        working-directory: apps/ios/Packages/PalKit
         run: swift build --build-tests

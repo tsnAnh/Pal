@@ -1,6 +1,6 @@
-import HermesChat
-import HermesDesign
-import HermesProtocol
+import PalChat
+import PalDesign
+import PalProtocol
 import SwiftUI
 
 struct BotThreadView: View {

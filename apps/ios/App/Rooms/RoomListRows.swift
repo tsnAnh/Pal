@@ -1,5 +1,5 @@
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import SwiftUI
 
 private struct RoomFace: View {
@@ -37,8 +37,8 @@ struct RoomsHomeSection: View {
                     select: { router.openRoom(id: room.roomID) }
                 ) {
                     HStack(spacing: 12) {
-                        RoomFace(room: room, roster: roster, diameter: HermesMetrics.homeRowAvatarSlot)
-                        VStack(alignment: .leading, spacing: HermesMetrics.homeRowTextGap) {
+                        RoomFace(room: room, roster: roster, diameter: PalMetrics.homeRowAvatarSlot)
+                        VStack(alignment: .leading, spacing: PalMetrics.homeRowTextGap) {
                             Text(room.name)
                                 .hermesText(.botName)
                                 .foregroundStyle(PalTokens.textPrimary)
@@ -50,8 +50,8 @@ struct RoomsHomeSection: View {
                         }
                         Spacer(minLength: 0)
                     }
-                    .padding(.horizontal, HermesMetrics.homeRowInset - 8)
-                    .frame(height: HermesMetrics.homeRowPitch)
+                    .padding(.horizontal, PalMetrics.homeRowInset - 8)
+                    .frame(height: PalMetrics.homeRowPitch)
                     .contentShape(Rectangle())
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(Text("\(room.name), group chat with \(memberLine(room))"))

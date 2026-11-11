@@ -1,8 +1,8 @@
 import Foundation
-import HermesConnect
-import HermesDesign
-import HermesDiagnostics
-import HermesProtocol
+import PalConnect
+import PalDesign
+import PalDiagnostics
+import PalProtocol
 import Observation
 
 @MainActor

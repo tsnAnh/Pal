@@ -1,6 +1,6 @@
 import AppIntents
 import CoreSpotlight
-import HermesDiagnostics
+import PalDiagnostics
 
 @MainActor
 final class BotDirectory {
@@ -8,7 +8,7 @@ final class BotDirectory {
     private let diagnostics = Diagnostics.osLog()
 
     func publish(_ bots: [BotRow]) async {
-        HermesBotsShortcuts.updateAppShortcutParameters()
+        PalBotsShortcuts.updateAppShortcutParameters()
         let entities = bots.map(BotEntity.init)
         let current = Set(entities.map(\.id))
         let stale = published.subtracting(current)

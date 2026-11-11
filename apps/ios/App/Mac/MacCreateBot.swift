@@ -1,6 +1,6 @@
 #if os(macOS)
-import HermesDesign
-import HermesRoster
+import PalDesign
+import PalRoster
 import SwiftUI
 
 struct MacCreateBot: View {
@@ -56,7 +56,7 @@ private struct MacCreateBotPreview: View {
 
     var body: some View {
         CreateBotPreview(spec: model.spec)
-            .frame(width: HermesMetrics.createPreviewFrame, height: HermesMetrics.createPreviewFrame)
+            .frame(width: PalMetrics.createPreviewFrame, height: PalMetrics.createPreviewFrame)
             .scaleEffect(0.6)
             .frame(width: 100, height: 100)
     }
