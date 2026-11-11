@@ -1,4 +1,4 @@
-import HermesDesign
+import PalDesign
 import SwiftMath
 import SwiftUI
 

@@ -1,5 +1,5 @@
 import Foundation
-import HermesBotProfile
+import PalBotProfile
 import Observation
 
 @MainActor

@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import HermesRFB
+import PalRFB
 import SwiftUI
 
 struct ComputerSurface: NSViewRepresentable {

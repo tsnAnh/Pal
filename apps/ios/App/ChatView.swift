@@ -1,7 +1,7 @@
-import HermesChat
-import HermesDesign
-import HermesProtocol
-import HermesRoster
+import PalChat
+import PalDesign
+import PalProtocol
+import PalRoster
 import PhotosUI
 import SwiftUI
 

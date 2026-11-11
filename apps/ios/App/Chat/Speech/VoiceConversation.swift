@@ -1,5 +1,5 @@
 import Foundation
-import HermesChat
+import PalChat
 import Observation
 
 @MainActor

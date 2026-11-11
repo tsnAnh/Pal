@@ -1,5 +1,5 @@
 import AuthenticationServices
-import HermesAuth
+import PalAuth
 
 @MainActor
 final class WebAuthenticationBrowser: NSObject, AuthorizationBrowser, ASWebAuthenticationPresentationContextProviding {

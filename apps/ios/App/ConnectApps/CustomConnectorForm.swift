@@ -1,5 +1,5 @@
-import HermesConnect
-import HermesDesign
+import PalConnect
+import PalDesign
 import SwiftUI
 
 struct CustomConnectorStyle {
@@ -17,11 +17,11 @@ struct CustomConnectorStyle {
     let bodyFont: Font
     let captionFont: Font
 
-    static func phone(_ theme: HermesTheme) -> CustomConnectorStyle {
+    static func phone(_ theme: PalTheme) -> CustomConnectorStyle {
         CustomConnectorStyle(
             primary: Color(theme.palette.textPrimary), secondary: Color(theme.palette.textSecondary),
             field: Color(theme.palette.groupedCard), divider: Color(theme.palette.tileStroke),
-            fieldRadius: HermesMetrics.cardRadius, fieldHeight: 48, margin: HermesMetrics.screenMargin, spacing: 18,
+            fieldRadius: PalMetrics.cardRadius, fieldHeight: 48, margin: PalMetrics.screenMargin, spacing: 18,
             maxWidth: .infinity, titleFont: .title3.weight(.semibold), labelFont: .footnote.weight(.medium),
             bodyFont: .body, captionFont: .footnote
         )

@@ -1,5 +1,5 @@
-import HermesDesign
-import HermesRoster
+import PalDesign
+import PalRoster
 import SwiftUI
 
 struct HomeView: View {
@@ -16,8 +16,8 @@ struct HomeView: View {
             LazyVStack(spacing: 0) {
                 if !roster.pinned.isEmpty {
                     PinnedHero(roster: roster, router: router)
-                        .padding(.top, HermesMetrics.heroTopPadding)
-                        .padding(.bottom, HermesMetrics.heroRowSpacing)
+                        .padding(.top, PalMetrics.heroTopPadding)
+                        .padding(.bottom, PalMetrics.heroRowSpacing)
                 }
                 ForEach(roster.rows) { bot in
                     HomeBotLink(bot: bot, roster: roster, router: router)
@@ -145,7 +145,7 @@ private struct HiddenBotsSection: View {
                         .foregroundStyle(PalTokens.textTertiary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                 }
-                .padding(.horizontal, HermesMetrics.homeRowInset - 8)
+                .padding(.horizontal, PalMetrics.homeRowInset - 8)
                 .frame(height: 44)
                 .contentShape(Rectangle())
             }
@@ -267,16 +267,16 @@ private struct HeroCell: View {
     }
 
     var body: some View {
-        VStack(spacing: HermesMetrics.heroNameGap) {
+        VStack(spacing: PalMetrics.heroNameGap) {
             AvatarBadge(
-                diameter: HermesMetrics.heroDiameter,
+                diameter: PalMetrics.heroDiameter,
                 showsPrimaryBadge: bot.isPrimary,
                 accessibilityIdentifier: "heroAvatar-\(bot.name)"
             ) {
-                BotAvatarView(spec: bot.spec, size: HermesMetrics.heroAvatarFrame, mood: mood)
+                BotAvatarView(spec: bot.spec, size: PalMetrics.heroAvatarFrame, mood: mood)
                     .opacity(activity.avatarOpacity)
             }
-            .frame(width: HermesMetrics.heroDiameter, height: HermesMetrics.heroDiameter)
+            .frame(width: PalMetrics.heroDiameter, height: PalMetrics.heroDiameter)
             Text(bot.displayName)
                 .hermesText(.heroName)
                 .foregroundStyle(PalTokens.textPrimary.opacity(0.9))
@@ -309,7 +309,7 @@ struct HomeRow: View {
     var body: some View {
         HStack(spacing: 12) {
             BotRowAvatar(bot: bot, activity: activity, mood: mood)
-            VStack(alignment: .leading, spacing: HermesMetrics.homeRowTextGap) {
+            VStack(alignment: .leading, spacing: PalMetrics.homeRowTextGap) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(bot.displayName)
                         .hermesText(.botName)
@@ -331,8 +331,8 @@ struct HomeRow: View {
                 PreviewLine(bot: bot, activity: activity)
             }
         }
-        .padding(.horizontal, HermesMetrics.homeRowInset - 8)
-        .frame(height: HermesMetrics.homeRowPitch)
+        .padding(.horizontal, PalMetrics.homeRowInset - 8)
+        .frame(height: PalMetrics.homeRowPitch)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(accessibilityText))
@@ -358,14 +358,14 @@ struct BotRowAvatar: View {
 
     var body: some View {
         AvatarBadge(
-            diameter: HermesMetrics.homeRowAvatarSlot,
+            diameter: PalMetrics.homeRowAvatarSlot,
             showsPrimaryBadge: bot.isPrimary && showsPrimaryBadge,
             accessibilityIdentifier: "rowAvatar-\(bot.name)"
         ) {
-            BotAvatarView(spec: bot.spec, size: HermesMetrics.homeRowAvatarFrame, mood: mood)
+            BotAvatarView(spec: bot.spec, size: PalMetrics.homeRowAvatarFrame, mood: mood)
                 .opacity(activity.avatarOpacity)
         }
-        .frame(width: HermesMetrics.homeRowAvatarSlot, height: HermesMetrics.homeRowAvatarSlot)
+        .frame(width: PalMetrics.homeRowAvatarSlot, height: PalMetrics.homeRowAvatarSlot)
         .overlay(alignment: .bottomTrailing) {
             if activity == .working {
                 Circle()

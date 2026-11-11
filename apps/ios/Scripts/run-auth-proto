@@ -64,8 +64,8 @@ for _ in $(seq 60); do
 done
 curl -fs "$BASE_URL/api/auth/providers" >/dev/null
 
-echo "== swift test (HermesKit, live gateway)"
-( cd "$IOS_DIR/Packages/HermesKit" &&
+echo "== swift test (PalKit, live gateway)"
+( cd "$IOS_DIR/Packages/PalKit" &&
   HERMES_IOS_TEST_BASE_URL="$BASE_URL" HERMES_IOS_TEST_USERNAME="$USERNAME" HERMES_IOS_TEST_PASSWORD="$PASSWORD" \
   swift test ) 2>&1 | tee "$ART/swift-test.log" | grep -E "Test run|error|failed|instance_id" || true
 grep -q "Test run with .* passed" "$ART/swift-test.log"

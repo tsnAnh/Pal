@@ -1,6 +1,6 @@
 import Foundation
-import HermesBotProfile
-import HermesChat
+import PalBotProfile
+import PalChat
 import Observation
 
 enum TeachSurface: Hashable {

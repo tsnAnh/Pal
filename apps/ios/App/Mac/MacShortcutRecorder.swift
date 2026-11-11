@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import HermesSettings
+import PalSettings
 import SwiftUI
 
 enum MacRecorderEvent {

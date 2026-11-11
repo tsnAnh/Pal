@@ -1,5 +1,5 @@
 import Foundation
-import HermesDesign
+import PalDesign
 
 @MainActor
 enum LaunchPreferences {

@@ -1,6 +1,6 @@
 import Foundation
-import HermesProtocol
-import HermesSettings
+import PalProtocol
+import PalSettings
 import Observation
 import SwiftUI
 

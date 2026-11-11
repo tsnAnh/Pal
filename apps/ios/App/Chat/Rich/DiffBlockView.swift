@@ -1,5 +1,5 @@
-import HermesChat
-import HermesDesign
+import PalChat
+import PalDesign
 import SwiftUI
 
 struct DiffBlockView: View {

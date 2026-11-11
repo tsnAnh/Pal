@@ -1,4 +1,4 @@
-import HermesDesign
+import PalDesign
 import SwiftUI
 
 struct SettingsPage<Trailing: View, Content: View>: View {
@@ -31,7 +31,7 @@ struct SettingsPage<Trailing: View, Content: View>: View {
             trailing: { trailing },
             content: {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: HermesMetrics.cardGap) { content }
+                    VStack(alignment: .leading, spacing: PalMetrics.cardGap) { content }
                         .padding(.bottom, 32)
                 }
                 .scrollIndicators(.hidden)
@@ -71,8 +71,8 @@ struct FailureCard: View {
                     .buttonStyle(.pill())
                     .accessibilityIdentifier("\(identifier)-retry")
             }
-            .padding(.horizontal, HermesMetrics.rowInset)
-            .padding(.vertical, HermesMetrics.rowVerticalPadding)
+            .padding(.horizontal, PalMetrics.rowInset)
+            .padding(.vertical, PalMetrics.rowVerticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -93,8 +93,8 @@ struct LoadingRow: View {
             ProgressView().tint(Color(theme.palette.textSecondary))
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, HermesMetrics.rowInset)
-        .frame(minHeight: HermesMetrics.rowMinimumHeight)
+        .padding(.horizontal, PalMetrics.rowInset)
+        .frame(minHeight: PalMetrics.rowMinimumHeight)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier(identifier)
     }

@@ -1,7 +1,7 @@
 #if os(macOS)
-import HermesBotProfile
-import HermesConnect
-import HermesDesign
+import PalBotProfile
+import PalConnect
+import PalDesign
 import SwiftUI
 
 struct MacConnectApps: View {

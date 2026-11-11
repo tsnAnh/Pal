@@ -1,11 +1,11 @@
 import Foundation
-import HermesAuth
-import HermesBotProfile
-import HermesConnect
-import HermesDesign
-import HermesDevice
-import HermesDiagnostics
-import HermesProtocol
+import PalAuth
+import PalBotProfile
+import PalConnect
+import PalDesign
+import PalDevice
+import PalDiagnostics
+import PalProtocol
 import Observation
 
 struct ConnectionRPC: ConnectRPC {

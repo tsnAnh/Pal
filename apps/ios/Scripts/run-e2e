@@ -2,7 +2,7 @@
 set -euo pipefail
 
 IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PACKAGE="$IOS_DIR/Packages/HermesKit"
+PACKAGE="$IOS_DIR/Packages/PalKit"
 FIXTURES="$IOS_DIR/Fixtures/ios-client"
 
 mkdir -p "$FIXTURES"

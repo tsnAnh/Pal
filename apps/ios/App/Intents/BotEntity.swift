@@ -1,6 +1,6 @@
 import AppIntents
 import Foundation
-import HermesRoster
+import PalRoster
 
 struct BotEntity: AppEntity, IndexedEntity {
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Bot"

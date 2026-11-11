@@ -1,5 +1,5 @@
-import HermesAuth
-import HermesSettings
+import PalAuth
+import PalSettings
 import Observation
 import SwiftUI
 import UserNotifications

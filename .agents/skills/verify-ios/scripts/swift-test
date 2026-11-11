@@ -2,7 +2,7 @@
 set -uo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 case "${1:-}" in
-  -h|--help|"") say "usage: swift-test <HermesDesign|HermesKit> [swift test args...]   package tests on the host (no simulator, no launch needed); log goes to the run's evidence dir, or a fresh evidence dir when no run is active"; [ -n "${1:-}" ] && exit 0; exit 2 ;;
+  -h|--help|"") say "usage: swift-test <PalDesign|PalKit> [swift test args...]   package tests on the host (no simulator, no launch needed); log goes to the run's evidence dir, or a fresh evidence dir when no run is active"; [ -n "${1:-}" ] && exit 0; exit 2 ;;
 esac
 PACKAGE="$1"; shift
 [ -d "$IOS_DIR/Packages/$PACKAGE" ] || die "unknown package $PACKAGE"

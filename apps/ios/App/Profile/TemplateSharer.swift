@@ -1,4 +1,4 @@
-import HermesBotProfile
+import PalBotProfile
 import Foundation
 
 @MainActor

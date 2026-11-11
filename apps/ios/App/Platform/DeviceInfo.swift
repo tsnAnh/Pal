@@ -1,4 +1,4 @@
-import HermesAuth
+import PalAuth
 import Foundation
 
 #if os(iOS)

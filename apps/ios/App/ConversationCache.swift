@@ -1,6 +1,6 @@
 import Foundation
-import HermesChat
-import HermesProtocol
+import PalChat
+import PalProtocol
 
 struct ConversationCache: Sendable {
     let store: CacheStore

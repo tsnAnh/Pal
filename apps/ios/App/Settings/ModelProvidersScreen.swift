@@ -1,6 +1,6 @@
-import HermesBotProfile
-import HermesDesign
-import HermesDevice
+import PalBotProfile
+import PalDesign
+import PalDevice
 import SwiftUI
 
 struct ModelProvidersScreen: View {
@@ -71,7 +71,7 @@ struct ModelProvidersScreen: View {
 
     private func providerSection(_ provider: ModelProvider) -> some View {
         let key = "modelProvider-\(provider.id)"
-        return VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+        return VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             GroupedCard(accessibilityIdentifier: key) {
                 SettingsRow.value(
                     provider.name, value: stateText(provider), subtitle: subtitle(provider), accessibilityIdentifier: "\(key)-state")
@@ -105,8 +105,8 @@ struct ModelProvidersScreen: View {
         .urlEntry()
         .submitLabel(.done)
         .onSubmit { Task { await model.saveAddress(provider) } }
-        .padding(.horizontal, HermesMetrics.rowInset)
-        .frame(minHeight: HermesMetrics.rowMinimumHeight)
+        .padding(.horizontal, PalMetrics.rowInset)
+        .frame(minHeight: PalMetrics.rowMinimumHeight)
         .disabled(model.isWorking(provider.id))
         .accessibilityLabel(Text("Address"))
         .accessibilityIdentifier("\(key)-address")
@@ -142,7 +142,7 @@ struct ModelProvidersScreen: View {
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(Color(theme.palette.destructive))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset - 3)
+                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset - 3)
                 .accessibilityIdentifier("\(key)-status")
         }
     }

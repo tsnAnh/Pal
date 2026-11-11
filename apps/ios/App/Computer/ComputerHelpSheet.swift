@@ -1,4 +1,4 @@
-import HermesDesign
+import PalDesign
 import SwiftUI
 
 enum ComputerHelpIcon {
@@ -128,8 +128,8 @@ struct ComputerHelpSheet: View {
                 VStack(spacing: 0) {
                     ForEach(Array(ComputerHelpSection.all.enumerated()), id: \.element.id) { index, section in
                         SectionCaption(section.caption, accessibilityIdentifier: "computerHelpCaption-\(section.id)")
-                            .padding(.top, index == 0 ? 0 : HermesMetrics.cardGap)
-                            .padding(.bottom, HermesMetrics.captionToCardGap)
+                            .padding(.top, index == 0 ? 0 : PalMetrics.cardGap)
+                            .padding(.bottom, PalMetrics.captionToCardGap)
                         GroupedCard(accessibilityIdentifier: "computerHelpCard-\(section.id)") {
                             ForEach(section.topics) { topic in
                                 ComputerHelpRow(topic: topic)
@@ -161,12 +161,12 @@ private struct ComputerHelpRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: HermesMetrics.rowIconSpacing) {
+        HStack(alignment: .top, spacing: PalMetrics.rowIconSpacing) {
             icon
                 .foregroundStyle(Color(theme.palette.textSecondary))
-                .frame(width: HermesMetrics.rowIconWidth)
+                .frame(width: PalMetrics.rowIconWidth)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: HermesMetrics.rowTextSpacing) {
+            VStack(alignment: .leading, spacing: PalMetrics.rowTextSpacing) {
                 Text(topic.title)
                     .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textPrimary))
@@ -177,9 +177,9 @@ private struct ComputerHelpRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.leading, HermesMetrics.rowIconLeadingInset)
-        .padding(.trailing, HermesMetrics.rowInset)
-        .padding(.vertical, HermesMetrics.rowVerticalPadding)
+        .padding(.leading, PalMetrics.rowIconLeadingInset)
+        .padding(.trailing, PalMetrics.rowInset)
+        .padding(.vertical, PalMetrics.rowVerticalPadding)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("computerHelpRow-\(topic.id)")
     }

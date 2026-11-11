@@ -1,5 +1,5 @@
 import Foundation
-import HermesProtocol
+import PalProtocol
 
 enum DeviceWording {
     static var copyToDevice: String {

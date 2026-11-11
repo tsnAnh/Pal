@@ -1,5 +1,5 @@
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import SwiftUI
 
 struct BotProfileView: View {
@@ -173,7 +173,7 @@ struct BotProfileView: View {
                 .hermesText(.footnoteCaption)
                 .foregroundStyle(Color(theme.palette.sectionCaption))
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset)
+                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
                 .padding(.top, ProfileMetrics.toggleToFooter)
                 .accessibilityIdentifier("profileNotificationsFooter")
         }

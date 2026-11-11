@@ -192,7 +192,7 @@ def _swift_cases(path: Path, enum: str) -> set[str]:
 
 def test_swift_wire_values_match_the_gateway_contract():
     from tui_gateway.contracts.canonical_auth import AuthCredentialOutcome, AuthFlow, AuthOutcome, AuthReason
-    wire = REPO / 'apps/ios/Packages/HermesKit/Sources/HermesProtocol/ServiceSignInWire.swift'
+    wire = REPO / 'apps/ios/Packages/PalKit/Sources/PalProtocol/ServiceSignInWire.swift'
     assert _swift_cases(wire, 'ServiceSignInFlow') == {item.value for item in AuthFlow}
     assert _swift_cases(wire, 'ServiceSignInReason') == {item.value for item in AuthReason}
     assert _swift_cases(wire, 'ServiceSignInOutcome') == {item.value for item in AuthOutcome}
@@ -200,7 +200,7 @@ def test_swift_wire_values_match_the_gateway_contract():
 
 
 def test_every_connect_app_source_in_swift_has_a_declared_sign_in_flow():
-    catalog = REPO / 'apps/ios/Packages/HermesKit/Sources/HermesConnect/ConnectCatalog.swift'
+    catalog = REPO / 'apps/ios/Packages/PalKit/Sources/PalConnect/ConnectCatalog.swift'
     block = re.search(r'enum ConnectAppSource\b[^{]*\{(.*?)\n\}', catalog.read_text(), re.DOTALL).group(1)
     sources = set(re.findall(r'^\s*case (\w+)', block, re.MULTILINE))
     assert sources == set(auth_flows.CONNECT_APP_SOURCES), 'declare the new Connected apps source in auth_flows'

@@ -1,4 +1,4 @@
-import HermesDesign
+import PalDesign
 import SwiftUI
 
 struct VoiceModeView: View {

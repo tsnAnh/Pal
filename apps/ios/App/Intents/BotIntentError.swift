@@ -1,5 +1,5 @@
 import AppIntents
-import HermesChat
+import PalChat
 
 enum BotIntentError: Error, CustomLocalizedStringResourceConvertible {
     case signedOut
@@ -50,11 +50,11 @@ enum BotIntentError: Error, CustomLocalizedStringResourceConvertible {
 
     init(_ error: any Error) {
         switch error {
-        case HermesChat.AttachmentError.tooLarge(let name): self = .fileTooLarge(name: name)
-        case HermesChat.AttachmentError.empty(let name): self = .fileEmpty(name: name)
-        case HermesChat.AttachmentError.unsupported(let name): self = .fileUnsupported(name: name)
-        case HermesChat.AttachmentError.unreadable(let name): self = .fileUnreadable(name: name)
-        case HermesChat.AttachmentError.tooMany: self = .tooManyFiles
+        case PalChat.AttachmentError.tooLarge(let name): self = .fileTooLarge(name: name)
+        case PalChat.AttachmentError.empty(let name): self = .fileEmpty(name: name)
+        case PalChat.AttachmentError.unsupported(let name): self = .fileUnsupported(name: name)
+        case PalChat.AttachmentError.unreadable(let name): self = .fileUnreadable(name: name)
+        case PalChat.AttachmentError.tooMany: self = .tooManyFiles
         case let error as ErrandError: self.init(error)
         case let error as BotIntentError: self = error
         default: self = .unreachable

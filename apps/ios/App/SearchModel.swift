@@ -1,6 +1,6 @@
 import Foundation
-import HermesDiagnostics
-import HermesRoster
+import PalDiagnostics
+import PalRoster
 import Observation
 
 @MainActor

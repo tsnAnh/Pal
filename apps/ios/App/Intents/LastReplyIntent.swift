@@ -1,6 +1,6 @@
 import AppIntents
 import Foundation
-import HermesChat
+import PalChat
 
 struct LastReplyIntent: AppIntent {
     static let title: LocalizedStringResource = "Hear a Bot's Last Reply"

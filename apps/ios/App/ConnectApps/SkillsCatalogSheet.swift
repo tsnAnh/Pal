@@ -1,5 +1,5 @@
-import HermesConnect
-import HermesDesign
+import PalConnect
+import PalDesign
 import SwiftUI
 
 struct SkillsCatalogEntry: View {
@@ -173,7 +173,7 @@ struct SkillsCatalogSheet: View {
                     .accessibilityIdentifier("skillsOutcomeDismiss")
             }
             .padding(14)
-            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
+            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
             .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
             .padding(.bottom, 10)
             .accessibilityElement(children: .contain)

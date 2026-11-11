@@ -1,6 +1,6 @@
-import HermesBotProfile
-import HermesChat
-import HermesDesign
+import PalBotProfile
+import PalChat
+import PalDesign
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers

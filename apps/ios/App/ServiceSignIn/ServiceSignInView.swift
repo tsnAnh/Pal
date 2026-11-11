@@ -1,6 +1,6 @@
-import HermesDesign
-import HermesDevice
-import HermesProtocol
+import PalDesign
+import PalDevice
+import PalProtocol
 import SwiftUI
 #if os(iOS)
 import UIKit

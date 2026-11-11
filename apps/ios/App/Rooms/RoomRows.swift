@@ -1,6 +1,6 @@
-import HermesBotProfile
-import HermesDesign
-import HermesProtocol
+import PalBotProfile
+import PalDesign
+import PalProtocol
 import SwiftUI
 
 struct RoomEventRow: View {

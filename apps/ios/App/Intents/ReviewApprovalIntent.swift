@@ -1,6 +1,6 @@
 import AppIntents
 import Foundation
-import HermesChat
+import PalChat
 
 enum ApprovalVerdict: String, AppEnum {
     case approved

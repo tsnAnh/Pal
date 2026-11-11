@@ -1,4 +1,4 @@
-import HermesBotProfile
+import PalBotProfile
 
 extension CapabilityIndicator {
     var symbolName: String {

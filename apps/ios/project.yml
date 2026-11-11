@@ -17,10 +17,10 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 packages:
-  HermesKit:
-    path: Packages/HermesKit
-  HermesDesign:
-    path: Packages/HermesDesign
+  PalKit:
+    path: Packages/PalKit
+  PalDesign:
+    path: Packages/PalDesign
   SwiftMath:
     url: https://github.com/mgriebling/SwiftMath
     exactVersion: 1.7.3
@@ -71,34 +71,34 @@ targets:
         ENABLE_APP_SANDBOX: NO
         ENABLE_HARDENED_RUNTIME: YES
     dependencies:
-      - package: HermesKit
-        product: HermesProtocol
-      - package: HermesKit
-        product: HermesDiagnostics
-      - package: HermesKit
-        product: HermesREST
-      - package: HermesKit
-        product: HermesAuth
-      - package: HermesKit
-        product: HermesTransport
-      - package: HermesKit
-        product: HermesClient
-      - package: HermesKit
-        product: HermesChat
-      - package: HermesKit
-        product: HermesRoster
-      - package: HermesKit
-        product: HermesBotProfile
-      - package: HermesKit
-        product: HermesRFB
-      - package: HermesKit
-        product: HermesDevice
-      - package: HermesKit
-        product: HermesConnect
-      - package: HermesKit
-        product: HermesSettings
-      - package: HermesDesign
-        product: HermesDesign
+      - package: PalKit
+        product: PalProtocol
+      - package: PalKit
+        product: PalDiagnostics
+      - package: PalKit
+        product: PalREST
+      - package: PalKit
+        product: PalAuth
+      - package: PalKit
+        product: PalTransport
+      - package: PalKit
+        product: PalClient
+      - package: PalKit
+        product: PalChat
+      - package: PalKit
+        product: PalRoster
+      - package: PalKit
+        product: PalBotProfile
+      - package: PalKit
+        product: PalRFB
+      - package: PalKit
+        product: PalDevice
+      - package: PalKit
+        product: PalConnect
+      - package: PalKit
+        product: PalSettings
+      - package: PalDesign
+        product: PalDesign
       - package: SwiftMath
         product: SwiftMath
   HermesBotsUITests:
@@ -139,8 +139,8 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
       - target: HermesBots
-      - package: HermesDesign
-        product: HermesDesign
+      - package: PalDesign
+        product: PalDesign
       - sdk: AppIntentsTesting.framework
         destinationFilters: [iOS]
 schemes:
