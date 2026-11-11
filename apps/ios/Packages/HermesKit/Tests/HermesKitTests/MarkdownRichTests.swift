@@ -20,7 +20,7 @@ struct MarkdownRichTests {
     @Test func nonStreamingOpenFenceStaysCompleteCode() {
         let blocks = MarkdownDocument(parsing: "Before\n\n```swift\nlet a = 1").blocks
         #expect(blocks.last?.kind == .code(language: "swift"))
-        #expect(blocks.allSatisfy(\.isComplete))
+        #expect(blocks.allSatisfy { $0.isComplete })
     }
 
     @Test func streamingClosedFenceIsComplete() {
@@ -57,12 +57,12 @@ struct MarkdownRichTests {
 
     @Test func fourSpaceIndentIsNotAFence() {
         let blocks = MarkdownDocument(parsing: "    ```swift\n    foo", isStreaming: true).blocks
-        #expect(blocks.allSatisfy(\.isComplete))
+        #expect(blocks.allSatisfy { $0.isComplete })
     }
 
     @Test func backtickFenceInfoCannotContainBackticks() {
         let blocks = MarkdownDocument(parsing: "```a`b\ntext", isStreaming: true).blocks
-        #expect(blocks.allSatisfy(\.isComplete))
+        #expect(blocks.allSatisfy { $0.isComplete })
     }
 
     @Test func fenceIndentedUpToThreeSpacesStillCounts() {
