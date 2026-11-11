@@ -24,6 +24,11 @@ class SigninFlow(Protocol):
     def cancel(self) -> None: ...
 
 
+CONNECT_APP_SOURCES = {
+    "hosted": "connector:<slug> -> oauth through the connector portal (CONNECTION_REQUIRED / CONNECTION_EXPIRED)",
+    "mcp": "mcp:<server> -> oauth, api_key or header from the server config (manifest auth.type for catalog presets)",
+}
+
 FlowFactory = Callable[[Path, str], SigninFlow]
 _factories: dict[str, FlowFactory] = {}
 
@@ -39,6 +44,19 @@ def unregister(prefix: str) -> None:
 def flow_for(home: Path, service: str) -> SigninFlow:
     factory = _factories.get(service) or _factories.get(service.partition(":")[0])
     return factory(home, service) if factory is not None else ManualFlow()
+
+
+def classify_mcp_server(cfg: object) -> str:
+    if not isinstance(cfg, dict):
+        return "manual"
+    if cfg.get("auth") == "oauth":
+        return "oauth"
+    headers = cfg.get("headers")
+    if isinstance(headers, dict) and headers:
+        bearer = headers.get("Authorization") or headers.get("authorization")
+        only_bearer = len(headers) == 1 and isinstance(bearer, str) and bearer.startswith("Bearer ${")
+        return "api_key" if only_bearer else "header"
+    return "oauth" if cfg.get("url") else "manual"
 
 
 class ManualFlow:
@@ -154,5 +172,144 @@ class McpOAuthFlow:
             mcp_oauth_sessions.cancel_flow(self._session_id, self._server, self._home_key())
 
 
+class KeyEntryFlow:
+    kind = "api_key"
+    user_code = None
+    verification_uri = None
+    expires_in = None
+
+    def __init__(self, server: str) -> None:
+        self.server = server
+        self._stored = asyncio.Event()
+
+    async def begin(self) -> None:
+        return None
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def confirm(self) -> bool:
+        from hermes_cli.config import get_env_value
+        from hermes_cli.mcp_config import _env_key_for_server
+        if not await asyncio.to_thread(get_env_value, _env_key_for_server(self.server)):
+            return False
+        self._stored.set()
+        return True
+
+    async def wait(self) -> bool:
+        await self._stored.wait()
+        return True
+
+    def cancel(self) -> None:
+        return None
+
+
+class HeaderFlow(ManualFlow):
+    kind = "header"
+
+    def __init__(self, server: str) -> None:
+        super().__init__()
+        self.server = server
+
+
+class McpServerFlow:
+    user_code = None
+    verification_uri = None
+    expires_in = None
+
+    def __init__(self, home: Path, service: str) -> None:
+        self._home = home
+        self._server = service.partition(":")[2]
+        self._inner: SigninFlow = ManualFlow()
+
+    @property
+    def kind(self) -> str:
+        return self._inner.kind
+
+    @property
+    def server(self) -> str:
+        return self._server
+
+    async def begin(self) -> None:
+        from hermes_cli.mcp_config import _get_mcp_servers
+        cfg = (await asyncio.to_thread(_get_mcp_servers)).get(self._server)
+        kind = classify_mcp_server(cfg)
+        if kind == "oauth":
+            self._inner = McpOAuthFlow(self._home, f"mcp:{self._server}")
+        elif kind == "api_key":
+            self._inner = KeyEntryFlow(self._server)
+        elif kind == "header":
+            self._inner = HeaderFlow(self._server)
+
+    async def authorize_url(self) -> Optional[str]:
+        return await self._inner.authorize_url()
+
+    async def confirm(self) -> bool:
+        confirm = getattr(self._inner, "confirm", None)
+        return await confirm() if confirm is not None else True
+
+    async def wait(self) -> bool:
+        return await self._inner.wait()
+
+    def cancel(self) -> None:
+        self._inner.cancel()
+
+
+class HostedConnectorFlow:
+    kind = "oauth"
+    user_code = None
+    verification_uri = None
+    expires_in = None
+    POLL_SECONDS = 3.0
+
+    def __init__(self, home: Path, service: str) -> None:
+        self._slug = service.partition(":")[2]
+        self._started = asyncio.Event()
+        self._cancelled = False
+        self.already_connected = False
+
+    async def begin(self) -> None:
+        return None
+
+    def _mint(self) -> Optional[str]:
+        from tools.connectors.gateway.client import return_to_args
+        from tools.connectors.managed import managed_client
+        client = managed_client(creates_guest=False)
+        response = client.connections([self._slug], reinitiate=True, alias=None, connection_id=None, **return_to_args())
+        for entry in response.get("results", []):
+            if str(entry.get("connector") or "").lower() != self._slug:
+                continue
+            if entry.get("status") == "active":
+                self.already_connected = True
+                return None
+            url = entry.get("connect_url")
+            return url if isinstance(url, str) and url.startswith("https://") else None
+        return None
+
+    def _connected(self) -> bool:
+        from tools.connectors.managed import managed_client
+        rows = managed_client(creates_guest=False).list_connectors()
+        return any(str(r.get("connector", "")).lower() == self._slug and r.get("connected") is True
+                   and r.get("connection_status") in (None, "active") for r in rows if isinstance(r, dict))
+
+    async def authorize_url(self) -> Optional[str]:
+        url = await asyncio.to_thread(self._mint)
+        self._started.set()
+        return url
+
+    async def wait(self) -> bool:
+        await self._started.wait()
+        while not self._cancelled:
+            if self.already_connected or await asyncio.to_thread(self._connected):
+                return True
+            await asyncio.sleep(self.POLL_SECONDS)
+        return False
+
+    def cancel(self) -> None:
+        self._cancelled = True
+        self._started.set()
+
+
 register("github", GithubDeviceFlow)
-register("mcp", McpOAuthFlow)
+register("mcp", McpServerFlow)
+register("connector", HostedConnectorFlow)

@@ -17,6 +17,8 @@ class AuthReason(WireEnum):
 class AuthFlow(WireEnum):
     DEVICE_CODE = "device_code"
     OAUTH = "oauth"
+    API_KEY = "api_key"
+    HEADER = "header"
     MANUAL = "manual"
 
 
@@ -38,13 +40,15 @@ class AuthRequiredPayload(Payload):
     user_code: str | None = None
     verification_uri: str | None = None
     expires_in: int | None = None
+    server: str | None = None
 
 
 event("auth.required", AuthRequiredPayload,
       doc="A bot's tool call failed because a credential for service is missing, expired or revoked. Show one "
           "sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code "
           "carries user_code and verification_uri to open in the system browser; oauth is started with "
-          "auth.signin; manual has no in-app sign-in. The payload never carries a token.")
+          "auth.signin; api_key asks for the key for MCP server `server` (store it with mcp.servers.set_api_key, then "
+          "call auth.signin); header and manual have no in-app sign-in. The payload never carries a token.")
 
 
 class AuthResolvedPayload(Payload):

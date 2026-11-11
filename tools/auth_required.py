@@ -9,6 +9,8 @@ from typing import Any, Optional
 ERROR_TYPE = "auth_required"
 MAX_SCANNED_RESULT_CHARS = 200_000
 REASONS = ("missing", "expired", "revoked")
+AUTH_TYPES = ("device_code", "oauth", "api_key", "header", "none")
+CONNECTION_CODES = {"CONNECTION_REQUIRED": "missing", "CONNECTION_EXPIRED": "expired"}
 
 _GH_LOGIN_HINT = re.compile(r"\bgh auth login\b", re.IGNORECASE)
 _GH_REASONS = (
@@ -19,6 +21,7 @@ _GH_REASONS = (
 )
 _ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _SERVICE_NAMES = {"github": "GitHub"}
+_MARKERS = ('"auth_required"', '"needs_reauth"', '"CONNECTION_REQUIRED"', '"CONNECTION_EXPIRED"')
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +32,8 @@ class AuthNeed:
 
 
 def service_display_name(service: str) -> str:
-    return _SERVICE_NAMES.get(service, service.replace("_", " ").replace("-", " ").title() or service)
+    name = service.partition(":")[2] if ":" in service else service
+    return _SERVICE_NAMES.get(service, name.replace("_", " ").replace("-", " ").title() or service)
 
 
 def auth_required_result(service: str, reason: str = "missing", *, flow: Optional[str] = None,
@@ -74,10 +78,25 @@ def match_gh_failure(command: str, output: str, exit_code: Any) -> Optional[Auth
     return None
 
 
+def _hosted_connector_need(body: dict) -> Optional[AuthNeed]:
+    entry = body.get("error") if isinstance(body.get("error"), dict) else body
+    code, slug = entry.get("code"), entry.get("connector")
+    if code in CONNECTION_CODES and isinstance(slug, str) and slug.strip():
+        return AuthNeed(f"connector:{slug.strip().lower()}", CONNECTION_CODES[code], flow="oauth")
+    return None
+
+
+def declared_auth_type(entry: Any) -> str:
+    declared = getattr(getattr(entry, "auth", None), "type", None)
+    if declared not in AUTH_TYPES:
+        raise ValueError(f"{getattr(entry, 'name', entry)!r} declares no usable auth type ({declared!r})")
+    return declared
+
+
 def detect(function_name: str, function_args: Any, result: Any) -> Optional[AuthNeed]:
     if not isinstance(result, str) or not result.startswith("{") or len(result) > MAX_SCANNED_RESULT_CHARS:
         return None
-    if function_name != "terminal" and '"auth_required"' not in result and '"needs_reauth"' not in result:
+    if function_name != "terminal" and not any(marker in result for marker in _MARKERS):
         return None
     try:
         body = json.loads(result)
@@ -92,7 +111,10 @@ def detect(function_name: str, function_args: Any, result: Any) -> Optional[Auth
         return AuthNeed(typed["service"], reason if reason in REASONS else "missing",
                         flow if isinstance(flow, str) else None)
     if body.get("needs_reauth") is True and isinstance(body.get("server"), str):
-        return AuthNeed(f"mcp:{body['server']}", "expired", flow="oauth")
+        return AuthNeed(f"mcp:{body['server']}", "expired")
+    hosted = _hosted_connector_need(body)
+    if hosted is not None:
+        return hosted
     if function_name == "terminal" and isinstance(function_args, dict):
         return match_gh_failure(function_args.get("command", ""), str(body.get("output", "")),
                                 body.get("exit_code"))

@@ -310,7 +310,7 @@ def test_gh_matcher_negative(command, output, code):
 def test_detect_reads_the_typed_result_and_the_mcp_marker_not_free_text():
     assert auth_required.detect('t', {}, _unauthorized('x')) == AuthNeed('x', 'expired', None)
     mcp = json.dumps({'error': 'x', 'needs_reauth': True, 'server': 'notes'})
-    assert auth_required.detect('mcp_notes_search', {}, mcp) == AuthNeed('mcp:notes', 'expired', 'oauth')
+    assert auth_required.detect('mcp_notes_search', {}, mcp) == AuthNeed('mcp:notes', 'expired', None)
     assert auth_required.detect('t', {}, json.dumps({'error': 'HTTP 401 not logged in'})) is None
     terminal = json.dumps({'output': GH_NOT_LOGGED_IN, 'exit_code': 4, 'error': None})
     assert auth_required.detect('terminal', {'command': 'gh repo list'}, terminal).service == 'github'

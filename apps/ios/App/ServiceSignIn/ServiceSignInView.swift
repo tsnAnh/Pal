@@ -32,10 +32,20 @@ enum ServiceSignInWording {
         String(localized: "Sign in to \(dialog.serviceName) on the computer your bot runs on, then it can carry on.")
     }
 
-    static func status(_ phase: ServiceSignInPhase) -> String? {
-        switch phase {
+    static func keyPrompt(_ dialog: ServiceSignInDialog, botName: (String) -> String) -> String {
+        String(localized: "\(botName(dialog.bot)) needs an API key for \(dialog.serviceName) to keep going.")
+    }
+
+    static func header(_ dialog: ServiceSignInDialog) -> String {
+        String(localized: "Update the \(dialog.serviceName) credential in the connector's settings, then it can carry on.")
+    }
+
+    static func status(_ dialog: ServiceSignInDialog) -> String? {
+        switch dialog.phase {
         case .prompting: nil
-        case .signingIn: String(localized: "Waiting for you to finish signing in…")
+        case .signingIn: dialog.takesKey ? String(localized: "Saving…") : String(localized: "Waiting for you to finish signing in…")
+        case .keySet: String(localized: "Key set")
+        case .keyFailed(let text): text
         case .signedIn: String(localized: "Signed in")
         case .failed(let text): text
         }
@@ -58,6 +68,7 @@ struct ServiceSignInDialogView: View {
     let center: ServiceSignInCenter
     let botName: (String) -> String
     @State private var copied = false
+    @State private var key = ""
 
     var body: some View {
         if let dialog = center.current {
@@ -70,7 +81,10 @@ struct ServiceSignInDialogView: View {
                 .background(PalTokens.elevated)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("service-signin-dialog")
-                .onChange(of: dialog.requestID) { _, _ in copied = false }
+                .onChange(of: dialog.requestID) { _, _ in
+                    copied = false
+                    key = ""
+                }
         }
     }
 
@@ -83,7 +97,7 @@ struct ServiceSignInDialogView: View {
                     .foregroundStyle(PalTokens.textPrimary)
                     .multilineTextAlignment(.center)
                 if dialog.phase != .signedIn {
-                    Text(dialog.canSignIn ? ServiceSignInWording.subtitle(dialog, botName: botName) : ServiceSignInWording.manual(dialog))
+                    Text(subtitle(dialog))
                         .hermesText(.rowSubtitle)
                         .foregroundStyle(PalTokens.textSecondary)
                         .multilineTextAlignment(.center)
@@ -97,7 +111,10 @@ struct ServiceSignInDialogView: View {
             if dialog.flow == .deviceCode, let code = dialog.userCode, showsCode(dialog.phase) {
                 codeCard(code)
             }
-            if let status = ServiceSignInWording.status(dialog.phase) {
+            if dialog.takesKey, dialog.phase != .signedIn, !isFailed(dialog.phase) {
+                keyField(dialog)
+            }
+            if let status = ServiceSignInWording.status(dialog) {
                 Text(status)
                     .hermesText(.rowSubtitle)
                     .foregroundStyle(PalTokens.textSecondary)
@@ -108,10 +125,45 @@ struct ServiceSignInDialogView: View {
         }
     }
 
+    private func subtitle(_ dialog: ServiceSignInDialog) -> String {
+        switch dialog.flow {
+        case .deviceCode, .oauth: ServiceSignInWording.subtitle(dialog, botName: botName)
+        case .apiKey: ServiceSignInWording.keyPrompt(dialog, botName: botName)
+        case .header: ServiceSignInWording.header(dialog)
+        case .manual, .unknown: ServiceSignInWording.manual(dialog)
+        }
+    }
+
+    private func isFailed(_ phase: ServiceSignInPhase) -> Bool {
+        if case .failed = phase { true } else { false }
+    }
+
+    private func keyField(_ dialog: ServiceSignInDialog) -> some View {
+        SecureField("API key", text: $key)
+            .textContentType(nil)
+            .autocorrectionDisabled()
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            #endif
+            .textFieldStyle(.plain)
+            .padding(12)
+            .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .disabled(!dialog.acceptsKey)
+            .onSubmit { saveKey(dialog) }
+            .accessibilityIdentifier("service-signin-key-field")
+    }
+
+    private func saveKey(_ dialog: ServiceSignInDialog) {
+        guard dialog.acceptsKey, !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        let value = key
+        key = ""
+        Task { await center.saveKey(value) }
+    }
+
     private func showsCode(_ phase: ServiceSignInPhase) -> Bool {
         switch phase {
         case .prompting, .signingIn: true
-        case .signedIn, .failed: false
+        case .keySet, .keyFailed, .signedIn, .failed: false
         }
     }
 
@@ -146,16 +198,22 @@ struct ServiceSignInDialogView: View {
                 .buttonStyle(PillButtonStyle(kind: .neutral, size: .large))
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier("service-signin-notnow-button")
-        case .prompting, .signingIn:
+        case .prompting, .signingIn, .keySet, .keyFailed:
             VStack(spacing: 8) {
-                if dialog.canSignIn {
+                if dialog.takesKey {
+                    Button(dialog.phase == .signingIn ? "Saving…" : "Save") { saveKey(dialog) }
+                        .buttonStyle(PillButtonStyle(kind: .accent, size: .large))
+                        .disabled(!dialog.acceptsKey || key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                        .keyboardShortcut(.defaultAction)
+                        .accessibilityIdentifier("service-signin-key-save-button")
+                } else if dialog.canSignIn {
                     Button(dialog.phase == .signingIn ? "Signing in…" : "Sign in") { Task { await center.signIn() } }
                         .buttonStyle(PillButtonStyle(kind: .accent, size: .large))
                         .disabled(dialog.phase == .signingIn)
                         .keyboardShortcut(.defaultAction)
                         .accessibilityIdentifier("service-signin-signin-button")
                 }
-                Button(dialog.canSignIn ? "Not now" : "Close") { Task { await center.notNow() } }
+                Button(dialog.canSignIn || dialog.takesKey ? "Not now" : "Close") { Task { await center.notNow() } }
                     .buttonStyle(PillButtonStyle(kind: .dimmed, size: .large))
                     .keyboardShortcut(.cancelAction)
                     .accessibilityIdentifier("service-signin-notnow-button")

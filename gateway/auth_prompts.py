@@ -46,6 +46,7 @@ class _Request:
     driver: asyncio.Task | None = None
     signin_acknowledged: bool = False
     authorize_url: str | None = None
+    concluding: bool = False
 
 
 _active: dict[tuple, _Request] = {}
@@ -74,7 +75,8 @@ def _required_frame(req: _Request) -> dict:
     return required_frame(AuthRequiredPayload(
         request_id=req.request_id, service=req.service, service_name=service_display_name(req.service),
         bot=req.bots[0], bots=list(req.bots), reason=req.reason, flow=req.flow.kind,
-        user_code=req.flow.user_code, verification_uri=req.flow.verification_uri, expires_in=req.flow.expires_in))
+        user_code=req.flow.user_code, verification_uri=req.flow.verification_uri, expires_in=req.flow.expires_in,
+        server=getattr(req.flow, 'server', None)))
 
 
 async def _broadcast(transports: list, frame: dict) -> list:
@@ -111,15 +113,16 @@ async def _drive(req: _Request) -> None:
 
 
 async def _conclude(req: _Request, resolution: Resolution) -> None:
-    if req.future.done():
+    if req.future.done() or req.concluding:
         return
+    req.concluding = True
     if resolution is not Resolution.SIGNED_IN:
         req.flow.cancel()
     wire = {Resolution.SIGNED_IN: "signed_in", Resolution.DECLINED: "declined",
             Resolution.TIMED_OUT: "timed_out"}.get(resolution, "failed")
-    _finish(req, resolution)
     await _broadcast(list(req.transports),
                      resolved_frame(AuthResolvedPayload(request_id=req.request_id, outcome=wire)))
+    _finish(req, resolution)
 
 
 async def request_signin(authority, home: Path, need: AuthNeed, bot: str) -> Resolution:
@@ -176,6 +179,9 @@ async def signin(authority, request_id: str) -> tuple[bool, str | None]:
     if req is None or req.future.done():
         return False, None
     req.signin_acknowledged = True
+    confirm = getattr(req.flow, "confirm", None)
+    if confirm is not None and not await confirm():
+        return False, None
     if req.flow.kind == "oauth" and req.authorize_url is None:
         try:
             req.authorize_url = await req.flow.authorize_url()
@@ -183,7 +189,7 @@ async def signin(authority, request_id: str) -> tuple[bool, str | None]:
             logger.warning("sign-in for %s could not start", req.service, exc_info=True)
             await _conclude(req, Resolution.FAILED)
             return False, None
-        if req.authorize_url is None:
+        if req.authorize_url is None and not getattr(req.flow, "already_connected", False):
             await _conclude(req, Resolution.FAILED)
             return False, None
     return True, req.authorize_url

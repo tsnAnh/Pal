@@ -7056,9 +7056,10 @@ export interface AuthRequiredPayload {
   user_code?: string | null
   verification_uri?: string | null
   expires_in?: number | null
+  server?: string | null
 }
 export type AuthReason = 'missing' | 'expired' | 'revoked'
-export type AuthFlow = 'device_code' | 'oauth' | 'manual'
+export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual'
 export interface AuthResolvedPayload {
   request_id: string
   outcome: AuthOutcome
@@ -8414,7 +8415,7 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
-  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; manual has no in-app sign-in. The payload never carries a token. */
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key asks for the key for MCP server `server` (store it with mcp.servers.set_api_key, then call auth.signin); header and manual have no in-app sign-in. The payload never carries a token. */
   'auth.required': AuthRequiredPayload
   /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. */
   'auth.resolved': AuthResolvedPayload

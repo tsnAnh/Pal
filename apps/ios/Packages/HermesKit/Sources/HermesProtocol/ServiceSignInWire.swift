@@ -11,9 +11,11 @@ public enum ServiceSignInReason: String, Sendable, Hashable {
     }
 }
 
-public enum ServiceSignInFlow: String, Sendable, Hashable {
+public enum ServiceSignInFlow: String, Sendable, Hashable, CaseIterable {
     case deviceCode = "device_code"
     case oauth
+    case apiKey = "api_key"
+    case header
     case manual
     case unknown
 
@@ -47,6 +49,7 @@ public struct AuthRequiredEvent: Sendable, Hashable {
     public var userCode: String?
     public var verificationURI: String?
     public var expiresIn: Int?
+    public var server: String?
 
     public init(
         requestID: String,
@@ -58,7 +61,8 @@ public struct AuthRequiredEvent: Sendable, Hashable {
         flow: ServiceSignInFlow,
         userCode: String? = nil,
         verificationURI: String? = nil,
-        expiresIn: Int? = nil
+        expiresIn: Int? = nil,
+        server: String? = nil
     ) {
         self.requestID = requestID
         self.service = service
@@ -70,6 +74,7 @@ public struct AuthRequiredEvent: Sendable, Hashable {
         self.userCode = userCode
         self.verificationURI = verificationURI
         self.expiresIn = expiresIn
+        self.server = server
     }
 
     public init?(event: GatewayEvent) {
@@ -93,7 +98,8 @@ public struct AuthRequiredEvent: Sendable, Hashable {
             flow: ServiceSignInFlow(wire: payload["flow"]?.stringValue),
             userCode: payload["user_code"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
             verificationURI: payload["verification_uri"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
-            expiresIn: payload["expires_in"]?.intValue
+            expiresIn: payload["expires_in"]?.intValue,
+            server: payload["server"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 }
@@ -135,8 +141,13 @@ public struct AuthSignInResult: Sendable, Hashable {
 public enum ServiceSignInWire {
     public static let signInMethod = "auth.signin"
     public static let declineMethod = "auth.decline"
+    public static let setAPIKeyMethod = "mcp.servers.set_api_key"
 
     public static func requestParams(_ requestID: String) -> JSONValue {
         ["request_id": .string(requestID)]
+    }
+
+    public static func setAPIKeyParams(server: String, value: String) -> JSONValue {
+        ["name": .string(server), "value": .string(value)]
     }
 }

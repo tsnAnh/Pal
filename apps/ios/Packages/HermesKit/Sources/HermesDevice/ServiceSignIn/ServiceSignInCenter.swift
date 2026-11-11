@@ -7,6 +7,8 @@ public typealias SystemBrowserOpener = @MainActor @Sendable (URL) -> Void
 public enum ServiceSignInPhase: Sendable, Hashable {
     case prompting
     case signingIn
+    case keySet
+    case keyFailed(String)
     case signedIn
     case failed(String)
 }
@@ -21,16 +23,26 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var flow: ServiceSignInFlow
     public var userCode: String?
     public var verificationURI: String?
+    public var server: String?
     public var phase: ServiceSignInPhase
 
     public var id: String { service }
 
     public var otherBotCount: Int { bots.filter { $0 != bot }.count }
 
+    public var acceptsKey: Bool {
+        switch phase {
+        case .prompting, .keyFailed: true
+        case .signingIn, .keySet, .signedIn, .failed: false
+        }
+    }
+
+    public var takesKey: Bool { flow == .apiKey }
+
     public var canSignIn: Bool {
         switch flow {
         case .deviceCode, .oauth: true
-        case .manual, .unknown: false
+        case .apiKey, .header, .manual, .unknown: false
         }
     }
 }
@@ -99,8 +111,29 @@ public final class ServiceSignInCenter {
             } catch {
                 setPhase(.failed(Self.startFailure), for: service, ifRequest: requestID)
             }
-        case .manual, .unknown:
+        case .apiKey, .header, .manual, .unknown:
             return
+        }
+    }
+
+    public func saveKey(_ value: String) async {
+        guard let dialog = current, dialog.flow == .apiKey, dialog.acceptsKey,
+              let server = dialog.server, !server.isEmpty else { return }
+        let key = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return }
+        let requestID = dialog.requestID
+        let service = dialog.service
+        setPhase(.signingIn, for: service)
+        do {
+            _ = try await call(ServiceSignInWire.setAPIKeyMethod, ServiceSignInWire.setAPIKeyParams(server: server, value: key))
+            let result = AuthSignInResult(try await call(ServiceSignInWire.signInMethod, ServiceSignInWire.requestParams(requestID)))
+            guard result.recorded else {
+                setPhase(.keyFailed(Self.keyFailure), for: service, ifRequest: requestID)
+                return
+            }
+            setPhase(.keySet, for: service, ifRequest: requestID)
+        } catch {
+            setPhase(.keyFailed(Self.keyFailure), for: service, ifRequest: requestID)
         }
     }
 
@@ -108,7 +141,7 @@ public final class ServiceSignInCenter {
         guard let dialog = current else { return }
         remove(service: dialog.service)
         switch dialog.phase {
-        case .prompting, .signingIn:
+        case .prompting, .signingIn, .keySet, .keyFailed:
             _ = try? await call(ServiceSignInWire.declineMethod, ServiceSignInWire.requestParams(dialog.requestID))
         case .signedIn, .failed:
             return
@@ -122,7 +155,7 @@ public final class ServiceSignInCenter {
             case .signedIn, .failed:
                 dismissals.removeValue(forKey: event.service)?.cancel()
                 dialogs[index] = Self.dialog(from: event)
-            case .prompting, .signingIn:
+            case .prompting, .signingIn, .keySet, .keyFailed:
                 dialog.requestID = event.requestID
                 dialog.serviceName = event.serviceName
                 dialog.bot = event.bot
@@ -130,6 +163,7 @@ public final class ServiceSignInCenter {
                 dialog.reason = event.reason
                 if event.userCode != nil { dialog.userCode = event.userCode }
                 if event.verificationURI != nil { dialog.verificationURI = event.verificationURI }
+                if event.server != nil { dialog.server = event.server }
                 dialogs[index] = dialog
             }
         } else {
@@ -194,6 +228,7 @@ public final class ServiceSignInCenter {
             flow: event.flow,
             userCode: event.userCode,
             verificationURI: event.verificationURI,
+            server: event.server,
             phase: .prompting
         )
     }
@@ -210,6 +245,7 @@ public final class ServiceSignInCenter {
 
     static let pageFailure = "We couldn't open the sign-in page."
     static let startFailure = "We couldn't start sign-in. Please try again later."
+    static let keyFailure = "Couldn't save the key."
     static let didNotFinish = "Sign-in didn't finish."
     static let timedOut = "Sign-in took too long and was stopped."
 }

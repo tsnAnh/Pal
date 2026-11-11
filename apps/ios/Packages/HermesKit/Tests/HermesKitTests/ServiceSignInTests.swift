@@ -12,7 +12,8 @@ private func requiredEvent(
     flow: String = "device_code",
     reason: String = "missing",
     code: String? = "WDJB-MJHT",
-    uri: String? = "https://github.com/login/device"
+    uri: String? = "https://github.com/login/device",
+    server: String? = nil
 ) -> GatewayEvent {
     var payload: [String: JSONValue] = [
         "request_id": .string(requestID), "service": .string(service), "service_name": "GitHub", "bot": .string(bot),
@@ -20,6 +21,7 @@ private func requiredEvent(
     ]
     if let code { payload["user_code"] = .string(code) }
     if let uri { payload["verification_uri"] = .string(uri) }
+    if let server { payload["server"] = .string(server) }
     return GatewayEvent(type: "auth.required", payload: .object(payload))
 }
 
@@ -92,6 +94,25 @@ struct ServiceSignInWireTests {
         #expect(event.reason == .unknown)
         let resolved = try #require(AuthResolvedEvent(event: resolvedEvent("r1", "exploded")))
         #expect(resolved.outcome == .unknown)
+    }
+
+    @Test func decodesKeyAndHeaderFlowsWithServer() throws {
+        let key = try #require(AuthRequiredEvent(event: requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear")))
+        #expect(key.flow == .apiKey)
+        #expect(key.server == "linear")
+        let header = try #require(AuthRequiredEvent(event: requiredEvent(flow: "header", code: nil, uri: nil, server: "docs")))
+        #expect(header.flow == .header)
+        #expect(header.server == "docs")
+        let none = try #require(AuthRequiredEvent(event: requiredEvent()))
+        #expect(none.server == nil)
+    }
+
+    @Test func flowRawValuesDoNotDrift() {
+        let known = ServiceSignInFlow.allCases.filter { $0 != .unknown }.map(\.rawValue)
+        #expect(known == ["device_code", "oauth", "api_key", "header", "manual"])
+        #expect(ServiceSignInFlow.allCases.count == known.count + 1)
+        #expect(ServiceSignInFlow(wire: "passkey") == .unknown)
+        #expect(ServiceSignInFlow(wire: nil) == .unknown)
     }
 
     @Test func missingRequiredFieldsAreIgnored() {
@@ -238,6 +259,77 @@ struct ServiceSignInCenterTests {
         let center = makeCenter(Recorder(), Opened())
         center.receive(requiredEvent("r1"))
         center.receive(resolvedEvent("r1", "declined"))
+        #expect(center.current == nil)
+    }
+
+    @Test func saveKeySetsKeyThenSignsIn() async {
+        let secret = "sk-live-SECRET-123"
+        let recorder = Recorder()
+        let center = makeCenter(recorder, Opened())
+        center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
+        #expect(center.current?.takesKey == true)
+        await center.signIn()
+        #expect(recorder.methods().isEmpty)
+        await center.saveKey("  \(secret)\n")
+        #expect(recorder.methods() == ["mcp.servers.set_api_key", "auth.signin"])
+        let sent = recorder.params("mcp.servers.set_api_key").first ?? nil
+        #expect(sent?["name"]?.stringValue == "linear")
+        #expect(sent?["value"]?.stringValue == secret)
+        #expect(recorder.params("auth.signin").first??["request_id"]?.stringValue == "r1")
+        #expect(center.current?.phase == .keySet)
+        #expect(!String(reflecting: center.dialogs).contains(secret))
+        center.receive(resolvedEvent("r1", "signed_in"))
+        #expect(center.current?.phase == .signedIn)
+        #expect(await settle { center.current == nil })
+    }
+
+    @Test func saveKeyFailureLeavesNoValueAndAllowsRetry() async {
+        let secret = "sk-live-SECRET-456"
+        let center = makeCenter(Recorder(failing: true), Opened())
+        center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
+        await center.saveKey(secret)
+        #expect(center.current?.phase == .keyFailed("Couldn't save the key."))
+        #expect(center.current?.acceptsKey == true)
+        #expect(!String(reflecting: center.dialogs).contains(secret))
+        var dumped = ""
+        dump(center, to: &dumped)
+        #expect(!dumped.contains(secret))
+    }
+
+    @Test func saveKeyFailsWhenSignInNotRecorded() async {
+        let recorder = Recorder(reply: ["recorded": false])
+        let center = makeCenter(recorder, Opened())
+        center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil, server: "linear"))
+        await center.saveKey("abc")
+        #expect(recorder.methods() == ["mcp.servers.set_api_key", "auth.signin"])
+        #expect(center.current?.phase == .keyFailed("Couldn't save the key."))
+    }
+
+    @Test func saveKeyIgnoredWithoutServerOrValueOrKeyFlow() async {
+        let recorder = Recorder()
+        let center = makeCenter(recorder, Opened())
+        center.receive(requiredEvent(flow: "api_key", code: nil, uri: nil))
+        await center.saveKey("abc")
+        center.receive(requiredEvent("r2", service: "notion", flow: "api_key", code: nil, uri: nil, server: "notion"))
+        await center.notNow()
+        await center.saveKey("   ")
+        let oauth = makeCenter(recorder, Opened())
+        oauth.receive(requiredEvent(flow: "oauth", code: nil, uri: nil, server: "linear"))
+        await oauth.saveKey("abc")
+        #expect(recorder.methods() == ["auth.decline"])
+    }
+
+    @Test func headerFlowOffersNoSignInAction() async {
+        let recorder = Recorder()
+        let center = makeCenter(recorder, Opened())
+        center.receive(requiredEvent(flow: "header", code: nil, uri: nil, server: "docs"))
+        #expect(center.current?.canSignIn == false)
+        #expect(center.current?.takesKey == false)
+        await center.signIn()
+        await center.saveKey("abc")
+        #expect(recorder.methods().isEmpty)
+        await center.notNow()
+        #expect(recorder.methods() == ["auth.decline"])
         #expect(center.current == nil)
     }
 }

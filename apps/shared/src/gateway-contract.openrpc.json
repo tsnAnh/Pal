@@ -6706,6 +6706,8 @@
         "enum": [
           "device_code",
           "oauth",
+          "api_key",
+          "header",
           "manual"
         ],
         "title": "AuthFlow",
@@ -6797,6 +6799,18 @@
             ],
             "default": null,
             "title": "Expires In"
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Server"
           }
         },
         "required": [
@@ -58317,7 +58331,7 @@
     },
     {
       "name": "auth.required",
-      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; manual has no in-app sign-in. The payload never carries a token.",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key asks for the key for MCP server `server` (store it with mcp.servers.set_api_key, then call auth.signin); header and manual have no in-app sign-in. The payload never carries a token.",
       "params": [
         {
           "name": "payload",
