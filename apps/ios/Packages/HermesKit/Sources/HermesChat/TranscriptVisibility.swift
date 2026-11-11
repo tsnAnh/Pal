@@ -9,8 +9,7 @@ public enum TranscriptVisibility {
         case .assistant(let text, _, _):
             text.trimmingCharacters(in: .whitespacesAndNewlines) == silentReply
         case .user(let text, _):
-            item.inbound == .processCompletion
-                || (botChat && text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(cronjobTurnPrefix))
+            botChat && text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(cronjobTurnPrefix)
         default:
             false
         }

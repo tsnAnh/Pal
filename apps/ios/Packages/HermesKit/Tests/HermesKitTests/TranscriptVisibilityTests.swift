@@ -25,11 +25,11 @@ struct TranscriptVisibilityTests {
         #expect(entries([quoting]) == [quoting.id])
     }
 
-    @Test func processNoticesAndBotChatCronjobTurnsAreHidden() {
+    @Test func processNoticesStayVisibleAndBotChatCronjobTurnsAreHidden() {
         let process = user("[IMPORTANT: Background process 1 finished]", inbound: .processCompletion)
         let cron = user("[Cronjob \"digest\"] run now")
         let real = user("hello")
-        #expect(entries([process, cron, real]) == [real.id])
+        #expect(entries([process, cron, real]) == [process.id, real.id])
     }
 
     @Test func visibleKeepsOnlyWhatARealChatShows() {

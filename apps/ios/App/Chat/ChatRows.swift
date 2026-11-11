@@ -198,12 +198,14 @@ struct NoticeRow: View {
     let isCurrentMatch: Bool
 
     @Environment(\.hermesTheme) private var theme
+    @State private var expanded = false
 
     private var title: String {
         switch notice {
         case .botMessage(let name, _): String(localized: "Message from \(name)")
         case .notification: String(localized: "Notification")
-        case .backgroundTaskFinished: String(localized: "Background task finished")
+        case .backgroundTaskFinished(let count, _):
+            count > 1 ? String(localized: "\(count) background tasks finished") : String(localized: "Background task finished")
         }
     }
 
@@ -216,6 +218,43 @@ struct NoticeRow: View {
     }
 
     var body: some View {
+        if case .backgroundTaskFinished(_, let text) = notice {
+            backgroundTaskRow(text: text)
+        } else {
+            capsule
+        }
+    }
+
+    private func backgroundTaskRow(text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button { expanded.toggle() } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: icon).font(.system(size: 12))
+                    Text(title).hermesText(.chip)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(title))
+            .accessibilityValue(Text(expanded ? "Expanded" : "Collapsed"))
+            .accessibilityIdentifier("inboundNotice")
+            if expanded {
+                Text(text)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("backgroundTaskText")
+            }
+        }
+        .foregroundStyle(Color(theme.palette.textSecondary))
+        .padding(.vertical, 2)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var capsule: some View {
         HStack(spacing: 6) {
             Image(systemName: icon).font(.system(size: 12))
             Text(title).hermesText(.chip)
