@@ -233,6 +233,13 @@ final class RosterModel {
         Task { await feed.nudge() }
     }
 
+    func avatarChanged(_ name: String, photo: Data?) {
+        photos[name] = photo
+        rebuildServerBots()
+        publish()
+        nudge()
+    }
+
     private var admin: BotAdmin {
         BotAdmin(gateway: gateway, diagnostics: .osLog())
     }
