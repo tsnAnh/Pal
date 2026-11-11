@@ -97,3 +97,46 @@ def test_every_dead_request_reads_as_never_answered_with_its_reason():
     summary = bot_mode_dm_outcome.combined_summary(
         [{"to": "@gamma", "status": "pending", "detail": "No outcome"}, {"to": "@beta", "status": "settled", "reply": "y"}])
     assert summary.startswith("@beta answered. @gamma never answered within the wait")
+
+
+OWNER_LINE = "Anh Ben ơi, chief hỏi cái giới hạn 4 session của em lấy từ đâu; em trả lời ngay, không đổi gì."
+ENGLISH_REPLY = "The 4-session limit comes from max_sessions in config.yaml; no change needed."
+
+
+def test_owner_line_in_a_toolless_bot_turn_stays_out_of_the_sender_payload(tmp_path):
+    final = f"{OWNER_LINE}\n{ENGLISH_REPLY}"
+    db, record = _settled(tmp_path, [{"role": "assistant", "content": final}], final)
+    try:
+        receipt = _result(SimpleNamespace(db=db), record)
+        assert receipt["reply"] == ENGLISH_REPLY
+        from gateway.session_results import admission_result
+        assert OWNER_LINE in admission_result(db, record["admission_id"])["result"]["final_response"]
+    finally:
+        db.close()
+
+
+def test_owner_line_before_a_tool_call_is_an_earlier_message_and_the_reply_is_untouched(tmp_path):
+    messages = [{"role": "assistant", "content": OWNER_LINE, "tool_calls": [{"function": {"name": "terminal", "arguments": "{}"}}]},
+                {"role": "tool", "content": "max_sessions: 4"},
+                {"role": "assistant", "content": ENGLISH_REPLY}]
+    db, record = _settled(tmp_path, messages, ENGLISH_REPLY)
+    try:
+        assert _result(SimpleNamespace(db=db), record)["reply"] == ENGLISH_REPLY
+    finally:
+        db.close()
+
+
+def test_a_lone_owner_addressed_line_is_withheld_not_delivered(tmp_path):
+    db, record = _settled(tmp_path, [{"role": "assistant", "content": OWNER_LINE}], OWNER_LINE)
+    try:
+        assert _result(SimpleNamespace(db=db), record)["reply"] == ""
+    finally:
+        db.close()
+
+
+def test_a_lone_english_line_is_still_delivered(tmp_path):
+    db, record = _settled(tmp_path, [{"role": "assistant", "content": ENGLISH_REPLY}], ENGLISH_REPLY)
+    try:
+        assert _result(SimpleNamespace(db=db), record)["reply"] == ENGLISH_REPLY
+    finally:
+        db.close()

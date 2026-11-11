@@ -492,6 +492,9 @@ def _result(authority, record):
         status, reply = _admission_outcome(authority, record['admission_id'], record)
         if status == 'failed' and (record.get('retry') or {}).get('refused') == 'cancelled':
             status = 'cancelled'  # its sender withdrew it (``session_bot_cancel``); its retry never ran
+    if status == 'settled' and reply and (record.get('author') or {}).get('is_bot'):
+        from gateway.session_bot_outcome import sender_reply
+        reply = sender_reply(authority, current, reply)
     if status == 'settled' and not reply:
         from gateway.session_bot_outcome import forgotten_reply
         reply = forgotten_reply(authority, current, record) or ''
