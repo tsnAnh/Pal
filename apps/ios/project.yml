@@ -21,6 +21,9 @@ packages:
     path: Packages/HermesKit
   HermesDesign:
     path: Packages/HermesDesign
+  SwiftMath:
+    url: https://github.com/mgriebling/SwiftMath
+    exactVersion: 1.7.3
 targets:
   HermesBots:
     type: application
@@ -96,6 +99,8 @@ targets:
         product: HermesSettings
       - package: HermesDesign
         product: HermesDesign
+      - package: SwiftMath
+        product: SwiftMath
   HermesBotsUITests:
     type: bundle.ui-testing
     supportedDestinations: [iOS, macOS]

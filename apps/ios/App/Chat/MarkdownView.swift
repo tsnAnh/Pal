@@ -6,13 +6,14 @@ struct MarkdownView: View {
     let document: MarkdownDocument
     let highlight: String
     let isCurrentMatch: Bool
+    var isStreaming: Bool = false
 
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(document.blocks) { block in
-                MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch)
+                MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
             }
         }
     }
@@ -22,6 +23,7 @@ private struct MarkdownBlockView: View {
     let block: MarkdownBlock
     let highlight: String
     let isCurrentMatch: Bool
+    let isStreaming: Bool
 
     @Environment(\.hermesTheme) private var theme
     @ScaledMetric(relativeTo: .body) private var indentStep: CGFloat = 25.7
@@ -29,11 +31,17 @@ private struct MarkdownBlockView: View {
     var body: some View {
         switch block.kind {
         case .paragraph:
-            listRow { InlineText(text: block.text, highlight: highlight, isCurrentMatch: isCurrentMatch) }
+            if block.isComplete, let link = block.standaloneLink, MediaLink.isInlinePlayableVideo(link) {
+                VideoBlockView(url: link)
+            } else if block.isComplete, let link = block.standaloneLink, let descriptor = EmbedDetector.detect(link) {
+                EmbedCardView(descriptor: descriptor)
+            } else {
+                listRow { InlineText(text: block.text, highlight: highlight, isCurrentMatch: isCurrentMatch) }
+            }
         case .heading(let level):
             InlineText(text: block.text, highlight: highlight, isCurrentMatch: isCurrentMatch, style: level <= 2 ? .chatStatus : .chatBody, weight: .bold)
         case .code, .math:
-            CodeBlockView(text: String(block.text.characters))
+            RichBlockView(block: block, isStreaming: isStreaming)
         case .thematicBreak:
             Rectangle().fill(Color(theme.palette.separator)).frame(height: 1).padding(.vertical, 4)
         }
@@ -69,7 +77,7 @@ private struct MarkdownBlockView: View {
     }
 }
 
-private struct CodeBlockView: View {
+struct CodeBlockView: View {
     let text: String
 
     @Environment(\.hermesTheme) private var theme

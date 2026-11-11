@@ -94,6 +94,7 @@ public enum MessageImages {
     private static func extractFromAssistant(_ text: String) -> MessageContent {
         var body = text
         var images: [ImageReference] = []
+        var videos: [URL] = []
         var search = body.startIndex..<body.endIndex
         while let tag = body.range(of: "MEDIA:", range: search) {
             var cursor = tag.upperBound
@@ -101,8 +102,13 @@ public enum MessageImages {
             let tokenStart = cursor
             while cursor < body.endIndex, !body[cursor].isWhitespace { cursor = body.index(after: cursor) }
             let token = String(body[tokenStart..<cursor]).trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)]}>"))
+            let video = remoteVideoURL(in: unquote(token))
             if let reference = reference(forPath: unquote(token)) ?? remoteImageReference(in: token) {
                 images.append(reference)
+                body.removeSubrange(tag.lowerBound..<cursor)
+                search = tag.lowerBound..<body.endIndex
+            } else if let video {
+                videos.append(video)
                 body.removeSubrange(tag.lowerBound..<cursor)
                 search = tag.lowerBound..<body.endIndex
             } else {
@@ -117,8 +123,21 @@ public enum MessageImages {
                 kept.append(line)
             }
         }
-        guard !images.isEmpty else { return MessageContent(text: text, images: []) }
-        return MessageContent(text: tidy(kept.joined(separator: "\n")), images: unique(images))
+        guard !images.isEmpty || !videos.isEmpty else { return MessageContent(text: text, images: []) }
+        let videoLines = videos.map(\.absoluteString).joined(separator: "\n\n")
+        let remaining = tidy(kept.joined(separator: "\n"))
+        let joined = [remaining, videoLines].filter { !$0.isEmpty }.joined(separator: "\n\n")
+        return MessageContent(text: joined, images: unique(images))
+    }
+
+    static func remoteVideoURL(in token: String) -> URL? {
+        let lowered = token.lowercased()
+        guard lowered.hasPrefix("https://") || lowered.hasPrefix("http://"),
+              !token.contains(where: \.isWhitespace),
+              let url = URL(string: token), url.host() != nil,
+              MediaLink.isInlinePlayableVideo(url)
+        else { return nil }
+        return url
     }
 
     private static func reference(forPath raw: String) -> ImageReference? {
