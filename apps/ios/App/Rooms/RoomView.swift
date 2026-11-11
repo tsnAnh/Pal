@@ -117,6 +117,8 @@ struct RoomView: View {
                 attachments: model.pendingAttachments,
                 slashItems: [],
                 loadSlashItems: {},
+                fileRefResult: nil,
+                loadFileRefs: { _ in },
                 replyTarget: nil,
                 cancelReply: {},
                 canSend: model.canSend,
