@@ -1,4 +1,5 @@
 import AppIntents
+import HermesBotProfile
 import HermesClient
 import HermesDesign
 import HermesDevice
