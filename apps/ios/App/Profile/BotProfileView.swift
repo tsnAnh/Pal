@@ -139,6 +139,11 @@ struct BotProfileView: View {
                     }
                 }
                 SettingsRow.navigate(
+                    String(localized: "Connect Telegram"),
+                    icon: .symbol("paperplane.fill"),
+                    accessibilityIdentifier: "profileTelegramRow"
+                ) { router.push(.telegram(botName: model.botName)) }
+                SettingsRow.navigate(
                     String(localized: "Messaging"),
                     icon: .symbol("bubble.left.and.bubble.right"),
                     accessibilityIdentifier: "profileMessagingRow"

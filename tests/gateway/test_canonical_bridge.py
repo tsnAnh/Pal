@@ -230,6 +230,27 @@ async def test_a_slack_connect_never_echoes_or_logs_the_tokens(bots, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_a_telegram_connect_never_echoes_or_logs_the_token_and_needs_control(bots, monkeypatch, caplog):
+    from hermes_cli.web_routers import messaging
+    from tui_gateway import server
+    saved = {}
+    monkeypatch.setattr(server, '_telegram_probe', lambda token: 'accepted')
+    monkeypatch.setattr(messaging, '_apply_platform_update',
+                        lambda platform, entry, rules, env, remove, enabled: saved.update(env))
+    monkeypatch.setattr(messaging, '_notify_multiplexer_hot_serve', lambda profile: True)
+    params = {'bot_token': '123456789:SECRET' + 'a' * 30}
+    response = await call(bots.connect(), 'messaging.telegram.connect', params)
+    assert 'error' not in response, response
+    assert saved['TELEGRAM_BOT_TOKEN'] == params['bot_token']
+    assert 'SECRET' not in str(response) and 'SECRET' not in caplog.text
+    saved.clear()
+    for method, extra in (('messaging.telegram.connect', params), ('messaging.telegram.disconnect', {})):
+        refused = await call(bots.connect(capabilities=READ), method, extra)
+        assert failure(refused)['message'] == 'permission_denied'
+    assert saved == {} and 'SECRET' not in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_account_owned_connector_calls_are_served_not_unknown(bots):
     connection = bots.connect()
     unknown = await call(connection, 'connectors.operation.status', {'owner': {'type': 'account'}, 'op_id': 'nope'})

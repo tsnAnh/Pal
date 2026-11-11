@@ -549,6 +549,39 @@ export interface MessagingSlackConnectResult {
   restart_busy?: boolean | null
   restart_error?: string | null
 }
+/** One bot's Telegram connection. The token is never echoed: only whether it is set. ``state`` is the gateway's verdict for the Telegram adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``, ``gateway_stopped``, ``startup_failed``, ``retrying``, ...). When the connection failed, ``error_code`` names why (``telegram_auth_error``: invalid or revoked token, ``telegram_network_error`` / ``telegram_connect_error``: Telegram unreachable, ``telegram_polling_conflict``: another copy uses the token); none of these is a secret. */
+export interface MessagingTelegramStatus {
+  profile: string
+  enabled: boolean
+  configured: boolean
+  gateway_running: boolean
+  state?: string | null
+  error_code?: string | null
+  error_message?: string | null
+  bot_token_set: boolean
+  allowed_users_set: boolean
+}
+/** ``bot_token`` is the BotFather token; it is written to the bot's own .env only, after Telegram's getMe accepted it. A replacement keeps the old token until the new one is accepted and saved. Error 4101: the token has the wrong shape or Telegram refused it (invalid or revoked); 5103: Telegram could not be reached. */
+export interface MessagingTelegramConnectParams {
+  profile?: string | null
+  bot_token: string
+}
+/** The status after the write plus what became of the gateway: ``hot_served`` when a running multiplexer rebuilt the adapter, else a gateway restart (``restart_started``; refused while a chat is live: ``restart_busy``). */
+export interface MessagingTelegramConnectResult {
+  profile: string
+  enabled: boolean
+  configured: boolean
+  gateway_running: boolean
+  state?: string | null
+  error_code?: string | null
+  error_message?: string | null
+  bot_token_set: boolean
+  allowed_users_set: boolean
+  hot_served: boolean
+  restart_started: boolean
+  restart_busy?: boolean | null
+  restart_error?: string | null
+}
 export interface MessagingSlackManifestParams {
   profile?: string | null
   display_name?: string | null
@@ -7555,6 +7588,12 @@ export interface RpcMethods {
   'messaging.slack.manifest': { params: MessagingSlackManifestParams; result: MessagingSlackManifestResult }
   /** Slack connection state of one bot (never carries a token). */
   'messaging.slack.status': { params: ProfileParams; result: MessagingSlackStatus }
+  /** Check a bot's Telegram token with getMe, save it (replacing any stored one), enable the adapter and reload it. */
+  'messaging.telegram.connect': { params: MessagingTelegramConnectParams; result: MessagingTelegramConnectResult }
+  /** Remove a bot's Telegram token and disable the adapter; the allowlist is kept. */
+  'messaging.telegram.disconnect': { params: ProfileParams; result: MessagingTelegramConnectResult }
+  /** Telegram connection state of one bot (never carries the token). */
+  'messaging.telegram.status': { params: ProfileParams; result: MessagingTelegramStatus }
   /** Remove every credential (env keys and OAuth state) for a provider. */
   'model.disconnect': { params: ModelDisconnectParams; result: ModelDisconnectResult }
   /** Provider/model inventory for the picker, layered over the session's live provider when given. */
@@ -8024,6 +8063,9 @@ export const RPC_METHODS = [
   'messaging.slack.disconnect',
   'messaging.slack.manifest',
   'messaging.slack.status',
+  'messaging.telegram.connect',
+  'messaging.telegram.disconnect',
+  'messaging.telegram.status',
   'model.disconnect',
   'model.options',
   'model.providers.list',
@@ -8340,6 +8382,12 @@ export interface CanonicalRpcMethods {
   'messaging.slack.manifest': { params: MessagingSlackManifestParams; result: MessagingSlackManifestResult }
   /** Slack connection state of one bot (never carries a token). */
   'messaging.slack.status': { params: ProfileParams; result: MessagingSlackStatus }
+  /** Check a bot's Telegram token with getMe, save it (replacing any stored one), enable the adapter and reload it. */
+  'messaging.telegram.connect': { params: MessagingTelegramConnectParams; result: MessagingTelegramConnectResult }
+  /** Remove a bot's Telegram token and disable the adapter; the allowlist is kept. */
+  'messaging.telegram.disconnect': { params: ProfileParams; result: MessagingTelegramConnectResult }
+  /** Telegram connection state of one bot (never carries the token). */
+  'messaging.telegram.status': { params: ProfileParams; result: MessagingTelegramStatus }
   /** Auto-Review state and both rule lists of one profile. */
   'permissions.get': { params: ProfileParams; result: PermissionsState }
   /** Add a rule (1 to 280 characters after trimming, at most 30 per list, never a repeat of a rule in either list); returns the stored rule. */
@@ -8520,6 +8568,9 @@ export const CANONICAL_RPC_METHODS = [
   'messaging.slack.disconnect',
   'messaging.slack.manifest',
   'messaging.slack.status',
+  'messaging.telegram.connect',
+  'messaging.telegram.disconnect',
+  'messaging.telegram.status',
   'permissions.get',
   'permissions.rules.add',
   'permissions.rules.remove',

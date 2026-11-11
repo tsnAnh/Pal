@@ -235,6 +235,12 @@ struct MacInspector: View {
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
                 }
+                InspectorRow(identifier: "profileTelegramRow", action: { router.push(.telegram(botName: botName)) }) {
+                    Image(systemName: "paperplane.fill").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    Text("Connect Telegram").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                }
             }
             InspectorSection(title: String(localized: "Notifications"), identifier: "inspectorNotifications") {
                 EmptyView()

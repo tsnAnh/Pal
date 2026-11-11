@@ -5,7 +5,7 @@
    "undecided": 343
   },
   "rpc": {
-   "authority": 183,
+   "authority": 186,
    "keep-host-wide": 1,
    "undecided": 164
   },
@@ -540,6 +540,9 @@
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.slack.disconnect", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.slack.manifest", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.slack.status", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.telegram.connect", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.telegram.disconnect", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.telegram.status", "kind": "rpc", "ref": ""},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "model.disconnect", "kind": "rpc", "ref": "D3"},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "model.options", "kind": "rpc", "ref": ""},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "model.save_key", "kind": "rpc", "ref": "D3"},
