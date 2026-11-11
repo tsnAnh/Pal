@@ -23315,6 +23315,44 @@
         "title": "FailedDelegation",
         "type": "object"
       },
+      "FallbackModel": {
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "FallbackModel",
+        "type": "object"
+      },
+      "FallbackModelParam": {
+        "additionalProperties": false,
+        "properties": {
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "model"
+        ],
+        "title": "FallbackModelParam",
+        "type": "object"
+      },
       "FileAttachParams": {
         "additionalProperties": false,
         "description": "``path`` when the file is gateway-visible, else ``data_url`` carries the bytes; ``name`` labels\nan uploaded file.",
@@ -37622,6 +37660,18 @@
             "default": null,
             "title": "Model"
           },
+          "fallback_providers": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fallback Providers"
+          },
           "skills": {
             "anyOf": [
               {
@@ -37780,6 +37830,21 @@
             ],
             "default": null,
             "title": "Confirm Expensive Model"
+          },
+          "fallback_providers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FallbackModelParam"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fallback Providers"
           },
           "disabled_skills": {
             "anyOf": [
@@ -38222,6 +38287,13 @@
           },
           "model": {
             "$ref": "#/components/schemas/ProfileModelPin"
+          },
+          "fallback_providers": {
+            "items": {
+              "$ref": "#/components/schemas/FallbackModel"
+            },
+            "title": "Fallback Providers",
+            "type": "array"
           },
           "skills": {
             "items": {

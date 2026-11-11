@@ -423,6 +423,7 @@ def _(rid, params: dict) -> dict:
             "name": name, "description": str(meta.get("description") or ""), "soul": soul,
             "model": {"provider": str(model_cfg.get("provider") or ""),
                       "default": str(model_cfg.get("default") or "")},
+            "fallback_providers": _fallback_pairs(cfg.get("fallback_providers")),
             "skills": installed, "toolsets": toolsets_out,
             "toolsets_pinned": pinned_set is not None, "mcp_servers": mcp_out,
             "onboarding_pending": _try(
@@ -452,6 +453,8 @@ def _(rid, params: dict) -> dict:
         applied["description"] = _best_effort(lambda: write_meta(
             profile_dir, description=params["description"].strip(), description_auto=False))
     confirm_message = _configure_model(profile_dir, params, applied)
+    if isinstance(params.get("fallback_providers"), list):
+        _configure_fallbacks(profile_dir, params["fallback_providers"], applied)
     if any(isinstance(params.get(k), list) for k in ("disabled_skills", "enabled_toolsets", "enabled_mcp_servers")):
         _configure_cfg_sections(profile_dir, params, applied)
     # confirm_* is the shape config.set returns, so clients reuse one confirm handler.
@@ -771,6 +774,29 @@ def _configure_model(profile_dir, params, applied):
     if confirm_message is None:
         applied["model"] = _best_effort(lambda: _pin_profile_model(profile_dir, provider, model))
     return confirm_message
+
+
+def _fallback_pairs(value) -> list:
+    return [{"provider": str(e.get("provider") or ""), "model": str(e.get("model") or "")}
+            for e in value if isinstance(e, dict) and e.get("provider") and e.get("model")] \
+        if isinstance(value, list) else []
+
+
+def _configure_fallbacks(profile_dir, wanted, applied) -> None:
+    """Replace ``fallback_providers`` with the complete ``{provider, model}`` pairs sent, in order. An
+    entry already configured for the same pair keeps its hand-written routing (``base_url``,
+    ``key_env``, ...) so a reorder never reroutes it to the public provider (#89184)."""
+    with _hermes_home_scope(profile_dir):
+        from hermes_cli.config import load_config, save_config
+        cfg = load_config() or {}
+        existing = cfg.get("fallback_providers")
+        known = {(str(e.get("provider")), str(e.get("model"))): e for e in existing or [] if isinstance(e, dict)}
+        chain = []
+        for pair in _fallback_pairs(wanted):
+            chain.append({**known.get((pair["provider"], pair["model"]), {}), **pair})
+        cfg["fallback_providers"] = chain
+        applied["fallback_providers"] = _best_effort(lambda: save_config(cfg)) \
+            and _landed(cfg, ("fallback_providers",))
 
 
 def _clean_names(values) -> set:

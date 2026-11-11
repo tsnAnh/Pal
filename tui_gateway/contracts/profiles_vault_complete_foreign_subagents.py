@@ -286,6 +286,16 @@ class ProfileModelPin(Result):
     default: str = ""
 
 
+class FallbackModel(Result):
+    provider: str
+    model: str
+
+
+class FallbackModelParam(Params):
+    provider: str
+    model: str
+
+
 class ProfilesDescribeResult(Result):
     """Editor snapshot; ``toolsets_pinned`` says whether ``tools.enabled_toolsets`` is explicit."""
 
@@ -293,6 +303,7 @@ class ProfilesDescribeResult(Result):
     description: str = ""
     soul: str = ""
     model: ProfileModelPin
+    fallback_providers: list[FallbackModel] = Field(default_factory=list)
     skills: list[CapabilityEntry] = Field(default_factory=list)
     toolsets: list[ToolsetEntry] = Field(default_factory=list)
     toolsets_pinned: bool = False
@@ -315,6 +326,7 @@ class ProfilesConfigureParams(ProfileParams):
     model: str | None = None
     provider: str | None = None
     confirm_expensive_model: bool | str | None = None
+    fallback_providers: list[FallbackModelParam] | None = None
     disabled_skills: list[str] | None = None
     enabled_toolsets: list[str] | None = None
     enabled_mcp_servers: list[str] | None = None
@@ -334,6 +346,7 @@ class ProfilesConfigureApplied(Result):
     soul: bool | None = None
     description: bool | None = None
     model: bool | None = None
+    fallback_providers: bool | None = None
     skills: bool | None = None
     toolsets: bool | None = None
     mcp_servers: bool | None = None
