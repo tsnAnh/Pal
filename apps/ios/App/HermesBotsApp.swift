@@ -1,6 +1,7 @@
 import AppIntents
 import HermesClient
 import HermesDesign
+import HermesDevice
 import HermesDiagnostics
 import SwiftUI
 
@@ -18,6 +19,7 @@ struct HermesBotsApp: App {
     @State private var appearance: AppearanceStore
     @State private var consent: DeviceConsentPresenter
     @State private var hostPool: DeviceHostPool
+    @State private var signIn: ServiceSignInCenter
     @State private var links: BotLinks
     @State private var directory = BotDirectory()
     #if os(macOS)
@@ -38,6 +40,14 @@ struct HermesBotsApp: App {
         let consent = DeviceConsentPresenter { profile in roster.displayName(forProfile: profile) }
         _consent = State(initialValue: consent)
         _hostPool = State(initialValue: DeviceHostPool(connection: model, consent: consent))
+        let signIn = ServiceSignInCenter(
+            call: { method, params in try await model.rpc(method, params) },
+            openBrowser: { _ = ExternalLink.open($0) }
+        )
+        _signIn = State(initialValue: signIn)
+        roster.gatewayEventSink = { event in
+            Task { @MainActor in signIn.receive(event) }
+        }
         _offers = State(initialValue: ReachOfferModel(presence: model.presence) { sessionID in
             router.openChat(sessionID: sessionID, in: roster)
         })
@@ -54,6 +64,7 @@ struct HermesBotsApp: App {
                 .overlay { ReachOfferOverlay(model: offers) }
                 .overlay(alignment: .topLeading) { ExternalLinkProbe() }
                 .deviceConsentAlert(consent)
+                .serviceSignInDialog(signIn) { roster.displayName(forProfile: $0) }
                 .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
                 .environment(appearance)
                 #if os(macOS)

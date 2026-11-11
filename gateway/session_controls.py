@@ -271,6 +271,8 @@ class AuthorityConnection:
         handlers.update(reach_handlers(self))
         from gateway.session_device_controls import handlers as device_connector_handlers
         handlers.update(device_connector_handlers(self))
+        from gateway.session_auth_controls import handlers as auth_handlers
+        handlers.update(auth_handlers(self))
         from gateway.session_bot_thread_controls import handlers as bot_thread_handlers
         handlers.update(bot_thread_handlers(self))
         from gateway.session_search_controls import handlers as search_handlers
@@ -1025,3 +1027,5 @@ class AuthorityConnection:
         await departed(self)
         from gateway.device_tools import forget_transport
         forget_transport(self.transport)
+        from gateway.auth_prompts import forget_transport as forget_auth_transport
+        forget_auth_transport(self.transport)

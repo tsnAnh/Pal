@@ -980,6 +980,10 @@ def handle_function_call(
         start = time.monotonic()
         result = _execute_tool(function_name, function_args, original_args, ids, user_task=user_task,
                                enabled_tools=enabled_tools, skip_tool_execution_middleware=skip_tool_execution_middleware)
+        from tools.auth_required import resolve as resolve_auth_required
+        result = resolve_auth_required(function_name, function_args, result, lambda: _execute_tool(
+            function_name, function_args, original_args, ids, user_task=user_task, enabled_tools=enabled_tools,
+            skip_tool_execution_middleware=skip_tool_execution_middleware))
         duration_ms = _elapsed_ms(start)
         _emit(result, duration_ms=duration_ms)
         return _apply_transform_tool_result_hook(function_name, function_args, result, duration_ms, ids)

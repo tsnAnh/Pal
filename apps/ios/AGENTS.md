@@ -19,6 +19,15 @@ Every sign-in, OAuth or "add to <service>" link opens in the system browser (`UI
 - Exception: `WebAuthenticationBrowser` (`ASWebAuthenticationSession`) stays for gateway and Connected apps sign-in, because those flows return to the app through the `dev.tsnanh.hermes.bot` callback or a loopback redirect that a plain `open` cannot deliver.
 - Enforced by `ExternalLinkPolicyTests` in `Packages/HermesKit/Tests/HermesKitTests`, which scans `App/` for web surfaces outside their allowlist.
 
+## Rule 3: connectors that need auth raise the sign-in dialog
+
+Any new connector, MCP preset or service tool that can fail on a missing, expired or revoked credential must declare its auth type and surface the failure through `tools/auth_required.py`, so the gateway raises `auth.required` and the app shows `ServiceSignInView`.
+
+- Declare: catalog manifests carry `auth.type` (`oauth`, `api_key` or `none`); hosted connectors use the `CONNECTION_REQUIRED` and `CONNECTION_EXPIRED` codes; anything else returns `auth_required_result(service, reason)` (or `http_auth_failure(service, status, headers)` for a 401 or 403).
+- How to: register a `SigninFlow` for the service prefix with `register(prefix, factory)` in `gateway/auth_flows.py`. Flows are `device_code`, `oauth`, `api_key` (SecureField to `mcp.servers.set_api_key`), `header` and `manual`. A new Connected apps source kind in `ConnectCatalog.swift` must be added to `auth_flows.CONNECT_APP_SOURCES`.
+- Enforced by `tests/gateway/test_auth_catalog.py`: it walks every `optional-mcps` manifest, raises the event through the real detection path, and fails on a missing auth type, a Swift enum drifting from `tui_gateway/contracts/canonical_auth.py`, or an undeclared source kind.
+- Secrets: the app never receives a token. Keys go from the SecureField straight to the gateway's secret path and are never echoed, logged or stored. The dialog opens verification and OAuth URLs through `ExternalLink.open` (Rule 2).
+
 ## Tests
 
 - `swift test` in `apps/ios/Packages/HermesKit` covers `ConnectedServices` and the source scan.

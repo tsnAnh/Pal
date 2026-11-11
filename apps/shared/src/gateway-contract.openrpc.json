@@ -6673,6 +6673,176 @@
         "title": "AttachedImageResult",
         "type": "object"
       },
+      "AuthDeclineParams": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "AuthDeclineParams",
+        "type": "object"
+      },
+      "AuthDeclineResult": {
+        "additionalProperties": false,
+        "properties": {
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recorded"
+        ],
+        "title": "AuthDeclineResult",
+        "type": "object"
+      },
+      "AuthFlow": {
+        "enum": [
+          "device_code",
+          "oauth",
+          "api_key",
+          "header",
+          "manual"
+        ],
+        "title": "AuthFlow",
+        "type": "string"
+      },
+      "AuthOutcome": {
+        "enum": [
+          "signed_in",
+          "failed",
+          "declined",
+          "timed_out"
+        ],
+        "title": "AuthOutcome",
+        "type": "string"
+      },
+      "AuthReason": {
+        "enum": [
+          "missing",
+          "expired",
+          "revoked"
+        ],
+        "title": "AuthReason",
+        "type": "string"
+      },
+      "AuthRequiredPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "service": {
+            "title": "Service",
+            "type": "string"
+          },
+          "service_name": {
+            "title": "Service Name",
+            "type": "string"
+          },
+          "bot": {
+            "title": "Bot",
+            "type": "string"
+          },
+          "bots": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Bots",
+            "type": "array"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/AuthReason"
+          },
+          "flow": {
+            "$ref": "#/components/schemas/AuthFlow"
+          },
+          "user_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "User Code"
+          },
+          "verification_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Verification Uri"
+          },
+          "expires_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires In"
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Server"
+          }
+        },
+        "required": [
+          "request_id",
+          "service",
+          "service_name",
+          "bot",
+          "bots",
+          "reason",
+          "flow"
+        ],
+        "title": "AuthRequiredPayload",
+        "type": "object"
+      },
+      "AuthResolvedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "title": "Request Id",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/AuthOutcome"
+          }
+        },
+        "required": [
+          "request_id",
+          "outcome"
+        ],
+        "title": "AuthResolvedPayload",
+        "type": "object"
+      },
       "AuthRevokeSelfParams": {
         "additionalProperties": false,
         "description": "The caller's own native sign-in tokens: holding the refresh token is the proof of ownership.",
@@ -6723,6 +6893,47 @@
           "forgotten"
         ],
         "title": "AuthRevokeSelfResult",
+        "type": "object"
+      },
+      "AuthSigninParams": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Request Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id"
+        ],
+        "title": "AuthSigninParams",
+        "type": "object"
+      },
+      "AuthSigninResult": {
+        "additionalProperties": false,
+        "properties": {
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          },
+          "authorization_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Authorization Url"
+          }
+        },
+        "required": [
+          "recorded"
+        ],
+        "title": "AuthSigninResult",
         "type": "object"
       },
       "AutoContinue": {
@@ -55545,6 +55756,24 @@
       }
     },
     {
+      "name": "auth.decline",
+      "summary": "The user chose Not now on an auth.required request; the waiting bots are told the user declined sign-in.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthDeclineParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthDeclineResult"
+        }
+      }
+    },
+    {
       "name": "auth.revoke_self",
       "summary": "Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record.",
       "params": [
@@ -55559,6 +55788,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/AuthRevokeSelfResult"
+        }
+      }
+    },
+    {
+      "name": "auth.signin",
+      "summary": "The user chose Sign in on an auth.required request. For oauth the gateway starts the flow and returns authorization_url to open in the system browser; for device_code it only acknowledges (the gateway is already polling). recorded is false for an unknown, finished or foreign request.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthSigninParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthSigninResult"
         }
       }
     },
@@ -58084,6 +58331,30 @@
           "name": "payload",
           "schema": {
             "$ref": "#/components/schemas/ApprovalCancelledPayload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth.required",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key asks for the key for MCP server `server` (store it with mcp.servers.set_api_key, then call auth.signin); header and manual have no in-app sign-in. The payload never carries a token.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "$ref": "#/components/schemas/AuthRequiredPayload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "auth.resolved",
+      "summary": "The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "$ref": "#/components/schemas/AuthResolvedPayload"
           }
         }
       ]
