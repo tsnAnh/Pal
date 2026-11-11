@@ -6,13 +6,11 @@ public enum CapabilityState: Sendable, Equatable {
     case on
     case off
     case unavailable
-    case notYetAvailable
 
     init(wire: String?) {
         switch wire {
         case "on": self = .on
         case "off": self = .off
-        case "not_yet_available": self = .notYetAvailable
         default: self = .unavailable
         }
     }
@@ -23,7 +21,6 @@ public enum CapabilityIndicator: Sendable, Equatable {
     case limited
     case off
     case unavailable
-    case notYetAvailable
 }
 
 public struct CapabilityRow: Sendable, Equatable, Identifiable {
@@ -53,7 +50,6 @@ public struct CapabilityRow: Sendable, Equatable, Identifiable {
         case .on: reason == nil ? .on : .limited
         case .off: .off
         case .unavailable: .unavailable
-        case .notYetAvailable: .notYetAvailable
         }
     }
 
@@ -63,14 +59,13 @@ public struct CapabilityRow: Sendable, Equatable, Identifiable {
         case .limited: "Limited"
         case .off: "Off"
         case .unavailable: "Unavailable"
-        case .notYetAvailable: "Coming soon"
         }
     }
 
     public var shownKeyName: String? {
         switch indicator {
         case .limited, .off: keyName
-        case .on, .unavailable, .notYetAvailable: nil
+        case .on, .unavailable: nil
         }
     }
 

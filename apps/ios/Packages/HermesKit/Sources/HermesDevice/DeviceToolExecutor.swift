@@ -115,7 +115,6 @@ public actor DeviceToolExecutor {
         case .alarms: "Alarms"
         case .shell: "Run commands"
         case .files: "Files"
-        case .browser: "Browser"
         }
     }
 
@@ -143,7 +142,7 @@ extension DeviceToolExecutor {
 
     private func iso(_ date: Date) -> String { ISODate.format(date, in: zone) }
 
-    func provider<T>(_ keyPath: KeyPath<DeviceProviders, T?>) throws -> T {
+    private func provider<T>(_ keyPath: KeyPath<DeviceProviders, T?>) throws -> T {
         guard let provider = providers[keyPath: keyPath] else { throw DeviceProviderError.unsupported }
         return provider
     }
@@ -167,12 +166,6 @@ extension DeviceToolExecutor {
         case .filesRead: try await readFile(raw)
         case .filesList: try await listFiles(raw)
         case .filesWrite: try await writeFile(raw)
-        case .browserOpen: try await openPage(raw, budget: budget)
-        case .browserRead: try await readPage(budget: budget)
-        case .browserClick: try await clickPage(raw, budget: budget)
-        case .browserType: try await typeIntoPage(raw, budget: budget)
-        case .browserWaitForText: try await waitForText(raw, budget: budget)
-        case .browserClose: try await closePage()
         }
     }
 

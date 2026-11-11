@@ -329,31 +329,6 @@ public protocol FilesProviding: Sendable {
     func write(path: String, content: String, append: Bool, createDirs: Bool) async throws -> FileWriteRecord
 }
 
-public struct BrowserPageRecord: Sendable, Equatable {
-    public var url: String
-    public var title: String
-    public var text: CapturedText
-    public var loginRequired: Bool
-    public var matched: Bool?
-
-    public init(url: String, title: String, text: CapturedText = CapturedText(), loginRequired: Bool = false, matched: Bool? = nil) {
-        self.url = url
-        self.title = title
-        self.text = text
-        self.loginRequired = loginRequired
-        self.matched = matched
-    }
-}
-
-public protocol BrowserProviding: Sendable {
-    func open(url: URL, captureLimit: Int, timeout: Duration) async throws -> BrowserPageRecord
-    func read(captureLimit: Int) async throws -> BrowserPageRecord
-    func click(selector: String?, text: String?, captureLimit: Int) async throws -> BrowserPageRecord
-    func type(selector: String, text: String, submit: Bool, captureLimit: Int) async throws -> BrowserPageRecord
-    func waitForText(_ text: String, timeout: Duration, captureLimit: Int) async throws -> BrowserPageRecord
-    func close() async throws
-}
-
 public struct DeviceProviders: Sendable {
     public var calendar: (any CalendarProviding)?
     public var reminders: (any RemindersProviding)?
@@ -363,7 +338,6 @@ public struct DeviceProviders: Sendable {
     public var home: (any HomeProviding)?
     public var shell: (any ShellProviding)?
     public var files: (any FilesProviding)?
-    public var browser: (any BrowserProviding)?
 
     public init(
         calendar: (any CalendarProviding)? = nil,
@@ -373,8 +347,7 @@ public struct DeviceProviders: Sendable {
         alarms: (any AlarmsProviding)? = nil,
         home: (any HomeProviding)? = nil,
         shell: (any ShellProviding)? = nil,
-        files: (any FilesProviding)? = nil,
-        browser: (any BrowserProviding)? = nil
+        files: (any FilesProviding)? = nil
     ) {
         self.calendar = calendar
         self.reminders = reminders
@@ -384,7 +357,6 @@ public struct DeviceProviders: Sendable {
         self.home = home
         self.shell = shell
         self.files = files
-        self.browser = browser
     }
 }
 

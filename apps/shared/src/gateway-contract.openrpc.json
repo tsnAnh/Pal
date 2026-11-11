@@ -494,7 +494,7 @@
     },
     {
       "name": "capabilities.status",
-      "summary": "Which of the five bot capabilities (web, deep search, YouTube, maps, own-machine browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value.",
+      "summary": "Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value.",
       "params": [
         {
           "name": "params",
@@ -14550,8 +14550,7 @@
         "enum": [
           "on",
           "off",
-          "unavailable",
-          "not_yet_available"
+          "unavailable"
         ],
         "title": "CapabilityState",
         "type": "string"
@@ -20244,8 +20243,7 @@
           "location",
           "alarms",
           "shell",
-          "files",
-          "browser"
+          "files"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -20484,13 +20482,7 @@
           "shell.run",
           "files.read",
           "files.list",
-          "files.write",
-          "browser.open",
-          "browser.read",
-          "browser.click",
-          "browser.type",
-          "browser.wait_for_text",
-          "browser.close"
+          "files.write"
         ],
         "title": "DeviceToolAction",
         "type": "string"
@@ -56363,7 +56355,7 @@
     },
     {
       "name": "capabilities.status",
-      "summary": "Which of the five bot capabilities (web, deep search, YouTube, maps, own-machine browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value.",
+      "summary": "Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value.",
       "params": [
         {
           "name": "params",

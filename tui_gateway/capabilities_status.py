@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import sqlite3
-from pathlib import Path
-
 from tui_gateway.contracts.capabilities import CapabilityId, CapabilityRow, CapabilityState
 
 YOUTUBE_KEY = "YOUTUBE_API_KEY"
@@ -11,7 +8,7 @@ WEB_PROVIDER_KEYS = "TAVILY_API_KEY, PERPLEXITY_API_KEY, EXA_API_KEY, FIRECRAWL_
 DEEP_SEARCH_SKILL = "deep-search"
 YOUTUBE_SKILL = "youtube-content"
 MAPS_SKILL = "maps"
-BROWSER_LABEL = "Browser on your machine"
+BROWSER_LABEL = "Browser"
 
 
 def _row(cap: CapabilityId, label: str, state: CapabilityState, reason: str | None = None, *,
@@ -79,42 +76,39 @@ def _maps_row(disabled: set[str]) -> CapabilityRow:
                 f"OpenStreetMap only. Google Places needs {MAPS_KEY}; set it from your terminal.", key_name=MAPS_KEY)
 
 
-def _browser_connector():
-    from gateway.device_actions import Connector
-    return getattr(Connector, "BROWSER", None)
+BROWSER_PROVIDER_KEYS = "BROWSER_USE_API_KEY, or BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID"
+BROWSER_PROVIDER_SETTING = "browser.cloud_provider"
 
 
-def _browser_row(home: Path) -> CapabilityRow:
-    connector = _browser_connector()
-    if connector is None:
-        return _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.NOT_YET_AVAILABLE,
-                    "Not available yet in this version.")
-    from gateway import device_connectors
+def _browser_off(reason: str) -> CapabilityRow:
+    return _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.OFF, reason, setting=BROWSER_PROVIDER_SETTING)
+
+
+def _browser_row() -> CapabilityRow:
+    from tools.browser_session_cdp import get_cdp_override_raw
+    from tools.browser_session_cloud import browser_cfg, get_cloud_provider
+    from tools.browser_use_cli import browser_exec_available
+    from tools.tool_backend_helpers import normalize_browser_cloud_provider
+
+    if not browser_exec_available():
+        return _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.UNAVAILABLE,
+                    "This computer cannot run a browser for the bot: the browser engine is not installed.")
+    ready = _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.ON)
+    selected = normalize_browser_cloud_provider(browser_cfg("cloud_provider", None))
+    if get_cdp_override_raw() or selected in ("local", "camofox"):
+        return ready
     try:
-        known = device_connectors.known_device_ids(home)
-        enabled = device_connectors.open_devices(home, connector)
-    except device_connectors.StoreUnreadable:
-        return _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.UNAVAILABLE, "Device list could not be read.")
-    if enabled:
-        return _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.ON)
-    if not known:
-        return _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.UNAVAILABLE, "No device online.")
-    labels = _device_labels(home, known)
-    return _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.OFF,
-                f"Browser connector off on {', '.join(labels)}.")
+        provider = get_cloud_provider()
+    except ValueError:
+        return _browser_off(f"The {selected} browser provider is selected but is not installed. "
+                            "Pick another with browser.cloud_provider.")
+    if provider is not None and provider.is_available():
+        return ready
+    return _browser_off(f"The {selected} browser provider is selected but its credentials are missing. "
+                        f"Set {BROWSER_PROVIDER_KEYS} from your terminal, or use the local browser.")
 
 
-def _device_labels(home: Path, device_ids: list[str]) -> list[str]:
-    from gateway import device_registry
-    from hermes_constants import profile_name_for_home
-    try:
-        records = {r.device_id: r.label for r in device_registry.list_devices(device_registry.install_root(profile_name_for_home(home) or "default"))}
-    except (OSError, sqlite3.Error):
-        records = {}
-    return [records.get(device_id) or device_id for device_id in device_ids]
-
-
-def capability_rows(home: Path) -> list[CapabilityRow]:
+def capability_rows() -> list[CapabilityRow]:
     disabled = _skills_disabled()
     web = _web_row()
-    return [web, _deep_search_row(disabled, web), _youtube_row(disabled), _maps_row(disabled), _browser_row(home)]
+    return [web, _deep_search_row(disabled, web), _youtube_row(disabled), _maps_row(disabled), _browser_row()]

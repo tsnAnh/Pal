@@ -18,7 +18,6 @@ class DeviceConnectorId(WireEnum):
     ALARMS = "alarms"
     SHELL = "shell"
     FILES = "files"
-    BROWSER = "browser"
 
 
 class DeviceConnectorState(WireEnum):
@@ -52,12 +51,6 @@ class DeviceToolAction(WireEnum):
     FILES_READ = "files.read"
     FILES_LIST = "files.list"
     FILES_WRITE = "files.write"
-    BROWSER_OPEN = "browser.open"
-    BROWSER_READ = "browser.read"
-    BROWSER_CLICK = "browser.click"
-    BROWSER_TYPE = "browser.type"
-    BROWSER_WAIT_FOR_TEXT = "browser.wait_for_text"
-    BROWSER_CLOSE = "browser.close"
 
 
 class DeviceToolErrorCode(WireEnum):
