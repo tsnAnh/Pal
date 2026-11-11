@@ -4926,9 +4926,11 @@ export interface SkillsManageParams {
   query?: string | null
   page?: number | null
   page_size?: number | null
+  key_name?: string | null
+  value?: string | null
 }
-export type SkillsAction = 'list' | 'search' | 'install' | 'browse' | 'inspect'
-/** Shape follows the action: ``list`` → ``skills`` (category → names); ``search`` → ``results``; ``install`` → ``installed`` + ``name``; ``browse`` → ``items`` + paging; ``inspect`` → ``info``. */
+export type SkillsAction = 'list' | 'search' | 'install' | 'browse' | 'inspect' | 'installed' | 'check' | 'update' | 'uninstall' | 'set_key'
+/** Shape follows the action: ``list`` → ``skills`` (category → names); ``search`` → ``results``; ``install`` → ``installed`` + ``name``; ``browse`` → ``items`` + paging; ``inspect`` → ``info``; ``installed`` → ``installed_skills``; ``check`` → ``updates``; ``update`` → ``updated``; ``uninstall`` → ``removed``; ``set_key`` (``query`` = skill name, ``key_name``, ``value``) → ``saved``, refused with 4101 unless the skill declares ``key_name`` as a required environment variable (the value is never echoed or logged). ``update`` with no ``query`` updates every skill with an update; a failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail. */
 export interface SkillsManageResult {
   skills?: Record<string, string[]> | null
   results?: SkillHubHit[] | null
@@ -4939,6 +4941,11 @@ export interface SkillsManageResult {
   total_pages?: number | null
   total?: number | null
   info?: SkillInspectInfo | null
+  installed_skills?: InstalledHubSkill[] | null
+  updates?: SkillUpdateStatus[] | null
+  updated?: boolean | null
+  removed?: boolean | null
+  saved?: boolean | null
 }
 export interface SkillHubHit {
   name: string
@@ -4962,6 +4969,21 @@ export interface SkillInspectInfo {
   tags?: string[] | null
   skill_md_preview?: string | null
   [key: string]: unknown
+}
+/** One hub-lock row: a skill installed from a registry (the only kind update / uninstall act on). */
+export interface InstalledHubSkill {
+  name: string
+  identifier?: string | null
+  source?: string | null
+  trust_level?: string | null
+  install_path?: string | null
+}
+/** ``check_for_skill_updates`` row; ``status`` is ``update_available`` | ``up_to_date`` | ``orphaned`` | ``invalid_install`` | ... */
+export interface SkillUpdateStatus {
+  name: string
+  identifier?: string | null
+  source?: string | null
+  status: string
 }
 /** ``session_id`` binds the rescan to that session's profile and workspace (project skills); ``profile`` scopes a session-less rescan. */
 export interface SkillsReloadParams {
@@ -7911,7 +7933,7 @@ export interface RpcMethods {
   'shared_metrics.update_run': { params: SharedMetricsUpdateRunParams; result: SharedMetricsUpdateRunResult }
   /** Run a safe (non-dangerous) shell command captured for ``!cmd`` / inline substitution. */
   'shell.exec': { params: ShellExecParams; result: ShellExecResult }
-  /** Skills hub backend: list the profile's skills or search / browse / inspect / install from the hub. */
+  /** Skills hub backend: list the profile's skills, search / browse / inspect the hub, and install / check / update / uninstall for the scoped profile. */
   'skills.manage': { params: SkillsManageParams; result: SkillsManageResult }
   /** Re-scan skill dirs; the pre-rendered ``output`` is what /reload-skills prints. */
   'skills.reload': { params: SkillsReloadParams; result: SkillsReloadResult }
@@ -8545,7 +8567,7 @@ export interface CanonicalRpcMethods {
   'shared_metrics.status': { params: ProfileParams; result: SharedMetricsConsentResult }
   /** Ink ``!cmd`` / ``{!cmd}`` on the shared owner: one safe command for a local session, in its frozen launch cwd (``gateway/session_shell.py``). */
   'shell.exec': { params: CanonicalShellExecParams; result: ShellExecResult }
-  /** Skills hub backend: list the profile's skills or search / browse / inspect / install from the hub. */
+  /** Skills hub backend: list the profile's skills, search / browse / inspect the hub, and install / check / update / uninstall for the scoped profile. */
   'skills.manage': { params: SkillsManageParams; result: SkillsManageResult }
   /** Add a login / payment / address item to the local vault. */
   'vault.add': { params: VaultAddParams; result: VaultAddResult }

@@ -4796,7 +4796,7 @@
     },
     {
       "name": "skills.manage",
-      "summary": "Skills hub backend: list the profile's skills or search / browse / inspect / install from the hub.",
+      "summary": "Skills hub backend: list the profile's skills, search / browse / inspect the hub, and install / check / update / uninstall for the scoped profile.",
       "params": [
         {
           "name": "params",
@@ -27083,6 +27083,69 @@
         ],
         "title": "InstallPhase",
         "type": "string"
+      },
+      "InstalledHubSkill": {
+        "additionalProperties": false,
+        "description": "One hub-lock row: a skill installed from a registry (the only kind update / uninstall act on).",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Identifier"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "trust_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Trust Level"
+          },
+          "install_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Install Path"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "InstalledHubSkill",
+        "type": "object"
       },
       "InterruptStatus": {
         "enum": [
@@ -50512,13 +50575,62 @@
         "title": "SkillInspectInfo",
         "type": "object"
       },
+      "SkillUpdateStatus": {
+        "additionalProperties": false,
+        "description": "``check_for_skill_updates`` row; ``status`` is ``update_available`` | ``up_to_date`` | ``orphaned`` | ``invalid_install`` | ...",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Identifier"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "title": "SkillUpdateStatus",
+        "type": "object"
+      },
       "SkillsAction": {
         "enum": [
           "list",
           "search",
           "install",
           "browse",
-          "inspect"
+          "inspect",
+          "installed",
+          "check",
+          "update",
+          "uninstall",
+          "set_key"
         ],
         "title": "SkillsAction",
         "type": "string"
@@ -50578,6 +50690,30 @@
             ],
             "default": null,
             "title": "Page Size"
+          },
+          "key_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key Name"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
           }
         },
         "title": "SkillsManageParams",
@@ -50585,7 +50721,7 @@
       },
       "SkillsManageResult": {
         "additionalProperties": false,
-        "description": "Shape follows the action: ``list`` \u2192 ``skills`` (category \u2192 names); ``search`` \u2192 ``results``;\n``install`` \u2192 ``installed`` + ``name``; ``browse`` \u2192 ``items`` + paging; ``inspect`` \u2192 ``info``.",
+        "description": "Shape follows the action: ``list`` \u2192 ``skills`` (category \u2192 names); ``search`` \u2192 ``results``;\n``install`` \u2192 ``installed`` + ``name``; ``browse`` \u2192 ``items`` + paging; ``inspect`` \u2192 ``info``;\n``installed`` \u2192 ``installed_skills``; ``check`` \u2192 ``updates``; ``update`` \u2192 ``updated``;\n``uninstall`` \u2192 ``removed``; ``set_key`` (``query`` = skill name, ``key_name``, ``value``) \u2192 ``saved``, refused with 4101 unless the skill declares ``key_name`` as a required environment variable (the value is never echoed or logged). ``update`` with no ``query`` updates every skill with an update;\na failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail.",
         "properties": {
           "skills": {
             "anyOf": [
@@ -50705,6 +50841,72 @@
               }
             ],
             "default": null
+          },
+          "installed_skills": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/InstalledHubSkill"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Installed Skills"
+          },
+          "updates": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SkillUpdateStatus"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Updates"
+          },
+          "updated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Updated"
+          },
+          "removed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Removed"
+          },
+          "saved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Saved"
           }
         },
         "title": "SkillsManageResult",
@@ -60185,7 +60387,7 @@
     },
     {
       "name": "skills.manage",
-      "summary": "Skills hub backend: list the profile's skills or search / browse / inspect / install from the hub.",
+      "summary": "Skills hub backend: list the profile's skills, search / browse / inspect the hub, and install / check / update / uninstall for the scoped profile.",
       "params": [
         {
           "name": "params",
