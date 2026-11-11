@@ -27,7 +27,7 @@ Any new connector, MCP preset or service tool that can fail on a missing, expire
 - How to: register a `SigninFlow` for the service prefix with `register(prefix, factory)` in `gateway/auth_flows.py`. Flows are `device_code`, `oauth`, `api_key` and `header` (one masked box, `SecretEntryView`, answered with `auth.submit_credential`) and `manual`. A new Connected apps source kind in `ConnectCatalog.swift` must be added to `auth_flows.CONNECT_APP_SOURCES`.
 - Enforced by `tests/gateway/test_auth_catalog.py`: it walks every `optional-mcps` manifest, raises the event through the real detection path, and fails on a missing auth type, a Swift enum drifting from `tui_gateway/contracts/canonical_auth.py`, or an undeclared source kind.
 - Secrets: the app never receives a token. Keys go from the masked field straight to the gateway's secret path in `auth.submit_credential` (or the connector's own authenticated settings call) and are never echoed, logged, stored or held in a plain `String` longer than the field needs (`SecretString` redacts). The dialog opens verification and OAuth URLs through `ExternalLink.open` (Rule 2).
-- Any configuration or credential the apps still need must be settable from the Swift apps, through the shared secret-entry flow (`SecretEntryView`, `SecretField`) or a settings form, never only by a terminal, SSH or the hermes CLI.
+- Any configuration or credential the apps still need (messaging included, such as Slack or Telegram) must be settable from the Swift apps, through the shared secret-entry flow (`SecretEntryView`, `SecretField`) or a settings form, never only by a terminal, SSH or the hermes CLI.
 
 ## Tests
 
