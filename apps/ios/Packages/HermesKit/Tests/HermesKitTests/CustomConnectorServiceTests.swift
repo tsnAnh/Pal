@@ -121,6 +121,16 @@ struct CustomConnectorServiceTests {
         #expect(rpc.params("mcp.servers.update").last?["headers"] == nil)
     }
 
+    @Test func aStoredHeaderTakesANewValueFromTheEditForm() async throws {
+        let rpc = CustomRPC(["mcp.servers.update": { _ in ["ok": true] }, "mcp.servers.test": okTools(["a"])])
+        let fresh = randomSecret()
+        var stored = ConnectorHeader(key: "X-Old", isStored: true)
+        stored.value = fresh
+        _ = try await customService(rpc).updateCustomConnector(draft(headers: [stored], originalHeaderKeys: ["X-Old"]))
+        let sent = try #require(rpc.params("mcp.servers.update").first)
+        #expect(sent["headers"] == .object(["X-Old": .string(fresh)]))
+    }
+
     @Test func removeCallsTheGateway() async throws {
         let rpc = CustomRPC(["mcp.servers.remove": { _ in ["ok": true] }])
         try await customService(rpc).removeCustomConnector(name: "notes")

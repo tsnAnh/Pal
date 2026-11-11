@@ -750,17 +750,29 @@ export interface CapabilitiesStatusResult {
   profile: string
   capabilities: CapabilityRow[]
 }
-/** ``reason`` is one line and is set whenever the capability is not fully usable; an ``on`` row may carry it for a limit that still leaves it working (``OpenStreetMap only``). ``key_name`` is the name of the environment variable that would lift the limit, never its value. ``setting`` is the config.yaml path when a setting, not a key, is what is missing. */
+/** ``reason`` is one line and is set whenever the capability is not fully usable; an ``on`` row may carry it for a limit that still leaves it working (``OpenStreetMap only``). ``key_name`` is the name of the environment variable that would lift the limit, never its value. ``setting`` is the config.yaml path when a setting, not a key, is what is missing. ``key_choices`` lists the settable key names when any one of several providers' keys would turn the capability on (web search, the cloud browser). */
 export interface CapabilityRow {
   id: CapabilityId
   label: string
   state: CapabilityState
   reason?: string | null
   key_name?: string | null
+  key_choices?: string[]
   setting?: string | null
 }
 export type CapabilityId = 'web' | 'deep_search' | 'youtube' | 'maps' | 'browser'
 export type CapabilityState = 'on' | 'off' | 'unavailable'
+export interface CapabilitySetKeyParams {
+  profile?: string | null
+  key_name: string
+  value?: string | null
+}
+export interface CapabilitySetKeyResult {
+  profile: string
+  key_name: string
+  is_set: boolean
+  capabilities: CapabilityRow[]
+}
 /** ``key`` selects one getter from ``_CONFIG_GETTERS``; ``cwd`` feeds the ``project`` getter, ``session_id`` lets ``reasoning`` / ``fast`` answer with the session's live pin. */
 export interface ConfigGetParams {
   profile?: string | null
@@ -7362,6 +7374,8 @@ export interface RpcMethods {
   'bot_relay.roster.sync': { params: BotRelayRosterSyncParams; result: BotRelayRosterSyncResult }
   /** Inspect, attach to, or drop the CDP browser the tools use; ``messages`` narrate a connect. */
   'browser.manage': { params: BrowserManageParams; result: BrowserManageResult }
+  /** Save (value set) or remove (value null) one capability key in the named bot's own secret store. key_name must be one a capabilities.status row names in key_name or key_choices; anything else is refused with 4101. The value travels only in this request and is never echoed, logged, broadcast or shown to the model; the answer carries only whether the key is set and the refreshed rows. 4101 invalid key name or value; 5103 not saved, the previous value is kept. */
+  'capabilities.set_key': { params: CapabilitySetKeyParams; result: CapabilitySetKeyResult }
   /** Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
   /** Lock one answer of a batch clarify request (editable until every question is locked). */
@@ -7950,6 +7964,7 @@ export const RPC_METHODS = [
   'bot_relay.reply',
   'bot_relay.roster.sync',
   'browser.manage',
+  'capabilities.set_key',
   'capabilities.status',
   'clarify.lock',
   'cli.exec',

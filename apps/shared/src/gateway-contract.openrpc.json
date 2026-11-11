@@ -493,6 +493,24 @@
       }
     },
     {
+      "name": "capabilities.set_key",
+      "summary": "Save (value set) or remove (value null) one capability key in the named bot's own secret store. key_name must be one a capabilities.status row names in key_name or key_choices; anything else is refused with 4101. The value travels only in this request and is never echoed, logged, broadcast or shown to the model; the answer carries only whether the key is set and the refreshed rows. 4101 invalid key name or value; 5103 not saved, the previous value is kept.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/CapabilitySetKeyParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CapabilitySetKeyResult"
+        }
+      }
+    },
+    {
       "name": "capabilities.status",
       "summary": "Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value.",
       "params": [
@@ -14805,7 +14823,7 @@
       },
       "CapabilityRow": {
         "additionalProperties": false,
-        "description": "``reason`` is one line and is set whenever the capability is not fully usable; an ``on`` row may carry\nit for a limit that still leaves it working (``OpenStreetMap only``). ``key_name`` is the name of the\nenvironment variable that would lift the limit, never its value. ``setting`` is the config.yaml path\nwhen a setting, not a key, is what is missing.",
+        "description": "``reason`` is one line and is set whenever the capability is not fully usable; an ``on`` row may carry\nit for a limit that still leaves it working (``OpenStreetMap only``). ``key_name`` is the name of the\nenvironment variable that would lift the limit, never its value. ``setting`` is the config.yaml path\nwhen a setting, not a key, is what is missing. ``key_choices`` lists the settable key names when any one of\nseveral providers' keys would turn the capability on (web search, the cloud browser).",
         "properties": {
           "id": {
             "$ref": "#/components/schemas/CapabilityId"
@@ -14841,6 +14859,13 @@
             "default": null,
             "title": "Key Name"
           },
+          "key_choices": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Key Choices",
+            "type": "array"
+          },
           "setting": {
             "anyOf": [
               {
@@ -14860,6 +14885,78 @@
           "state"
         ],
         "title": "CapabilityRow",
+        "type": "object"
+      },
+      "CapabilitySetKeyParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "key_name": {
+            "pattern": "^[A-Z][A-Z0-9_]{2,63}$",
+            "title": "Key Name",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key_name"
+        ],
+        "title": "CapabilitySetKeyParams",
+        "type": "object"
+      },
+      "CapabilitySetKeyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "key_name": {
+            "title": "Key Name",
+            "type": "string"
+          },
+          "is_set": {
+            "title": "Is Set",
+            "type": "boolean"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityRow"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile",
+          "key_name",
+          "is_set",
+          "capabilities"
+        ],
+        "title": "CapabilitySetKeyResult",
         "type": "object"
       },
       "CapabilityState": {

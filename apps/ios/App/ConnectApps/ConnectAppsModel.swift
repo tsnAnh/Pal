@@ -2,6 +2,7 @@ import Foundation
 import HermesAuth
 import HermesBotProfile
 import HermesConnect
+import HermesDesign
 import HermesDevice
 import HermesDiagnostics
 import HermesProtocol
@@ -43,6 +44,12 @@ struct CredentialPrompt: Identifiable {
     let id = UUID()
     let app: ConnectApp
     let keys: [String]
+}
+
+struct CapabilityKeyRequest: Identifiable, Equatable {
+    let capability: String
+    let keyName: String
+    var id: String { keyName }
 }
 
 enum ConnectDisconnectTarget: Identifiable {
@@ -105,6 +112,8 @@ final class ConnectAppsModel {
     var page: Page = .catalog
     var notice: ConnectNotice?
     var credentialPrompt: CredentialPrompt?
+    var keyRequest: CapabilityKeyRequest?
+    private(set) var keyState: SecretEntryState = .idle
     var disconnectTarget: ConnectDisconnectTarget?
     private(set) var mode: Mode = .list
 
@@ -180,6 +189,33 @@ final class ConnectAppsModel {
         } catch {
             diagnostics.info("capabilities", "status failed: \(Diagnostics.describe(error))")
             if case .ready = capabilitiesPhase {} else { capabilitiesPhase = .failed }
+        }
+    }
+
+    var canSetKeys: Bool { profile != nil }
+
+    func beginKeyEntry(_ row: CapabilityRow, keyName: String) {
+        guard canSetKeys, row.settableKeys.contains(keyName) else { return }
+        keyState = .idle
+        keyRequest = CapabilityKeyRequest(capability: row.label, keyName: keyName)
+    }
+
+    func cancelKeyEntry() {
+        keyRequest = nil
+        keyState = .idle
+    }
+
+    func submitKey(_ value: String) async {
+        guard let request = keyRequest, let profile, keyState.acceptsInput else { return }
+        keyState = .submitting
+        do {
+            capabilitiesPhase = .ready(try await capabilitiesService.setKey(request.keyName, to: SecretString(value), profile: profile))
+            cancelKeyEntry()
+        } catch is CancellationError {
+            keyState = .idle
+        } catch {
+            diagnostics.info("capabilities", "set key failed: \(Diagnostics.describe(error))")
+            keyState = .failure(String(localized: "Couldn't save the key. Check it and try again."))
         }
     }
 
