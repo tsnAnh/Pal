@@ -118,12 +118,11 @@ method("messaging.slack.manifest", params=MessagingSlackManifestParams, result=M
 class MessagingSettingsKind(WireEnum):
     allowlist = "allowlist"
     home_channel = "home_channel"
-    port = "port"
 
 
 class MessagingSettingsField(Result):
     """One editable, non-secret setting. ``values`` is the allowlist's IDs; the single-value kinds
-    (``home_channel``, ``port``) hold zero or one."""
+    (``home_channel``) hold zero or one."""
 
     key: str
     kind: MessagingSettingsKind
@@ -157,7 +156,7 @@ class MessagingSettingsGetResult(Result):
 
 
 method("messaging.settings.get", params=ProfileParams, result=MessagingSettingsGetResult,
-       doc="Non-secret messaging settings of one bot (allowlists, home channel, webhook port, enabled) for every platform that has any; credentials appear as set / not set only.")
+       doc="Non-secret messaging settings of one bot (allowlists, home channel, enabled) for Slack and Telegram; credentials appear as set / not set only.")
 
 
 class MessagingSettingsUpdateParams(ProfileParams):

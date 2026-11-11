@@ -12,21 +12,17 @@ _SETTINGS_INVALID = 4101
 _SETTINGS_NOT_FOUND = 4103
 _SETTINGS_FAILED = 5102
 _SETTINGS_MAX_IDS = 200
-_SETTINGS_PORT_KEY = "WEBHOOK_PORT"
+_SETTINGS_PLATFORMS = ("telegram", "slack")
 _SETTINGS_ALLOWLIST_KEY = re.compile(r"_ALLOWED(?:_[A-Z]+)?$")
-_SETTINGS_GENERIC_ID = re.compile(r"^[A-Za-z0-9_.@+:=!#-]{1,128}$")
 _SETTINGS_DIGITS = re.compile(r"^\d{1,20}$")
 _SETTINGS_USER_ID_RULES = {
     "telegram": (_SETTINGS_DIGITS, "Telegram user IDs are numbers, like 123456789."),
-    "discord": (_SETTINGS_DIGITS, "Discord user IDs are numbers, like 123456789012345678."),
     "slack": (re.compile(r"^[UW][A-Z0-9]{2,31}$"), "Slack member IDs start with U or W, like U01ABC2DEF3."),
 }
 _SETTINGS_CHANNEL_RULES = {
     "telegram": (re.compile(r"^-?\d{1,20}$"), "Telegram chat IDs are numbers, like 123456789 or -1001234567890."),
-    "discord": (_SETTINGS_DIGITS, "Discord channel IDs are numbers, like 123456789012345678."),
     "slack": (re.compile(r"^[CDG][A-Z0-9]{2,31}$"), "Slack channel IDs start with C, D or G, like C01ABC2DEF3."),
 }
-_SETTINGS_GENERIC_MESSAGE = "Use letters, numbers and . _ @ + : = ! # - only (up to 128 characters)."
 
 
 def _settings_messaging():
@@ -39,8 +35,6 @@ def _settings_kind(key, is_password):
         return "secret"
     if _SETTINGS_ALLOWLIST_KEY.search(key):
         return "allowlist"
-    if key == _SETTINGS_PORT_KEY:
-        return "port"
     return None
 
 
@@ -80,7 +74,8 @@ def _settings_state(payload):
 
 def _settings_snapshot(params, platform_id=None):
     messaging = _settings_messaging()
-    entries = [messaging._require_platform(platform_id)] if platform_id else list(messaging._messaging_platform_catalog())
+    catalog = messaging._messaging_platform_catalog()
+    entries = [messaging._require_platform(platform_id)] if platform_id else [e for e in catalog if e["id"] in _SETTINGS_PLATFORMS]
     home = _profile_home(params.get("profile"))
     payloads = messaging._platform_payloads(home, entries)
     env = messaging.load_env()
@@ -94,16 +89,10 @@ def _settings_snapshot(params, platform_id=None):
 
 def _settings_check_ids(platform_id, key, kind, values, errors):
     rules = _SETTINGS_USER_ID_RULES if kind == "allowlist" else _SETTINGS_CHANNEL_RULES
-    pattern, message = rules.get(platform_id, (_SETTINGS_GENERIC_ID, _SETTINGS_GENERIC_MESSAGE))
+    pattern, message = rules[platform_id]
     bad = [value for value in values if not pattern.match(value)]
     if bad:
         errors[key] = message
-
-
-def _settings_check_port(key, values, errors):
-    ok = len(values) == 1 and values[0].isdigit() and 1 <= int(values[0]) <= 65535
-    if not ok:
-        errors[key] = "The port must be a whole number from 1 to 65535."
 
 
 def _settings_normalise(platform_id, layout, requested):
@@ -122,8 +111,6 @@ def _settings_normalise(platform_id, layout, requested):
             errors[key] = "Only one value is allowed."
         elif len(values) > _SETTINGS_MAX_IDS:
             errors[key] = f"At most {_SETTINGS_MAX_IDS} entries are allowed."
-        elif kind == "port" and values:
-            _settings_check_port(key, values, errors)
         elif values:
             _settings_check_ids(platform_id, key, kind, values, errors)
         cleaned[key] = ",".join(values)
@@ -176,17 +163,12 @@ def _(rid, params: dict) -> dict:
     if not platform_id or not isinstance(requested, dict) or (enabled is not None and not isinstance(enabled, bool)):
         return _err(rid, _SETTINGS_INVALID, "platform is required; fields must be an object and enabled a boolean")
     messaging = _settings_messaging()
-    try:
-        entry = messaging._require_platform(platform_id)
-    except HTTPException as exc:
-        return _err(rid, _SETTINGS_NOT_FOUND, str(exc.detail))
+    if platform_id not in _SETTINGS_PLATFORMS:
+        return _err(rid, _SETTINGS_NOT_FOUND, f"Unknown messaging platform: {platform_id}")
+    entry = messaging._require_platform(platform_id)
     layout, _ = _settings_layout(entry)
     cleaned, errors = _settings_normalise(platform_id, layout, requested)
     profile_arg = str(params.get("profile") or "").strip() or None
-    if enabled:
-        conflict = messaging._multiplex_port_binding_conflict(platform_id, profile_arg)
-        if conflict:
-            errors["enabled"] = conflict
     if errors:
         return _err(rid, _SETTINGS_INVALID, "Some settings need a change before they can be saved.", {"fields": errors})
     try:

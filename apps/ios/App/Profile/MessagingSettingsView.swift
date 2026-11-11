@@ -126,7 +126,6 @@ struct MessagingSettingsView: View {
         switch kind {
         case .allowlist: String(localized: "Separate IDs with commas")
         case .homeChannel: String(localized: "Channel ID")
-        case .port: String(localized: "Port number")
         }
     }
 

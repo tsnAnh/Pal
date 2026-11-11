@@ -2366,7 +2366,7 @@
     },
     {
       "name": "messaging.settings.get",
-      "summary": "Non-secret messaging settings of one bot (allowlists, home channel, webhook port, enabled) for every platform that has any; credentials appear as set / not set only.",
+      "summary": "Non-secret messaging settings of one bot (allowlists, home channel, enabled) for Slack and Telegram; credentials appear as set / not set only.",
       "params": [
         {
           "name": "params",
@@ -29746,7 +29746,7 @@
       },
       "MessagingSettingsField": {
         "additionalProperties": false,
-        "description": "One editable, non-secret setting. ``values`` is the allowlist's IDs; the single-value kinds\n(``home_channel``, ``port``) hold zero or one.",
+        "description": "One editable, non-secret setting. ``values`` is the allowlist's IDs; the single-value kinds\n(``home_channel``) hold zero or one.",
         "properties": {
           "key": {
             "title": "Key",
@@ -29806,8 +29806,7 @@
       "MessagingSettingsKind": {
         "enum": [
           "allowlist",
-          "home_channel",
-          "port"
+          "home_channel"
         ],
         "title": "MessagingSettingsKind",
         "type": "string"
@@ -57797,7 +57796,7 @@
     },
     {
       "name": "messaging.settings.get",
-      "summary": "Non-secret messaging settings of one bot (allowlists, home channel, webhook port, enabled) for every platform that has any; credentials appear as set / not set only.",
+      "summary": "Non-secret messaging settings of one bot (allowlists, home channel, enabled) for Slack and Telegram; credentials appear as set / not set only.",
       "params": [
         {
           "name": "params",

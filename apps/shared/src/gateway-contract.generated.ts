@@ -575,14 +575,14 @@ export interface MessagingSettingsPlatform {
   fields: MessagingSettingsField[]
   secrets: MessagingSettingsSecret[]
 }
-/** One editable, non-secret setting. ``values`` is the allowlist's IDs; the single-value kinds (``home_channel``, ``port``) hold zero or one. */
+/** One editable, non-secret setting. ``values`` is the allowlist's IDs; the single-value kinds (``home_channel``) hold zero or one. */
 export interface MessagingSettingsField {
   key: string
   kind: MessagingSettingsKind
   label: string
   values: string[]
 }
-export type MessagingSettingsKind = 'allowlist' | 'home_channel' | 'port'
+export type MessagingSettingsKind = 'allowlist' | 'home_channel'
 /** A credential the platform needs: only whether it is set, never a value or a preview. */
 export interface MessagingSettingsSecret {
   key: string
@@ -7455,7 +7455,7 @@ export interface RpcMethods {
   'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
   /** Set/clear one author's emoji reaction on a message; returns the row's full reaction list. */
   'message.react': { params: MessageReactParams; result: MessageReactResult }
-  /** Non-secret messaging settings of one bot (allowlists, home channel, webhook port, enabled) for every platform that has any; credentials appear as set / not set only. */
+  /** Non-secret messaging settings of one bot (allowlists, home channel, enabled) for Slack and Telegram; credentials appear as set / not set only. */
   'messaging.settings.get': { params: ProfileParams; result: MessagingSettingsGetResult }
   /** Validate and save one platform's non-secret settings for a bot; idempotent, all-or-nothing. */
   'messaging.settings.update': { params: MessagingSettingsUpdateParams; result: MessagingSettingsUpdateResult }
@@ -8226,7 +8226,7 @@ export interface CanonicalRpcMethods {
   'mcp.servers.update': { params: McpServersUpdateParams; result: McpServersUpdateResult }
   /** Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned. */
   'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
-  /** Non-secret messaging settings of one bot (allowlists, home channel, webhook port, enabled) for every platform that has any; credentials appear as set / not set only. */
+  /** Non-secret messaging settings of one bot (allowlists, home channel, enabled) for Slack and Telegram; credentials appear as set / not set only. */
   'messaging.settings.get': { params: ProfileParams; result: MessagingSettingsGetResult }
   /** Validate and save one platform's non-secret settings for a bot; idempotent, all-or-nothing. */
   'messaging.settings.update': { params: MessagingSettingsUpdateParams; result: MessagingSettingsUpdateResult }

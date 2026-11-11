@@ -20,11 +20,11 @@ def two_bots(tmp_path, monkeypatch) -> Path:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setattr(server, "_hermes_home", home)
-    for key in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS", "TELEGRAM_HOME_CHANNEL", "WEBHOOK_PORT", "WEBHOOK_SECRET"):
+    for key in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS", "TELEGRAM_HOME_CHANNEL", "SLACK_HOME_CHANNEL", "SLACK_ALLOWED_USERS"):
         monkeypatch.delenv(key, raising=False)
     create_profile("scout", no_alias=True, no_skills=True)
     create_profile("pilot", no_alias=True, no_skills=True)
-    (get_profile_dir("scout") / ".env").write_text(f"TELEGRAM_BOT_TOKEN={TELEGRAM_CANARY}\nWEBHOOK_SECRET={CANARY}\n")
+    (get_profile_dir("scout") / ".env").write_text(f"TELEGRAM_BOT_TOKEN={TELEGRAM_CANARY}\nSLACK_BOT_TOKEN=xoxb-{CANARY}\n")
     return home
 
 
@@ -87,9 +87,7 @@ def test_get_lists_non_secret_fields_and_credentials_as_set_flags(two_bots, gate
     assert {f["key"]: f["kind"] for f in telegram["fields"]} == {
         "TELEGRAM_ALLOWED_USERS": "allowlist", "TELEGRAM_HOME_CHANNEL": "home_channel"}
     assert {s["key"]: s["is_set"] for s in telegram["secrets"]}["TELEGRAM_BOT_TOKEN"] is True
-    webhook = _platform(result, "webhook")
-    assert [f["key"] for f in webhook["fields"]] == ["WEBHOOK_PORT"]
-    assert {s["key"]: s["is_set"] for s in webhook["secrets"]} == {"WEBHOOK_SECRET": True}
+    assert {p["id"] for p in result["platforms"]} == {"telegram", "slack"}
     pilot = _platform(_ok("messaging.settings.get", {"profile": "pilot"}), "telegram")
     assert {s["key"]: s["is_set"] for s in pilot["secrets"]}["TELEGRAM_BOT_TOKEN"] is False
 
@@ -100,7 +98,7 @@ def test_secret_values_never_reach_a_response_or_a_log(two_bots, gateway, caplog
         _rpc("messaging.settings.get", {"profile": "scout"}),
         _update(fields={"TELEGRAM_ALLOWED_USERS": ["42"]}),
         _update(fields={"TELEGRAM_ALLOWED_USERS": ["nope"]}),
-        _update(platform="webhook", fields={"WEBHOOK_PORT": ["8650"]}, enabled=True)]
+        _update(platform="slack", fields={"SLACK_ALLOWED_USERS": ["U01ABC2DEF3"]}, enabled=True)]
     assert CANARY not in json.dumps(responses)
     assert CANARY not in caplog.text
 
@@ -115,11 +113,11 @@ def test_update_saves_allowlist_home_channel_port_and_toggle_for_that_bot_only(t
     assert "TELEGRAM_ALLOWED_USERS=123,456" in env and "TELEGRAM_HOME_CHANNEL=-100987" in env
     assert "TELEGRAM_" not in _env_text("pilot")
 
-    web = _ok("messaging.settings.update", {
-        "profile": "scout", "platform": "webhook", "enabled": True, "fields": {"WEBHOOK_PORT": ["8650"]}})
-    assert web["settings"]["enabled"] is True and _field(web["settings"], "WEBHOOK_PORT") == ["8650"]
-    assert "WEBHOOK_PORT=8650" in _env_text("scout")
-    assert _platform(_ok("messaging.settings.get", {"profile": "pilot"}), "webhook")["enabled"] is False
+    slack = _ok("messaging.settings.update", {
+        "profile": "scout", "platform": "slack", "enabled": True, "fields": {"SLACK_HOME_CHANNEL": ["C01ABC2DEF3"]}})
+    assert slack["settings"]["enabled"] is True and _field(slack["settings"], "SLACK_HOME_CHANNEL") == ["C01ABC2DEF3"]
+    assert "SLACK_HOME_CHANNEL=C01ABC2DEF3" in _env_text("scout")
+    assert _platform(_ok("messaging.settings.get", {"profile": "pilot"}), "slack")["enabled"] is False
 
 
 def test_clearing_a_field_removes_it(two_bots, gateway):
@@ -137,11 +135,7 @@ def test_clearing_a_field_removes_it(two_bots, gateway):
     ("telegram", "TELEGRAM_HOME_CHANNEL", ["1", "2"], "one value"),
     ("slack", "SLACK_ALLOWED_USERS", ["alice"], "start with U or W"),
     ("slack", "SLACK_HOME_CHANNEL", ["general"], "start with C, D or G"),
-    ("discord", "DISCORD_ALLOWED_USERS", ["me#1"], "numbers"),
-    ("webhook", "WEBHOOK_PORT", ["0"], "1 to 65535"),
-    ("webhook", "WEBHOOK_PORT", ["70000"], "1 to 65535"),
-    ("webhook", "WEBHOOK_PORT", ["http"], "1 to 65535"),
-    ("webhook", "WEBHOOK_PORT", [], None),
+    ("slack", "SLACK_ALLOWED_USERS", [], None),
     ("telegram", "TELEGRAM_BOT_TOKEN", ["1:xx"], "cannot be changed here"),
     ("telegram", "NOT_A_SETTING", ["1"], "cannot be changed here"),
 ])
@@ -167,6 +161,7 @@ def test_unknown_profile_and_platform_are_typed_errors_and_other_bots_are_untouc
     assert _rpc("messaging.settings.get", {"profile": "ghost"})["error"]["code"] == 4064
     assert _update(profile="ghost", fields={"TELEGRAM_ALLOWED_USERS": ["1"]})["error"]["code"] == 4064
     assert _update(platform="nonesuch")["error"]["code"] == 4103
+    assert _update(platform="discord", fields={"DISCORD_ALLOWED_USERS": ["1"]})["error"]["code"] == 4103
     assert "ALLOWED" not in _env_text("pilot") and "ALLOWED" not in _env_text("scout")
 
 

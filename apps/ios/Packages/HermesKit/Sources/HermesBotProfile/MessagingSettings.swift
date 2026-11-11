@@ -5,7 +5,6 @@ import HermesTransport
 public enum MessagingSettingKind: String, Sendable, Equatable {
     case allowlist
     case homeChannel = "home_channel"
-    case port
 }
 
 public struct MessagingSetting: Sendable, Equatable, Identifiable {
