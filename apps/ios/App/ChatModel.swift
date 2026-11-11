@@ -81,6 +81,8 @@ final class ChatModel {
     var attachments: [PendingAttachment] { pending.items }
     private var localImages: [String: Data] = [:]
     private(set) var slashItems: [SlashItem] = []
+    private(set) var fileRefResult: FileRefResult?
+    private var fileRefTask: Task<Void, Never>?
     private(set) var reactions: [String: String] = [:]
     private(set) var replyTarget: ReplyTarget?
     var isFinding = false
@@ -410,6 +412,20 @@ final class ChatModel {
         guard slashItems.isEmpty, let session else { return }
         Task {
             if let items = try? await session.slashCommands() { slashItems = items }
+        }
+    }
+
+    /// Asks the gateway for the files `word` completes to. Keystrokes within the debounce collapse into
+    /// one request, a newer word cancels the older one, and a failed or unreachable lookup settles as an
+    /// empty answer so the picker shows its quiet empty state instead of waiting.
+    func loadFileRefs(word: String) {
+        fileRefTask?.cancel()
+        fileRefTask = Task {
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            let items = (try? await session?.pathCompletions(word: word)) ?? []
+            guard !Task.isCancelled else { return }
+            fileRefResult = FileRefResult(word: word, items: items)
         }
     }
 
