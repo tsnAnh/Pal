@@ -47,8 +47,9 @@ event("auth.required", AuthRequiredPayload,
       doc="A bot's tool call failed because a credential for service is missing, expired or revoked. Show one "
           "sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code "
           "carries user_code and verification_uri to open in the system browser; oauth is started with "
-          "auth.signin; api_key asks for the key for MCP server `server` (store it with mcp.servers.set_api_key, then "
-          "call auth.signin); header and manual have no in-app sign-in. The payload never carries a token.")
+          "auth.signin; api_key and header ask for one masked credential for the service: answer with "
+          "auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. "
+          "The payload never carries a credential.")
 
 
 class AuthResolvedPayload(Payload):
@@ -87,3 +88,26 @@ class AuthDeclineResult(Result):
 canonical_method("auth.decline", params=AuthDeclineParams, result=AuthDeclineResult,
                  doc="The user chose Not now on an auth.required request; the waiting bots are told the user "
                      "declined sign-in.")
+
+
+class AuthCredentialOutcome(WireEnum):
+    STORED = "stored"
+    FAILED = "failed"
+    REJECTED = "rejected"
+
+
+class AuthSubmitCredentialParams(Params):
+    request_id: str = Field(pattern=AUTH_REQUEST_ID_PATTERN)
+    value: str = Field(min_length=1, max_length=4096, repr=False)
+
+
+class AuthSubmitCredentialResult(Result):
+    outcome: AuthCredentialOutcome
+
+
+canonical_method("auth.submit_credential", params=AuthSubmitCredentialParams, result=AuthSubmitCredentialResult,
+                 doc="The user typed the credential for an api_key or header auth.required request. The gateway "
+                     "saves it in the requesting profile's secret store and resolves the request; the value is never "
+                     "echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. "
+                     "failed: not saved (invalid value or store error), the same request may be answered again. "
+                     "rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored.")

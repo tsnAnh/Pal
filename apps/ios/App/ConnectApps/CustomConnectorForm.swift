@@ -186,10 +186,15 @@ struct CustomConnectorBody: View {
                         .modifier(FieldStyle(style: style))
                         .disabled(row.isStored || model.isBusy)
                         .accessibilityIdentifier("customConnectorHeaderKey-\(index)")
-                    SecureField("Value", text: $row.value, prompt: Text(verbatim: row.isStored ? "••••••••" : "Value"))
+                    SecretField(
+                        String(localized: "Value"),
+                        prompt: row.isStored ? "••••••••" : String(localized: "Value"),
+                        text: $row.value,
+                        identifier: "customConnectorHeaderValue-\(index)",
+                        clearsOnBackground: false
+                    )
                         .modifier(FieldStyle(style: style))
                         .disabled(model.isBusy)
-                        .accessibilityIdentifier("customConnectorHeaderValue-\(index)")
                     if !row.isBlank {
                         Button { model.removeHeader(row.id) } label: {
                             Image(systemName: "minus.circle.fill").foregroundStyle(style.secondary)

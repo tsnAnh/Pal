@@ -138,16 +138,31 @@ public struct AuthSignInResult: Sendable, Hashable {
     }
 }
 
+public enum AuthCredentialOutcome: String, Sendable, Hashable {
+    case stored = "stored"
+    case failed = "failed"
+    case rejected = "rejected"
+    case unknown = "unknown"
+
+    public init(wire raw: String?) {
+        self = raw.flatMap(Self.init(rawValue:)) ?? .unknown
+    }
+
+    public init(_ result: JSONValue) {
+        self.init(wire: result["outcome"]?.stringValue)
+    }
+}
+
 public enum ServiceSignInWire {
     public static let signInMethod = "auth.signin"
     public static let declineMethod = "auth.decline"
-    public static let setAPIKeyMethod = "mcp.servers.set_api_key"
+    public static let submitCredentialMethod = "auth.submit_credential"
 
     public static func requestParams(_ requestID: String) -> JSONValue {
         ["request_id": .string(requestID)]
     }
 
-    public static func setAPIKeyParams(server: String, value: String) -> JSONValue {
-        ["name": .string(server), "value": .string(value)]
+    public static func submitCredentialParams(requestID: String, value: SecretString) -> JSONValue {
+        ["request_id": .string(requestID), "value": .string(value.reveal())]
     }
 }

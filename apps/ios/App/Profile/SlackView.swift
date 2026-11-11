@@ -84,6 +84,13 @@ struct SlackView: View {
                 statusLine(String(localized: "Restart needed"), systemImage: "arrow.triangle.2.circlepath", identifier: "slackStatusRestart")
             case .failed:
                 statusLine(String(localized: "Couldn't connect"), systemImage: "exclamationmark.triangle", identifier: "slackStatusFailed")
+                if let failure = model.failure {
+                    Text(failure.message)
+                        .hermesText(.rowSubtitle)
+                        .foregroundStyle(Color(theme.palette.textSecondary))
+                        .multilineTextAlignment(.center)
+                        .accessibilityIdentifier("slackFailureReason")
+                }
             case .notConnected, nil:
                 EmptyView()
             }
@@ -127,6 +134,18 @@ struct SlackView: View {
 
     @ViewBuilder
     private func readyAction(_ connection: SlackConnection) -> some View {
+        VStack(spacing: 8) {
+            primaryAction(connection)
+            if model.showsUpdateTokens {
+                PillButton(String(localized: "Update tokens"), kind: .neutral, size: .large, accessibilityIdentifier: "slackUpdateTokensButton") {
+                    model.beginUpdateTokens()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func primaryAction(_ connection: SlackConnection) -> some View {
         switch connection {
         case .notConnected, .failed:
             PillButton(String(localized: "Connect Slack workspace"), kind: .accent, size: .large, accessibilityIdentifier: "slackConnectButton") {
@@ -165,35 +184,46 @@ private struct SlackTokenSheet: View {
 
     @Environment(\.hermesTheme) private var theme
 
+    private var isUpdate: Bool { model.tokenEntry == .update }
+    private var introText: String {
+        isUpdate
+            ? String(localized: "Paste the token you want to replace. Leave the other empty to keep the one Hermes already has.")
+            : String(localized: "After installing the app in your workspace, copy its two tokens here.")
+    }
+
+    private var canSubmit: Bool { isUpdate ? model.canSubmitTokenUpdate : model.canSubmitTokens }
+
     var body: some View {
         SheetChrome(
-            title: String(localized: "Slack tokens"),
+            title: isUpdate ? String(localized: "Update Slack tokens") : String(localized: "Slack tokens"),
             accessibilityIdentifier: "slackTokenSheet",
             onLeading: { model.isEnteringTokens = false },
             trailing: {
                 PillButton(
-                    String(localized: "Connect"),
-                    kind: model.canSubmitTokens ? .accent : .dimmed,
+                    isUpdate ? String(localized: "Update") : String(localized: "Connect"),
+                    kind: canSubmit ? .accent : .dimmed,
                     accessibilityIdentifier: "slackTokenSubmit"
                 ) {
-                    Task { await model.submitTokens() }
+                    Task {
+                        if isUpdate { await model.submitTokenUpdate() } else { await model.submitTokens() }
+                    }
                 }
             },
             content: {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("After installing the app in your workspace, copy its two tokens here.")
+                        Text(introText)
                             .hermesText(.rowSubtitle)
                             .foregroundStyle(Color(theme.palette.textSecondary))
                             .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset)
                             .padding(.bottom, HermesMetrics.cardGap)
                         SectionCaption(String(localized: "Bot token"), accessibilityIdentifier: "slackBotTokenCaption")
                             .padding(.bottom, HermesMetrics.captionToCardGap)
-                        tokenField(String(localized: "xoxb-…"), text: $model.botToken, identifier: "slackBotToken")
+                        tokenField(String(localized: "Bot token"), prompt: String(localized: "xoxb-…"), text: $model.botToken, identifier: "slackBotToken")
                         SectionCaption(String(localized: "App token"), accessibilityIdentifier: "slackAppTokenCaption")
                             .padding(.top, HermesMetrics.cardGap)
                             .padding(.bottom, HermesMetrics.captionToCardGap)
-                        tokenField(String(localized: "xapp-…"), text: $model.appToken, identifier: "slackAppToken")
+                        tokenField(String(localized: "App token"), prompt: String(localized: "xapp-…"), text: $model.appToken, identifier: "slackAppToken")
                     }
                     .padding(.bottom, 32)
                 }
@@ -202,17 +232,12 @@ private struct SlackTokenSheet: View {
         )
     }
 
-    private func tokenField(_ prompt: String, text: Binding<String>, identifier: String) -> some View {
-        SecureField("", text: text, prompt: Text(prompt))
-            .neverAutocapitalized()
-            .autocorrectionDisabled()
-            .textContentType(.oneTimeCode)
+    private func tokenField(_ label: String, prompt: String, text: Binding<String>, identifier: String) -> some View {
+        SecretField(label, prompt: prompt, text: text, identifier: identifier)
             .padding(.horizontal, HermesMetrics.rowInset)
             .frame(height: HermesMetrics.rowMinimumHeight)
             .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
             .padding(.horizontal, HermesMetrics.screenMargin)
-            .accessibilityLabel(Text(prompt))
-            .accessibilityIdentifier(identifier)
     }
 }
 

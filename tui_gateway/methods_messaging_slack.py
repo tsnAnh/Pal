@@ -10,6 +10,7 @@ _profile_scoped = _registry.profile_scoped
 _SLACK_INVALID = 4101
 _SLACK_NOT_FOUND = 4103
 _SLACK_FAILED = 5102
+_SLACK_TOKEN_KEYS = {"bot_token": "SLACK_BOT_TOKEN", "app_token": "SLACK_APP_TOKEN"}
 _SLACK_ENV = ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS")
 _SLACK_CREATE_URL = "https://api.slack.com/apps?new_app=1&manifest_json="
 _SLACK_MAX_ALLOWED_USERS = 50
@@ -43,6 +44,7 @@ def _slack_status_payload(params):
         "profile": _bot_settings_profile_name(params), "enabled": payload["enabled"], "configured": payload["configured"],
         "gateway_running": payload["gateway_running"], "state": payload["state"],
         "error_code": payload["error_code"], "error_message": payload["error_message"],
+        "needed_scope": payload.get("needed_scope"), "provided_scope": payload.get("provided_scope"),
         "bot_token_set": bool(fields.get("SLACK_BOT_TOKEN")), "app_token_set": bool(fields.get("SLACK_APP_TOKEN")),
         "allowed_users_set": bool(fields.get("SLACK_ALLOWED_USERS"))}
 
@@ -82,18 +84,24 @@ def _(rid, params: dict) -> dict:
 @_profile_scoped
 def _(rid, params: dict) -> dict:
     from fastapi import HTTPException
-    bot_token, app_token = (str(params.get(key) or "").strip() for key in ("bot_token", "app_token"))
-    if not bot_token or not app_token:
-        return _err(rid, _SLACK_INVALID, "bot_token and app_token required")
+    given = {key: str(params.get(key) or "").strip() for key in _SLACK_TOKEN_KEYS}
+    given = {key: value for key, value in given.items() if value}
+    if not given:
+        return _err(rid, _SLACK_INVALID, "bot_token or app_token required")
     allowed, err = _slack_allowed_users(rid, params.get("allowed_users"))
     if err is not None:
         return err
     messaging = _slack_messaging()
-    env = {"SLACK_BOT_TOKEN": bot_token, "SLACK_APP_TOKEN": app_token}
+    env = {_SLACK_TOKEN_KEYS[key]: value for key, value in given.items()}
     if allowed:
         env["SLACK_ALLOWED_USERS"] = allowed
     try:
         entry = messaging._require_platform("slack")
+        if len(given) < len(_SLACK_TOKEN_KEYS):
+            stored = {item["key"]: item["is_set"]
+                      for item in messaging._platform_payloads(_slack_scope_dir(params), [entry])[0]["env_vars"]}
+            if any(key not in given and not stored.get(var) for key, var in _SLACK_TOKEN_KEYS.items()):
+                return _err(rid, _SLACK_INVALID, "bot_token and app_token required")
         messaging._apply_platform_update("slack", entry, messaging._env_value_rules("slack"), env, [], True)
         reload = _slack_reload(str(params.get("profile") or "").strip() or None)
         return _ok(rid, {**_slack_status_payload(params), **reload})

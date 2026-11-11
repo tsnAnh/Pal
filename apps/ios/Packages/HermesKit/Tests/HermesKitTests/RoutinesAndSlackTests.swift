@@ -130,28 +130,124 @@ struct SlackTests {
         state: String? = nil,
         restartStarted: Bool? = nil,
         restartBusy: Bool? = nil,
-        restartError: String? = nil
-    ) throws -> SlackConnection {
+        restartError: String? = nil,
+        errorCode: String? = nil,
+        neededScope: String? = nil,
+        providedScope: String? = nil
+    ) throws -> SlackStatus {
         var object: [String: JSONValue] = ["enabled": .bool(configured), "configured": .bool(configured), "gateway_running": true]
         if let state { object["state"] = .string(state) }
         if let restartStarted { object["restart_started"] = .bool(restartStarted) }
         if let restartBusy { object["restart_busy"] = .bool(restartBusy) }
         if let restartError { object["restart_error"] = .string(restartError) }
-        return SlackConnection(try JSONValue.object(object).decoded(as: SlackStatusWire.self))
+        if let errorCode { object["error_code"] = .string(errorCode) }
+        if let neededScope { object["needed_scope"] = .string(neededScope) }
+        if let providedScope { object["provided_scope"] = .string(providedScope) }
+        return SlackStatus(try JSONValue.object(object).decoded(as: SlackStatusWire.self))
+    }
+
+    private func connection(
+        _ state: String?,
+        errorCode: String? = nil,
+        configured: Bool = true
+    ) throws -> SlackConnection {
+        try status(configured: configured, state: state, errorCode: errorCode).connection
     }
 
     @Test("status maps to connected, not connected, restart needed and failed")
     func mapping() throws {
-        #expect(try status(state: "connected") == .connected)
-        #expect(try status(configured: false, state: "not_configured") == .notConnected)
-        #expect(try status(state: "disabled") == .notConnected)
-        #expect(try status(state: "pending_restart") == .restartNeeded)
-        #expect(try status(state: "gateway_stopped") == .restartNeeded)
-        #expect(try status(state: "pending_restart", restartStarted: true) == .starting)
-        #expect(try status(state: "startup_failed") == .failed)
-        #expect(try status(state: "pending_restart", restartBusy: true) == .restartNeeded)
-        #expect(try status(state: "connected", restartError: "boom") == .failed)
-        #expect(try status(state: "something_new") == .starting)
+        #expect(try connection("connected") == .connected)
+        #expect(try connection("not_configured", configured: false) == .notConnected)
+        #expect(try connection("disabled") == .notConnected)
+        #expect(try connection("pending_restart") == .restartNeeded)
+        #expect(try connection("gateway_stopped") == .restartNeeded)
+        #expect(try status(state: "pending_restart", restartStarted: true).connection == .starting)
+        #expect(try connection("startup_failed") == .failed)
+        #expect(try status(state: "pending_restart", restartBusy: true).connection == .restartNeeded)
+        #expect(try status(state: "connected", restartError: "boom").connection == .failed)
+        #expect(try connection("something_new") == .starting)
+    }
+
+    @Test("fatal and retrying with an error code are failures, without one they keep starting")
+    func failureStates() throws {
+        for state in ["fatal", "retrying", "startup_failed"] {
+            #expect(try connection(state, errorCode: "missing_scope") == .failed, "\(state)")
+        }
+        #expect(try connection("fatal") == .starting)
+        #expect(try connection("retrying") == .starting)
+        #expect(try connection("retrying", errorCode: "") == .starting)
+        #expect(try connection("connected", errorCode: "missing_scope") == .connected)
+        #expect(try connection("fatal", errorCode: "invalid_auth").isSettled)
+    }
+
+    @Test("token update is offered only for failed and connected")
+    func updateRule() {
+        let offered: [SlackConnection] = [.failed, .connected]
+        let hidden: [SlackConnection] = [.notConnected, .starting, .restartNeeded]
+        for connection in offered { #expect(connection.allowsTokenUpdate) }
+        for connection in hidden { #expect(!connection.allowsTokenUpdate) }
+    }
+
+    @Test("a failed status carries its plain reason, other states carry none")
+    func statusCarriesReason() throws {
+        let failed = try status(state: "fatal", errorCode: "missing_scope", neededScope: "connections:write", providedScope: "chat:write")
+        #expect(failed.connection == .failed)
+        #expect(failed.failure?.code == "missing_scope")
+        #expect(failed.failure?.message.contains("connections:write") == true)
+        #expect(try status(state: "connected", errorCode: "missing_scope").failure == nil)
+        #expect(try status(state: "startup_failed").failure == nil)
+    }
+
+    struct ReasonCase: Sendable, CustomTestStringConvertible {
+        let code: String?
+        let needed: String?
+        let provided: String?
+        let expected: String?
+
+        var testDescription: String { "\(code ?? "nil") needed=\(needed ?? "nil")" }
+    }
+
+    @Test("failure reason wording", arguments: [
+        ReasonCase(
+            code: "missing_scope", needed: "connections:write", provided: nil,
+            expected: "The app token is missing the connections:write scope. Add it to your Slack app, then update the token."
+        ),
+        ReasonCase(
+            code: "missing_scope", needed: "chat:write,im:history", provided: "channels:read",
+            expected: "The bot token is missing the chat:write,im:history scope. It has: channels:read. Add it to your Slack app, then update the token."
+        ),
+        ReasonCase(
+            code: "missing_scope", needed: nil, provided: nil,
+            expected: "A Slack scope is missing. Add it to your Slack app, then update the token."
+        ),
+        ReasonCase(
+            code: "missing_scope", needed: "bad scope <script>", provided: nil,
+            expected: "A Slack scope is missing. Add it to your Slack app, then update the token."
+        ),
+        ReasonCase(
+            code: "invalid_auth", needed: nil, provided: nil,
+            expected: "Slack didn't accept a token. Check the bot token and the app token, then update them."
+        ),
+        ReasonCase(
+            code: "token_revoked", needed: nil, provided: nil,
+            expected: "A Slack token was revoked. Create a new token in your Slack app and update it."
+        ),
+        ReasonCase(
+            code: "account_inactive", needed: nil, provided: nil,
+            expected: "The Slack account behind these tokens is inactive. Use tokens from an active account."
+        ),
+        ReasonCase(
+            code: "not_authed", needed: nil, provided: nil,
+            expected: "Slack didn't receive a token. Update the tokens and try again."
+        ),
+        ReasonCase(code: "ratelimited", needed: nil, provided: nil, expected: "Slack said: ratelimited"),
+        ReasonCase(code: "xoxb-1234 leak", needed: nil, provided: nil, expected: "Slack turned down the connection."),
+        ReasonCase(code: nil, needed: "connections:write", provided: nil, expected: nil),
+        ReasonCase(code: "  ", needed: nil, provided: nil, expected: nil),
+    ])
+    func reasonWording(_ item: ReasonCase) {
+        let reason = SlackFailureReason(errorCode: item.code, neededScope: item.needed, providedScope: item.provided)
+        #expect(reason?.message == item.expected)
     }
 
     @Test("only the starting state keeps polling")
@@ -162,13 +258,23 @@ struct SlackTests {
 
     @Test("tokens need the xoxb and xapp prefixes and no whitespace")
     func tokenValidation() {
-        #expect(SlackTokens(bot: "xoxb-123", app: "xapp-456") != nil)
-        #expect(SlackTokens(bot: " xoxb-123 \n", app: "xapp-456") != nil)
-        #expect(SlackTokens(bot: "xoxp-123", app: "xapp-456") == nil)
-        #expect(SlackTokens(bot: "xoxb-123", app: "xoxb-456") == nil)
-        #expect(SlackTokens(bot: "xoxb-", app: "xapp-456") == nil)
-        #expect(SlackTokens(bot: "xoxb-1 2", app: "xapp-456") == nil)
-        #expect(SlackTokens(bot: "", app: "") == nil)
+        #expect(SlackTokenUpdate(bot: "xoxb-123", app: "xapp-456")?.isComplete == true)
+        #expect(SlackTokenUpdate(bot: " xoxb-123 \n", app: "xapp-456") != nil)
+        #expect(SlackTokenUpdate(bot: "xoxp-123", app: "xapp-456") == nil)
+        #expect(SlackTokenUpdate(bot: "xoxb-123", app: "xoxb-456") == nil)
+        #expect(SlackTokenUpdate(bot: "xoxb-", app: "xapp-456") == nil)
+        #expect(SlackTokenUpdate(bot: "xoxb-1 2", app: "xapp-456") == nil)
+        #expect(SlackTokenUpdate(bot: "", app: "") == nil)
+    }
+
+    @Test("an update may carry just one valid token")
+    func partialUpdates() {
+        let botOnly = SlackTokenUpdate(bot: "xoxb-123", app: "  ")
+        #expect(botOnly?.bot != nil && botOnly?.app == nil && botOnly?.isComplete == false)
+        let appOnly = SlackTokenUpdate(bot: "", app: "xapp-456")
+        #expect(appOnly?.bot == nil && appOnly?.app != nil)
+        #expect(SlackTokenUpdate(bot: "nope", app: "") == nil)
+        #expect(SlackTokenUpdate(bot: "", app: "xoxb-1") == nil)
     }
 
     @Test("manifest passes the bot name and accepts only an api.slack.com https link")
@@ -195,10 +301,32 @@ struct SlackTests {
             "profile": "a", "enabled": true, "configured": true, "gateway_running": true, "state": "pending_restart",
             "hot_served": false, "restart_started": false, "restart_busy": true,
         ])
-        let tokens = try #require(SlackTokens(bot: "xoxb-secret-one", app: "xapp-secret-two"))
+        let tokens = try #require(SlackTokenUpdate(bot: "xoxb-secret-one", app: "xapp-secret-two"))
         let state = try await SlackService(gateway: bots.gateway).connect(profile: "a", tokens: tokens)
-        #expect(state == .restartNeeded)
+        #expect(state.connection == .restartNeeded)
         #expect(bots.calls.first?.params == ["bot_token": "xoxb-secret-one", "app_token": "xapp-secret-two", "profile": "a"])
+    }
+
+    @Test("an update sends only the token present and the secret appears only in the request")
+    func partialConnect() async throws {
+        let canary = "xoxb-CANARY-\(UUID().uuidString)"
+        let bots = ScriptedBots()
+        bots.script("messaging.slack.connect", [
+            "profile": "a", "enabled": true, "configured": true, "gateway_running": true, "state": "retrying",
+            "error_code": "missing_scope", "needed_scope": "connections:write",
+        ])
+        let update = try #require(SlackTokenUpdate(bot: canary, app: ""))
+        let status = try await SlackService(gateway: bots.gateway).connect(profile: "a", tokens: update)
+        #expect(bots.calls.first?.params == ["bot_token": .string(canary), "profile": "a"])
+        #expect(status.connection == .failed)
+        #expect(!"\(status)".contains(canary))
+        #expect(!String(reflecting: update).contains(canary))
+
+        let appBots = ScriptedBots()
+        appBots.script("messaging.slack.connect", ["profile": "a", "enabled": true, "configured": true, "gateway_running": true, "state": "connected"])
+        let appOnly = try #require(SlackTokenUpdate(bot: "", app: "xapp-only"))
+        _ = try await SlackService(gateway: appBots.gateway).connect(profile: "a", tokens: appOnly)
+        #expect(appBots.calls.first?.params == ["app_token": "xapp-only", "profile": "a"])
     }
 
     @Test("a refused connect never leaks the tokens into diagnostics or the error")
@@ -207,7 +335,7 @@ struct SlackTests {
         bots.script("messaging.slack.connect") { _ in
             throw GatewayTransportError.rpc(RPCError(code: 4101, message: "SLACK_BOT_TOKEN rejected"))
         }
-        let tokens = try #require(SlackTokens(bot: "xoxb-secret-one", app: "xapp-secret-two"))
+        let tokens = try #require(SlackTokenUpdate(bot: "xoxb-secret-one", app: "xapp-secret-two"))
         do {
             _ = try await SlackService(gateway: bots.gateway).connect(profile: "a", tokens: tokens)
             Issue.record("expected a refusal")
@@ -223,7 +351,7 @@ struct SlackTests {
         bots.script("messaging.slack.connect") { _ in
             throw GatewayTransportError.rpc(RPCError(code: 5102, message: "Could not save the Slack connection"))
         }
-        let tokens = try #require(SlackTokens(bot: "xoxb-a", app: "xapp-b"))
+        let tokens = try #require(SlackTokenUpdate(bot: "xoxb-a", app: "xapp-b"))
         await #expect(throws: BotsError.rejected(reason: nil)) {
             _ = try await SlackService(gateway: bots.gateway).connect(profile: "a", tokens: tokens)
         }
@@ -235,8 +363,8 @@ struct SlackTests {
         bots.script("messaging.slack.disconnect", ["profile": "a", "enabled": false, "configured": false, "gateway_running": true, "state": "not_configured", "hot_served": true, "restart_started": false])
         bots.script("messaging.slack.status", ["profile": "a", "enabled": true, "configured": true, "gateway_running": true, "state": "connected"])
         let service = SlackService(gateway: bots.gateway)
-        #expect(try await service.disconnect(profile: "a") == .notConnected)
-        #expect(try await service.status(profile: "a") == .connected)
+        #expect(try await service.disconnect(profile: "a").connection == .notConnected)
+        #expect(try await service.status(profile: "a").connection == .connected)
         #expect(bots.calls.map(\.params["profile"]) == ["a", "a"])
     }
 }

@@ -508,7 +508,7 @@ export interface ProfilesDeleteResult {
   settlement_pending?: boolean | null
   retry_command?: string | null
 }
-/** One bot's Slack connection. Credentials are never echoed: only whether each is set. ``state`` is the gateway's verdict for the Slack adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``, ``gateway_stopped``, ``startup_failed``, ...). */
+/** One bot's Slack connection. Credentials are never echoed: only whether each is set. ``state`` is the gateway's verdict for the Slack adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``, ``gateway_stopped``, ``startup_failed``, ``retrying``, ...). When Slack refused the connection, ``error_code`` is Slack's own code (``missing_scope``, ``invalid_auth``, ``token_revoked``, ...) and ``needed_scope`` / ``provided_scope`` name the scopes involved; none of these is a secret. */
 export interface MessagingSlackStatus {
   profile: string
   enabled: boolean
@@ -517,15 +517,17 @@ export interface MessagingSlackStatus {
   state?: string | null
   error_code?: string | null
   error_message?: string | null
+  needed_scope?: string | null
+  provided_scope?: string | null
   bot_token_set: boolean
   app_token_set: boolean
   allowed_users_set: boolean
 }
-/** ``bot_token`` (xoxb-) and ``app_token`` (xapp-, Socket Mode) are written to the bot's own .env only. ``allowed_users`` are Slack member IDs allowed to talk to the bot. */
+/** ``bot_token`` (xoxb-) and ``app_token`` (xapp-, Socket Mode) are written to the bot's own .env only. ``allowed_users`` are Slack member IDs allowed to talk to the bot. Either token may be sent alone to replace it; the other must already be stored. */
 export interface MessagingSlackConnectParams {
   profile?: string | null
-  bot_token: string
-  app_token: string
+  bot_token?: string | null
+  app_token?: string | null
   allowed_users?: string[] | null
 }
 /** The status after the write plus what became of the gateway: ``hot_served`` when a running multiplexer rebuilt the adapter, else a gateway restart (``restart_started``; refused while a chat is live: ``restart_busy``). */
@@ -537,6 +539,8 @@ export interface MessagingSlackConnectResult {
   state?: string | null
   error_code?: string | null
   error_message?: string | null
+  needed_scope?: string | null
+  provided_scope?: string | null
   bot_token_set: boolean
   app_token_set: boolean
   allowed_users_set: boolean
@@ -6277,6 +6281,14 @@ export interface AuthDeclineParams {
 export interface AuthDeclineResult {
   recorded: boolean
 }
+export interface AuthSubmitCredentialParams {
+  request_id: string
+  value: string
+}
+export interface AuthSubmitCredentialResult {
+  outcome: AuthCredentialOutcome
+}
+export type AuthCredentialOutcome = 'stored' | 'failed' | 'rejected'
 export interface DeviceConnectorsListParams {
   device_id?: string | null
 }
@@ -7435,7 +7447,7 @@ export interface RpcMethods {
   'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
   /** Set/clear one author's emoji reaction on a message; returns the row's full reaction list. */
   'message.react': { params: MessageReactParams; result: MessageReactResult }
-  /** Validate and save a bot's Slack tokens, enable the adapter and reload it. */
+  /** Validate and save a bot's Slack tokens (either one alone replaces just that token), enable the adapter and reload it. */
   'messaging.slack.connect': { params: MessagingSlackConnectParams; result: MessagingSlackConnectResult }
   /** Remove a bot's Slack tokens and disable the adapter. */
   'messaging.slack.disconnect': { params: ProfileParams; result: MessagingSlackConnectResult }
@@ -8079,6 +8091,8 @@ export interface CanonicalRpcMethods {
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
   /** The user chose Sign in on an auth.required request. For oauth the gateway starts the flow and returns authorization_url to open in the system browser; for device_code it only acknowledges (the gateway is already polling). recorded is false for an unknown, finished or foreign request. */
   'auth.signin': { params: AuthSigninParams; result: AuthSigninResult }
+  /** The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored. */
+  'auth.submit_credential': { params: AuthSubmitCredentialParams; result: AuthSubmitCredentialResult }
   /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
   'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
   /** This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat. */
@@ -8201,7 +8215,7 @@ export interface CanonicalRpcMethods {
   'mcp.servers.update': { params: McpServersUpdateParams; result: McpServersUpdateResult }
   /** Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned. */
   'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
-  /** Validate and save a bot's Slack tokens, enable the adapter and reload it. */
+  /** Validate and save a bot's Slack tokens (either one alone replaces just that token), enable the adapter and reload it. */
   'messaging.slack.connect': { params: MessagingSlackConnectParams; result: MessagingSlackConnectResult }
   /** Remove a bot's Slack tokens and disable the adapter. */
   'messaging.slack.disconnect': { params: ProfileParams; result: MessagingSlackConnectResult }
@@ -8315,6 +8329,7 @@ export const CANONICAL_RPC_METHODS = [
   'auth.decline',
   'auth.revoke_self',
   'auth.signin',
+  'auth.submit_credential',
   'bot.thread.links',
   'bot.thread.list',
   'bot.thread.read',
@@ -8510,7 +8525,7 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
-  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key asks for the key for MCP server `server` (store it with mcp.servers.set_api_key, then call auth.signin); header and manual have no in-app sign-in. The payload never carries a token. */
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential. */
   'auth.required': AuthRequiredPayload
   /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. */
   'auth.resolved': AuthResolvedPayload
