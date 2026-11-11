@@ -1,3 +1,4 @@
+import HermesBotProfile
 import HermesConnect
 import HermesDesign
 import HermesProtocol
@@ -168,6 +169,36 @@ struct ConnectAppsSheet: View {
         ForEach(model.catalog.categories, id: \.self) { category in
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
             ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) }
+        }
+        capabilitiesSection
+    }
+
+    @ViewBuilder
+    private var capabilitiesSection: some View {
+        switch model.capabilitiesPhase {
+        case .hidden:
+            EmptyView()
+        case .loading:
+            ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
+            ProgressView().frame(maxWidth: .infinity).padding(.vertical, 12).accessibilityIdentifier("capabilitiesLoading")
+        case .failed:
+            ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
+            Text("Couldn't load capabilities")
+                .font(.system(size: ConnectRowMetrics.captionSize))
+                .foregroundStyle(Color(theme.palette.textSecondary))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
+                .padding(.vertical, 8)
+                .accessibilityIdentifier("capabilitiesError")
+        case .ready(let rows):
+            if !rows.isEmpty {
+                ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
+                VStack(spacing: 0) {
+                    ForEach(rows) { CapabilityListRow(row: $0) }
+                }
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier("capabilitiesList")
+            }
         }
     }
 
@@ -360,5 +391,63 @@ struct CredentialSheet: View {
             }
         )
         .presentationDetents([.medium])
+    }
+}
+
+private struct CapabilityListRow: View {
+    let row: CapabilityRow
+
+    @Environment(\.hermesTheme) private var theme
+
+    var body: some View {
+        HStack(alignment: .top, spacing: ConnectRowMetrics.tileToTextGap) {
+            Image(systemName: row.indicator.symbolName)
+                .font(.system(size: 20))
+                .foregroundStyle(indicatorColor)
+                .frame(width: ConnectRowMetrics.tileSize)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(row.label)
+                        .font(.system(size: ConnectRowMetrics.titleSize))
+                        .foregroundStyle(Color(theme.palette.textPrimary))
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(row.stateWord)
+                        .font(.system(size: ConnectRowMetrics.subtitleSize))
+                        .foregroundStyle(Color(theme.palette.textSecondary))
+                }
+                if let reason = row.reason {
+                    Text(reason)
+                        .font(.system(size: ConnectRowMetrics.subtitleSize))
+                        .foregroundStyle(Color(theme.palette.textSecondary))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let key = row.shownKeyName {
+                    Text(key)
+                        .font(.system(size: ConnectRowMetrics.subtitleSize, design: .monospaced))
+                        .foregroundStyle(Color(theme.palette.chipText))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color(theme.palette.chipFill), in: Capsule())
+                        .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
+        .padding(.vertical, ConnectRowMetrics.verticalPadding)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(row.accessibilitySummary))
+        .accessibilityHint(Text(row.terminalHint ?? ""))
+        .accessibilityIdentifier(row.accessibilityIdentifier)
+    }
+
+    private var indicatorColor: Color {
+        switch row.indicator {
+        case .on: Color(theme.palette.toggleOnTrack)
+        case .limited: Color(theme.palette.accentBlue)
+        case .off, .unavailable, .notYetAvailable: Color(theme.palette.textTertiary)
+        }
     }
 }

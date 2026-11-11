@@ -109,6 +109,19 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         XCTAssertFalse(deviceAction(app, "home").exists, "search narrows the rows")
     }
 
+    func test1bCapabilitiesListShowsEachCapabilityRow() throws {
+        let app = launchConnectApps()
+        let list = app.descendants(matching: .any)["capabilitiesList"]
+        for _ in 0..<12 where !list.exists { app.swipeUp() }
+        waitFor(list, timeout: 30, "capabilities list")
+        for id in ["web", "deep_search", "youtube", "maps", "browser"] {
+            let row = app.descendants(matching: .any)["capabilityRow-\(id)"]
+            for _ in 0..<4 where !row.exists { app.swipeUp() }
+            waitFor(row, timeout: 10, "capability row \(id)")
+        }
+        shot(app, "connect-apps-capabilities")
+    }
+
     func test2EnablingCalendarLetsTheBotReadTodaysEvents() async throws {
         let store = EKEventStore()
         let granted = try await store.requestFullAccessToEvents()

@@ -2,6 +2,7 @@ from gateway.session_legacy_bridge import Verb, bridged
 
 
 VERBS = {
+    'capabilities.status': Verb('session:read'),
     'messaging.slack.status': Verb('session:read'),
     'messaging.slack.manifest': Verb('session:read'),
     'messaging.slack.connect': Verb('session:control'),

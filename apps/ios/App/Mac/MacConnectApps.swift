@@ -1,4 +1,5 @@
 #if os(macOS)
+import HermesBotProfile
 import HermesConnect
 import HermesDesign
 import SwiftUI
@@ -243,6 +244,7 @@ struct MacConnectApps: View {
                     appGrid(Array(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)))
                 }
             }
+            capabilitiesSection
         case ConnectChip.iphone:
             section(title: String(localized: "This Mac"), identifier: "connectAppsSectionTitle", viewAll: nil) { deviceGrid }
         case let category:
@@ -338,6 +340,35 @@ struct MacConnectApps: View {
                 }
             }
             content()
+        }
+    }
+
+    @ViewBuilder
+    private var capabilitiesSection: some View {
+        switch model.capabilitiesPhase {
+        case .hidden:
+            EmptyView()
+        case .loading:
+            section(title: String(localized: "Capabilities"), identifier: "capabilitiesTitle", viewAll: nil) {
+                ProgressView().controlSize(.small).accessibilityIdentifier("capabilitiesLoading")
+            }
+        case .failed:
+            section(title: String(localized: "Capabilities"), identifier: "capabilitiesTitle", viewAll: nil) {
+                Text("Couldn't load capabilities")
+                    .font(.system(size: 11))
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .accessibilityIdentifier("capabilitiesError")
+            }
+        case .ready(let rows):
+            if !rows.isEmpty {
+                section(title: String(localized: "Capabilities"), identifier: "capabilitiesTitle", viewAll: nil) {
+                    LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
+                        ForEach(rows) { MacCapabilityRow(row: $0) }
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("capabilitiesList")
+                }
+            }
         }
     }
 
@@ -464,6 +495,60 @@ struct MacConnectApps: View {
         switch target {
         case .device: String(localized: "\(model.botName) won't be able to use it until you turn it back on.")
         case .app: String(localized: "\(model.botName) loses access to this app until you connect it again.")
+        }
+    }
+}
+
+private struct MacCapabilityRow: View {
+    let row: CapabilityRow
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: row.indicator.symbolName)
+                .font(.system(size: 16))
+                .foregroundStyle(indicatorColor)
+                .frame(width: 38)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    Text(row.label)
+                        .font(.system(size: 12))
+                        .foregroundStyle(PalTokens.textPrimary)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    Text(row.stateWord)
+                        .font(.system(size: 11))
+                        .foregroundStyle(PalTokens.textSecondary)
+                }
+                if let reason = row.reason {
+                    Text(reason)
+                        .font(.system(size: 11))
+                        .foregroundStyle(PalTokens.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let key = row.shownKeyName {
+                    Text(key)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(PalTokens.textSecondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(PalTokens.chipFill, in: Capsule())
+                        .padding(.top, 2)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text(row.accessibilitySummary))
+        .accessibilityHint(Text(row.terminalHint ?? ""))
+        .accessibilityIdentifier(row.accessibilityIdentifier)
+    }
+
+    private var indicatorColor: Color {
+        switch row.indicator {
+        case .on: PalTokens.toggleOn
+        case .limited: PalTokens.textPrimary
+        case .off, .unavailable, .notYetAvailable: PalTokens.textTertiary
         }
     }
 }

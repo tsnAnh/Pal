@@ -1,5 +1,6 @@
 import Foundation
 import HermesAuth
+import HermesBotProfile
 import HermesConnect
 import HermesDevice
 import HermesDiagnostics
@@ -87,7 +88,15 @@ final class ConnectAppsModel {
         case customConnector(CustomConnectorModel)
     }
 
+    enum CapabilitiesPhase: Equatable {
+        case hidden
+        case loading
+        case ready([CapabilityRow])
+        case failed
+    }
+
     private(set) var phase: Phase = .loading
+    private(set) var capabilitiesPhase: CapabilitiesPhase = .hidden
     private(set) var catalog = ConnectCatalog()
     private(set) var deviceRows: [DeviceRow] = []
     private(set) var busy: Set<String> = []
@@ -102,6 +111,7 @@ final class ConnectAppsModel {
     let botName: String
     private let profile: String?
     private let service: ConnectAppsService
+    private let capabilitiesService: CapabilitiesService
     private let bots: [CustomConnectorBot]
     private let currentBot: String?
     private let pool: DeviceHostPool
@@ -125,6 +135,7 @@ final class ConnectAppsModel {
             rpc: ConnectionRPC(model: connection), profile: profile, browser: browser,
             systemBrowser: SystemBrowserAuthorization(), diagnostics: .osLog()
         )
+        capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
         rebuildDeviceRows()
     }
 
@@ -156,6 +167,20 @@ final class ConnectAppsModel {
     func start() async {
         await attachDevices()
         await reload()
+        await loadCapabilities()
+    }
+
+    func loadCapabilities() async {
+        guard let profile else { return }
+        if case .ready = capabilitiesPhase {} else { capabilitiesPhase = .loading }
+        do {
+            capabilitiesPhase = .ready(try await capabilitiesService.status(profile: profile))
+        } catch is CancellationError {
+            return
+        } catch {
+            diagnostics.info("capabilities", "status failed: \(Diagnostics.describe(error))")
+            if case .ready = capabilitiesPhase {} else { capabilitiesPhase = .failed }
+        }
     }
 
     func stop() async {

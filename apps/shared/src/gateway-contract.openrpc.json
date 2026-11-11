@@ -493,6 +493,24 @@
       }
     },
     {
+      "name": "capabilities.status",
+      "summary": "Which of the five bot capabilities (web, deep search, YouTube, maps, own-machine browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CapabilitiesStatusResult"
+        }
+      }
+    },
+    {
       "name": "clarify.lock",
       "summary": "Lock one answer of a batch clarify request (editable until every question is locked).",
       "params": [
@@ -14417,6 +14435,28 @@
         "title": "CanonicalVoiceStopped",
         "type": "object"
       },
+      "CapabilitiesStatusResult": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/CapabilityRow"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile",
+          "capabilities"
+        ],
+        "title": "CapabilitiesStatusResult",
+        "type": "object"
+      },
       "CapabilityEntry": {
         "additionalProperties": false,
         "properties": {
@@ -14435,6 +14475,86 @@
         ],
         "title": "CapabilityEntry",
         "type": "object"
+      },
+      "CapabilityId": {
+        "enum": [
+          "web",
+          "deep_search",
+          "youtube",
+          "maps",
+          "browser"
+        ],
+        "title": "CapabilityId",
+        "type": "string"
+      },
+      "CapabilityRow": {
+        "additionalProperties": false,
+        "description": "``reason`` is one line and is set whenever the capability is not fully usable; an ``on`` row may carry\nit for a limit that still leaves it working (``OpenStreetMap only``). ``key_name`` is the name of the\nenvironment variable that would lift the limit, never its value. ``setting`` is the config.yaml path\nwhen a setting, not a key, is what is missing.",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/CapabilityId"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/CapabilityState"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "key_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key Name"
+          },
+          "setting": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Setting"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "state"
+        ],
+        "title": "CapabilityRow",
+        "type": "object"
+      },
+      "CapabilityState": {
+        "enum": [
+          "on",
+          "off",
+          "unavailable",
+          "not_yet_available"
+        ],
+        "title": "CapabilityState",
+        "type": "string"
       },
       "CatalogAppState": {
         "description": "The desktop app a catalog plugin drives, from its ``hermes_platform`` declaration.",
@@ -56231,6 +56351,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/CanonicalBotStopResult"
+        }
+      }
+    },
+    {
+      "name": "capabilities.status",
+      "summary": "Which of the five bot capabilities (web, deep search, YouTube, maps, own-machine browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CapabilitiesStatusResult"
         }
       }
     },

@@ -208,3 +208,45 @@ public struct SlackManifestWire: Codable, Sendable, Hashable {
         case createURL = "create_url"
     }
 }
+
+public struct CapabilityRowWire: Codable, Sendable, Hashable {
+    public var id: String
+    public var label: String?
+    public var state: String?
+    public var reason: String?
+    public var keyName: String?
+    public var setting: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, label, state, reason, setting
+        case keyName = "key_name"
+    }
+}
+
+public struct CapabilitiesStatusWire: Codable, Sendable, Hashable {
+    public var profile: String?
+    public var capabilities: [CapabilityRowWire]
+
+    enum CodingKeys: String, CodingKey {
+        case profile, capabilities
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        profile = try container.decodeIfPresent(String.self, forKey: .profile)
+        var rows = try container.nestedUnkeyedContainer(forKey: .capabilities)
+        var decoded: [CapabilityRowWire] = []
+        while !rows.isAtEnd {
+            if let row = try? rows.decode(CapabilityRowWire.self) {
+                decoded.append(row)
+            } else {
+                _ = try? rows.decode(DiscardedValue.self)
+            }
+        }
+        capabilities = decoded
+    }
+
+    private struct DiscardedValue: Decodable {
+        init(from decoder: any Decoder) throws {}
+    }
+}

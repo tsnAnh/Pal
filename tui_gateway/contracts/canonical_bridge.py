@@ -15,7 +15,7 @@ BRIDGED = (
     "library.list", "library.asset",
     "permissions.get", "permissions.set_auto_review", "permissions.rules.add", "permissions.rules.remove",
     "cron.manage",
-    "messaging.slack.status", "messaging.slack.manifest", "messaging.slack.connect", "messaging.slack.disconnect",
+    "capabilities.status", "messaging.slack.status", "messaging.slack.manifest", "messaging.slack.connect", "messaging.slack.disconnect",
     "bot_mode.about_you.get", "bot_mode.about_you.set", "memory.import",
     "profiles.get_asset", "profiles.template.export", "profiles.create", "profiles.configure",
     "profiles.set_asset", "profiles.rename", "profiles.delete",

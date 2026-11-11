@@ -664,6 +664,21 @@ export interface BotTeachDiscardResult {
   teach_id: string
   discarded: boolean
 }
+export interface CapabilitiesStatusResult {
+  profile: string
+  capabilities: CapabilityRow[]
+}
+/** ``reason`` is one line and is set whenever the capability is not fully usable; an ``on`` row may carry it for a limit that still leaves it working (``OpenStreetMap only``). ``key_name`` is the name of the environment variable that would lift the limit, never its value. ``setting`` is the config.yaml path when a setting, not a key, is what is missing. */
+export interface CapabilityRow {
+  id: CapabilityId
+  label: string
+  state: CapabilityState
+  reason?: string | null
+  key_name?: string | null
+  setting?: string | null
+}
+export type CapabilityId = 'web' | 'deep_search' | 'youtube' | 'maps' | 'browser'
+export type CapabilityState = 'on' | 'off' | 'unavailable' | 'not_yet_available'
 /** ``key`` selects one getter from ``_CONFIG_GETTERS``; ``cwd`` feeds the ``project`` getter, ``session_id`` lets ``reasoning`` / ``fast`` answer with the session's live pin. */
 export interface ConfigGetParams {
   profile?: string | null
@@ -7175,6 +7190,8 @@ export interface RpcMethods {
   'bot_relay.roster.sync': { params: BotRelayRosterSyncParams; result: BotRelayRosterSyncResult }
   /** Inspect, attach to, or drop the CDP browser the tools use; ``messages`` narrate a connect. */
   'browser.manage': { params: BrowserManageParams; result: BrowserManageResult }
+  /** Which of the five bot capabilities (web, deep search, YouTube, maps, own-machine browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
+  'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
   /** Lock one answer of a batch clarify request (editable until every question is locked). */
   'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }
   /** Run ``hermes <argv>`` non-interactively and capture its output; ``blocked`` explains a refusal. */
@@ -7739,6 +7756,7 @@ export const RPC_METHODS = [
   'bot_relay.reply',
   'bot_relay.roster.sync',
   'browser.manage',
+  'capabilities.status',
   'clarify.lock',
   'cli.exec',
   'client.capabilities',
@@ -8035,6 +8053,8 @@ export interface CanonicalRpcMethods {
   'bot_relay.deliver': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
   'bot_relay.settle': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
   'bot_relay.stop': { params: CanonicalBotStopParams; result: CanonicalBotStopResult }
+  /** Which of the five bot capabilities (web, deep search, YouTube, maps, own-machine browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
+  'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
   /** Lock one answer of the owner's batch clarify request (editable until every question is locked); only a viewer attached to that session with session:respond may lock. */
   'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }
   /** Generation-fenced answer to a pending clarify prompt (empty answer = skipped). */
@@ -8264,6 +8284,7 @@ export const CANONICAL_RPC_METHODS = [
   'bot_relay.deliver',
   'bot_relay.settle',
   'bot_relay.stop',
+  'capabilities.status',
   'clarify.lock',
   'clarify.respond',
   'client.attention',
