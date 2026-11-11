@@ -54,7 +54,7 @@ public struct SpeechChunker: Sendable {
         MarkdownDocument(parsing: markdown).blocks
             .compactMap { block -> String? in
                 switch block.kind {
-                case .code, .thematicBreak: nil
+                case .code, .math, .thematicBreak: nil
                 case .paragraph, .heading: String(block.text.characters)
                 }
             }

@@ -94,13 +94,14 @@ struct AssistantBubble: View {
     var images: [ImageReference] = []
     let highlight: String
     let isCurrentMatch: Bool
+    var isStreaming: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if !images.isEmpty { ChatImageGrid(images: images) }
             if !text.isEmpty {
                 ChatBubble(style: BubblePalette.agentBubble) {
-                    MarkdownView(document: MarkdownDocument(parsing: text), highlight: highlight, isCurrentMatch: isCurrentMatch)
+                    MarkdownView(document: MarkdownDocument(parsing: text, isStreaming: isStreaming), highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
                         .bubbleTextSelection()
                 }
                 .bubbleAccessibility(text: text, identifier: "assistantBubble")
