@@ -2,7 +2,6 @@
   "backend": "claude",
   "max_in_flight": 1,
   "forbidden_paths": [
-    ".github/workflows/",
     "infra/",
     "*.lock",
     "package-lock.json",
