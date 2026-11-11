@@ -410,12 +410,14 @@ private struct AttachmentTray: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("attachmentChip")
+        .help(attachment.failureReason ?? attachment.name)
     }
 
     @ViewBuilder
     private func content(_ attachment: PendingAttachment) -> some View {
         if let data = attachment.thumbnail, let image = PlatformImage(data: data) {
             Image(platformImage: image).resizable().scaledToFill()
+                .accessibilityIdentifier("attachmentThumbnail")
         } else {
             VStack(spacing: 4) {
                 Image(systemName: "doc").font(.system(size: 20))
@@ -434,11 +436,13 @@ private struct AttachmentTray: View {
                 ProgressView().controlSize(.small)
             }
             .accessibilityIdentifier("attachmentUploading")
-        case .failed:
+        case .failed(let reason):
             ZStack {
                 Color.black.opacity(0.5)
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color(theme.palette.destructive))
             }
+            .accessibilityLabel(Text(reason))
+            .accessibilityIdentifier("attachmentFailed")
         case .ready:
             EmptyView()
         }

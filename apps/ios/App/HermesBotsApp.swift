@@ -42,7 +42,7 @@ struct HermesBotsApp: App {
         _hostPool = State(initialValue: DeviceHostPool(connection: model, consent: consent))
         let signIn = ServiceSignInCenter(
             call: { method, params in try await model.rpc(method, params) },
-            openBrowser: { SystemSettings.open($0) }
+            openBrowser: { _ = ExternalLink.open($0) }
         )
         _signIn = State(initialValue: signIn)
         roster.gatewayEventSink = { event in
@@ -62,6 +62,7 @@ struct HermesBotsApp: App {
         WindowGroup {
             RootView(model: model, roster: roster, router: router, hostPool: hostPool, links: links)
                 .overlay { ReachOfferOverlay(model: offers) }
+                .overlay(alignment: .topLeading) { ExternalLinkProbe() }
                 .deviceConsentAlert(consent)
                 .serviceSignInDialog(signIn) { roster.displayName(forProfile: $0) }
                 .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
@@ -161,6 +162,7 @@ struct RootView: View {
         case .botProfile(let name):
             BotProfileView(
                 model: BotProfileModel(botName: name, services: bots.services, roster: roster, sharer: bots.sharer),
+                suggestions: ConnectedServicesModel(botName: name, services: bots.services),
                 router: router
             )
         case .botThread(let thread):

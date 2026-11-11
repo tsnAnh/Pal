@@ -6,8 +6,9 @@ class BotProfileTestCase: E2ETestCase {
     static let primarySlug = "default"
     static let otherSlug = "cho-ua"
 
-    func signedInApp() -> XCUIApplication {
-        let app = launch(extraArguments: ["-\(AppearanceStore.defaultsKey)", AppearanceMode.dark.rawValue])
+    func signedInApp(connectedServices: [String] = []) -> XCUIApplication {
+        let services = connectedServices.isEmpty ? [] : ["-hermes-test-connected-services", connectedServices.joined(separator: ",")]
+        let app = launch(extraArguments: ["-\(AppearanceStore.defaultsKey)", AppearanceMode.dark.rawValue, "-hermes-record-external-links"] + services)
         signInIfNeeded(app)
         let anyBotRow = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "botRow-")).firstMatch
         waitFor(anyBotRow, timeout: 30, "roster rows")

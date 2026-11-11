@@ -186,6 +186,11 @@ public actor ChatSession: OutboxSubmitter {
         return try await api.attachImage(sessionID: sessionID, data: data, filename: filename)
     }
 
+    public func imageAsset(ref: String, thumbnail: Bool) async throws -> Data {
+        guard let api else { throw ChatError.notConnected }
+        return try await api.libraryAsset(ref: ref, thumbnail: thumbnail)
+    }
+
     public func attachFile(_ data: Data, name: String, mime: String) async throws -> StagedFile {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         return try await api.attachFile(sessionID: sessionID, data: data, name: name, mime: mime)
