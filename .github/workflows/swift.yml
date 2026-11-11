@@ -21,7 +21,7 @@ concurrency:
 jobs:
   swift:
     name: swift
-    runs-on: macos-15
+    runs-on: xcode-27
     timeout-minutes: 60
     defaults:
       run:
@@ -29,13 +29,13 @@ jobs:
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
 
-      # project.yml and both Package.swift files need the iOS/macOS 26 SDK and swift-tools 6.2,
-      # so Xcode 26.x; the newest one the image carries.
-      - name: Select Xcode 26
+      # App/Intents uses the iOS/macOS 27 SDK (LongRunningIntent, the messages app schemas),
+      # which only the xcode-27 image carries; macos-15 and macos-26 stop at Xcode 26.x.
+      - name: Select Xcode 27
         working-directory: .
         run: |
-          xcode="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
-          test -n "$xcode" || { echo "no Xcode 26 on this image"; ls -d /Applications/Xcode*; exit 1; }
+          xcode="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)"
+          test -n "$xcode" || { echo "no Xcode 27 on this image"; ls -d /Applications/Xcode*; exit 1; }
           sudo xcode-select -s "$xcode"
           xcodebuild -version
 
