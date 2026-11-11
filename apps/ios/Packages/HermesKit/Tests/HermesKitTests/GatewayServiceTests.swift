@@ -54,7 +54,7 @@ struct GatewayServiceTests {
         bots.script("gateway.service.status") { _ in throw GatewayTransportError.closed(.normal) }
         bots.script("gateway.service.status", status(instance: "gen-2", startedAt: 2_000))
         let outcome = await client(bots).restart()
-        guard case .done(let info) = outcome else { return Issue.record("expected done, got \(outcome)") }
+        guard case .done(let info) = outcome else { Issue.record("expected done, got \(outcome)"); return }
         #expect(info.instance == "gen-2")
         #expect(info.startedAt == Date(timeIntervalSince1970: 2_000))
         #expect(bots.calls(to: "gateway.service.restart").first?.params == [:])
@@ -66,7 +66,7 @@ struct GatewayServiceTests {
         bots.script("gateway.service.status", status(instance: "gen-1"))
         bots.script("gateway.service.restart", action("started", status: status(instance: "gen-1")))
         let outcome = await client(bots).restart()
-        guard case .pending = outcome else { return Issue.record("expected pending, got \(outcome)") }
+        guard case .pending = outcome else { Issue.record("expected pending, got \(outcome)"); return }
     }
 
     @Test("a connection that drops during the restart request keeps waiting for the new instance")
@@ -76,7 +76,7 @@ struct GatewayServiceTests {
         bots.script("gateway.service.restart") { _ in throw GatewayTransportError.closed(.normal) }
         bots.script("gateway.service.status", status(instance: "gen-2"))
         let outcome = await client(bots).restart()
-        guard case .done(let info) = outcome else { return Issue.record("expected done, got \(outcome)") }
+        guard case .done(let info) = outcome else { Issue.record("expected done, got \(outcome)"); return }
         #expect(info.instance == "gen-2")
     }
 
@@ -119,7 +119,7 @@ struct GatewayServiceTests {
     func install() async {
         let installed = ScriptedBots()
         installed.script("gateway.service.install", action("installed", status: status("stopped")))
-        guard case .done(let info) = await client(installed).install() else { return Issue.record("expected done") }
+        guard case .done(let info) = await client(installed).install() else { Issue.record("expected done"); return }
         #expect(info.state == .stopped)
 
         let unsupported = ScriptedBots()
