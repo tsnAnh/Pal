@@ -1393,8 +1393,9 @@ def _skills_op(name: str):
     """``skills.manage`` action whose body lives in ``tui_gateway.skills_hub_ops`` (failures carry code + CLI tail)."""
     def handler(rid, params, query):
         ops = _tools_mod("tui_gateway.skills_hub_ops")
+        args = (query, str(params.get("key_name") or ""), str(params.get("value") or "")) if name == "set_key" else (query,)
         try:
-            return _ok(rid, getattr(ops, name)(query))
+            return _ok(rid, getattr(ops, name)(*args))
         except ops.SkillsOpError as exc:
             return _err(rid, exc.code, exc.message, data=exc.data)
     return handler
@@ -1409,7 +1410,7 @@ def _skills_browse(rid, params, query):
 _SKILLS_ACTIONS = {
     "list": lambda rid, params, query: _ok(rid, {"skills": _tools_mod("hermes_cli.banner").get_available_skills()}),
     "search": _skills_search, "browse": _skills_browse,
-    **{name: _skills_op(name) for name in ("install", "installed", "check", "update", "uninstall")},
+    **{name: _skills_op(name) for name in ("install", "installed", "check", "update", "uninstall", "set_key")},
     "inspect": lambda rid, params, query: _ok(
         rid, {"info": _tools_mod("hermes_cli.skills_hub").inspect_skill(query) or {}})}
 

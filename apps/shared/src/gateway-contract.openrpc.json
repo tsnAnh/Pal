@@ -50557,7 +50557,8 @@
           "installed",
           "check",
           "update",
-          "uninstall"
+          "uninstall",
+          "set_key"
         ],
         "title": "SkillsAction",
         "type": "string"
@@ -50617,6 +50618,30 @@
             ],
             "default": null,
             "title": "Page Size"
+          },
+          "key_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key Name"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
           }
         },
         "title": "SkillsManageParams",
@@ -50624,7 +50649,7 @@
       },
       "SkillsManageResult": {
         "additionalProperties": false,
-        "description": "Shape follows the action: ``list`` \u2192 ``skills`` (category \u2192 names); ``search`` \u2192 ``results``;\n``install`` \u2192 ``installed`` + ``name``; ``browse`` \u2192 ``items`` + paging; ``inspect`` \u2192 ``info``;\n``installed`` \u2192 ``installed_skills``; ``check`` \u2192 ``updates``; ``update`` \u2192 ``updated``;\n``uninstall`` \u2192 ``removed``. ``update`` with no ``query`` updates every skill with an update;\na failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail.",
+        "description": "Shape follows the action: ``list`` \u2192 ``skills`` (category \u2192 names); ``search`` \u2192 ``results``;\n``install`` \u2192 ``installed`` + ``name``; ``browse`` \u2192 ``items`` + paging; ``inspect`` \u2192 ``info``;\n``installed`` \u2192 ``installed_skills``; ``check`` \u2192 ``updates``; ``update`` \u2192 ``updated``;\n``uninstall`` \u2192 ``removed``; ``set_key`` (``query`` = skill name, ``key_name``, ``value``) \u2192 ``saved``, refused with 4101 unless the skill declares ``key_name`` as a required environment variable (the value is never echoed or logged). ``update`` with no ``query`` updates every skill with an update;\na failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail.",
         "properties": {
           "skills": {
             "anyOf": [
@@ -50798,6 +50823,18 @@
             ],
             "default": null,
             "title": "Removed"
+          },
+          "saved": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Saved"
           }
         },
         "title": "SkillsManageResult",

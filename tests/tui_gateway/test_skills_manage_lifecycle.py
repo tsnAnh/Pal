@@ -81,3 +81,28 @@ def test_uninstall_success(monkeypatch):
     monkeypatch.setattr(cli_hub, "do_uninstall", lambda name, console=None, skip_confirm=False, invalidate_cache=True: True)
 
     assert _call({"action": "uninstall", "query": "x"})["result"] == {"removed": True, "name": "x"}
+
+
+def _skill_with_key(tmp_path, monkeypatch, saved):
+    import hermes_cli.config as cfg
+    import tools.skills_tool as st
+
+    md = tmp_path / "SKILL.md"
+    md.write_text("---\nname: x\nrequired_environment_variables:\n  - name: X_API_KEY\n---\nbody\n")
+    monkeypatch.setattr(st, "_scanned_skill_catalog", lambda **kw: [{"name": "x", "path": md}])
+    monkeypatch.setattr(cfg, "save_env_value_secure", lambda k, v: saved.append((k, v)))
+
+
+def test_set_key_saves_only_a_name_the_skill_declares(monkeypatch, tmp_path):
+    saved = []
+    _skill_with_key(tmp_path, monkeypatch, saved)
+
+    ok = _call({"action": "set_key", "query": "x", "key_name": "X_API_KEY", "value": "abc123"})
+    other = _call({"action": "set_key", "query": "x", "key_name": "OPENAI_API_KEY", "value": "abc123"})
+    unknown = _call({"action": "set_key", "query": "nope", "key_name": "X_API_KEY", "value": "abc123"})
+
+    assert ok["result"] == {"saved": True, "name": "x"}
+    assert saved == [("X_API_KEY", "abc123")]
+    assert other["error"]["code"] == 4101
+    assert unknown["error"]["code"] == 4004
+    assert "abc123" not in str(ok) + str(other) + str(unknown)

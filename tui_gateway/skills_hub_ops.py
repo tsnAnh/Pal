@@ -70,3 +70,25 @@ def uninstall(query: str) -> dict:
     if _mod("hermes_cli.skills_hub").do_uninstall(query, console=captured, skip_confirm=True) is not True:
         raise _failure(5033, "skill uninstall failed", captured, {"removed": False, "name": query})
     return {"removed": True, "name": query}
+
+
+def set_key(query: str, key_name: str, value: str) -> dict:
+    """Save ``value`` as ``key_name`` in the scoped profile's secret store, only when the skill ``query``
+    declares ``key_name`` as a required environment variable. The value is never echoed or logged."""
+    from gateway.auth_flows import credential_text
+
+    skills = _mod("tools.skills_tool")
+    match = next((s for s in skills._scanned_skill_catalog(skip_disabled=True, include_hidden=True)
+                  if s["name"] == query), None)
+    if match is None:
+        raise SkillsOpError(4004, "skill not found", {"saved": False, "name": query})
+    frontmatter, _ = _mod("agent.skill_utils").parse_frontmatter(match["path"].read_text(encoding="utf-8"))
+    declared = {e["name"] for e in _mod("tools.skills_tool_setup")._get_required_environment_variables(frontmatter)}
+    text = credential_text(value) if value else None
+    if key_name not in declared or text is None:
+        raise SkillsOpError(4101, "That key cannot be set here", {"saved": False, "name": query})
+    try:
+        _mod("hermes_cli.config").save_env_value_secure(key_name, text)
+    except (OSError, ValueError, RuntimeError, KeyError) as exc:
+        raise SkillsOpError(5034, "Could not save the key", {"saved": False, "name": query}) from exc
+    return {"saved": True, "name": query}

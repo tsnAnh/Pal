@@ -167,6 +167,7 @@ class SkillsAction(WireEnum):
     check = "check"
     update = "update"
     uninstall = "uninstall"
+    set_key = "set_key"
 
 
 class SkillsManageParams(ProfileParams):
@@ -177,6 +178,8 @@ class SkillsManageParams(ProfileParams):
     query: str | None = None
     page: int | None = None
     page_size: int | None = None
+    key_name: str | None = None
+    value: str | None = None
 
 
 class SkillHubHit(Result):
@@ -228,7 +231,7 @@ class SkillsManageResult(Result):
     """Shape follows the action: ``list`` → ``skills`` (category → names); ``search`` → ``results``;
     ``install`` → ``installed`` + ``name``; ``browse`` → ``items`` + paging; ``inspect`` → ``info``;
     ``installed`` → ``installed_skills``; ``check`` → ``updates``; ``update`` → ``updated``;
-    ``uninstall`` → ``removed``. ``update`` with no ``query`` updates every skill with an update;
+    ``uninstall`` → ``removed``; ``set_key`` (``query`` = skill name, ``key_name``, ``value``) → ``saved``, refused with 4101 unless the skill declares ``key_name`` as a required environment variable (the value is never echoed or logged). ``update`` with no ``query`` updates every skill with an update;
     a failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail."""
 
     skills: dict[str, list[str]] | None = None
@@ -244,6 +247,7 @@ class SkillsManageResult(Result):
     updates: list[SkillUpdateStatus] | None = None
     updated: bool | None = None
     removed: bool | None = None
+    saved: bool | None = None
 
 
 method("skills.manage", params=SkillsManageParams, result=SkillsManageResult,
