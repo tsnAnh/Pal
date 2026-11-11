@@ -226,6 +226,16 @@ struct MacInspector: View {
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
                 }
             }
+            InspectorSection(title: String(localized: "Model"), identifier: "inspectorModel") {
+                EmptyView()
+            } content: {
+                InspectorRow(identifier: "profileModelRow", action: { router.push(.botModel(botName: botName)) }) {
+                    Image(systemName: "cpu").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    Text("Model and backups").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                }
+            }
             InspectorSection(title: String(localized: "Messaging"), identifier: "inspectorMessaging") {
                 EmptyView()
             } content: {

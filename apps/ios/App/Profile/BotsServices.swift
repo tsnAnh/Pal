@@ -14,6 +14,7 @@ struct BotsServices: Sendable {
     let connectCatalog: @Sendable (String) async throws -> ConnectCatalog
     let computer: ComputerService
     let openDisplayStream: @Sendable (ComputerObservation) async throws -> any RFBTransport
+    let models: @Sendable (String) -> BotModelClient
 
     @MainActor
     init(connection: ConnectionModel) {
@@ -29,6 +30,7 @@ struct BotsServices: Sendable {
             try await ConnectAppsService(rpc: ConnectionRPC(model: connection), profile: profile).load()
         }
         computer = ComputerService(gateway: gateway)
+        models = { profile in BotModelClient(gateway: gateway, profile: profile) }
         openDisplayStream = { observation in
             try await connection.displayTransport(path: observation.path, ticket: observation.ticket)
         }
