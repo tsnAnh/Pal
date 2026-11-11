@@ -5,12 +5,14 @@ public struct ToolStart: Codable, Sendable, Hashable {
     public var name: String
     public var context: String?
     public var preview: String?
+    public var args: JSONValue?
 
     enum CodingKeys: String, CodingKey {
         case toolID = "tool_id"
         case name
         case context
         case preview
+        case args
     }
 }
 
@@ -20,6 +22,8 @@ public struct ToolComplete: Codable, Sendable, Hashable {
     public var summary: String?
     public var result: String?
     public var resultText: String?
+    public var resultValue: JSONValue?
+    public var args: JSONValue?
     public var durationSeconds: Double?
 
     enum CodingKeys: String, CodingKey {
@@ -27,6 +31,7 @@ public struct ToolComplete: Codable, Sendable, Hashable {
         case name
         case summary
         case result
+        case args
         case resultText = "result_text"
         case durationSeconds = "duration_s"
     }
@@ -37,6 +42,8 @@ public struct ToolComplete: Codable, Sendable, Hashable {
         name = try container.decode(String.self, forKey: .name)
         summary = try? container.decodeIfPresent(String.self, forKey: .summary)
         result = try? container.decodeIfPresent(String.self, forKey: .result)
+        resultValue = try? container.decodeIfPresent(JSONValue.self, forKey: .result)
+        args = try? container.decodeIfPresent(JSONValue.self, forKey: .args)
         resultText = try? container.decodeIfPresent(String.self, forKey: .resultText)
         durationSeconds = try? container.decodeIfPresent(Double.self, forKey: .durationSeconds)
     }

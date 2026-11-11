@@ -116,6 +116,7 @@ final class ConnectAppsModel {
     private(set) var keyState: SecretEntryState = .idle
     var disconnectTarget: ConnectDisconnectTarget?
     var showsSkills = false
+    var accountsModel: ConnectorAccountsModel?
     private(set) var mode: Mode = .list
 
     let botName: String
@@ -335,6 +336,14 @@ final class ConnectAppsModel {
             report("Couldn't connect \(app.name). Try again.")
         }
         await reload()
+    }
+
+    func manageAccounts(_ app: ConnectApp) {
+        guard case .hosted(let slug) = app.source else { return }
+        accountsModel = ConnectorAccountsModel(
+            app: app, slug: slug, botName: botName, service: service,
+            changed: { [weak self] in await self?.reload() }
+        )
     }
 
     func addCustomConnector() {

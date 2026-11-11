@@ -100,10 +100,16 @@ final class BotProfileModel {
         await sharer.share(botName: botName)
     }
 
-    func saved(look spec: BotAvatarSpec?) async {
+    func saved(look spec: BotAvatarSpec?, photo: Data?, photoChanged: Bool) async {
         if let spec { lookOverride = spec }
+        if photoChanged { roster.avatarChanged(botName, photo: photo) }
         await reloadProfile()
         roster.nudge()
+    }
+
+    private var currentPhoto: Data? {
+        guard case .photo(let avatar)? = spec else { return nil }
+        return avatar.data
     }
 
     func beginEditing() {
@@ -111,10 +117,11 @@ final class BotProfileModel {
         let meta = profile.meta
         let seed = BotProfileEditSeed(
             name: displayName,
-            look: BotLook(name: botName, shape: meta.shape, color: meta.color)
+            look: BotLook(name: botName, shape: meta.shape, color: meta.color),
+            photo: currentPhoto
         )
-        editing = EditBotModel(profile: profile, seed: seed, services: services) { [weak self] spec in
-            await self?.saved(look: spec)
+        editing = EditBotModel(profile: profile, seed: seed, services: services) { [weak self] spec, photo, photoChanged in
+            await self?.saved(look: spec, photo: photo, photoChanged: photoChanged)
         }
     }
 
@@ -126,4 +133,5 @@ final class BotProfileModel {
 struct BotProfileEditSeed: Equatable {
     var name: String
     var look: BotLook
+    var photo: Data?
 }

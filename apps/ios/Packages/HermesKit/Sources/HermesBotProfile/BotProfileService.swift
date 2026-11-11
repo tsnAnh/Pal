@@ -76,17 +76,44 @@ public struct BotProfileService: Sendable {
         }
     }
 
-    public func updateLook(_ name: String, shape: String, colorHex: String) async throws {
+    public func updateLook(_ name: String, shape: String, colorHex: String, photo: Bool? = nil) async throws {
         do {
             try await writer.update(name) { fields in
                 var next = fields
                 next["shape"] = .string(shape)
                 next["color"] = .string(colorHex)
                 next["custom"] = .bool(true)
+                if let photo {
+                    next["imageKind"] = .string(photo ? "photo" : "shape")
+                    next.removeValue(forKey: "image")
+                }
                 return next
             }
         } catch {
             diagnostics.warning("bots", "look change failed: \(Diagnostics.describe(error))")
+            throw BotsError.surface(error)
+        }
+    }
+
+    public func setAvatarPhoto(_ name: String, png: Data) async throws {
+        guard !png.isEmpty, png.count <= AvatarPhoto.maximumUploadBytes else { throw BotsError.rejected(reason: "asset_too_large") }
+        do {
+            _ = try await gateway.call("profiles.set_asset", [
+                "name": .string(name),
+                "asset": "avatar",
+                "data": .string("data:image/png;base64," + png.base64EncodedString()),
+            ])
+        } catch {
+            diagnostics.warning("bots", "avatar upload failed: \(Diagnostics.describe(error))")
+            throw BotsError.surface(error)
+        }
+    }
+
+    public func clearAvatarPhoto(_ name: String) async throws {
+        do {
+            _ = try await gateway.call("profiles.set_asset", ["name": .string(name), "asset": "avatar", "clear": true])
+        } catch {
+            diagnostics.warning("bots", "avatar removal failed: \(Diagnostics.describe(error))")
             throw BotsError.surface(error)
         }
     }
