@@ -18,21 +18,12 @@ struct MacConnectApps: View {
     private var onCatalog: Bool { model.page == .catalog }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            if onCatalog {
-                searchField.padding(.horizontal, 29).padding(.top, 17)
-                chips.padding(.top, 11.5)
+        Group {
+            if let connector = model.customConnector {
+                customConnectorPanel(connector)
+            } else {
+                listPanel
             }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 30) {
-                    if onCatalog { catalogContent } else { yourPluginsContent }
-                }
-                .padding(.horizontal, 29)
-                .padding(.top, onCatalog ? 25.5 : 20)
-                .padding(.bottom, 28)
-            }
-            .scrollIndicators(.never)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectApps")
@@ -59,6 +50,55 @@ struct MacConnectApps: View {
                 Task { await model.connect(prompt.app, credentials: values) }
             }
             .macSheetFrame()
+        }
+    }
+
+    private func customConnectorPanel(_ connector: CustomConnectorModel) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button { Task { await model.leaveCustomConnector() } } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(PalTokens.textPrimary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "Back"))
+                .accessibilityLabel(Text("Back"))
+                .accessibilityIdentifier("customConnectorBackButton")
+                Spacer()
+            }
+            .padding(.leading, 29)
+            .padding(.trailing, 38)
+            .padding(.top, 47)
+            .frame(height: 71, alignment: .top)
+            CustomConnectorForm(model: connector, style: .mac) { Task { await model.leaveCustomConnector() } }
+        }
+        .preference(key: MacPanelCloseIdentifierKey.self, value: "customConnectorCloseButton")
+    }
+
+    private var listPanel: some View {
+        VStack(spacing: 0) {
+            header
+            if onCatalog {
+                searchField.padding(.horizontal, 29).padding(.top, 17)
+                chips.padding(.top, 11.5)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 30) {
+                    if onCatalog { catalogContent } else { yourPluginsContent }
+                }
+                .padding(.horizontal, 29)
+                .padding(.top, onCatalog ? 25.5 : 20)
+                .padding(.bottom, 28)
+            }
+            .scrollIndicators(.never)
+            Button("Add a custom connector") { model.addCustomConnector() }
+                .buttonStyle(.palPill)
+                .padding(.horizontal, 29)
+                .padding(.vertical, 14)
+                .accessibilityIdentifier("addCustomConnectorButton")
         }
     }
 
@@ -314,10 +354,14 @@ struct MacConnectApps: View {
     }
 
     private func appRow(_ app: ConnectApp) -> some View {
-        let action: MacRowAction = switch app.state {
+        let action: MacRowAction = if case .custom = app.source {
+            MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
+        } else {
+            switch app.state {
         case .disconnected: MacRowAction(title: String(localized: "Connect"), prominent: false) { Task { await model.connect(app) } }
         case .needsAuthorization: MacRowAction(title: String(localized: "Authorize"), prominent: true) { Task { await model.connect(app) } }
         case .connected: MacRowAction(title: String(localized: "Connected"), checked: true) { model.disconnectTarget = .app(app) }
+            }
         }
         return tileRow(
             title: app.name, summary: app.summary, identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id)
@@ -385,7 +429,7 @@ struct MacConnectApps: View {
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
         case .hosted: MacAppTile(url: app.iconURL)
-        case .mcp: MacAppTile(url: nil)
+        case .mcp, .custom: MacAppTile(url: nil)
         }
     }
 

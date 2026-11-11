@@ -14,6 +14,14 @@ struct MacModalScrim: View {
     }
 }
 
+struct MacPanelCloseIdentifierKey: PreferenceKey {
+    static let defaultValue: String? = nil
+
+    static func reduce(value: inout String?, nextValue: () -> String?) {
+        value = nextValue() ?? value
+    }
+}
+
 struct MacModalPanel<Content: View>: View {
     let width: CGFloat
     var height: CGFloat?
@@ -30,8 +38,8 @@ struct MacModalPanel<Content: View>: View {
             .frame(width: width, height: height)
             .background(background, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
-            .overlay(alignment: .topTrailing) {
-                MacPlainCloseButton(identifier: closeIdentifier, action: close)
+            .overlayPreferenceValue(MacPanelCloseIdentifierKey.self, alignment: .topTrailing) { override in
+                MacPlainCloseButton(identifier: override ?? closeIdentifier, action: close)
                     .padding(.top, 12)
                     .padding(.trailing, 13)
             }

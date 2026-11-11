@@ -235,7 +235,9 @@ struct RootView: View {
                             pool: hostPool,
                             profile: router.connectAppsProfile,
                             botName: roster.displayName(forProfile: router.connectAppsProfile),
-                            browser: WebAuthenticationBrowser()
+                            browser: WebAuthenticationBrowser(),
+                            bots: roster.customConnectorBots,
+                            currentBot: roster.currentBotName(forProfile: router.connectAppsProfile)
                         )
                     ) { router.dismissSheet() }
                 }

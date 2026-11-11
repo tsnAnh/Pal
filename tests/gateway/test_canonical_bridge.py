@@ -1,3 +1,5 @@
+import secrets
+
 import pytest
 import pytest_asyncio
 
@@ -114,14 +116,48 @@ async def test_a_control_grant_adds_and_removes_a_catalog_mcp_server_in_its_own_
 @pytest.mark.parametrize('params', [
     {'name': 'evil', 'config': {'command': 'sh', 'args': ['-c', 'touch /tmp/owned']}},
     {'name': 'evil', 'preset': 'airtable', 'config': {'command': 'sh'}},
-    {'name': 'evil', 'config': {'url': 'https://example.invalid/mcp'}},
+    {'name': 'evil', 'config': {'url': 'https://example.invalid/mcp', 'command': 'sh'}},
+    {'name': 'evil', 'config': {'url': 'https://example.invalid/mcp', 'args': ['-c', 'id']}},
+    {'name': 'evil', 'config': {'url': 'https://example.invalid/mcp', 'env': {'A': 'b'}}},
+    {'name': 'evil', 'config': {'url': 'https://example.invalid/mcp', 'headers': {'X-Key': 'literal'}}},
+    {'name': 'evil', 'config': {'transport': 'http'}},
     {'name': 'evil', 'preset': '  '},
 ])
-async def test_the_socket_adds_catalog_presets_only_never_a_command_or_custom_server(bots, params):
+async def test_the_socket_never_adds_a_command_or_an_unvetted_custom_config(bots, params):
     before = config_of(get_profile_dir('alpha'))
     refused = failure(await call(bots.connect('alpha'), 'mcp.servers.add', params))
     assert refused['data']['reason'] == 'invalid_params' and refused['data']['field'] == 'config', refused
     assert config_of(get_profile_dir('alpha')) == before
+
+
+@pytest.mark.asyncio
+async def test_the_socket_adds_updates_and_removes_a_url_server_with_secret_headers_kept_out_of_config(bots):
+    connection, home = bots.connect('alpha'), get_profile_dir('alpha')
+    key = secrets.token_urlsafe(18)
+    added = await call(connection, 'mcp.servers.add', {
+        'name': 'notes', 'config': {'url': 'https://example.invalid/mcp', 'transport': 'http'},
+        'headers': {'X-Api-Key': key}, 'client_id': 'pal-client'})
+    assert 'error' not in added, added
+    CANONICAL_METHODS['mcp.servers.add'].result.model_validate(added['result'])
+    saved = (config_of(home).get('mcp_servers') or {})['notes']
+    assert saved['url'] == 'https://example.invalid/mcp' and saved['oauth'] == {'client_id': 'pal-client'}
+    assert saved['headers'] == {'X-Api-Key': '${MCP_NOTES_HDR_X_API_KEY}'}
+    assert key not in (home / 'config.yaml').read_text() and key not in str(added)
+    assert 'notes' not in (config_of(bots.root).get('mcp_servers') or {})
+
+    updated = await call(connection, 'mcp.servers.update', {
+        'name': 'notes', 'config': {'url': 'https://example.invalid/v2'}, 'headers': {'X-Api-Key': None}})
+    assert 'error' not in updated, updated
+    assert (config_of(home)['mcp_servers']['notes'])['url'] == 'https://example.invalid/v2'
+    moved = failure(await call(connection, 'mcp.servers.update', {
+        'name': 'notes', 'config': {'url': 'https://elsewhere.invalid/mcp'}, 'headers': {'X-Api-Key': None}}), 4063)
+    assert moved['message'] == 're-enter headers for the new address'
+    smuggled = failure(await call(connection, 'mcp.servers.update', {
+        'name': 'notes', 'config': {'url': 'https://example.invalid/v2', 'command': 'sh'}}))
+    assert smuggled['data']['reason'] == 'invalid_params'
+    removed = await call(connection, 'mcp.servers.remove', {'name': 'notes'})
+    assert removed['result']['removed'] is True, removed
+    assert 'MCP_NOTES_HDR_X_API_KEY' not in ((home / '.env').read_text() if (home / '.env').exists() else '')
 
 
 @pytest.mark.asyncio

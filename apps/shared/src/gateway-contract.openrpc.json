@@ -2293,6 +2293,24 @@
       }
     },
     {
+      "name": "mcp.servers.update",
+      "summary": "Edit a url server's endpoint and auth; validated like add (4063), unknown name 4064, plugin-owned 4090.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpServersUpdateParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpServersUpdateResult"
+        }
+      }
+    },
+    {
       "name": "memory.import",
       "summary": "Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned.",
       "params": [
@@ -27614,6 +27632,15 @@
         "title": "MachineInfo",
         "type": "object"
       },
+      "McpAuthMode": {
+        "enum": [
+          "none",
+          "bearer",
+          "oauth"
+        ],
+        "title": "McpAuthMode",
+        "type": "string"
+      },
       "McpCatalogEntry": {
         "additionalProperties": false,
         "properties": {
@@ -27981,6 +28008,18 @@
             ],
             "default": null,
             "title": "Client Redirect Uri"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
           }
         },
         "required": [
@@ -28048,6 +28087,38 @@
         ],
         "title": "McpRuntimeStatus",
         "type": "string"
+      },
+      "McpServerEndpointEdit": {
+        "additionalProperties": false,
+        "description": "``transport`` is ``http`` or ``sse``; an unsupported one is refused with 4063 by the handler.",
+        "properties": {
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "transport": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Transport"
+          }
+        },
+        "title": "McpServerEndpointEdit",
+        "type": "object"
       },
       "McpServerEntry": {
         "additionalProperties": false,
@@ -28277,6 +28348,25 @@
             "default": null,
             "title": "Auth"
           },
+          "headers": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Headers",
+            "type": "array"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
+          },
           "oauth_tokens_present": {
             "anyOf": [
               {
@@ -28324,6 +28414,7 @@
           "transport",
           "args",
           "env",
+          "headers",
           "enabled",
           "source"
         ],
@@ -28332,7 +28423,7 @@
       },
       "McpServersAddParams": {
         "additionalProperties": false,
-        "description": "``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools); a\n``bearer_token`` is written to the profile's .env, only the header template persists.",
+        "description": "``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools). ``headers``\n{Name: Value} and ``bearer_token`` are written to the profile's .env, only ``${VAR}`` templates persist;\n``client_id`` is a pre-registered OAuth client id (not a secret).",
         "properties": {
           "profile": {
             "anyOf": [
@@ -28386,6 +28477,40 @@
             ],
             "default": null,
             "title": "Bearer Token"
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Headers"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
           }
         },
         "required": [
@@ -28548,7 +28673,7 @@
       },
       "McpServersTestResult": {
         "additionalProperties": false,
-        "description": "``ok: false`` carries ``error``; ``prompts`` / ``resources`` are only counted on success.",
+        "description": "``ok: false`` carries ``error`` (never a header or env secret) and ``reason``; ``prompts`` /\n``resources`` are only counted on success. A server with no tools is ``ok: true`` with ``tools: []``.",
         "properties": {
           "ok": {
             "title": "Ok",
@@ -28572,6 +28697,17 @@
             ],
             "default": null,
             "title": "Error"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpTestFailureReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "prompts": {
             "anyOf": [
@@ -28621,6 +28757,133 @@
         ],
         "title": "McpServersTestResult",
         "type": "object"
+      },
+      "McpServersUpdateParams": {
+        "additionalProperties": false,
+        "description": "Edit a saved url server in place (the name is its key). ``auth`` ``none`` clears the Authorization\nheader, ``bearer`` stores ``bearer_token`` in the profile's .env, ``oauth`` marks the server for OAuth.\n``headers`` replaces the whole set (omitted names are removed with their .env values; ``null`` keeps a\nstored value, a string replaces it) and cannot be combined with ``auth`` / ``bearer_token``; changing the\nserver's origin needs every secret header re-sent (4063). ``client_id`` ``\"\"`` clears it.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "config": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpServerEndpointEdit"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "auth": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpAuthMode"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "bearer_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bearer Token"
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Headers"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "McpServersUpdateParams",
+        "type": "object"
+      },
+      "McpServersUpdateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "server": {
+            "$ref": "#/components/schemas/McpServerSummary"
+          }
+        },
+        "required": [
+          "ok",
+          "name",
+          "server"
+        ],
+        "title": "McpServersUpdateResult",
+        "type": "object"
+      },
+      "McpTestFailureReason": {
+        "enum": [
+          "unreachable",
+          "auth_refused",
+          "server_error"
+        ],
+        "title": "McpTestFailureReason",
+        "type": "string"
       },
       "MemoryImportParams": {
         "additionalProperties": false,
@@ -56940,6 +57203,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/McpServersSetApiKeyResult"
+        }
+      }
+    },
+    {
+      "name": "mcp.servers.update",
+      "summary": "Edit a url server's endpoint and auth; validated like add (4063), unknown name 4064, plugin-owned 4090.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpServersUpdateParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpServersUpdateResult"
         }
       }
     },

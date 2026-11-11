@@ -82,6 +82,11 @@ final class ConnectAppsModel {
         case yourPlugins
     }
 
+    enum Mode {
+        case list
+        case customConnector(CustomConnectorModel)
+    }
+
     private(set) var phase: Phase = .loading
     private(set) var catalog = ConnectCatalog()
     private(set) var deviceRows: [DeviceRow] = []
@@ -92,10 +97,13 @@ final class ConnectAppsModel {
     var notice: ConnectNotice?
     var credentialPrompt: CredentialPrompt?
     var disconnectTarget: ConnectDisconnectTarget?
+    private(set) var mode: Mode = .list
 
     let botName: String
     private let profile: String?
     private let service: ConnectAppsService
+    private let bots: [CustomConnectorBot]
+    private let currentBot: String?
     private let pool: DeviceHostPool
     private let permissions = SystemPermissions()
     private let diagnostics = Diagnostics.osLog()
@@ -104,12 +112,24 @@ final class ConnectAppsModel {
     private var ledger: ConnectorLedger?
     private var observation: UUID?
 
-    init(connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser) {
+    init(
+        connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser,
+        bots: [CustomConnectorBot] = [], currentBot: String? = nil
+    ) {
         self.profile = profile
         self.botName = botName
         self.pool = pool
-        service = ConnectAppsService(rpc: ConnectionRPC(model: connection), profile: profile, browser: browser, diagnostics: .osLog())
+        self.bots = bots
+        self.currentBot = currentBot
+        service = ConnectAppsService(
+            rpc: ConnectionRPC(model: connection), profile: profile, browser: browser,
+            systemBrowser: SystemBrowserAuthorization(), diagnostics: .osLog()
+        )
         rebuildDeviceRows()
+    }
+
+    var customConnector: CustomConnectorModel? {
+        if case .customConnector(let connector) = mode { connector } else { nil }
     }
 
     var connectedCount: Int {
@@ -139,6 +159,7 @@ final class ConnectAppsModel {
     }
 
     func stop() async {
+        await customConnector?.discard()
         if let observation, let ledger { await ledger.stopObserving(observation) }
         observation = nil
     }
@@ -248,6 +269,29 @@ final class ConnectAppsModel {
             report("Couldn't connect \(app.name). Try again.")
         }
         await reload()
+    }
+
+    func addCustomConnector() {
+        mode = .customConnector(makeCustomConnector(existing: nil))
+    }
+
+    func manage(_ app: ConnectApp) {
+        guard case .custom(let info) = app.source else { return }
+        mode = .customConnector(makeCustomConnector(existing: info))
+    }
+
+    func leaveCustomConnector() async {
+        await customConnector?.discard()
+        mode = .list
+        await reload()
+    }
+
+    private func makeCustomConnector(existing: CustomConnectorInfo?) -> CustomConnectorModel {
+        CustomConnectorModel(
+            service: service, existing: existing, bots: bots, currentBot: currentBot,
+            reload: { [weak self] in await self?.reload() },
+            leave: { [weak self] in self?.mode = .list }
+        )
     }
 
     func disconnect(_ target: ConnectDisconnectTarget) async {

@@ -1515,7 +1515,8 @@ def _(rid, params: dict) -> dict:
 @_mcp_rpc("add")
 def _(rid, params: dict) -> dict:
     """Add ``name`` from ``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/
-    tools); ``bearer_token`` goes to the profile's .env (only the header template persists). Dup → 4090."""
+    tools). ``headers`` {Key: Value} and ``bearer_token`` go to the profile's .env (only ``${VAR}`` templates
+    persist); ``client_id`` is stored as ``oauth.client_id``. Dup → 4090."""
     mc = _tools_mod("hermes_cli.mcp_config")
     name, preset = _str_arg(params, "name"), _str_arg(params, "preset")
     servers, plugins = _mcp_server_rows()
@@ -1545,13 +1546,31 @@ def _(rid, params: dict) -> dict:
                 return _err(rid, 4063, f"Unknown MCP catalog entry or preset: {preset}")
     if not server_config.get("url") and not server_config.get("command"):
         return _err(rid, 4063, "config must specify a 'url' (http) or 'command' (stdio), or a valid 'preset'")
-    if bearer_token := params.get("bearer_token"):
-        server_config["headers"] = mc._save_bearer_auth_token(name, str(bearer_token))
-    saved_ok = mc._save_mcp_server(name, server_config)
-    _tools_mod("tui_gateway.mcp_rpc_helpers").record_mcp_add(entry, server_config, saved_ok)
+    helpers = _tools_mod("tui_gateway.mcp_rpc_helpers")
+    if message := helpers.endpoint_error(server_config):
+        return _err(rid, 4063, message)
+    env_writes, failure = helpers.plan_add_headers(name, server_config, params)
+    if failure:
+        return _err(rid, *failure)
+    saved_ok = helpers.add_server(name, server_config, env_writes)
+    helpers.record_mcp_add(entry, server_config, saved_ok)
     if not saved_ok:
         return _err(rid, 4001, f"server '{name}' rejected: suspicious command/args configuration")
     saved = mc._get_mcp_servers().get(name, server_config)
+    return _ok(rid, {"ok": True, "name": name, "server": _mcp_summarize_server(name, saved)})
+
+
+@_mcp_rpc("update")
+def _(rid, params: dict) -> dict:
+    """Edit a saved url server: ``config`` {url, transport}, ``auth`` none|bearer|oauth (+ ``bearer_token``),
+    ``headers`` (replaces the set; ``null`` keeps a stored value) and ``client_id`` (``""`` clears) →
+    ``{ok, name, server}``. Same validation as add (4063); a new origin needs every secret header re-sent."""
+    name, servers, err = _mcp_config_server_or_error(rid, params)
+    if err:
+        return err
+    saved, failure = _tools_mod("tui_gateway.mcp_rpc_helpers").update_server(name, servers[name], params)
+    if failure:
+        return _err(rid, *failure)
     return _ok(rid, {"ok": True, "name": name, "server": _mcp_summarize_server(name, saved)})
 
 
@@ -1590,7 +1609,8 @@ def _(rid, params: dict) -> dict:
 @_mcp_rpc("test")
 def _(rid, params: dict) -> dict:
     """Connect, list tools, disconnect → ``{ok, tools, prompts, resources, oauth_needed,
-    oauth_tokens_present}`` (``{ok: false, error, tools: []...}`` on failure). RPC pool: cold npx blocks."""
+    oauth_tokens_present}`` (``{ok: false, error, reason, tools: []...}`` on failure; ``error`` carries no
+    header/env secret). RPC pool: cold npx blocks."""
     mc = _tools_mod("hermes_cli.mcp_config")
     name, servers, err = _mcp_named_server(rid, params)
     if err:
@@ -1601,16 +1621,20 @@ def _(rid, params: dict) -> dict:
     needs_oauth_token = cfg.get("auth") == "oauth"
     details: dict = {}
 
-    def failure(error: str, oauth_needed: bool, tokens_present) -> dict:
-        return _ok(rid, {"ok": False, "error": error, "tools": [], "oauth_needed": oauth_needed,
-                         "oauth_tokens_present": tokens_present})
+    helpers = _tools_mod("tui_gateway.mcp_rpc_helpers")
+
+    def failure(error: str, reason: str, oauth_needed: bool, tokens_present) -> dict:
+        return _ok(rid, {"ok": False, "error": helpers.redact_secrets(error, cfg), "reason": reason, "tools": [],
+                         "oauth_needed": oauth_needed, "oauth_tokens_present": tokens_present})
     try:
         tools = mc._probe_single_server(name, cfg, details=details)
         token_present = mc._oauth_tokens_present(name) if needs_oauth_token else True
     except Exception as exc:
-        return failure(str(exc), needs_oauth_token, mc._oauth_tokens_present(name) if needs_oauth_token else None)
+        return failure(str(exc), helpers.classify_probe_failure(exc),
+                       needs_oauth_token or helpers.oauth_challenged(exc, cfg),
+                       mc._oauth_tokens_present(name) if needs_oauth_token else None)
     if not token_present:
-        return failure("OAuth authentication required — no token found.", True, False)
+        return failure("OAuth authentication required — no token found.", "auth_refused", True, False)
     return _ok(rid, {
         "ok": True, "tools": [{"name": t, "description": d} for t, d in tools],
         "prompts": details.get("prompts", 0), "resources": details.get("resources", 0),
@@ -1619,11 +1643,11 @@ def _(rid, params: dict) -> dict:
 
 @_mcp_rpc("remove")
 def _(rid, params: dict) -> dict:
-    """Remove a server from the profile's config.yaml → ``{ok: true, removed: true}``."""
+    """Remove a server from the profile's config.yaml and its header secrets from .env → ``{ok, removed}``."""
     name = _str_arg(params, "name")
     if err := _mcp_plugin_write_error(rid, name, _mcp_server_rows()[1]):
         return err
-    if not _tools_mod("hermes_cli.mcp_config")._remove_mcp_server(name):
+    if not _tools_mod("tui_gateway.mcp_header_secrets").remove_server(name):
         return _err(rid, 4064, f"server '{name}' not found")
     return _ok(rid, {"ok": True, "removed": True})
 
@@ -1645,6 +1669,8 @@ def _(rid, params: dict) -> dict:
         if cfg.get("headers") and cfg.get("auth") != "oauth":
             return _err(rid, 4001, "this server uses header/API-key auth, not OAuth")
         cfg["auth"] = "oauth"
+        if message := _tools_mod("tui_gateway.mcp_rpc_helpers").apply_client_id(cfg, params.get("client_id")):
+            return _err(rid, 4063, message)
         hermes_home = str(_tools_mod("hermes_constants").get_hermes_home().expanduser().resolve(strict=False))
         result = _tools_mod("tui_gateway.mcp_oauth_sessions").start_flow(
             hermes_home, name, cfg, client_redirect_uri=client_redirect_uri)
@@ -1717,38 +1743,6 @@ def _plugin_rows() -> list[dict]:
                if _dir_path and (target := git_updates.get(_dir_path.name)) else {}),
             **({"pinned_sha": sha} if (sha := pc.pinned_revision(name, ref_pins)) else {})})
     return out
-
-
-# Latest ``on_plugin_loaded`` summaries by plugin name — the TUI server's own subscription, so an
-# install/toggle/update result reports what the load actually activated (#87770). One listener per manager.
-_plugin_activations: dict = {}
-_plugin_activation_subscribed: set = set()
-
-
-def _ensure_plugin_activation_listener() -> None:
-    from hermes_cli.plugins import get_plugin_manager
-    manager = get_plugin_manager()
-    if manager.scope_key in _plugin_activation_subscribed:
-        return
-    _plugin_activation_subscribed.add(manager.scope_key)
-
-    def _on_loaded(summaries) -> None:
-        for entry in summaries:
-            _plugin_activations[entry["name"]] = entry
-            _plugin_activations[entry["key"]] = entry
-    manager.on_plugin_loaded(_on_loaded)
-
-
-def _with_activation(result: dict, name: str) -> dict:
-    """Fill ``activation`` from this process's listener when the core returned none (the core's own
-    copy carries ``live_now``, which the listener's load-time summary cannot)."""
-    if result.get("activation"):
-        return result
-    for key in (name, result.get("plugin_name"), result.get("name")):
-        if key and key in _plugin_activations:
-            result["activation"] = _plugin_activations[key]
-            break
-    return result
 
 
 def _plugins_list(rid, params):

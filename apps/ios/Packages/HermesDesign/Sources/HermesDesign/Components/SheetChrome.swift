@@ -42,6 +42,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
     public let titleAlignment: SheetTitleAlignment
     public let surface: SheetSurface
     public let accessibilityIdentifier: String
+    public let leadingAccessibilityIdentifier: String?
     public let onLeading: () -> Void
     private let trailing: Trailing
     private let content: Content
@@ -54,6 +55,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         titleAlignment: SheetTitleAlignment = .centered,
         surface: SheetSurface = .grouped,
         accessibilityIdentifier: String,
+        leadingAccessibilityIdentifier: String? = nil,
         onLeading: @escaping () -> Void,
         @ViewBuilder trailing: () -> Trailing,
         @ViewBuilder content: () -> Content
@@ -63,6 +65,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         self.titleAlignment = titleAlignment
         self.surface = surface
         self.accessibilityIdentifier = accessibilityIdentifier
+        self.leadingAccessibilityIdentifier = leadingAccessibilityIdentifier
         self.onLeading = onLeading
         self.trailing = trailing()
         self.content = content()
@@ -123,14 +126,14 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         switch leading {
         case .close:
             Button(role: .close, action: onLeading)
-                .accessibilityIdentifier("\(accessibilityIdentifier)-close")
+                .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-close")
                 .tint(.primary)
         case .back:
             Button(action: onLeading) {
                 Image(systemName: "chevron.left")
             }
             .accessibilityLabel(Text(leading.accessibilityLabel))
-            .accessibilityIdentifier("\(accessibilityIdentifier)-back")
+            .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-back")
             .tint(.primary)
         }
     }
@@ -149,7 +152,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
                 .accessibilityLabel(Text(leading.accessibilityLabel))
-                .accessibilityIdentifier("\(accessibilityIdentifier)-\(leading.identifierSuffix)")
+                .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-\(leading.identifierSuffix)")
                 if let title, titleAlignment == .afterLeadingButton {
                     titleText(title).padding(.leading, 16)
                 }
@@ -179,6 +182,7 @@ extension SheetChrome where Trailing == EmptyView {
         titleAlignment: SheetTitleAlignment = .centered,
         surface: SheetSurface = .grouped,
         accessibilityIdentifier: String,
+        leadingAccessibilityIdentifier: String? = nil,
         onLeading: @escaping () -> Void,
         @ViewBuilder content: () -> Content
     ) {
@@ -188,6 +192,7 @@ extension SheetChrome where Trailing == EmptyView {
             titleAlignment: titleAlignment,
             surface: surface,
             accessibilityIdentifier: accessibilityIdentifier,
+            leadingAccessibilityIdentifier: leadingAccessibilityIdentifier,
             onLeading: onLeading,
             trailing: { EmptyView() },
             content: content

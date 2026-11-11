@@ -18,6 +18,8 @@ public enum BotLookCatalog {
         Array(shapes[0..<5]), Array(shapes[5..<10]), Array(shapes[10...]),
     ]
 
+    public static let tealHex = "#0ec79b"
+
     public static let swatches: [Swatch] = [
         Swatch(hex: "#ffffff", name: "White"),
         Swatch(hex: "#845634", name: "Brown"),
@@ -25,7 +27,7 @@ public enum BotLookCatalog {
         Swatch(hex: "#f15105", name: "Vermilion"),
         Swatch(hex: "#f58a06", name: "Orange"),
         Swatch(hex: "#10dc69", name: "Green"),
-        Swatch(hex: "#0ec79b", name: "Teal"),
+        Swatch(hex: tealHex, name: "Teal"),
         Swatch(hex: "#1b7af8", name: "Blue"),
         Swatch(hex: "#833cf8", name: "Purple"),
         Swatch(hex: "#ee0d8f", name: "Pink"),

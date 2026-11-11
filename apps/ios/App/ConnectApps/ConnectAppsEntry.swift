@@ -11,6 +11,23 @@ extension RosterModel {
     }
 }
 
+struct CustomConnectorBot: Identifiable, Equatable {
+    let name: String
+    let displayName: String
+
+    var id: String { name }
+}
+
+extension RosterModel {
+    var customConnectorBots: [CustomConnectorBot] {
+        bots.map { CustomConnectorBot(name: $0.name, displayName: $0.displayName) }
+    }
+
+    func currentBotName(forProfile profile: String?) -> String? {
+        profile ?? bots.first(where: \.isDefault)?.name
+    }
+}
+
 private struct DeviceConsentAlert: ViewModifier {
     let presenter: DeviceConsentPresenter
 
