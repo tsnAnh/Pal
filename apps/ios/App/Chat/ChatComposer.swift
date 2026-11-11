@@ -40,6 +40,10 @@ struct ChatComposer: View {
         return SlashCatalog.filter(slashItems, query: query)
     }
 
+    private var isAttachmentSheetPresented: Bool {
+        isPhotoPickerPresented || isCameraPresented || isFileImporterPresented
+    }
+
     private var hasContent: Bool {
         !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !attachments.isEmpty
     }
@@ -87,7 +91,10 @@ struct ChatComposer: View {
             if SlashCatalog.query(in: text) != nil { loadSlashItems() }
         }
         .onChange(of: focused.wrappedValue) { _, isFocused in
-            if !isFocused { dismissedDraft = draft }
+            if !isFocused, !isAttachmentSheetPresented { dismissedDraft = draft }
+        }
+        .onChange(of: isAttachmentSheetPresented) { _, presented in
+            if !presented { dismissedDraft = nil }
         }
         .photosPicker(isPresented: $isPhotoPickerPresented, selection: $pickedPhotos, maxSelectionCount: 4, matching: .images)
         .onChange(of: pickedPhotos) { _, items in
@@ -188,11 +195,8 @@ struct ChatComposer: View {
                 return .handled
             }
             .onKeyPress(.return, phases: .down) { press in
-                if press.modifiers.contains(.shift) {
-                    draft += "\n"
-                } else if hasContent, canSend {
-                    send()
-                }
+                guard press.modifiers.isDisjoint(with: [.shift, .option]) else { return .ignored }
+                if hasContent, canSend { send() }
                 return .handled
             }
             #endif
