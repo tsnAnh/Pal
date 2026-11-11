@@ -27,6 +27,7 @@ class SigninFlow(Protocol):
 CONNECT_APP_SOURCES = {
     "hosted": "connector:<slug> -> oauth through the connector portal (CONNECTION_REQUIRED / CONNECTION_EXPIRED)",
     "mcp": "mcp:<server> -> oauth, api_key or header from the server config (manifest auth.type for catalog presets)",
+    "custom": "custom connector -> HTTP header values entered in the app's connector form, no sign-in flow",
 }
 
 FlowFactory = Callable[[Path, str], SigninFlow]

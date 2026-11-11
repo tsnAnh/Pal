@@ -5,9 +5,9 @@
    "undecided": 343
   },
   "rpc": {
-   "authority": 186,
+   "authority": 187,
    "keep-host-wide": 1,
-   "undecided": 164
+   "undecided": 170
   },
   "websocket": {
    "undecided": 10
@@ -382,6 +382,7 @@
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "approval.pending", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "approval.received", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "approval.respond", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "auth.begin", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "auth.decline", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "auth.revoke_self", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "auth.signin", "kind": "rpc", "ref": ""},
@@ -413,7 +414,7 @@
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "bot_relay.settle", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "bot_relay.stop", "kind": "rpc", "ref": ""},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "browser.manage", "kind": "rpc", "ref": "D3"},
-  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "capabilities.set_key", "kind": "rpc", "ref": ""},
+  {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "capabilities.set_key", "kind": "rpc", "ref": "D3"},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "capabilities.status", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "clarify.lock", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "clarify.respond", "kind": "rpc", "ref": ""},
@@ -546,6 +547,9 @@
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.telegram.status", "kind": "rpc", "ref": ""},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "model.disconnect", "kind": "rpc", "ref": "D3"},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "model.options", "kind": "rpc", "ref": ""},
+  {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "model.providers.list", "kind": "rpc", "ref": "D3"},
+  {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "model.providers.remove", "kind": "rpc", "ref": "D3"},
+  {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "model.providers.set_base_url", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "model.save_key", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "onboarding.set_run", "kind": "rpc", "ref": "D3"},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "onboarding.skip", "kind": "rpc", "ref": ""},
@@ -690,6 +694,8 @@
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "spawn_tree.list", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "spawn_tree.load", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "spawn_tree.save", "kind": "rpc", "ref": "D3"},
+  {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "speech_memory.settings.get", "kind": "rpc", "ref": "D3"},
+  {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "speech_memory.settings.set", "kind": "rpc", "ref": "D3"},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "subagent.interrupt", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "subagent.list", "kind": "rpc", "ref": ""},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "subagent.roster", "kind": "rpc", "ref": "D3"},

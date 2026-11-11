@@ -4425,6 +4425,54 @@ export interface LlmOneshotParams {
 export interface LlmOneshotResult {
   text: string
 }
+export interface SpeechMemorySettings {
+  profile: string
+  tts: SpeechSettings
+  memory: SpeechProviderGroup
+}
+export interface SpeechSettings {
+  selected: string
+  providers: SpeechMemoryProvider[]
+  voice?: SpeechVoice | null
+}
+/** One text-to-speech or memory provider. ``key_name`` is the name of the secret that powers it (absent when none is needed here), ``key_set`` whether any source supplies it, ``can_remove`` whether the bot's own secret store holds one that ``capabilities.set_key`` can remove. ``ready`` is whether the provider works now. ``note`` is one line on a shared or optional key. No key value is ever carried. */
+export interface SpeechMemoryProvider {
+  id: string
+  name: string
+  description?: string | null
+  key_name?: string | null
+  key_required?: boolean
+  key_set?: boolean
+  can_remove?: boolean
+  ready?: boolean
+  selectable?: boolean
+  note?: string | null
+}
+export interface SpeechVoice {
+  current: string
+  options: SpeechVoiceOption[]
+}
+export interface SpeechVoiceOption {
+  id: string
+  label: string
+}
+export interface SpeechProviderGroup {
+  selected: string
+  providers: SpeechMemoryProvider[]
+}
+export interface SpeechMemorySetParams {
+  profile?: string | null
+  area: SpeechMemoryArea
+  provider: string
+  voice?: string | null
+}
+export type SpeechMemoryArea = 'tts' | 'memory'
+export interface SpeechMemorySetResult {
+  outcome: SpeechMemorySetOutcome
+  reason?: string | null
+  settings?: SpeechMemorySettings | null
+}
+export type SpeechMemorySetOutcome = 'saved' | 'needs_key' | 'unsupported' | 'invalid' | 'failed'
 export interface SystemBatteryParams {
   profile?: string | null
 }
@@ -7864,6 +7912,10 @@ export interface RpcMethods {
   'spawn_tree.load': { params: SpawnTreeLoadParams; result: SpawnTreeLoadResult }
   /** Persist a finished delegation tree snapshot under the session's spawn-trees dir. */
   'spawn_tree.save': { params: SpawnTreeSaveParams; result: SpawnTreeSaveResult }
+  /** The bot's text-to-speech and memory providers: which is chosen, which are installed on this computer, and whether the key each needs is set. Read-only; never carries a key value. Keys are set and removed with capabilities.set_key. */
+  'speech_memory.settings.get': { params: ProfileParams; result: SpeechMemorySettings }
+  /** Choose the bot's text-to-speech provider (and the Edge voice) or memory provider (empty string for the built-in memory only). needs_key: the provider's key is not set yet. Applies to new conversations. */
+  'speech_memory.settings.set': { params: SpeechMemorySetParams; result: SpeechMemorySetResult }
   /** Hard-interrupt one owned child; ``found`` is false when it already finished. */
   'subagent.interrupt': { params: SubagentIdParams; result: SubagentInterruptResult }
   /** Live children owned by this session (other sessions' children never leak). */
@@ -8209,6 +8261,8 @@ export const RPC_METHODS = [
   'spawn_tree.list',
   'spawn_tree.load',
   'spawn_tree.save',
+  'speech_memory.settings.get',
+  'speech_memory.settings.set',
   'subagent.interrupt',
   'subagent.list',
   'subagent.roster',
