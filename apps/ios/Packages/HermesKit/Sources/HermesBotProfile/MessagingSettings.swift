@@ -32,7 +32,7 @@ public struct MessagingCredential: Sendable, Equatable, Identifiable {
 
     public var id: String { key }
 
-    init(key: String, label: String, isSet: Bool) {
+    public init(key: String, label: String, isSet: Bool) {
         self.key = key
         self.label = label
         self.isSet = isSet

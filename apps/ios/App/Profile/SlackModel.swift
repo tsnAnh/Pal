@@ -22,6 +22,7 @@ final class SlackModel {
         case connecting
         case disconnecting
         case checking
+        case restarting
     }
 
     private(set) var phase: Phase = .loading
@@ -36,6 +37,7 @@ final class SlackModel {
     let botName: String
     let displayName: String
     private let services: BotsServices
+    let hermesService: GatewayServiceModel
     private var polling: Task<Void, Never>?
 
     static let pollInterval: Duration = .seconds(2)
@@ -45,6 +47,7 @@ final class SlackModel {
         self.botName = botName
         self.displayName = displayName
         self.services = services
+        hermesService = GatewayServiceModel(client: services.gatewayService)
     }
 
     var connection: SlackConnection? {
@@ -165,6 +168,18 @@ final class SlackModel {
         } catch {
             phase = .ready(.connected)
             notice = String(localized: "Couldn't disconnect Slack. Try again.")
+        }
+    }
+
+    func restartNow() async {
+        notice = nil
+        phase = .busy(.restarting)
+        await hermesService.restart()
+        if case .restarted? = hermesService.notice {
+            await refresh()
+        } else {
+            phase = .ready(.restartNeeded)
+            notice = hermesService.noticeText
         }
     }
 
