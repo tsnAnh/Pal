@@ -15,7 +15,7 @@ enum ServiceSignInWording {
 
     static func subtitle(_ dialog: ServiceSignInDialog, botName: (String) -> String) -> String {
         let name = botName(dialog.bot)
-        switch dialog.reason {
+        return switch dialog.reason {
         case .expired: String(localized: "\(name) needs you to sign in to \(dialog.serviceName) again. Your last sign-in has expired.")
         case .revoked: String(localized: "\(name) lost access to \(dialog.serviceName). Sign in again to give it back.")
         case .missing, .unknown: String(localized: "\(name) needs you to sign in to \(dialog.serviceName) to keep going.")

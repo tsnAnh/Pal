@@ -248,7 +248,8 @@ public struct ConnectAppsService: Sendable {
     }
 }
 
-struct UnavailableAuthorizationBrowser: AuthorizationBrowser {
-    func present(_ url: URL) async throws { throw SignInError.browserUnavailable }
-    func dismiss() async {}
+public struct UnavailableAuthorizationBrowser: AuthorizationBrowser {
+    public init() {}
+    public func present(_ url: URL) async throws { throw SignInError.browserUnavailable }
+    public func dismiss() async {}
 }

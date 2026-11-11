@@ -40,7 +40,7 @@ private struct AttachmentIntakeModifier: ViewModifier {
                 }
             }
         #else
-        if handlesPaste {
+        if handlesPaste, #available(iOS 27.0, *) {
             content
                 .pasteDestination(for: Data.self) { datas in
                     datas.forEach { imageData($0) }
@@ -61,7 +61,7 @@ enum AttachmentIntake {
     }
 
     #if os(macOS)
-    static func receive(_ providers: [NSItemProvider], files: @escaping FilesHandler, imageData: @escaping ImageDataHandler) -> Bool {
+    @MainActor static func receive(_ providers: [NSItemProvider], files: @escaping FilesHandler, imageData: @escaping ImageDataHandler) -> Bool {
         let usable = providers.filter {
             $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) || $0.hasItemConformingToTypeIdentifier(UTType.image.identifier)
         }
@@ -72,7 +72,7 @@ enum AttachmentIntake {
             for provider in usable {
                 if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier), let url = await fileURL(from: provider) {
                     urls.append(url)
-                } else if let data = await imageData(from: provider) {
+                } else if let data = await Self.imageData(from: provider) {
                     images.append(data)
                 }
             }
@@ -84,7 +84,7 @@ enum AttachmentIntake {
         return true
     }
 
-    private static func fileURL(from provider: NSItemProvider) async -> URL? {
+    @MainActor private static func fileURL(from provider: NSItemProvider) async -> URL? {
         await withCheckedContinuation { continuation in
             _ = provider.loadObject(ofClass: URL.self) { url, _ in
                 continuation.resume(returning: url?.isFileURL == true ? url : nil)
@@ -92,7 +92,7 @@ enum AttachmentIntake {
         }
     }
 
-    private static func imageData(from provider: NSItemProvider) async -> Data? {
+    @MainActor private static func imageData(from provider: NSItemProvider) async -> Data? {
         await withCheckedContinuation { continuation in
             _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
                 continuation.resume(returning: data)
