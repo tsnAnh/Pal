@@ -44,7 +44,7 @@ func rpcFailure(_ code: Int, reason: String? = nil, message: String = "failed") 
 }
 
 func okTools(_ names: [String]) -> CustomRPC.Reply {
-    { _ in ["ok": true, "tools": .array(names.map { ["name": .string($0), "description": "Does \($0)"] }), "oauth_needed": false, "oauth_tokens_present": false] }
+    { _ in ["ok": true, "tools": .array(names.map { ["name": .string($0), "description": .string("Does \($0)")] }), "oauth_needed": false, "oauth_tokens_present": false] }
 }
 
 func customService(_ rpc: CustomRPC, profile: String? = nil, system: any AuthorizationBrowser = IdleBrowser(), catalog: any AuthorizationBrowser = IdleBrowser()) -> ConnectAppsService {
