@@ -148,6 +148,13 @@ public struct SessionAPI: Sendable {
         return SlashCatalog.parse(result)
     }
 
+    /// The files and folders `word` (`@` plus what the user typed) completes to, listed by the gateway
+    /// from the chat's own working folder.
+    public func pathCompletions(sessionID: String, word: String) async throws -> [FileRefItem] {
+        let result = try await call("complete.path", ["session_id": .string(sessionID), "word": .string(word)])
+        return FileRefCatalog.parse(result)
+    }
+
     public func attachImage(sessionID: String, data: Data, filename: String) async throws -> StagedImage {
         let result = try await call("image.attach_bytes", [
             "session_id": .string(sessionID),
