@@ -5,7 +5,7 @@
    "undecided": 343
   },
   "rpc": {
-   "authority": 180,
+   "authority": 182,
    "keep-host-wide": 1,
    "undecided": 161
   },
@@ -530,6 +530,8 @@
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "mcp.servers.update", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "memory.import", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "message.react", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.settings.get", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.settings.update", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.slack.connect", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.slack.disconnect", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "messaging.slack.manifest", "kind": "rpc", "ref": ""},
