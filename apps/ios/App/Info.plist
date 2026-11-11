@@ -24,8 +24,6 @@
 	<false/>
 	<key>NSAlarmKitUsageDescription</key>
 	<string>Pal sets alarms and timers when you ask your bot to.</string>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>Pal uses your browser to open and read pages when you ask your bot to.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Pal reads your calendar and adds events when you ask your bot to.</string>
 	<key>NSCameraUsageDescription</key>

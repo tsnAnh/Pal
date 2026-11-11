@@ -12,7 +12,7 @@ struct CapabilitiesTests {
             ["id": "deep_search", "label": "Deep search", "state": "off", "reason": "Needs a search key.", "key_name": "EXA_API_KEY"],
             ["id": "youtube", "label": "YouTube", "state": "unavailable", "reason": "Not installed."],
             ["id": "maps", "label": "Maps", "state": "on", "reason": "OpenStreetMap only.", "key_name": "GOOGLE_MAPS_API_KEY"],
-            ["id": "browser", "label": "Browser", "state": "not_yet_available", "reason": "Coming soon.", "setting": "browser.mode"],
+            ["id": "browser", "label": "Browser", "state": "off", "reason": "The browserbase browser provider is selected but its credentials are missing.", "setting": "browser.cloud_provider"],
             ["id": "future", "label": "Future", "state": "someday", "key_name": "FUTURE_KEY"],
         ],
     ]
@@ -31,9 +31,9 @@ struct CapabilitiesTests {
         #expect(bots.calls.first?.method == "capabilities.status")
         #expect(bots.calls.first?.params == ["profile": "a"])
         #expect(rows.map(\.id) == ["web", "deep_search", "youtube", "maps", "browser", "future"])
-        #expect(rows.map(\.state) == [.on, .off, .unavailable, .on, .notYetAvailable, .unavailable])
+        #expect(rows.map(\.state) == [.on, .off, .unavailable, .on, .off, .unavailable])
         #expect(rows[1].keyName == "EXA_API_KEY")
-        #expect(rows[4].setting == "browser.mode")
+        #expect(rows[4].setting == "browser.cloud_provider")
         #expect(rows[3].reason == "OpenStreetMap only.")
     }
 
@@ -52,11 +52,11 @@ struct CapabilitiesTests {
         #expect(rows[1].label == "future")
     }
 
-    @Test("indicator and state word separate on, limited, off, unavailable and not yet available")
+    @Test("indicator and state word separate on, limited, off and unavailable")
     func display() async throws {
         let rows = try await rows()
-        #expect(rows.map(\.indicator) == [.on, .off, .unavailable, .limited, .notYetAvailable, .unavailable])
-        #expect(rows.map(\.stateWord) == ["On", "Off", "Unavailable", "Limited", "Coming soon", "Unavailable"])
+        #expect(rows.map(\.indicator) == [.on, .off, .unavailable, .limited, .off, .unavailable])
+        #expect(rows.map(\.stateWord) == ["On", "Off", "Unavailable", "Limited", "Off", "Unavailable"])
     }
 
     @Test("the terminal hint names the key only for an off or limited row that has one")

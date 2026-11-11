@@ -548,7 +548,7 @@ private struct MacCapabilityRow: View {
         switch row.indicator {
         case .on: PalTokens.toggleOn
         case .limited: PalTokens.textPrimary
-        case .off, .unavailable, .notYetAvailable: PalTokens.textTertiary
+        case .off, .unavailable: PalTokens.textTertiary
         }
     }
 }

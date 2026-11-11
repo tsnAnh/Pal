@@ -19,10 +19,9 @@ _CAPABILITIES_FAILED = 5103
 @method("capabilities.status")
 @_profile_scoped
 def _(rid, params: dict) -> dict:
-    from hermes_constants import get_hermes_home
     from tui_gateway.capabilities_status import capability_rows
     try:
-        rows = capability_rows(get_hermes_home())
+        rows = capability_rows()
     except Exception:
         logger.exception("capabilities.status failed")
         return _err(rid, _CAPABILITIES_FAILED, "Could not read the capability status")

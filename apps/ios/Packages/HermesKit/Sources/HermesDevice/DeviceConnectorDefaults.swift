@@ -11,7 +11,6 @@ public enum DeviceConnectorDefaults {
         case .alarms: ("Alarms", "Set alarms and timers")
         case .shell: ("Run commands", "Let bots run commands on this Mac")
         case .files: ("Files", "Let bots read and change files on this Mac")
-        case .browser: ("Browser", "Let bots use your browser on this Mac")
         }
     }
 
@@ -19,7 +18,6 @@ public enum DeviceConnectorDefaults {
         switch connector {
         case .shell: "A bot can then run commands on this Mac without asking each time."
         case .files: "A bot can then read and change files on this Mac without asking each time."
-        case .browser: "A bot can then drive a browser on this Mac, with the sites you are already signed in to, without asking each time. It never sees your passwords and only works in the window it opens."
         case .calendar, .home, .reminders, .contacts, .location, .alarms: nil
         }
     }

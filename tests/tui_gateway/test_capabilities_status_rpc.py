@@ -8,8 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from gateway import device_connectors
-from gateway.device_actions import Connector
+import hermes_yaml as yaml
 from hermes_cli.profiles import create_profile, get_profile_dir
 from tui_gateway import capabilities_status, server
 from tui_gateway.contracts import METHODS
@@ -122,34 +121,80 @@ def test_an_unknown_bot_is_an_error_not_the_default_bots_state(bots, web_provide
     assert "error" in response and "result" not in response
 
 
-def test_browser_is_not_yet_available_until_a_connector_exists(bots, web_provider, disabled_skills):
-    assert getattr(Connector, "BROWSER", None) is None
-    row = _status()["browser"]
-    assert row["state"] == "not_yet_available" and row["reason"]
+BROWSER_SECRET = "bu-SECRETVALUE-333333"
+BROWSER_ENV_KEYS = ("BROWSER_USE_API_KEY", "BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID", "BROWSER_CDP_URL")
 
 
 @pytest.fixture
-def browser_connector(monkeypatch):
-    monkeypatch.setattr(capabilities_status, "_browser_connector", lambda: Connector.SHELL)
-    return Connector.SHELL
+def browser_host(bots, web_provider, disabled_skills, monkeypatch) -> dict:
+    from tools import browser_session_cloud
+
+    state = {"engine": True}
+    for key in BROWSER_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr("tools.browser_use_cli.browser_exec_available", lambda: state["engine"])
+    browser_session_cloud.reset_caches()
+    yield state
+    browser_session_cloud.reset_caches()
 
 
-def test_browser_row_flips_with_devices_and_connector_state(bots, web_provider, disabled_skills, browser_connector):
-    home = Path(get_profile_dir("scout"))
+def _write_browser_config(profile: str, **browser) -> None:
+    (get_profile_dir(profile) / "config.yaml").write_text(yaml.safe_dump({"browser": browser}))
+
+
+def test_browser_defaults_to_the_bots_own_local_browser(browser_host):
     row = _status()["browser"]
-    assert row["state"] == "unavailable" and row["reason"] == "No device online."
+    assert row["state"] == "on" and row["reason"] is None
 
-    device_connectors.register_device(home, "mac-1", "Work Mac", kind="mac")
+
+def test_browser_selected_provider_without_credentials_is_off_and_names_the_keys(browser_host):
+    _write_browser_config("scout", cloud_provider="browserbase")
     row = _status()["browser"]
-    assert row["state"] == "off" and row["reason"].startswith("Browser connector off on ")
+    assert row["state"] == "off" and row["setting"] == "browser.cloud_provider"
+    assert "browserbase" in row["reason"] and "BROWSERBASE_API_KEY" in row["reason"]
+    assert "not yet" not in row["reason"].lower() and "Mac" not in row["reason"]
 
-    device_connectors.update(home, "mac-1", browser_connector, state=device_connectors.ConnectorState.ALLOWED)
+
+def test_browser_selected_provider_turns_on_with_its_keys(browser_host):
+    _write_browser_config("scout", cloud_provider="browser-use")
+    assert _status()["browser"]["state"] == "off"
+    _write_env("scout", BROWSER_USE_API_KEY=BROWSER_SECRET)
+    row = _status()["browser"]
+    assert row["state"] == "on" and row["reason"] is None
+
+
+def test_browser_selected_provider_that_is_not_installed_is_off(browser_host):
+    _write_browser_config("scout", cloud_provider="no-such-provider")
+    row = _status()["browser"]
+    assert row["state"] == "off" and "not installed" in row["reason"]
+
+
+def test_browser_explicit_local_engine_is_on(browser_host):
+    _write_browser_config("scout", cloud_provider="local")
     assert _status()["browser"]["state"] == "on"
 
 
-def test_browser_devices_of_another_bot_do_not_count(bots, web_provider, disabled_skills, browser_connector):
-    other = Path(get_profile_dir("pilot"))
-    device_connectors.register_device(other, "mac-9", "Other Mac", kind="mac")
-    device_connectors.update(other, "mac-9", browser_connector, state=device_connectors.ConnectorState.ALLOWED)
-    assert _status("scout")["browser"]["state"] == "unavailable"
-    assert _status("pilot")["browser"]["state"] == "on"
+def test_browser_cdp_endpoint_is_on(browser_host):
+    _write_browser_config("scout", cdp_url="http://127.0.0.1:9222")
+    assert _status()["browser"]["state"] == "on"
+
+
+def test_browser_is_unavailable_when_the_host_cannot_run_one(browser_host):
+    browser_host["engine"] = False
+    row = _status()["browser"]
+    assert row["state"] == "unavailable" and "cannot run a browser" in row["reason"]
+
+
+def test_browser_key_value_never_reaches_the_result(browser_host):
+    _write_browser_config("scout", cloud_provider="browser-use")
+    _write_env("scout", BROWSER_USE_API_KEY=BROWSER_SECRET)
+    response = server.handle_request({"id": "1", "method": "capabilities.status", "params": {"profile": "scout"}})
+    assert BROWSER_SECRET not in json.dumps(response)
+
+
+def test_one_bots_browser_key_does_not_turn_on_another_bots_browser(browser_host):
+    for profile in ("scout", "pilot"):
+        _write_browser_config(profile, cloud_provider="browser-use")
+    _write_env("scout", BROWSER_USE_API_KEY=BROWSER_SECRET)
+    assert _status("scout")["browser"]["state"] == "on"
+    assert _status("pilot")["browser"]["state"] == "off"

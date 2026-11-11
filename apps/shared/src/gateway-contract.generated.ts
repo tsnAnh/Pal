@@ -678,7 +678,7 @@ export interface CapabilityRow {
   setting?: string | null
 }
 export type CapabilityId = 'web' | 'deep_search' | 'youtube' | 'maps' | 'browser'
-export type CapabilityState = 'on' | 'off' | 'unavailable' | 'not_yet_available'
+export type CapabilityState = 'on' | 'off' | 'unavailable'
 /** ``key`` selects one getter from ``_CONFIG_GETTERS``; ``cwd`` feeds the ``project`` getter, ``session_id`` lets ``reasoning`` / ``fast`` answer with the session's live pin. */
 export interface ConfigGetParams {
   profile?: string | null
@@ -6260,7 +6260,7 @@ export interface DeviceConnectorStatus {
   state: DeviceConnectorState
   os_permission: DeviceOsPermission
 }
-export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files' | 'browser'
+export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files'
 export type DeviceConnectorState = 'allowed' | 'ask' | 'off'
 export type DeviceOsPermission = 'granted' | 'denied' | 'not_determined' | 'unsupported'
 export interface DeviceConnectorsSetParams {
@@ -7118,7 +7118,7 @@ export interface DeviceToolRequestPayload {
   session_id?: string | null
   deadline_seconds: number
 }
-export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set' | 'shell.run' | 'files.read' | 'files.list' | 'files.write' | 'browser.open' | 'browser.read' | 'browser.click' | 'browser.type' | 'browser.wait_for_text' | 'browser.close'
+export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set' | 'shell.run' | 'files.read' | 'files.list' | 'files.write'
 export interface DeviceToolCancelPayload {
   request_id: string
   reason: DeviceToolCancelReason
@@ -7190,7 +7190,7 @@ export interface RpcMethods {
   'bot_relay.roster.sync': { params: BotRelayRosterSyncParams; result: BotRelayRosterSyncResult }
   /** Inspect, attach to, or drop the CDP browser the tools use; ``messages`` narrate a connect. */
   'browser.manage': { params: BrowserManageParams; result: BrowserManageResult }
-  /** Which of the five bot capabilities (web, deep search, YouTube, maps, own-machine browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
+  /** Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
   /** Lock one answer of a batch clarify request (editable until every question is locked). */
   'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }
@@ -8053,7 +8053,7 @@ export interface CanonicalRpcMethods {
   'bot_relay.deliver': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
   'bot_relay.settle': { params: CanonicalBotDeliverParams; result: CanonicalBotDeliverResult }
   'bot_relay.stop': { params: CanonicalBotStopParams; result: CanonicalBotStopResult }
-  /** Which of the five bot capabilities (web, deep search, YouTube, maps, own-machine browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
+  /** Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
   /** Lock one answer of the owner's batch clarify request (editable until every question is locked); only a viewer attached to that session with session:respond may lock. */
   'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }

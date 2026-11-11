@@ -17,7 +17,6 @@ class CapabilityState(WireEnum):
     ON = "on"
     OFF = "off"
     UNAVAILABLE = "unavailable"
-    NOT_YET_AVAILABLE = "not_yet_available"
 
 
 class CapabilityRow(Result):
@@ -40,5 +39,5 @@ class CapabilitiesStatusResult(Result):
 
 
 method("capabilities.status", params=ProfileParams, result=CapabilitiesStatusResult,
-       doc="Which of the five bot capabilities (web, deep search, YouTube, maps, own-machine browser) are usable "
+       doc="Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable "
            "for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value.")

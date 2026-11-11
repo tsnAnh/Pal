@@ -7,7 +7,6 @@ extension CapabilityIndicator {
         case .limited: "exclamationmark.circle.fill"
         case .off: "circle"
         case .unavailable: "slash.circle"
-        case .notYetAvailable: "clock"
         }
     }
 }
