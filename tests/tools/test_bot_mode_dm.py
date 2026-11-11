@@ -733,7 +733,7 @@ def test_live_dm_admitted_before_waiter_failure(tmp_path, monkeypatch):
     assert record is not None
     assert record["delivery_id"] == result["delivery_id"]
     assert record["profile_home"] == str(target.resolve())
-    assert authority.records[result["delivery_id"]]["message"] == "Message from 🤖 hermes (@hermes): hello"
+    assert authority.records[result["delivery_id"]]["message"].startswith("Message from 🤖 hermes (@hermes): hello\n\n")
     assert authority.calls[0][1]["author"] == {"id": "bot:default", "name": "hermes", "is_bot": True}
     assert "notification_error" in result
 

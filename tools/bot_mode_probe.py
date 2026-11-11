@@ -366,6 +366,8 @@ def _about_you_facts(root: Path) -> dict:
 
 
 def _build_section(home: Path) -> str:
+    from tools.bot_dm_wire import BOT_REPLY_RULE
+
     root = _hermes_root(home)
     me = _profile_name(home)
     if not _any_managed(root):
@@ -413,7 +415,8 @@ def _build_section(home: Path) -> str:
         f"\"{NO_REPLY_MARKER}\" or is a pure FYI with nothing to add, end your turn "
         "with an intentional silence token "
         "([SILENT] or NO_REPLY) — the transport swallows it, so the sender gets "
-        "no acknowledgement ping-pong.\n"
+        "no acknowledgement ping-pong. "
+        f"{BOT_REPLY_RULE}\n"
         f"You are `@{_handle(me, names)}`. Your teammates (live roster; roles from their "
         "profiles):\n"
         f"{roster_block}"

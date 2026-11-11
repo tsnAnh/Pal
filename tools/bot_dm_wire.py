@@ -18,6 +18,12 @@ _RELAY_FAILURE_RE = re.compile(r"^Delivery to (?P<label>.+?) failed(?: \[reason:
 _TARGET_LABEL_RE = re.compile(rf"^@(?P<handle>{_HANDLE})(?: on peer '(?P<peer>[a-z0-9][a-z0-9_-]{{0,63}})'| on (?P<conn>.+))?$",
                               re.DOTALL)
 EMPTY_RELAY_REPLY = "(empty reply)"
+BOT_REPLY_RULE = (
+    "Replying to a bot: write English only, a few terse factual lines: result, evidence (link or id), "
+    "blocker. No greeting, no owner name, no honorific, no emoji, no chat tone. The one line you write to "
+    "your owner at the start of this turn stays in the owner's language; nothing else does. A message you "
+    "compose for another bot follows the same rule."
+)
 
 
 @dataclass(frozen=True, slots=True)
