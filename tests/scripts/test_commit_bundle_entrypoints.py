@@ -12,7 +12,7 @@ import pytest
 
 from scripts.bundles import desktop
 
-from tests.ci.test_desktop_release_tag_admission import _BASH, _child_env, _git, _seed_repo
+from tests.scripts._release_git import _BASH, _child_env, _git, _seed_repo
 
 
 @pytest.mark.parametrize("variant", ["bundled", "light"])

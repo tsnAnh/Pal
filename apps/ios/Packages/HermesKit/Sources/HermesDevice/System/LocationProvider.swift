@@ -62,7 +62,7 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
         }
     }
 
-    func place(for location: CLLocation) async -> String? {
+    nonisolated func place(for location: CLLocation) async -> String? {
         guard let request = MKReverseGeocodingRequest(location: location) else { return nil }
         guard let items = try? await request.mapItems, let first = items.first else { return nil }
         return first.address?.shortAddress ?? first.name

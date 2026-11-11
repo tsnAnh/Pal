@@ -1,9 +1,7 @@
 """The committed TypeScript + OpenRPC contract files are exactly what ``tui_gateway/contracts``
 renders, and the contract catalog covers the whole wire.
 
-Regenerate with ``.venv/bin/python scripts/gen_gateway_contracts.py`` when a model changes. The
-two files are listed in ``scripts/ci/classify_changes.py::_PY_RELEVANT_CONTRACT_FILES`` so a
-TS-only PR that edits them still runs this test.
+Regenerate with ``.venv/bin/python scripts/gen_gateway_contracts.py`` when a model changes.
 """
 
 from __future__ import annotations

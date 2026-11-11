@@ -87,7 +87,7 @@ def _tail(text: str) -> list[str]:
 
 
 def _execute(step: PostUpdateStep, root: Path) -> tuple[int, str, str]:
-    popen_kwargs: dict[str, Any] = {"creationflags": windows_hide_flags()} if IS_WINDOWS else {"process_group": 0}
+    popen_kwargs: dict[str, Any] = {"creationflags": windows_hide_flags()} if IS_WINDOWS else {"process_group": 0}  # detached-spawn: ok — awaited with a group-killing timeout (kill_process_tree)
     proc = subprocess.Popen(
         step.argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8", errors="replace", cwd=root, env=_step_env(root), **popen_kwargs)

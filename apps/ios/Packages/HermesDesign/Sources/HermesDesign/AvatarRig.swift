@@ -106,20 +106,27 @@ struct AvatarRig {
         let roll = pose.eyeRoll * Double.pi / 180
         let shape = eyeShape(pose)
         let travel = eyes.travel ?? span
-        let centres = placements.map { placement -> CGPoint in
-            let dx = (placement.centre.x - mid.x) * pose.eyeSpread
-            let dy = (placement.centre.y - mid.y) * pose.eyeSpread
-            return CGPoint(
-                x: mid.x + dx * cos(roll) - dy * sin(roll) + pose.eyeX * travel,
-                y: mid.y + dx * sin(roll) + dy * cos(roll) + pose.eyeY * travel
-            )
+        let cosRoll: Double = cos(roll)
+        let sinRoll: Double = sin(roll)
+        let spread: Double = pose.eyeSpread
+        let offsetX: Double = pose.eyeX * travel
+        let offsetY: Double = pose.eyeY * travel
+        let centres: [CGPoint] = placements.map { (placement: EyePlacement) -> CGPoint in
+            let dx: Double = (placement.centre.x - mid.x) * spread
+            let dy: Double = (placement.centre.y - mid.y) * spread
+            let rotatedX: Double = dx * cosRoll - dy * sinRoll
+            let rotatedY: Double = dx * sinRoll + dy * cosRoll
+            return CGPoint(x: mid.x + rotatedX + offsetX, y: mid.y + rotatedY + offsetY)
         }
         let gaze = gazeOffset(look, bodyRotation: pose.bodyRotation, centres: centres, clearance: eyeClearance(pose, placements))
-        return zip(placements, centres).map { placement, base in
+        var paths: [Path] = []
+        paths.reserveCapacity(placements.count)
+        for (placement, base) in zip(placements, centres) {
             let centre = CGPoint(x: base.x + gaze.dx, y: base.y + gaze.dy)
             let moved = EyePlacement(centre: centre, angle: placement.angle + roll, scale: placement.scale * pose.eyeScale)
-            return surface.project(shape.applying(moved.transform), around: centre)
+            paths.append(surface.project(shape.applying(moved.transform), around: centre))
         }
+        return paths
     }
 
     private func eyeClearance(_ pose: AvatarPose, _ placements: [EyePlacement]) -> Double {

@@ -1,0 +1,66 @@
+name: Swift
+
+on:
+  pull_request:
+    paths:
+      - 'apps/ios/**'
+      - '.github/workflows/swift.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ios/**'
+      - '.github/workflows/swift.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swift-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  swift:
+    name: swift
+    runs-on: macos-15
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+
+      # project.yml and both Package.swift files need the iOS/macOS 26 SDK and swift-tools 6.2,
+      # so Xcode 26.x; the newest one the image carries.
+      - name: Select Xcode 26
+        working-directory: .
+        run: |
+          xcode="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          test -n "$xcode" || { echo "no Xcode 26 on this image"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: Generate the Xcode project
+        run: xcodegen generate
+
+      - name: Build for testing (iOS Simulator)
+        run: >-
+          xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
+          -destination 'generic/platform=iOS Simulator'
+          -skipPackagePluginValidation -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO
+
+      - name: Build for testing (macOS)
+        run: >-
+          xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
+          -destination 'generic/platform=macOS'
+          -skipPackagePluginValidation -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO
+
+      # Compile only: the packages target macOS 26, which a macos-15 host cannot launch, so
+      # `swift test` cannot run the tests here.
+      - name: Build HermesKit and its tests
+        working-directory: apps/ios/Packages/HermesKit
+        run: swift build --build-tests

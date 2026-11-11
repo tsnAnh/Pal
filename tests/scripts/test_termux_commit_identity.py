@@ -5,7 +5,7 @@ import shlex
 import subprocess
 import sys
 
-from tests.ci.test_desktop_release_tag_admission import _BASH, _GIT, _child_env, _git, _seed_repo
+from tests.scripts._release_git import _BASH, _GIT, _child_env, _git, _seed_repo
 
 
 ROOT = Path(__file__).resolve().parents[2]

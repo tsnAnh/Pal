@@ -118,10 +118,9 @@ _DEFAULT_ROOTS = ["tests"]
 # external services (a model gateway, a docker daemon with a prebuilt
 # image, etc.) and are run in their own dedicated CI jobs:
 #
-#   tests/e2e/         — .github/workflows/tests.yml :: e2e job
+#   tests/e2e/         — run on demand with --include-integration
 #   tests/integration/ — historical; legacy --ignore flags
-#   tests/docker/      — .github/workflows/docker.yml ::
-#                        build-amd64 job (runs against the freshly-loaded
+#   tests/docker/      — run on demand (runs against the freshly-loaded
 #                        nousresearch/hermes-agent:test image, via
 #                        ``HERMES_TEST_IMAGE`` so the fixture skips
 #                        rebuild). The full pytest-shard runner can't

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Run every blocking lint check CI runs, locally, with the same pinned tools: the lint
-the workflow's guards, ruff and the code-health ratchet, plus the case-collision, lazy-deps,
+guards, ruff and the code-health ratchet, plus the case-collision, lazy-deps,
 profile-archive and blob-size guards that CI runs in workflows of their own.
 
     python scripts/check                # everything, against the merge-base with origin/main
@@ -10,8 +10,8 @@ profile-archive and blob-size guards that CI runs in workflows of their own.
     python scripts/check --install-hook [pre-commit|pre-push]   # run it automatically
     python scripts/check --uninstall-hook
 
-CI runs the same command (``.github/workflows/lint.yml``), so a green local run means a green
-lint lane. Hooks are skippable (``--no-verify``); CI is not. The code-health part honours the
+CI runs the same command (``.github/workflows/python.yml``), so a green local run means a green
+Python check. Hooks are skippable (``--no-verify``); CI is not. The code-health part honours the
 ``ENFORCEMENT`` switch in ``scripts/code_health/config.py`` (blocking / advisory / off).
 """
 
@@ -98,9 +98,8 @@ exit $status
 """,
 }
 
-# name -> argv (relative to the repo root); mirrors the blocking steps in lint.yml, plus the
-# unconditional guards CI runs as steps of repo-guards.yml (case collisions, lazy_deps imports,
-# profile archives, blob size).
+# name -> argv (relative to the repo root); the blocking lint steps, plus the case-collision,
+# lazy_deps imports, profile archive and blob-size guards.
 _GUARDS = {
     "footguns": ["scripts/check-windows-footguns.py", "--all"],
     "shebangs": ["scripts/check_bash_shebangs.py"],
@@ -116,7 +115,7 @@ _GUARDS = {
     "profile-archives": ["scripts/ci/check_profile_archive_boundary.py"],
 }
 # Guards that judge a diff, not a tree: they get the same base/head as the ratchet
-# (the blob-size step of repo-guards.yml).
+# (blob size).
 _DIFF_GUARDS = {"blob-size": ["scripts/ci/check_blob_size.py"]}
 _CHECKS = (*_GUARDS, *_DIFF_GUARDS, "ruff", "health")
 
