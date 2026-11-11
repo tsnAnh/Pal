@@ -21,6 +21,7 @@ public struct MarkdownBlock: Sendable, Equatable, Identifiable {
         case heading(level: Int)
         case code(language: String?)
         case thematicBreak
+        case math
     }
 
     public var id: Int
@@ -29,25 +30,64 @@ public struct MarkdownBlock: Sendable, Equatable, Identifiable {
     public var lists: [ListMarker]
     public var startsListItem: Bool
     public var isQuoted: Bool
+    public var isComplete: Bool = true
+
+    public init(
+        id: Int,
+        kind: Kind,
+        text: AttributedString,
+        lists: [ListMarker] = [],
+        startsListItem: Bool = false,
+        isQuoted: Bool = false,
+        isComplete: Bool = true
+    ) {
+        self.id = id
+        self.kind = kind
+        self.text = text
+        self.lists = lists
+        self.startsListItem = startsListItem
+        self.isQuoted = isQuoted
+        self.isComplete = isComplete
+    }
 }
 
 public struct MarkdownDocument: Sendable, Equatable {
     public private(set) var blocks: [MarkdownBlock]
 
-    public init(parsing source: String) {
+    public init(parsing source: String, isStreaming: Bool = false) {
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             blocks = []
             return
         }
+        guard let segments = MarkdownSegmenter.segments(in: source, isStreaming: isStreaming) else {
+            blocks = Self.parsedBlocks(source)
+            return
+        }
+        var built: [MarkdownBlock] = []
+        for segment in segments {
+            switch segment {
+            case .text(let text):
+                built.append(contentsOf: Self.parsedBlocks(text))
+            case .math(let tex, let isComplete):
+                built.append(MarkdownBlock(id: 0, kind: .math, text: AttributedString(tex), isComplete: isComplete))
+            case .code(let language, let body):
+                built.append(MarkdownBlock(id: 0, kind: .code(language: language), text: AttributedString(body), isComplete: false))
+            }
+        }
+        for index in built.indices { built[index].id = index }
+        blocks = built
+    }
+
+    private static func parsedBlocks(_ source: String) -> [MarkdownBlock] {
+        guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         let options = AttributedString.MarkdownParsingOptions(
             interpretedSyntax: .full,
             failurePolicy: .returnPartiallyParsedIfPossible
         )
         guard let attributed = try? AttributedString(markdown: source, options: options) else {
-            blocks = [Self.fallbackBlock(source)]
-            return
+            return [fallbackBlock(source)]
         }
-        blocks = Self.blocks(from: attributed)
+        return blocks(from: attributed)
     }
 
     private static func fallbackBlock(_ source: String) -> MarkdownBlock {

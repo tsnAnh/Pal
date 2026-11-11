@@ -32,7 +32,7 @@ private struct MarkdownBlockView: View {
             listRow { InlineText(text: block.text, highlight: highlight, isCurrentMatch: isCurrentMatch) }
         case .heading(let level):
             InlineText(text: block.text, highlight: highlight, isCurrentMatch: isCurrentMatch, style: level <= 2 ? .chatStatus : .chatBody, weight: .bold)
-        case .code:
+        case .code, .math:
             CodeBlockView(text: String(block.text.characters))
         case .thematicBreak:
             Rectangle().fill(Color(theme.palette.separator)).frame(height: 1).padding(.vertical, 4)

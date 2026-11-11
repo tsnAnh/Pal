@@ -12,6 +12,8 @@ struct ExternalLinkPolicyTests {
         "Platform/InAppBrowser.swift": ["SFSafariViewController", "WebPage(", "inAppBrowser("],
         "Profile/LibraryView.swift": ["inAppBrowser("],
         "WebAuthenticationBrowser.swift": ["ASWebAuthenticationSession("],
+        "Chat/Rich/MermaidRenderer.swift": ["WKWebView"],
+        "Chat/Rich/EmbedWebView.swift": ["WKWebView"],
     ]
 
     private func swiftSources() throws -> [(path: String, text: String)] {
