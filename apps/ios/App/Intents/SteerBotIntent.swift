@@ -1,6 +1,6 @@
 import AppIntents
 import Foundation
-import HermesChat
+import PalChat
 
 struct SteerBotIntent: AppIntent {
     static let title: LocalizedStringResource = "Steer a Bot"

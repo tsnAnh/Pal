@@ -1,8 +1,8 @@
-import HermesBotProfile
-import HermesChat
-import HermesConnect
-import HermesDiagnostics
-import HermesRFB
+import PalBotProfile
+import PalChat
+import PalConnect
+import PalDiagnostics
+import PalRFB
 
 struct BotsServices: Sendable {
     let profiles: BotProfileService

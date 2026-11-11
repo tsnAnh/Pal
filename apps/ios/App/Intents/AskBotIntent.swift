@@ -1,7 +1,7 @@
 import AppIntents
 import Foundation
-import HermesChat
-import HermesDiagnostics
+import PalChat
+import PalDiagnostics
 
 struct AskBotIntent: AppIntent {
     static let title: LocalizedStringResource = "Ask a Bot"

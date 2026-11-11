@@ -1,5 +1,5 @@
-import HermesConnect
-import HermesDesign
+import PalConnect
+import PalDesign
 import SwiftUI
 
 struct ConnectorAccountsView: View {

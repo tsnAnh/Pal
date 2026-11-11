@@ -1,5 +1,5 @@
 import Foundation
-import HermesAuth
+import PalAuth
 
 struct SystemBrowserAuthorization: AuthorizationBrowser {
     private static let waitLimit: Duration = .seconds(600)

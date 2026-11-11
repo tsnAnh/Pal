@@ -9,7 +9,7 @@ import { ACCENT_CASES, CASES, COLOR_INPUTS, KIND_TRAITS, NAME_INPUTS, SEED_INPUT
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repo = resolve(here, '../../../..')
-const parityDir = resolve(here, '../../Packages/HermesDesign/Tests/HermesDesignTests/Parity')
+const parityDir = resolve(here, '../../Packages/PalDesign/Tests/PalDesignTests/Parity')
 const size = 256
 
 const requireTool = tool => {

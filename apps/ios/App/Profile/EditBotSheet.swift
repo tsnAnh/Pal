@@ -1,4 +1,4 @@
-import HermesDesign
+import PalDesign
 import PhotosUI
 import SwiftUI
 
@@ -38,10 +38,10 @@ struct EditBotSheet: View {
                             .focused($nameFocused)
                             .submitLabel(.done)
                             .onSubmit { nameFocused = false }
-                            .padding(.horizontal, HermesMetrics.rowInset)
-                            .frame(height: HermesMetrics.rowMinimumHeight)
-                            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
-                            .padding(.horizontal, HermesMetrics.screenMargin)
+                            .padding(.horizontal, PalMetrics.rowInset)
+                            .frame(height: PalMetrics.rowMinimumHeight)
+                            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+                            .padding(.horizontal, PalMetrics.screenMargin)
                             .accessibilityLabel(Text("Name"))
                             .accessibilityIdentifier("editBotName")
                         BotLookPicker(shape: shapeBinding, colorHex: $model.look.colorHex, seed: model.look.seed)

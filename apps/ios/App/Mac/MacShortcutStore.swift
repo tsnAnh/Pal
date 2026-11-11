@@ -1,5 +1,5 @@
 #if os(macOS)
-import HermesSettings
+import PalSettings
 import SwiftUI
 
 @MainActor

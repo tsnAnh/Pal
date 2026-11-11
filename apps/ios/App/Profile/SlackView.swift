@@ -1,5 +1,5 @@
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import SwiftUI
 
 struct SlackView: View {
@@ -215,14 +215,14 @@ private struct SlackTokenSheet: View {
                         Text(introText)
                             .hermesText(.rowSubtitle)
                             .foregroundStyle(Color(theme.palette.textSecondary))
-                            .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset)
-                            .padding(.bottom, HermesMetrics.cardGap)
+                            .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
+                            .padding(.bottom, PalMetrics.cardGap)
                         SectionCaption(String(localized: "Bot token"), accessibilityIdentifier: "slackBotTokenCaption")
-                            .padding(.bottom, HermesMetrics.captionToCardGap)
+                            .padding(.bottom, PalMetrics.captionToCardGap)
                         tokenField(String(localized: "Bot token"), prompt: String(localized: "xoxb-…"), text: $model.botToken, identifier: "slackBotToken")
                         SectionCaption(String(localized: "App token"), accessibilityIdentifier: "slackAppTokenCaption")
-                            .padding(.top, HermesMetrics.cardGap)
-                            .padding(.bottom, HermesMetrics.captionToCardGap)
+                            .padding(.top, PalMetrics.cardGap)
+                            .padding(.bottom, PalMetrics.captionToCardGap)
                         tokenField(String(localized: "App token"), prompt: String(localized: "xapp-…"), text: $model.appToken, identifier: "slackAppToken")
                     }
                     .padding(.bottom, 32)
@@ -234,10 +234,10 @@ private struct SlackTokenSheet: View {
 
     private func tokenField(_ label: String, prompt: String, text: Binding<String>, identifier: String) -> some View {
         SecretField(label, prompt: prompt, text: text, identifier: identifier)
-            .padding(.horizontal, HermesMetrics.rowInset)
-            .frame(height: HermesMetrics.rowMinimumHeight)
-            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
-            .padding(.horizontal, HermesMetrics.screenMargin)
+            .padding(.horizontal, PalMetrics.rowInset)
+            .frame(height: PalMetrics.rowMinimumHeight)
+            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+            .padding(.horizontal, PalMetrics.screenMargin)
     }
 }
 

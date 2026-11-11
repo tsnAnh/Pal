@@ -35,7 +35,7 @@ if [ "$(booted_count)" -le "$MAX_SIMS" ]; then ok "machine simulators running: $
 
 APP="$DERIVED/Build/Products/Debug-iphonesimulator/Pal.app"
 if [ -d "$APP" ]; then
-  NEWER="$(find "$IOS_DIR/App" "$IOS_DIR/Packages/HermesKit/Sources" "$IOS_DIR/Packages/HermesDesign/Sources" "$IOS_DIR/UITests" -name '*.swift' -newer "$APP/Pal" 2>/dev/null | head -3)"
+  NEWER="$(find "$IOS_DIR/App" "$IOS_DIR/Packages/PalKit/Sources" "$IOS_DIR/Packages/PalDesign/Sources" "$IOS_DIR/UITests" -name '*.swift' -newer "$APP/Pal" 2>/dev/null | head -3)"
   if [ -z "$NEWER" ]; then ok "built app is newer than all sources"; else bad "sources changed since the build; rerun scripts/build: $(echo $NEWER | tr '\n' ' ')"; fi
 else
   bad "no built app at $APP; run scripts/build"

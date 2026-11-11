@@ -1,4 +1,4 @@
-import HermesChat
+import PalChat
 import SwiftUI
 import WebKit
 

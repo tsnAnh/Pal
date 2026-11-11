@@ -1,6 +1,6 @@
 import AppIntents
 import Foundation
-import HermesChat
+import PalChat
 
 struct StopBotIntent: AppIntent {
     static let title: LocalizedStringResource = "Stop a Bot"

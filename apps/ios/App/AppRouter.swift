@@ -1,5 +1,5 @@
-import HermesClient
-import HermesRoster
+import PalClient
+import PalRoster
 import Observation
 
 enum AppRoute: Hashable {

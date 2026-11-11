@@ -1,6 +1,6 @@
 import Foundation
-import HermesChat
-import HermesProtocol
+import PalChat
+import PalProtocol
 
 enum VoicePhrase {
     static var appName: String {

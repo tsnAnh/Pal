@@ -1,4 +1,4 @@
-import HermesDesign
+import PalDesign
 import SwiftUI
 
 struct AccountScreen: View {
@@ -21,7 +21,7 @@ struct AccountScreen: View {
                 }
                 .frame(minHeight: 70)
             }
-            VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+            VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
                 SectionCaption("Switch Account", accessibilityIdentifier: "accountSwitchCaption")
                 GroupedCard(accessibilityIdentifier: "accountSwitchCard") {
                     SettingsRow(
@@ -31,7 +31,7 @@ struct AccountScreen: View {
                         Image(systemName: "checkmark")
                             .font(.system(size: 16, weight: .medium))
                             .foregroundStyle(Color(theme.palette.textPrimary))
-                            .padding(.trailing, HermesMetrics.rowInset)
+                            .padding(.trailing, PalMetrics.rowInset)
                             .accessibilityHidden(true)
                     }
                     LeadingSettingsRow(

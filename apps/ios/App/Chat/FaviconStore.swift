@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import ImageIO
 import Observation
-import HermesChat
+import PalChat
 
 private final class FaviconRedirectGuard: NSObject, URLSessionTaskDelegate {
     func urlSession(

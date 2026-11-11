@@ -1,6 +1,6 @@
 import AppIntents
 import Foundation
-import HermesRoster
+import PalRoster
 
 enum BotStatus: String, AppEnum {
     case idle

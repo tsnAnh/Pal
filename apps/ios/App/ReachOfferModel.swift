@@ -1,5 +1,5 @@
 import Foundation
-import HermesClient
+import PalClient
 import Observation
 
 @MainActor

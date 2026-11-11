@@ -1,6 +1,6 @@
 import AppIntents
 import Foundation
-import HermesChat
+import PalChat
 
 enum IntentAttachments {
     static func files(from intentFiles: [IntentFile]) throws -> [OutgoingFile] {

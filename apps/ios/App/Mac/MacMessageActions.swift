@@ -1,6 +1,6 @@
 #if os(macOS)
 import AppKit
-import HermesDesign
+import PalDesign
 import SwiftUI
 
 struct MacMessageActionsModifier: ViewModifier {

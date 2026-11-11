@@ -1,5 +1,5 @@
-import HermesDesign
-import HermesSettings
+import PalDesign
+import PalSettings
 import Observation
 import SwiftUI
 
@@ -99,7 +99,7 @@ struct PermissionsScreen: View {
 
     @ViewBuilder
     private func content(_ summary: PermissionsSummary) -> some View {
-        VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+        VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             GroupedCard(accessibilityIdentifier: "permissionsAutoReviewCard") {
                 SettingsRow.toggle(
                     "Auto-Review", subtitle: "Review your Bots' actions based on custom rules",
@@ -130,7 +130,7 @@ struct PermissionsScreen: View {
     }
 
     private func ruleSection(_ list: PermissionList, title: String, subtitle: String, rules: [PermissionRuleEntry]) -> some View {
-        VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
+        VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             SectionHeader(title, subtitle: subtitle, accessibilityIdentifier: "permissionsHeader-\(list.rawValue)") {
                 Button("Add Rule") { addingTo = list }
                     .buttonStyle(.pill())
@@ -187,7 +187,7 @@ struct AddRuleSheet: View {
                             .focused($focused)
                             .hermesText(.rowTitle)
                             .foregroundStyle(Color(theme.palette.textPrimary))
-                            .padding(.horizontal, HermesMetrics.rowInset)
+                            .padding(.horizontal, PalMetrics.rowInset)
                             .padding(.vertical, 14)
                             .accessibilityIdentifier("permissionsRuleText")
                     }

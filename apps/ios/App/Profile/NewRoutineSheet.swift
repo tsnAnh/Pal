@@ -1,5 +1,5 @@
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import SwiftUI
 
 struct NewRoutineSheet: View {
@@ -28,21 +28,21 @@ struct NewRoutineSheet: View {
                     VStack(alignment: .leading, spacing: 0) {
                         field(String(localized: "Name"), text: $model.title, prompt: String(localized: "Morning brief"), identifier: "newRoutineTitle")
                         SectionCaption(String(localized: "What should it do?"), accessibilityIdentifier: "newRoutinePromptCaption")
-                            .padding(.top, HermesMetrics.cardGap)
-                            .padding(.bottom, HermesMetrics.captionToCardGap)
+                            .padding(.top, PalMetrics.cardGap)
+                            .padding(.bottom, PalMetrics.captionToCardGap)
                         promptField
                         SectionCaption(String(localized: "When should it run?"), accessibilityIdentifier: "newRoutineScheduleCaption")
-                            .padding(.top, HermesMetrics.cardGap)
-                            .padding(.bottom, HermesMetrics.captionToCardGap)
+                            .padding(.top, PalMetrics.cardGap)
+                            .padding(.bottom, PalMetrics.captionToCardGap)
                         field(String(localized: "Schedule"), text: $model.schedule, prompt: String(localized: "weekdays at 8:30 AM"), identifier: "newRoutineSchedule")
                         previewLine
-                            .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset)
+                            .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
                             .padding(.top, 10)
                         if let failure = model.failure {
                             Text(failure)
                                 .hermesText(.rowSubtitle)
                                 .foregroundStyle(Color(theme.palette.destructive))
-                                .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset)
+                                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
                                 .padding(.top, 10)
                                 .accessibilityIdentifier("newRoutineFailure")
                         }
@@ -58,10 +58,10 @@ struct NewRoutineSheet: View {
         TextField("", text: text, prompt: Text(prompt))
             .autocapitalization(sentences: identifier != "newRoutineSchedule")
             .autocorrectionDisabled(identifier == "newRoutineSchedule")
-            .padding(.horizontal, HermesMetrics.rowInset)
-            .frame(height: HermesMetrics.rowMinimumHeight)
-            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
-            .padding(.horizontal, HermesMetrics.screenMargin)
+            .padding(.horizontal, PalMetrics.rowInset)
+            .frame(height: PalMetrics.rowMinimumHeight)
+            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+            .padding(.horizontal, PalMetrics.screenMargin)
             .accessibilityLabel(Text(label))
             .accessibilityIdentifier(identifier)
     }
@@ -69,11 +69,11 @@ struct NewRoutineSheet: View {
     private var promptField: some View {
         TextField("", text: $model.prompt, prompt: Text("Summarize what happened overnight"), axis: .vertical)
             .lineLimit(3...8)
-            .padding(.horizontal, HermesMetrics.rowInset)
+            .padding(.horizontal, PalMetrics.rowInset)
             .padding(.vertical, 14)
-            .frame(minHeight: HermesMetrics.rowMinimumHeight, alignment: .topLeading)
-            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous))
-            .padding(.horizontal, HermesMetrics.screenMargin)
+            .frame(minHeight: PalMetrics.rowMinimumHeight, alignment: .topLeading)
+            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+            .padding(.horizontal, PalMetrics.screenMargin)
             .accessibilityLabel(Text("Prompt"))
             .accessibilityIdentifier("newRoutinePrompt")
     }

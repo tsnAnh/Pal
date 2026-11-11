@@ -1,5 +1,5 @@
-import HermesBotProfile
-import HermesDesign
+import PalBotProfile
+import PalDesign
 import QuickLook
 import SwiftUI
 
@@ -124,7 +124,7 @@ extension LibraryView {
     fileprivate func standardSection(_ section: LibrarySection) -> some View {
         SectionCaption(section.id.title, accessibilityIdentifier: "librarySection-\(section.id.rawValue)")
             .padding(.top, LibraryMetrics.sectionGap)
-            .padding(.bottom, HermesMetrics.captionToCardGap)
+            .padding(.bottom, PalMetrics.captionToCardGap)
         GroupedCard(accessibilityIdentifier: "libraryCard-\(section.id.rawValue)") {
             ForEach(section.entries) { entry in
                 LibraryRow(entry: entry, model: model)
@@ -266,7 +266,7 @@ private struct LibraryRow: View {
         HStack(spacing: LibraryMetrics.iconToText) {
             LibraryIcon(entry: entry, model: model)
                 .frame(width: LibraryMetrics.iconSize, height: LibraryMetrics.iconSize)
-            VStack(alignment: .leading, spacing: HermesMetrics.rowTextSpacing) {
+            VStack(alignment: .leading, spacing: PalMetrics.rowTextSpacing) {
                 Text(entry.title)
                     .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textPrimary))
@@ -282,7 +282,7 @@ private struct LibraryRow: View {
             }
         }
         .padding(.leading, LibraryMetrics.leadingInset)
-        .padding(.trailing, HermesMetrics.rowInset)
+        .padding(.trailing, PalMetrics.rowInset)
         .padding(.vertical, LibraryMetrics.rowVerticalPadding)
         .frame(minHeight: LibraryMetrics.rowHeight)
         .contentShape(Rectangle())

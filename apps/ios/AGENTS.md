@@ -6,7 +6,7 @@ Pal is the SwiftUI iPhone and macOS app (`apps/ios`), not the Electron desktop a
 
 A Suggested item that depends on a service shows only when that service is connected in Connected apps. It is hidden, with no placeholder, when the service is not connected or its state is not yet known. A Suggested section with no visible items does not render.
 
-- Shared helper: `ConnectedServices` and `ServiceSuggestion` in `Packages/HermesKit/Sources/HermesConnect/ConnectedServices.swift`. "Connected" is the Connected apps catalog (`ConnectAppsService.load()`), never a second status call.
+- Shared helper: `ConnectedServices` and `ServiceSuggestion` in `Packages/PalKit/Sources/PalConnect/ConnectedServices.swift`. "Connected" is the Connected apps catalog (`ConnectAppsService.load()`), never a second status call.
 - App wiring: `ProfileSuggestion` and `ConnectedServicesModel` in `App/Profile/ProfileSuggestion.swift`. Both `MacInspector` and `BotProfileView` render `visibleSuggestions` only.
 - New suggestion: add a `ServiceKind` case if it needs a service, add a `ProfileSuggestion` case with its `requiredService`, and render it inside the `visibleSuggestions` loop. The Connect entry point for a service lives in Connected apps, never in Suggested.
 
@@ -17,7 +17,7 @@ Every sign-in, OAuth or "add to <service>" link opens in the system browser (`UI
 - Shared helper: `ExternalLink.open(_:)` in `App/Platform/ExternalLink.swift`. Only https and http URLs open.
 - New link: call `ExternalLink.open(url)`. Do not use `inAppBrowser(url:)`; it is for plain content links in the Library only.
 - Exception: `WebAuthenticationBrowser` (`ASWebAuthenticationSession`) stays for gateway and Connected apps sign-in, because those flows return to the app through the `dev.tsnanh.hermes.bot` callback or a loopback redirect that a plain `open` cannot deliver.
-- Enforced by `ExternalLinkPolicyTests` in `Packages/HermesKit/Tests/HermesKitTests`, which scans `App/` for web surfaces outside their allowlist.
+- Enforced by `ExternalLinkPolicyTests` in `Packages/PalKit/Tests/PalKitTests`, which scans `App/` for web surfaces outside their allowlist.
 
 ## Rule 3: connectors that need auth raise the sign-in dialog
 
@@ -31,5 +31,5 @@ Any new connector, MCP preset or service tool that can fail on a missing, expire
 
 ## Tests
 
-- `swift test` in `apps/ios/Packages/HermesKit` covers `ConnectedServices` and the source scan.
+- `swift test` in `apps/ios/Packages/PalKit` covers `ConnectedServices` and the source scan.
 - UI tests pass `-hermes-record-external-links` (links are recorded, not opened; read `externalLinkProbe`) and `-hermes-test-connected-services slack` (see `BotProfileSupport.signedInApp`).

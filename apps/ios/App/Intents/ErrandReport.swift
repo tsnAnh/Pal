@@ -1,6 +1,6 @@
 import AppIntents
-import HermesChat
-import HermesProtocol
+import PalChat
+import PalProtocol
 
 struct ErrandReport: Sendable {
     let spoken: String

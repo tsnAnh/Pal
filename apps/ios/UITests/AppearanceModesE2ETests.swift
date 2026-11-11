@@ -1,4 +1,4 @@
-import HermesDesign
+import PalDesign
 import SwiftUI
 import XCTest
 
@@ -71,6 +71,6 @@ final class AppearanceModesE2ETests: E2ETestCase {
     func test2FollowSystemRendersTheLightPaletteOnALightDevice() throws {
         XCUIDevice.shared.appearance = .light
         Thread.sleep(forTimeInterval: Self.appearanceSwitchDelay)
-        assertClose(try renderedCanvas(mode: .followSystem), HermesPalette.derivedLight.canvas, "follow system on a light device")
+        assertClose(try renderedCanvas(mode: .followSystem), PalPalette.derivedLight.canvas, "follow system on a light device")
     }
 }

@@ -1,5 +1,5 @@
-import HermesClient
-import HermesDesign
+import PalClient
+import PalDesign
 import SwiftUI
 
 struct ReachOfferOverlay: View {

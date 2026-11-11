@@ -1,14 +1,14 @@
 import Foundation
-import HermesChat
-import HermesClient
-import HermesDiagnostics
-import HermesTransport
+import PalChat
+import PalClient
+import PalDiagnostics
+import PalTransport
 
 struct LiveChatConnector: ChatConnector {
     let connection: ConnectionModel
 
     func connect() async throws -> GatewayConnection {
-        guard let connector = await connection.chatConnector else { throw HermesClientError.notSignedIn }
+        guard let connector = await connection.chatConnector else { throw PalClientError.notSignedIn }
         return try await connector.connect()
     }
 }

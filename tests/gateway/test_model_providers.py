@@ -273,7 +273,7 @@ def test_swift_decodes_every_wire_value_of_the_contract():
     from tui_gateway.contracts import model_providers as wire
     from tui_gateway.contracts.canonical_auth import AuthBeginOutcome
     swift = (Path(__file__).resolve().parents[2]
-             / 'apps/ios/Packages/HermesKit/Sources/HermesBotProfile/ModelProviders.swift').read_text()
+             / 'apps/ios/Packages/PalKit/Sources/PalBotProfile/ModelProviders.swift').read_text()
     values = {item.value for enum in (wire.ModelProviderKind, wire.ModelProviderState, wire.ModelProviderScope,
                                       wire.ModelProviderRemoveOutcome, wire.ModelProviderBaseUrlOutcome)
               for item in enum}

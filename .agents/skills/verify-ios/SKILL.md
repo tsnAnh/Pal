@@ -1,6 +1,6 @@
 ---
 name: verify-ios
-description: Drive and prove the Pal iOS app (apps/ios, native Bot Mode client, bundle dev.tsnanh.hermes.bot) on an iOS Simulator against an isolated local Hermes gateway with a fake LLM. Use after any change under apps/ios (App/, Packages/HermesKit, Packages/HermesDesign, UITests/) to sign in, list bots, chat, and check avatars with real XCUITest runs, video, screenshots, and logs.
+description: Drive and prove the Pal iOS app (apps/ios, native Bot Mode client, bundle dev.tsnanh.hermes.bot) on an iOS Simulator against an isolated local Hermes gateway with a fake LLM. Use after any change under apps/ios (App/, Packages/PalKit, Packages/PalDesign, UITests/) to sign in, list bots, chat, and check avatars with real XCUITest runs, video, screenshots, and logs.
 ---
 
 # verify-ios
@@ -79,8 +79,8 @@ Simulator slots are shared machine-wide, so a run costs every other agent time.
 Host-only package tests (no simulator, no backend, no launch needed; without an active run the log goes to a fresh `swift-test-<time>` evidence dir):
 
 ```
-$S/swift-test HermesDesign                        # avatar parity, motion, tone, pointer look
-$S/swift-test HermesDesign --filter AvatarMotionTests
+$S/swift-test PalDesign                        # avatar parity, motion, tone, pointer look
+$S/swift-test PalDesign --filter AvatarMotionTests
 ```
 
 Ad hoc evidence between drives:
@@ -130,7 +130,7 @@ Run it after every drive session, pass or fail, and after any failed attempt. It
 | `drive` | `$S/drive [--label X] [--no-video] Class[/test]... \| --rerun-failed` | XCUITest against the launched backend; refuses control tests |
 | `test-lanes` | `$S/test-lanes apps/ios/UITests Class[/test]...` | which selected tests need `drive-control` |
 | `drive-control` | `$S/drive-control Class/test` | XCUITest that needs gateway kill, external turns |
-| `swift-test` | `$S/swift-test <HermesDesign\|HermesKit> [args]` | host package tests |
+| `swift-test` | `$S/swift-test <PalDesign\|PalKit> [args]` | host package tests |
 | `snap` | `$S/snap <name>` | simulator screenshot |
 | `logs` | `$S/logs [window]` | app os_log extract |
 | `cleanup` | `$S/cleanup` | teardown, never evidence |

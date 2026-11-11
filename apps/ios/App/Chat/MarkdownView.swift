@@ -1,5 +1,5 @@
-import HermesChat
-import HermesDesign
+import PalChat
+import PalDesign
 import SwiftUI
 
 struct MarkdownView: View {
@@ -109,7 +109,7 @@ struct InlineText: View {
     let text: AttributedString
     let highlight: String
     let isCurrentMatch: Bool
-    var style: HermesTextStyle = .chatBody
+    var style: PalTextStyle = .chatBody
     var weight: Font.Weight?
     var foreground: Color?
 
@@ -144,7 +144,7 @@ struct InlineText: View {
         return result
     }
 
-    static func applyHighlight(to text: AttributedString, query: String, current: Bool, theme: HermesTheme) -> AttributedString {
+    static func applyHighlight(to text: AttributedString, query: String, current: Bool, theme: PalTheme) -> AttributedString {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return text }
         var result = text

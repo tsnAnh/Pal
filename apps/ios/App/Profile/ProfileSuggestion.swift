@@ -1,5 +1,5 @@
 import Foundation
-import HermesConnect
+import PalConnect
 import Observation
 
 enum ProfileSuggestion: CaseIterable, ServiceSuggestion {

@@ -1,7 +1,7 @@
 import Foundation
-import HermesChat
-import HermesProtocol
-import HermesRoster
+import PalChat
+import PalProtocol
+import PalRoster
 
 @MainActor
 final class IntentEnvironment {

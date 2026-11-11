@@ -1,7 +1,7 @@
 import Foundation
-import HermesChat
-import HermesProtocol
-import HermesTransport
+import PalChat
+import PalProtocol
+import PalTransport
 import Observation
 
 struct BotThreadRoute: Hashable {
@@ -80,7 +80,7 @@ final class BotThreadModel {
         }
     }
 
-    private func run(_ connector: HermesClientConnector) async {
+    private func run(_ connector: PalClientConnector) async {
         var delay = Duration.milliseconds(500)
         while !Task.isCancelled {
             do {

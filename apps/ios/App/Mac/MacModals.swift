@@ -1,5 +1,5 @@
 #if os(macOS)
-import HermesDesign
+import PalDesign
 import SwiftUI
 
 struct MacModalHost: View {

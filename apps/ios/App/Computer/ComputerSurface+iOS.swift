@@ -1,5 +1,5 @@
 #if os(iOS)
-import HermesRFB
+import PalRFB
 import SwiftUI
 import UIKit
 
