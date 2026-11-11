@@ -18,26 +18,12 @@ struct MacConnectApps: View {
     private var onCatalog: Bool { model.page == .catalog }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            if onCatalog {
-                searchField.padding(.horizontal, 29).padding(.top, 17)
-                chips.padding(.top, 11.5)
+        Group {
+            if let connector = model.customConnector {
+                customConnectorPanel(connector)
+            } else {
+                listPanel
             }
-            ScrollView {
-                VStack(alignment: .leading, spacing: 30) {
-                    if onCatalog { catalogContent } else { yourPluginsContent }
-                }
-                .padding(.horizontal, 29)
-                .padding(.top, onCatalog ? 25.5 : 20)
-                .padding(.bottom, 28)
-            }
-            .scrollIndicators(.never)
-            Button("Add a custom connector") { model.addCustomConnector() }
-                .buttonStyle(.palPill)
-                .padding(.horizontal, 29)
-                .padding(.vertical, 14)
-                .accessibilityIdentifier("addCustomConnectorButton")
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectApps")
@@ -59,15 +45,60 @@ struct MacConnectApps: View {
         } message: { target in
             Text(disconnectMessage(target))
         }
-        .sheet(item: $model.customConnector) { connector in
-            CustomConnectorSheet(model: connector) { model.customConnector = nil }
-                .macSheetFrame()
-        }
         .sheet(item: $model.credentialPrompt) { prompt in
             CredentialSheet(prompt: prompt) { values in
                 Task { await model.connect(prompt.app, credentials: values) }
             }
             .macSheetFrame()
+        }
+    }
+
+    private func customConnectorPanel(_ connector: CustomConnectorModel) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button { Task { await model.leaveCustomConnector() } } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(PalTokens.textPrimary)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "Back"))
+                .accessibilityLabel(Text("Back"))
+                .accessibilityIdentifier("customConnectorBackButton")
+                Spacer()
+            }
+            .padding(.leading, 29)
+            .padding(.trailing, 38)
+            .padding(.top, 47)
+            .frame(height: 71, alignment: .top)
+            CustomConnectorForm(model: connector, style: .mac) { Task { await model.leaveCustomConnector() } }
+        }
+        .preference(key: MacPanelCloseIdentifierKey.self, value: "customConnectorCloseButton")
+    }
+
+    private var listPanel: some View {
+        VStack(spacing: 0) {
+            header
+            if onCatalog {
+                searchField.padding(.horizontal, 29).padding(.top, 17)
+                chips.padding(.top, 11.5)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 30) {
+                    if onCatalog { catalogContent } else { yourPluginsContent }
+                }
+                .padding(.horizontal, 29)
+                .padding(.top, onCatalog ? 25.5 : 20)
+                .padding(.bottom, 28)
+            }
+            .scrollIndicators(.never)
+            Button("Add a custom connector") { model.addCustomConnector() }
+                .buttonStyle(.palPill)
+                .padding(.horizontal, 29)
+                .padding(.vertical, 14)
+                .accessibilityIdentifier("addCustomConnectorButton")
         }
     }
 

@@ -187,10 +187,12 @@ public struct ConnectAppsService: Sendable {
         }
     }
 
-    func authorizeMcp(name: String, browser: any AuthorizationBrowser) async throws {
+    func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil) async throws {
         let listener = try await LoopbackRedirectListener.start(diagnostics: diagnostics)
         defer { listener.cancel() }
-        let started = try await call("mcp.servers.oauth.start", ["name": .string(name), "client_redirect_uri": .string(listener.redirectURI)])
+        var startParams: [String: JSONValue] = ["name": .string(name), "client_redirect_uri": .string(listener.redirectURI)]
+        if let clientID { startParams["client_id"] = .string(clientID) }
+        let started = try await call("mcp.servers.oauth.start", startParams)
         guard let flow = started["session_id"]?.stringValue, let link = started["auth_url"]?.stringValue.flatMap(URL.init(string:)),
               link.scheme?.lowercased() == "https" || link.scheme?.lowercased() == "http"
         else { throw ConnectAppsError.failed }

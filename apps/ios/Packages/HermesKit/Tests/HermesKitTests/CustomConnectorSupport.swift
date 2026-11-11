@@ -54,4 +54,30 @@ func customService(_ rpc: CustomRPC, profile: String? = nil, system: any Authori
     )
 }
 
-func randomToken() -> String { "tok-" + UUID().uuidString + UUID().uuidString }
+func randomSecret() -> String { "sec-" + UUID().uuidString + UUID().uuidString }
+
+func oauthChallenge() -> JSONValue {
+    ["ok": false, "reason": "auth_refused", "error": "401", "oauth_needed": true, "oauth_tokens_present": false]
+}
+
+final class CallCounter: Sendable {
+    private let count = Mutex(0)
+    func next() -> Int { count.withLock { value in value += 1; return value } }
+}
+
+func oauthThenTools(_ names: [String]) -> CustomRPC.Reply {
+    let calls = CallCounter()
+    return { params in
+        let count = calls.next()
+        return count == 1 ? oauthChallenge() : try okTools(names)(params)
+    }
+}
+
+final class BlockingBrowser: AuthorizationBrowser {
+    let presented = Mutex<[URL]>([])
+    func present(_ url: URL) async throws {
+        presented.withLock { $0.append(url) }
+        try await Task.sleep(for: .seconds(60))
+    }
+    func dismiss() async {}
+}

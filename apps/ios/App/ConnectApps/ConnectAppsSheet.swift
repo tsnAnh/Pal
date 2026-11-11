@@ -20,6 +20,57 @@ struct ConnectAppsSheet: View {
     private var onCatalog: Bool { model.page == .catalog }
 
     var body: some View {
+        Group {
+            if let connector = model.customConnector {
+                customConnectorChrome(connector)
+            } else {
+                listChrome
+            }
+        }
+        .task { await model.start() }
+        .onDisappear { Task { await model.stop() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await model.refreshPermissions() } }
+        }
+        .alert(item: $model.notice) { notice in
+            Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
+        }
+        .alert(
+            model.disconnectTarget.map { "\(disconnectVerb($0)) \($0.name)?" } ?? "",
+            isPresented: Binding(get: { model.disconnectTarget != nil }, set: { if !$0 { model.disconnectTarget = nil } }),
+            presenting: model.disconnectTarget
+        ) { target in
+            Button(disconnectVerb(target), role: .destructive) { Task { await model.disconnect(target) } }
+            Button("Cancel", role: .cancel) {}
+        } message: { target in
+            Text(disconnectMessage(target))
+        }
+        .sheet(item: $model.credentialPrompt) { prompt in
+            CredentialSheet(prompt: prompt) { values in
+                Task { await model.connect(prompt.app, credentials: values) }
+            }
+            .macSheetFrame()
+        }
+    }
+
+    private func customConnectorChrome(_ connector: CustomConnectorModel) -> some View {
+        SheetChrome(
+            leading: .back,
+            accessibilityIdentifier: "connectApps",
+            leadingAccessibilityIdentifier: "customConnectorBackButton",
+            onLeading: { Task { await model.leaveCustomConnector() } },
+            trailing: {
+                Button(role: .close) { close() }
+                    .tint(.primary)
+                    .accessibilityIdentifier("customConnectorCloseButton")
+            },
+            content: {
+                CustomConnectorForm(model: connector, style: .phone(theme)) { Task { await model.leaveCustomConnector() } }
+            }
+        )
+    }
+
+    private var listChrome: some View {
         SheetChrome(
             title: onCatalog ? "Connect apps" : "Your plugins",
             leading: onCatalog ? .close : .back,
@@ -59,34 +110,6 @@ struct ConnectAppsSheet: View {
                 }
             }
         )
-        .task { await model.start() }
-        .onDisappear { Task { await model.stop() } }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refreshPermissions() } }
-        }
-        .alert(item: $model.notice) { notice in
-            Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
-        }
-        .alert(
-            model.disconnectTarget.map { "\(disconnectVerb($0)) \($0.name)?" } ?? "",
-            isPresented: Binding(get: { model.disconnectTarget != nil }, set: { if !$0 { model.disconnectTarget = nil } }),
-            presenting: model.disconnectTarget
-        ) { target in
-            Button(disconnectVerb(target), role: .destructive) { Task { await model.disconnect(target) } }
-            Button("Cancel", role: .cancel) {}
-        } message: { target in
-            Text(disconnectMessage(target))
-        }
-        .sheet(item: $model.customConnector) { connector in
-            CustomConnectorSheet(model: connector) { model.customConnector = nil }
-                .macSheetFrame()
-        }
-        .sheet(item: $model.credentialPrompt) { prompt in
-            CredentialSheet(prompt: prompt) { values in
-                Task { await model.connect(prompt.app, credentials: values) }
-            }
-            .macSheetFrame()
-        }
     }
 
     private func disconnectVerb(_ target: ConnectDisconnectTarget) -> String {

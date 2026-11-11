@@ -2,26 +2,28 @@ import Foundation
 import HermesProtocol
 import HermesTransport
 
-public enum CustomConnectorTransport: String, Sendable, CaseIterable, Hashable {
-    case http
-    case sse
+public enum CustomConnectorType: String, Sendable, CaseIterable, Hashable {
+    case remoteHTTPS
+    case remoteSSE
 
-    init(wire: String?) {
-        self = wire?.lowercased() == "sse" ? .sse : .http
-    }
-}
+    public static let options: [CustomConnectorType] = [.remoteHTTPS, .remoteSSE]
 
-public enum CustomConnectorAuth: String, Sendable, CaseIterable, Hashable {
-    case none
-    case bearer
-    case oauth
-
-    init(wire: String?) {
-        switch wire?.lowercased() {
-        case "header", "bearer": self = .bearer
-        case "oauth": self = .oauth
-        default: self = .none
+    public var label: String {
+        switch self {
+        case .remoteHTTPS: "Remote HTTPS"
+        case .remoteSSE: "Remote HTTPS (SSE)"
         }
+    }
+
+    public var transport: String {
+        switch self {
+        case .remoteHTTPS: "http"
+        case .remoteSSE: "sse"
+        }
+    }
+
+    init(wire: String?) {
+        self = wire?.lowercased() == "sse" ? .remoteSSE : .remoteHTTPS
     }
 }
 
@@ -50,17 +52,50 @@ public struct ConnectorTool: Sendable, Equatable, Identifiable {
     }
 }
 
+public struct ConnectorHeader: Sendable, Equatable, Identifiable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    public let id: UUID
+    public var key: String
+    public var value: String
+    public let isStored: Bool
+
+    public init(id: UUID = UUID(), key: String = "", value: String = "", isStored: Bool = false) {
+        self.id = id
+        self.key = key
+        self.value = value
+        self.isStored = isStored
+    }
+
+    public var isBlank: Bool {
+        key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && value.isEmpty && !isStored
+    }
+
+    public var description: String { "ConnectorHeader(key: \(key), stored: \(isStored))" }
+    public var debugDescription: String { description }
+    public var customMirror: Mirror { Mirror(self, children: ["key": key, "stored": isStored]) }
+
+    public static func withTrailingBlank(_ rows: [ConnectorHeader]) -> [ConnectorHeader] {
+        guard let last = rows.last, !last.isBlank else { return rows + [ConnectorHeader()] }
+        return rows
+    }
+
+    public static func stored(keys: [String]) -> [ConnectorHeader] {
+        withTrailingBlank(keys.map { ConnectorHeader(key: $0, isStored: true) })
+    }
+}
+
 public struct CustomConnectorInfo: Sendable, Hashable {
     public var name: String
     public var url: String
-    public var transport: CustomConnectorTransport
-    public var auth: CustomConnectorAuth
+    public var type: CustomConnectorType
+    public var headerKeys: [String]
+    public var clientID: String?
 
-    public init(name: String, url: String, transport: CustomConnectorTransport = .http, auth: CustomConnectorAuth = .none) {
+    public init(name: String, url: String, type: CustomConnectorType = .remoteHTTPS, headerKeys: [String] = [], clientID: String? = nil) {
         self.name = name
         self.url = url
-        self.transport = transport
-        self.auth = auth
+        self.type = type
+        self.headerKeys = headerKeys
+        self.clientID = clientID
     }
 }
 
@@ -68,19 +103,22 @@ public struct McpServerEntry: Decodable, Sendable, Equatable {
     public var name: String
     public var url: String?
     public var transport: String?
-    public var auth: String?
     public var enabled: Bool
+    public var headers: [String]
+    public var clientID: String?
 
-    public init(name: String, url: String? = nil, transport: String? = nil, auth: String? = nil, enabled: Bool = true) {
+    public init(name: String, url: String? = nil, transport: String? = nil, enabled: Bool = true, headers: [String] = [], clientID: String? = nil) {
         self.name = name
         self.url = url
         self.transport = transport
-        self.auth = auth
         self.enabled = enabled
+        self.headers = headers
+        self.clientID = clientID
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, url, transport, auth, enabled
+        case name, url, transport, enabled, headers
+        case clientID = "client_id"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -88,13 +126,14 @@ public struct McpServerEntry: Decodable, Sendable, Equatable {
         name = try container.decode(String.self, forKey: .name)
         url = try container.decodeIfPresent(String.self, forKey: .url)
         transport = try container.decodeIfPresent(String.self, forKey: .transport)
-        auth = try container.decodeIfPresent(String.self, forKey: .auth)
         enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        headers = (try? container.decodeIfPresent([String].self, forKey: .headers)) ?? []
+        clientID = (try? container.decodeIfPresent(String.self, forKey: .clientID)).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     var customInfo: CustomConnectorInfo? {
         guard let url, !url.isEmpty else { return nil }
-        return CustomConnectorInfo(name: name, url: url, transport: CustomConnectorTransport(wire: transport), auth: CustomConnectorAuth(wire: auth))
+        return CustomConnectorInfo(name: name, url: url, type: CustomConnectorType(wire: transport), headerKeys: headers, clientID: clientID)
     }
 }
 
@@ -106,7 +145,8 @@ public enum CustomConnectorValidationError: Error, Sendable, Equatable {
     case unsupportedScheme
     case insecureURL
     case credentialsInURL
-    case tokenRequired
+    case invalidHeader
+    case duplicateHeader
 
     public var message: String {
         switch self {
@@ -116,55 +156,89 @@ public enum CustomConnectorValidationError: Error, Sendable, Equatable {
         case .invalidURL: "That address doesn't look right. Check it and try again."
         case .unsupportedScheme: "The address must start with https://."
         case .insecureURL: "Use a secure https:// address. Plain http is only allowed for servers on your own network."
-        case .credentialsInURL: "Remove the username and password from the address. Use a token instead."
-        case .tokenRequired: "Enter the token this server expects."
+        case .credentialsInURL: "Remove the username and password from the address. Add them as an HTTP header instead."
+        case .invalidHeader: "Check your HTTP headers. Each one needs a valid name and a value."
+        case .duplicateHeader: "Each HTTP header name can only be used once."
         }
+    }
+}
+
+public enum ConnectorURL {
+    public static let maxLength = 2048
+
+    public static func normalized(_ input: String) -> String {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !text.contains("://") else { return text }
+        let host = URLComponents(string: "https://" + text)?.host ?? ""
+        return (PrivateHost.isPrivate(host) ? "http://" : "https://") + text
+    }
+
+    public static func validated(_ input: String) throws(CustomConnectorValidationError) -> String {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw .emptyURL }
+        let text = normalized(trimmed)
+        guard text.count <= maxLength, let components = URLComponents(string: text) else { throw .invalidURL }
+        guard let scheme = components.scheme?.lowercased() else { throw .invalidURL }
+        guard scheme == "https" || scheme == "http" else { throw .unsupportedScheme }
+        guard let host = components.host, !host.isEmpty else { throw .invalidURL }
+        guard components.user == nil, components.password == nil else { throw .credentialsInURL }
+        if scheme == "http", !PrivateHost.isPrivate(host) { throw .insecureURL }
+        return text
     }
 }
 
 public struct CustomConnectorDraft: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public var name: String
+    public var type: CustomConnectorType
     public var url: String
-    public var transport: CustomConnectorTransport
-    public var auth: CustomConnectorAuth
-    public var bearerToken: ConnectorSecret?
-    public var originalAuth: CustomConnectorAuth?
+    public var headers: [ConnectorHeader]
+    public var clientID: String
+    public var originalHeaderKeys: [String]
 
     public init(
         name: String = "",
+        type: CustomConnectorType = .remoteHTTPS,
         url: String = "",
-        transport: CustomConnectorTransport = .http,
-        auth: CustomConnectorAuth = .none,
-        bearerToken: ConnectorSecret? = nil,
-        originalAuth: CustomConnectorAuth? = nil
+        headers: [ConnectorHeader] = [],
+        clientID: String = "",
+        originalHeaderKeys: [String] = []
     ) {
         self.name = name
+        self.type = type
         self.url = url
-        self.transport = transport
-        self.auth = auth
-        self.bearerToken = bearerToken
-        self.originalAuth = originalAuth
+        self.headers = headers
+        self.clientID = clientID
+        self.originalHeaderKeys = originalHeaderKeys
     }
 
-    public var description: String { "CustomConnectorDraft(name: \(name), transport: \(transport.rawValue), auth: \(auth.rawValue))" }
+    public var description: String { "CustomConnectorDraft(name: \(name), type: \(type.rawValue), headers: \(headers.map(\.key)))" }
     public var debugDescription: String { description }
     public var customMirror: Mirror {
-        Mirror(self, children: ["name": name, "transport": transport.rawValue, "auth": auth.rawValue])
+        Mirror(self, children: ["name": name, "type": type.rawValue, "headerKeys": headers.map(\.key)])
     }
 
     public static let maxNameLength = 48
-    public static let maxURLLength = 2048
+
+    public var canSubmit: Bool {
+        guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        do { _ = try ConnectorURL.validated(url) } catch { return false }
+        return true
+    }
+
+    public var normalizedURL: String? {
+        do { return try ConnectorURL.validated(url) } catch { return nil }
+    }
 
     public func validated() throws(CustomConnectorValidationError) -> ValidatedConnector {
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else { throw .emptyName }
         guard Self.isSafeKey(trimmedName) else { throw .invalidName }
-        let trimmedURL = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedURL.isEmpty else { throw .emptyURL }
-        try Self.validateURL(trimmedURL)
-        let token = bearerToken.flatMap { $0.isEmpty ? nil : $0 }
-        if auth == .bearer, token == nil, originalAuth != .bearer { throw .tokenRequired }
-        return ValidatedConnector(name: trimmedName, url: trimmedURL, transport: transport, auth: auth, token: auth == .bearer ? token : nil)
+        let address = try ConnectorURL.validated(url)
+        let trimmedClient = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ValidatedConnector(
+            name: trimmedName, url: address, type: type, headers: try Self.validatedHeaders(headers),
+            clientID: trimmedClient.isEmpty ? nil : trimmedClient
+        )
     }
 
     static func isSafeKey(_ value: String) -> Bool {
@@ -176,22 +250,46 @@ public struct CustomConnectorDraft: Sendable, CustomStringConvertible, CustomDeb
         (scalar.value >= 48 && scalar.value <= 57) || (scalar.value >= 65 && scalar.value <= 90) || (scalar.value >= 97 && scalar.value <= 122)
     }
 
-    private static func validateURL(_ text: String) throws(CustomConnectorValidationError) {
-        guard text.count <= maxURLLength, let components = URLComponents(string: text) else { throw .invalidURL }
-        guard let scheme = components.scheme?.lowercased() else { throw .invalidURL }
-        guard scheme == "https" || scheme == "http" else { throw .unsupportedScheme }
-        guard let host = components.host, !host.isEmpty else { throw .invalidURL }
-        guard components.user == nil, components.password == nil else { throw .credentialsInURL }
-        if scheme == "http", !PrivateHost.isPrivate(host) { throw .insecureURL }
+    private static let headerSymbols = Set("!#$%&'*+-.^_`|~".unicodeScalars)
+
+    private static func isHeaderName(_ value: String) -> Bool {
+        !value.isEmpty && value.count <= 128 && value.unicodeScalars.allSatisfy { isAlphanumeric($0) || headerSymbols.contains($0) }
     }
+
+    private static func isHeaderValue(_ value: String) -> Bool {
+        value.count <= 4096 && value.unicodeScalars.allSatisfy { $0.value == 9 || ($0.value >= 32 && $0.value != 127) }
+    }
+
+    private static func validatedHeaders(_ rows: [ConnectorHeader]) throws(CustomConnectorValidationError) -> [ValidatedHeader] {
+        var seen = Set<String>()
+        var result: [ValidatedHeader] = []
+        for row in rows where !row.isBlank {
+            let key = row.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard isHeaderName(key) else { throw .invalidHeader }
+            guard seen.insert(key.lowercased()).inserted else { throw .duplicateHeader }
+            if row.value.isEmpty {
+                guard row.isStored else { throw .invalidHeader }
+                result.append(ValidatedHeader(key: key, value: nil))
+            } else {
+                guard isHeaderValue(row.value) else { throw .invalidHeader }
+                result.append(ValidatedHeader(key: key, value: ConnectorSecret(row.value)))
+            }
+        }
+        return result
+    }
+}
+
+public struct ValidatedHeader: Sendable, Equatable {
+    public var key: String
+    var value: ConnectorSecret?
 }
 
 public struct ValidatedConnector: Sendable, Equatable {
     public var name: String
     public var url: String
-    public var transport: CustomConnectorTransport
-    public var auth: CustomConnectorAuth
-    var token: ConnectorSecret?
+    public var type: CustomConnectorType
+    public var headers: [ValidatedHeader]
+    public var clientID: String?
 }
 
 enum PrivateHost {
@@ -234,10 +332,10 @@ public enum ConnectorFailure: Error, Sendable, Equatable, CustomStringConvertibl
     public var message: String {
         switch self {
         case .unreachable: "Couldn't reach that server. Check the address and that it's online."
-        case .authRefused: "The server turned down the sign-in. Check your token or sign in again."
+        case .authRefused: "The server turned down the sign-in. Check your HTTP headers or sign in again."
         case .noTools: "Connected, but the server doesn't offer any tools yet."
         case .invalidURL: "That address doesn't look right. Check it and try again."
-        case .unsupportedTransport: "That connection type isn't supported. Pick Streamable HTTP or SSE."
+        case .unsupportedTransport: "That connection type isn't supported. Pick Remote HTTPS or Remote HTTPS (SSE)."
         case .serverError: "The server ran into a problem. Try again in a moment."
         case .nameTaken: "You already have a connector with that name. Pick another name."
         case .offline: "Couldn't reach your Hermes. Check your connection and try again."
@@ -300,6 +398,10 @@ extension ConnectorFailure {
         let network = ["timeout", "timed out", "refused", "unreachable", "resolve", "dns", "connect", "no route", "network"]
         if network.contains(where: { text.contains($0) }) { return .unreachable }
         return .serverError
+    }
+
+    static func requiresSignIn(_ result: JSONValue) -> Bool {
+        !(result["ok"]?.boolValue ?? false) && (result["oauth_needed"]?.boolValue ?? false)
     }
 
     static func tools(from result: JSONValue) -> [ConnectorTool] {

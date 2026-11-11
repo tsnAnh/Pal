@@ -79,6 +79,11 @@ final class ConnectAppsModel {
         case yourPlugins
     }
 
+    enum Mode {
+        case list
+        case customConnector(CustomConnectorModel)
+    }
+
     private(set) var phase: Phase = .loading
     private(set) var catalog = ConnectCatalog()
     private(set) var deviceRows: [DeviceRow] = []
@@ -89,7 +94,7 @@ final class ConnectAppsModel {
     var notice: ConnectNotice?
     var credentialPrompt: CredentialPrompt?
     var disconnectTarget: ConnectDisconnectTarget?
-    var customConnector: CustomConnectorModel?
+    private(set) var mode: Mode = .list
 
     let botName: String
     private let profile: String?
@@ -120,6 +125,10 @@ final class ConnectAppsModel {
         rebuildDeviceRows()
     }
 
+    var customConnector: CustomConnectorModel? {
+        if case .customConnector(let connector) = mode { connector } else { nil }
+    }
+
     var connectedCount: Int {
         catalog.connectedApps.count + deviceRows.filter { $0.action == .connected }.count
     }
@@ -147,6 +156,7 @@ final class ConnectAppsModel {
     }
 
     func stop() async {
+        await customConnector?.discard()
         if let observation, let ledger { await ledger.stopObserving(observation) }
         observation = nil
     }
@@ -252,18 +262,25 @@ final class ConnectAppsModel {
     }
 
     func addCustomConnector() {
-        customConnector = makeCustomConnector(existing: nil)
+        mode = .customConnector(makeCustomConnector(existing: nil))
     }
 
     func manage(_ app: ConnectApp) {
         guard case .custom(let info) = app.source else { return }
-        customConnector = makeCustomConnector(existing: info)
+        mode = .customConnector(makeCustomConnector(existing: info))
+    }
+
+    func leaveCustomConnector() async {
+        await customConnector?.discard()
+        mode = .list
+        await reload()
     }
 
     private func makeCustomConnector(existing: CustomConnectorInfo?) -> CustomConnectorModel {
         CustomConnectorModel(
             service: service, existing: existing, bots: bots, currentBot: currentBot,
-            reload: { [weak self] in await self?.reload() }
+            reload: { [weak self] in await self?.reload() },
+            leave: { [weak self] in self?.mode = .list }
         )
     }
 

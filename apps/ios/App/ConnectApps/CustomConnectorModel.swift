@@ -20,10 +20,10 @@ final class CustomConnectorModel: Identifiable {
 
     let id = UUID()
     var name = ""
+    var type: CustomConnectorType = .remoteHTTPS
     var url = ""
-    var transport: CustomConnectorTransport = .http
-    var auth: CustomConnectorAuth = .none
-    var token = ""
+    var headers = ConnectorHeader.withTrailingBlank([])
+    var clientID = ""
     var confirmingRemove = false
 
     private(set) var screen: Screen
@@ -32,23 +32,27 @@ final class CustomConnectorModel: Identifiable {
     private(set) var switches: [BotSwitch]
     private(set) var switchNotice: String?
     private(set) var existing: CustomConnectorInfo?
-    private(set) var removed = false
     private(set) var removeFailure: ConnectorFailure?
 
     private let service: ConnectAppsService
     private let currentBot: String?
     private let reload: @MainActor () async -> Void
+    private let leave: @MainActor () -> Void
     private let diagnostics = Diagnostics.osLog()
     private var started = false
+    private var discarded = false
+    private var pending: Task<[ConnectorTool], any Error>?
+    private var pendingAddName: String?
 
     init(
         service: ConnectAppsService, existing: CustomConnectorInfo?, bots: [CustomConnectorBot], currentBot: String?,
-        reload: @escaping @MainActor () async -> Void
+        reload: @escaping @MainActor () async -> Void, leave: @escaping @MainActor () -> Void
     ) {
         self.service = service
         self.existing = existing
         self.currentBot = currentBot
         self.reload = reload
+        self.leave = leave
         switches = bots.map { BotSwitch(id: $0.name, displayName: $0.displayName) }
         screen = existing == nil ? .form : .result
         if let existing { fill(from: existing) }
@@ -57,8 +61,29 @@ final class CustomConnectorModel: Identifiable {
     var isEditing: Bool { existing != nil }
     var phase: CustomConnectorPhase { machine.phase }
     var isBusy: Bool { phase.isInFlight }
-    var title: String { existing?.name ?? "Custom connector" }
-    var canSave: Bool { !isBusy && !name.trimmingCharacters(in: .whitespaces).isEmpty && !url.trimmingCharacters(in: .whitespaces).isEmpty }
+
+    var heading: String {
+        switch screen {
+        case .form: isEditing ? "Edit custom connector" : "Add a custom connector"
+        case .result: existing?.name ?? "Custom connector"
+        }
+    }
+
+    var submitTitle: String { isEditing ? "Save" : "Add plugin" }
+
+    var draft: CustomConnectorDraft {
+        CustomConnectorDraft(
+            name: name, type: type, url: url, headers: headers, clientID: clientID, originalHeaderKeys: existing?.headerKeys ?? []
+        )
+    }
+
+    var canSubmit: Bool { !isBusy && draft.canSubmit }
+
+    var addressPreview: String? {
+        let typed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let normalized = draft.normalizedURL, normalized != typed else { return nil }
+        return normalized
+    }
 
     var failure: ConnectorFailure? {
         if case .failed(let failure) = phase { failure } else { nil }
@@ -73,12 +98,25 @@ final class CustomConnectorModel: Identifiable {
         }
     }
 
+    func index(ofHeader id: UUID) -> Int {
+        headers.firstIndex { $0.id == id } ?? 0
+    }
+
+    func ensureTrailingHeaderRow() {
+        let padded = ConnectorHeader.withTrailingBlank(headers)
+        if padded.count != headers.count { headers = padded }
+    }
+
+    func removeHeader(_ id: UUID) {
+        headers = ConnectorHeader.withTrailingBlank(headers.filter { $0.id != id })
+    }
+
     private func fill(from info: CustomConnectorInfo) {
         name = info.name
+        type = info.type
         url = info.url
-        transport = info.transport
-        auth = info.auth
-        token = ""
+        headers = ConnectorHeader.stored(keys: info.headerKeys)
+        clientID = info.clientID ?? ""
     }
 
     func begin() async {
@@ -101,42 +139,56 @@ final class CustomConnectorModel: Identifiable {
         }
     }
 
-    func save() async {
-        guard machine.send(.submit) else { return }
-        var draft = CustomConnectorDraft(name: name, url: url, transport: transport, auth: auth, originalAuth: existing?.auth)
-        draft.bearerToken = token.isEmpty ? nil : ConnectorSecret(token)
+    func submit() async {
+        guard !discarded, machine.send(.submit) else { return }
+        let draft = draft
+        let connector: ValidatedConnector
         do {
-            _ = try draft.validated()
+            connector = try draft.validated()
         } catch {
             _ = machine.send(.failed(.validation(error)))
             return
         }
         _ = machine.send(.validated)
-        let progress: CustomConnectorProgress = { [weak self] _ in _ = self?.machine.send(.saved) }
         let adding = existing == nil
-        do {
-            let result: [ConnectorTool]
+        let service = service
+        let progress: CustomConnectorProgress = { [weak self] _ in
+            guard let self else { return }
+            _ = self.machine.send(.saved)
+            if adding { self.pendingAddName = connector.name }
+        }
+        let task = Task { () throws -> [ConnectorTool] in
             if adding {
-                result = try await service.addCustomConnector(draft, progress: progress)
-            } else {
-                result = try await service.updateCustomConnector(draft, progress: progress)
+                return try await service.addCustomConnector(draft, progress: progress)
             }
-            token = ""
-            tools = result
-            let saved = CustomConnectorInfo(
-                name: draft.name.trimmingCharacters(in: .whitespacesAndNewlines),
-                url: draft.url.trimmingCharacters(in: .whitespacesAndNewlines), transport: transport, auth: auth
-            )
-            existing = saved
-            _ = machine.send(.connected(result))
-            screen = .result
+            return try await service.updateCustomConnector(draft, progress: progress)
+        }
+        pending = task
+        do {
+            let result = try await task.value
+            pending = nil
+            pendingAddName = nil
+            guard !discarded else { return }
+            complete(result, connector: connector)
             await reload()
-            if adding { await enableForCurrentBot(saved.name) }
+            if adding { await enableForCurrentBot(connector.name) }
             await loadSwitches()
         } catch {
+            pending = nil
+            guard !discarded else { return }
             _ = machine.send(.failed(Self.failure(of: error)))
             if !adding { await reload() }
         }
+    }
+
+    private func complete(_ result: [ConnectorTool], connector: ValidatedConnector) {
+        tools = result
+        let keys = connector.headers.map(\.key)
+        let info = CustomConnectorInfo(name: connector.name, url: connector.url, type: connector.type, headerKeys: keys, clientID: connector.clientID)
+        existing = info
+        fill(from: info)
+        _ = machine.send(.connected(result))
+        screen = .result
     }
 
     func edit() {
@@ -145,11 +197,16 @@ final class CustomConnectorModel: Identifiable {
         screen = .form
     }
 
-    func cancelEditing() async {
-        guard let existing, machine.send(.reset) else { return }
-        fill(from: existing)
-        screen = .result
-        await verify(existing)
+    func discard() async {
+        discarded = true
+        guard let task = pending else { return }
+        task.cancel()
+        let finished = (try? await task.value) != nil
+        pending = nil
+        if finished, let added = pendingAddName {
+            try? await service.removeCustomConnector(name: added)
+        }
+        pendingAddName = nil
     }
 
     func remove() async {
@@ -157,8 +214,8 @@ final class CustomConnectorModel: Identifiable {
         removeFailure = nil
         do {
             try await service.removeCustomConnector(name: existing.name)
-            removed = true
             await reload()
+            leave()
         } catch {
             removeFailure = Self.failure(of: error)
         }
