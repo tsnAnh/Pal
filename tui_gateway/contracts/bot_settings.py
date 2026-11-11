@@ -98,6 +98,53 @@ method("messaging.slack.disconnect", params=ProfileParams, result=MessagingSlack
        doc="Remove a bot's Slack tokens and disable the adapter.")
 
 
+class MessagingTelegramStatus(Result):
+    """One bot's Telegram connection. The token is never echoed: only whether it is set. ``state`` is the gateway's
+    verdict for the Telegram adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``,
+    ``gateway_stopped``, ``startup_failed``, ``retrying``, ...). When the connection failed, ``error_code`` names why
+    (``telegram_auth_error``: invalid or revoked token, ``telegram_network_error`` / ``telegram_connect_error``:
+    Telegram unreachable, ``telegram_polling_conflict``: another copy uses the token); none of these is a secret."""
+
+    profile: str
+    enabled: bool
+    configured: bool
+    gateway_running: bool
+    state: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    bot_token_set: bool
+    allowed_users_set: bool
+
+
+method("messaging.telegram.status", params=ProfileParams, result=MessagingTelegramStatus,
+       doc="Telegram connection state of one bot (never carries the token).")
+
+
+class MessagingTelegramConnectParams(ProfileParams):
+    """``bot_token`` is the BotFather token; it is written to the bot's own .env only, after Telegram's getMe accepted
+    it. A replacement keeps the old token until the new one is accepted and saved. Error 4101: the token has the wrong
+    shape or Telegram refused it (invalid or revoked); 5103: Telegram could not be reached."""
+
+    bot_token: str = Field(repr=False)
+
+
+class MessagingTelegramConnectResult(MessagingTelegramStatus):
+    """The status after the write plus what became of the gateway: ``hot_served`` when a running multiplexer
+    rebuilt the adapter, else a gateway restart (``restart_started``; refused while a chat is live:
+    ``restart_busy``)."""
+
+    hot_served: bool
+    restart_started: bool
+    restart_busy: bool | None = None
+    restart_error: str | None = None
+
+
+method("messaging.telegram.connect", params=MessagingTelegramConnectParams, result=MessagingTelegramConnectResult,
+       doc="Check a bot's Telegram token with getMe, save it (replacing any stored one), enable the adapter and reload it.")
+method("messaging.telegram.disconnect", params=ProfileParams, result=MessagingTelegramConnectResult,
+       doc="Remove a bot's Telegram token and disable the adapter; the allowlist is kept.")
+
+
 class MessagingSlackManifestParams(ProfileParams):
     display_name: str | None = None
 

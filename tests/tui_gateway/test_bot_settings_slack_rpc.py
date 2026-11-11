@@ -22,7 +22,7 @@ def two_bots(tmp_path, monkeypatch) -> Path:
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("HERMES_HOME", str(home))
     monkeypatch.setattr(server, "_hermes_home", home)
-    for key in ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS"):
+    for key in ("SLACK_BOT_TOKEN", "SLACK_APP_TOKEN", "SLACK_ALLOWED_USERS", "TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_USERS", "TELEGRAM_PROXY"):
         monkeypatch.delenv(key, raising=False)
     create_profile("scout", no_alias=True, no_skills=True)
     create_profile("pilot", no_alias=True, no_skills=True)

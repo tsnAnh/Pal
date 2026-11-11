@@ -203,6 +203,34 @@ public struct SlackStatusWire: Codable, Sendable, Hashable {
     }
 }
 
+public struct TelegramStatusWire: Codable, Sendable, Hashable {
+    public var enabled: Bool
+    public var configured: Bool
+    public var gatewayRunning: Bool
+    public var state: String?
+    public var errorCode: String?
+    public var errorMessage: String?
+    public var botTokenSet: Bool?
+    public var allowedUsersSet: Bool?
+    public var restartStarted: Bool?
+    public var restartBusy: Bool?
+    public var restartError: String?
+    public var hotServed: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case enabled, configured, state
+        case gatewayRunning = "gateway_running"
+        case errorCode = "error_code"
+        case errorMessage = "error_message"
+        case botTokenSet = "bot_token_set"
+        case allowedUsersSet = "allowed_users_set"
+        case restartStarted = "restart_started"
+        case restartBusy = "restart_busy"
+        case restartError = "restart_error"
+        case hotServed = "hot_served"
+    }
+}
+
 public struct SlackManifestWire: Codable, Sendable, Hashable {
     public var botName: String
     public var createURL: String

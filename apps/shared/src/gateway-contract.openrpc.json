@@ -2437,6 +2437,60 @@
       }
     },
     {
+      "name": "messaging.telegram.connect",
+      "summary": "Check a bot's Telegram token with getMe, save it (replacing any stored one), enable the adapter and reload it.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingTelegramConnectParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingTelegramConnectResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.telegram.disconnect",
+      "summary": "Remove a bot's Telegram token and disable the adapter; the allowlist is kept.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingTelegramConnectResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.telegram.status",
+      "summary": "Telegram connection state of one bot (never carries the token).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingTelegramStatus"
+        }
+      }
+    },
+    {
       "name": "model.disconnect",
       "summary": "Remove every credential (env keys and OAuth state) for a provider.",
       "params": [
@@ -30073,6 +30127,219 @@
         "title": "MessagingSlackStatus",
         "type": "object"
       },
+      "MessagingTelegramConnectParams": {
+        "additionalProperties": false,
+        "description": "``bot_token`` is the BotFather token; it is written to the bot's own .env only, after Telegram's getMe accepted\nit. A replacement keeps the old token until the new one is accepted and saved. Error 4101: the token has the wrong\nshape or Telegram refused it (invalid or revoked); 5103: Telegram could not be reached.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "bot_token": {
+            "title": "Bot Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bot_token"
+        ],
+        "title": "MessagingTelegramConnectParams",
+        "type": "object"
+      },
+      "MessagingTelegramConnectResult": {
+        "additionalProperties": false,
+        "description": "The status after the write plus what became of the gateway: ``hot_served`` when a running multiplexer\nrebuilt the adapter, else a gateway restart (``restart_started``; refused while a chat is live:\n``restart_busy``).",
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "gateway_running": {
+            "title": "Gateway Running",
+            "type": "boolean"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "State"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Message"
+          },
+          "bot_token_set": {
+            "title": "Bot Token Set",
+            "type": "boolean"
+          },
+          "allowed_users_set": {
+            "title": "Allowed Users Set",
+            "type": "boolean"
+          },
+          "hot_served": {
+            "title": "Hot Served",
+            "type": "boolean"
+          },
+          "restart_started": {
+            "title": "Restart Started",
+            "type": "boolean"
+          },
+          "restart_busy": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restart Busy"
+          },
+          "restart_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restart Error"
+          }
+        },
+        "required": [
+          "profile",
+          "enabled",
+          "configured",
+          "gateway_running",
+          "bot_token_set",
+          "allowed_users_set",
+          "hot_served",
+          "restart_started"
+        ],
+        "title": "MessagingTelegramConnectResult",
+        "type": "object"
+      },
+      "MessagingTelegramStatus": {
+        "additionalProperties": false,
+        "description": "One bot's Telegram connection. The token is never echoed: only whether it is set. ``state`` is the gateway's\nverdict for the Telegram adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``,\n``gateway_stopped``, ``startup_failed``, ``retrying``, ...). When the connection failed, ``error_code`` names why\n(``telegram_auth_error``: invalid or revoked token, ``telegram_network_error`` / ``telegram_connect_error``:\nTelegram unreachable, ``telegram_polling_conflict``: another copy uses the token); none of these is a secret.",
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "gateway_running": {
+            "title": "Gateway Running",
+            "type": "boolean"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "State"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Message"
+          },
+          "bot_token_set": {
+            "title": "Bot Token Set",
+            "type": "boolean"
+          },
+          "allowed_users_set": {
+            "title": "Allowed Users Set",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "profile",
+          "enabled",
+          "configured",
+          "gateway_running",
+          "bot_token_set",
+          "allowed_users_set"
+        ],
+        "title": "MessagingTelegramStatus",
+        "type": "object"
+      },
       "MoaAggregatingPayload": {
         "additionalProperties": false,
         "properties": {
@@ -57570,6 +57837,60 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/MessagingSlackStatus"
+        }
+      }
+    },
+    {
+      "name": "messaging.telegram.connect",
+      "summary": "Check a bot's Telegram token with getMe, save it (replacing any stored one), enable the adapter and reload it.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingTelegramConnectParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingTelegramConnectResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.telegram.disconnect",
+      "summary": "Remove a bot's Telegram token and disable the adapter; the allowlist is kept.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingTelegramConnectResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.telegram.status",
+      "summary": "Telegram connection state of one bot (never carries the token).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingTelegramStatus"
         }
       }
     },

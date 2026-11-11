@@ -207,4 +207,22 @@ final class BotProfileE2ETests: BotProfileTestCase {
         XCTAssertFalse(submit.isEnabled, "wrong prefix keeps connect disabled")
         shot(app, "slack-tokens-invalid")
     }
+
+    func test9bTelegramScreenTokenEntryRequiresWellFormedToken() throws {
+        let app = signedInApp()
+        openProfile(app, Self.primarySlug)
+        element(app, "profileTelegramRow").tap()
+        let connect = element(app, "telegramConnectButton")
+        waitFor(connect, timeout: 30, "connect button")
+        shot(app, "telegram-ready")
+        connect.tap()
+        waitFor(element(app, "telegramTokenSheet"), timeout: 15, "token sheet")
+        let submit = element(app, "telegramTokenSubmit")
+        XCTAssertFalse(submit.isEnabled)
+        let token = app.secureTextFields["telegramBotToken"]
+        token.tap()
+        token.typeText("not-a-botfather-token")
+        XCTAssertFalse(submit.isEnabled, "a malformed token keeps connect disabled")
+        shot(app, "telegram-token-invalid")
+    }
 }

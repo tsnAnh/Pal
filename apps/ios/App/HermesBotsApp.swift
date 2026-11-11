@@ -188,6 +188,12 @@ struct RootView: View {
                 displayName: roster.bot(named: name)?.displayName ?? name,
                 services: bots.services
             ))
+        case .telegram(let name):
+            TelegramView(model: TelegramModel(
+                botName: name,
+                displayName: roster.bot(named: name)?.displayName ?? name,
+                services: bots.services
+            ))
         }
     }
 
