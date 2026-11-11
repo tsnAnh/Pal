@@ -1389,31 +1389,15 @@ def _skills_search(rid, params, query):
     return _ok(rid, {"results": [{"name": r.name, "description": r.describe()} for r in raw]})
 
 
-def _skills_install(rid, params, query):
-    """Install via `do_install(skip_confirm=True)`; the profile-scoped console is a sink, so the
-    RPC must carry the outcome itself. The install path prints a full scan report before the
-    gate (skills_hub._scan_quarantined); a blocked or failed install returned `installed: True`
-    before, which read as success to every caller (#63307 Part B)."""
-    class _Capture:
-        """Console stand-in: collect lines so the verdict travels with the response."""
-
-        def __init__(self):
-            self.lines = []
-
-        def print(self, *args, **kwargs):
-            self.lines.append(" ".join(str(a) for a in args))
-
-    captured = _Capture()
-    verdict = _tools_mod("hermes_cli.skills_hub").do_install(query, skip_confirm=True, console=captured)
-    bundled = _tools_mod("tools.skills_sync_bundled_ops").bundled_skill_for_install
-    installed = verdict is True or (verdict is None and bool(bundled(query)))  # an active built-in is no failure
-    if not installed:
-        # The tail carries the reason the CLI user would have seen: the scan-block message,
-        # the "Multiple skills named" candidate table, or the fetch failure.
-        log = "\n".join(captured.lines[-12:]).strip()
-        return _err(rid, 5031, log.splitlines()[-1] if log else "skill install failed",
-                    data={"installed": False, "name": query, "log": log or None})
-    return _ok(rid, {"installed": True, "name": query})
+def _skills_op(name: str):
+    """``skills.manage`` action whose body lives in ``tui_gateway.skills_hub_ops`` (failures carry code + CLI tail)."""
+    def handler(rid, params, query):
+        ops = _tools_mod("tui_gateway.skills_hub_ops")
+        try:
+            return _ok(rid, getattr(ops, name)(query))
+        except ops.SkillsOpError as exc:
+            return _err(rid, exc.code, exc.message, data=exc.data)
+    return handler
 
 
 def _skills_browse(rid, params, query):
@@ -1424,7 +1408,8 @@ def _skills_browse(rid, params, query):
 
 _SKILLS_ACTIONS = {
     "list": lambda rid, params, query: _ok(rid, {"skills": _tools_mod("hermes_cli.banner").get_available_skills()}),
-    "search": _skills_search, "install": _skills_install, "browse": _skills_browse,
+    "search": _skills_search, "browse": _skills_browse,
+    **{name: _skills_op(name) for name in ("install", "installed", "check", "update", "uninstall")},
     "inspect": lambda rid, params, query: _ok(
         rid, {"info": _tools_mod("hermes_cli.skills_hub").inspect_skill(query) or {}})}
 
@@ -1440,7 +1425,7 @@ def _run_action(rid, params: dict, table: dict, label: str, *extra) -> dict:
 
 @_scoped_rpc("skills.manage")
 def _(rid, params: dict) -> dict:
-    """list/install use the scoped profile's skills dir; search/browse/inspect hit the shared hub."""
+    """list/installed/check/install/update/uninstall use the scoped profile's skills dir; search/browse/inspect hit the shared hub."""
     return _run_action(rid, params, _SKILLS_ACTIONS, "skills", params.get("query", ""))
 
 

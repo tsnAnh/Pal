@@ -163,6 +163,10 @@ class SkillsAction(WireEnum):
     install = "install"
     browse = "browse"
     inspect = "inspect"
+    installed = "installed"
+    check = "check"
+    update = "update"
+    uninstall = "uninstall"
 
 
 class SkillsManageParams(ProfileParams):
@@ -201,9 +205,31 @@ class SkillInspectInfo(OpenModel):
     skill_md_preview: str | None = None
 
 
+class InstalledHubSkill(Result):
+    """One hub-lock row: a skill installed from a registry (the only kind update / uninstall act on)."""
+
+    name: str
+    identifier: str | None = None
+    source: str | None = None
+    trust_level: str | None = None
+    install_path: str | None = None
+
+
+class SkillUpdateStatus(Result):
+    """``check_for_skill_updates`` row; ``status`` is ``update_available`` | ``up_to_date`` | ``orphaned`` | ``invalid_install`` | ..."""
+
+    name: str
+    identifier: str | None = None
+    source: str | None = None
+    status: str
+
+
 class SkillsManageResult(Result):
     """Shape follows the action: ``list`` → ``skills`` (category → names); ``search`` → ``results``;
-    ``install`` → ``installed`` + ``name``; ``browse`` → ``items`` + paging; ``inspect`` → ``info``."""
+    ``install`` → ``installed`` + ``name``; ``browse`` → ``items`` + paging; ``inspect`` → ``info``;
+    ``installed`` → ``installed_skills``; ``check`` → ``updates``; ``update`` → ``updated``;
+    ``uninstall`` → ``removed``. ``update`` with no ``query`` updates every skill with an update;
+    a failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail."""
 
     skills: dict[str, list[str]] | None = None
     results: list[SkillHubHit] | None = None
@@ -214,10 +240,14 @@ class SkillsManageResult(Result):
     total_pages: int | None = None
     total: int | None = None
     info: SkillInspectInfo | None = None
+    installed_skills: list[InstalledHubSkill] | None = None
+    updates: list[SkillUpdateStatus] | None = None
+    updated: bool | None = None
+    removed: bool | None = None
 
 
 method("skills.manage", params=SkillsManageParams, result=SkillsManageResult,
-       doc="Skills hub backend: list the profile's skills or search / browse / inspect / install from the hub.")
+       doc="Skills hub backend: list the profile's skills, search / browse / inspect the hub, and install / check / update / uninstall for the scoped profile.")
 
 
 class SkillsReloadParams(Params):
