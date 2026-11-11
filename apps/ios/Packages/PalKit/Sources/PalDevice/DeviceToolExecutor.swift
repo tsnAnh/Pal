@@ -101,7 +101,7 @@ public actor DeviceToolExecutor {
         case .granted: return nil
         case .unsupported: return .failure(.unsupported, "This device cannot use \(Self.title(connector)).")
         case .denied, .notDetermined:
-            return .failure(.permissionDenied, "Allow \(Self.title(connector)) for Hermes in this device's Settings.")
+            return .failure(.permissionDenied, "Allow \(Self.title(connector)) for Pal in this device's Settings.")
         }
     }
 

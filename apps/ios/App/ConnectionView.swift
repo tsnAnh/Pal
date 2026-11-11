@@ -11,7 +11,7 @@ struct ConnectionForm: View {
     var body: some View {
         Form {
             if !model.isConnected {
-                Section("Hermes address") {
+                Section("Pal address") {
                     addressField
                         .urlEntry()
                         .accessibilityIdentifier("baseURLField")
@@ -75,7 +75,7 @@ struct ConnectionForm: View {
     @ViewBuilder
     private var addressField: some View {
         #if os(macOS)
-        TextField("Hermes address", text: $model.baseURLText, prompt: Text(verbatim: "https://your-host.tailnet.ts.net"))
+        TextField("Pal address", text: $model.baseURLText, prompt: Text(verbatim: "https://your-host.tailnet.ts.net"))
             .labelsHidden()
             .onChange(of: model.baseURLText) { model.addressChanged() }
         #else
@@ -185,7 +185,7 @@ struct ConnectionView: View {
                 .foregroundStyle(tone.secondaryText)
                 .padding(.top, SignInMetrics.buttonToLink)
                 .accessibilityIdentifier("otherOptionsButton")
-            Text("By continuing, you connect Pal to the Hermes you run and sign in with your Hermes account.")
+            Text("By continuing, you connect Pal to your own server and sign in with your account.")
                 .font(.system(size: SignInMetrics.footnoteSize))
                 .foregroundStyle(tone.footnoteText)
                 .multilineTextAlignment(.center)
@@ -238,7 +238,7 @@ struct ConnectionView: View {
         if let host, !model.usesPasswordSignIn {
             return String(localized: "Continue to \(host)")
         }
-        return String(localized: "Connect to your Hermes")
+        return String(localized: "Connect to your Pal")
     }
 }
 

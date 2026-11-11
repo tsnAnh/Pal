@@ -36,7 +36,7 @@ public struct BotProfile: Sendable, Equatable {
         if let display = row.displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !display.isEmpty {
             return display
         }
-        if row.name.lowercased() == "default" { return "Hermes" }
+        if row.name.lowercased() == "default" { return "Pal" }
         return row.name
             .replacingOccurrences(of: "[-_]+", with: " ", options: .regularExpression)
             .split(separator: " ")

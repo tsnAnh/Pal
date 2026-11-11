@@ -198,7 +198,7 @@ final class SlackModel {
         case .starting: startPolling()
         case .failed:
             if status.failure == nil { notice = String(localized: "Slack saved your tokens but the connection didn't start.") }
-        case .restartNeeded: notice = String(localized: "Hermes needs a restart to finish connecting. It can't restart while a chat is running.")
+        case .restartNeeded: notice = String(localized: "Pal needs a restart to finish connecting. It can't restart while a chat is running.")
         case .notConnected, .connected: break
         }
     }

@@ -159,7 +159,7 @@ struct SettingsRootView: View {
                 SettingsRow.navigate("Bot Computer", accessibilityIdentifier: "settingsBotComputerRow", action: { open(.botComputer) })
                 SettingsRow.navigate("Model providers", accessibilityIdentifier: "settingsModelProvidersRow", action: { open(.modelProviders) })
                 SettingsRow.navigate("Voice and memory", accessibilityIdentifier: "settingsSpeechMemoryRow", action: { open(.speechMemory) })
-                SettingsRow.navigate("Hermes service", accessibilityIdentifier: "settingsHermesServiceRow", action: { open(.hermesService) })
+                SettingsRow.navigate("Pal service", accessibilityIdentifier: "settingsHermesServiceRow", action: { open(.hermesService) })
                 SettingsRow.navigate("Manage your devices", accessibilityIdentifier: "settingsDevicesRow", action: { open(.devices) })
                 SettingsRow.navigate("Import Memory", accessibilityIdentifier: "settingsImportMemoryRow", action: { open(.importMemory) })
             }

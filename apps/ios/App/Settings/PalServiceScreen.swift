@@ -17,7 +17,7 @@ struct PalServiceScreen: View {
     }
 
     var body: some View {
-        SettingsPage(title: "Hermes service", identifier: "hermesServiceScreen", back: back) {
+        SettingsPage(title: "Pal service", identifier: "hermesServiceScreen", back: back) {
             GroupedCard(accessibilityIdentifier: "hermesServiceStateCard") {
                 SettingsRow.value("Status", value: stateText, accessibilityIdentifier: "hermesServiceState")
                 if let since = model.info?.startedAt {
@@ -41,7 +41,7 @@ struct PalServiceScreen: View {
             GroupedCard(accessibilityIdentifier: "hermesServiceActionCard") {
                 if info.canRestart {
                     SettingsRow(
-                        title: model.activity == .restarting ? "Restarting…" : "Restart Hermes",
+                        title: model.activity == .restarting ? "Restarting…" : "Restart Pal",
                         subtitle: info.activeRuns > 0 ? "A chat is running. Restart once it finishes." : nil, trailing: .none,
                         accessibilityIdentifier: "hermesServiceRestartRow",
                         action: { Task { await model.restart() } }
@@ -50,8 +50,8 @@ struct PalServiceScreen: View {
                 }
                 if info.canInstall {
                     SettingsRow(
-                        title: model.activity == .installing ? "Installing…" : "Start Hermes automatically",
-                        subtitle: "Keeps Hermes and its scheduled jobs running when you sign in.", trailing: .none,
+                        title: model.activity == .installing ? "Installing…" : "Start Pal automatically",
+                        subtitle: "Keeps Pal and its scheduled jobs running when you sign in.", trailing: .none,
                         accessibilityIdentifier: "hermesServiceInstallRow",
                         action: { Task { await model.install() } }
                     )
@@ -74,7 +74,7 @@ struct PalServiceScreen: View {
     }
 
     private var footnote: String {
-        if model.loadFailed { return "Couldn't reach Hermes. Pull to refresh." }
-        return model.info?.reason ?? "The Hermes service on the computer you're connected to."
+        if model.loadFailed { return "Couldn't reach Pal. Pull to refresh." }
+        return model.info?.reason ?? "The Pal service on the computer you're connected to."
     }
 }

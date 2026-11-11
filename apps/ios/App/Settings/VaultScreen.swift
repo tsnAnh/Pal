@@ -170,7 +170,7 @@ struct AddVaultLoginSheet: View {
                             secureField
                         }
                         CardFootnote(
-                            "Passwords are stored encrypted on your Hermes computer. Your Bots can use them but never read them.",
+                            "Passwords are stored encrypted on the computer that runs Pal. Your Bots can use them but never read them.",
                             accessibilityIdentifier: "vaultAddFootnote"
                         )
                     }

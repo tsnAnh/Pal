@@ -47,7 +47,7 @@ struct BotProfileTests {
             profileRow("x", displayName: "Named")
         ))
         let profiles = service(bots)
-        #expect(try await profiles.profile(named: "default").displayName == "Hermes")
+        #expect(try await profiles.profile(named: "default").displayName == "Pal")
         #expect(try await profiles.profile(named: "market-researcher").displayName == "Market Researcher")
         #expect(try await profiles.profile(named: "x").displayName == "Named")
     }

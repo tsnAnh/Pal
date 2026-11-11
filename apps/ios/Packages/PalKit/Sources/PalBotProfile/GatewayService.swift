@@ -151,6 +151,6 @@ public struct GatewayServiceClient: Sendable {
         return .pending(last)
     }
 
-    static let couldNotRestart = "Hermes couldn't restart."
-    static let couldNotInstall = "Hermes couldn't install the service."
+    static let couldNotRestart = "Pal couldn't restart."
+    static let couldNotInstall = "Pal couldn't install the service."
 }

@@ -51,7 +51,7 @@ public enum TelegramConnection: Sendable, Equatable {
 
 public struct TelegramFailureReason: Sendable, Equatable {
     public static let invalidToken = "Telegram doesn't accept this token. It may be wrong or revoked. Create a new one with @BotFather and update it."
-    public static let network = "Hermes can't reach Telegram right now. Check the connection; it keeps trying."
+    public static let network = "Pal can't reach Telegram right now. Check the connection; it keeps trying."
     public static let conflict = "Another copy of this bot is using the same token. Stop it, or create a new token with @BotFather and update it."
     public static let generic = "Telegram turned down the connection."
 

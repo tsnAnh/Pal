@@ -152,7 +152,7 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
         reply(
             on: connection,
             status: "200 OK",
-            body: Self.page("Signed in. You can return to Hermes."),
+            body: Self.page("Signed in. You can return to Pal."),
             then: { [weak self] in self?.finishOnQueue(.success(request)) }
         )
     }
@@ -189,7 +189,7 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
     }
 
     private static func page(_ message: String) -> Data {
-        Data("<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Hermes</title><body style=\"font:-apple-system-body;font-family:-apple-system,sans-serif;padding:2rem;text-align:center\"><p>\(message)</p></body>".utf8)
+        Data("<!doctype html><meta charset=utf-8><meta name=viewport content=\"width=device-width,initial-scale=1\"><title>Pal</title><body style=\"font:-apple-system-body;font-family:-apple-system,sans-serif;padding:2rem;text-align:center\"><p>\(message)</p></body>".utf8)
     }
 }
 

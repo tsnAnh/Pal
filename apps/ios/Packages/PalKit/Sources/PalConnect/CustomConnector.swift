@@ -325,7 +325,7 @@ public enum ConnectorFailure: Error, Sendable, Equatable, CustomStringConvertibl
         case .unsupportedTransport: "That connection type isn't supported. Pick Remote HTTPS or Remote HTTPS (SSE)."
         case .serverError: "The server ran into a problem. Try again in a moment."
         case .nameTaken: "You already have a connector with that name. Pick another name."
-        case .offline: "Couldn't reach your Hermes. Check your connection and try again."
+        case .offline: "Couldn't reach your Pal. Check your connection and try again."
         case .signInCancelled: "Sign-in was cancelled."
         case .validation(let error): error.message
         }

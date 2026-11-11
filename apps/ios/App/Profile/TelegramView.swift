@@ -229,7 +229,7 @@ private struct TelegramTokenSheet: View {
 
     private var introText: String {
         isUpdate
-            ? String(localized: "Paste the new token from @BotFather. It replaces the one Hermes has now.")
+            ? String(localized: "Paste the new token from @BotFather. It replaces the one Pal has now.")
             : String(localized: "Create a bot with @BotFather in Telegram, then paste its token here.")
     }
 }
