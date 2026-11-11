@@ -17,16 +17,19 @@ public enum SlackConnection: Sendable, Equatable {
         } else if !wire.configured {
             self = .notConnected
         } else {
-            self = Self.configured(state: wire.state, restartStarted: wire.restartStarted == true)
+            self = Self.configured(
+                state: wire.state, hasErrorCode: wire.errorCode?.isEmpty == false, restartStarted: wire.restartStarted == true
+            )
         }
     }
 
-    private static func configured(state: String?, restartStarted: Bool) -> SlackConnection {
+    private static func configured(state: String?, hasErrorCode: Bool, restartStarted: Bool) -> SlackConnection {
         switch state {
         case "connected": .connected
         case "not_configured", "disabled": .notConnected
         case "pending_restart", "gateway_stopped": restartStarted ? .starting : .restartNeeded
         case "startup_failed": .failed
+        case "fatal", "retrying": hasErrorCode ? .failed : .starting
         default: .starting
         }
     }
@@ -37,22 +40,88 @@ public enum SlackConnection: Sendable, Equatable {
         case .notConnected, .connected, .restartNeeded, .failed: true
         }
     }
+
+    public var allowsTokenUpdate: Bool {
+        switch self {
+        case .failed, .connected: true
+        case .notConnected, .starting, .restartNeeded: false
+        }
+    }
 }
 
-public struct SlackTokens: Sendable {
+public struct SlackFailureReason: Sendable, Equatable {
+    public let code: String
+    public let message: String
+
+    public init?(errorCode: String?, neededScope: String?, providedScope: String?) {
+        guard let code = errorCode?.trimmingCharacters(in: .whitespacesAndNewlines), !code.isEmpty else { return nil }
+        self.code = code
+        let needed = Self.plainList(neededScope)
+        switch code {
+        case "missing_scope":
+            if let needed {
+                let token = needed.split(separator: ",").contains("connections:write") ? "app" : "bot"
+                let has = Self.plainList(providedScope).map { " It has: \($0)." } ?? ""
+                message = "The \(token) token is missing the \(needed) scope.\(has) Add it to your Slack app, then update the token."
+            } else {
+                message = "A Slack scope is missing. Add it to your Slack app, then update the token."
+            }
+        case "invalid_auth":
+            message = "Slack didn't accept a token. Check the bot token and the app token, then update them."
+        case "token_revoked":
+            message = "A Slack token was revoked. Create a new token in your Slack app and update it."
+        case "account_inactive":
+            message = "The Slack account behind these tokens is inactive. Use tokens from an active account."
+        case "not_authed":
+            message = "Slack didn't receive a token. Update the tokens and try again."
+        default:
+            message = Self.plainList(code).map { "Slack said: \($0)" } ?? "Slack turned down the connection."
+        }
+    }
+
+    private static let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:_,.-")
+
+    private static func plainList(_ raw: String?) -> String? {
+        guard let text = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty, text.count <= 200,
+              text.allSatisfy({ allowed.contains($0) }) else { return nil }
+        return text
+    }
+}
+
+public struct SlackStatus: Sendable, Equatable {
+    public let connection: SlackConnection
+    public let failure: SlackFailureReason?
+
+    public init(connection: SlackConnection, failure: SlackFailureReason? = nil) {
+        self.connection = connection
+        self.failure = failure
+    }
+
+    public init(_ wire: SlackStatusWire) {
+        let connection = SlackConnection(wire)
+        self.connection = connection
+        failure = connection == .failed
+            ? SlackFailureReason(errorCode: wire.errorCode, neededScope: wire.neededScope, providedScope: wire.providedScope)
+            : nil
+    }
+}
+
+public struct SlackTokenUpdate: Sendable, Equatable {
     public static let botPrefix = "xoxb-"
     public static let appPrefix = "xapp-"
 
-    public let bot: String
-    public let app: String
+    public let bot: SecretString?
+    public let app: SecretString?
 
     public init?(bot: String, app: String) {
         let bot = bot.trimmingCharacters(in: .whitespacesAndNewlines)
         let app = app.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard Self.isBot(bot), Self.isApp(app) else { return nil }
-        self.bot = bot
-        self.app = app
+        guard bot.isEmpty || Self.isBot(bot), app.isEmpty || Self.isApp(app), !bot.isEmpty || !app.isEmpty else { return nil }
+        self.bot = bot.isEmpty ? nil : SecretString(bot)
+        self.app = app.isEmpty ? nil : SecretString(app)
     }
+
+    public var isComplete: Bool { bot != nil && app != nil }
 
     public static func isBot(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -80,10 +149,10 @@ public struct SlackService: Sendable {
         self.gateway = gateway
     }
 
-    public func status(profile: String) async throws -> SlackConnection {
+    public func status(profile: String) async throws -> SlackStatus {
         do {
             let result = try await gateway.scoped("messaging.slack.status", profile: profile)
-            return SlackConnection(try gateway.decoded(SlackStatusWire.self, result))
+            return SlackStatus(try gateway.decoded(SlackStatusWire.self, result))
         } catch {
             throw BotsError.surface(error)
         }
@@ -102,13 +171,13 @@ public struct SlackService: Sendable {
         }
     }
 
-    public func connect(profile: String, tokens: SlackTokens) async throws -> SlackConnection {
+    public func connect(profile: String, tokens: SlackTokenUpdate) async throws -> SlackStatus {
+        var params: [String: JSONValue] = [:]
+        if let bot = tokens.bot { params["bot_token"] = .string(bot.reveal()) }
+        if let app = tokens.app { params["app_token"] = .string(app.reveal()) }
         do {
-            let result = try await gateway.scoped("messaging.slack.connect", profile: profile, [
-                "bot_token": .string(tokens.bot),
-                "app_token": .string(tokens.app),
-            ])
-            return SlackConnection(try gateway.decoded(SlackStatusWire.self, result))
+            let result = try await gateway.scoped("messaging.slack.connect", profile: profile, params)
+            return SlackStatus(try gateway.decoded(SlackStatusWire.self, result))
         } catch GatewayTransportError.rpc(let rpc) where rpc.code == Self.invalidTokensCode {
             throw BotsError.rejected(reason: Self.invalidTokensReason)
         } catch {
@@ -116,10 +185,10 @@ public struct SlackService: Sendable {
         }
     }
 
-    public func disconnect(profile: String) async throws -> SlackConnection {
+    public func disconnect(profile: String) async throws -> SlackStatus {
         do {
             let result = try await gateway.scoped("messaging.slack.disconnect", profile: profile)
-            return SlackConnection(try gateway.decoded(SlackStatusWire.self, result))
+            return SlackStatus(try gateway.decoded(SlackStatusWire.self, result))
         } catch {
             throw BotsError.surface(error)
         }

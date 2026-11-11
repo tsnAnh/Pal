@@ -25,7 +25,7 @@ extension ConnectAppsService {
 
     private static func headersParam(_ connector: ValidatedConnector) -> JSONValue {
         var object: [String: JSONValue] = [:]
-        for header in connector.headers { object[header.key] = header.value.map { JSONValue.string($0.value) } ?? JSONValue.null }
+        for header in connector.headers { object[header.key] = header.value.map { JSONValue.string($0.reveal()) } ?? JSONValue.null }
         return .object(object)
     }
 

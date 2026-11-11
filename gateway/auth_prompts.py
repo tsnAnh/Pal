@@ -31,6 +31,12 @@ class Resolution(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
+class CredentialOutcome(StrEnum):
+    STORED = "stored"
+    FAILED = "failed"
+    REJECTED = "rejected"
+
+
 @dataclass(eq=False)
 class _Request:
     request_id: str
@@ -47,6 +53,7 @@ class _Request:
     signin_acknowledged: bool = False
     authorize_url: str | None = None
     concluding: bool = False
+    answering: bool = False
 
 
 _active: dict[tuple, _Request] = {}
@@ -193,6 +200,30 @@ async def signin(authority, request_id: str) -> tuple[bool, str | None]:
             await _conclude(req, Resolution.FAILED)
             return False, None
     return True, req.authorize_url
+
+
+async def submit_credential(authority, request_id: str, value: str) -> CredentialOutcome:
+    req = _owned(authority, request_id)
+    store = getattr(req.flow, "store", None) if req is not None else None
+    if req is None or store is None or req.future.done() or req.answering:
+        return CredentialOutcome.REJECTED
+    req.answering = True
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    scope = set_hermes_home_override(req.home)
+    try:
+        stored = await store(value)
+    except (OSError, ValueError, RuntimeError, KeyError) as exc:
+        from agent.redact import redact_sensitive_text
+        detail = redact_sensitive_text(str(exc).replace(value, "<redacted>"), force=True)[:200]
+        logger.warning("credential for %s was not saved (%s: %s)", req.service, type(exc).__name__, detail)
+        stored = False
+    finally:
+        reset_hermes_home_override(scope)
+    if not stored:
+        req.answering = False
+        return CredentialOutcome.FAILED
+    await _conclude(req, Resolution.SIGNED_IN)
+    return CredentialOutcome.STORED
 
 
 async def decline(authority, request_id: str) -> bool:
