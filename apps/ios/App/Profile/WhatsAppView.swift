@@ -114,7 +114,7 @@ struct WhatsAppView: View {
                 .hermesText(.footnoteCaption)
                 .foregroundStyle(Color(theme.palette.sectionCaption))
                 .padding(.horizontal, HermesMetrics.screenMargin + HermesMetrics.rowInset)
-                .padding(.top, HermesMetrics.toggleToFooter)
+                .padding(.top, ProfileMetrics.toggleToFooter)
                 .accessibilityIdentifier("whatsapp.allowedUsersFooter")
         }
         .padding(.top, WhatsAppMetrics.bodyToSettings)
