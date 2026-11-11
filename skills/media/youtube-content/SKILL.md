@@ -1,10 +1,16 @@
 ---
 name: youtube-content
-description: "YouTube transcripts to summaries, threads, blogs."
-version: 1.0.0
+description: "YouTube search, channel stats, video details, transcripts."
+version: 1.1.0
 author: Teknium (teknium1), Hermes Agent
 license: MIT
 platforms: [linux, macos, windows]
+required_environment_variables:
+  - name: YOUTUBE_API_KEY
+    prompt: YouTube Data API v3 key
+    help: "Create one at https://console.cloud.google.com/apis/credentials with YouTube Data API v3 enabled"
+    required_for: "video search, channel statistics and video metadata; transcripts need no key"
+    optional: true
 metadata:
   hermes:
     tags: [YouTube, Video, Transcripts, Media]
@@ -15,13 +21,21 @@ metadata:
 
 ## When to use
 
-Use when the user shares a YouTube URL or video link, asks to summarize a video, requests a transcript, or wants to extract and reformat content from any YouTube video. Transforms transcripts into structured content (chapters, summaries, threads, blog posts).
+Use when the user shares a YouTube URL or video link, asks to summarize a video, requests a transcript, wants to find YouTube videos on a topic, or asks for a channel's subscriber, view or video counts. Transforms transcripts into structured content (chapters, summaries, threads, blog posts).
 
-Extract transcripts from YouTube videos and convert them into useful formats.
+Transcripts need no key. Search, channel statistics and video metadata use the official YouTube Data API v3 and need `YOUTUBE_API_KEY`.
 
 ## Setup
 
-Use `terminal` with the Python from a PM-prepared Hermes source checkout. The
+**Search, channel stats, video metadata** need only the `YOUTUBE_API_KEY` secret and the system Python (standard library only). The owner sets it once from their terminal:
+
+```bash
+hermes config set YOUTUBE_API_KEY <key>
+```
+
+If it is not set the helper prints `YouTube search needs YOUTUBE_API_KEY; not set`. Relay that to the user and do not guess results. Do not ask the user to paste the key into chat.
+
+**Transcripts** (keyless) need the `youtube` extra. Use `terminal` with the Python from a PM-prepared Hermes source checkout. The
 `youtube` extra declares the helper's dependency; do not install packages into
 Hermes with raw pip or project-discovering `uv run`.
 
@@ -41,7 +55,19 @@ runs on a different host or in a sandbox, use an explicitly isolated helper
 environment there, not the agent's production environment. Run every command
 below with the interpreter whose import check succeeded.
 
-## Helper Script
+## API Helper
+
+`youtube_api.py` prints one JSON document. Results are bounded (`--max-results` 1-25, transcripts capped at 20,000 characters with `transcript_truncated`).
+
+```bash
+python SKILL_DIR/scripts/youtube_api.py search "query" --max-results 10
+python SKILL_DIR/scripts/youtube_api.py channel @handle          # or UC... id, or channel URL
+python SKILL_DIR/scripts/youtube_api.py video "URL_OR_ID" --transcript
+```
+
+Errors come back as `{"error": "..."}` with exit 1. A quota error means the key hit its daily 10,000 units (each search costs 100, other calls 1); tell the user, do not retry in a loop. Without the key, `video --transcript` still returns the transcript with `metadata_error` set.
+
+## Transcript Helper
 
 `SKILL_DIR` is the directory containing this SKILL.md file. The script accepts any standard YouTube URL format, short links (youtu.be), shorts, embeds, live links, or a raw 11-character video ID.
 
