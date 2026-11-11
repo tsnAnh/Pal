@@ -46,6 +46,7 @@ struct ChatRow: Identifiable, Equatable {
     let kind: Kind
     let separator: Date?
     let showsUnreadDivider: Bool
+    var images: [ImageReference] = []
 
     var searchableText: String? {
         switch kind {
@@ -68,30 +69,6 @@ struct VoiceReply: Equatable {
     var turn: Int
 }
 
-struct PendingAttachment: Identifiable, Equatable {
-    enum Kind: Equatable {
-        case image
-        case file
-    }
-
-    enum Staged: Equatable {
-        case image(PromptAttachment)
-        case file(referenceText: String)
-    }
-
-    enum State: Equatable {
-        case uploading
-        case ready(Staged)
-        case failed
-    }
-
-    let id = UUID()
-    let kind: Kind
-    let name: String
-    let thumbnail: Data?
-    var state: State
-}
-
 @MainActor
 @Observable
 final class ChatModel {
@@ -100,7 +77,9 @@ final class ChatModel {
     private(set) var isRunning = false
     private(set) var hasPendingClarify = false
     private(set) var sendError: String?
-    private(set) var attachments: [PendingAttachment] = []
+    private var pending = PendingAttachments()
+    var attachments: [PendingAttachment] { pending.items }
+    private var localImages: [String: Data] = [:]
     private(set) var slashItems: [SlashItem] = []
     private(set) var reactions: [String: String] = [:]
     private(set) var replyTarget: ReplyTarget?
@@ -243,9 +222,7 @@ final class ChatModel {
 
     func send(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let staged = attachments.compactMap { attachment -> PendingAttachment.Staged? in
-            if case .ready(let staged) = attachment.state { staged } else { nil }
-        }
+        let staged = pending.readyToSend
         guard !trimmed.isEmpty || !staged.isEmpty, canSendAttachments else { return }
         if let prompt = pendingClarify, staged.isEmpty {
             answer(prompt, with: trimmed)
@@ -264,7 +241,7 @@ final class ChatModel {
             case .file(let reference): body = body.isEmpty ? reference : body + "\n" + reference
             }
         }
-        attachments.removeAll()
+        pending.removeAll()
         Task {
             do {
                 let entry = try await outbox.enqueue(botID: bot.name, text: body, attachments: images)
@@ -354,21 +331,55 @@ final class ChatModel {
     }
 
     func attachPhoto(_ upload: PreparedUpload) {
-        stage(PendingAttachment(kind: .image, name: upload.filename, thumbnail: upload.thumbnail, state: .uploading)) { session in
+        stage(PendingAttachment(kind: .image, name: upload.filename, thumbnail: upload.thumbnail)) { [weak self] session in
             let staged = try await session.attachImage(upload.data, filename: upload.filename)
+            await self?.keepLocalImage(upload.data, forHostPath: staged.path)
             return .image(staged.promptAttachment)
         }
     }
 
     func attachFile(_ upload: PreparedUpload, mime: String) {
-        stage(PendingAttachment(kind: .file, name: upload.filename, thumbnail: nil, state: .uploading)) { session in
+        stage(PendingAttachment(kind: .file, name: upload.filename, thumbnail: nil)) { session in
             let staged = try await session.attachFile(upload.data, name: upload.filename, mime: mime)
             return .file(referenceText: staged.refText)
         }
     }
 
     func removeAttachment(_ id: UUID) {
-        attachments.removeAll { $0.id == id }
+        pending.remove(id)
+    }
+
+    func localImage(for reference: ImageReference) -> Data? {
+        guard case .hostPath(let path) = reference.source else { return nil }
+        return localImages[path]
+    }
+
+    func loadImage(_ reference: ImageReference, thumbnail: Bool) async throws -> Data {
+        if let local = localImage(for: reference) { return local }
+        do {
+            switch reference.source {
+            case .inline(let data):
+                return data
+            case .remote(let url):
+                guard url.scheme?.lowercased() == "https" else { throw ImageLoadFailure(reason: "Only secure image links can be opened.") }
+                let (data, response) = try await URLSession.shared.data(from: url)
+                guard (response as? HTTPURLResponse)?.statusCode == 200, !data.isEmpty else {
+                    throw ImageLoadFailure(reason: "The image link did not respond.")
+                }
+                return data
+            case .hostPath:
+                guard let ref = reference.assetRef, let session else { throw ChatError.notConnected }
+                return try await session.imageAsset(ref: ref, thumbnail: thumbnail)
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw ImageLoadFailure(describing: error)
+        }
+    }
+
+    func keepLocalImage(_ data: Data, forHostPath path: String) {
+        localImages[path] = data
     }
 
     func reportAttachmentFailure(_ message: String) {
@@ -406,26 +417,26 @@ final class ChatModel {
         _ attachment: PendingAttachment,
         upload: @escaping @Sendable (ChatSession) async throws -> PendingAttachment.Staged
     ) {
-        attachments.append(attachment)
+        pending.append(attachment)
         let id = attachment.id
         guard let session else {
-            update(id, to: .failed)
-            sendError = String(localized: "Attachments need a connection. Try again in a moment.")
+            let reason = String(localized: "Attachments need a connection. Try again in a moment.")
+            update(id, to: .failed(reason: reason))
+            sendError = reason
             return
         }
         Task {
             do {
                 update(id, to: .ready(try await upload(session)))
             } catch {
-                update(id, to: .failed)
+                update(id, to: .failed(reason: String(localized: "It could not be uploaded.")))
                 sendError = String(localized: "That attachment could not be uploaded.")
             }
         }
     }
 
     private func update(_ id: UUID, to state: PendingAttachment.State) {
-        guard let index = attachments.firstIndex(where: { $0.id == id }) else { return }
-        attachments[index].state = state
+        pending.setState(state, for: id)
     }
 
     private static let quoteLimit = 160
@@ -618,8 +629,9 @@ final class ChatModel {
         let byID = Dictionary(visible.map { ("submission:\($0.submissionID)", $0) }, uniquingKeysWith: { first, _ in first })
         var built: [ChatRow] = []
         for entry in entries {
-            guard let kind = rowKind(for: entry.item, outbox: byID[entry.item.id]) else { continue }
-            built.append(ChatRow(id: entry.item.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider))
+            let outbox = byID[entry.item.id]
+            guard let (kind, images) = rowKind(for: entry.item, outbox: outbox) else { continue }
+            built.append(ChatRow(id: entry.item.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider, images: images))
         }
         if shouldShowThinking {
             built.append(ChatRow(id: Self.thinkingRowID, kind: .working(status: runningToolName.map(ToolActivity.label(for:))), separator: nil, showsUnreadDivider: false))
@@ -631,7 +643,7 @@ final class ChatModel {
         recomputeFind(resetPosition: false)
     }
 
-    private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?) -> ChatRow.Kind? {
+    private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?) -> (ChatRow.Kind, [ImageReference])? {
         switch item.content {
         case .user(let text, let delivery):
             switch item.inbound {
@@ -641,27 +653,36 @@ final class ChatModel {
                 case .sending: isOffline ? .waitingForConnection : .sending
                 }
                 if let entry, case .failed = entry.state { state = .failed(submissionID: entry.submissionID) }
-                return .user(text: text, delivery: state)
+                var content = MessageImages.extract(from: text, role: .user)
+                if let entry, !entry.attachments.isEmpty {
+                    let staged = entry.attachments.filter { $0.mime.hasPrefix("image/") }.map { ImageReference(source: .hostPath($0.path)) }
+                    var seen: Set<String> = []
+                    content.images = (staged + content.images).filter { seen.insert($0.id).inserted }
+                    if entry.text.isEmpty, entry.files.isEmpty { content.text = "" }
+                }
+                return (.user(text: content.text, delivery: state), content.images)
             case .botMessage(let sender, let body):
-                return .notice(.botMessage(senderName: sender.name, body: body))
+                return (.notice(.botMessage(senderName: sender.name, body: body)), [])
             case .systemNotification:
-                return .notice(.notification)
+                return (.notice(.notification), [])
             case .processCompletion:
-                return .notice(.backgroundTaskFinished)
+                return (.notice(.backgroundTaskFinished), [])
             }
         case .assistant(let text, _, let streaming):
-            if streaming || text.isEmpty { return nil }
-            return .assistant(text: text)
+            if streaming { return nil }
+            let content = MessageImages.extract(from: text, role: .assistant)
+            if content.text.isEmpty, content.images.isEmpty { return nil }
+            return (.assistant(text: content.text), content.images)
         case .tool:
             return nil
         case .clarifyAnswered(let record):
-            return .clarifyAnswered(question: record.question, answer: record.answer)
+            return (.clarifyAnswered(question: record.question, answer: record.answer), [])
         case .clarify(let card):
-            return .clarify(card.prompt)
+            return (.clarify(card.prompt), [])
         case .approval(let card):
-            return .approval(card.prompt)
+            return (.approval(card.prompt), [])
         case .botThread(let link):
-            return .botThread(link)
+            return (.botThread(link), [])
         }
     }
 

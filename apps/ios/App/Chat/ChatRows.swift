@@ -39,6 +39,11 @@ struct ChatRowView: View {
         ChatTimeSeparator(text: ChatTimestamp.label(for: date))
     }
 
+    private var imageLoader: ChatImageLoader {
+        let model = model
+        return { reference, thumbnail in try await model.loadImage(reference, thumbnail: thumbnail) }
+    }
+
     private func messageActions(for text: String) -> MessageActions {
         let id = row.id
         let model = model
@@ -56,13 +61,15 @@ struct ChatRowView: View {
     private var content: some View {
         switch row.kind {
         case .user(let text, let delivery):
-            UserBubble(text: text, delivery: delivery, accent: model.chatAccent, highlight: findQuery, isCurrentMatch: isCurrentMatch) { id in
+            UserBubble(text: text, images: row.images, delivery: delivery, accent: model.chatAccent, highlight: findQuery, isCurrentMatch: isCurrentMatch) { id in
                 model.retry(id)
             }
             .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
+            .environment(\.chatImageLoader, imageLoader)
         case .assistant(let text):
-            AssistantBubble(text: text, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+            AssistantBubble(text: text, images: row.images, highlight: findQuery, isCurrentMatch: isCurrentMatch)
                 .environment(\.messageActions, messageActions(for: text))
+                .environment(\.chatImageLoader, imageLoader)
         case .working(let status):
             ChatWorkingRow(status: status, accent: model.chatAccent)
         case .clarifyAnswered(let question, let answer):
@@ -81,25 +88,30 @@ struct ChatRowView: View {
 
 struct AssistantBubble: View {
     let text: String
+    var images: [ImageReference] = []
     let highlight: String
     let isCurrentMatch: Bool
 
     var body: some View {
-        HStack(spacing: 0) {
-            ChatBubble(style: BubblePalette.agentBubble) {
-                MarkdownView(document: MarkdownDocument(parsing: text), highlight: highlight, isCurrentMatch: isCurrentMatch)
-                    .bubbleTextSelection()
+        VStack(alignment: .leading, spacing: 4) {
+            if !images.isEmpty { ChatImageGrid(images: images) }
+            if !text.isEmpty {
+                ChatBubble(style: BubblePalette.agentBubble) {
+                    MarkdownView(document: MarkdownDocument(parsing: text), highlight: highlight, isCurrentMatch: isCurrentMatch)
+                        .bubbleTextSelection()
+                }
+                .bubbleAccessibility(text: text, identifier: "assistantBubble")
+                .messageActions(side: .assistant)
             }
-            .bubbleAccessibility(text: text, identifier: "assistantBubble")
-            .messageActions(side: .assistant)
-            Spacer(minLength: 0)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .bubbleWidth(.leading)
     }
 }
 
 struct UserBubble: View {
     let text: String
+    var images: [ImageReference] = []
     let delivery: BubbleDelivery
     let accent: BotAccent?
     let highlight: String
@@ -117,29 +129,38 @@ struct UserBubble: View {
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 4) {
-            HStack(spacing: 0) {
-                Spacer(minLength: 0)
-                ChatBubble(fill: paint.background) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        if let quote = message.quote {
-                            UserQuoteBlock(text: quote, foreground: paint.foreground)
-                        }
-                        if !message.body.isEmpty {
-                            InlineText(
-                                text: AttributedString(message.body),
-                                highlight: highlight,
-                                isCurrentMatch: isCurrentMatch,
-                                foreground: paint.foreground
-                            )
-                        }
-                    }
-                    .bubbleTextSelection()
+            if !images.isEmpty {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    ChatImageGrid(images: images)
                 }
-                .opacity(delivery == .sent ? 1 : 0.75)
-                .bubbleAccessibility(text: message.spoken, identifier: "userBubble")
-                .messageActions(side: .user)
+                .bubbleWidth(.trailing)
             }
-            .bubbleWidth(.trailing)
+            if message.quote != nil || !message.body.isEmpty {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    ChatBubble(fill: paint.background) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            if let quote = message.quote {
+                                UserQuoteBlock(text: quote, foreground: paint.foreground)
+                            }
+                            if !message.body.isEmpty {
+                                InlineText(
+                                    text: AttributedString(message.body),
+                                    highlight: highlight,
+                                    isCurrentMatch: isCurrentMatch,
+                                    foreground: paint.foreground
+                                )
+                            }
+                        }
+                        .bubbleTextSelection()
+                    }
+                    .opacity(delivery == .sent ? 1 : 0.75)
+                    .bubbleAccessibility(text: message.spoken, identifier: "userBubble")
+                    .messageActions(side: .user)
+                }
+                .bubbleWidth(.trailing)
+            }
             status
         }
         .frame(maxWidth: .infinity, alignment: .trailing)

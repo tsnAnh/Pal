@@ -1,3 +1,4 @@
+import HermesChat
 import HermesDesign
 import HermesProtocol
 import HermesRoster
@@ -33,6 +34,15 @@ struct ChatView: View {
     }
 
     var body: some View {
+        chat
+            .attachmentIntake(
+                handlesPaste: false,
+                files: { urls in Task { await loadFiles(urls) } },
+                imageData: { data in Task { await stage(imageData: data) } }
+            )
+    }
+
+    private var chat: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -354,7 +364,14 @@ struct ChatView: View {
     }
 
     private func loadFiles(_ urls: [URL]) async {
-        for url in urls {
+        let items = DropIntake.classify(urls)
+        if let message = DropIntake.rejectionMessage(for: items) { model.reportAttachmentFailure(message) }
+        for item in items {
+            let url: URL
+            switch item {
+            case .image(let accepted), .document(let accepted): url = accepted
+            case .rejected: continue
+            }
             do {
                 let prepared = try await Task.detached { try AttachmentPreparer.prepareFile(at: url) }.value
                 if prepared.isImage { model.attachPhoto(prepared.upload) } else { model.attachFile(prepared.upload, mime: prepared.mime) }
