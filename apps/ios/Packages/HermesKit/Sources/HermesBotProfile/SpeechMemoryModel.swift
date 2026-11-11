@@ -44,7 +44,7 @@ public final class SpeechMemoryModel {
         self.client = client
     }
 
-    public static func rowID(_ area: SpeechMemoryArea, _ provider: String) -> String { "\(area.rawValue):\(provider)" }
+    public nonisolated static func rowID(_ area: SpeechMemoryArea, _ provider: String) -> String { "\(area.rawValue):\(provider)" }
 
     public var hasLoaded: Bool { settings != nil }
 
