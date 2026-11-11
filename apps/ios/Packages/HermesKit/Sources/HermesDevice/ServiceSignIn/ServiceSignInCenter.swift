@@ -11,6 +11,7 @@ public enum ServiceSignInPhase: Sendable, Hashable {
     case keyFailed(String)
     case signedIn
     case failed(String)
+    case expired
 }
 
 public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
@@ -33,11 +34,11 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var acceptsKey: Bool {
         switch phase {
         case .prompting, .keyFailed: true
-        case .signingIn, .keySet, .signedIn, .failed: false
+        case .signingIn, .keySet, .signedIn, .failed, .expired: false
         }
     }
 
-    public var takesKey: Bool { flow == .apiKey }
+    public var takesKey: Bool { flow == .apiKey || flow == .header }
 
     public var canSignIn: Bool {
         switch flow {
@@ -116,22 +117,19 @@ public final class ServiceSignInCenter {
         }
     }
 
-    public func saveKey(_ value: String) async {
-        guard let dialog = current, dialog.flow == .apiKey, dialog.acceptsKey,
-              let server = dialog.server, !server.isEmpty else { return }
-        let key = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !key.isEmpty else { return }
+    public func submitCredential(_ secret: SecretString) async {
+        guard let dialog = current, dialog.takesKey, dialog.acceptsKey, !secret.isEmpty else { return }
         let requestID = dialog.requestID
         let service = dialog.service
         setPhase(.signingIn, for: service)
         do {
-            _ = try await call(ServiceSignInWire.setAPIKeyMethod, ServiceSignInWire.setAPIKeyParams(server: server, value: key))
-            let result = AuthSignInResult(try await call(ServiceSignInWire.signInMethod, ServiceSignInWire.requestParams(requestID)))
-            guard result.recorded else {
-                setPhase(.keyFailed(Self.keyFailure), for: service, ifRequest: requestID)
-                return
+            let params = ServiceSignInWire.submitCredentialParams(requestID: requestID, value: secret)
+            let outcome = AuthCredentialOutcome(try await call(ServiceSignInWire.submitCredentialMethod, params))
+            switch outcome {
+            case .stored: setPhase(.keySet, for: service, ifRequest: requestID)
+            case .failed, .unknown: setPhase(.keyFailed(Self.keyFailure), for: service, ifRequest: requestID)
+            case .rejected: setPhase(.expired, for: service, ifRequest: requestID)
             }
-            setPhase(.keySet, for: service, ifRequest: requestID)
         } catch {
             setPhase(.keyFailed(Self.keyFailure), for: service, ifRequest: requestID)
         }
@@ -143,7 +141,7 @@ public final class ServiceSignInCenter {
         switch dialog.phase {
         case .prompting, .signingIn, .keySet, .keyFailed:
             _ = try? await call(ServiceSignInWire.declineMethod, ServiceSignInWire.requestParams(dialog.requestID))
-        case .signedIn, .failed:
+        case .signedIn, .failed, .expired:
             return
         }
     }
@@ -152,7 +150,7 @@ public final class ServiceSignInCenter {
         if let index = dialogs.firstIndex(where: { $0.service == event.service }) {
             var dialog = dialogs[index]
             switch dialog.phase {
-            case .signedIn, .failed:
+            case .signedIn, .failed, .expired:
                 dismissals.removeValue(forKey: event.service)?.cancel()
                 dialogs[index] = Self.dialog(from: event)
             case .prompting, .signingIn, .keySet, .keyFailed:
@@ -182,7 +180,7 @@ public final class ServiceSignInCenter {
         case .failed, .unknown:
             setPhase(.failed(Self.didNotFinish), for: dialog.service)
         case .timedOut:
-            setPhase(.failed(Self.timedOut), for: dialog.service)
+            setPhase(dialog.takesKey ? .expired : .failed(Self.timedOut), for: dialog.service)
         }
     }
 
@@ -245,7 +243,7 @@ public final class ServiceSignInCenter {
 
     static let pageFailure = "We couldn't open the sign-in page."
     static let startFailure = "We couldn't start sign-in. Please try again later."
-    static let keyFailure = "Couldn't save the key."
+    static let keyFailure = "Couldn't save that. Check it and try again."
     static let didNotFinish = "Sign-in didn't finish."
     static let timedOut = "Sign-in took too long and was stopped."
 }

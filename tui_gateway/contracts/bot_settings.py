@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pydantic import Field
+
 from .base import JsonValue, Params, Result, WireEnum
 from .common import ProfileParams
 from .registry import method
@@ -47,7 +49,9 @@ method("profiles.delete", params=ProfilesDeleteParams, result=ProfilesDeleteResu
 class MessagingSlackStatus(Result):
     """One bot's Slack connection. Credentials are never echoed: only whether each is set. ``state`` is the
     gateway's verdict for the Slack adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``,
-    ``gateway_stopped``, ``startup_failed``, ...)."""
+    ``gateway_stopped``, ``startup_failed``, ``retrying``, ...). When Slack refused the connection, ``error_code`` is
+    Slack's own code (``missing_scope``, ``invalid_auth``, ``token_revoked``, ...) and ``needed_scope`` /
+    ``provided_scope`` name the scopes involved; none of these is a secret."""
 
     profile: str
     enabled: bool
@@ -56,6 +60,8 @@ class MessagingSlackStatus(Result):
     state: str | None = None
     error_code: str | None = None
     error_message: str | None = None
+    needed_scope: str | None = None
+    provided_scope: str | None = None
     bot_token_set: bool
     app_token_set: bool
     allowed_users_set: bool
@@ -67,10 +73,11 @@ method("messaging.slack.status", params=ProfileParams, result=MessagingSlackStat
 
 class MessagingSlackConnectParams(ProfileParams):
     """``bot_token`` (xoxb-) and ``app_token`` (xapp-, Socket Mode) are written to the bot's own .env only.
-    ``allowed_users`` are Slack member IDs allowed to talk to the bot."""
+    ``allowed_users`` are Slack member IDs allowed to talk to the bot. Either token may be sent alone to replace it;
+    the other must already be stored."""
 
-    bot_token: str
-    app_token: str
+    bot_token: str | None = Field(default=None, repr=False)
+    app_token: str | None = Field(default=None, repr=False)
     allowed_users: list[str] | None = None
 
 
@@ -86,7 +93,7 @@ class MessagingSlackConnectResult(MessagingSlackStatus):
 
 
 method("messaging.slack.connect", params=MessagingSlackConnectParams, result=MessagingSlackConnectResult,
-       doc="Validate and save a bot's Slack tokens, enable the adapter and reload it.")
+       doc="Validate and save a bot's Slack tokens (either one alone replaces just that token), enable the adapter and reload it.")
 method("messaging.slack.disconnect", params=ProfileParams, result=MessagingSlackConnectResult,
        doc="Remove a bot's Slack tokens and disable the adapter.")
 

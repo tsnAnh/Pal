@@ -2402,7 +2402,7 @@
     },
     {
       "name": "messaging.slack.connect",
-      "summary": "Validate and save a bot's Slack tokens, enable the adapter and reload it.",
+      "summary": "Validate and save a bot's Slack tokens (either one alone replaces just that token), enable the adapter and reload it.",
       "params": [
         {
           "name": "params",
@@ -6745,6 +6745,15 @@
         "title": "AttachedImageResult",
         "type": "object"
       },
+      "AuthCredentialOutcome": {
+        "enum": [
+          "stored",
+          "failed",
+          "rejected"
+        ],
+        "title": "AuthCredentialOutcome",
+        "type": "string"
+      },
       "AuthDeclineParams": {
         "additionalProperties": false,
         "properties": {
@@ -7006,6 +7015,41 @@
           "recorded"
         ],
         "title": "AuthSigninResult",
+        "type": "object"
+      },
+      "AuthSubmitCredentialParams": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "value"
+        ],
+        "title": "AuthSubmitCredentialParams",
+        "type": "object"
+      },
+      "AuthSubmitCredentialResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/AuthCredentialOutcome"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "AuthSubmitCredentialResult",
         "type": "object"
       },
       "AutoContinue": {
@@ -29960,7 +30004,7 @@
       },
       "MessagingSlackConnectParams": {
         "additionalProperties": false,
-        "description": "``bot_token`` (xoxb-) and ``app_token`` (xapp-, Socket Mode) are written to the bot's own .env only.\n``allowed_users`` are Slack member IDs allowed to talk to the bot.",
+        "description": "``bot_token`` (xoxb-) and ``app_token`` (xapp-, Socket Mode) are written to the bot's own .env only.\n``allowed_users`` are Slack member IDs allowed to talk to the bot. Either token may be sent alone to replace it;\nthe other must already be stored.",
         "properties": {
           "profile": {
             "anyOf": [
@@ -29975,12 +30019,28 @@
             "title": "Profile"
           },
           "bot_token": {
-            "title": "Bot Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bot Token"
           },
           "app_token": {
-            "title": "App Token",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "App Token"
           },
           "allowed_users": {
             "anyOf": [
@@ -29998,10 +30058,6 @@
             "title": "Allowed Users"
           }
         },
-        "required": [
-          "bot_token",
-          "app_token"
-        ],
         "title": "MessagingSlackConnectParams",
         "type": "object"
       },
@@ -30060,6 +30116,30 @@
             ],
             "default": null,
             "title": "Error Message"
+          },
+          "needed_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Needed Scope"
+          },
+          "provided_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Provided Scope"
           },
           "bot_token_set": {
             "title": "Bot Token Set",
@@ -30184,7 +30264,7 @@
       },
       "MessagingSlackStatus": {
         "additionalProperties": false,
-        "description": "One bot's Slack connection. Credentials are never echoed: only whether each is set. ``state`` is the\ngateway's verdict for the Slack adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``,\n``gateway_stopped``, ``startup_failed``, ...).",
+        "description": "One bot's Slack connection. Credentials are never echoed: only whether each is set. ``state`` is the\ngateway's verdict for the Slack adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``,\n``gateway_stopped``, ``startup_failed``, ``retrying``, ...). When Slack refused the connection, ``error_code`` is\nSlack's own code (``missing_scope``, ``invalid_auth``, ``token_revoked``, ...) and ``needed_scope`` /\n``provided_scope`` name the scopes involved; none of these is a secret.",
         "properties": {
           "profile": {
             "title": "Profile",
@@ -30237,6 +30317,30 @@
             ],
             "default": null,
             "title": "Error Message"
+          },
+          "needed_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Needed Scope"
+          },
+          "provided_scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Provided Scope"
           },
           "bot_token_set": {
             "title": "Bot Token Set",
@@ -56486,6 +56590,24 @@
       }
     },
     {
+      "name": "auth.submit_credential",
+      "summary": "The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthSubmitCredentialParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthSubmitCredentialResult"
+        }
+      }
+    },
+    {
       "name": "bot.thread.links",
       "summary": "Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id.",
       "params": [
@@ -57711,7 +57833,7 @@
     },
     {
       "name": "messaging.slack.connect",
-      "summary": "Validate and save a bot's Slack tokens, enable the adapter and reload it.",
+      "summary": "Validate and save a bot's Slack tokens (either one alone replaces just that token), enable the adapter and reload it.",
       "params": [
         {
           "name": "params",
@@ -59085,7 +59207,7 @@
     },
     {
       "name": "auth.required",
-      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key asks for the key for MCP server `server` (store it with mcp.servers.set_api_key, then call auth.signin); header and manual have no in-app sign-in. The payload never carries a token.",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential.",
       "params": [
         {
           "name": "payload",

@@ -182,6 +182,8 @@ public struct SlackStatusWire: Codable, Sendable, Hashable {
     public var state: String?
     public var errorCode: String?
     public var errorMessage: String?
+    public var neededScope: String?
+    public var providedScope: String?
     public var restartStarted: Bool?
     public var restartBusy: Bool?
     public var restartError: String?
@@ -192,6 +194,8 @@ public struct SlackStatusWire: Codable, Sendable, Hashable {
         case gatewayRunning = "gateway_running"
         case errorCode = "error_code"
         case errorMessage = "error_message"
+        case neededScope = "needed_scope"
+        case providedScope = "provided_scope"
         case restartStarted = "restart_started"
         case restartBusy = "restart_busy"
         case restartError = "restart_error"

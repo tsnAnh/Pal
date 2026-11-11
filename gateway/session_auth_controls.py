@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from gateway import auth_prompts
 from hermes_state_runtime import RuntimeStoreError
-from tui_gateway.contracts.canonical_auth import AuthDeclineParams, AuthSigninParams
+from tui_gateway.contracts.canonical_auth import AuthDeclineParams, AuthSigninParams, AuthSubmitCredentialParams
 
 
 def _parse(model, params):
@@ -34,5 +34,16 @@ async def decline(connection, ref, params):
     return {'recorded': await auth_prompts.decline(connection.authority, parsed.request_id)}
 
 
+async def submit_credential(connection, ref, params):
+    _require_control(connection)
+    try:
+        parsed = AuthSubmitCredentialParams.model_validate(params)
+    except ValidationError:
+        raise RuntimeStoreError('invalid_params') from None
+    outcome = await auth_prompts.submit_credential(connection.authority, parsed.request_id, parsed.value)
+    return {'outcome': outcome.value}
+
+
 def handlers(connection):
-    return {'auth.signin': partial(signin, connection), 'auth.decline': partial(decline, connection)}
+    return {'auth.signin': partial(signin, connection), 'auth.decline': partial(decline, connection),
+            'auth.submit_credential': partial(submit_credential, connection)}
