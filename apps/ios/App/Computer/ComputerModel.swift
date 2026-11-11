@@ -133,6 +133,13 @@ final class ComputerModel {
         }
     }
 
+    func controlForTeaching() async -> (viewerID: String, took: Bool)? {
+        if hasControl, let viewerID { return (viewerID, false) }
+        await takeControl()
+        guard hasControl, let viewerID else { return nil }
+        return (viewerID, true)
+    }
+
     func handBack() async {
         guard hasControl, let viewerID else { return }
         releasePressedButtons()

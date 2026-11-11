@@ -4,13 +4,15 @@ import SwiftUI
 
 struct ComputerView: View {
     @State private var model: ComputerModel
+    let teach: TeachModel
     let title: String
     let spec: BotAvatarSpec?
 
     @Environment(\.dismiss) private var dismiss
 
-    init(model: ComputerModel, title: String, spec: BotAvatarSpec?) {
+    init(model: ComputerModel, teach: TeachModel, title: String, spec: BotAvatarSpec?) {
         _model = State(initialValue: model)
+        self.teach = teach
         self.title = title
         self.spec = spec
     }
@@ -50,12 +52,22 @@ struct ComputerView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .allowsHitTesting(false)
         }
+        .overlay(alignment: .top) { TeachBanner(model: teach, surface: .computer) }
         .overlay(alignment: .bottom) { bottomBar }
         .navigationBarBackButtonHidden()
         .clearNavigationBackground()
         .toolbar { toolbar }
         .toolbarTitleDisplayMode(.inline)
         .task(id: model.attempt) { await model.run() }
+        .onAppear {
+            teach.control = TeachControl(
+                acquire: { [model] in await model.controlForTeaching() },
+                release: { [model] in await model.handBack() }
+            )
+        }
+        .onDisappear { teach.control = nil }
+        .onChange(of: model.phase == .live, initial: true) { _, live in teach.setScreenLive(live) }
+        .teachPresentations(teach, surface: .computer)
         .sheet(isPresented: $model.showsHelp) { ComputerHelpSheet { model.showsHelp = false } }
         .toast($model.toast)
     }
@@ -149,11 +161,21 @@ struct ComputerView: View {
         HStack(spacing: ComputerMetrics.barSpacing) {
             if model.hasControl {
                 controlTools
+                if teach.canStart {
+                    Button("Teach a skill") { Task { await teach.start() } }
+                        .buttonStyle(ComputerPillStyle())
+                        .accessibilityIdentifier("computerTeachSkill")
+                }
                 Spacer(minLength: 0)
                 Button("I'm done") { Task { await model.handBack() } }
                     .buttonStyle(ComputerPillStyle())
                     .accessibilityIdentifier("computerImDone")
             } else if model.phase == .connecting || model.phase == .live {
+                if teach.canStart {
+                    Button("Teach a skill") { Task { await teach.start() } }
+                        .buttonStyle(ComputerPillStyle())
+                        .accessibilityIdentifier("computerTeachSkill")
+                }
                 Spacer(minLength: 0)
                 Button("Take control") { Task { await model.takeControl() } }
                     .buttonStyle(ComputerPillStyle())
