@@ -6190,6 +6190,19 @@ export interface ProfilesSetPrimaryResult {
   ok: boolean
   name: string
 }
+export interface AuthSigninParams {
+  request_id: string
+}
+export interface AuthSigninResult {
+  recorded: boolean
+  authorization_url?: string | null
+}
+export interface AuthDeclineParams {
+  request_id: string
+}
+export interface AuthDeclineResult {
+  recorded: boolean
+}
 export interface DeviceConnectorsListParams {
   device_id?: string | null
 }
@@ -7032,6 +7045,25 @@ export interface PetHatchProgressPayload {
 }
 /** ``change_watcher._CHANGE_WATCHES`` payload fn — ``{}`` for every watch except pet.changed. */
 export type ChangeSignalPayload = Record<string, unknown>
+export interface AuthRequiredPayload {
+  request_id: string
+  service: string
+  service_name: string
+  bot: string
+  bots: string[]
+  reason: AuthReason
+  flow: AuthFlow
+  user_code?: string | null
+  verification_uri?: string | null
+  expires_in?: number | null
+}
+export type AuthReason = 'missing' | 'expired' | 'revoked'
+export type AuthFlow = 'device_code' | 'oauth' | 'manual'
+export interface AuthResolvedPayload {
+  request_id: string
+  outcome: AuthOutcome
+}
+export type AuthOutcome = 'signed_in' | 'failed' | 'declined' | 'timed_out'
 export interface DeviceToolRequestPayload {
   request_id: string
   action: DeviceToolAction
@@ -7951,8 +7983,12 @@ export interface CanonicalRpcMethods {
   /** Every model-provider credential the profile holds (credential pool plus standalone logins and keys), active provider first then subscriptions then API keys, each with its usage windows and recent spend. refresh=false answers from the usage cache with no network call; refresh=true fetches all accounts concurrently within a 10s bound. */
   'account.subscriptions': { params: AccountSubscriptionsParams; result: AccountSubscriptionsResult }
   'approval.respond': { params: CanonicalApprovalParams; result: PromptResponseResult }
+  /** The user chose Not now on an auth.required request; the waiting bots are told the user declined sign-in. */
+  'auth.decline': { params: AuthDeclineParams; result: AuthDeclineResult }
   /** Sign this device out on the gateway: revoke its refresh token with the sign-in providers and drop it from the native sign-in record. */
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
+  /** The user chose Sign in on an auth.required request. For oauth the gateway starts the flow and returns authorization_url to open in the system browser; for device_code it only acknowledges (the gateway is already polling). recorded is false for an unknown, finished or foreign request. */
+  'auth.signin': { params: AuthSigninParams; result: AuthSigninResult }
   /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
   'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
   /** This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat. */
@@ -8182,7 +8218,9 @@ export const CANONICAL_RPC_METHODS = [
   'a2a.forward',
   'account.subscriptions',
   'approval.respond',
+  'auth.decline',
   'auth.revoke_self',
+  'auth.signin',
   'bot.thread.links',
   'bot.thread.list',
   'bot.thread.read',
@@ -8376,6 +8414,10 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; manual has no in-app sign-in. The payload never carries a token. */
+  'auth.required': AuthRequiredPayload
+  /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. */
+  'auth.resolved': AuthResolvedPayload
   /** A /background side agent finished. */
   'background.complete': SideAgentCompletePayload
   /** Device-flow URL + code for the billing scope step-up; the client opens the browser. */
@@ -8542,6 +8584,8 @@ export const GATEWAY_EVENT_TYPES = [
   'agent.print',
   'agent.terminal.output',
   'approval.cancelled',
+  'auth.required',
+  'auth.resolved',
   'background.complete',
   'billing.step_up.verification',
   'bot_relay.outbox.pending',
