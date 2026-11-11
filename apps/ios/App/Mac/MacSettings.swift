@@ -379,7 +379,7 @@ private struct MacGeneralSection: View {
         if case .loaded(let metrics) = sharing.state {
             MacGroup(title: "Data sharing") {
                 MacCard(identifier: "dataSharingCard") {
-                    MacRow(title: String(localized: "Share usage data"), subtitle: String(localized: "Help improve Hermes with anonymous usage information."), identifier: "dataSharingEnabledRow") {
+                    MacRow(title: String(localized: "Share usage data"), subtitle: String(localized: "Help improve Pal with anonymous usage information."), identifier: "dataSharingEnabledRow") {
                         Toggle("Share usage data", isOn: Binding(
                             get: { metrics.enabled },
                             set: { value in Task { await sharing.set(enabled: value, send: metrics.send, api: hub.api) } }
@@ -388,7 +388,7 @@ private struct MacGeneralSection: View {
                         .toggleStyle(.macSwitch)
                         .accessibilityIdentifier("dataSharingEnabledToggle")
                     }
-                    MacRow(title: String(localized: "Send reports automatically"), subtitle: String(localized: "Upload the shared usage data to Hermes."), identifier: "dataSharingSendRow") {
+                    MacRow(title: String(localized: "Send reports automatically"), subtitle: String(localized: "Upload the shared usage data to Pal."), identifier: "dataSharingSendRow") {
                         Toggle("Send reports automatically", isOn: Binding(
                             get: { metrics.enabled && metrics.send },
                             set: { value in Task { await sharing.set(enabled: metrics.enabled, send: value, api: hub.api) } }
@@ -735,7 +735,7 @@ private struct MacVaultSection: View {
                     ForEach(shown) { row($0) }
                 }
             }
-            MacFootnote(text: String(localized: "Passwords are stored encrypted on your Hermes computer. Your Bots can use them but never read them."), identifier: "vaultFootnote")
+            MacFootnote(text: String(localized: "Passwords are stored encrypted on the computer that runs Pal. Your Bots can use them but never read them."), identifier: "vaultFootnote")
         }
     }
 

@@ -119,7 +119,7 @@ struct DataSharingScreen: View {
                 VStack(alignment: .leading, spacing: HermesMetrics.captionToCardGap) {
                     GroupedCard(accessibilityIdentifier: "dataSharingCard") {
                         SettingsRow.toggle(
-                            "Share usage data", subtitle: "Help improve Hermes with anonymous usage information.",
+                            "Share usage data", subtitle: "Help improve Pal with anonymous usage information.",
                             isOn: Binding(
                                 get: { metrics.enabled },
                                 set: { value in Task { await model.set(enabled: value, send: metrics.send, api: hub.api) } }
@@ -127,7 +127,7 @@ struct DataSharingScreen: View {
                             accessibilityIdentifier: "dataSharingEnabledToggle"
                         )
                         SettingsRow.toggle(
-                            "Send reports automatically", subtitle: "Upload the shared usage data to Hermes.",
+                            "Send reports automatically", subtitle: "Upload the shared usage data to Pal.",
                             isOn: Binding(
                                 get: { metrics.enabled && metrics.send },
                                 set: { value in Task { await model.set(enabled: metrics.enabled, send: value, api: hub.api) } }
@@ -264,7 +264,7 @@ struct ImportMemoryScreen: View {
                         }
                 }
                 CardFootnote(
-                    model.result ?? "One fact per line. Hermes removes repeats and skips anything unsafe.",
+                    model.result ?? "One fact per line. Pal removes repeats and skips anything unsafe.",
                     accessibilityIdentifier: "importMemoryFootnote"
                 )
             }

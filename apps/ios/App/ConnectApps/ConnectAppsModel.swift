@@ -385,7 +385,7 @@ final class ConnectAppsModel {
         switch error {
         case .cancelled: break
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
-        case .signInRequired: report("Connecting \(app.name) needs you to sign in to Nous Portal on your Hermes first.")
+        case .signInRequired: report("Connecting \(app.name) needs you to sign in to Nous Portal on your Pal first.")
         case .unavailable, .failed: report("Couldn't connect \(app.name). Try again.")
         }
     }

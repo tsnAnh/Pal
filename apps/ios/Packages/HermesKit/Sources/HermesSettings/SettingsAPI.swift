@@ -41,10 +41,10 @@ public enum SettingsFailure: Error, Sendable, Equatable {
     public var message: String {
         switch self {
         case .notAllowed: "This account is not allowed to change that."
-        case .unavailable: "Hermes could not save that right now. Try again in a moment."
+        case .unavailable: "Pal could not save that right now. Try again in a moment."
         case .notFound: "That item no longer exists."
-        case .offline: "Could not reach Hermes. Check your connection and try again."
-        case .rejected(let code): Self.rejectionMessages[code] ?? "Hermes could not complete that."
+        case .offline: "Could not reach Pal. Check your connection and try again."
+        case .rejected(let code): Self.rejectionMessages[code] ?? "Pal could not complete that."
         case .unexpected: "Something went wrong. Try again."
         }
     }

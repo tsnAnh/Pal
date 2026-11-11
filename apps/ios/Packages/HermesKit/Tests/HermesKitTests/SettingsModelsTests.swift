@@ -279,7 +279,7 @@ struct SettingsBehaviourTests {
         #expect(SettingsFailure(GatewayTransportError.timedOut) == .offline)
         #expect(SettingsFailure(URLError(.notConnectedToInternet)) == .offline)
         #expect(SettingsFailure.rejected(code: "duplicate_rule").message == "That rule already exists.")
-        #expect(SettingsFailure.rejected(code: "zzz").message == "Hermes could not complete that.")
+        #expect(SettingsFailure.rejected(code: "zzz").message == "Pal could not complete that.")
         for sample in [SettingsFailure.notAllowed, .unavailable, .notFound, .offline, .unexpected] {
             #expect(!sample.message.contains("RPC") && !sample.message.contains("_"))
         }

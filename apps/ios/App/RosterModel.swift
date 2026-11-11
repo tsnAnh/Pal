@@ -459,7 +459,7 @@ final class RosterModel {
             return display
         }
         let slug = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if slug.lowercased() == "default" { return "Hermes" }
+        if slug.lowercased() == "default" { return "Pal" }
         let words = slug.replacingOccurrences(of: "[-_]+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
         return words.split(separator: " ").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")

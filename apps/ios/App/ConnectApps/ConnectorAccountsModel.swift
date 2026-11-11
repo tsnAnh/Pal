@@ -165,7 +165,7 @@ final class ConnectorAccountsModel: Identifiable {
         case .notFound: String(localized: "That account no longer exists. Pull to refresh.")
         case .policyChanged: String(localized: "These settings changed elsewhere. The latest are shown; try again.")
         case .readOnly: String(localized: "You can't change these settings.")
-        case .signInRequired: String(localized: "Sign in to Nous Portal on your Hermes first.")
+        case .signInRequired: String(localized: "Sign in to Nous Portal on your Pal first.")
         default: fallback
         }
     }

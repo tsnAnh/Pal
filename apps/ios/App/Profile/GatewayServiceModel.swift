@@ -68,12 +68,12 @@ final class GatewayServiceModel {
         switch notice {
         case .restarted(let date)?:
             if let date {
-                String(localized: "Hermes restarted. Running since \(date.formatted(date: .omitted, time: .shortened)).")
+                String(localized: "Pal restarted. Running since \(date.formatted(date: .omitted, time: .shortened)).")
             } else {
-                String(localized: "Hermes restarted.")
+                String(localized: "Pal restarted.")
             }
-        case .restarting?: String(localized: "Hermes is restarting. Check again in a moment.")
-        case .installed?: String(localized: "Hermes will now start automatically when you sign in.")
+        case .restarting?: String(localized: "Pal is restarting. Check again in a moment.")
+        case .installed?: String(localized: "Pal will now start automatically when you sign in.")
         case .busy(let reason)?, .unavailable(let reason)?, .failure(let reason)?: reason
         case nil: nil
         }

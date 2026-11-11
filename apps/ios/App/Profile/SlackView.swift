@@ -187,7 +187,7 @@ private struct SlackTokenSheet: View {
     private var isUpdate: Bool { model.tokenEntry == .update }
     private var introText: String {
         isUpdate
-            ? String(localized: "Paste the token you want to replace. Leave the other empty to keep the one Hermes already has.")
+            ? String(localized: "Paste the token you want to replace. Leave the other empty to keep the one Pal already has.")
             : String(localized: "After installing the app in your workspace, copy its two tokens here.")
     }
 

@@ -17,7 +17,7 @@ public enum SkillsCatalogError: Error, Sendable, Equatable {
 
     public var userMessage: String {
         switch self {
-        case .signInRequired: String(localized: "Sign in to Nous Portal on your Hermes first, then try again.")
+        case .signInRequired: String(localized: "Sign in to Nous Portal on your Pal first, then try again.")
         case .installBlocked: String(localized: "This skill was blocked by a safety check and wasn't installed.")
         case .installFailed: String(localized: "Couldn't install this skill. Try again.")
         case .updateFailed: String(localized: "Couldn't update. Try again.")

@@ -316,7 +316,7 @@ final class ConnectionModel {
         case let error as GatewayBaseURLError:
             switch error {
             case .insecureScheme: "Use an https address."
-            case .empty: "Enter your Hermes address."
+            case .empty: "Enter your Pal address."
             default: "That address is not valid."
             }
         case let error as SignInError:
@@ -326,17 +326,17 @@ final class ConnectionModel {
             case .authorizationDenied: "Sign-in was declined."
             case .invalidCredentials: "Wrong username or password."
             case .rateLimited: "Too many attempts. Try again in a moment."
-            case .serverUnavailable: "Hermes is unavailable right now. Try again shortly."
+            case .serverUnavailable: "Pal is unavailable right now. Try again shortly."
             default: "Sign-in could not be completed."
             }
         case let error as GatewayTransportError:
             switch error {
             case .closed(.unauthorized), .handshakeRejected(401): "Your session expired. Sign in again."
-            case .timedOut: "Hermes did not respond in time."
-            default: "Could not connect to Hermes."
+            case .timedOut: "Pal did not respond in time."
+            default: "Could not connect to Pal."
             }
         case is URLError:
-            "Could not reach Hermes."
+            "Could not reach Pal."
         default:
             "Something went wrong."
         }
