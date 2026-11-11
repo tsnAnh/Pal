@@ -57,6 +57,7 @@ extension ConsentAsk {
         case .alarms: "Alarms"
         case .shell: "Run commands"
         case .files: "Files"
+        case .browser: "Browser"
         }
     }
 
@@ -79,6 +80,12 @@ extension ConsentAsk {
         case .filesRead: "read a file on this Mac"
         case .filesList: "look through a folder on this Mac"
         case .filesWrite: "change a file on this Mac"
+        case .browserOpen: "open a page in your browser on this Mac"
+        case .browserRead: "read the page it opened in your browser"
+        case .browserClick: "click on the page it opened in your browser"
+        case .browserType: "type into a field on the page it opened in your browser"
+        case .browserWaitForText: "wait for text on the page it opened in your browser"
+        case .browserClose: "close the page it opened in your browser"
         }
     }
 }

@@ -6260,7 +6260,7 @@ export interface DeviceConnectorStatus {
   state: DeviceConnectorState
   os_permission: DeviceOsPermission
 }
-export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files'
+export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files' | 'browser'
 export type DeviceConnectorState = 'allowed' | 'ask' | 'off'
 export type DeviceOsPermission = 'granted' | 'denied' | 'not_determined' | 'unsupported'
 export interface DeviceConnectorsSetParams {
@@ -7118,7 +7118,7 @@ export interface DeviceToolRequestPayload {
   session_id?: string | null
   deadline_seconds: number
 }
-export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set' | 'shell.run' | 'files.read' | 'files.list' | 'files.write'
+export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set' | 'shell.run' | 'files.read' | 'files.list' | 'files.write' | 'browser.open' | 'browser.read' | 'browser.click' | 'browser.type' | 'browser.wait_for_text' | 'browser.close'
 export interface DeviceToolCancelPayload {
   request_id: string
   reason: DeviceToolCancelReason

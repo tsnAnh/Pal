@@ -43,6 +43,7 @@ targets:
         NSLocationWhenInUseUsageDescription: Pal uses your location to tell your bot where you are and to find places near you.
         NSHomeKitUsageDescription: Pal controls your lights, locks and other home accessories when you ask your bot to.
         NSAlarmKitUsageDescription: Pal sets alarms and timers when you ask your bot to.
+        NSAppleEventsUsageDescription: Pal uses your browser to open and read pages when you ask your bot to.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:

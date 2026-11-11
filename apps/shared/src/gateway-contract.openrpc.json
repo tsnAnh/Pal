@@ -20244,7 +20244,8 @@
           "location",
           "alarms",
           "shell",
-          "files"
+          "files",
+          "browser"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -20483,7 +20484,13 @@
           "shell.run",
           "files.read",
           "files.list",
-          "files.write"
+          "files.write",
+          "browser.open",
+          "browser.read",
+          "browser.click",
+          "browser.type",
+          "browser.wait_for_text",
+          "browser.close"
         ],
         "title": "DeviceToolAction",
         "type": "string"
