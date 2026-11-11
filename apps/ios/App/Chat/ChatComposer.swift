@@ -17,7 +17,7 @@ struct ChatComposer: View {
     @Binding var draft: String
     var focused: FocusState<Bool>.Binding
     let send: () -> Void
-    let openVoiceMode: () -> Void
+    let openVoiceMode: (() -> Void)?
     let removeAttachment: (UUID) -> Void
     let attachPhotos: ([PhotosPickerItem]) -> Void
     let attachCapture: (PlatformImage) -> Void
@@ -233,7 +233,7 @@ struct ChatComposer: View {
             .opacity(canSend ? 1 : 0.4)
             .accessibilityLabel(Text("Send"))
             .accessibilityIdentifier("sendButton")
-        } else {
+        } else if let openVoiceMode {
             Button(action: openVoiceMode) {
                 actionCircle(systemName: "waveform", weight: .semibold)
             }
