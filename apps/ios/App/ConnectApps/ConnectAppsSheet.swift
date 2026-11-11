@@ -46,6 +46,10 @@ struct ConnectAppsSheet: View {
         } message: { target in
             Text(disconnectMessage(target))
         }
+        .sheet(item: $model.accountsModel) { accounts in
+            ConnectorAccountsView(model: accounts, style: .phone(theme))
+                .macSheetFrame()
+        }
         .sheet(item: $model.keyRequest) { request in
             CapabilityKeyEntrySheet(model: model, request: request)
                 .presentationDetents([.medium])
@@ -281,6 +285,9 @@ struct ConnectAppsSheet: View {
                     isBusy: model.busy.contains(app.id),
                     trailing: ConnectRowAction("Disconnect") { model.disconnectTarget = .app(app) }
                 ) { icon(for: app) }
+                .contextMenu {
+                    if case .hosted = app.source { Button("Accounts") { model.manageAccounts(app) } }
+                }
             }
         }
     }
@@ -292,7 +299,7 @@ struct ConnectAppsSheet: View {
             switch app.state {
         case .disconnected: ConnectRowAction("Connect") { Task { await model.connect(app) } }
         case .needsAuthorization: ConnectRowAction("Authorize", kind: .accent) { Task { await model.connect(app) } }
-        case .connected: ConnectRowAction("Connected", kind: .dimmed) { model.disconnectTarget = .app(app) }
+        case .connected: ConnectRowAction("Manage") { model.manageAccounts(app) }
             }
         }
         return ConnectAppRow(
