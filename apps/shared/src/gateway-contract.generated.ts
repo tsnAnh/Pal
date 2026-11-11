@@ -2704,6 +2704,7 @@ export interface ProfilesDescribeResult {
   description?: string
   soul?: string
   model: ProfileModelPin
+  fallback_providers?: FallbackModel[]
   skills?: CapabilityEntry[]
   toolsets?: ToolsetEntry[]
   toolsets_pinned?: boolean
@@ -2713,6 +2714,10 @@ export interface ProfilesDescribeResult {
 export interface ProfileModelPin {
   provider?: string
   default?: string
+}
+export interface FallbackModel {
+  provider: string
+  model: string
 }
 export interface CapabilityEntry {
   name: string
@@ -2741,9 +2746,14 @@ export interface ProfilesConfigureParams {
   model?: string | null
   provider?: string | null
   confirm_expensive_model?: boolean | string | null
+  fallback_providers?: FallbackModelParam[] | null
   disabled_skills?: string[] | null
   enabled_toolsets?: string[] | null
   enabled_mcp_servers?: string[] | null
+}
+export interface FallbackModelParam {
+  provider: string
+  model: string
 }
 /** ``confirm_required`` mirrors ``config.set``: a guarded model pick wrote nothing yet. */
 export interface ProfilesConfigureResult {
@@ -2760,6 +2770,7 @@ export interface ProfilesConfigureApplied {
   soul?: boolean | null
   description?: boolean | null
   model?: boolean | null
+  fallback_providers?: boolean | null
   skills?: boolean | null
   toolsets?: boolean | null
   mcp_servers?: boolean | null

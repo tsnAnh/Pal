@@ -86,3 +86,27 @@ def test_configure_toggle_is_what_the_runtime_resolver_and_describe_see(profile_
     assert not any("disabled" in entry for entry in on_disk.values())
     assert enabled_mcp_server_names({"mcp_servers": on_disk}) == {"keep", "legacy"}
     assert _described() == {"keep": True, "drop": False, "legacy": True}
+
+
+def test_fallback_providers_round_trip_keeps_routing_and_order(profile_dir):
+    (profile_dir / "config.yaml").write_text(yaml.safe_dump({"fallback_providers": [
+        {"provider": "custom", "model": "m1", "base_url": "http://127.0.0.1:1/v1"},
+        {"provider": "openrouter", "model": "m2"},
+    ]}), encoding="utf-8")
+    assert _call("profiles.describe", {})["fallback_providers"] == [
+        {"provider": "custom", "model": "m1"}, {"provider": "openrouter", "model": "m2"}]
+
+    result = _call("profiles.configure", {"fallback_providers": [
+        {"provider": "openrouter", "model": "m2"},
+        {"provider": "custom", "model": "m1"},
+        {"provider": "anthropic", "model": ""},
+    ]})
+    assert result["applied"] == {"fallback_providers": True}
+    saved = yaml.safe_load((profile_dir / "config.yaml").read_text(encoding="utf-8"))["fallback_providers"]
+    assert saved == [
+        {"provider": "openrouter", "model": "m2"},
+        {"provider": "custom", "model": "m1", "base_url": "http://127.0.0.1:1/v1"},
+    ]
+
+    assert _call("profiles.configure", {"fallback_providers": []})["applied"] == {"fallback_providers": True}
+    assert _call("profiles.describe", {})["fallback_providers"] == []
