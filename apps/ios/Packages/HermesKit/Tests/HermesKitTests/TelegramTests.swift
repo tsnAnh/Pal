@@ -106,14 +106,14 @@ struct TelegramTests {
     private static let shapeCases: [(String, Bool)] = {
         var cases: [(String, Bool)] = []
         cases.append((token, true))
-        cases.append(("  " + token + "\n", true))
+        cases.append(("  \(token)\n", true))
         cases.append(("1:" + run(30), true))
         cases.append(("1:" + run(29), false))
         cases.append((":" + run(30), false))
         cases.append(("12a:" + run(30), false))
-        cases.append(("12:" + run(15) + " " + run(15), false))
-        cases.append(("12:" + run(29) + "!", false))
-        cases.append(("12:" + run(20) + ":" + run(20), false))
+        cases.append(("12:\(run(15)) \(run(15))", false))
+        cases.append(("12:\(run(29))!", false))
+        cases.append(("12:\(run(20)):\(run(20))", false))
         cases.append(("xoxb-123", false))
         cases.append(("", false))
         return cases
