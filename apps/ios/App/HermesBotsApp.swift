@@ -115,6 +115,7 @@ struct RootView: View {
     let links: BotLinks
     @State private var createBot = CreateBotModel()
     @State private var bots: BotsKit
+    @State private var rooms: RoomsModel
     @State private var hub: SettingsHub
     #if os(iOS)
     @SceneStorage("pal.openChat") private var restoredChat = ""
@@ -128,7 +129,9 @@ struct RootView: View {
         self.router = router
         self.hostPool = hostPool
         self.links = links
-        _bots = State(initialValue: BotsKit(connection: model))
+        let kit = BotsKit(connection: model)
+        _bots = State(initialValue: kit)
+        _rooms = State(initialValue: RoomsModel(services: kit.services, roster: roster))
         _hub = State(initialValue: SettingsHub(connection: model, roster: roster))
     }
 
@@ -159,6 +162,10 @@ struct RootView: View {
         case .chat(let name):
             if let bot = roster.bot(named: name) {
                 ChatView(model: ChatModel(bot: bot, links: links, roster: roster), router: router)
+            }
+        case .room(let roomID):
+            if let room = rooms.room(id: roomID), let service = rooms.service {
+                RoomView(model: RoomModel(room: room, service: service, rooms: rooms), roster: roster, router: router)
             }
         case .botProfile(let name):
             BotProfileView(
@@ -219,7 +226,12 @@ struct RootView: View {
     private var workspace: some View {
         navigation
             .environment(hub)
+            .environment(rooms)
             .task { await roster.runLive() }
+            .task { await rooms.run() }
+            .sheet(isPresented: Binding(get: { rooms.showsCreate }, set: { rooms.showsCreate = $0 })) {
+                CreateRoomSheet(rooms: rooms, roster: roster, router: router)
+            }
             .onChange(of: roster.bots, initial: true) { _, _ in router.dropUnresolvedChat(in: roster) }
             .onAppear {
                 router.registerShareAsTemplate { name in Task { await bots.sharer.share(botName: name) } }
