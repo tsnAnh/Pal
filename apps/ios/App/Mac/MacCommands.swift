@@ -1,58 +1,14 @@
 #if os(macOS)
 import HermesDesign
+import HermesSettings
 import SwiftUI
-
-enum MacShortcut: CaseIterable, Identifiable {
-    case newBot
-    case search
-    case searchAlternate
-    case goToBot
-    case previousBot
-    case nextBot
-    case compactSidebar
-    case details
-    case connectApps
-    case focusComposer
-    case findInChat
-    case settings
-    case shortcuts
-
-    var id: Self { self }
-
-    var key: KeyEquivalent {
-        switch self {
-        case .newBot: "n"
-        case .search: "k"
-        case .searchAlternate: "f"
-        case .goToBot: "1"
-        case .previousBot: .upArrow
-        case .nextBot: .downArrow
-        case .compactSidebar: "b"
-        case .details: "i"
-        case .connectApps: "m"
-        case .focusComposer: "l"
-        case .findInChat: "f"
-        case .settings: ","
-        case .shortcuts: "/"
-        }
-    }
-
-    var modifiers: EventModifiers {
-        switch self {
-        case .searchAlternate, .details, .connectApps: [.command, .shift]
-        case .previousBot, .nextBot: .option
-        default: .command
-        }
-    }
-
-    var keyboardShortcut: KeyboardShortcut { KeyboardShortcut(key, modifiers: modifiers) }
-}
 
 struct MacCommands: Commands {
     let shell: MacShell
     let roster: RosterModel
     let router: AppRouter
     let connection: ConnectionModel
+    let shortcuts: ShortcutStore
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
@@ -88,12 +44,12 @@ struct MacCommands: Commands {
         }
     }
 
-    private func item(_ shortcut: MacShortcut, action: @escaping () -> Void) -> some View {
-        Button(String(localized: shortcut.menuTitle)) {
+    private func item(_ shortcut: ShortcutAction, action: @escaping () -> Void) -> some View {
+        Button(String(localized: shortcut.localizedTitle)) {
             guard connection.isConnected else { return }
             action()
         }
-        .keyboardShortcut(shortcut.keyboardShortcut)
+        .keyboardShortcut(shortcuts.keyboardShortcut(for: shortcut))
     }
 
     private func openBot(at index: Int) {
@@ -112,26 +68,6 @@ struct MacCommands: Commands {
     }
 }
 
-extension MacShortcut {
-    var menuTitle: String.LocalizationValue {
-        switch self {
-        case .newBot: "New Bot"
-        case .search: "Search"
-        case .searchAlternate: "Search in All Chats"
-        case .goToBot: "Go to Bot"
-        case .previousBot: "Previous Bot"
-        case .nextBot: "Next Bot"
-        case .compactSidebar: "Compact Sidebar"
-        case .details: "Bot Details"
-        case .connectApps: "Connect Apps"
-        case .focusComposer: "Focus Message Field"
-        case .findInChat: "Find in Chat"
-        case .settings: "Settings…"
-        case .shortcuts: "Keyboard Shortcuts"
-        }
-    }
-}
-
 private struct MacShortcutRow: Identifiable {
     let id: String
     let title: LocalizedStringKey
@@ -147,55 +83,49 @@ private struct MacShortcutSection: Identifiable {
     var id: String { "\(title)" }
 }
 
-extension MacShortcut {
-    fileprivate var keycaps: [String] {
-        let glyphs = [(EventModifiers.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")]
-            .filter { modifiers.contains($0.0) }
-            .map(\.1)
-        let name: String = switch self {
-        case .previousBot: "↑"
-        case .nextBot: "↓"
-        case .goToBot: "1–9"
-        case .shortcuts: "/"
-        default: String(key.character).uppercased()
-        }
-        return glyphs + [name]
-    }
-
-    fileprivate func row(_ title: LocalizedStringKey) -> MacShortcutRow {
-        MacShortcutRow(id: "\(self)", title: title, chords: [keycaps])
-    }
-}
-
 struct MacShortcutsSheet: View {
-    private static let left: [MacShortcutSection] = [
-        MacShortcutSection(title: "Essentials", rows: [
-            MacShortcutRow(id: "search", title: "Search", chords: [MacShortcut.search.keycaps, MacShortcut.searchAlternate.keycaps]),
-            MacShortcut.newBot.row("New Bot"),
-            MacShortcutRow(id: "send", title: "Send", caption: "⇧↩ for new line", chords: [["↩"]]),
-            MacShortcut.goToBot.row("Go to Bot"),
-            MacShortcut.compactSidebar.row("Compact sidebar"),
-            MacShortcut.settings.row("Settings"),
-            MacShortcut.shortcuts.row("Keyboard shortcuts")
-        ]),
-        MacShortcutSection(title: "Chat", rows: [
-            MacShortcut.focusComposer.row("Focus chat"),
-            MacShortcut.findInChat.row("Find in chat")
-        ])
-    ]
+    @Environment(ShortcutStore.self) private var store
 
-    private static let right: [MacShortcutSection] = [
-        MacShortcutSection(title: "Navigation", rows: [
-            MacShortcutRow(id: "stepBot", title: "Previous / next Bot", chords: [MacShortcut.previousBot.keycaps, MacShortcut.nextBot.keycaps], joiner: "/")
-        ]),
-        MacShortcutSection(title: "Panels", rows: [
-            MacShortcut.details.row("Details"),
-            MacShortcut.connectApps.row("Connect apps")
-        ]),
-        MacShortcutSection(title: "Window", rows: [
-            MacShortcutRow(id: "fullScreen", title: "Full screen", chords: [["⌃", "⌘", "F"]])
-        ])
-    ]
+    private func row(_ action: ShortcutAction, _ title: LocalizedStringKey) -> MacShortcutRow {
+        MacShortcutRow(id: action.rawValue, title: title, chords: store.chord(for: action).map { [$0.glyphs] } ?? [])
+    }
+
+    private func chords(_ actions: ShortcutAction...) -> [[String]] {
+        actions.compactMap { store.chord(for: $0)?.glyphs }
+    }
+
+    private var left: [MacShortcutSection] {
+        [
+            MacShortcutSection(title: "Essentials", rows: [
+                MacShortcutRow(id: "search", title: "Search", chords: chords(.search, .searchAlternate)),
+                row(.newBot, "New Bot"),
+                MacShortcutRow(id: "send", title: "Send", caption: "⇧↩ for new line", chords: [["↩"]]),
+                MacShortcutRow(id: "goToBot", title: "Go to Bot", chords: [["⌘", "1–9"]]),
+                row(.compactSidebar, "Compact sidebar"),
+                row(.settings, "Settings"),
+                row(.shortcuts, "Keyboard shortcuts")
+            ]),
+            MacShortcutSection(title: "Chat", rows: [
+                row(.focusComposer, "Focus chat"),
+                row(.findInChat, "Find in chat")
+            ])
+        ]
+    }
+
+    private var right: [MacShortcutSection] {
+        [
+            MacShortcutSection(title: "Navigation", rows: [
+                MacShortcutRow(id: "stepBot", title: "Previous / next Bot", chords: chords(.previousBot, .nextBot), joiner: "/")
+            ]),
+            MacShortcutSection(title: "Panels", rows: [
+                row(.details, "Details"),
+                row(.connectApps, "Connect apps")
+            ]),
+            MacShortcutSection(title: "Window", rows: [
+                MacShortcutRow(id: "fullScreen", title: "Full screen", chords: [["⌃", "⌘", "F"]])
+            ])
+        ]
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -206,8 +136,8 @@ struct MacShortcutsSheet: View {
                 .padding(.top, 19.5)
                 .padding(.bottom, 17)
             HStack(alignment: .top, spacing: 58) {
-                column(Self.left)
-                column(Self.right)
+                column(left)
+                column(right)
             }
             Spacer(minLength: 0)
         }
@@ -256,7 +186,7 @@ struct MacShortcutsSheet: View {
                         Text(row.joiner).font(.system(size: 10)).foregroundStyle(PalTokens.textTertiary)
                     }
                     HStack(spacing: 2) {
-                        ForEach(Array(chord.enumerated()), id: \.offset) { _, glyph in keycap(glyph) }
+                        ForEach(Array(chord.enumerated()), id: \.offset) { _, glyph in MacKeycap(glyph: glyph) }
                     }
                 }
             }
@@ -264,15 +194,6 @@ struct MacShortcutsSheet: View {
         .frame(height: 31.5)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("shortcut-\(row.id)")
-    }
-
-    private func keycap(_ glyph: String) -> some View {
-        Text(glyph)
-            .font(.system(size: 10, weight: .medium))
-            .foregroundStyle(PalTokens.textSecondary)
-            .padding(.horizontal, 4)
-            .frame(minWidth: 19, minHeight: 19)
-            .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 }
 #endif

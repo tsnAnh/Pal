@@ -24,6 +24,7 @@ struct HermesBotsApp: App {
     @State private var directory = BotDirectory()
     #if os(macOS)
     @State private var shell = MacShell()
+    @State private var shortcuts = ShortcutStore()
     #endif
     @Environment(\.scenePhase) private var scenePhase
 
@@ -70,6 +71,7 @@ struct HermesBotsApp: App {
                 .environment(signIn)
                 #if os(macOS)
                 .environment(shell)
+                .environment(shortcuts)
                 #endif
                 .macWindowSizing()
                 .task { await model.restore() }
@@ -102,7 +104,7 @@ struct HermesBotsApp: App {
         .defaultSize(width: 1280, height: 830)
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
-        .commands { MacCommands(shell: shell, roster: roster, router: router, connection: model) }
+        .commands { MacCommands(shell: shell, roster: roster, router: router, connection: model, shortcuts: shortcuts) }
         #endif
     }
 }
