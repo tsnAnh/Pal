@@ -24,8 +24,8 @@ def test_constraints_and_expecting_reach_the_teammate_as_labelled_lines(tmp_path
     bot_mode_dm.message_agent_tool("researcher", "Summarize the Q3 report.", agent=_FakeAgent(home),
                                    constraints="under 20 words, no lists", expecting="a one-line summary")
 
-    assert authority.calls[0][1]["message"].endswith(
-        "): Summarize the Q3 report.\n\nConstraints: under 20 words, no lists\nReply needed: a one-line summary")
+    assert "): Summarize the Q3 report.\n\nConstraints: under 20 words, no lists\nReply needed: a one-line summary\n\n" in (
+        authority.calls[0][1]["message"])
 
 
 def _settled(tmp_path, messages, final, *, message="Message from 🤖 alpha (@alpha): what is the codeword?",

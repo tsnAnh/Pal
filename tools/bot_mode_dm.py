@@ -71,6 +71,8 @@ def _default_home() -> str:
 
 def message_agent_tool_schema() -> dict:
     """OpenAI-format schema for ``message_agent`` (injected, not registered)."""
+    from tools.bot_dm_wire import BOT_REPLY_RULE
+
     return {
         "type": "function",
         "function": {
@@ -90,7 +92,8 @@ def message_agent_tool_schema() -> dict:
                 "started yet, so rely on `status` and the later `outcome` line, never on it alone. "
                 "When YOU receive such a message: your first output is ONE short line to your owner saying "
                 "what you received and what you will do; your final text is the reply to the sender; do NOT "
-                "call message_agent to answer it (that spends a hop of the max_hops limit)."
+                "call message_agent to answer it (that spends a hop of the max_hops limit). "
+                + BOT_REPLY_RULE
             ),
             "parameters": {
                 "type": "object",
@@ -301,7 +304,10 @@ def message_agent_tool(target: str = "", message: str = "", task_id: Optional[st
     sender = replace(sender, body=body)
 
     # The runtime's chain rules run before any transport (hop cap, repeated ask, reply to a bot: #137027).
-    return send_gated(targets, reply, body, lambda wants: signature + ("" if wants else f"{NO_REPLY_MARKER} ") + body,
+    from tools.bot_dm_wire import BOT_REPLY_RULE
+
+    return send_gated(targets, reply, body,
+                      lambda wants: signature + (f"{body}\n\n{BOT_REPLY_RULE}" if wants else f"{NO_REPLY_MARKER} {body}"),
                       sender)
 
 
