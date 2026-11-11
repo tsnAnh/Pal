@@ -47,7 +47,7 @@ struct ExternalLinkPolicyTests {
         for path in ["Mac/MacInspector.swift", "Profile/BotProfileView.swift"] {
             let text = try #require(sources.first { $0.path == path }?.text)
             #expect(text.contains("ProfileSuggestion"), "\(path) must build suggestions through ProfileSuggestion")
-            #expect(!text.contains("\"Add to Slack\"") || text.contains("visibleSuggestions"), path)
+            #expect(!text.contains("\"Add to Slack\"") || text.contains("visibleSuggestions"), "\(path)")
         }
     }
 }
