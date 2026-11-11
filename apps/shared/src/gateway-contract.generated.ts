@@ -2330,6 +2330,101 @@ export interface MachineInfo {
   wsl?: boolean | null
   container?: boolean | null
 }
+/** One bot's WhatsApp link. ``paired`` means a linked phone identity is on the gateway host. ``mode`` is ``bot`` (a separate number) or ``self-chat`` (the owner's own number); ``allowed_users`` is the comma separated phone-number allowlist (not a secret). ``state``/``error_*`` are the gateway's verdict for the adapter. */
+export interface MessagingWhatsAppStatus {
+  profile: string
+  enabled: boolean
+  paired: boolean
+  mode: string
+  allowed_users: string
+  account_name?: string | null
+  account_phone?: string | null
+  gateway_running: boolean
+  state?: string | null
+  error_code?: string | null
+  error_message?: string | null
+}
+/** ``reset_session`` backs up the existing link first. ``allowed_users`` blank keeps the stored list. */
+export interface MessagingWhatsAppPairStartParams {
+  profile?: string | null
+  mode?: string | null
+  allowed_users?: string | null
+  reset_session?: boolean | null
+}
+/** One pairing attempt. ``qr_payload`` is the short-lived string the phone scans (render it as a QR code); it is present only while ``status`` is ``waiting`` and must never be stored, logged or kept after a terminal status. */
+export interface MessagingWhatsAppPairing {
+  pairing_id: string
+  status: WhatsAppPairingStatus
+  qr_payload?: string | null
+  expires_at: string
+  mode: string
+  allowed_users: string
+  account_name?: string | null
+  account_phone?: string | null
+  error?: string | null
+}
+export type WhatsAppPairingStatus = 'starting' | 'waiting' | 'connected' | 'error' | 'expired' | 'cancelled'
+export interface MessagingWhatsAppPairingParams {
+  profile?: string | null
+  pairing_id: string
+}
+export interface MessagingWhatsAppPairApplyParams {
+  profile?: string | null
+  pairing_id: string
+  mode?: string | null
+  allowed_users?: string | null
+}
+export interface MessagingWhatsAppPairApplyResult {
+  hot_served?: boolean | null
+  restart_started: boolean
+  restart_busy?: boolean | null
+  restart_error?: string | null
+  ok: boolean
+}
+/** A blank ``allowed_users`` keeps the stored list. */
+export interface MessagingWhatsAppConfigureParams {
+  profile?: string | null
+  mode: string
+  allowed_users?: string | null
+}
+export interface MessagingWhatsAppChange {
+  hot_served?: boolean | null
+  restart_started: boolean
+  restart_busy?: boolean | null
+  restart_error?: string | null
+  profile: string
+  enabled: boolean
+  paired: boolean
+  mode: string
+  allowed_users: string
+  account_name?: string | null
+  account_phone?: string | null
+  gateway_running: boolean
+  state?: string | null
+  error_code?: string | null
+  error_message?: string | null
+}
+/** Meta Cloud API credentials, written to the bot's own .env only. ``access_token`` and ``app_secret`` are secrets. */
+export interface MessagingWhatsAppCloudConnectParams {
+  profile?: string | null
+  phone_number_id: string
+  access_token: string
+  app_secret?: string | null
+  allowed_users?: string | null
+}
+export interface MessagingWhatsAppCloudStatus {
+  hot_served?: boolean | null
+  restart_started: boolean
+  restart_busy?: boolean | null
+  restart_error?: string | null
+  profile: string
+  enabled: boolean
+  configured: boolean
+  phone_number_id_set: boolean
+  access_token_set: boolean
+  app_secret_set: boolean
+  allowed_users_set: boolean
+}
 /** ``auto_review`` is true only under the smart guardian; ``approval_mode`` is the profile's real setting so a client can say approvals are off, in which case rules are stored and not applied. */
 export interface PermissionsState {
   auto_review: boolean
@@ -7406,6 +7501,22 @@ export interface RpcMethods {
   'messaging.slack.manifest': { params: MessagingSlackManifestParams; result: MessagingSlackManifestResult }
   /** Slack connection state of one bot (never carries a token). */
   'messaging.slack.status': { params: ProfileParams; result: MessagingSlackStatus }
+  /** Change a paired bot's WhatsApp mode and allowlist and reload the gateway. */
+  'messaging.whatsapp.configure': { params: MessagingWhatsAppConfigureParams; result: MessagingWhatsAppChange }
+  /** Save mode and allowlist, enable WhatsApp and reload the gateway once a pairing is connected. */
+  'messaging.whatsapp.pair.apply': { params: MessagingWhatsAppPairApplyParams; result: MessagingWhatsAppPairApplyResult }
+  /** Stop a pairing attempt owned by the same bot. */
+  'messaging.whatsapp.pair.cancel': { params: MessagingWhatsAppPairingParams; result: OkResult }
+  /** Start the WhatsApp bridge pairing for one bot; poll messaging.whatsapp.pair.status for the QR payload. */
+  'messaging.whatsapp.pair.start': { params: MessagingWhatsAppPairStartParams; result: MessagingWhatsAppPairing }
+  /** Current state of a pairing attempt owned by the same bot; another bot's pairing id is not found. */
+  'messaging.whatsapp.pair.status': { params: MessagingWhatsAppPairingParams; result: MessagingWhatsAppPairing }
+  /** WhatsApp link state of one bot (never carries a QR payload or credentials). */
+  'messaging.whatsapp.status': { params: ProfileParams; result: MessagingWhatsAppStatus }
+  /** Disable WhatsApp for a bot and move its linked session aside (never deleted); pair again afterwards. */
+  'messaging.whatsapp.unpair': { params: ProfileParams; result: MessagingWhatsAppChange }
+  /** Validate and save a bot's WhatsApp Cloud API credentials, enable the adapter and reload it (credentials are never echoed). */
+  'messaging.whatsapp_cloud.connect': { params: MessagingWhatsAppCloudConnectParams; result: MessagingWhatsAppCloudStatus }
   /** Remove every credential (env keys and OAuth state) for a provider. */
   'model.disconnect': { params: ModelDisconnectParams; result: ModelDisconnectResult }
   /** Provider/model inventory for the picker, layered over the session's live provider when given. */
@@ -7864,6 +7975,14 @@ export const RPC_METHODS = [
   'messaging.slack.disconnect',
   'messaging.slack.manifest',
   'messaging.slack.status',
+  'messaging.whatsapp.configure',
+  'messaging.whatsapp.pair.apply',
+  'messaging.whatsapp.pair.cancel',
+  'messaging.whatsapp.pair.start',
+  'messaging.whatsapp.pair.status',
+  'messaging.whatsapp.status',
+  'messaging.whatsapp.unpair',
+  'messaging.whatsapp_cloud.connect',
   'model.disconnect',
   'model.options',
   'model.save_key',
@@ -8169,6 +8288,22 @@ export interface CanonicalRpcMethods {
   'messaging.slack.manifest': { params: MessagingSlackManifestParams; result: MessagingSlackManifestResult }
   /** Slack connection state of one bot (never carries a token). */
   'messaging.slack.status': { params: ProfileParams; result: MessagingSlackStatus }
+  /** Change a paired bot's WhatsApp mode and allowlist and reload the gateway. */
+  'messaging.whatsapp.configure': { params: MessagingWhatsAppConfigureParams; result: MessagingWhatsAppChange }
+  /** Save mode and allowlist, enable WhatsApp and reload the gateway once a pairing is connected. */
+  'messaging.whatsapp.pair.apply': { params: MessagingWhatsAppPairApplyParams; result: MessagingWhatsAppPairApplyResult }
+  /** Stop a pairing attempt owned by the same bot. */
+  'messaging.whatsapp.pair.cancel': { params: MessagingWhatsAppPairingParams; result: OkResult }
+  /** Start the WhatsApp bridge pairing for one bot; poll messaging.whatsapp.pair.status for the QR payload. */
+  'messaging.whatsapp.pair.start': { params: MessagingWhatsAppPairStartParams; result: MessagingWhatsAppPairing }
+  /** Current state of a pairing attempt owned by the same bot; another bot's pairing id is not found. */
+  'messaging.whatsapp.pair.status': { params: MessagingWhatsAppPairingParams; result: MessagingWhatsAppPairing }
+  /** WhatsApp link state of one bot (never carries a QR payload or credentials). */
+  'messaging.whatsapp.status': { params: ProfileParams; result: MessagingWhatsAppStatus }
+  /** Disable WhatsApp for a bot and move its linked session aside (never deleted); pair again afterwards. */
+  'messaging.whatsapp.unpair': { params: ProfileParams; result: MessagingWhatsAppChange }
+  /** Validate and save a bot's WhatsApp Cloud API credentials, enable the adapter and reload it (credentials are never echoed). */
+  'messaging.whatsapp_cloud.connect': { params: MessagingWhatsAppCloudConnectParams; result: MessagingWhatsAppCloudStatus }
   /** Auto-Review state and both rule lists of one profile. */
   'permissions.get': { params: ProfileParams; result: PermissionsState }
   /** Add a rule (1 to 280 characters after trimming, at most 30 per list, never a repeat of a rule in either list); returns the stored rule. */
@@ -8345,6 +8480,14 @@ export const CANONICAL_RPC_METHODS = [
   'messaging.slack.disconnect',
   'messaging.slack.manifest',
   'messaging.slack.status',
+  'messaging.whatsapp.configure',
+  'messaging.whatsapp.pair.apply',
+  'messaging.whatsapp.pair.cancel',
+  'messaging.whatsapp.pair.start',
+  'messaging.whatsapp.pair.status',
+  'messaging.whatsapp.status',
+  'messaging.whatsapp.unpair',
+  'messaging.whatsapp_cloud.connect',
   'permissions.get',
   'permissions.rules.add',
   'permissions.rules.remove',

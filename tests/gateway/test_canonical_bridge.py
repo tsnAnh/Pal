@@ -273,3 +273,19 @@ async def test_the_iphone_connector_verbs_follow_the_same_scopes(bots):
     assert failure(await call(bots.connect(capabilities=READ), 'device_connectors.set', toggle),
                    )['message'] == 'permission_denied'
     assert failure(await call(bots.connect(), 'device_connectors.list', device))['message'] == 'not_found'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('method,params', [
+    ('messaging.whatsapp.pair.start', {'mode': 'bot'}),
+    ('messaging.whatsapp.pair.status', {'pairing_id': 'x'}),
+    ('messaging.whatsapp.pair.cancel', {'pairing_id': 'x'}),
+    ('messaging.whatsapp.pair.apply', {'pairing_id': 'x'}),
+    ('messaging.whatsapp.unpair', {}),
+    ('messaging.whatsapp.configure', {'mode': 'bot'}),
+    ('messaging.whatsapp_cloud.connect', {'phone_number_id': '1', 'access_token': 'CANARY-NOT-A-REAL-TOKEN'}),
+])
+async def test_whatsapp_pairing_needs_control_and_stays_inside_the_granted_bot(bots, method, params):
+    assert failure(await call(bots.connect(capabilities=READ), method, params))['message'] == 'permission_denied'
+    bound = failure(await call(bots.connect('alpha'), method, {**params, 'profile': 'beta'}))
+    assert bound['message'] == 'profile_mismatch'

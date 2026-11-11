@@ -188,6 +188,12 @@ struct RootView: View {
                 displayName: roster.bot(named: name)?.displayName ?? name,
                 services: bots.services
             ))
+        case .whatsApp(let name):
+            WhatsAppView(model: WhatsAppModel(
+                botName: name,
+                displayName: roster.bot(named: name)?.displayName ?? name,
+                services: bots.services
+            ))
         }
     }
 

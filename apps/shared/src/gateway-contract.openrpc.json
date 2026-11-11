@@ -2437,6 +2437,150 @@
       }
     },
     {
+      "name": "messaging.whatsapp.configure",
+      "summary": "Change a paired bot's WhatsApp mode and allowlist and reload the gateway.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppConfigureParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppChange"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.pair.apply",
+      "summary": "Save mode and allowlist, enable WhatsApp and reload the gateway once a pairing is connected.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppPairApplyParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppPairApplyResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.pair.cancel",
+      "summary": "Stop a pairing attempt owned by the same bot.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppPairingParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/OkResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.pair.start",
+      "summary": "Start the WhatsApp bridge pairing for one bot; poll messaging.whatsapp.pair.status for the QR payload.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppPairStartParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppPairing"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.pair.status",
+      "summary": "Current state of a pairing attempt owned by the same bot; another bot's pairing id is not found.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppPairingParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppPairing"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.status",
+      "summary": "WhatsApp link state of one bot (never carries a QR payload or credentials).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppStatus"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.unpair",
+      "summary": "Disable WhatsApp for a bot and move its linked session aside (never deleted); pair again afterwards.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppChange"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp_cloud.connect",
+      "summary": "Validate and save a bot's WhatsApp Cloud API credentials, enable the adapter and reload it (credentials are never echoed).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppCloudConnectParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppCloudStatus"
+        }
+      }
+    },
+    {
       "name": "model.disconnect",
       "summary": "Remove every credential (env keys and OAuth state) for a provider.",
       "params": [
@@ -29969,6 +30113,695 @@
         "title": "MessagingSlackStatus",
         "type": "object"
       },
+      "MessagingWhatsAppChange": {
+        "additionalProperties": false,
+        "properties": {
+          "hot_served": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Hot Served"
+          },
+          "restart_started": {
+            "title": "Restart Started",
+            "type": "boolean"
+          },
+          "restart_busy": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restart Busy"
+          },
+          "restart_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restart Error"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "paired": {
+            "title": "Paired",
+            "type": "boolean"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "allowed_users": {
+            "title": "Allowed Users",
+            "type": "string"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account Name"
+          },
+          "account_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account Phone"
+          },
+          "gateway_running": {
+            "title": "Gateway Running",
+            "type": "boolean"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "State"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Message"
+          }
+        },
+        "required": [
+          "restart_started",
+          "profile",
+          "enabled",
+          "paired",
+          "mode",
+          "allowed_users",
+          "gateway_running"
+        ],
+        "title": "MessagingWhatsAppChange",
+        "type": "object"
+      },
+      "MessagingWhatsAppCloudConnectParams": {
+        "additionalProperties": false,
+        "description": "Meta Cloud API credentials, written to the bot's own .env only. ``access_token`` and ``app_secret`` are secrets.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "phone_number_id": {
+            "title": "Phone Number Id",
+            "type": "string"
+          },
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "app_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "App Secret"
+          },
+          "allowed_users": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Allowed Users"
+          }
+        },
+        "required": [
+          "phone_number_id",
+          "access_token"
+        ],
+        "title": "MessagingWhatsAppCloudConnectParams",
+        "type": "object"
+      },
+      "MessagingWhatsAppCloudStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "hot_served": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Hot Served"
+          },
+          "restart_started": {
+            "title": "Restart Started",
+            "type": "boolean"
+          },
+          "restart_busy": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restart Busy"
+          },
+          "restart_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restart Error"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "phone_number_id_set": {
+            "title": "Phone Number Id Set",
+            "type": "boolean"
+          },
+          "access_token_set": {
+            "title": "Access Token Set",
+            "type": "boolean"
+          },
+          "app_secret_set": {
+            "title": "App Secret Set",
+            "type": "boolean"
+          },
+          "allowed_users_set": {
+            "title": "Allowed Users Set",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "restart_started",
+          "profile",
+          "enabled",
+          "configured",
+          "phone_number_id_set",
+          "access_token_set",
+          "app_secret_set",
+          "allowed_users_set"
+        ],
+        "title": "MessagingWhatsAppCloudStatus",
+        "type": "object"
+      },
+      "MessagingWhatsAppConfigureParams": {
+        "additionalProperties": false,
+        "description": "A blank ``allowed_users`` keeps the stored list.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "allowed_users": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Allowed Users"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "MessagingWhatsAppConfigureParams",
+        "type": "object"
+      },
+      "MessagingWhatsAppPairApplyParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "pairing_id": {
+            "title": "Pairing Id",
+            "type": "string"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mode"
+          },
+          "allowed_users": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Allowed Users"
+          }
+        },
+        "required": [
+          "pairing_id"
+        ],
+        "title": "MessagingWhatsAppPairApplyParams",
+        "type": "object"
+      },
+      "MessagingWhatsAppPairApplyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "hot_served": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Hot Served"
+          },
+          "restart_started": {
+            "title": "Restart Started",
+            "type": "boolean"
+          },
+          "restart_busy": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restart Busy"
+          },
+          "restart_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Restart Error"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "restart_started",
+          "ok"
+        ],
+        "title": "MessagingWhatsAppPairApplyResult",
+        "type": "object"
+      },
+      "MessagingWhatsAppPairStartParams": {
+        "additionalProperties": false,
+        "description": "``reset_session`` backs up the existing link first. ``allowed_users`` blank keeps the stored list.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mode"
+          },
+          "allowed_users": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Allowed Users"
+          },
+          "reset_session": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reset Session"
+          }
+        },
+        "title": "MessagingWhatsAppPairStartParams",
+        "type": "object"
+      },
+      "MessagingWhatsAppPairing": {
+        "additionalProperties": false,
+        "description": "One pairing attempt. ``qr_payload`` is the short-lived string the phone scans (render it as a QR code); it\nis present only while ``status`` is ``waiting`` and must never be stored, logged or kept after a terminal status.",
+        "properties": {
+          "pairing_id": {
+            "title": "Pairing Id",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WhatsAppPairingStatus"
+          },
+          "qr_payload": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Qr Payload"
+          },
+          "expires_at": {
+            "title": "Expires At",
+            "type": "string"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "allowed_users": {
+            "title": "Allowed Users",
+            "type": "string"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account Name"
+          },
+          "account_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account Phone"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          }
+        },
+        "required": [
+          "pairing_id",
+          "status",
+          "expires_at",
+          "mode",
+          "allowed_users"
+        ],
+        "title": "MessagingWhatsAppPairing",
+        "type": "object"
+      },
+      "MessagingWhatsAppPairingParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "pairing_id": {
+            "title": "Pairing Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pairing_id"
+        ],
+        "title": "MessagingWhatsAppPairingParams",
+        "type": "object"
+      },
+      "MessagingWhatsAppStatus": {
+        "additionalProperties": false,
+        "description": "One bot's WhatsApp link. ``paired`` means a linked phone identity is on the gateway host. ``mode`` is\n``bot`` (a separate number) or ``self-chat`` (the owner's own number); ``allowed_users`` is the comma\nseparated phone-number allowlist (not a secret). ``state``/``error_*`` are the gateway's verdict for the adapter.",
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "paired": {
+            "title": "Paired",
+            "type": "boolean"
+          },
+          "mode": {
+            "title": "Mode",
+            "type": "string"
+          },
+          "allowed_users": {
+            "title": "Allowed Users",
+            "type": "string"
+          },
+          "account_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account Name"
+          },
+          "account_phone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account Phone"
+          },
+          "gateway_running": {
+            "title": "Gateway Running",
+            "type": "boolean"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "State"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Code"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Message"
+          }
+        },
+        "required": [
+          "profile",
+          "enabled",
+          "paired",
+          "mode",
+          "allowed_users",
+          "gateway_running"
+        ],
+        "title": "MessagingWhatsAppStatus",
+        "type": "object"
+      },
       "MoaAggregatingPayload": {
         "additionalProperties": false,
         "properties": {
@@ -55820,6 +56653,18 @@
         "title": "WakeStopResult",
         "type": "object"
       },
+      "WhatsAppPairingStatus": {
+        "enum": [
+          "starting",
+          "waiting",
+          "connected",
+          "error",
+          "expired",
+          "cancelled"
+        ],
+        "title": "WhatsAppPairingStatus",
+        "type": "string"
+      },
       "WorkerExecution": {
         "additionalProperties": true,
         "description": "A ``worker_executions`` row without its adoption digest.",
@@ -57448,6 +58293,150 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/MessagingSlackStatus"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.configure",
+      "summary": "Change a paired bot's WhatsApp mode and allowlist and reload the gateway.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppConfigureParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppChange"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.pair.apply",
+      "summary": "Save mode and allowlist, enable WhatsApp and reload the gateway once a pairing is connected.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppPairApplyParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppPairApplyResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.pair.cancel",
+      "summary": "Stop a pairing attempt owned by the same bot.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppPairingParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/OkResult"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.pair.start",
+      "summary": "Start the WhatsApp bridge pairing for one bot; poll messaging.whatsapp.pair.status for the QR payload.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppPairStartParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppPairing"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.pair.status",
+      "summary": "Current state of a pairing attempt owned by the same bot; another bot's pairing id is not found.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppPairingParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppPairing"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.status",
+      "summary": "WhatsApp link state of one bot (never carries a QR payload or credentials).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppStatus"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp.unpair",
+      "summary": "Disable WhatsApp for a bot and move its linked session aside (never deleted); pair again afterwards.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppChange"
+        }
+      }
+    },
+    {
+      "name": "messaging.whatsapp_cloud.connect",
+      "summary": "Validate and save a bot's WhatsApp Cloud API credentials, enable the adapter and reload it (credentials are never echoed).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/MessagingWhatsAppCloudConnectParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/MessagingWhatsAppCloudStatus"
         }
       }
     },

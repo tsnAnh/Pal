@@ -139,6 +139,11 @@ struct BotProfileView: View {
                     }
                 }
                 SettingsRow.navigate(
+                    String(localized: "WhatsApp"),
+                    icon: .symbol("message"),
+                    accessibilityIdentifier: "profileWhatsAppRow"
+                ) { router.push(.whatsApp(botName: model.botName)) }
+                SettingsRow.navigate(
                     String(localized: "Routines"),
                     value: model.routinesText,
                     icon: .symbol("clock"),

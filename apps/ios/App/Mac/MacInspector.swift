@@ -213,6 +213,16 @@ struct MacInspector: View {
                     }
                 }
             }
+            InspectorSection(title: String(localized: "Messaging"), identifier: "inspectorMessaging") {
+                EmptyView()
+            } content: {
+                InspectorRow(identifier: "profileWhatsAppRow", action: { router.push(.whatsApp(botName: botName)) }) {
+                    Image(systemName: "message").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    Text("WhatsApp").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                }
+            }
             InspectorSection(title: String(localized: "Computer"), identifier: "inspectorComputer") {
                 EmptyView()
             } content: {

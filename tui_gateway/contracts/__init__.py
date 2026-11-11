@@ -17,6 +17,7 @@ from . import (
     liveness,
     library,
     machine,
+    messaging_whatsapp,
     permissions,
     profile_templates,
     profiles_vault_complete_foreign_subagents,

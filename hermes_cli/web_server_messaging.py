@@ -6,7 +6,7 @@ import logging
 import os
 import subprocess
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from fastapi import HTTPException
 from pathlib import Path
 from typing import Any, Optional
@@ -194,7 +194,7 @@ class _WhatsAppOnboardingSession:
     expires_at_ts: float
     profile: str | None = None
     status: str = "starting"
-    qr_payload: str | None = None
+    qr_payload: str | None = field(default=None, repr=False)
     account_id: str | None = None
     account_name: str | None = None
     account_phone: str | None = None
