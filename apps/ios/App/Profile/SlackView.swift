@@ -156,13 +156,8 @@ struct SlackView: View {
                 model.confirmsDisconnect = true
             }
         case .restartNeeded:
-            VStack(spacing: 8) {
-                PillButton(String(localized: "Restart now"), kind: .accent, size: .large, accessibilityIdentifier: "slackRestartNowButton") {
-                    Task { await model.restartNow() }
-                }
-                PillButton(String(localized: "Check again"), kind: .neutral, size: .large, accessibilityIdentifier: "slackRecheckButton") {
-                    Task { await model.recheck() }
-                }
+            PillButton(String(localized: "Check again"), kind: .accent, size: .large, accessibilityIdentifier: "slackRecheckButton") {
+                Task { await model.recheck() }
             }
         case .starting:
             PillButton(String(localized: "Connecting…"), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "slackStartingButton") {}
@@ -173,7 +168,6 @@ struct SlackView: View {
         switch activity {
         case .preparing, .checking: String(localized: "Loading")
         case .connecting: String(localized: "Connecting…")
-        case .restarting: String(localized: "Restarting…")
         case .disconnecting: String(localized: "Disconnecting…")
         }
     }
