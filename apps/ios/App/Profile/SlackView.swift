@@ -47,7 +47,6 @@ struct SlackView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { action }
         .task { await model.load() }
         .onDisappear { model.stop() }
-        .inAppBrowser(url: $model.safariURL) { model.safariDismissed() }
         .sheet(isPresented: $model.isEnteringTokens, onDismiss: { model.cancelTokenEntry() }) {
             SlackTokenSheet(model: model)
                 .macSheetFrame()

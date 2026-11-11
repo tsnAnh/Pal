@@ -49,6 +49,10 @@ public struct ConnectAppsService: Sendable {
         self.diagnostics = diagnostics
     }
 
+    public init(rpc: any ConnectRPC, profile: String?) {
+        self.init(rpc: rpc, profile: profile, browser: UnavailableBrowser())
+    }
+
     private static let account: JSONValue = ["type": "account"]
 
     private func call(_ method: String, _ params: [String: JSONValue] = [:]) async throws -> JSONValue {
@@ -229,4 +233,9 @@ public struct ConnectAppsService: Sendable {
             throw CancellationError()
         }
     }
+}
+
+private struct UnavailableBrowser: AuthorizationBrowser {
+    func present(_ url: URL) async throws { throw ConnectAppsError.unavailable }
+    func dismiss() async {}
 }

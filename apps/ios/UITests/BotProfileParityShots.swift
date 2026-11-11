@@ -39,7 +39,7 @@ final class BotProfileParityShots: BotProfileTestCase {
     }
 
     func test22AddToSlack() throws {
-        let app = signedInApp()
+        let app = signedInApp(connectedServices: ["slack"])
         openProfile(app, Self.primarySlug)
         element(app, "profileSlackRow").tap()
         waitFor(element(app, "slackConnectButton"), timeout: 30, "connect button")

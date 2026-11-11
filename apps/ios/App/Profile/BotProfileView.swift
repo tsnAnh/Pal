@@ -4,12 +4,14 @@ import SwiftUI
 
 struct BotProfileView: View {
     @State private var model: BotProfileModel
+    @State private var suggestions: ConnectedServicesModel
     let router: AppRouter
 
     @Environment(\.hermesTheme) private var theme
 
-    init(model: BotProfileModel, router: AppRouter) {
+    init(model: BotProfileModel, suggestions: ConnectedServicesModel, router: AppRouter) {
         _model = State(initialValue: model)
+        _suggestions = State(initialValue: suggestions)
         self.router = router
     }
 
@@ -27,6 +29,7 @@ struct BotProfileView: View {
         .toolbar { toolbar }
         .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
+        .task { await suggestions.load() }
         .toast($model.toast)
         .sheet(item: Binding(get: { model.editing }, set: { if $0 == nil { model.endEditing() } })) { editing in
             EditBotSheet(model: editing) { model.endEditing() }
@@ -125,11 +128,16 @@ struct BotProfileView: View {
                 .padding(.top, ProfileMetrics.cardToCaption)
                 .padding(.bottom, ProfileMetrics.captionToCard)
             GroupedCard(accessibilityIdentifier: "profileConfigureCard") {
-                SettingsRow.navigate(
-                    String(localized: "Add to Slack"),
-                    icon: .custom(SlackMark(style: .mono(Color(theme.palette.textSecondary))).frame(width: 18, height: 18)),
-                    accessibilityIdentifier: "profileSlackRow"
-                ) { router.push(.slack(botName: model.botName)) }
+                ForEach(suggestions.visibleSuggestions, id: \.self) { suggestion in
+                    switch suggestion {
+                    case .addToSlack:
+                        SettingsRow.navigate(
+                            String(localized: "Add to Slack"),
+                            icon: .custom(SlackMark(style: .mono(Color(theme.palette.textSecondary))).frame(width: 18, height: 18)),
+                            accessibilityIdentifier: "profileSlackRow"
+                        ) { router.push(.slack(botName: model.botName)) }
+                    }
+                }
                 SettingsRow.navigate(
                     String(localized: "Routines"),
                     value: model.routinesText,
