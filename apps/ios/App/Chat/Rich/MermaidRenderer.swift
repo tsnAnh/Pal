@@ -63,7 +63,7 @@ final class MermaidRenderer: NSObject {
         init(_ continuation: CheckedContinuation<Value, Error>) { self.continuation = continuation }
 
         @discardableResult
-        func resume(_ result: Result<Value, Error>) -> Bool {
+        func resume(_ result: sending Result<Value, Error>) -> Bool {
             guard let continuation else { return false }
             self.continuation = nil
             continuation.resume(with: result)
