@@ -12,6 +12,7 @@ from . import (
     connectors_operation,
     display,
     events,
+    gateway_service,
     groups_bot_relay,
     i18n,
     liveness,

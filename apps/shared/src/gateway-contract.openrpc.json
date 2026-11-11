@@ -1339,6 +1339,60 @@
       }
     },
     {
+      "name": "gateway.service.install",
+      "summary": "Install the gateway as a login service where the host supports one.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GatewayServiceInstallResult"
+        }
+      }
+    },
+    {
+      "name": "gateway.service.restart",
+      "summary": "Ask the host's service manager to restart the gateway; refused while a chat is running.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GatewayServiceRestartParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GatewayServiceRestartResult"
+        }
+      }
+    },
+    {
+      "name": "gateway.service.status",
+      "summary": "Gateway service state on the connected host (running, stopped, not installed, restart needed).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GatewayServiceStatus"
+        }
+      }
+    },
+    {
       "name": "groups.approve",
       "summary": "Resolve one exact pending approval raised by a local or peer room member.",
       "params": [
@@ -23512,6 +23566,205 @@
           "replay_epoch"
         ],
         "title": "GatewayReadyPayload",
+        "type": "object"
+      },
+      "GatewayServiceInstallOutcome": {
+        "enum": [
+          "installed",
+          "already_installed",
+          "unsupported",
+          "failed"
+        ],
+        "title": "GatewayServiceInstallOutcome",
+        "type": "string"
+      },
+      "GatewayServiceInstallResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/GatewayServiceInstallOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GatewayServiceStatus"
+          }
+        },
+        "required": [
+          "outcome",
+          "status"
+        ],
+        "title": "GatewayServiceInstallResult",
+        "type": "object"
+      },
+      "GatewayServiceRestartOutcome": {
+        "enum": [
+          "started",
+          "busy",
+          "refused",
+          "unsupported",
+          "not_installed",
+          "failed"
+        ],
+        "title": "GatewayServiceRestartOutcome",
+        "type": "string"
+      },
+      "GatewayServiceRestartParams": {
+        "additionalProperties": false,
+        "description": "``force`` interrupts running chats; only the host's main connection may set it.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "force": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Force"
+          }
+        },
+        "title": "GatewayServiceRestartParams",
+        "type": "object"
+      },
+      "GatewayServiceRestartResult": {
+        "additionalProperties": false,
+        "description": "``started`` means the supervisor was asked; the caller polls ``gateway.service.status`` until\n``instance`` differs from ``status.instance`` (the connection drops while the gateway restarts).",
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/GatewayServiceRestartOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "status": {
+            "$ref": "#/components/schemas/GatewayServiceStatus"
+          }
+        },
+        "required": [
+          "outcome",
+          "status"
+        ],
+        "title": "GatewayServiceRestartResult",
+        "type": "object"
+      },
+      "GatewayServiceState": {
+        "enum": [
+          "running",
+          "stopped",
+          "not_installed",
+          "restart_needed",
+          "unsupported"
+        ],
+        "title": "GatewayServiceState",
+        "type": "string"
+      },
+      "GatewayServiceStatus": {
+        "additionalProperties": false,
+        "description": "The gateway service on the connected host. ``instance`` changes on every restart (proof the new\ngateway is up); ``started_at`` is epoch seconds when the host can tell. ``active_runs`` counts chats and\nruns a restart would interrupt. No path, token or environment value is carried.",
+        "properties": {
+          "backend": {
+            "title": "Backend",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/GatewayServiceState"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          },
+          "restart_needed": {
+            "title": "Restart Needed",
+            "type": "boolean"
+          },
+          "active_runs": {
+            "title": "Active Runs",
+            "type": "integer"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Instance"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Started At"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "backend",
+          "state",
+          "installed",
+          "running",
+          "restart_needed",
+          "active_runs"
+        ],
+        "title": "GatewayServiceStatus",
         "type": "object"
       },
       "GoalContractSnapshot": {

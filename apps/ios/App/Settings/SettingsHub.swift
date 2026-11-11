@@ -12,6 +12,7 @@ enum SettingsRoute: Hashable {
     case timeZone
     case botComputer
     case devices
+    case hermesService
     case importMemory
     case botNotifications
     case appearance

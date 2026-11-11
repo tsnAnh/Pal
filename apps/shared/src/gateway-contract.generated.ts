@@ -1789,6 +1789,37 @@ export interface DisplayLeaseResolveParams {
   profile?: string | null
   ask_at?: number | null
 }
+/** The gateway service on the connected host. ``instance`` changes on every restart (proof the new gateway is up); ``started_at`` is epoch seconds when the host can tell. ``active_runs`` counts chats and runs a restart would interrupt. No path, token or environment value is carried. */
+export interface GatewayServiceStatus {
+  backend: string
+  state: GatewayServiceState
+  installed: boolean
+  running: boolean
+  restart_needed: boolean
+  active_runs: number
+  instance?: string | null
+  started_at?: number | null
+  reason?: string | null
+}
+export type GatewayServiceState = 'running' | 'stopped' | 'not_installed' | 'restart_needed' | 'unsupported'
+/** ``force`` interrupts running chats; only the host's main connection may set it. */
+export interface GatewayServiceRestartParams {
+  profile?: string | null
+  force?: boolean | null
+}
+/** ``started`` means the supervisor was asked; the caller polls ``gateway.service.status`` until ``instance`` differs from ``status.instance`` (the connection drops while the gateway restarts). */
+export interface GatewayServiceRestartResult {
+  outcome: GatewayServiceRestartOutcome
+  reason?: string | null
+  status: GatewayServiceStatus
+}
+export type GatewayServiceRestartOutcome = 'started' | 'busy' | 'refused' | 'unsupported' | 'not_installed' | 'failed'
+export interface GatewayServiceInstallResult {
+  outcome: GatewayServiceInstallOutcome
+  reason?: string | null
+  status: GatewayServiceStatus
+}
+export type GatewayServiceInstallOutcome = 'installed' | 'already_installed' | 'unsupported' | 'failed'
 export interface GroupsCapabilitiesParams {
   profile?: string | null
 }
@@ -7296,6 +7327,12 @@ export interface RpcMethods {
   'free_tier.status': { params: ProfileParams; result: FreeTierStatusResult }
   /** What THIS build enforces (a client withholds a feature unless advertised). */
   'gateway.capabilities': { params: PingParams; result: GatewayCapabilitiesResult }
+  /** Install the gateway as a login service where the host supports one. */
+  'gateway.service.install': { params: ProfileParams; result: GatewayServiceInstallResult }
+  /** Ask the host's service manager to restart the gateway; refused while a chat is running. */
+  'gateway.service.restart': { params: GatewayServiceRestartParams; result: GatewayServiceRestartResult }
+  /** Gateway service state on the connected host (running, stopped, not installed, restart needed). */
+  'gateway.service.status': { params: ProfileParams; result: GatewayServiceStatus }
   /** Resolve one exact pending approval raised by a local or peer room member. */
   'groups.approve': { params: GroupsApproveParams; result: GroupsApproveResult }
   /** Read one committed attachment for a live room viewer. */
@@ -7815,6 +7852,9 @@ export const RPC_METHODS = [
   'free_tier.provision',
   'free_tier.status',
   'gateway.capabilities',
+  'gateway.service.install',
+  'gateway.service.restart',
+  'gateway.service.status',
   'groups.approve',
   'groups.attachment.download',
   'groups.attachment.upload',
