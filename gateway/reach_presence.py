@@ -18,6 +18,7 @@ class ClientKind(StrEnum):
 
 
 PUSH_CLIENT_KINDS = frozenset({ClientKind.IOS, ClientKind.MAC})
+DEVICE_TOOL_KINDS = frozenset({ClientKind.IOS, ClientKind.MAC})
 
 
 class AttentionState(StrEnum):

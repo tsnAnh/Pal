@@ -83,11 +83,11 @@ def device_id_for(label: str) -> str:
 
 
 async def connect_phone(authority, label: str = 'iPhone', *, responder=None, device_tools: bool = True,
-                        attention: str = 'foreground') -> FakePhone:
+                        attention: str = 'foreground', kind: str = 'ios') -> FakePhone:
     from gateway.session_controls import AuthorityConnection
     phone = FakePhone(asyncio.get_running_loop(), responder)
     phone.connection = AuthorityConnection(authority, phone, {'user_id': 'owner'})
-    reply = await phone.call('client.hello', {**HELLO, 'label': label, 'device_id': device_id_for(label),
+    reply = await phone.call('client.hello', {**HELLO, 'kind': kind, 'label': label, 'device_id': device_id_for(label),
                                               'device_tools': device_tools, 'attention': attention})
     assert reply['result']['recorded'] is True, reply
     return phone

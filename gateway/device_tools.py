@@ -15,7 +15,7 @@ from pydantic import BaseModel, ValidationError
 
 from gateway import device_connectors
 from gateway.device_actions import ActionSpec, clean_text
-from gateway.reach_presence import Attention, ClientKind, attention_of, last_frame_at, slot_of
+from gateway.reach_presence import DEVICE_TOOL_KINDS, Attention, attention_of, last_frame_at, slot_of
 from tui_gateway.contracts.canonical_device import (
     DeviceConnectorState as ConnectorState,
     DeviceOsPermission,
@@ -65,6 +65,7 @@ class Outcome:
     data: dict | None = None
     failure: Failure | None = None
     detail: str = ""
+    device: str = ""
 
     @property
     def ok(self) -> bool:
@@ -83,6 +84,7 @@ class _Route:
     device_id: str
     state: ConnectorState
     rank: tuple
+    label: str = ""
 
 
 @dataclass(slots=True)
@@ -93,6 +95,7 @@ class _Pending:
     home: Path
     spec: ActionSpec
     device_id: str
+    label: str = ""
 
 
 _pending: dict[str, _Pending] = {}
@@ -116,7 +119,7 @@ def _routes(authority, states: dict[str, ConnectorState], now: float) -> list[_R
     found = []
     for transport in list(authority.events.values()):
         slot = slot_of(transport)
-        if slot is None or not slot.device_tools or slot.device.kind is not ClientKind.IOS:
+        if slot is None or not slot.device_tools or slot.device.kind not in DEVICE_TOOL_KINDS:
             continue
         state = states.get(slot.device.device_id)
         if state is None:
@@ -125,7 +128,7 @@ def _routes(authority, states: dict[str, ConnectorState], now: float) -> list[_R
         if attention is Attention.PARKED:
             continue
         found.append(_Route(transport, slot.device.device_id, state,
-                            (int(attention), slot.last_input_at or 0.0, slot.attention_at)))
+                            (int(attention), slot.last_input_at or 0.0, slot.attention_at), slot.device.label))
     return sorted(found, key=lambda route: route.rank, reverse=True)
 
 
@@ -152,7 +155,7 @@ async def round_trip(authority, home: Path, spec: ActionSpec, args: BaseModel, *
     deadline = timeouts.consent if needs_consent else timeouts.request
     request_id = uuid.uuid4().hex
     pending = _Pending(asyncio.get_running_loop().create_future(), authority, route.transport, home, spec,
-                       route.device_id)
+                       route.device_id, route.label)
     _pending[request_id] = pending
     frame = request_frame(DeviceToolRequestPayload(
         request_id=request_id, action=spec.name, connector=spec.connector,
@@ -165,7 +168,7 @@ async def round_trip(authority, home: Path, spec: ActionSpec, args: BaseModel, *
             return await asyncio.wait_for(pending.future, deadline)
         except TimeoutError:
             _withdraw(request_id, route, DeviceToolCancelReason.TIMEOUT)
-            return Outcome(failure=Failure.TIMEOUT)
+            return Outcome(failure=Failure.TIMEOUT, device=route.label)
     except asyncio.CancelledError:
         _withdraw(request_id, route, DeviceToolCancelReason.INTERRUPTED)
         raise
@@ -202,7 +205,7 @@ async def respond(authority, transport, request_id: str, *, ok: bool, result: An
         outcome = await asyncio.to_thread(_interpret_result, pending.spec, result)
     else:
         failure = _DEVICE_ERRORS.get(error_code or DeviceToolErrorCode.FAILED, Failure.DEVICE_FAILED)
-        outcome = Outcome(failure=failure, detail=clean_text(error_message, 200))
+        outcome = Outcome(failure=failure, detail=clean_text(error_message, 200), device=pending.label)
     if not _settle(pending, outcome):
         return False
     if outcome.failure is Failure.PERMISSION_DENIED:
@@ -218,7 +221,7 @@ async def respond(authority, transport, request_id: str, *, ok: bool, result: An
 def forget_transport(transport) -> int:
     dropped = [pending for pending in _pending.values() if pending.transport is transport]
     for pending in dropped:
-        _settle(pending, Outcome(failure=Failure.DISCONNECTED))
+        _settle(pending, Outcome(failure=Failure.DISCONNECTED, device=pending.label))
     return len(dropped)
 
 

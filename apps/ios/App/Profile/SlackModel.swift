@@ -21,7 +21,6 @@ final class SlackModel {
 
     private(set) var phase: Phase = .loading
     private(set) var notice: String?
-    var safariURL: URL?
     var isEnteringTokens = false
     var confirmsDisconnect = false
     var botToken = ""
@@ -78,17 +77,16 @@ final class SlackModel {
         do {
             let manifest = try await services.slack.manifest(profile: botName, displayName: displayName)
             phase = .ready(connection ?? .notConnected)
-            safariURL = manifest.createURL
+            if ExternalLink.open(manifest.createURL) {
+                isEnteringTokens = true
+            } else {
+                notice = String(localized: "Couldn't open Slack. Try again.")
+            }
         } catch is CancellationError {
         } catch {
             phase = .ready(.notConnected)
             notice = String(localized: "Couldn't reach Slack. Try again.")
         }
-    }
-
-    func safariDismissed() {
-        guard safariURL == nil else { return }
-        isEnteringTokens = true
     }
 
     func cancelTokenEntry() {

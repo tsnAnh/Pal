@@ -268,6 +268,7 @@ const sidebars: SidebarsConfig = {
                   items: [
                     'user-guide/skills/bundled/research/research-arxiv',
                     'user-guide/skills/bundled/research/research-competitor-news-monitor',
+                    'user-guide/skills/bundled/research/research-deep-search',
                     'user-guide/skills/bundled/research/research-grounded-citations',
                   ],
                 },

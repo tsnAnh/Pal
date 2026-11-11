@@ -52,6 +52,7 @@ struct HermesBotsApp: App {
         WindowGroup {
             RootView(model: model, roster: roster, router: router, hostPool: hostPool, links: links)
                 .overlay { ReachOfferOverlay(model: offers) }
+                .overlay(alignment: .topLeading) { ExternalLinkProbe() }
                 .deviceConsentAlert(consent)
                 .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
                 .environment(appearance)
@@ -150,6 +151,7 @@ struct RootView: View {
         case .botProfile(let name):
             BotProfileView(
                 model: BotProfileModel(botName: name, services: bots.services, roster: roster, sharer: bots.sharer),
+                suggestions: ConnectedServicesModel(botName: name, services: bots.services),
                 router: router
             )
         case .botThread(let thread):

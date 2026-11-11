@@ -25,6 +25,7 @@ struct MacInspector: View {
     @State private var profile: BotProfileModel
     @State private var routines: RoutinesModel
     @State private var library: LibraryModel
+    @State private var suggestions: ConnectedServicesModel
     @State private var tab = InspectorTab.activity
     @State private var creation: NewRoutineModel?
     @AppStorage("mac.inspector.suggestionsHidden") private var suggestionsHidden = false
@@ -38,6 +39,7 @@ struct MacInspector: View {
         _profile = State(initialValue: BotProfileModel(botName: botName, services: bots.services, roster: roster, sharer: bots.sharer))
         _routines = State(initialValue: RoutinesModel(botName: botName, services: bots.services))
         _library = State(initialValue: LibraryModel(botName: botName, services: bots.services))
+        _suggestions = State(initialValue: ConnectedServicesModel(botName: botName, services: bots.services))
     }
 
     var body: some View {
@@ -64,6 +66,7 @@ struct MacInspector: View {
         .accessibilityIdentifier("botProfileScreen")
         .task { await profile.load() }
         .task { await routines.load() }
+        .task { await suggestions.load() }
         .toast($profile.toast)
         .sheet(item: $creation) { created in
             NewRoutineSheet(model: created) { creation = nil }
@@ -95,7 +98,7 @@ struct MacInspector: View {
                         .accessibilityIdentifier("profileEditButton")
                     Button("New Routine…", systemImage: "plus") { creation = routines.creationModel() }
                         .accessibilityIdentifier("routinesNewButton")
-                    if suggestionsHidden {
+                    if suggestionsHidden, !suggestions.visibleSuggestions.isEmpty {
                         Button("Show Suggestions", systemImage: "eye") { suggestionsHidden = false }
                             .accessibilityIdentifier("inspectorShowSuggestions")
                     }
@@ -189,7 +192,7 @@ struct MacInspector: View {
             } content: {
                 routinesList
             }
-            if !suggestionsHidden {
+            if !suggestionsHidden, !suggestions.visibleSuggestions.isEmpty {
                 InspectorSection(title: String(localized: "Suggested"), identifier: "inspectorSuggested") {
                     Button("Hide") { withAnimation(.snappy(duration: 0.18)) { suggestionsHidden = true } }
                         .buttonStyle(.plain)
@@ -197,11 +200,16 @@ struct MacInspector: View {
                         .foregroundStyle(PalTokens.textSecondary)
                         .accessibilityIdentifier("inspectorHideSuggested")
                 } content: {
-                    InspectorRow(identifier: "profileSlackRow", action: { router.push(.slack(botName: botName)) }) {
-                        SlackMark().frame(width: 14, height: 14)
-                        Text("Add to Slack").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                    ForEach(suggestions.visibleSuggestions, id: \.self) { suggestion in
+                        switch suggestion {
+                        case .addToSlack:
+                            InspectorRow(identifier: "profileSlackRow", action: { router.push(.slack(botName: botName)) }) {
+                                SlackMark().frame(width: 14, height: 14)
+                                Text("Add to Slack").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                            }
+                        }
                     }
                 }
             }

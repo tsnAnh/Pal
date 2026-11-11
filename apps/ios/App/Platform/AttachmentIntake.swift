@@ -1,3 +1,6 @@
+import HermesChat
+import HermesDesign
+import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -5,39 +8,96 @@ typealias FilesHandler = @MainActor @Sendable ([URL]) -> Void
 typealias ImageDataHandler = @MainActor @Sendable (Data) -> Void
 
 extension View {
-    func attachmentIntake(files: @escaping FilesHandler, imageData: @escaping ImageDataHandler) -> some View {
+    func attachmentIntake(handlesPaste: Bool = true, files: @escaping FilesHandler, imageData: @escaping ImageDataHandler) -> some View {
+        modifier(AttachmentIntakeModifier(handlesPaste: handlesPaste, files: files, imageData: imageData))
+    }
+}
+
+private struct AttachmentIntakeModifier: ViewModifier {
+    let handlesPaste: Bool
+    let files: FilesHandler
+    let imageData: ImageDataHandler
+
+    @State private var isTargeted = false
+    @Environment(\.hermesTheme) private var theme
+
+    func body(content: Content) -> some View {
         #if os(macOS)
-        dropDestination(for: URL.self) { urls, _ in
-            let fileURLs = urls.filter(\.isFileURL)
-            guard !fileURLs.isEmpty else { return false }
-            files(fileURLs)
-            return true
-        }
-        .onPasteCommand(of: [.fileURL, .image]) { providers in
-            for provider in providers {
-                AttachmentIntake.load(provider, files: files, imageData: imageData)
+        content
+            .onDrop(of: [.fileURL, .image], isTargeted: $isTargeted) { providers in
+                AttachmentIntake.receive(providers, files: files, imageData: imageData)
             }
-        }
+            .onPasteCommand(of: handlesPaste ? [.fileURL, .image] : []) { providers in
+                _ = AttachmentIntake.receive(providers, files: files, imageData: imageData)
+            }
+            .overlay {
+                if isTargeted {
+                    RoundedRectangle(cornerRadius: HermesMetrics.cardRadius, style: .continuous)
+                        .strokeBorder(Color(theme.palette.primaryBadge), lineWidth: 2)
+                        .padding(2)
+                        .allowsHitTesting(false)
+                        .accessibilityIdentifier("composerDropTarget")
+                }
+            }
         #else
-        self
+        if handlesPaste {
+            content
+                .pasteDestination(for: Data.self) { datas in
+                    datas.forEach { imageData($0) }
+                } validator: { datas in
+                    datas.filter(AttachmentIntake.isImage)
+                }
+        } else {
+            content
+        }
         #endif
     }
 }
 
-#if os(macOS)
-private enum AttachmentIntake {
-    static func load(_ provider: NSItemProvider, files: @escaping FilesHandler, imageData: @escaping ImageDataHandler) {
-        if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
-            _ = provider.loadTransferable(type: URL.self) { result in
-                guard case .success(let url) = result, url.isFileURL else { return }
-                Task { @MainActor in files([url]) }
+enum AttachmentIntake {
+    nonisolated static func isImage(_ data: Data) -> Bool {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil), CGImageSourceGetCount(source) > 0 else { return false }
+        return true
+    }
+
+    #if os(macOS)
+    static func receive(_ providers: [NSItemProvider], files: @escaping FilesHandler, imageData: @escaping ImageDataHandler) -> Bool {
+        let usable = providers.filter {
+            $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) || $0.hasItemConformingToTypeIdentifier(UTType.image.identifier)
+        }
+        guard !usable.isEmpty else { return false }
+        Task {
+            var urls: [URL] = []
+            var images: [Data] = []
+            for provider in usable {
+                if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier), let url = await fileURL(from: provider) {
+                    urls.append(url)
+                } else if let data = await imageData(from: provider) {
+                    images.append(data)
+                }
             }
-        } else {
-            _ = provider.loadTransferable(type: Data.self) { result in
-                guard case .success(let data) = result else { return }
-                Task { @MainActor in imageData(data) }
+            await MainActor.run {
+                if !urls.isEmpty { files(urls) }
+                images.forEach { imageData($0) }
+            }
+        }
+        return true
+    }
+
+    private static func fileURL(from provider: NSItemProvider) async -> URL? {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                continuation.resume(returning: url?.isFileURL == true ? url : nil)
             }
         }
     }
+
+    private static func imageData(from provider: NSItemProvider) async -> Data? {
+        await withCheckedContinuation { continuation in
+            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { data, _ in
+                continuation.resume(returning: data)
+            }
+        }
+    }
+    #endif
 }
-#endif

@@ -10,6 +10,14 @@ public enum ChatError: Error, Sendable, Equatable {
     case attachmentRefused
 }
 
+struct LibraryAssetPayload: Decodable {
+    var dataBase64: String
+
+    enum CodingKeys: String, CodingKey {
+        case dataBase64 = "data_base64"
+    }
+}
+
 public struct StagedImage: Decodable, Sendable, Hashable {
     public var attached: Bool
     public var path: String
@@ -148,6 +156,19 @@ public struct SessionAPI: Sendable {
         let staged = try decode(StagedImage.self, result, "image.attach_bytes")
         guard staged.attached else { throw ChatError.attachmentRefused }
         return staged
+    }
+
+    public func libraryAsset(ref: String, thumbnail: Bool) async throws -> Data {
+        let result = try await call("library.asset", [
+            "asset_ref": .string(ref),
+            "thumbnail": .bool(thumbnail),
+            "max_bytes": .int(16_000_000),
+        ])
+        let wire = try decode(LibraryAssetPayload.self, result, "library.asset")
+        guard let data = Data(base64Encoded: wire.dataBase64), !data.isEmpty else {
+            throw ChatError.unexpectedResponse(method: "library.asset")
+        }
+        return data
     }
 
     public func attachFile(sessionID: String, data: Data, name: String, mime: String) async throws -> StagedFile {

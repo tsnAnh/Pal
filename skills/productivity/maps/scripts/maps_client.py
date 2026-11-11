@@ -18,11 +18,19 @@ Commands:
 import argparse
 import json
 import math
+import os
+import re
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from datetime import datetime, timezone, UTC
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import google_places
+import opening_hours
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -313,7 +321,7 @@ def haversine_m(lat1, lon1, lat2, lon2):
 # Nominatim helpers
 # ---------------------------------------------------------------------------
 
-def nominatim_search(query, limit=5):
+def nominatim_search(query, limit=5, extratags=False):
     """Geocode a free-text query. Returns list of result dicts."""
     params = {
         "q":              query,
@@ -321,6 +329,8 @@ def nominatim_search(query, limit=5):
         "limit":          limit,
         "addressdetails": 1,
     }
+    if extratags:
+        params["extratags"] = 1
     time.sleep(NOMINATIM_RATE_LIMIT)
     return http_get(NOMINATIM_SEARCH, params=params)
 
@@ -354,7 +364,7 @@ def geocode_single(query):
 # ---------------------------------------------------------------------------
 
 def build_overpass_nearby(tag_key, tag_val, lat, lon, radius, limit,
-                          religion=None, tag_pairs=None):
+                          religion=None, tag_pairs=None, cuisine=None):
     """Build an Overpass QL query for nearby POIs around a point.
 
     If ``tag_pairs`` is provided, the query unions across every
@@ -366,6 +376,8 @@ def build_overpass_nearby(tag_key, tag_val, lat, lon, radius, limit,
     religion_filter = ""
     if religion:
         religion_filter = f'["religion"="{religion}"]'
+    if cuisine:
+        religion_filter += f'["cuisine"~"(^|;){cuisine}(;|$)",i]'
     body_lines = []
     for k, v in pairs:
         body_lines.append(
@@ -495,13 +507,88 @@ def parse_overpass_elements(elements, ref_lat=None, ref_lon=None):
 
 
 # ---------------------------------------------------------------------------
+# Opening hours + provider helpers
+# ---------------------------------------------------------------------------
+
+OSM_HOURS_CAVEAT = (
+    "OpenStreetMap opening hours are community-maintained and many places have "
+    "none, so hours may be missing or out of date. Confirm by phone or website."
+)
+CUISINE_PATTERN = re.compile(r"^[A-Za-z][A-Za-z _-]{0,40}$")
+POI_CLASSES = {
+    "amenity", "shop", "tourism", "leisure", "office", "healthcare", "craft",
+    "aeroway", "railway",
+}
+OPEN_NOW_FETCH_FACTOR = 5
+OPEN_NOW_FETCH_FLOOR = 50
+
+
+def utc_now():
+    return datetime.now(UTC)
+
+
+def resolve_timezone(lat, lon):
+    try:
+        data = http_get(TIMEAPI_BASE, params={"latitude": lat, "longitude": lon},
+                        silent=True)
+    except RuntimeError:
+        return None
+    if isinstance(data, dict):
+        return data.get("timeZone") or None
+    return None
+
+
+def attach_opening_status(places, tz_name, now_utc=None):
+    now_utc = now_utc or utc_now()
+    for place in places:
+        place["opening_status"] = opening_hours.describe_hours(
+            place.get("hours"), tz_name, now_utc)
+    return places
+
+
+def filter_open_now(places):
+    kept, closed, unknown = [], 0, 0
+    for place in places:
+        state = place["opening_status"]["state"]
+        if state == "open":
+            kept.append(place)
+        elif state == "closed":
+            closed += 1
+        else:
+            unknown += 1
+    return kept, {"closed": closed, "unknown_hours": unknown}
+
+
+def choose_provider(requested):
+    api_key = google_places.get_api_key()
+    if requested == "osm":
+        return "osm", None, None
+    if api_key:
+        return "google", api_key, None
+    note = (
+        f"{google_places.API_KEY_ENV} is not set, so OpenStreetMap was used. "
+        + OSM_HOURS_CAVEAT
+    )
+    return "osm", None, note
+
+
+def validate_cuisine(cuisine):
+    if cuisine is None:
+        return None
+    cleaned = cuisine.strip().lower()
+    if not CUISINE_PATTERN.match(cleaned):
+        error_exit("--cuisine must be a short word such as 'italian' or 'sushi'.")
+    return cleaned.replace(" ", "_")
+
+
+# ---------------------------------------------------------------------------
 # Command: search
 # ---------------------------------------------------------------------------
 
 def cmd_search(args):
     """Geocode a place name and return top results."""
     query = " ".join(args.query)
-    raw   = nominatim_search(query, limit=5)
+    raw   = nominatim_search(query, limit=5, extratags=True)
 
     if not raw:
         print_json({
@@ -532,13 +619,22 @@ def cmd_search(args):
             },
             "importance":   item.get("importance"),
         })
+        if item.get("category") in POI_CLASSES:
+            hours_raw = (item.get("extratags") or {}).get("opening_hours")
+            if hours_raw:
+                results[-1]["hours"] = hours_raw
+            tz_name = resolve_timezone(results[-1]["lat"], results[-1]["lon"])
+            attach_opening_status([results[-1]], tz_name)
 
-    print_json({
+    payload = {
         "query":       query,
         "results":     results,
         "count":       len(results),
         "data_source": DATA_SOURCE,
-    })
+    }
+    if any("opening_status" in r for r in results):
+        payload["hours_caveat"] = OSM_HOURS_CAVEAT
+    print_json(payload)
 
 
 # ---------------------------------------------------------------------------
@@ -643,39 +739,151 @@ def cmd_nearby(args):
     if limit <= 0:
         error_exit("Limit must be a positive integer.")
 
-    # Query each category against the Overpass fallback chain, merge results,
-    # dedupe by OSM identity so POIs tagged under multiple categories don't
-    # appear twice.
-    merged = {}
-    for category in categories:
-        tag_pairs = _tags_for(category)
-        religion = RELIGION_FILTER.get(category)
-        query = build_overpass_nearby(None, None, lat, lon, radius, limit,
-                                      religion=religion, tag_pairs=tag_pairs)
-        raw = overpass_query(query)
-        elements = raw.get("elements", [])
-        for place in parse_overpass_elements(elements, ref_lat=lat, ref_lon=lon):
-            place["category"] = category
-            key = (place.get("osm_type", ""), place.get("osm_id", ""))
-            # Prefer the entry that actually has a distance_m attached (first
-            # pass through the ref_lat/ref_lon branch), then first-seen wins.
-            if key not in merged:
-                merged[key] = place
+    cuisine  = validate_cuisine(getattr(args, "cuisine", None))
+    open_now = bool(getattr(args, "open_now", False))
+    provider, api_key, note = choose_provider(getattr(args, "provider", "auto"))
 
-    # Sort merged by distance when we have ref lat/lon, then cap at ``limit``.
-    places = sorted(
-        merged.values(),
-        key=lambda p: p.get("distance_m", float("inf")),
-    )[:limit]
+    places = None
+    if provider == "google":
+        try:
+            places = nearby_google(api_key, lat, lon, categories, cuisine,
+                                   radius, limit, open_now)
+        except google_places.GooglePlacesError as exc:
+            note = (f"Google Places could not be used ({exc}); OpenStreetMap was "
+                    f"used instead. {OSM_HOURS_CAVEAT}")
+            provider = "osm"
 
-    print_json({
+    payload = {
         "center_lat":  lat,
         "center_lon":  lon,
         "categories":  categories,
         "radius_m":    radius,
+        "provider":    provider,
+    }
+    if cuisine:
+        payload["cuisine"] = cuisine
+    if provider == "google":
+        payload["attribution"] = google_places.ATTRIBUTION
+        payload["data_source"] = google_places.DATA_SOURCE
+    else:
+        places, excluded = nearby_osm(lat, lon, categories, cuisine, radius,
+                                      limit, open_now)
+        payload["data_source"] = DATA_SOURCE
+        payload["hours_caveat"] = OSM_HOURS_CAVEAT
+        if open_now:
+            payload["excluded_by_open_now"] = excluded
+    if note:
+        payload["provider_note"] = note
+    payload["count"] = len(places)
+    payload["results"] = places
+    print_json(payload)
+
+
+def nearby_google(api_key, lat, lon, categories, cuisine, radius, limit, open_now):
+    unsupported = [c for c in categories if not google_places.supports_category(c)]
+    if unsupported:
+        raise google_places.GooglePlacesError(
+            f"no Google place type for {', '.join(unsupported)}")
+    now = utc_now()
+    merged = {}
+    for category in categories:
+        words = [cuisine.replace("_", " ") if cuisine else "", category.replace("_", " ")]
+        raw_places = google_places.search_text(
+            api_key, " ".join(w for w in words if w), lat, lon, radius,
+            google_places.GOOGLE_TYPES[category], open_now, limit)
+        for raw in raw_places:
+            place = google_places.normalize_place(raw, now, lat, lon)
+            place["category"] = category
+            if place.get("distance_m", 0) <= radius:
+                merged.setdefault(place["place_id"], place)
+    return sorted(merged.values(),
+                  key=lambda p: p.get("distance_m", float("inf")))[:limit]
+
+
+def nearby_osm(lat, lon, categories, cuisine, radius, limit, open_now):
+    fetch_limit = limit
+    if open_now:
+        fetch_limit = max(limit * OPEN_NOW_FETCH_FACTOR, OPEN_NOW_FETCH_FLOOR)
+    merged = {}
+    for category in categories:
+        query = build_overpass_nearby(
+            None, None, lat, lon, radius, fetch_limit,
+            religion=RELIGION_FILTER.get(category),
+            tag_pairs=_tags_for(category), cuisine=cuisine)
+        elements = overpass_query(query).get("elements", [])
+        for place in parse_overpass_elements(elements, ref_lat=lat, ref_lon=lon):
+            place["category"] = category
+            key = (place.get("osm_type", ""), place.get("osm_id", ""))
+            if key not in merged:
+                merged[key] = place
+    places = sorted(merged.values(),
+                    key=lambda p: p.get("distance_m", float("inf")))
+    excluded = None
+    if places:
+        attach_opening_status(places, resolve_timezone(lat, lon))
+    if open_now:
+        places, excluded = filter_open_now(places)
+    return places[:limit], excluded
+
+
+# ---------------------------------------------------------------------------
+# Commands: places / place-details (Google Places, key required)
+# ---------------------------------------------------------------------------
+
+def require_google_key():
+    api_key = google_places.get_api_key()
+    if api_key:
+        return api_key
+    print_json({
+        "status": "error",
+        "error": (f"{google_places.API_KEY_ENV} is not set, so Google Places is "
+                  "unavailable."),
+        "fallback": ("Use the nearby or search commands, which use OpenStreetMap. "
+                     + OSM_HOURS_CAVEAT),
+    })
+    sys.exit(1)
+
+
+def cmd_places(args):
+    api_key = require_google_key()
+    query = " ".join(args.query).strip()
+    if not query:
+        error_exit("Provide a text query such as 'italian restaurants'.")
+    lat = lon = None
+    if args.near:
+        lat, lon, _ = geocode_single(" ".join(args.near).strip())
+    elif args.lat is not None and args.lon is not None:
+        lat, lon = args.lat, args.lon
+    if args.limit <= 0 or args.radius <= 0:
+        error_exit("Radius and limit must be positive integers.")
+    try:
+        raw_places = google_places.search_text(
+            api_key, query, lat, lon, args.radius, None, args.open_now, args.limit)
+    except google_places.GooglePlacesError as exc:
+        error_exit(str(exc))
+    now = utc_now()
+    places = [google_places.normalize_place(raw, now, lat, lon) for raw in raw_places]
+    print_json({
+        "query":       query,
+        "provider":    "google",
         "count":       len(places),
         "results":     places,
-        "data_source": DATA_SOURCE,
+        "data_source": google_places.DATA_SOURCE,
+        "attribution": google_places.ATTRIBUTION,
+    })
+
+
+def cmd_place_details(args):
+    api_key = require_google_key()
+    try:
+        raw = google_places.place_details(api_key, args.place_id)
+    except google_places.GooglePlacesError as exc:
+        error_exit(str(exc))
+    print_json({
+        "provider":    "google",
+        "place":       google_places.normalize_place(raw, utc_now()),
+        "data_source": google_places.DATA_SOURCE,
+        "attribution": google_places.ATTRIBUTION,
     })
 
 
@@ -1010,8 +1218,11 @@ def cmd_bbox(args):
 
     for p in places:
         p["category"] = category
+    if places:
+        attach_opening_status(places, resolve_timezone(center_lat, center_lon))
 
     print_json({
+        "hours_caveat": OSM_HOURS_CAVEAT,
         "bounding_box": {
             "south": south,
             "west":  west,
@@ -1090,7 +1301,7 @@ def build_parser():
             "CLI maps tool: geocoding, reverse geocoding, POI search, "
             "routing, directions, timezone, and area lookup. "
             "Powered by OpenStreetMap, OSRM, Overpass, and TimeAPI.io. "
-            "No API keys required."
+            f"No API key required; Google Places is used only when {google_places.API_KEY_ENV} is set."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
@@ -1172,6 +1383,49 @@ def build_parser():
         default=10, type=int, metavar="N",
         help="Maximum number of results (default: 10).",
     )
+    p_nearby.add_argument(
+        "--cuisine", metavar="CUISINE",
+        help="Only places serving this cuisine, e.g. italian or sushi.",
+    )
+    p_nearby.add_argument(
+        "--open-now", action="store_true", dest="open_now",
+        help="Only places open right now (places with unknown hours are excluded and counted).",
+    )
+    p_nearby.add_argument(
+        "--provider", choices=["auto", "osm", "google"], default="auto",
+        help=(f"auto uses Google Places when {google_places.API_KEY_ENV} is set, "
+              "otherwise OpenStreetMap; osm forces OpenStreetMap."),
+    )
+
+    # -- places --
+    p_places = sub.add_parser(
+        "places",
+        help="Google Places text search with opening hours and rating.",
+        description=(
+            f"Google Places (New) text search. Requires {google_places.API_KEY_ENV}.\n"
+            "Example: maps_client.py places italian restaurants --near \"Times Square\" --open-now"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    p_places.add_argument("query", nargs="+", help="What to look for.")
+    p_places.add_argument("--near", nargs="+", metavar="PLACE",
+                          help="Address or landmark to bias results toward.")
+    p_places.add_argument("--lat", type=float, help="Bias latitude (with --lon).")
+    p_places.add_argument("--lon", type=float, help="Bias longitude (with --lat).")
+    p_places.add_argument("--radius", "-r", default=1000, type=int, metavar="METRES",
+                          help="Bias radius in metres (default: 1000, max 50000).")
+    p_places.add_argument("--limit", "-n", default=10, type=int, metavar="N",
+                          help="Maximum results, up to 20 (default: 10).")
+    p_places.add_argument("--open-now", action="store_true", dest="open_now",
+                          help="Only places open right now.")
+
+    # -- place-details --
+    p_details = sub.add_parser(
+        "place-details",
+        help="Google place details: hours, rating, contact.",
+        description=f"Fetch one Google place by id. Requires {google_places.API_KEY_ENV}.",
+    )
+    p_details.add_argument("place_id", help="Google place id (the place_id field from places).")
 
     # -- distance --
     p_dist = sub.add_parser(
@@ -1279,6 +1533,8 @@ def main():
         "search":     cmd_search,
         "reverse":    cmd_reverse,
         "nearby":     cmd_nearby,
+        "places":        cmd_places,
+        "place-details": cmd_place_details,
         "distance":   cmd_distance,
         "directions": cmd_directions,
         "timezone":   cmd_timezone,

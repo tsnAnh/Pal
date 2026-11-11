@@ -46,34 +46,35 @@ def iphone_available() -> bool:
     return device_connectors.any_enabled(get_hermes_home())
 
 
-def _failure_message(failure, spec, detail: str) -> str:
+def _failure_message(failure, spec, detail: str, outcome_device: str = "") -> str:
     from gateway.device_actions import CONNECTOR_CATALOG
     from gateway.device_tools import Failure
     title = next(info.title for info in CONNECTOR_CATALOG if info.connector is spec.connector)
+    device = outcome_device or "iPhone"
     messages = {
         Failure.CONNECTOR_OFF: f"The {title} connector is turned off for the user's iPhone. Tell the user they can "
                                "turn it on in Hermes on their iPhone under iPhone connectors.",
         Failure.PHONE_OFFLINE: "The user's iPhone is not connected right now. Ask the user to open Hermes on their "
                                "iPhone, then try again.",
-        Failure.TIMEOUT: "The iPhone did not answer in time. Ask the user to open Hermes on their iPhone and try again.",
-        Failure.DISCONNECTED: "The iPhone disconnected before it answered. Ask the user to open Hermes on their "
-                              "iPhone and try again.",
-        Failure.PERMISSION_DENIED: f"iOS has not given Hermes access to {title}. Ask the user to allow it in the "
-                                   "iPhone's Settings, then try again.",
-        Failure.CONSENT_DECLINED: f"The user declined to let you use {title} on their iPhone. Do not ask again unless "
+        Failure.TIMEOUT: f"{device} did not answer in time. Ask the user to open Hermes on {device} and try again.",
+        Failure.DISCONNECTED: f"{device} disconnected before it answered. Ask the user to open Hermes on "
+                              f"{device} and try again.",
+        Failure.PERMISSION_DENIED: f"{title} access is off on {device}. Ask the user to allow it for Hermes in "
+                                   f"Settings on {device}, then try again.",
+        Failure.CONSENT_DECLINED: f"The user declined to let you use {title} on {device}. Do not ask again unless "
                                   "they bring it up.",
-        Failure.UNSUPPORTED: f"This iPhone cannot do {spec.name}.",
-        Failure.INVALID_ARGS: f"The iPhone rejected the arguments for {spec.name}.",
-        Failure.NOT_FOUND: f"The iPhone could not find what {spec.name} refers to.",
-        Failure.DEVICE_FAILED: f"The iPhone could not complete {spec.name}.",
-        Failure.INVALID_RESULT: "The iPhone sent an answer that could not be read.",
+        Failure.UNSUPPORTED: f"{device} cannot do {spec.name}.",
+        Failure.INVALID_ARGS: f"{device} rejected the arguments for {spec.name}.",
+        Failure.NOT_FOUND: f"{device} could not find what {spec.name} refers to.",
+        Failure.DEVICE_FAILED: f"{device} could not complete {spec.name}.",
+        Failure.INVALID_RESULT: f"{device} sent an answer that could not be read.",
         Failure.UNAVAILABLE: "iPhone connectors are not available in this chat.",
     }
     return messages[failure] + (f" ({detail})" if detail else "")
 
 
 def _failure(outcome, spec) -> str:
-    return tool_error(_failure_message(outcome.failure, spec, outcome.detail), code=outcome.failure.value,
+    return tool_error(_failure_message(outcome.failure, spec, outcome.detail, outcome.device), code=outcome.failure.value,
                       action=spec.name)
 
 
