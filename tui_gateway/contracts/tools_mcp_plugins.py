@@ -461,6 +461,38 @@ method("mcp.servers.add", params=McpServersAddParams, result=McpServersAddResult
        doc="Add a server to the profile's config from a catalog preset and/or an explicit config.")
 
 
+class McpServerEndpointEdit(Params):
+    """``transport`` is ``http`` or ``sse``; an unsupported one is refused with 4063 by the handler."""
+
+    url: str | None = None
+    transport: str | None = None
+
+
+class McpAuthMode(WireEnum):
+    none = "none"
+    bearer = "bearer"
+    oauth = "oauth"
+
+
+class McpServersUpdateParams(McpServerNameParams):
+    """Edit a saved url server in place (the name is its key). ``auth`` ``none`` clears the Authorization
+    header, ``bearer`` stores ``bearer_token`` in the profile's .env, ``oauth`` marks the server for OAuth."""
+
+    config: McpServerEndpointEdit | None = None
+    auth: McpAuthMode | None = None
+    bearer_token: str | None = None
+
+
+class McpServersUpdateResult(Result):
+    ok: bool
+    name: str
+    server: McpServerSummary
+
+
+method("mcp.servers.update", params=McpServersUpdateParams, result=McpServersUpdateResult,
+       doc="Edit a url server's endpoint and auth; validated like add (4063), unknown name 4064, plugin-owned 4090.")
+
+
 class McpServersSetApiKeyParams(McpServerNameParams):
     value: str
     env_var: str | None = None
@@ -482,12 +514,20 @@ class McpProbeTool(Result):
     description: str
 
 
+class McpTestFailureReason(WireEnum):
+    unreachable = "unreachable"
+    auth_refused = "auth_refused"
+    server_error = "server_error"
+
+
 class McpServersTestResult(Result):
-    """``ok: false`` carries ``error``; ``prompts`` / ``resources`` are only counted on success."""
+    """``ok: false`` carries ``error`` (never a header or env secret) and ``reason``; ``prompts`` /
+    ``resources`` are only counted on success. A server with no tools is ``ok: true`` with ``tools: []``."""
 
     ok: bool
     tools: list[McpProbeTool]
     error: str | None = None
+    reason: McpTestFailureReason | None = None
     prompts: int | None = None
     resources: int | None = None
     oauth_needed: bool

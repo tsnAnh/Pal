@@ -6,7 +6,8 @@ bodies in methods_tools resolve it.
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping
+import re
+from typing import Any, Mapping
 
 
 def server_configs_with_sources(config_servers: Mapping[str, dict]) -> tuple[dict[str, dict], dict[str, str | None]]:
@@ -34,7 +35,10 @@ def summarize_server(name: str, cfg: dict, plugin: str | None = None) -> dict[st
     from tools.mcp_tool_common import mcp_server_enabled
 
     cfg = cfg if isinstance(cfg, dict) else {}
-    transport = "http" if cfg.get("url") else ("stdio" if cfg.get("command") else "unknown")
+    if cfg.get("url"):
+        transport = "sse" if cfg.get("transport") == "sse" else "http"
+    else:
+        transport = "stdio" if cfg.get("command") else "unknown"
     auth = cfg.get("auth")
     headers = cfg.get("headers") or {}
     if not auth and isinstance(headers, dict) and any(str(key).lower() == "authorization" for key in headers):
@@ -62,3 +66,141 @@ def record_mcp_add(entry: Any, server_config: Mapping[str, Any], saved: bool) ->
     source = "catalog" if entry is not None else ("url" if server_config.get("url") else "local")
     record_mcp_install(source, entry.name if entry is not None else None, "success" if saved else "failed",
                        failure_class=None if saved else "config_rejected")
+
+
+ENDPOINT_TRANSPORTS = ("http", "sse")
+AUTH_MODES = ("none", "bearer", "oauth")
+_MIN_REDACTED_LEN = 6
+_HTTP_STATUS = re.compile(r"\bHTTP (\d{3})\b|'(\d{3}) [A-Za-z ]+' for url")
+_TRANSPORT_FAILURES = frozenset({
+    "ConnectError", "ConnectTimeout", "ReadTimeout", "WriteTimeout", "PoolTimeout", "TimeoutException",
+    "NetworkError", "TransportError", "gaierror"})
+Failure = tuple[int, str]
+
+
+def endpoint_error(cfg: Mapping[str, Any]) -> str | None:
+    """Plain client message for a url server's bad ``url`` / ``transport``; ``None`` for anything else."""
+    from tools.mcp_tool_errors import InvalidMcpUrlError, _validate_remote_mcp_url
+
+    if not cfg.get("url"):
+        return None
+    try:
+        _validate_remote_mcp_url("server", cfg["url"])
+    except InvalidMcpUrlError:
+        return "invalid url"
+    transport = cfg.get("transport")
+    return None if transport is None or transport in ENDPOINT_TRANSPORTS else "unsupported transport"
+
+
+def _authorization_keys(headers: Any) -> list[str]:
+    return [k for k in headers if str(k).lower() == "authorization"] if isinstance(headers, dict) else []
+
+
+def _references_default_token_var(name: str) -> bool:
+    """Whether the profile's stored header for ``name`` points at the server's own ``.env`` variable."""
+    from hermes_cli.config import read_user_config_raw
+    from hermes_cli.mcp_config import _env_key_for_server
+
+    raw = ((read_user_config_raw().get("mcp_servers") or {}).get(name) or {}).get("headers")
+    return any(f"${{{_env_key_for_server(name)}}}" in str(raw[k]) for k in _authorization_keys(raw))
+
+
+def _plan_auth(entry: dict, params: Mapping[str, Any]) -> tuple[str | None, str | None, Failure | None]:
+    """``(mode, normalized bearer token, error)`` for an update request."""
+    from hermes_cli.mcp_config import _strip_bearer_prefix
+
+    mode, raw_token = params.get("auth"), params.get("bearer_token")
+    if mode is not None and mode not in AUTH_MODES:
+        return None, None, (4063, "unsupported auth")
+    token = None
+    if raw_token is not None:
+        token = _strip_bearer_prefix(str(raw_token))
+        if not token or token.lower() == "bearer":
+            return None, None, (4063, "bearer_token is not a valid credential")
+        mode = mode or "bearer"
+        if mode != "bearer":
+            return None, None, (4063, "bearer_token requires auth bearer")
+    if mode == "bearer" and token is None and not _authorization_keys(entry.get("headers")):
+        return None, None, (4063, "bearer_token required")
+    return mode, token, None
+
+
+def update_server(name: str, entry: dict, params: Mapping[str, Any]) -> tuple[dict | None, Failure | None]:
+    """Edit a saved url server (endpoint and/or auth) → ``(saved entry, None)`` or ``(None, (code, message))``.
+    Everything is validated before the first write so a refused edit leaves config and ``.env`` untouched."""
+    from hermes_cli import mcp_config as mc
+    from hermes_cli.config import remove_env_value
+    from hermes_cli.mcp_security import validate_mcp_server_entry
+
+    if not entry.get("url"):
+        return None, (4063, "only url servers can be edited")
+    edit = params.get("config") or {}
+    cfg = {**entry, **{k: edit[k] for k in ("url", "transport") if edit.get(k) is not None}}
+    if message := endpoint_error(cfg):
+        return None, (4063, message)
+    mode, token, failure = _plan_auth(entry, params)
+    if failure:
+        return None, failure
+    drops_header = mode in ("none", "oauth")
+    drop_env_var = drops_header and _references_default_token_var(name)
+    if mode in ("none", "bearer", "oauth"):
+        headers = {k: v for k, v in (cfg.get("headers") or {}).items() if str(k).lower() != "authorization"}
+        if headers:
+            cfg["headers"] = headers
+        else:
+            cfg.pop("headers", None)
+        cfg.pop("auth", None)
+        if mode == "oauth":
+            cfg["auth"] = "oauth"
+    if validate_mcp_server_entry(name, cfg):
+        return None, (4001, f"server '{name}' rejected: suspicious command/args configuration")
+    if token is not None:
+        cfg["headers"] = {**(cfg.get("headers") or {}), **mc._save_bearer_auth_token(name, token)}
+    if not mc._save_mcp_server(name, cfg):
+        return None, (4001, f"server '{name}' rejected: suspicious command/args configuration")
+    if drop_env_var:
+        remove_env_value(mc._env_key_for_server(name))
+    return mc._get_mcp_servers().get(name, cfg), None
+
+
+def _secret_values(cfg: Mapping[str, Any]) -> list[str]:
+    """Header and env values of a server entry plus their credential-only forms (``Bearer`` stripped)."""
+    values: set[str] = set()
+    for block in (cfg.get("headers"), cfg.get("env")):
+        for value in (block.values() if isinstance(block, dict) else ()):
+            text = str(value)
+            values.update({text, re.sub(r"^(?:bearer|basic)\s+", "", text, flags=re.IGNORECASE)})
+    return sorted((v for v in values if len(v) >= _MIN_REDACTED_LEN), key=len, reverse=True)
+
+
+def redact_secrets(text: str, cfg: Mapping[str, Any]) -> str:
+    for secret in _secret_values(cfg):
+        text = text.replace(secret, "***")
+    return text
+
+
+def _http_statuses(nodes: list[BaseException]) -> set[int]:
+    found: set[int] = set()
+    for node in nodes:
+        status = getattr(getattr(node, "response", None), "status_code", None)
+        if isinstance(status, int):
+            found.add(status)
+        found.update(int(m.group(1) or m.group(2)) for m in _HTTP_STATUS.finditer(str(node)))
+    return found
+
+
+def classify_probe_failure(exc: BaseException) -> str:
+    """``auth_refused`` (HTTP 401/403 anywhere in the failure), else ``server_error`` for any other HTTP
+    status, ``unreachable`` for a connect/DNS/TLS/timeout failure, ``server_error`` for the rest. The
+    transport wraps a rejection in a plain ``ConnectionError``, so the status is read from the text too."""
+    from tools.mcp_tool_errors import _iter_exception_nodes
+
+    nodes = _iter_exception_nodes(exc)
+    statuses = _http_statuses(nodes)
+    if statuses & {401, 403}:
+        return "auth_refused"
+    if statuses:
+        return "server_error"
+    unreachable = any(isinstance(node, (TimeoutError, OSError)) or type(node).__name__ in _TRANSPORT_FAILURES
+                      for node in nodes)
+    return "unreachable" if unreachable else "server_error"

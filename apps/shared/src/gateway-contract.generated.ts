@@ -4880,6 +4880,25 @@ export interface McpServersAddResult {
   name: string
   server: McpServerSummary
 }
+/** Edit a saved url server in place (the name is its key). ``auth`` ``none`` clears the Authorization header, ``bearer`` stores ``bearer_token`` in the profile's .env, ``oauth`` marks the server for OAuth. */
+export interface McpServersUpdateParams {
+  profile?: string | null
+  name: string
+  config?: McpServerEndpointEdit | null
+  auth?: McpAuthMode | null
+  bearer_token?: string | null
+}
+/** ``transport`` is ``http`` or ``sse``; an unsupported one is refused with 4063 by the handler. */
+export interface McpServerEndpointEdit {
+  url?: string | null
+  transport?: string | null
+}
+export type McpAuthMode = 'none' | 'bearer' | 'oauth'
+export interface McpServersUpdateResult {
+  ok: boolean
+  name: string
+  server: McpServerSummary
+}
 export interface McpServersSetApiKeyParams {
   profile?: string | null
   name: string
@@ -4896,11 +4915,12 @@ export interface McpServerNameParams {
   profile?: string | null
   name: string
 }
-/** ``ok: false`` carries ``error``; ``prompts`` / ``resources`` are only counted on success. */
+/** ``ok: false`` carries ``error`` (never a header or env secret) and ``reason``; ``prompts`` / ``resources`` are only counted on success. A server with no tools is ``ok: true`` with ``tools: []``. */
 export interface McpServersTestResult {
   ok: boolean
   tools: McpProbeTool[]
   error?: string | null
+  reason?: McpTestFailureReason | null
   prompts?: number | null
   resources?: number | null
   oauth_needed: boolean
@@ -4910,6 +4930,7 @@ export interface McpProbeTool {
   name: string
   description: string
 }
+export type McpTestFailureReason = 'unreachable' | 'auth_refused' | 'server_error'
 export interface McpServersRemoveResult {
   ok: boolean
   removed: boolean
@@ -7314,6 +7335,8 @@ export interface RpcMethods {
   'mcp.servers.status': { params: ProfileParams; result: McpServersStatusResult }
   /** Connect, list tools, disconnect — an OAuth server with no token on disk is reported as not ok. */
   'mcp.servers.test': { params: McpServerNameParams; result: McpServersTestResult }
+  /** Edit a url server's endpoint and auth; validated like add (4063), unknown name 4064, plugin-owned 4090. */
+  'mcp.servers.update': { params: McpServersUpdateParams; result: McpServersUpdateResult }
   /** Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned. */
   'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
   /** Set/clear one author's emoji reaction on a message; returns the row's full reaction list. */
@@ -7776,6 +7799,7 @@ export const RPC_METHODS = [
   'mcp.servers.set_api_key',
   'mcp.servers.status',
   'mcp.servers.test',
+  'mcp.servers.update',
   'memory.import',
   'message.react',
   'messaging.slack.connect',
@@ -8069,6 +8093,8 @@ export interface CanonicalRpcMethods {
   'mcp.servers.remove': { params: McpServerNameParams; result: McpServersRemoveResult }
   /** Store a credential in the profile's .env and reference it from the server config (header or env). */
   'mcp.servers.set_api_key': { params: McpServersSetApiKeyParams; result: McpServersSetApiKeyResult }
+  /** Edit a url server's endpoint and auth; validated like add (4063), unknown name 4064, plugin-owned 4090. */
+  'mcp.servers.update': { params: McpServersUpdateParams; result: McpServersUpdateResult }
   /** Import pasted text (a ChatGPT or Claude memory export) into a bot's memory: deduped, size-capped, scanned. */
   'memory.import': { params: MemoryImportParams; result: MemoryImportResult }
   /** Validate and save a bot's Slack tokens, enable the adapter and reload it. */
@@ -8246,6 +8272,7 @@ export const CANONICAL_RPC_METHODS = [
   'mcp.servers.oauth.start',
   'mcp.servers.remove',
   'mcp.servers.set_api_key',
+  'mcp.servers.update',
   'memory.import',
   'messaging.slack.connect',
   'messaging.slack.disconnect',
