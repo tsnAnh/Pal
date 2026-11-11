@@ -99,19 +99,27 @@ struct TelegramTests {
         #expect(try status(state: "connected").allowedUsersSet)
     }
 
-    @Test("token must have the BotFather shape after trimming", arguments: [
-        (TelegramTests.token, true),
-        ("  \(TelegramTests.token)\n", true),
-        ("1:" + String(repeating: "a", count: 30), true),
-        ("1:" + String(repeating: "a", count: 29), false),
-        (":" + String(repeating: "a", count: 30), false),
-        ("12a:" + String(repeating: "a", count: 30), false),
-        ("12:" + String(repeating: "a", count: 15) + " " + String(repeating: "a", count: 15), false),
-        ("12:" + String(repeating: "a", count: 29) + "!", false),
-        ("12:" + String(repeating: "a", count: 20) + ":" + String(repeating: "a", count: 20), false),
-        ("xoxb-123", false),
-        ("", false),
-    ])
+    private static func run(_ count: Int) -> String {
+        String(repeating: "a", count: count)
+    }
+
+    private static let shapeCases: [(String, Bool)] = {
+        var cases: [(String, Bool)] = []
+        cases.append((token, true))
+        cases.append(("  " + token + "\n", true))
+        cases.append(("1:" + run(30), true))
+        cases.append(("1:" + run(29), false))
+        cases.append((":" + run(30), false))
+        cases.append(("12a:" + run(30), false))
+        cases.append(("12:" + run(15) + " " + run(15), false))
+        cases.append(("12:" + run(29) + "!", false))
+        cases.append(("12:" + run(20) + ":" + run(20), false))
+        cases.append(("xoxb-123", false))
+        cases.append(("", false))
+        return cases
+    }()
+
+    @Test("token must have the BotFather shape after trimming", arguments: TelegramTests.shapeCases)
     func tokenValidation(_ item: (String, Bool)) {
         #expect((TelegramTokenUpdate(item.0) != nil) == item.1)
     }
