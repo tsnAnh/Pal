@@ -9,6 +9,7 @@ struct HomeView: View {
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.hermesTheme) private var theme
+    @Environment(RoomsModel.self) private var rooms
 
     var body: some View {
         ScrollView {
@@ -20,6 +21,10 @@ struct HomeView: View {
                 }
                 ForEach(roster.rows) { bot in
                     HomeBotLink(bot: bot, roster: roster, router: router)
+                }
+                if rooms.isAvailable, !rooms.rooms.isEmpty {
+                    RoomsHomeSection(rooms: rooms, roster: roster, router: router)
+                        .padding(.top, 6)
                 }
                 if !roster.hiddenBots.isEmpty {
                     HiddenBotsSection(roster: roster, router: router)
@@ -38,6 +43,16 @@ struct HomeView: View {
                 .accessibilityLabel(Text("Account and settings"))
                 .accessibilityIdentifier("userAvatarButton")
                 .tint(.primary)
+            }
+            if rooms.canCreate {
+                ToolbarItem(placement: .trailingBar) {
+                    Button { rooms.showsCreate = true } label: {
+                        Image(systemName: "person.2")
+                    }
+                    .accessibilityLabel(Text("New Group Chat"))
+                    .accessibilityIdentifier("createRoomButton")
+                    .tint(.primary)
+                }
             }
             ToolbarItem(placement: .trailingBar) {
                 Button { router.present(.createBot) } label: {

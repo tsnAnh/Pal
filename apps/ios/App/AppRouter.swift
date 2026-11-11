@@ -12,6 +12,7 @@ enum AppRoute: Hashable {
     case telegram(botName: String)
     case messagingSettings(botName: String)
     case computer(botName: String)
+    case room(roomID: String)
 }
 
 enum AppSheet: String, Identifiable {
@@ -92,6 +93,12 @@ final class AppRouter {
         isSearching = false
         sheet = nil
         if path.last != .chat(botName: botName) { path = [.chat(botName: botName)] }
+    }
+
+    func openRoom(id roomID: String) {
+        isSearching = false
+        sheet = nil
+        if path.last != .room(roomID: roomID) { path = [.room(roomID: roomID)] }
     }
 
     func supports(_ action: BotMenuAction) -> Bool {

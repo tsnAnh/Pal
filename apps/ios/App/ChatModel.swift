@@ -40,6 +40,7 @@ struct ChatRow: Identifiable, Equatable {
         case approval(PendingPrompt)
         case notice(ChatNotice)
         case botThread(BotThreadLink)
+        case imageGeneration(ImageGeneration)
     }
 
     let id: String
@@ -81,6 +82,8 @@ final class ChatModel {
     var attachments: [PendingAttachment] { pending.items }
     private var localImages: [String: Data] = [:]
     private(set) var slashItems: [SlashItem] = []
+    private(set) var fileRefResult: FileRefResult?
+    private var fileRefTask: Task<Void, Never>?
     private(set) var reactions: [String: String] = [:]
     private(set) var replyTarget: ReplyTarget?
     var isFinding = false
@@ -413,6 +416,20 @@ final class ChatModel {
         }
     }
 
+    /// Asks the gateway for the files `word` completes to. Keystrokes within the debounce collapse into
+    /// one request, a newer word cancels the older one, and a failed or unreachable lookup settles as an
+    /// empty answer so the picker shows its quiet empty state instead of waiting.
+    func loadFileRefs(word: String) {
+        fileRefTask?.cancel()
+        fileRefTask = Task {
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            let items = (try? await session?.pathCompletions(word: word)) ?? []
+            guard !Task.isCancelled else { return }
+            fileRefResult = FileRefResult(word: word, items: items)
+        }
+    }
+
     private func stage(
         _ attachment: PendingAttachment,
         upload: @escaping @Sendable (ChatSession) async throws -> PendingAttachment.Staged
@@ -621,16 +638,20 @@ final class ChatModel {
         let now = Date()
         for item in transcript.items where hasBaseline && item.timestamp == nil && arrivals[item.id] == nil { arrivals[item.id] = now }
         let items = allItems().filter { item in
-            if case .tool = item.content { return false }
+            if case .tool(let call) = item.content { return call.imageGeneration != nil }
             return true
         }
+        let generated = Set(items.compactMap { item -> String? in
+            guard case .tool(let call) = item.content, case .ready(let image)? = call.imageGeneration else { return nil }
+            return image.id
+        })
         let entries = ChatTimeline.entries(items: items, date: effectiveDate, lastSeen: lastSeenAtOpen)
         let visible = outboxEntries.filter { !retried.contains($0.submissionID) }
         let byID = Dictionary(visible.map { ("submission:\($0.submissionID)", $0) }, uniquingKeysWith: { first, _ in first })
         var built: [ChatRow] = []
         for entry in entries {
             let outbox = byID[entry.item.id]
-            guard let (kind, images) = rowKind(for: entry.item, outbox: outbox) else { continue }
+            guard let (kind, images) = rowKind(for: entry.item, outbox: outbox, generated: generated) else { continue }
             built.append(ChatRow(id: entry.item.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider, images: images))
         }
         if shouldShowThinking {
@@ -643,7 +664,7 @@ final class ChatModel {
         recomputeFind(resetPosition: false)
     }
 
-    private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?) -> (ChatRow.Kind, [ImageReference])? {
+    private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>) -> (ChatRow.Kind, [ImageReference])? {
         switch item.content {
         case .user(let text, let delivery):
             switch item.inbound {
@@ -671,10 +692,12 @@ final class ChatModel {
         case .assistant(let text, _, let streaming):
             if streaming { return nil }
             let content = MessageImages.extract(from: text, role: .assistant)
-            if content.text.isEmpty, content.images.isEmpty { return nil }
-            return (.assistant(text: content.text), content.images)
-        case .tool:
-            return nil
+            let images = content.images.filter { !generated.contains($0.id) }
+            if content.text.isEmpty, images.isEmpty { return nil }
+            return (.assistant(text: content.text), images)
+        case .tool(let call):
+            guard let generation = call.imageGeneration else { return nil }
+            return (.imageGeneration(generation), [])
         case .clarifyAnswered(let record):
             return (.clarifyAnswered(question: record.question, answer: record.answer), [])
         case .clarify(let card):

@@ -3,6 +3,9 @@ import HermesDesign
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 struct ChatComposer: View {
     let botName: String
@@ -10,6 +13,8 @@ struct ChatComposer: View {
     let attachments: [PendingAttachment]
     let slashItems: [SlashItem]
     let loadSlashItems: () -> Void
+    let fileRefResult: FileRefResult?
+    let loadFileRefs: (String) -> Void
     let replyTarget: ReplyTarget?
     let cancelReply: () -> Void
     let canSend: Bool
@@ -17,7 +22,7 @@ struct ChatComposer: View {
     @Binding var draft: String
     var focused: FocusState<Bool>.Binding
     let send: () -> Void
-    let openVoiceMode: () -> Void
+    let openVoiceMode: (() -> Void)?
     let removeAttachment: (UUID) -> Void
     let attachPhotos: ([PhotosPickerItem]) -> Void
     let attachCapture: (PlatformImage) -> Void
@@ -34,10 +39,52 @@ struct ChatComposer: View {
     @State private var pickedPhotos: [PhotosPickerItem] = []
     /// The draft the user dismissed the picker on; it stays closed until the draft changes.
     @State private var dismissedDraft: String?
+    @State private var fileRefIndex = 0
 
     private var slashMatches: [SlashItem] {
         guard let query = SlashCatalog.query(in: draft), dismissedDraft != draft else { return [] }
         return SlashCatalog.filter(slashItems, query: query)
+    }
+
+    private var fileRefTrigger: FileRefTrigger? {
+        guard SlashCatalog.query(in: draft) == nil, dismissedDraft != draft else { return nil }
+        return FileRefCatalog.trigger(in: draft)
+    }
+
+    private var fileRefMatches: [FileRefItem] {
+        guard let trigger = fileRefTrigger else { return [] }
+        return FileRefCatalog.visible(fileRefResult, for: trigger)
+    }
+
+    private var showsFileRefEmpty: Bool {
+        guard let trigger = fileRefTrigger else { return false }
+        return FileRefCatalog.isSettled(fileRefResult, for: trigger) && fileRefMatches.isEmpty
+    }
+
+    private var isFileRefOpen: Bool { !fileRefMatches.isEmpty || showsFileRefEmpty }
+
+    private var selectedFileRef: FileRefItem? {
+        fileRefMatches.indices.contains(fileRefIndex) ? fileRefMatches[fileRefIndex] : nil
+    }
+
+    private var slashRows: [CompletionRow] {
+        var shownGroups: Set<SlashItem.Group> = []
+        return slashMatches.map { item in
+            CompletionRow(
+                id: item.command,
+                title: item.command,
+                subtitle: item.description,
+                header: shownGroups.insert(item.group).inserted ? item.group.title : nil
+            )
+        }
+    }
+
+    private var fileRefRows: [CompletionRow] {
+        fileRefMatches.map { item in
+            let path = item.value
+            let subtitle = (item.kind == .file || item.kind == .folder) && path != item.display ? path : item.meta
+            return CompletionRow(id: item.text, title: item.display, subtitle: subtitle, header: nil)
+        }
     }
 
     private var isAttachmentSheetPresented: Bool {
@@ -79,7 +126,25 @@ struct ChatComposer: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            if !slashMatches.isEmpty { SlashPicker(items: slashMatches, pick: pickSlash) }
+            if !slashMatches.isEmpty {
+                CompletionList(
+                    rows: slashRows,
+                    emptyText: nil,
+                    selection: nil,
+                    listIdentifier: "slashPicker",
+                    rowIdentifierPrefix: "slashItem-",
+                    pick: { id in if let item = slashMatches.first(where: { $0.id == id }) { pickSlash(item) } }
+                )
+            } else if isFileRefOpen {
+                CompletionList(
+                    rows: fileRefRows,
+                    emptyText: "No matching files",
+                    selection: selectedFileRef?.id,
+                    listIdentifier: "fileRefPicker",
+                    rowIdentifierPrefix: "fileRefItem-",
+                    pick: { id in if let item = fileRefMatches.first(where: { $0.id == id }) { pickFileRef(item) } }
+                )
+            }
             if let replyTarget { ReplyBar(target: replyTarget, botName: botName, accent: accent, cancel: cancelReply) }
             if !attachments.isEmpty { AttachmentTray(attachments: attachments, remove: removeAttachment) }
             composerRow
@@ -89,6 +154,8 @@ struct ChatComposer: View {
         .padding(.bottom, bottomMargin)
         .onChange(of: draft) { _, text in
             if SlashCatalog.query(in: text) != nil { loadSlashItems() }
+            fileRefIndex = 0
+            if SlashCatalog.query(in: text) == nil, let trigger = FileRefCatalog.trigger(in: text) { loadFileRefs(trigger.word) }
         }
         .onChange(of: focused.wrappedValue) { _, isFocused in
             if !isFocused, !isAttachmentSheetPresented { dismissedDraft = draft }
@@ -114,6 +181,25 @@ struct ChatComposer: View {
         dismissedDraft = nil
         focused.wrappedValue = true
     }
+
+    private func pickFileRef(_ item: FileRefItem, descend: Bool = false) {
+        guard let trigger = FileRefCatalog.trigger(in: draft) else { return }
+        draft = FileRefCatalog.replacement(in: draft, trigger: trigger, item: item, descend: descend).draft
+        dismissedDraft = nil
+        focused.wrappedValue = true
+    }
+
+    #if os(macOS)
+    private var isComposingText: Bool {
+        (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
+    }
+
+    private func moveFileRefSelection(by step: Int) -> KeyPress.Result {
+        guard !fileRefMatches.isEmpty, !isComposingText else { return .ignored }
+        fileRefIndex = (fileRefIndex + step + fileRefMatches.count) % fileRefMatches.count
+        return .handled
+    }
+    #endif
 
     private var composerRow: some View {
         HStack(alignment: .bottom, spacing: 6) {
@@ -190,12 +276,23 @@ struct ChatComposer: View {
             .textFieldStyle(.plain)
             .focusEffectDisabled()
             .onKeyPress(.escape, phases: .down) { _ in
-                guard !slashMatches.isEmpty else { return .ignored }
+                guard !slashMatches.isEmpty || isFileRefOpen, !isComposingText else { return .ignored }
                 dismissedDraft = draft
+                return .handled
+            }
+            .onKeyPress(.upArrow, phases: .down) { _ in moveFileRefSelection(by: -1) }
+            .onKeyPress(.downArrow, phases: .down) { _ in moveFileRefSelection(by: 1) }
+            .onKeyPress(.tab, phases: .down) { press in
+                guard let item = selectedFileRef, press.modifiers.isEmpty, !isComposingText else { return .ignored }
+                pickFileRef(item, descend: true)
                 return .handled
             }
             .onKeyPress(.return, phases: .down) { press in
                 guard press.modifiers.isDisjoint(with: [.shift, .option]) else { return .ignored }
+                if let item = selectedFileRef, !isComposingText {
+                    pickFileRef(item)
+                    return .handled
+                }
                 if hasContent, canSend { send() }
                 return .handled
             }
@@ -233,7 +330,7 @@ struct ChatComposer: View {
             .opacity(canSend ? 1 : 0.4)
             .accessibilityLabel(Text("Send"))
             .accessibilityIdentifier("sendButton")
-        } else {
+        } else if let openVoiceMode {
             Button(action: openVoiceMode) {
                 actionCircle(systemName: "waveform", weight: .semibold)
             }
@@ -261,50 +358,74 @@ struct ChatComposer: View {
     }
 }
 
-private struct SlashPicker: View {
-    let items: [SlashItem]
-    let pick: (SlashItem) -> Void
+private struct CompletionRow: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let header: String?
+}
+
+private struct CompletionList: View {
+    let rows: [CompletionRow]
+    let emptyText: LocalizedStringKey?
+    let selection: String?
+    let listIdentifier: String
+    let rowIdentifierPrefix: String
+    let pick: (String) -> Void
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                ForEach(items) { item in
-                    if item.id == firstOfGroup(item.group)?.id {
-                        Text(item.group.title)
-                            .font(.system(size: 11, weight: .semibold))
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    if rows.isEmpty, let emptyText {
+                        Text(emptyText)
+                            .font(.system(size: 13))
                             .foregroundStyle(PalTokens.textTertiary)
                             .padding(.horizontal, 14)
-                            .padding(.top, 8)
-                            .padding(.bottom, 2)
+                            .padding(.vertical, 8)
+                            .accessibilityIdentifier("\(listIdentifier)Empty")
                     }
-                    Button { pick(item) } label: { row(item) }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("slashItem-\(item.command)")
+                    ForEach(rows) { row in
+                        if let header = row.header {
+                            Text(header)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(PalTokens.textTertiary)
+                                .padding(.horizontal, 14)
+                                .padding(.top, 8)
+                                .padding(.bottom, 2)
+                        }
+                        Button { pick(row.id) } label: { rowView(row) }
+                            .buttonStyle(.plain)
+                            .background(row.id == selection ? PalTokens.selected : Color.clear)
+                            .id(row.id)
+                            .accessibilityIdentifier(rowIdentifierPrefix + row.id)
+                    }
                 }
+                .padding(.vertical, 4)
             }
-            .padding(.vertical, 4)
+            .onChange(of: selection) { _, id in
+                if let id { proxy.scrollTo(id) }
+            }
         }
         .frame(maxHeight: 240)
         .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(PalTokens.panelBorder, lineWidth: 1))
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("slashPicker")
+        .accessibilityIdentifier(listIdentifier)
     }
 
-    private func firstOfGroup(_ group: SlashItem.Group) -> SlashItem? {
-        items.first { $0.group == group }
-    }
-
-    private func row(_ item: SlashItem) -> some View {
+    private func rowView(_ row: CompletionRow) -> some View {
         VStack(alignment: .leading, spacing: 1) {
-            Text(item.command)
+            Text(row.title)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(PalTokens.textPrimary)
-            if !item.description.isEmpty {
-                Text(item.description)
+                .lineLimit(1)
+            if !row.subtitle.isEmpty {
+                Text(row.subtitle)
                     .font(.system(size: 12))
                     .foregroundStyle(PalTokens.textSecondary)
                     .lineLimit(1)
+                    .truncationMode(.head)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

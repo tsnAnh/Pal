@@ -82,6 +82,9 @@ struct ChatRowView: View {
             NoticeRow(notice: notice, highlight: findQuery, isCurrentMatch: isCurrentMatch)
         case .botThread(let link):
             BotThreadLinkRow(link: link, avatars: model.avatars) { openThread(link) }
+        case .imageGeneration(let generation):
+            GeneratedImageRow(generation: generation)
+                .environment(\.chatImageLoader, imageLoader)
         }
     }
 }

@@ -44,4 +44,14 @@ struct BotLookTests {
         #expect(blob.kind == .cloud)
         #expect(blob.isCustomBody)
     }
+
+    @Test("a random look uses a catalog kind and swatch with an eight character seed that survives the stored shape string")
+    func randomLook() {
+        var first = SystemRandomNumberGenerator()
+        let look = BotLook.random(using: &first)
+        #expect(look.seed.count == 8)
+        #expect(BotLookCatalog.shapes.contains(look.kind))
+        #expect(BotLookCatalog.swatches.contains { $0.hex == look.colorHex })
+        #expect(BotLook(name: "x", shape: look.shapeString, color: look.colorHex) == BotLook(seed: look.seed, kind: look.kind, colorHex: look.colorHex))
+    }
 }
