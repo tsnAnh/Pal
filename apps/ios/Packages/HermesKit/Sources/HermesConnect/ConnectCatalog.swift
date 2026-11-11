@@ -84,6 +84,7 @@ public enum ConnectAppState: Sendable, Equatable {
 public enum ConnectAppSource: Sendable, Hashable {
     case hosted(slug: String)
     case mcp(name: String, requires: [String])
+    case custom(CustomConnectorInfo)
 }
 
 public struct ConnectApp: Identifiable, Sendable, Equatable {
@@ -130,6 +131,7 @@ public struct InstalledSkill: Sendable, Equatable, Identifiable {
 
 public struct ConnectCatalog: Sendable, Equatable {
     public static let otherCategory = "Other"
+    public static let customCategory = "Custom"
     private static let preferredOrder = [
         "Communication", "Work management", "Files and docs", "Design and media", "Developer",
         "Data and monitoring", "Sales and support", "Commerce",
@@ -170,7 +172,7 @@ public struct ConnectCatalog: Sendable, Equatable {
         return apps.filter { $0.name.localizedStandardContains(needle) || $0.summary.localizedStandardContains(needle) }
     }
 
-    public static func make(hosted: [HostedConnectorEntry], states: [HostedConnectorState], mcp: [McpPresetEntry], skills: [InstalledSkill] = []) -> ConnectCatalog {
+    public static func make(hosted: [HostedConnectorEntry], states: [HostedConnectorState], mcp: [McpPresetEntry], skills: [InstalledSkill] = [], servers: [McpServerEntry] = []) -> ConnectCatalog {
         let stateBySlug = Dictionary(states.map { ($0.connector, $0) }, uniquingKeysWith: { _, last in last })
         let hostedSlugs = Set(hosted.map(\.slug))
         var apps = hosted.map { entry in
@@ -187,6 +189,15 @@ public struct ConnectCatalog: Sendable, Equatable {
                 iconURL: nil, source: .mcp(name: preset.name, requires: preset.requires),
                 state: preset.installed && preset.enabled ? .connected : .disconnected
             )
+        }
+        let presetNames = Set(mcp.map(\.name))
+        apps += servers.filter { !presetNames.contains($0.name) }.compactMap { entry in
+            entry.customInfo.map { info in
+                ConnectApp(
+                    id: "custom:\(info.name)", name: info.name, summary: "Custom connector", category: customCategory,
+                    iconURL: nil, source: .custom(info), state: entry.enabled ? .connected : .disconnected
+                )
+            }
         }
         apps.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         return ConnectCatalog(apps: apps, skills: skills)

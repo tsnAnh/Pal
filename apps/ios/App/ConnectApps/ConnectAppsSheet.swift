@@ -43,13 +43,18 @@ struct ConnectAppsSheet: View {
                 .scrollIndicators(.automatic)
                 .scrollDismissesKeyboard(.interactively)
                 .safeAreaBar(edge: .bottom) {
-                    if onCatalog {
-                        FloatingSearchBar(
-                            text: $model.query,
-                            prompt: "Search across apps and skills",
-                            accessibilityLabel: "Search across apps and skills",
-                            accessibilityIdentifier: "connectAppsSearch"
-                        )
+                    VStack(spacing: 10) {
+                        if onCatalog {
+                            FloatingSearchBar(
+                                text: $model.query,
+                                prompt: "Search across apps and skills",
+                                accessibilityLabel: "Search across apps and skills",
+                                accessibilityIdentifier: "connectAppsSearch"
+                            )
+                        }
+                        PillButton("Add a custom connector", size: .large, accessibilityIdentifier: "addCustomConnectorButton") {
+                            model.addCustomConnector()
+                        }
                     }
                 }
             }
@@ -71,6 +76,10 @@ struct ConnectAppsSheet: View {
             Button("Cancel", role: .cancel) {}
         } message: { target in
             Text(disconnectMessage(target))
+        }
+        .sheet(item: $model.customConnector) { connector in
+            CustomConnectorSheet(model: connector) { model.customConnector = nil }
+                .macSheetFrame()
         }
         .sheet(item: $model.credentialPrompt) { prompt in
             CredentialSheet(prompt: prompt) { values in
@@ -218,10 +227,14 @@ struct ConnectAppsSheet: View {
     }
 
     private func appRow(_ app: ConnectApp) -> some View {
-        let action: ConnectRowAction = switch app.state {
+        let action: ConnectRowAction = if case .custom = app.source {
+            ConnectRowAction("Manage") { model.manage(app) }
+        } else {
+            switch app.state {
         case .disconnected: ConnectRowAction("Connect") { Task { await model.connect(app) } }
         case .needsAuthorization: ConnectRowAction("Authorize", kind: .accent) { Task { await model.connect(app) } }
         case .connected: ConnectRowAction("Connected", kind: .dimmed) { model.disconnectTarget = .app(app) }
+            }
         }
         return ConnectAppRow(
             title: app.name, summary: app.summary, accessibilityIdentifier: "connectApp-\(app.id)",
@@ -233,7 +246,7 @@ struct ConnectAppsSheet: View {
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
         case .hosted: RemoteLogoTile(url: app.iconURL)
-        case .mcp: PluginGlyphTile()
+        case .mcp, .custom: PluginGlyphTile()
         }
     }
 

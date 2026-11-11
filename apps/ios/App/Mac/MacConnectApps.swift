@@ -33,6 +33,11 @@ struct MacConnectApps: View {
                 .padding(.bottom, 28)
             }
             .scrollIndicators(.never)
+            Button("Add a custom connector") { model.addCustomConnector() }
+                .buttonStyle(.palPill)
+                .padding(.horizontal, 29)
+                .padding(.vertical, 14)
+                .accessibilityIdentifier("addCustomConnectorButton")
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectApps")
@@ -53,6 +58,10 @@ struct MacConnectApps: View {
             Button("Cancel", role: .cancel) {}
         } message: { target in
             Text(disconnectMessage(target))
+        }
+        .sheet(item: $model.customConnector) { connector in
+            CustomConnectorSheet(model: connector) { model.customConnector = nil }
+                .macSheetFrame()
         }
         .sheet(item: $model.credentialPrompt) { prompt in
             CredentialSheet(prompt: prompt) { values in
@@ -314,10 +323,14 @@ struct MacConnectApps: View {
     }
 
     private func appRow(_ app: ConnectApp) -> some View {
-        let action: MacRowAction = switch app.state {
+        let action: MacRowAction = if case .custom = app.source {
+            MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
+        } else {
+            switch app.state {
         case .disconnected: MacRowAction(title: String(localized: "Connect"), prominent: false) { Task { await model.connect(app) } }
         case .needsAuthorization: MacRowAction(title: String(localized: "Authorize"), prominent: true) { Task { await model.connect(app) } }
         case .connected: MacRowAction(title: String(localized: "Connected"), checked: true) { model.disconnectTarget = .app(app) }
+            }
         }
         return tileRow(
             title: app.name, summary: app.summary, identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id)
@@ -340,7 +353,7 @@ struct MacConnectApps: View {
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
         case .hosted: MacAppTile(url: app.iconURL)
-        case .mcp: MacAppTile(url: nil)
+        case .mcp, .custom: MacAppTile(url: nil)
         }
     }
 
