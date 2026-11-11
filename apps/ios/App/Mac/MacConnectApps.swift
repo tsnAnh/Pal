@@ -46,6 +46,10 @@ struct MacConnectApps: View {
         } message: { target in
             Text(disconnectMessage(target))
         }
+        .sheet(item: $model.keyRequest) { request in
+            CapabilityKeyEntrySheet(model: model, request: request)
+                .macSheetFrame()
+        }
         .sheet(item: $model.credentialPrompt) { prompt in
             CredentialSheet(prompt: prompt) { values in
                 Task { await model.connect(prompt.app, credentials: values) }
@@ -363,7 +367,7 @@ struct MacConnectApps: View {
             if !rows.isEmpty {
                 section(title: String(localized: "Capabilities"), identifier: "capabilitiesTitle", viewAll: nil) {
                     LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
-                        ForEach(rows) { MacCapabilityRow(row: $0) }
+                        ForEach(rows) { row in MacCapabilityRow(row: row, onSetKey: model.canSetKeys ? { model.beginKeyEntry(row, keyName: $0) } : nil) }
                     }
                     .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("capabilitiesList")
@@ -501,6 +505,7 @@ struct MacConnectApps: View {
 
 private struct MacCapabilityRow: View {
     let row: CapabilityRow
+    let onSetKey: ((String) -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -535,12 +540,16 @@ private struct MacCapabilityRow: View {
                         .background(PalTokens.chipFill, in: Capsule())
                         .padding(.top, 2)
                 }
+                if let onSetKey {
+                    CapabilitySetKeyButton(row: row, onSelect: onSetKey)
+                        .font(.system(size: 11, weight: .semibold))
+                        .padding(.top, 2)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: onSetKey == nil ? .combine : .contain)
         .accessibilityLabel(Text(row.accessibilitySummary))
-        .accessibilityHint(Text(row.terminalHint ?? ""))
         .accessibilityIdentifier(row.accessibilityIdentifier)
     }
 

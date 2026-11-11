@@ -219,11 +219,13 @@ public struct CapabilityRowWire: Codable, Sendable, Hashable {
     public var state: String?
     public var reason: String?
     public var keyName: String?
+    public var keyChoices: [String]?
     public var setting: String?
 
     enum CodingKeys: String, CodingKey {
         case id, label, state, reason, setting
         case keyName = "key_name"
+        case keyChoices = "key_choices"
     }
 }
 

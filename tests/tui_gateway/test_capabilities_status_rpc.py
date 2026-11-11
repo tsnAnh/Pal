@@ -67,7 +67,7 @@ def test_web_search_follows_provider_availability(bots, web_provider, disabled_s
     web_provider["available"] = False
     row = _status()["web"]
     assert row["state"] == "off" and row["setting"] == "web.search_backend"
-    assert "TAVILY_API_KEY" in row["reason"] and "terminal" in row["reason"]
+    assert "TAVILY_API_KEY" in row["reason"] and "terminal" not in row["reason"]
 
 
 def test_deep_search_needs_web_and_its_skill(bots, web_provider, disabled_skills):

@@ -46,6 +46,11 @@ struct ConnectAppsSheet: View {
         } message: { target in
             Text(disconnectMessage(target))
         }
+        .sheet(item: $model.keyRequest) { request in
+            CapabilityKeyEntrySheet(model: model, request: request)
+                .presentationDetents([.medium])
+                .macSheetFrame()
+        }
         .sheet(item: $model.credentialPrompt) { prompt in
             CredentialSheet(prompt: prompt) { values in
                 Task { await model.connect(prompt.app, credentials: values) }
@@ -194,7 +199,7 @@ struct ConnectAppsSheet: View {
             if !rows.isEmpty {
                 ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
                 VStack(spacing: 0) {
-                    ForEach(rows) { CapabilityListRow(row: $0) }
+                    ForEach(rows) { row in CapabilityListRow(row: row, onSetKey: model.canSetKeys ? { model.beginKeyEntry(row, keyName: $0) } : nil) }
                 }
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("capabilitiesList")
@@ -396,6 +401,7 @@ struct CredentialSheet: View {
 
 private struct CapabilityListRow: View {
     let row: CapabilityRow
+    let onSetKey: ((String) -> Void)?
 
     @Environment(\.hermesTheme) private var theme
 
@@ -432,14 +438,18 @@ private struct CapabilityListRow: View {
                         .background(Color(theme.palette.chipFill), in: Capsule())
                         .padding(.top, 2)
                 }
+                if let onSetKey {
+                    CapabilitySetKeyButton(row: row, onSelect: onSetKey)
+                        .font(.system(size: ConnectRowMetrics.subtitleSize, weight: .semibold))
+                        .padding(.top, 2)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
         .padding(.vertical, ConnectRowMetrics.verticalPadding)
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: onSetKey == nil ? .combine : .contain)
         .accessibilityLabel(Text(row.accessibilitySummary))
-        .accessibilityHint(Text(row.terminalHint ?? ""))
         .accessibilityIdentifier(row.accessibilityIdentifier)
     }
 

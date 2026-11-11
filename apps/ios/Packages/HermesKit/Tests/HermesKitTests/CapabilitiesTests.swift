@@ -59,17 +59,57 @@ struct CapabilitiesTests {
         #expect(rows.map(\.stateWord) == ["On", "Off", "Unavailable", "Limited", "Off", "Unavailable"])
     }
 
-    @Test("the terminal hint names the key only for an off or limited row that has one")
-    func hint() async throws {
+    @Test("settable keys name the key only for an off or limited row that has one, or the provider choices")
+    func settable() async throws {
         let rows = try await rows()
-        #expect(rows[0].terminalHint == nil)
-        #expect(rows[1].terminalHint == "Set EXA_API_KEY from your terminal.")
-        #expect(rows[2].terminalHint == nil)
-        #expect(rows[3].terminalHint == "Set GOOGLE_MAPS_API_KEY from your terminal.")
-        #expect(rows[4].terminalHint == nil)
-        #expect(rows[5].terminalHint == nil)
+        #expect(rows.map(\.settableKeys) == [[], ["EXA_API_KEY"], [], ["GOOGLE_MAPS_API_KEY"], [], []])
         #expect(rows[1].shownKeyName == "EXA_API_KEY")
         #expect(rows[5].shownKeyName == nil)
+        let web = CapabilityRow(id: "web", label: "Web", state: .off, reason: "No provider.", keyChoices: ["TAVILY_API_KEY", " ", "EXA_API_KEY"])
+        #expect(web.settableKeys == ["TAVILY_API_KEY", "EXA_API_KEY"])
+        #expect(CapabilityRow(id: "web", label: "Web", state: .on, keyChoices: ["TAVILY_API_KEY"]).settableKeys == [])
+    }
+
+    @Test("choices decode from key_choices")
+    func choices() async throws {
+        let bots = ScriptedBots()
+        bots.script("capabilities.status", ["profile": "a", "capabilities": [
+            ["id": "web", "label": "Web", "state": "off", "reason": "None.", "key_choices": ["TAVILY_API_KEY", "EXA_API_KEY"]],
+        ]])
+        let rows = try await CapabilitiesService(gateway: bots.gateway).status(profile: "a")
+        #expect(rows[0].settableKeys == ["TAVILY_API_KEY", "EXA_API_KEY"])
+    }
+
+    @Test("setting a key sends the name and value for the profile and returns the refreshed rows")
+    func setKey() async throws {
+        let bots = ScriptedBots()
+        let canary = "CANARY-\(UUID().uuidString)"
+        bots.script("capabilities.set_key", ["profile": "a", "key_name": "GOOGLE_MAPS_API_KEY", "is_set": true, "capabilities": [
+            ["id": "maps", "label": "Maps", "state": "on"],
+        ]])
+        let rows = try await CapabilitiesService(gateway: bots.gateway)
+            .setKey("GOOGLE_MAPS_API_KEY", to: SecretString(canary), profile: "a")
+        let call = try #require(bots.calls.first)
+        #expect(call.method == "capabilities.set_key")
+        #expect(call.params == ["profile": "a", "key_name": "GOOGLE_MAPS_API_KEY", "value": .string(canary)])
+        #expect(rows.map(\.indicator) == [.on])
+        #expect(!String(describing: rows).contains(canary))
+    }
+
+    @Test("removing a key sends a null value")
+    func removeKey() async throws {
+        let bots = ScriptedBots()
+        bots.script("capabilities.set_key", ["profile": "a", "key_name": "YOUTUBE_API_KEY", "is_set": false, "capabilities": []])
+        _ = try await CapabilitiesService(gateway: bots.gateway).setKey("YOUTUBE_API_KEY", to: nil, profile: "a")
+        #expect(bots.calls.first?.params["value"] == JSONValue.null)
+    }
+
+    @Test("a refused key surfaces as a bots error and never echoes the value")
+    func refusedKey() async {
+        let bots = ScriptedBots()
+        await #expect(throws: BotsError.self) {
+            try await CapabilitiesService(gateway: bots.gateway).setKey("OPENAI_API_KEY", to: SecretString("x"), profile: "a")
+        }
     }
 
     @Test("a gateway failure surfaces as a bots error")

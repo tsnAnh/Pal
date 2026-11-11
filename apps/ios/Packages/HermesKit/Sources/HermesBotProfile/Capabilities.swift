@@ -29,20 +29,25 @@ public struct CapabilityRow: Sendable, Equatable, Identifiable {
     public let state: CapabilityState
     public let reason: String?
     public let keyName: String?
+    public let keyChoices: [String]
     public let setting: String?
 
-    public init(id: String, label: String, state: CapabilityState, reason: String? = nil, keyName: String? = nil, setting: String? = nil) {
+    public init(
+        id: String, label: String, state: CapabilityState, reason: String? = nil, keyName: String? = nil,
+        keyChoices: [String] = [], setting: String? = nil
+    ) {
         self.id = id
         self.label = label
         self.state = state
         self.reason = Self.text(reason)
         self.keyName = Self.text(keyName)
+        self.keyChoices = keyChoices.compactMap(Self.text)
         self.setting = Self.text(setting)
     }
 
     init?(_ wire: CapabilityRowWire) {
         guard let id = Self.text(wire.id) else { return nil }
-        self.init(id: id, label: Self.text(wire.label) ?? id, state: CapabilityState(wire: wire.state), reason: wire.reason, keyName: wire.keyName, setting: wire.setting)
+        self.init(id: id, label: Self.text(wire.label) ?? id, state: CapabilityState(wire: wire.state), reason: wire.reason, keyName: wire.keyName, keyChoices: wire.keyChoices ?? [], setting: wire.setting)
     }
 
     public var indicator: CapabilityIndicator {
@@ -69,8 +74,12 @@ public struct CapabilityRow: Sendable, Equatable, Identifiable {
         }
     }
 
-    public var terminalHint: String? {
-        shownKeyName.map { "Set \($0) from your terminal." }
+    public var settableKeys: [String] {
+        switch indicator {
+        case .limited: keyName.map { [$0] } ?? []
+        case .off: keyName.map { [$0] } ?? keyChoices
+        case .on, .unavailable: []
+        }
     }
 
     private static func text(_ value: String?) -> String? {
@@ -89,6 +98,17 @@ public struct CapabilitiesService: Sendable {
     public func status(profile: String) async throws -> [CapabilityRow] {
         do {
             let result = try await gateway.scoped("capabilities.status", profile: profile)
+            return try gateway.decoded(CapabilitiesStatusWire.self, result).capabilities.compactMap(CapabilityRow.init)
+        } catch {
+            throw BotsError.surface(error)
+        }
+    }
+
+    public func setKey(_ keyName: String, to value: SecretString?, profile: String) async throws -> [CapabilityRow] {
+        do {
+            let result = try await gateway.scoped("capabilities.set_key", profile: profile, [
+                "key_name": .string(keyName), "value": value.map { .string($0.reveal()) } ?? .null,
+            ])
             return try gateway.decoded(CapabilitiesStatusWire.self, result).capabilities.compactMap(CapabilityRow.init)
         } catch {
             throw BotsError.surface(error)

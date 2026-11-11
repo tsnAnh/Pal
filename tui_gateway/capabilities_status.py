@@ -11,9 +11,17 @@ MAPS_SKILL = "maps"
 BROWSER_LABEL = "Browser"
 
 
+WEB_KEYS = ["TAVILY_API_KEY", "PERPLEXITY_API_KEY", "EXA_API_KEY", "FIRECRAWL_API_KEY", "BRAVE_SEARCH_API_KEY",
+            "SEARXNG_URL"]
+BROWSER_KEYS = ["BROWSER_USE_API_KEY", "BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID"]
+SETTABLE_KEYS = frozenset([YOUTUBE_KEY, MAPS_KEY, *WEB_KEYS, *BROWSER_KEYS])
+
+
 def _row(cap: CapabilityId, label: str, state: CapabilityState, reason: str | None = None, *,
-         key_name: str | None = None, setting: str | None = None) -> CapabilityRow:
-    return CapabilityRow(id=cap, label=label, state=state, reason=reason, key_name=key_name, setting=setting)
+         key_name: str | None = None, key_choices: list[str] | None = None,
+         setting: str | None = None) -> CapabilityRow:
+    return CapabilityRow(id=cap, label=label, state=state, reason=reason, key_name=key_name,
+                         key_choices=key_choices or [], setting=setting)
 
 
 def _key_set(name: str) -> bool:
@@ -36,8 +44,8 @@ def _web_row() -> CapabilityRow:
     if _web_usable():
         return _row(CapabilityId.WEB, label, CapabilityState.ON)
     return _row(CapabilityId.WEB, label, CapabilityState.OFF,
-                f"No web search provider is set. Set one of {WEB_PROVIDER_KEYS} from your terminal, "
-                "or pick a provider with web.search_backend.", setting="web.search_backend")
+                f"No web search provider is set. Set one of {WEB_PROVIDER_KEYS}, "
+                "or pick a provider with web.search_backend.", key_choices=WEB_KEYS, setting="web.search_backend")
 
 
 def _skill_off(cap: CapabilityId, label: str, skill: str) -> CapabilityRow:
@@ -62,7 +70,7 @@ def _youtube_row(disabled: set[str]) -> CapabilityRow:
     if _key_set(YOUTUBE_KEY):
         return _row(CapabilityId.YOUTUBE, label, CapabilityState.ON)
     return _row(CapabilityId.YOUTUBE, label, CapabilityState.ON,
-                f"Transcripts only. Search and channel stats need {YOUTUBE_KEY}; set it from your terminal.",
+                f"Transcripts only. Search and channel stats need {YOUTUBE_KEY}.",
                 key_name=YOUTUBE_KEY)
 
 
@@ -73,7 +81,7 @@ def _maps_row(disabled: set[str]) -> CapabilityRow:
     if _key_set(MAPS_KEY):
         return _row(CapabilityId.MAPS, label, CapabilityState.ON)
     return _row(CapabilityId.MAPS, label, CapabilityState.ON,
-                f"OpenStreetMap only. Google Places needs {MAPS_KEY}; set it from your terminal.", key_name=MAPS_KEY)
+                f"OpenStreetMap only. Google Places needs {MAPS_KEY}.", key_name=MAPS_KEY)
 
 
 BROWSER_PROVIDER_KEYS = "BROWSER_USE_API_KEY, or BROWSERBASE_API_KEY and BROWSERBASE_PROJECT_ID"
@@ -81,7 +89,8 @@ BROWSER_PROVIDER_SETTING = "browser.cloud_provider"
 
 
 def _browser_off(reason: str) -> CapabilityRow:
-    return _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.OFF, reason, setting=BROWSER_PROVIDER_SETTING)
+    return _row(CapabilityId.BROWSER, BROWSER_LABEL, CapabilityState.OFF, reason, key_choices=BROWSER_KEYS,
+                setting=BROWSER_PROVIDER_SETTING)
 
 
 def _browser_row() -> CapabilityRow:
@@ -105,7 +114,7 @@ def _browser_row() -> CapabilityRow:
     if provider is not None and provider.is_available():
         return ready
     return _browser_off(f"The {selected} browser provider is selected but its credentials are missing. "
-                        f"Set {BROWSER_PROVIDER_KEYS} from your terminal, or use the local browser.")
+                        f"Set {BROWSER_PROVIDER_KEYS}, or use the local browser.")
 
 
 def capability_rows() -> list[CapabilityRow]:
