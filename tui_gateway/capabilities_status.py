@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from tui_gateway.contracts.capabilities import CapabilityId, CapabilityRow, CapabilityState
+from tui_gateway.speech_memory_settings import MEMORY_KEYS, TTS_KEYS
 
 YOUTUBE_KEY = "YOUTUBE_API_KEY"
 MAPS_KEY = "GOOGLE_MAPS_API_KEY"
@@ -14,7 +15,7 @@ BROWSER_LABEL = "Browser"
 WEB_KEYS = ["TAVILY_API_KEY", "PERPLEXITY_API_KEY", "EXA_API_KEY", "FIRECRAWL_API_KEY", "BRAVE_SEARCH_API_KEY",
             "SEARXNG_URL"]
 BROWSER_KEYS = ["BROWSER_USE_API_KEY", "BROWSERBASE_API_KEY", "BROWSERBASE_PROJECT_ID"]
-SETTABLE_KEYS = frozenset([YOUTUBE_KEY, MAPS_KEY, *WEB_KEYS, *BROWSER_KEYS])
+SETTABLE_KEYS = frozenset([YOUTUBE_KEY, MAPS_KEY, *WEB_KEYS, *BROWSER_KEYS, *TTS_KEYS, *MEMORY_KEYS])
 
 
 def _row(cap: CapabilityId, label: str, state: CapabilityState, reason: str | None = None, *,

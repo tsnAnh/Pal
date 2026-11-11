@@ -4903,6 +4903,42 @@
       }
     },
     {
+      "name": "speech_memory.settings.get",
+      "summary": "The bot's text-to-speech and memory providers: which is chosen, which are installed on this computer, and whether the key each needs is set. Read-only; never carries a key value. Keys are set and removed with capabilities.set_key.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SpeechMemorySettings"
+        }
+      }
+    },
+    {
+      "name": "speech_memory.settings.set",
+      "summary": "Choose the bot's text-to-speech provider (and the Edge voice) or memory provider (empty string for the built-in memory only). needs_key: the provider's key is not set yet. Applies to new conversations.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/SpeechMemorySetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SpeechMemorySetResult"
+        }
+      }
+    },
+    {
       "name": "subagent.interrupt",
       "summary": "Hard-interrupt one owned child; ``found`` is false when it already finished.",
       "params": [
@@ -51214,6 +51250,302 @@
           "session_id"
         ],
         "title": "SpawnTreeSaveResult",
+        "type": "object"
+      },
+      "SpeechMemoryArea": {
+        "enum": [
+          "tts",
+          "memory"
+        ],
+        "title": "SpeechMemoryArea",
+        "type": "string"
+      },
+      "SpeechMemoryProvider": {
+        "additionalProperties": false,
+        "description": "One text-to-speech or memory provider. ``key_name`` is the name of the secret that powers it (absent\nwhen none is needed here), ``key_set`` whether any source supplies it, ``can_remove`` whether the bot's own\nsecret store holds one that ``capabilities.set_key`` can remove. ``ready`` is whether the provider works\nnow. ``note`` is one line on a shared or optional key. No key value is ever carried.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "key_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Key Name"
+          },
+          "key_required": {
+            "default": false,
+            "title": "Key Required",
+            "type": "boolean"
+          },
+          "key_set": {
+            "default": false,
+            "title": "Key Set",
+            "type": "boolean"
+          },
+          "can_remove": {
+            "default": false,
+            "title": "Can Remove",
+            "type": "boolean"
+          },
+          "ready": {
+            "default": false,
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "selectable": {
+            "default": true,
+            "title": "Selectable",
+            "type": "boolean"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Note"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "SpeechMemoryProvider",
+        "type": "object"
+      },
+      "SpeechMemorySetOutcome": {
+        "enum": [
+          "saved",
+          "needs_key",
+          "unsupported",
+          "invalid",
+          "failed"
+        ],
+        "title": "SpeechMemorySetOutcome",
+        "type": "string"
+      },
+      "SpeechMemorySetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "area": {
+            "$ref": "#/components/schemas/SpeechMemoryArea"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Voice"
+          }
+        },
+        "required": [
+          "area",
+          "provider"
+        ],
+        "title": "SpeechMemorySetParams",
+        "type": "object"
+      },
+      "SpeechMemorySetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/SpeechMemorySetOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "settings": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeechMemorySettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "SpeechMemorySetResult",
+        "type": "object"
+      },
+      "SpeechMemorySettings": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "tts": {
+            "$ref": "#/components/schemas/SpeechSettings"
+          },
+          "memory": {
+            "$ref": "#/components/schemas/SpeechProviderGroup"
+          }
+        },
+        "required": [
+          "profile",
+          "tts",
+          "memory"
+        ],
+        "title": "SpeechMemorySettings",
+        "type": "object"
+      },
+      "SpeechProviderGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "selected": {
+            "title": "Selected",
+            "type": "string"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/SpeechMemoryProvider"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "selected",
+          "providers"
+        ],
+        "title": "SpeechProviderGroup",
+        "type": "object"
+      },
+      "SpeechSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "selected": {
+            "title": "Selected",
+            "type": "string"
+          },
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/SpeechMemoryProvider"
+            },
+            "title": "Providers",
+            "type": "array"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpeechVoice"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "selected",
+          "providers"
+        ],
+        "title": "SpeechSettings",
+        "type": "object"
+      },
+      "SpeechVoice": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "title": "Current",
+            "type": "string"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/SpeechVoiceOption"
+            },
+            "title": "Options",
+            "type": "array"
+          }
+        },
+        "required": [
+          "current",
+          "options"
+        ],
+        "title": "SpeechVoice",
+        "type": "object"
+      },
+      "SpeechVoiceOption": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "SpeechVoiceOption",
         "type": "object"
       },
       "StagedFileUpload": {

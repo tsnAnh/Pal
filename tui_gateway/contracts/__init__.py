@@ -26,6 +26,7 @@ from . import (
     prompt_voice,
     server_requests,
     sessions,
+    speech_memory,
     tools_commands,
     tools_mcp_plugins,
     account,
