@@ -36,8 +36,7 @@ struct MermaidBlockView: View {
             VStack(alignment: .leading, spacing: 6) {
                 diagram(image)
                 Button("Copy source") { Pasteboard.string = source }
-                    .font(.footnote)
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.pill())
             }
         case .failed:
             RichSourceFallback(source: source, note: "Could not draw this diagram", offersCopy: true)
@@ -49,7 +48,7 @@ struct MermaidBlockView: View {
             .resizable()
             .scaledToFit()
             .frame(maxWidth: image.size.width, maxHeight: image.size.height)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Diagram")
             .accessibilityValue(source)
