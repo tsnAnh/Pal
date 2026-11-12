@@ -28,6 +28,7 @@ struct DeviceTile: View {
         case .notifications: "bell.fill"
         case .apps: "macwindow"
         case .clipboard: "doc.on.clipboard.fill"
+        case .messages: "message.fill"
         }
     }
 
@@ -46,6 +47,7 @@ struct DeviceTile: View {
         case .notifications: RGB(hex: 0xe5493a)
         case .apps: RGB(hex: 0x5e5ce6)
         case .clipboard: RGB(hex: 0x8e6bd8)
+        case .messages: RGB(hex: 0x34c759)
         }
     }
 }
