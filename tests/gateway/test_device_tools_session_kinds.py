@@ -50,10 +50,12 @@ KINDS = {
     'cli': dict(source='cli'),
     'bot_chat': dict(source='cli', title='Bot Chat', follow_profile_config=True),
     'ios': dict(source='ios'),
+    'desktop': dict(source='gui'),
 }
 NOT_ENABLED = {
     'tui': dict(source='tui'),
-    'gui': dict(source='gui'),
+    'gui_with_picked_toolsets': dict(source='gui', toolsets=['web']),
+    'ios_with_picked_toolsets': dict(source='ios', toolsets=['web']),
     'oneshot': dict(source='oneshot'),
     'tool': dict(source='tool'),
     'cli_with_picked_toolsets': dict(source='cli', toolsets=['web']),
@@ -76,7 +78,7 @@ async def sessions(tmp_path, monkeypatch, kinds, connector_on):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('connector_on', [True, False])
-async def test_cli_bot_chat_and_ios_sessions_are_offered_the_device_tools_exactly_when_a_connector_is_on(
+async def test_cli_bot_chat_ios_and_desktop_sessions_are_offered_the_device_tools_exactly_when_a_connector_is_on(
         tmp_path, monkeypatch, connector_on):
     store, authority, owner, made = await sessions(tmp_path, monkeypatch, KINDS, connector_on)
     try:
