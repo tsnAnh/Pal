@@ -125,6 +125,8 @@ class McpOAuthFlow:
     user_code = None
     verification_uri = None
     expires_in = None
+    accepts_redirect = True
+    failure: Optional[str] = None
     POLL_SECONDS = 1.5
 
     def __init__(self, home: Path, service: str) -> None:
@@ -157,13 +159,24 @@ class McpOAuthFlow:
         from tui_gateway import mcp_oauth_sessions
         await self._started.wait()
         while not self._cancelled and self._session_id:
-            status = mcp_oauth_sessions.poll_flow(self._session_id, self._server).get("status")
+            status_row = mcp_oauth_sessions.poll_flow(self._session_id, self._server)
+            status = status_row.get("status")
             if status == "approved":
                 return True
             if status == "error":
+                if "access_denied" in str(status_row.get("error_message") or ""):
+                    self.failure = "Sign-in was declined on the provider's page."
                 return False
             await asyncio.sleep(self.POLL_SECONDS)
         return False
+
+    async def submit_redirect(self, value: str) -> bool:
+        from tui_gateway import mcp_oauth_sessions
+        if not self._session_id:
+            return False
+        outcome = await asyncio.to_thread(
+            mcp_oauth_sessions.deliver_pasted_redirect, self._session_id, self._server, self._home_key(), value)
+        return outcome["ok"]
 
     def cancel(self) -> None:
         self._cancelled = True
@@ -305,6 +318,17 @@ class McpServerFlow:
     @property
     def store(self):
         return getattr(self._inner, "store", None)
+
+    @property
+    def accepts_redirect(self) -> bool:
+        return getattr(self._inner, "accepts_redirect", False)
+
+    @property
+    def failure(self) -> Optional[str]:
+        return getattr(self._inner, "failure", None)
+
+    async def submit_redirect(self, value: str) -> bool:
+        return await self._inner.submit_redirect(value)
 
     async def confirm(self) -> bool:
         confirm = getattr(self._inner, "confirm", None)

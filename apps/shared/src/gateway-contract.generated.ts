@@ -6538,6 +6538,14 @@ export interface AuthSubmitCredentialResult {
   outcome: AuthCredentialOutcome
 }
 export type AuthCredentialOutcome = 'stored' | 'failed' | 'rejected'
+export interface AuthSubmitRedirectParams {
+  request_id: string
+  value: string
+}
+export interface AuthSubmitRedirectResult {
+  outcome: AuthRedirectOutcome
+}
+export type AuthRedirectOutcome = 'accepted' | 'invalid' | 'rejected'
 export interface AuthBeginParams {
   service: string
 }
@@ -7402,6 +7410,7 @@ export interface AuthRequiredPayload {
   verification_uri?: string | null
   expires_in?: number | null
   server?: string | null
+  redirect_paste?: boolean | null
 }
 export type AuthReason = 'missing' | 'expired' | 'revoked'
 export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual'
@@ -8406,6 +8415,8 @@ export interface CanonicalRpcMethods {
   'auth.signin': { params: AuthSigninParams; result: AuthSigninResult }
   /** The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored. */
   'auth.submit_credential': { params: AuthSubmitCredentialParams; result: AuthSubmitCredentialResult }
+  /** The user pasted the address their browser ended on after an oauth auth.required request whose payload has redirect_paste (the full address, its query, or code=...&state=...). From any device attached to the same profile: the gateway holds the PKCE verifier, checks the state and the redirect address, exchanges the code and stores the tokens; the value is used once and never echoed, logged, kept or shown to the model. accepted: taken, the request then ends with auth.resolved. invalid: not this flow's redirect, a wrong or repeated state, or already used; the same request may be answered again. rejected: unknown, finished, foreign request, or one that was never signed in with auth.signin. */
+  'auth.submit_redirect': { params: AuthSubmitRedirectParams; result: AuthSubmitRedirectResult }
   /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
   'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
   /** This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat. */
@@ -8654,6 +8665,7 @@ export const CANONICAL_RPC_METHODS = [
   'auth.revoke_self',
   'auth.signin',
   'auth.submit_credential',
+  'auth.submit_redirect',
   'bot.thread.links',
   'bot.thread.list',
   'bot.thread.read',
@@ -8854,7 +8866,7 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
-  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential. */
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. redirect_paste: true means any device can finish an oauth sign-in by sending the address the browser ended on to auth.submit_redirect, so no device has to host the redirect. The payload never carries a credential. */
   'auth.required': AuthRequiredPayload
   /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is the provider's failure in plain words when the flow has one; it never carries a credential. */
   'auth.resolved': AuthResolvedPayload

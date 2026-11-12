@@ -41,6 +41,7 @@ class AuthRequiredPayload(Payload):
     verification_uri: str | None = None
     expires_in: int | None = None
     server: str | None = None
+    redirect_paste: bool | None = None
 
 
 event("auth.required", AuthRequiredPayload,
@@ -49,6 +50,8 @@ event("auth.required", AuthRequiredPayload,
           "carries user_code and verification_uri to open in the system browser; oauth is started with "
           "auth.signin; api_key and header ask for one masked credential for the service: answer with "
           "auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. "
+          "redirect_paste: true means any device can finish an oauth sign-in by sending the address the browser "
+          "ended on to auth.submit_redirect, so no device has to host the redirect. "
           "The payload never carries a credential.")
 
 
@@ -113,6 +116,32 @@ canonical_method("auth.submit_credential", params=AuthSubmitCredentialParams, re
                      "echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. "
                      "failed: not saved (invalid value or store error), the same request may be answered again. "
                      "rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored.")
+
+
+class AuthRedirectOutcome(WireEnum):
+    ACCEPTED = "accepted"
+    INVALID = "invalid"
+    REJECTED = "rejected"
+
+
+class AuthSubmitRedirectParams(Params):
+    request_id: str = Field(pattern=AUTH_REQUEST_ID_PATTERN)
+    value: str = Field(min_length=1, max_length=4096, repr=False)
+
+
+class AuthSubmitRedirectResult(Result):
+    outcome: AuthRedirectOutcome
+
+
+canonical_method("auth.submit_redirect", params=AuthSubmitRedirectParams, result=AuthSubmitRedirectResult,
+                 doc="The user pasted the address their browser ended on after an oauth auth.required request "
+                     "whose payload has redirect_paste (the full address, its query, or code=...&state=...). From "
+                     "any device attached to the same profile: the gateway holds the PKCE verifier, checks the "
+                     "state and the redirect address, exchanges the code and stores the tokens; the value is "
+                     "used once and never echoed, logged, kept or shown to the model. accepted: taken, the "
+                     "request then ends with auth.resolved. invalid: not this flow's redirect, a wrong or "
+                     "repeated state, or already used; the same request may be answered again. rejected: "
+                     "unknown, finished, foreign request, or one that was never signed in with auth.signin.")
 
 
 class AuthBeginOutcome(WireEnum):

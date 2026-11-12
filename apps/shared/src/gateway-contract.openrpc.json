@@ -7199,6 +7199,15 @@
         "title": "AuthReason",
         "type": "string"
       },
+      "AuthRedirectOutcome": {
+        "enum": [
+          "accepted",
+          "invalid",
+          "rejected"
+        ],
+        "title": "AuthRedirectOutcome",
+        "type": "string"
+      },
       "AuthRequiredPayload": {
         "additionalProperties": false,
         "properties": {
@@ -7278,6 +7287,18 @@
             ],
             "default": null,
             "title": "Server"
+          },
+          "redirect_paste": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Redirect Paste"
           }
         },
         "required": [
@@ -7448,6 +7469,41 @@
           "outcome"
         ],
         "title": "AuthSubmitCredentialResult",
+        "type": "object"
+      },
+      "AuthSubmitRedirectParams": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "value"
+        ],
+        "title": "AuthSubmitRedirectParams",
+        "type": "object"
+      },
+      "AuthSubmitRedirectResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/AuthRedirectOutcome"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "AuthSubmitRedirectResult",
         "type": "object"
       },
       "AutoContinue": {
@@ -58651,6 +58707,24 @@
       }
     },
     {
+      "name": "auth.submit_redirect",
+      "summary": "The user pasted the address their browser ended on after an oauth auth.required request whose payload has redirect_paste (the full address, its query, or code=...&state=...). From any device attached to the same profile: the gateway holds the PKCE verifier, checks the state and the redirect address, exchanges the code and stores the tokens; the value is used once and never echoed, logged, kept or shown to the model. accepted: taken, the request then ends with auth.resolved. invalid: not this flow's redirect, a wrong or repeated state, or already used; the same request may be answered again. rejected: unknown, finished, foreign request, or one that was never signed in with auth.signin.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthSubmitRedirectParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthSubmitRedirectResult"
+        }
+      }
+    },
+    {
       "name": "bot.thread.links",
       "summary": "Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id.",
       "params": [
@@ -61304,7 +61378,7 @@
     },
     {
       "name": "auth.required",
-      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential.",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. redirect_paste: true means any device can finish an oauth sign-in by sending the address the browser ended on to auth.submit_redirect, so no device has to host the redirect. The payload never carries a credential.",
       "params": [
         {
           "name": "payload",

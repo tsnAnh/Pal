@@ -5,7 +5,7 @@
    "undecided": 343
   },
   "rpc": {
-   "authority": 187,
+   "authority": 188,
    "keep-host-wide": 1,
    "undecided": 176
   },
@@ -387,6 +387,7 @@
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "auth.revoke_self", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "auth.signin", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "auth.submit_credential", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "auth.submit_redirect", "kind": "rpc", "ref": ""},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "billing.auto_reload", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "billing.charge", "kind": "rpc", "ref": "D3"},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "billing.charge_status", "kind": "rpc", "ref": "D3"},

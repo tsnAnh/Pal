@@ -71,6 +71,41 @@ enum ServiceSignInWording {
     }
 }
 
+struct ServiceSignInRedirectEntry: View {
+    let note: String?
+    let onSubmit: (String) -> Void
+    @State private var pasted = ""
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text("After you approve, the page may not load. Copy its address and paste it here.")
+                .hermesText(.footnoteCaption)
+                .foregroundStyle(PalTokens.textSecondary)
+                .multilineTextAlignment(.center)
+            SecureField("Address from the browser", text: $pasted)
+                .textFieldStyle(.plain)
+                .padding(12)
+                .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityIdentifier("service-signin-redirect-field")
+            if let note {
+                Text(note)
+                    .hermesText(.footnoteCaption)
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("service-signin-redirect-note")
+            }
+            Button("Finish sign-in") {
+                let value = pasted
+                pasted = ""
+                onSubmit(value)
+            }
+            .buttonStyle(PillButtonStyle(kind: .neutral))
+            .disabled(pasted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .accessibilityIdentifier("service-signin-redirect-button")
+        }
+    }
+}
+
 enum ServiceSignInClipboard {
     @MainActor
     static func copy(_ text: String) {
@@ -191,6 +226,12 @@ struct ServiceSignInDialogView: View {
             }
             if dialog.flow == .deviceCode, let code = dialog.userCode, showsCode(dialog.phase) {
                 ServiceSignInCodeCard(code: code).id(code)
+            }
+            if dialog.acceptsRedirect {
+                ServiceSignInRedirectEntry(note: dialog.redirectNote) { value in
+                    Task { await center.submitRedirect(SecretString(value)) }
+                }
+                .id(dialog.requestID)
             }
             if let status = ServiceSignInWording.status(dialog) {
                 Text(status)

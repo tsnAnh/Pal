@@ -25,6 +25,8 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var userCode: String?
     public var verificationURI: String?
     public var server: String?
+    public var redirectPaste = false
+    public var redirectNote: String?
     public var phase: ServiceSignInPhase
 
     public var id: String { service }
@@ -37,6 +39,8 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
         case .signingIn, .keySet, .signedIn, .failed, .expired: false
         }
     }
+
+    public var acceptsRedirect: Bool { flow == .oauth && redirectPaste && phase == .signingIn }
 
     public var takesKey: Bool { flow == .apiKey || flow == .header }
 
@@ -144,6 +148,26 @@ public final class ServiceSignInCenter {
         }
     }
 
+    public func submitRedirect(_ secret: SecretString) async {
+        guard let dialog = current, dialog.acceptsRedirect, !secret.isEmpty else { return }
+        let requestID = dialog.requestID
+        let service = dialog.service
+        setRedirectNote(nil, for: service)
+        let outcome: AuthRedirectOutcome
+        do {
+            let params = ServiceSignInWire.submitRedirectParams(requestID: requestID, value: secret)
+            outcome = AuthRedirectOutcome(try await call(ServiceSignInWire.submitRedirectMethod, params))
+        } catch {
+            setRedirectNote(Self.redirectInvalid, for: service, ifRequest: requestID)
+            return
+        }
+        switch outcome {
+        case .accepted: break
+        case .invalid, .unknown: setRedirectNote(Self.redirectInvalid, for: service, ifRequest: requestID)
+        case .rejected: setPhase(.failed(Self.redirectEnded), for: service, ifRequest: requestID)
+        }
+    }
+
     public func notNow() async {
         guard let dialog = current else { return }
         remove(service: dialog.service)
@@ -171,6 +195,7 @@ public final class ServiceSignInCenter {
                 if event.userCode != nil { dialog.userCode = event.userCode }
                 if event.verificationURI != nil { dialog.verificationURI = event.verificationURI }
                 if event.server != nil { dialog.server = event.server }
+                if event.redirectPaste { dialog.redirectPaste = true }
                 dialogs[index] = dialog
             }
         } else {
@@ -222,6 +247,12 @@ public final class ServiceSignInCenter {
         dialogs.first(where: { $0.service == service })?.phase == .signingIn
     }
 
+    private func setRedirectNote(_ note: String?, for service: String, ifRequest requestID: String? = nil) {
+        guard let index = dialogs.firstIndex(where: { $0.service == service }) else { return }
+        if let requestID, dialogs[index].requestID != requestID { return }
+        dialogs[index].redirectNote = note
+    }
+
     private func setPhase(_ phase: ServiceSignInPhase, for service: String, ifRequest requestID: String? = nil) {
         guard let index = dialogs.firstIndex(where: { $0.service == service }) else { return }
         if let requestID, dialogs[index].requestID != requestID { return }
@@ -241,6 +272,7 @@ public final class ServiceSignInCenter {
             userCode: event.userCode,
             verificationURI: event.verificationURI,
             server: event.server,
+            redirectPaste: event.redirectPaste,
             phase: .prompting
         )
     }
@@ -257,6 +289,8 @@ public final class ServiceSignInCenter {
 
     static let pageFailure = "We couldn't open the sign-in page."
     static let startFailure = "We couldn't start sign-in. Please try again later."
+    public static let redirectInvalid = "That address didn't work. Copy the whole address from the page and try again."
+    public static let redirectEnded = "That sign-in has ended. Start again."
     static let keyFailure = "Couldn't save that. Check it and try again."
     static let didNotFinish = "Sign-in didn't finish."
     static let timedOut = "Sign-in took too long and was stopped."

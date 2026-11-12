@@ -50,6 +50,7 @@ public struct AuthRequiredEvent: Sendable, Hashable {
     public var verificationURI: String?
     public var expiresIn: Int?
     public var server: String?
+    public var redirectPaste: Bool
 
     public init(
         requestID: String,
@@ -62,7 +63,8 @@ public struct AuthRequiredEvent: Sendable, Hashable {
         userCode: String? = nil,
         verificationURI: String? = nil,
         expiresIn: Int? = nil,
-        server: String? = nil
+        server: String? = nil,
+        redirectPaste: Bool = false
     ) {
         self.requestID = requestID
         self.service = service
@@ -75,6 +77,7 @@ public struct AuthRequiredEvent: Sendable, Hashable {
         self.verificationURI = verificationURI
         self.expiresIn = expiresIn
         self.server = server
+        self.redirectPaste = redirectPaste
     }
 
     public init?(event: GatewayEvent) {
@@ -99,7 +102,8 @@ public struct AuthRequiredEvent: Sendable, Hashable {
             userCode: payload["user_code"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
             verificationURI: payload["verification_uri"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
             expiresIn: payload["expires_in"]?.intValue,
-            server: payload["server"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+            server: payload["server"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
+            redirectPaste: payload["redirect_paste"]?.boolValue ?? false
         )
     }
 }
@@ -159,14 +163,34 @@ public enum AuthCredentialOutcome: String, Sendable, Hashable {
     }
 }
 
+public enum AuthRedirectOutcome: String, Sendable, Hashable {
+    case accepted
+    case invalid
+    case rejected
+    case unknown
+
+    public init(wire raw: String?) {
+        self = raw.flatMap(Self.init(rawValue:)) ?? .unknown
+    }
+
+    public init(_ result: JSONValue) {
+        self.init(wire: result["outcome"]?.stringValue)
+    }
+}
+
 public enum ServiceSignInWire {
     public static let signInMethod = "auth.signin"
     public static let declineMethod = "auth.decline"
     public static let submitCredentialMethod = "auth.submit_credential"
     public static let beginMethod = "auth.begin"
+    public static let submitRedirectMethod = "auth.submit_redirect"
 
     public static func requestParams(_ requestID: String) -> JSONValue {
         ["request_id": .string(requestID)]
+    }
+
+    public static func submitRedirectParams(requestID: String, value: SecretString) -> JSONValue {
+        ["request_id": .string(requestID), "value": .string(value.reveal())]
     }
 
     public static func submitCredentialParams(requestID: String, value: SecretString) -> JSONValue {
