@@ -56,18 +56,19 @@ struct ModelProvidersClientTests {
                 providerRow("b", kind: "device_code", state: "expired", scope: "account"),
                 providerRow("c", kind: "unsupported", state: "unsupported", reason: "Needs a setup this app can't do."),
                 providerRow("d", kind: "from_the_future", state: "from_the_future", scope: "from_the_future"),
-                providerRow("e", editable: true, baseURL: "https://proxy.example.com/v1", defaultBaseURL: "https://api.example.com/v1")
+                providerRow("e", editable: true, baseURL: "https://proxy.example.com/v1", defaultBaseURL: "https://api.example.com/v1"),
+                providerRow("f", kind: "oauth_paste", state: "expired")
             ))
         let providers = try await client(bots).list()
-        #expect(providers.map(\.kind) == [.apiKey, .deviceCode, .unsupported, .unknown, .apiKey])
-        #expect(providers.map(\.state) == [.set, .expired, .unsupported, .unknown, .notSet])
-        #expect(providers.map(\.scope) == [.profile, .account, .profile, .unknown, .profile])
+        #expect(providers.map(\.kind) == [.apiKey, .deviceCode, .unsupported, .unknown, .apiKey, .oauthPaste])
+        #expect(providers.map(\.state) == [.set, .expired, .unsupported, .unknown, .notSet, .expired])
+        #expect(providers.map(\.scope) == [.profile, .account, .profile, .unknown, .profile, .profile])
         #expect(providers[0].canRemove && !providers[1].canRemove)
         #expect(providers[2].reason == "Needs a setup this app can't do.")
         #expect(providers[4].baseURLEditable)
         #expect(providers[4].baseURL == "https://proxy.example.com/v1")
         #expect(providers[4].defaultBaseURL == "https://api.example.com/v1")
-        #expect(providers.map(\.canSignIn) == [true, true, false, false, true])
+        #expect(providers.map(\.canSignIn) == [true, true, false, false, true, true])
     }
 
     @Test("list and remove params carry the profile and never a secret")

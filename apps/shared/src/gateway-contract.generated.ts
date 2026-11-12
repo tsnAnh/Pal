@@ -485,6 +485,31 @@ export interface ProjectFacts {
   verifyCommands: string[]
   contextFiles: string[]
 }
+export interface BotKeysStatusResult {
+  profile: string
+  groups: BotKeyGroup[]
+}
+export interface BotKeyGroup {
+  id: string
+  label: string
+  keys: BotKeyRow[]
+}
+export interface BotKeyRow {
+  name: string
+  label: string
+  is_set: boolean
+}
+export interface BotKeysSetParams {
+  profile?: string | null
+  key_name: string
+  value?: string | null
+}
+export interface BotKeysSetResult {
+  profile: string
+  key_name: string
+  is_set: boolean
+  groups: BotKeyGroup[]
+}
 export interface ProfilesRenameParams {
   name: string
   new_name: string
@@ -507,6 +532,15 @@ export interface ProfilesDeleteResult {
   identity_settled?: boolean | null
   settlement_pending?: boolean | null
   retry_command?: string | null
+}
+export interface ProfilesDescribeAutoParams {
+  name: string
+  overwrite?: boolean
+}
+export interface ProfilesDescribeAutoResult {
+  ok: boolean
+  name: string
+  description: string
 }
 /** One bot's Slack connection. Credentials are never echoed: only whether each is set. ``state`` is the gateway's verdict for the Slack adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``, ``gateway_stopped``, ``startup_failed``, ``retrying``, ...). When Slack refused the connection, ``error_code`` is Slack's own code (``missing_scope``, ``invalid_auth``, ``token_revoked``, ...) and ``needed_scope`` / ``provided_scope`` name the scopes involved; none of these is a secret. */
 export interface MessagingSlackStatus {
@@ -2596,7 +2630,7 @@ export interface ModelProvider {
   reason?: string | null
   can_remove: boolean
 }
-export type ModelProviderKind = 'api_key' | 'device_code' | 'unsupported'
+export type ModelProviderKind = 'api_key' | 'device_code' | 'oauth_paste' | 'unsupported'
 export type ModelProviderState = 'set' | 'not_set' | 'expired' | 'unsupported'
 export type ModelProviderScope = 'profile' | 'account'
 export interface ModelProviderRemoveParams {
@@ -6625,6 +6659,14 @@ export interface AuthSubmitCredentialResult {
   outcome: AuthCredentialOutcome
 }
 export type AuthCredentialOutcome = 'stored' | 'failed' | 'rejected'
+export interface AuthSubmitCallbackParams {
+  request_id: string
+  value: string
+}
+export interface AuthSubmitCallbackResult {
+  outcome: AuthCredentialOutcome
+  reason?: string | null
+}
 export interface AuthBeginParams {
   service: string
 }
@@ -7491,7 +7533,7 @@ export interface AuthRequiredPayload {
   server?: string | null
 }
 export type AuthReason = 'missing' | 'expired' | 'revoked'
-export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual'
+export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual' | 'oauth_paste'
 export interface AuthResolvedPayload {
   request_id: string
   outcome: AuthOutcome
@@ -7566,6 +7608,10 @@ export interface RpcMethods {
   'bot.teach.status': { params: ProfileParams; result: BotTeachStatus }
   /** End the recording; creates the disabled draft and returns the prompt that asks the bot to write it. */
   'bot.teach.stop': { params: BotTeachStopParams; result: BotTeachStopResult }
+  /** Save (value set) or remove (value null) one key listed by bot_keys.status in the named bot's own secret store. The value travels only in this request and is never echoed, logged or shown to the model. 4101 invalid key name or value; 4403 not an owner connection; 5103 not saved, the previous value is kept. */
+  'bot_keys.set': { params: BotKeysSetParams; result: BotKeysSetResult }
+  /** Which of the extra tool, memory, app and messaging keys one bot has set, by name. Owner connections only; never carries a key value. 4403 for a bot's own connection. */
+  'bot_keys.status': { params: ProfileParams; result: BotKeysStatusResult }
   /** Owner facts (name, time zone) shared by every Bot Mode bot on this install. */
   'bot_mode.about_you.get': { params: BotAboutYouGetParams; result: BotAboutYouFacts }
   /** Save owner facts install-wide; validates the time zone and answers the normalized values. */
@@ -7916,6 +7962,8 @@ export interface RpcMethods {
   'profiles.delete': { params: ProfilesDeleteParams; result: ProfilesDeleteResult }
   /** Everything the profile editor shows: soul, model pin, skills, toolsets, MCP servers. */
   'profiles.describe': { params: ProfileNameParams; result: ProfilesDescribeResult }
+  /** Write a bot's description with the auxiliary model, as `hermes profile describe --auto`. Owner connections only (4403); overwrite=false keeps a description the owner wrote (4102 says so). Never a model tool. */
+  'profiles.describe_auto': { params: ProfilesDescribeAutoParams; result: ProfilesDescribeAutoResult }
   /** A profile asset as a data URL. */
   'profiles.get_asset': { params: ProfilesGetAssetParams; result: ProfilesGetAssetResult }
   /** Restore the profile's identity to before the named change (newest change only). */
@@ -8191,6 +8239,8 @@ export const RPC_METHODS = [
   'bot.teach.start',
   'bot.teach.status',
   'bot.teach.stop',
+  'bot_keys.set',
+  'bot_keys.status',
   'bot_mode.about_you.get',
   'bot_mode.about_you.set',
   'bot_relay.deliver',
@@ -8366,6 +8416,7 @@ export const RPC_METHODS = [
   'profiles.create',
   'profiles.delete',
   'profiles.describe',
+  'profiles.describe_auto',
   'profiles.get_asset',
   'profiles.identity.undo',
   'profiles.list',
@@ -8509,6 +8560,8 @@ export interface CanonicalRpcMethods {
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
   /** The user chose Sign in on an auth.required request. For oauth the gateway starts the flow and returns authorization_url to open in the system browser; for device_code it only acknowledges (the gateway is already polling). recorded is false for an unknown, finished or foreign request. */
   'auth.signin': { params: AuthSigninParams; result: AuthSigninResult }
+  /** The user pasted the address the browser ended on for an oauth_paste auth.required request. The gateway, which holds the PKCE verifier, checks the address, the state and the code, exchanges it and stores the credential in the requesting profile; the pasted text is never echoed, logged or kept. stored: signed in. failed: reason says in plain words what to fix; the same request may be answered again unless auth.resolved already ended it (declined on the provider's page, expired, exchange refused). rejected: unknown, finished, foreign or already used request; nothing stored. */
+  'auth.submit_callback': { params: AuthSubmitCallbackParams; result: AuthSubmitCallbackResult }
   /** The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored. */
   'auth.submit_credential': { params: AuthSubmitCredentialParams; result: AuthSubmitCredentialResult }
   /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
@@ -8758,6 +8811,7 @@ export const CANONICAL_RPC_METHODS = [
   'auth.decline',
   'auth.revoke_self',
   'auth.signin',
+  'auth.submit_callback',
   'auth.submit_credential',
   'bot.thread.links',
   'bot.thread.list',
@@ -8959,7 +9013,7 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
-  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential. */
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. The payload never carries a credential. */
   'auth.required': AuthRequiredPayload
   /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is the provider's failure in plain words when the flow has one; it never carries a credential. */
   'auth.resolved': AuthResolvedPayload
