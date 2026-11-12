@@ -331,6 +331,12 @@ final class ConnectAppsModel {
         SystemSettings.open(url)
     }
 
+    func openSettings(for row: DeviceRow) {
+        guard row.id == .screen else { return openSettings() }
+        guard let url = SystemSettings.screenRecordingURL else { return }
+        SystemSettings.open(url)
+    }
+
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
         busy.insert(app.id)
         defer { busy.remove(app.id) }

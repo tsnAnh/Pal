@@ -20,6 +20,7 @@ FAMILIES = {
     'home': ('home.list_accessories', {}, {'accessories': []}),
     'shell': ('shell.run', {'command': 'uname -srm'}, {'exit_code': 0, 'stdout': 'Darwin 25.0 arm64\n'}),
     'files': ('files.list', {'path': '~/'}, {'path': '/Users/sam', 'entries': []}),
+    'screen': ('screen.read', {}, {'text': 'Inbox', 'display': 1}),
     'notifications': ('notify.post', {'title': 'Hi', 'body': 'There'}, {'identifier': 'n1'}),
     'clipboard': ('clipboard.read', {}, {'types': ['text'], 'text': 'copied'}),
     'apps': ('apps.list', {}, {'apps': []}),

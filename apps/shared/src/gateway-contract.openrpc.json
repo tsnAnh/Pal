@@ -20693,6 +20693,7 @@
           "alarms",
           "shell",
           "files",
+          "screen",
           "notifications",
           "clipboard",
           "apps"
@@ -20935,6 +20936,8 @@
           "files.read",
           "files.list",
           "files.write",
+          "screen.capture",
+          "screen.read",
           "notify.post",
           "notify.cancel",
           "clipboard.read",

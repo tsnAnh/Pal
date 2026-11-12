@@ -439,7 +439,11 @@ struct MacConnectApps: View {
                 }
             }
             .frame(height: 60.5)
-            if row.action == .connected {
+            if row.action == .allowInSettings {
+                Button(String(localized: "Open System Settings")) { model.openSettings(for: row) }
+                    .accessibilityIdentifier("\(identifier)-settings")
+            }
+            if row.action != .allow {
                 Text(warning)
                     .font(.system(size: 11))
                     .foregroundStyle(PalTokens.textSecondary)
@@ -470,7 +474,7 @@ struct MacConnectApps: View {
     private func buttonRow(_ row: DeviceRow) -> some View {
         let action: MacRowAction = switch row.action {
         case .allow: MacRowAction(title: String(localized: "Allow"), prominent: true) { Task { await model.allow(row) } }
-        case .allowInSettings: MacRowAction(title: String(localized: "Allow in Settings"), prominent: true) { model.openSettings() }
+        case .allowInSettings: MacRowAction(title: String(localized: "Allow in Settings"), prominent: true) { model.openSettings(for: row) }
         case .connected: MacRowAction(title: String(localized: "Connected"), checked: true) { model.disconnectTarget = .device(row) }
         }
         return tileRow(

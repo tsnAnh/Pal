@@ -4,6 +4,7 @@ import PalDevice
 import PalDiagnostics
 import PalProtocol
 import Observation
+import SwiftUI
 
 @MainActor
 @Observable
@@ -57,6 +58,7 @@ extension ConsentAsk {
         case .alarms: "Alarms"
         case .shell: "Run commands"
         case .files: "Files"
+        case .screen: "Screen"
         case .notifications: "Notifications"
         case .apps: "Apps"
         case .clipboard: "Clipboard"
@@ -82,6 +84,8 @@ extension ConsentAsk {
         case .filesRead: "read a file on this Mac"
         case .filesList: "look through a folder on this Mac"
         case .filesWrite: "change a file on this Mac"
+        case .screenCapture: "take a screenshot of this Mac"
+        case .screenRead: "read the text on this Mac's screen"
         case .notifyPost: "show a notification on this Mac"
         case .notifyCancel: "remove a notification it showed on this Mac"
         case .appsList: "see which apps are running on this Mac"
@@ -103,6 +107,7 @@ final class DeviceHostPool {
     private let consent: DeviceConsentPresenter
     private let defaults: UserDefaults
     private var stacks: [String: DeviceToolStack] = [:]
+    let screenIndicator = ScreenCaptureIndicator()
 
     init(connection: ConnectionModel, consent: DeviceConsentPresenter, defaults: UserDefaults = .standard) {
         self.connection = connection
@@ -116,7 +121,7 @@ final class DeviceHostPool {
         guard let client = connection.client else { return nil }
         let stack = DeviceToolStack.make(
             connect: { try await client.connect(profile: profile, reach: .deviceHost) },
-            providers: .system(),
+            providers: .system(screenActivity: { [screenIndicator] active in screenIndicator.report(active) }),
             permissions: SystemPermissions(),
             consent: consent,
             diagnostics: .osLog()
@@ -142,5 +147,47 @@ final class DeviceHostPool {
         let running = Array(stacks.values)
         stacks.removeAll()
         for stack in running { await stack.host.stop() }
+    }
+}
+
+@MainActor
+@Observable
+final class ScreenCaptureIndicator {
+    private static let linger: Duration = .seconds(2)
+
+    private(set) var isCapturing = false
+    private var hideTask: Task<Void, Never>?
+
+    nonisolated func report(_ active: Bool) {
+        Task { @MainActor in self.apply(active) }
+    }
+
+    private func apply(_ active: Bool) {
+        hideTask?.cancel()
+        if active {
+            isCapturing = true
+            return
+        }
+        hideTask = Task {
+            try? await Task.sleep(for: Self.linger)
+            if !Task.isCancelled { isCapturing = false }
+        }
+    }
+}
+
+struct ScreenCaptureBadge: View {
+    let indicator: ScreenCaptureIndicator
+
+    var body: some View {
+        if indicator.isCapturing {
+            Label("A bot is looking at your screen", systemImage: "eye.fill")
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(.red, in: Capsule())
+                .padding(.top, 8)
+                .accessibilityIdentifier("screenCaptureIndicator")
+        }
     }
 }

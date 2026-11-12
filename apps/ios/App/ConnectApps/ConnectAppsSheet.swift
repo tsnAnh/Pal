@@ -324,7 +324,7 @@ struct ConnectAppsSheet: View {
     private func deviceRow(_ row: DeviceRow) -> some View {
         let action: ConnectRowAction = switch row.action {
         case .allow: ConnectRowAction("Allow", kind: .accent) { Task { await model.allow(row) } }
-        case .allowInSettings: ConnectRowAction("Allow in Settings", kind: .accent) { model.openSettings() }
+        case .allowInSettings: ConnectRowAction("Allow in Settings", kind: .accent) { model.openSettings(for: row) }
         case .connected: ConnectRowAction("Connected", kind: .dimmed) { model.disconnectTarget = .device(row) }
         }
         return ConnectAppRow(
@@ -355,6 +355,7 @@ struct DeviceTile: View {
         case .alarms: "alarm.fill"
         case .shell: "terminal.fill"
         case .files: "folder.fill"
+        case .screen: "display"
         case .notifications: "bell.fill"
         case .apps: "macwindow"
         case .clipboard: "doc.on.clipboard.fill"
@@ -371,6 +372,7 @@ struct DeviceTile: View {
         case .alarms: RGB(hex: 0x2c2c2e)
         case .shell: RGB(hex: 0x3a3a3c)
         case .files: RGB(hex: 0x1c8ef0)
+        case .screen: RGB(hex: 0x6e4bd8)
         case .notifications: RGB(hex: 0xe5493a)
         case .apps: RGB(hex: 0x5e5ce6)
         case .clipboard: RGB(hex: 0x8e6bd8)
