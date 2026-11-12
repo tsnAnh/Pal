@@ -90,7 +90,8 @@ def _execute(argv: list[str], timeout: float) -> tuple[int, str, str]:
     try:
         proc = subprocess.Popen(  # health: allow HX006 -- proc.wait(timeout=) below bounds it and kills the group
             argv, shell=False, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env=host_env(), start_new_session=True)
+            env=host_env(),
+            start_new_session=True)  # detached-spawn: ok -- awaited with a group-killing timeout (_kill)
     except OSError:
         raise KitFailure("kit_unavailable", "The kit isn't installed on this computer.", argv[1]) from None
     out: list[bytes] = []

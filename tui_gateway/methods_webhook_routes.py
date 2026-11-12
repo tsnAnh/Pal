@@ -20,7 +20,7 @@ _WEBHOOK_FAILED = 5321
 _CODE_TO_ERROR = {"not_found": _WEBHOOK_NOT_FOUND, "exists": _WEBHOOK_EXISTS}
 
 
-def _owner_only(rid, action):
+def _webhook_owner_only(rid, action):
     from tui_gateway import webhook_routes
     from tui_gateway.ws_legacy_fallback import connection_profile_home
     if connection_profile_home() is not None:
@@ -38,12 +38,12 @@ def _owner_only(rid, action):
 
 @method("webhook.routes.list")
 def _(rid, params: dict) -> dict:
-    return _owner_only(rid, lambda routes: routes.list_routes())
+    return _webhook_owner_only(rid, lambda routes: routes.list_routes())
 
 
 @method("webhook.routes.add")
 def _(rid, params: dict) -> dict:
-    return _owner_only(rid, lambda routes: routes.add_route(params))
+    return _webhook_owner_only(rid, lambda routes: routes.add_route(params))
 
 
 @method("webhook.routes.remove")
@@ -51,12 +51,12 @@ def _(rid, params: dict) -> dict:
     def remove(routes):
         routes.remove_route(str(params.get("name") or ""))
         return {"ok": True}
-    return _owner_only(rid, remove)
+    return _webhook_owner_only(rid, remove)
 
 
 @method("webhook.routes.probe")
 def _(rid, params: dict) -> dict:
-    return _owner_only(rid, lambda routes: routes.probe_route(str(params.get("name") or "")))
+    return _webhook_owner_only(rid, lambda routes: routes.probe_route(str(params.get("name") or "")))
 
 
 def register(server) -> None:
