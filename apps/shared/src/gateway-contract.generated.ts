@@ -2393,6 +2393,40 @@ export interface BotRelayReplyParams {
   error?: string | null
   reason?: string | null
 }
+export type HostUpdateCheckParams = Record<string, never>
+/** ``error`` is set only when ``status`` is ``unknown``. ``commits_behind`` is null when the channel pins a release or the count is unknown. ``release_notes_url`` is null unless the install tracks a GitHub remote. */
+export interface HostUpdateCheckResult {
+  version: string
+  commit?: string | null
+  status: 'up_to_date' | 'update_available' | 'unknown'
+  commits_behind?: number | null
+  error?: 'no_network' | 'check_failed' | null
+  release_notes_url?: string | null
+  active_runs: number
+  blockers: ('turn_running' | 'dirty_install' | 'update_running' | 'no_network')[]
+}
+/** ``confirm_turns`` is set only after the owner taps Update anyway while a chat is running. */
+export interface HostUpdateApplyParams {
+  confirm_turns?: boolean | null
+}
+export interface HostUpdateApplyResult {
+  outcome: 'started' | 'already_running' | 'refused' | 'failed'
+  blockers: ('turn_running' | 'dirty_install' | 'update_running' | 'no_network')[]
+  update: HostUpdateState
+}
+/** ``failure`` is a code (``no_network``, ``update_failed``, ``interrupted``, ``not_started``, ``needs_recovery``); ``left_behind`` says what a failure left on disk (``nothing``, ``old_version_running``, ``tree_needs_recovery``). ``tail`` is a bounded, redacted slice of the update's output. ``version`` is the running gateway's own, so a changed value after a reconnect is the proof the new gateway is up. */
+export interface HostUpdateState {
+  run_id?: string | null
+  state: 'idle' | 'running' | 'succeeded' | 'failed' | 'needs_recovery'
+  phase?: 'preparing' | 'downloading' | 'applying' | 'installing' | 'restarting' | 'finished' | null
+  started_at?: number | null
+  finished_at?: number | null
+  from_commit?: string | null
+  tail: string[]
+  failure?: string | null
+  left_behind?: string | null
+  version: string
+}
 export interface I18nLanguagesResult {
   languages: LanguageOption[]
 }
@@ -7659,6 +7693,12 @@ export interface RpcMethods {
   'handoff.request': { params: HandoffRequestParams; result: HandoffRequestResult }
   /** Poll the handoff row for this session. */
   'handoff.state': { params: SessionParams; result: HandoffStateResult }
+  /** Owner only: start the host update, or return the one already running. Refused while a chat runs unless confirmed. */
+  'host.update.apply': { params: HostUpdateApplyParams; result: HostUpdateApplyResult }
+  /** Owner only: compare this install with the latest on its update channel and list what blocks an update. */
+  'host.update.check': { params: HostUpdateCheckParams; result: HostUpdateCheckResult }
+  /** Owner only: the latest update run's phase, output tail and result; survives the gateway restart. */
+  'host.update.status': { params: HostUpdateCheckParams; result: HostUpdateState }
   /** Pack + overlay messages for one language and surface; the renderer merges them over its bundled catalog. */
   'i18n.catalog': { params: I18nCatalogParams; result: I18nCatalogResult }
   /** Every language some layer supplies (bundled ∪ user overlay ∪ plugin packs), en first. */
@@ -8182,6 +8222,9 @@ export const RPC_METHODS = [
   'handoff.fail',
   'handoff.request',
   'handoff.state',
+  'host.update.apply',
+  'host.update.check',
+  'host.update.status',
   'i18n.catalog',
   'i18n.languages',
   'image.attach',
