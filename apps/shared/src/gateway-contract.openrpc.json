@@ -367,6 +367,42 @@
       }
     },
     {
+      "name": "bot_keys.set",
+      "summary": "Save (value set) or remove (value null) one key listed by bot_keys.status in the named bot's own secret store. The value travels only in this request and is never echoed, logged or shown to the model. 4101 invalid key name or value; 4403 not an owner connection; 5103 not saved, the previous value is kept.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotKeysSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotKeysSetResult"
+        }
+      }
+    },
+    {
+      "name": "bot_keys.status",
+      "summary": "Which of the extra tool, memory, app and messaging keys one bot has set, by name. Owner connections only; never carries a key value. 4403 for a bot's own connection.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotKeysStatusResult"
+        }
+      }
+    },
+    {
       "name": "bot_mode.about_you.get",
       "summary": "Owner facts (name, time zone) shared by every Bot Mode bot on this install.",
       "params": [
@@ -3477,6 +3513,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ProfilesDescribeResult"
+        }
+      }
+    },
+    {
+      "name": "profiles.describe_auto",
+      "summary": "Write a bot's description with the auxiliary model, as `hermes profile describe --auto`. Owner connections only (4403); overwrite=false keeps a description the owner wrote (4102 says so). Never a model tool.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfilesDescribeAutoParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ProfilesDescribeAutoResult"
         }
       }
     },
@@ -9368,6 +9422,151 @@
           }
         },
         "title": "BotAboutYouSetParams",
+        "type": "object"
+      },
+      "BotKeyGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/BotKeyRow"
+            },
+            "title": "Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "keys"
+        ],
+        "title": "BotKeyGroup",
+        "type": "object"
+      },
+      "BotKeyRow": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "is_set": {
+            "title": "Is Set",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "is_set"
+        ],
+        "title": "BotKeyRow",
+        "type": "object"
+      },
+      "BotKeysSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "key_name": {
+            "pattern": "^[A-Z][A-Z0-9_]{2,63}$",
+            "title": "Key Name",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key_name"
+        ],
+        "title": "BotKeysSetParams",
+        "type": "object"
+      },
+      "BotKeysSetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "key_name": {
+            "title": "Key Name",
+            "type": "string"
+          },
+          "is_set": {
+            "title": "Is Set",
+            "type": "boolean"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/BotKeyGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile",
+          "key_name",
+          "is_set",
+          "groups"
+        ],
+        "title": "BotKeysSetResult",
+        "type": "object"
+      },
+      "BotKeysStatusResult": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/BotKeyGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile",
+          "groups"
+        ],
+        "title": "BotKeysStatusResult",
         "type": "object"
       },
       "BotRelayDeliverParams": {
@@ -39097,6 +39296,49 @@
           "path"
         ],
         "title": "ProfilesDeleteResult",
+        "type": "object"
+      },
+      "ProfilesDescribeAutoParams": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "overwrite": {
+            "default": false,
+            "title": "Overwrite",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProfilesDescribeAutoParams",
+        "type": "object"
+      },
+      "ProfilesDescribeAutoResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "name",
+          "description"
+        ],
+        "title": "ProfilesDescribeAutoResult",
         "type": "object"
       },
       "ProfilesDescribeResult": {

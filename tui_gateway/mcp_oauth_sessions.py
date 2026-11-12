@@ -175,3 +175,13 @@ def deliver_callback_flow(
     except ValueError as exc:
         return {"ok": False, "error_message": str(exc)}
     return {"ok": True, "session_id": session_id}
+
+
+def pending_callback(session_id: str, server_name: str, hermes_home: str) -> tuple[str, str] | None:
+    """The registered redirect and the state a pasted address must carry, for the owning profile only."""
+    rec, _ = _lookup(session_id, server_name, hermes_home)
+    if rec is None:
+        return None
+    flow = rec["flow"]
+    state = flow.expected_state
+    return (flow.redirect_uri, state) if state and flow.redirect_uri else None
