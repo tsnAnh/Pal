@@ -32,9 +32,9 @@ public enum DeviceConnectorCatalog {
         all.filter { $0.kinds.contains(kind) }
     }
 
-    public static func rows(for kind: DeviceKind, reports: [DeviceConnectorID: DeviceConnectorReport], online: Bool = true) -> [DeviceConnectorRow] {
+    public static func rows(for kind: DeviceKind, reports: [DeviceConnectorID: DeviceConnectorReport]) -> [DeviceConnectorRow] {
         entries(for: kind).map { entry in
-            DeviceConnectorRow(entry: entry, state: DeviceConnectorRowState(osPermission: reports[entry.id]?.osPermission, online: online))
+            DeviceConnectorRow(entry: entry, state: DeviceConnectorRowState(osPermission: reports[entry.id]?.osPermission))
         }
     }
 
@@ -74,14 +74,9 @@ public enum DeviceConnectorRowState: Sendable, Hashable {
     case allow
     case needsSystemPermission
     case unavailable
-    case offline
     case unknown
 
-    public init(osPermission: DeviceOSPermission?, online: Bool = true) {
-        guard online else {
-            self = .offline
-            return
-        }
+    public init(osPermission: DeviceOSPermission?) {
         switch osPermission {
         case .granted: self = .allowed
         case .notDetermined: self = .allow
@@ -100,16 +95,6 @@ public struct DeviceConnectorReport: Sendable, Hashable {
         self.id = id
         self.osPermission = osPermission
     }
-
-    public static func decode(_ result: JSONValue) -> [DeviceConnectorID: DeviceConnectorReport] {
-        let rows = result["connectors"]?.arrayValue ?? []
-        let reports = rows.compactMap { row -> DeviceConnectorReport? in
-            guard let id = row["id"]?.stringValue.flatMap(DeviceConnectorID.init(rawValue:)) else { return nil }
-            let permission = row["os_permission"]?.stringValue.flatMap(DeviceOSPermission.init(rawValue:))
-            return DeviceConnectorReport(id: id, osPermission: permission)
-        }
-        return Dictionary(reports.map { ($0.id, $0) }, uniquingKeysWith: { _, last in last })
-    }
 }
 
 public struct DeviceRowPresentation: Sendable, Hashable {
@@ -118,25 +103,18 @@ public struct DeviceRowPresentation: Sendable, Hashable {
         case openSettings
     }
 
-    public static let remoteNote = "Open Pal on this device to allow"
-
     public let summary: String
     public let buttonTitle: String?
     public let action: Action?
 
-    public init(row: DeviceConnectorRow, isThisDevice: Bool) {
+    public init(row: DeviceConnectorRow) {
         let subtitle = row.entry.subtitle
-        switch (row.state, isThisDevice) {
-        case (.allowed, true): self.init(summary: subtitle, buttonTitle: "Allowed", action: nil)
-        case (.allowed, false): self.init(summary: "Allowed", buttonTitle: nil, action: nil)
-        case (.allow, true): self.init(summary: subtitle, buttonTitle: "Allow", action: .allow)
-        case (.needsSystemPermission, true): self.init(summary: "Needs a system permission", buttonTitle: "Open Settings", action: .openSettings)
-        case (.allow, false), (.needsSystemPermission, false):
-            self.init(summary: "Needs permission. \(Self.remoteNote)", buttonTitle: nil, action: nil)
-        case (.unavailable, _): self.init(summary: "Not available on this device", buttonTitle: nil, action: nil)
-        case (.offline, _): self.init(summary: "Offline", buttonTitle: nil, action: nil)
-        case (.unknown, true): self.init(summary: subtitle, buttonTitle: nil, action: nil)
-        case (.unknown, false): self.init(summary: "Status unavailable", buttonTitle: nil, action: nil)
+        switch row.state {
+        case .allowed: self.init(summary: subtitle, buttonTitle: "Allowed", action: nil)
+        case .allow: self.init(summary: subtitle, buttonTitle: "Allow", action: .allow)
+        case .needsSystemPermission: self.init(summary: "Needs a system permission", buttonTitle: "Open Settings", action: .openSettings)
+        case .unavailable: self.init(summary: "Not available on this device", buttonTitle: nil, action: nil)
+        case .unknown: self.init(summary: subtitle, buttonTitle: nil, action: nil)
         }
     }
 
