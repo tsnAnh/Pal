@@ -249,7 +249,7 @@ struct AppSignInDialogTests {
         let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in })
         center.receive(event())
         #expect(center.current?.requiresAppSignIn == true)
-        center.receive(event(service: "github", signinOn: "owner_computer"))
+        center.receive(event(service: "github", signinOn: "owner_app"))
         #expect(center.dialogs.last?.requiresAppSignIn == false)
     }
 
