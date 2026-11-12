@@ -48,7 +48,7 @@ def auth_required_result(service: str, reason: str = "missing", *, flow: Optiona
 
 
 def reauth_reason(server: str) -> str:
-    return f"Sign in again on a Mac: {service_display_name(f'mcp:{server}')} stopped accepting the saved sign-in"
+    return f"Sign in again: {service_display_name(f'mcp:{server}')} stopped accepting the saved sign-in"
 
 
 def reauth_required_result(server: str) -> str:

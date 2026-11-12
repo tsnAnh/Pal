@@ -170,7 +170,7 @@ public enum ServiceSignInWire {
     public static let declineMethod = "auth.decline"
     public static let submitCredentialMethod = "auth.submit_credential"
     public static let beginMethod = "auth.begin"
-    public static let ownerComputer = "owner_computer"
+    public static let ownerComputer = "owner_app"
 
     public static func requestParams(_ requestID: String) -> JSONValue {
         ["request_id": .string(requestID)]

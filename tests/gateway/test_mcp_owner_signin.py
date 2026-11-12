@@ -62,7 +62,7 @@ async def test_the_prompt_says_sign_in_on_your_computer_and_the_gateway_starts_n
         'mcp_upwork_x', {}, _reauth(), lambda: json.dumps({'ok': True}))))
     await _wait_for(lambda: len(_required(phone)) == 1)
     event = _required(phone)[0]
-    assert event['flow'] == 'oauth' and event['signin_on'] == 'owner_computer' and event['server'] == 'upwork'
+    assert event['flow'] == 'oauth' and event['signin_on'] == 'owner_app' and event['server'] == 'upwork'
     reply = await phone.call('auth.signin', {'request_id': event['request_id']})
     assert reply['result'] == {'recorded': True}
     assert not task.done()

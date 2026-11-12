@@ -43,7 +43,7 @@ class AuthRequiredPayload(Payload):
     verification_uri: str | None = None
     expires_in: int | None = None
     server: str | None = None
-    signin_on: Literal["owner_computer"] | None = None
+    signin_on: Literal["owner_app"] | None = None
 
 
 event("auth.required", AuthRequiredPayload,
@@ -52,7 +52,7 @@ event("auth.required", AuthRequiredPayload,
           "carries user_code and verification_uri to open in the system browser; oauth is started with "
           "auth.signin; api_key and header ask for one masked credential for the service: answer with "
           "auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. "
-          "signin_on owner_computer: the sign-in cannot run on the gateway host; sign in on the owner's own "
+          "signin_on owner_app: the sign-in cannot run on the gateway host; sign in on the owner's own "
           "computer and hand the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). "
           "The payload never carries a credential.")
 
@@ -166,7 +166,7 @@ class AuthSubmitOauthTokensResult(Result):
 
 canonical_method("auth.submit_oauth_tokens", params=AuthSubmitOauthTokensParams, result=AuthSubmitOauthTokensResult,
                  doc="The owner signed in to an MCP server on their own computer (auth.required signin_on "
-                     "owner_computer) and hands over the public client it registered and the tokens. The gateway "
+                     "owner_app) and hands over the public client it registered and the tokens. The gateway "
                      "stores them for the connecting profile, connects the server and ends any waiting sign-in "
                      "request as signed_in. Public clients only: a client_secret is not accepted. The tokens are "
                      "never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, "

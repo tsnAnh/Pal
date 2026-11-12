@@ -272,7 +272,7 @@ class OwnerComputerFlow:
     so the owner's app signs in there and hands the tokens over (``auth.submit_oauth_tokens``), which ends this."""
 
     kind = "oauth"
-    signin_on = "owner_computer"
+    signin_on = "owner_app"
     user_code = None
     verification_uri = None
     expires_in = None
@@ -325,11 +325,11 @@ class McpServerFlow:
     async def begin(self) -> None:
         from hermes_cli.mcp_config import _get_mcp_servers
         cfg = (await asyncio.to_thread(_get_mcp_servers)).get(self._server)
-        from tools.mcp_oauth import signs_in_on_owner_computer
+        from tools.mcp_oauth import signs_in_on_owner_app
         kind = classify_mcp_server(cfg)
         if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
             kind = "api_key"
-        if kind == "oauth" and signs_in_on_owner_computer(cfg):
+        if kind == "oauth" and signs_in_on_owner_app(cfg):
             self._inner = OwnerComputerFlow(self._server)
         elif kind == "oauth":
             self._inner = McpOAuthFlow(self._home, f"mcp:{self._server}")

@@ -216,7 +216,7 @@ struct ActionAutoApproveTests {
 @MainActor
 @Suite("Mac-only sign-in dialog")
 struct MacOnlySignInDialogTests {
-    private func event(service: String = "mcp:upwork", signinOn: String? = "owner_computer") -> GatewayEvent {
+    private func event(service: String = "mcp:upwork", signinOn: String? = "owner_app") -> GatewayEvent {
         var payload: [String: JSONValue] = [
             "request_id": "r1", "service": .string(service), "service_name": "Upwork", "bot": "atlas", "reason": "missing", "flow": "oauth",
         ]

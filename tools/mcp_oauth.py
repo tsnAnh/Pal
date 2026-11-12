@@ -940,15 +940,15 @@ def _make_callback_waiter(port: int, cimd_url: str | None = None, timeout: float
 HermesOAuthClientProvider: Any = None
 
 
-def signs_in_on_owner_computer(cfg: object) -> bool:
+def signs_in_on_owner_app(cfg: object) -> bool:
     """True for a server whose vendor approves OAuth redirects only for apps on the owner's own computer: the
     gateway host never starts its browser flow, the owner's app signs in there and imports the tokens."""
-    return isinstance(cfg, dict) and cfg.get("signin_on") == "owner_computer"
+    return isinstance(cfg, dict) and cfg.get("signin_on") == "owner_app"
 
 
-def server_signs_in_on_owner_computer(server_name: str) -> bool:
+def server_signs_in_on_owner_app(server_name: str) -> bool:
     from hermes_cli.mcp_config import _get_mcp_servers
-    return signs_in_on_owner_computer(_get_mcp_servers().get(server_name))
+    return signs_in_on_owner_app(_get_mcp_servers().get(server_name))
 
 
 def pending_reauth_reason(server_name: str) -> str | None:

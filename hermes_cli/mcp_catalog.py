@@ -48,12 +48,12 @@ class AuthSpec:
     # Pre-registered OAuth client block copied verbatim to ``mcp_servers.<name>.oauth`` (vendors
     # without Dynamic Client Registration). Secrets stay ``${VAR}`` references declared in ``env``.
     oauth: dict[str, Any] = field(default_factory=dict)
-    # Where the browser sign-in must run. "owner_computer": the vendor only approves redirects for apps on
+    # Where the browser sign-in must run. "owner_app": the vendor only approves redirects for apps on
     # the owner's own computer, so the gateway never starts the flow and the owner's app imports the tokens.
     signin_on: Optional[str] = None
 
 
-_SIGNIN_ON_VALUES = frozenset({"owner_computer"})
+_SIGNIN_ON_VALUES = frozenset({"owner_app"})
 
 
 @dataclass

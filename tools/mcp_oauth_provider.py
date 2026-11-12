@@ -94,10 +94,10 @@ class HermesProviderMixin:
         # reject httpx's default (#75576).
         self._hermes_token_user_agent = token_user_agent
 
-    def _hermes_signs_in_on_owner_computer(self) -> bool:
-        from tools.mcp_oauth import server_signs_in_on_owner_computer
+    def _hermes_signs_in_on_owner_app(self) -> bool:
+        from tools.mcp_oauth import server_signs_in_on_owner_app
         name = getattr(self, "_hermes_server_name", "")
-        return bool(name) and server_signs_in_on_owner_computer(name)
+        return bool(name) and server_signs_in_on_owner_app(name)
 
     def _hermes_raise_if_reauth_required(self) -> None:
         from tools.mcp_oauth import HermesTokenStorage, OwnerSigninRequired
@@ -106,7 +106,7 @@ class HermesProviderMixin:
             raise OwnerSigninRequired("The saved sign-in was rejected and a new one must be handed over from the owner's computer")
 
     async def _perform_authorization(self):
-        if self._hermes_signs_in_on_owner_computer():
+        if self._hermes_signs_in_on_owner_app():
             from tools.mcp_oauth import OwnerSigninRequired
             raise OwnerSigninRequired("This server signs in on the owner's computer, not on this host")
         info = self.context.client_info
@@ -483,7 +483,7 @@ class HermesProviderMixin:
                 )
                 return True
             self.context.clear_tokens()
-            if response.status_code in (400, 401) and self._hermes_signs_in_on_owner_computer():
+            if response.status_code in (400, 401) and self._hermes_signs_in_on_owner_app():
                 self._hermes_reject_refresh_token()
             return False
         from httpx import HTTPError

@@ -68,7 +68,7 @@ async def test_import_installs_the_catalog_server_with_its_gate_and_no_secret_in
     assert await imp.import_owner_tokens(home, "upwork", _tokens()) is None
     config = _get_mcp_servers()["upwork"]
     wanted = mcp_catalog._build_server_config(mcp_catalog.get_entry("upwork"), None)
-    assert config["url"] == URL and config["auth"] == "oauth" and config["signin_on"] == "owner_computer"
+    assert config["url"] == URL and config["auth"] == "oauth" and config["signin_on"] == "owner_app"
     assert config["action_policy"] == wanted["action_policy"] and "client_secret" not in json.dumps(config)
     text = (home / "config.yaml").read_text()
     assert ACCESS not in text and REFRESH not in text
