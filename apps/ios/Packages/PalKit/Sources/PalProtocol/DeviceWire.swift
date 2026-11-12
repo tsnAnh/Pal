@@ -18,14 +18,12 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
 
     public var needsOSPermission: Bool {
         switch self {
-        case .shell, .files, .apps, .messages: false
-        case .calendar, .home, .reminders, .contacts, .location, .alarms, .notifications, .clipboard, .screen, .input: true
+        case .shell, .files, .apps: false
+        case .calendar, .home, .reminders, .contacts, .location, .alarms, .notifications, .clipboard, .screen, .input, .messages: true
         }
     }
 
-    public var asksOSPermissionOnUse: Bool { self != .screen && self != .notifications && self != .input }
-
-    public var isOwnerSwitched: Bool { self == .messages }
+    public var asksOSPermissionOnUse: Bool { self != .screen && self != .notifications && self != .input && self != .messages }
 }
 
 public enum DeviceConnectorState: String, Codable, Sendable, Hashable {

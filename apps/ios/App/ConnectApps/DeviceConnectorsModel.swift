@@ -50,6 +50,7 @@ final class DeviceConnectorsModel {
         let url: URL? = switch id {
         case .input: SystemSettings.accessibilitySettingsURL
         case .screen: SystemSettings.screenRecordingURL
+        case .messages: SystemSettings.fullDiskAccessURL
         default: SystemSettings.appSettingsURL
         }
         if let url { SystemSettings.open(url) }

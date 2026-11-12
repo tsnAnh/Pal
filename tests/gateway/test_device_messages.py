@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.gateway.device_tools_harness import call_device, call_devices_list, connect_phone, device_id_for, home_of, set_state
+from tests.gateway.device_tools_harness import call_device, call_devices_list, connect_phone, device_id_for, home_of
 
 pytest_plugins = ('tests.gateway.device_tools_harness',)
 
@@ -33,11 +33,8 @@ def answer(payload):
     return {'ok': True, 'result': {'sent': True, 'service': 'imessage', 'recipient': payload['args']['recipient']}}
 
 
-async def mac(authority, label='Work Mac', responder=answer, on=True):
-    phone = await connect_phone(authority, label, kind='mac', model=MAC_MODEL, responder=responder)
-    if on:
-        await set_state(phone, 'messages', 'allowed')
-    return phone
+async def mac(authority, label='Work Mac', responder=answer):
+    return await connect_phone(authority, label, kind='mac', model=MAC_MODEL, responder=responder)
 
 
 class Owner:
@@ -63,14 +60,13 @@ SEND = {'recipient': '+15550123', 'text': f'see you at 5 {SEND_CANARY}'}
 
 
 @pytest.mark.asyncio
-async def test_the_catalog_lists_messages_for_a_mac_only_and_it_is_not_always_on(authorities):
+async def test_the_catalog_lists_messages_for_a_mac_only_and_it_is_always_on(authorities):
     authority = await authorities()
-    work = await mac(authority, on=False)
+    work = await mac(authority)
     pocket = await connect_phone(authority, 'Sam iPhone', model='iPhone15,2')
     rows = {row['id']: row for row in (await work.call('device_connectors.list', {}))['result']['connectors']}
-    assert rows['messages']['title'] == 'Messages' and rows['messages']['always_on'] is False
-    assert rows['messages']['subtitle'] == ('Lets your bots read your messages on this Mac. They can see private '
-                                            'conversations. Needs Full Disk Access.')
+    assert rows['messages']['title'] == 'Messages' and rows['messages']['always_on'] is True
+    assert rows['messages']['subtitle'] == 'Read and send your messages'
     assert rows['clipboard']['always_on'] is True
     assert 'messages' not in {row['id'] for row in (await pocket.call('device_connectors.list', {}))['result']['connectors']}
     await work.connection.close()
@@ -78,48 +74,15 @@ async def test_the_catalog_lists_messages_for_a_mac_only_and_it_is_not_always_on
 
 
 @pytest.mark.asyncio
-async def test_messages_are_off_until_the_mac_itself_allows_them(authorities):
+async def test_an_old_app_switch_state_is_ignored_and_messages_stay_reachable(authorities):
     authority = await authorities()
-    work = await mac(authority, on=False)
-    assert 'messages' not in (await call_devices_list(authority))['devices'][0]['capabilities']
-    for action, args in (('messages.recent', {}), ('messages.send', SEND)):
-        result = await call_device(authority, 'Work Mac', action, args)
-        assert result['code'] == 'connector_off' and 'switched off' in result['error']
-    assert work.requests() == []
-    await set_state(work, 'messages', 'allowed')
+    work = await mac(authority)
     assert (await call_devices_list(authority))['devices'][0]['capabilities']['messages'] == 'allowed'
-    await set_state(work, 'messages', 'off')
-    assert (await call_device(authority, 'Work Mac', 'messages.recent', {}))['code'] == 'connector_off'
-    reply = await work.call('device_connectors.set', {'id': 'messages', 'state': 'ask'})
-    rows = {row['id']: row['state'] for row in reply['result']['connectors']}
-    assert rows['messages'] == 'off'
+    for state in ('off', 'ask', 'allowed'):
+        reply = await work.call('device_connectors.set', {'id': 'messages', 'state': state})
+        assert {row['id']: row['state'] for row in reply['result']['connectors']}['messages'] == 'allowed'
+        assert (await call_device(authority, 'Work Mac', 'messages.recent', {}))['success'] is True
     await work.connection.close()
-
-
-@pytest.mark.asyncio
-async def test_another_device_cannot_switch_messages_on(authorities):
-    authority = await authorities()
-    work = await mac(authority, on=False)
-    pocket = await connect_phone(authority, 'Sam iPhone', model='iPhone15,2')
-    reply = await pocket.call('device_connectors.set', {'id': 'messages', 'state': 'allowed',
-                                                        'device_id': device_id_for('Work Mac')})
-    assert reply['error']['message'] and 'result' not in reply
-    assert (await call_device(authority, 'Work Mac', 'messages.recent', {}))['code'] == 'connector_off'
-    await work.connection.close()
-    await pocket.connection.close()
-
-
-@pytest.mark.asyncio
-async def test_state_in_one_profile_does_not_enable_another(authorities):
-    first = await authorities('one')
-    second = await authorities('two')
-    work = await mac(first)
-    other = await connect_phone(second, 'Work Mac', kind='mac', model=MAC_MODEL, responder=answer)
-    assert (await call_device(first, 'Work Mac', 'messages.recent', {}))['success'] is True
-    assert (await call_device(second, 'Work Mac', 'messages.recent', {}))['code'] == 'connector_off'
-    assert other.requests() == []
-    await work.connection.close()
-    await other.connection.close()
 
 
 @pytest.mark.asyncio
@@ -251,16 +214,6 @@ async def test_send_is_refused_where_nobody_can_answer_or_the_approval_layer_fai
 
 
 @pytest.mark.asyncio
-async def test_a_send_with_the_switch_off_fails_before_any_card(authorities, monkeypatch):
-    owner = Owner(monkeypatch)
-    authority = await authorities()
-    work = await mac(authority, on=False)
-    assert (await call_device(authority, 'Work Mac', 'messages.send', SEND))['code'] == 'connector_off'
-    assert owner.cards == [] and work.requests() == []
-    await work.connection.close()
-
-
-@pytest.mark.asyncio
 async def test_a_send_to_an_offline_mac_sends_nothing(authorities, monkeypatch):
     Owner(monkeypatch)
     authority = await authorities()
@@ -342,19 +295,14 @@ def test_the_tool_text_tells_the_bot_how_messages_behave():
     assert "[needs the owner's approval each time]" in action_catalog_text()
 
 
-def test_the_store_defaults_to_off_and_keeps_other_connectors_unchanged(tmp_path: Path):
+def test_the_store_always_allows_messages_and_ignores_a_switch_state(tmp_path: Path):
     from gateway import device_connectors
     from tui_gateway.contracts.canonical_device import DeviceConnectorId as C
     from tui_gateway.contracts.canonical_device import DeviceConnectorState as S
     device_connectors.register_device(tmp_path, 'device-mac-0001', 'Work Mac', kind='mac')
     states = lambda: {row.connector: row.state for row in device_connectors.statuses(tmp_path, 'device-mac-0001')}
-    assert states()[C.MESSAGES] is S.OFF and states()[C.CLIPBOARD] is S.ALLOWED
-    assert device_connectors.open_devices(tmp_path, C.MESSAGES) == {}
-    device_connectors.update(tmp_path, 'device-mac-0001', C.MESSAGES, state=S.ASK)
-    assert states()[C.MESSAGES] is S.OFF
-    device_connectors.update(tmp_path, 'device-mac-0001', C.MESSAGES, state=S.ALLOWED)
+    assert states()[C.MESSAGES] is S.ALLOWED and states()[C.CLIPBOARD] is S.ALLOWED
     assert device_connectors.open_devices(tmp_path, C.MESSAGES) == {'device-mac-0001': S.ALLOWED}
-    device_connectors.update(tmp_path, 'device-mac-0001', C.CLIPBOARD, state=S.OFF)
-    assert states()[C.CLIPBOARD] is S.ALLOWED
-    device_connectors.update(tmp_path, 'device-mac-0001', C.MESSAGES, state=S.OFF)
-    assert states()[C.MESSAGES] is S.OFF
+    for state in (S.OFF, S.ASK, S.ALLOWED):
+        device_connectors.update(tmp_path, 'device-mac-0001', C.MESSAGES, state=state)
+        assert states()[C.MESSAGES] is S.ALLOWED
