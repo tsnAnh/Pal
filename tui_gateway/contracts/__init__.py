@@ -14,6 +14,7 @@ from . import (
     events,
     gateway_service,
     github,
+    github_token,
     groups_bot_relay,
     i18n,
     liveness,
