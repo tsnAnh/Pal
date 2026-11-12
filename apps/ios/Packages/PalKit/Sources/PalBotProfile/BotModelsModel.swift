@@ -25,6 +25,7 @@ public final class BotModelsModel {
     public private(set) var phase = Phase.loading
     public private(set) var settings = BotModelSettings(current: nil, fallbacks: [])
     public private(set) var providers: [ModelCatalogProvider] = []
+    public private(set) var effort: String?
     public private(set) var save = Save.idle
     public var confirmation: Confirmation?
 
@@ -43,6 +44,12 @@ public final class BotModelsModel {
     public var usableProviders: [ModelCatalogProvider] { providers.filter { $0.hasCredential && !$0.models.isEmpty } }
 
     public var providersNeedingKey: [ModelCatalogProvider] { providers.filter { !$0.hasCredential } }
+
+    public var effortOptions: EffortOptions {
+        guard let current = settings.current else { return .unknown }
+        let capability = providers.first { $0.id == current.provider }?.capabilities[current.model]
+        return ReasoningEffort.options(for: capability)
+    }
 
     public func displayName(for choice: ModelChoice) -> String {
         choice.model
@@ -66,8 +73,10 @@ public final class BotModelsModel {
         if phase == .failed { phase = .loading }
         async let loadedSettings = try? client.settings()
         async let loadedCatalog = try? client.catalog()
-        let (fresh, catalog) = await (loadedSettings, loadedCatalog)
+        async let loadedEffort = try? client.effort()
+        let (fresh, catalog, reportedEffort) = await (loadedSettings, loadedCatalog, loadedEffort)
         if let catalog { providers = catalog }
+        if !isSaving { effort = reportedEffort }
         guard let fresh else {
             if phase == .loading { phase = .failed }
             return
@@ -99,6 +108,20 @@ public final class BotModelsModel {
             save = .idle
         case .failed(let reason):
             save = .failed(reason)
+        }
+    }
+
+    public func chooseEffort(_ level: String) async {
+        guard !isSaving, level != effort else { return }
+        save = .saving
+        switch await client.setEffort(level) {
+        case .saved:
+            effort = level
+            save = .saved("Saved. New conversations use this effort; ones already open keep theirs.")
+        case .failed(let reason):
+            save = .failed(reason)
+        case .needsConfirmation:
+            save = .failed(BotModelClient.couldNotSaveEffort)
         }
     }
 
