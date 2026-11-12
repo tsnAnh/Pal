@@ -2393,6 +2393,39 @@ export interface BotRelayReplyParams {
   error?: string | null
   reason?: string | null
 }
+/** ``doctor_ran`` is false when the doctor could not run (``problems`` is then empty and the app must not read it as healthy). ``disk_free_bytes`` is for the volume holding Pal's data. */
+export interface HostHealth {
+  version?: string | null
+  commit?: string | null
+  python_version?: string | null
+  platform?: string | null
+  disk_free_bytes?: number | null
+  disk_total_bytes?: number | null
+  host_uptime_seconds?: number | null
+  profile_count?: number | null
+  running_gateway_count?: number | null
+  doctor_ran: boolean
+  problems: HostProblem[]
+}
+export interface HostProblem {
+  severity: 'warning' | 'error'
+  message: string
+}
+/** ``skip`` is how many of the newest lines to leave out, so the next older page is ``skip = skip + len(lines)``. */
+export interface HostLogsTailParams {
+  name?: HostLogName
+  lines?: number
+  skip?: number
+}
+export type HostLogName = 'gateway' | 'agent' | 'errors'
+/** Newest line last, token-shaped text already replaced. ``available`` is false when the log file does not exist yet. ``truncated`` means older lines were dropped to fit the byte cap. */
+export interface HostLogsTail {
+  name: HostLogName
+  lines: string[]
+  has_more: boolean
+  truncated: boolean
+  available: boolean
+}
 export interface I18nLanguagesResult {
   languages: LanguageOption[]
 }
@@ -7659,6 +7692,10 @@ export interface RpcMethods {
   'handoff.request': { params: HandoffRequestParams; result: HandoffRequestResult }
   /** Poll the handoff row for this session. */
   'handoff.state': { params: SessionParams; result: HandoffStateResult }
+  /** Read-only health of the computer running Pal: version, runtime, free disk, uptime, profile counts and the doctor's plain-words problems. Owner only (4403 secondary profile); not a model tool. */
+  'host.health': { params: Params; result: HostHealth }
+  /** Last lines of one allow-listed Pal log (gateway, agent or errors), newest last, bounded by line and byte caps, with token-shaped text redacted before it leaves the host. Owner only (4403 secondary profile); not a model tool. */
+  'host.logs.tail': { params: HostLogsTailParams; result: HostLogsTail }
   /** Pack + overlay messages for one language and surface; the renderer merges them over its bundled catalog. */
   'i18n.catalog': { params: I18nCatalogParams; result: I18nCatalogResult }
   /** Every language some layer supplies (bundled ∪ user overlay ∪ plugin packs), en first. */
@@ -8182,6 +8219,8 @@ export const RPC_METHODS = [
   'handoff.fail',
   'handoff.request',
   'handoff.state',
+  'host.health',
+  'host.logs.tail',
   'i18n.catalog',
   'i18n.languages',
   'image.attach',

@@ -166,7 +166,7 @@ struct SettingsRootView: View {
                 )
                 SettingsRow.navigate("Bot models", accessibilityIdentifier: "settingsBotModelsRow", action: { open(.botModels) })
                 SettingsRow.navigate("Voice and memory", accessibilityIdentifier: "settingsSpeechMemoryRow", action: { open(.speechMemory) })
-                SettingsRow.navigate("Pal service", accessibilityIdentifier: "settingsHermesServiceRow", action: { open(.hermesService) })
+                SettingsRow.navigate("Server", accessibilityIdentifier: "settingsHermesServiceRow", action: { open(.hermesService) })
                 SettingsRow.navigate("Manage your devices", accessibilityIdentifier: "settingsDevicesRow", action: { open(.devices) })
                 SettingsRow.navigate("Import Memory", accessibilityIdentifier: "settingsImportMemoryRow", action: { open(.importMemory) })
             }

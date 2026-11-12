@@ -15,6 +15,7 @@ from . import (
     gateway_service,
     github_token,
     groups_bot_relay,
+    host,
     i18n,
     liveness,
     library,
