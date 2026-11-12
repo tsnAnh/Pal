@@ -18,6 +18,7 @@ class DeviceConnectorId(WireEnum):
     ALARMS = "alarms"
     SHELL = "shell"
     FILES = "files"
+    CLIPBOARD = "clipboard"
     APPS = "apps"
 
 
@@ -52,6 +53,8 @@ class DeviceToolAction(WireEnum):
     FILES_READ = "files.read"
     FILES_LIST = "files.list"
     FILES_WRITE = "files.write"
+    CLIPBOARD_READ = "clipboard.read"
+    CLIPBOARD_WRITE = "clipboard.write"
     APPS_LIST = "apps.list"
     APPS_OPEN = "apps.open"
     APPS_QUIT = "apps.quit"

@@ -116,6 +116,7 @@ public actor DeviceToolExecutor {
         case .shell: "Run commands"
         case .files: "Files"
         case .apps: "Apps"
+        case .clipboard: "Clipboard"
         }
     }
 
@@ -172,6 +173,8 @@ extension DeviceToolExecutor {
         case .appsQuit: try await quitApp(raw)
         case .windowsList: try await listWindows(raw)
         case .windowsFocus: try await focusWindow(raw)
+        case .clipboardRead: try await readClipboard(raw)
+        case .clipboardWrite: try await writeClipboard(raw)
         }
     }
 
@@ -204,6 +207,34 @@ extension DeviceToolExecutor {
         let record = try await provider(\.files).read(path: path, captureLimit: DeviceTextLimit.fileContent)
         let content = TextCap.finish(record.content, limit: DeviceTextLimit.fileContent)
         return try DeviceWire.encode(FileReadWire(path: record.path, content: content.text, sizeBytes: record.sizeBytes, truncated: content.truncated))
+    }
+
+    private func readClipboard(_ raw: JSONValue) async throws -> JSONValue {
+        let args: ClipboardReadArgs = try DeviceWire.decodeArgs(raw)
+        let record = try await provider(\.clipboard).read(
+            includeImage: args.includeImage ?? false, textLimit: DeviceTextLimit.clipboardText, imageLimit: DeviceTextLimit.clipboardImage
+        )
+        let text = record.text.map { TextCap.finish($0, limit: DeviceTextLimit.clipboardText) }
+        return try DeviceWire.encode(ClipboardReadWire(
+            types: record.types, concealed: record.concealed, text: text?.text,
+            imageBase64: record.image?.data.base64EncodedString(), imageMime: record.image?.mime,
+            imageBytes: record.imageBytes, truncated: text?.truncated ?? false
+        ))
+    }
+
+    private func writeClipboard(_ raw: JSONValue) async throws -> JSONValue {
+        let args: ClipboardWriteArgs = try DeviceWire.decodeArgs(raw)
+        let record: ClipboardWriteRecord
+        switch (args.text, args.imageBase64) {
+        case (let text?, nil):
+            guard !text.isEmpty else { throw DeviceProviderError.invalidArgs("text must not be empty.") }
+            record = try await provider(\.clipboard).write(text: text)
+        case (nil, let image?):
+            record = try await provider(\.clipboard).write(imageBase64: image, imageLimit: DeviceTextLimit.clipboardImage)
+        default:
+            throw DeviceProviderError.invalidArgs("Pass exactly one of text or image_base64.")
+        }
+        return try DeviceWire.encode(ClipboardWriteWire(kind: record.kind, size: record.size))
     }
 
     private func listFiles(_ raw: JSONValue) async throws -> JSONValue {

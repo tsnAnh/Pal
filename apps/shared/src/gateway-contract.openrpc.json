@@ -20693,6 +20693,7 @@
           "alarms",
           "shell",
           "files",
+          "clipboard",
           "apps"
         ],
         "title": "DeviceConnectorId",
@@ -20933,6 +20934,8 @@
           "files.read",
           "files.list",
           "files.write",
+          "clipboard.read",
+          "clipboard.write",
           "apps.list",
           "apps.open",
           "apps.quit",
