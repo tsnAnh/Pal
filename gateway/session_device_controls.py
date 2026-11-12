@@ -18,7 +18,7 @@ from tui_gateway.contracts.canonical_device import (
 
 
 SELF_SWITCHED = frozenset({DeviceConnectorId.SHELL, DeviceConnectorId.FILES, DeviceConnectorId.CLIPBOARD,
-                           DeviceConnectorId.INPUT})
+                           DeviceConnectorId.NOTIFICATIONS, DeviceConnectorId.INPUT})
 
 
 def _authority_home(authority) -> Path:

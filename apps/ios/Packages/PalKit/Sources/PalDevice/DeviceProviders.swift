@@ -329,6 +329,27 @@ public protocol FilesProviding: Sendable {
     func write(path: String, content: String, append: Bool, createDirs: Bool) async throws -> FileWriteRecord
 }
 
+public struct NotificationDraft: Sendable, Equatable {
+    public var identifier: String
+    public var title: String
+    public var subtitle: String
+    public var body: String
+    public var sound: Bool
+
+    public init(identifier: String, title: String, subtitle: String, body: String, sound: Bool) {
+        self.identifier = identifier
+        self.title = title
+        self.subtitle = subtitle
+        self.body = body
+        self.sound = sound
+    }
+}
+
+public protocol NotificationsProviding: Sendable {
+    func post(_ draft: NotificationDraft) async throws
+    func cancel(identifier: String) async throws
+}
+
 public struct AppRecord: Sendable, Equatable {
     public var name: String
     public var bundleID: String?
@@ -549,6 +570,7 @@ public struct DeviceProviders: Sendable {
     public var home: (any HomeProviding)?
     public var shell: (any ShellProviding)?
     public var files: (any FilesProviding)?
+    public var notifications: (any NotificationsProviding)?
     public var apps: (any AppsProviding)?
     public var clipboard: (any ClipboardProviding)?
     public var input: (any InputProviding)?
@@ -562,6 +584,7 @@ public struct DeviceProviders: Sendable {
         home: (any HomeProviding)? = nil,
         shell: (any ShellProviding)? = nil,
         files: (any FilesProviding)? = nil,
+        notifications: (any NotificationsProviding)? = nil,
         apps: (any AppsProviding)? = nil,
         clipboard: (any ClipboardProviding)? = nil,
         input: (any InputProviding)? = nil
@@ -574,6 +597,7 @@ public struct DeviceProviders: Sendable {
         self.home = home
         self.shell = shell
         self.files = files
+        self.notifications = notifications
         self.apps = apps
         self.clipboard = clipboard
         self.input = input

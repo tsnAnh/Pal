@@ -3,6 +3,7 @@ import CoreLocation
 import EventKit
 import Foundation
 import PalProtocol
+import UserNotifications
 #if canImport(AlarmKit) && os(iOS)
 import AlarmKit
 #endif
@@ -23,6 +24,7 @@ public struct SystemPermissions: DevicePermissions {
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
         case .input: AccessibilityAccess.status
+        case .notifications: await Self.notificationsStatus()
         case .apps: Self.appsStatus
         case .clipboard: Self.clipboardStatus
         }
@@ -46,6 +48,8 @@ public struct SystemPermissions: DevicePermissions {
             break
         case .input:
             AccessibilityAccess.request()
+        case .notifications:
+            await Self.requestNotifications()
         case .apps:
             Self.requestApps()
         case .clipboard:
@@ -81,11 +85,29 @@ public struct SystemPermissions: DevicePermissions {
         #endif
     }
 
+    private static func notificationsStatus() async -> DeviceOSPermission {
+        #if os(macOS)
+        switch await UNUserNotificationCenter.current().notificationSettings().authorizationStatus {
+        case .authorized, .provisional: .granted
+        case .notDetermined: .notDetermined
+        default: .denied
+        }
+        #else
+        .unsupported
+        #endif
+    }
+
     private static var clipboardStatus: DeviceOSPermission {
         #if os(macOS)
         GeneralPasteboard().accessAllowed ? .granted : .denied
         #else
         .unsupported
+        #endif
+    }
+
+    private static func requestNotifications() async {
+        #if os(macOS)
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
         #endif
     }
 
@@ -167,18 +189,20 @@ extension DeviceProviders {
         let files: (any FilesProviding)? = SystemFiles()
         let apps: (any AppsProviding)? = AppsController(workspace: SystemAppsWorkspace())
         let input: (any InputProviding)? = InputController.shared
+        let notifications: (any NotificationsProviding)? = SystemNotifications()
         let clipboard: (any ClipboardProviding)? = SystemClipboard(store: GeneralPasteboard())
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
         let apps: (any AppsProviding)? = nil
+        let notifications: (any NotificationsProviding)? = nil
         let clipboard: (any ClipboardProviding)? = nil
         let input: (any InputProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, apps: apps,
-            clipboard: clipboard, input: input
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, notifications: notifications,
+            apps: apps, clipboard: clipboard, input: input
         )
     }
 }

@@ -58,6 +58,7 @@ extension ConsentAsk {
         case .shell: "Run commands"
         case .files: "Files"
         case .input: "Mouse and keyboard"
+        case .notifications: "Notifications"
         case .apps: "Apps"
         case .clipboard: "Clipboard"
         }
@@ -85,6 +86,8 @@ extension ConsentAsk {
         case .inputDisplays: "see this Mac's screen sizes"
         case .inputMove, .inputClick, .inputDrag, .inputScroll: "use this Mac's mouse"
         case .inputType, .inputKey: "use this Mac's keyboard"
+        case .notifyPost: "show a notification on this Mac"
+        case .notifyCancel: "remove a notification it showed on this Mac"
         case .appsList: "see which apps are running on this Mac"
         case .appsOpen: "open an app on this Mac"
         case .appsQuit: "quit an app on this Mac"

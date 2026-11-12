@@ -62,7 +62,7 @@ public actor DeviceToolExecutor {
         if let refusal = await gate(connector, action: action, request: request) { return refusal }
         if let refusal = await osPermission(for: connector) { return refusal }
         do {
-            return .success(try await dispatch(action, request.args, budget: budget))
+            return .success(try await dispatch(action, request.args, budget: budget, profile: request.profile))
         } catch DeviceProviderError.unsupported {
             return .failure(.unsupported, "This device cannot do \(action.rawValue).")
         } catch let error as DeviceProviderError {
@@ -96,6 +96,7 @@ public actor DeviceToolExecutor {
         guard connector.needsOSPermission else { return nil }
         var status = await permissions.status(of: connector)
         if status == .notDetermined, connector != .input { status = await permissions.request(connector) }
+        if status == .notDetermined, connector != .notifications { status = await permissions.request(connector) }
         await ledger.reportOSPermission(status, for: connector)
         switch status {
         case .granted: return nil
@@ -117,6 +118,7 @@ public actor DeviceToolExecutor {
         case .shell: "Run commands"
         case .files: "Files"
         case .input: "Mouse and keyboard"
+        case .notifications: "Notifications"
         case .apps: "Apps"
         case .clipboard: "Clipboard"
         }
@@ -151,7 +153,7 @@ extension DeviceToolExecutor {
         return provider
     }
 
-    private func dispatch(_ action: DeviceToolAction, _ raw: JSONValue, budget: Duration) async throws -> JSONValue {
+    private func dispatch(_ action: DeviceToolAction, _ raw: JSONValue, budget: Duration, profile: String) async throws -> JSONValue {
         switch action {
         case .calendarListEvents: try await listEvents(raw)
         case .calendarAddEvent: try await addEvent(raw)
@@ -172,6 +174,8 @@ extension DeviceToolExecutor {
         case .filesWrite: try await writeFile(raw)
         case .inputDisplays, .inputMove, .inputClick, .inputDrag, .inputScroll, .inputType, .inputKey:
             try await InputToolHandler.run(action, raw, provider: provider(\.input))
+        case .notifyPost: try await postNotification(raw, profile: profile)
+        case .notifyCancel: try await cancelNotification(raw, profile: profile)
         case .appsList: try await listApps(raw)
         case .appsOpen: try await openApp(raw)
         case .appsQuit: try await quitApp(raw)
@@ -257,6 +261,32 @@ extension DeviceToolExecutor {
         let path = try DevicePath.resolve(args.path)
         let record = try await provider(\.files).write(path: path, content: args.content, append: args.append ?? false, createDirs: args.createDirs ?? false)
         return try DeviceWire.encode(FileWriteWire(path: record.path, bytesWritten: record.bytesWritten))
+    }
+
+    private func postNotification(_ raw: JSONValue, profile: String) async throws -> JSONValue {
+        let args: NotifyPostArgs = try DeviceWire.decodeArgs(raw)
+        let title = args.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = args.body.trimmingCharacters(in: .whitespacesAndNewlines)
+        let subtitle = args.subtitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !title.isEmpty, !body.isEmpty else { throw DeviceProviderError.invalidArgs("title and body are required.") }
+        guard title.count <= NotificationLimit.title, subtitle.count <= NotificationLimit.subtitle, body.count <= NotificationLimit.body else {
+            throw DeviceProviderError.invalidArgs("title is at most \(NotificationLimit.title), subtitle \(NotificationLimit.subtitle) and body \(NotificationLimit.body) characters.")
+        }
+        let identifier = try args.identifier.map(NotificationScope.validated) ?? UUID().uuidString.lowercased()
+        let from = "\(NotificationScope.botName(profile)) via Pal"
+        let draft = NotificationDraft(
+            identifier: NotificationScope.key(profile: profile, identifier: identifier), title: title,
+            subtitle: subtitle.isEmpty ? from : "\(from) · \(subtitle)", body: body, sound: args.sound ?? false
+        )
+        try await provider(\.notifications).post(draft)
+        return try DeviceWire.encode(NotifyWire(identifier: identifier))
+    }
+
+    private func cancelNotification(_ raw: JSONValue, profile: String) async throws -> JSONValue {
+        let args: NotifyCancelArgs = try DeviceWire.decodeArgs(raw)
+        let identifier = try NotificationScope.validated(args.identifier)
+        try await provider(\.notifications).cancel(identifier: NotificationScope.key(profile: profile, identifier: identifier))
+        return try DeviceWire.encode(NotifyWire(identifier: identifier))
     }
 
     private static let maximumApps = 200
