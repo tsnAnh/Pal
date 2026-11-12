@@ -170,6 +170,8 @@ struct ConnectAppsSheet: View {
         }
         SkillsCatalogEntry { model.showsSkills = true }
         capabilitiesSection
+        ConnectSectionHeader("On your Mac", accessibilityIdentifier: "onYourMacTitle")
+        PhoneMessagesConnectorRow()
     }
 
     @ViewBuilder

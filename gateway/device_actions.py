@@ -50,6 +50,7 @@ class ConnectorInfo:
     subtitle: str
     kinds: frozenset[str] = APPLE_KINDS
     on_by_default: bool = True
+    opt_in: bool = False
 
 
 CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
@@ -66,7 +67,13 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.NOTIFICATIONS, "Notifications", "Let bots show notifications on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.CLIPBOARD, "Clipboard", "Let bots read and change this Mac's clipboard", MAC_ONLY, False),
     ConnectorInfo(Connector.APPS, "Apps", "Let bots open and switch apps on this Mac", MAC_ONLY, False),
+    ConnectorInfo(Connector.MESSAGES, "Messages",
+                  "Lets your bots read your messages on this Mac. They can see private conversations. "
+                  "Needs Full Disk Access.", MAC_ONLY, False, True),
 )
+MESSAGES_READ_ACTIONS = frozenset({"messages.recent", "messages.search", "messages.read"})
+MESSAGES_TEXT_CHARS = 1000
+MESSAGES_MAX_PARTICIPANTS = 20
 
 
 def connector_info(connector: Connector) -> ConnectorInfo:
@@ -388,6 +395,35 @@ class WindowsFocusArgs(_Args):
         return self
 
 
+class MessagesRecentArgs(_Args):
+    limit: int = Field(default=10, ge=1, le=25)
+    messages_per_chat: int = Field(default=3, ge=1, le=10)
+
+
+class MessagesSearchArgs(_Args):
+    query: str = Field(min_length=1, max_length=200)
+    limit: int = Field(default=10, ge=1, le=25)
+
+
+class MessagesReadArgs(_Args):
+    chat_id: Identifier
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class MessagesSendArgs(_Args):
+    recipient: str = Field(min_length=1, max_length=200)
+    text: str = Field(min_length=1, max_length=4000)
+    service: Literal["imessage", "sms"] | None = None
+
+    @model_validator(mode="after")
+    def _plain(self):
+        if not self.text.strip() or _CONTROL.search(self.text) or strip_unicode_tags(self.text) != self.text:
+            raise ValueError("text must be non-blank and free of control characters")
+        if not self.recipient.strip() or _CONTROL.search(self.recipient) or any(c.isspace() for c in self.recipient):
+            raise ValueError("recipient must be one phone number or email handle")
+        return self
+
+
 class CalendarEvent(_Data):
     id: Identifier
     title: Short
@@ -671,6 +707,68 @@ class WindowsFocusResult(_Data):
     note: Short | None = None
 
 
+class MessagePerson(_Data):
+    handle: Short
+    name: Short | None = None
+
+
+class Message(_Capped):
+    text_limits: ClassVar[dict[str, int]] = {"text": MESSAGES_TEXT_CHARS}
+    id: int
+    at: IsoDateTime
+    from_me: bool
+    sender: Short | None = None
+    sender_name: Short | None = None
+    text: str
+    service: Short | None = None
+
+
+class Conversation(_Data):
+    chat_id: Identifier
+    title: Short | None = None
+    participants: Annotated[list[MessagePerson], _first(MESSAGES_MAX_PARTICIPANTS)] = Field(default_factory=list)
+    last_at: IsoDateTime
+    messages: Annotated[list[Message], _first(50)] = Field(default_factory=list)
+    truncated: bool = False
+
+    @model_validator(mode="after")
+    def _carry_truncation(self):
+        self.truncated = self.truncated or any(message.truncated for message in self.messages)
+        return self
+
+
+class MessageMatch(_Data):
+    chat_id: Identifier
+    title: Short | None = None
+    message: Message
+
+
+class MessagesRecentResult(_Data):
+    conversations: Annotated[list[Conversation], _first(25)]
+    truncated: bool = False
+
+    @model_validator(mode="after")
+    def _carry_truncation(self):
+        self.truncated = self.truncated or any(chat.truncated for chat in self.conversations)
+        return self
+
+
+class MessagesSearchResult(_Data):
+    matches: Annotated[list[MessageMatch], _first(25)]
+    truncated: bool = False
+
+    @model_validator(mode="after")
+    def _carry_truncation(self):
+        self.truncated = self.truncated or any(match.message.truncated for match in self.matches)
+        return self
+
+
+class MessagesSendResult(_Data):
+    sent: bool
+    service: Literal["imessage", "sms"]
+    recipient: Short
+
+
 def fit_result(data: dict, limit: int) -> dict:
     fitted = dict(data)
     while len(json.dumps(fitted, ensure_ascii=False)) > limit:
@@ -702,6 +800,10 @@ class ActionSpec:
     @property
     def rate_limited(self) -> bool:
         return self.name == "notify.post"
+
+    @property
+    def asks_every_time(self) -> bool:
+        return self.connector is Connector.MESSAGES and self.name not in MESSAGES_READ_ACTIONS
 
     @property
     def truncates(self) -> bool:
@@ -814,6 +916,20 @@ ACTIONS: dict[str, ActionSpec] = dict([
           WindowsFocusArgs, WindowsFocusResult,
           lambda a: "Bring " + (f"window {a.window_id}" if a.window_id is not None else _quoted(a.app)) + " to the front",
           MAC_ONLY),
+    _spec("messages.recent", Connector.MESSAGES, False,
+          "the owner's most recent iMessage/SMS conversations with their latest messages (limit conversations "
+          "1-25, messages_per_chat 1-10); private, read only when asked",
+          MessagesRecentArgs, MessagesRecentResult, lambda a: "Read recent messages", MAC_ONLY),
+    _spec("messages.search", Connector.MESSAGES, False,
+          "search the owner's messages for a text (limit 1-25); private, read only when asked",
+          MessagesSearchArgs, MessagesSearchResult, lambda a: f"Search messages for {_quoted(a.query)}", MAC_ONLY),
+    _spec("messages.read", Connector.MESSAGES, False,
+          "read the latest messages of one conversation by its chat_id (limit 1-50)",
+          MessagesReadArgs, Conversation, lambda a: "Read one message conversation", MAC_ONLY),
+    _spec("messages.send", Connector.MESSAGES, True,
+          "send a message from the owner's Mac to one phone number or email handle (recipient, text up to 4000 "
+          "characters, optional service imessage|sms); the owner approves the exact text every time",
+          MessagesSendArgs, MessagesSendResult, lambda a: f"Send a message to {_quoted(a.recipient)}", MAC_ONLY),
 ])
 
 
@@ -824,5 +940,6 @@ def action_catalog_text(kinds: frozenset[str] | None = None) -> str:
             continue
         fields = ", ".join(
             f"{name}{'' if field.is_required() else '?'}" for name, field in spec.args.model_fields.items())
-        lines.append(f"{spec.name}({fields}): {spec.purpose}" + (" [changes the device]" if spec.write else ""))
+        lines.append(f"{spec.name}({fields}): {spec.purpose}" + (" [changes the device]" if spec.write else "")
+                     + (" [needs the owner's approval each time]" if spec.asks_every_time else ""))
     return "\n".join(lines)

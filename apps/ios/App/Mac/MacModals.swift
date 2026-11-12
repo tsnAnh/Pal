@@ -109,7 +109,8 @@ struct MacModalHost: View {
                         browser: WebAuthenticationBrowser(),
                         bots: roster.customConnectorBots,
                         currentBot: roster.currentBotName(forProfile: router.connectAppsProfile)
-                    )
+                    ),
+                    messages: MessagesConnectorModel(profile: router.connectAppsProfile, hostPool: hostPool)
                 )
                 .id(router.connectAppsProfile ?? "")
             }

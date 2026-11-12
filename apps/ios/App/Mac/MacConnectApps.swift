@@ -6,13 +6,14 @@ import SwiftUI
 
 struct MacConnectApps: View {
     @State private var model: ConnectAppsModel
-
+    private let messages: MessagesConnectorModel
 
     private static let rowsPerSectionInAll = 6
     private let columns = [GridItem(.flexible(), spacing: 30), GridItem(.flexible(), spacing: 30)]
 
-    init(model: ConnectAppsModel) {
+    init(model: ConnectAppsModel, messages: MessagesConnectorModel) {
         _model = State(initialValue: model)
+        self.messages = messages
     }
 
     private var onCatalog: Bool { model.page == .catalog }
@@ -245,6 +246,9 @@ struct MacConnectApps: View {
                 }
             }
             capabilitiesSection
+            section(title: String(localized: "This Mac"), identifier: "thisMacTitle", viewAll: nil) {
+                MacMessagesConnectorRow(model: messages)
+            }
         case let category:
             section(title: category, identifier: "connectAppsSectionTitle", viewAll: nil) {
                 appGrid(model.catalog.apps(in: category))
