@@ -129,7 +129,7 @@ public struct SystemPermissions: DevicePermissions {
     private static var messagesStatus: DeviceOSPermission {
         #if os(macOS)
         guard UserDefaults.standard.bool(forKey: messagesAskedKey) else { return .notDetermined }
-        switch MessagesAccessProbe.current() {
+        return switch MessagesAccessProbe.current() {
         case .ready: .granted
         case .permissionNeeded: .denied
         case .unavailable: .unsupported
