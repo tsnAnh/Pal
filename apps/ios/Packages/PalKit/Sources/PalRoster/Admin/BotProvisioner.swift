@@ -71,7 +71,7 @@ public actor BotProvisioner {
 
     private func provision(_ identity: BotIdentity, _ request: NewBotRequest) async throws -> CreatedBot {
         await discardAbandoned(except: identity.slug)
-        let entry = try await ensureProfile(identity)
+        let entry = try await ensureProfile(identity, cloneFrom: request.cloneFrom)
         let look = Self.look(identity, request, created: entry.createdAtMilliseconds)
         do {
             try await writer.update(identity.slug) { fields in
@@ -87,7 +87,7 @@ public actor BotProvisioner {
         return CreatedBot(name: identity.slug, displayName: identity.displayName, greetsUnprompted: entry.greetsUnprompted)
     }
 
-    private func ensureProfile(_ identity: BotIdentity) async throws -> Pending {
+    private func ensureProfile(_ identity: BotIdentity, cloneFrom: String) async throws -> Pending {
         let listing = try await writer.listing()
         let exists = listing.profiles.contains { $0.name == identity.slug }
         if var known = pending[identity.slug] {
@@ -105,7 +105,7 @@ public actor BotProvisioner {
             greetsUnprompted: listing.capabilities.botBirthNotice
         )
         pending[identity.slug] = entry
-        _ = try await gateway.call("profiles.create", Self.createParams(identity, cloneFrom: request.cloneFrom))
+        _ = try await gateway.call("profiles.create", Self.createParams(identity, cloneFrom: cloneFrom))
         entry.created = true
         pending[identity.slug] = entry
         return entry
