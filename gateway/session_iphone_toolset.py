@@ -1,4 +1,6 @@
 import json
+from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 
 
@@ -36,3 +38,53 @@ def _chat_has_a_phone(authority, policy, config, session_id) -> bool:
         return False
     from gateway import device_connectors
     return device_connectors.any_enabled(Path(authority.profile_id))
+
+
+class SessionKind(Enum):
+    IOS = 'ios'
+    BOT_CHAT = 'bot_chat'
+    CLI = 'cli'
+    DESKTOP = 'desktop'
+    OTHER = 'other'
+
+
+class GrantReason(Enum):
+    GRANTED = 'granted'
+    KIND_NOT_ALLOWED = 'kind_not_allowed'
+    EXPLICIT_PICK = 'explicit_pick'
+    SAFE_MODE = 'safe_mode'
+    DISABLED_BY_CONFIG = 'disabled_by_config'
+    NO_CONNECTOR_ON = 'no_connector_on'
+
+
+@dataclass(frozen=True, slots=True)
+class SessionFacts:
+    kind: SessionKind
+    picked_toolsets: bool
+    safe_mode: bool
+    disabled_toolsets: frozenset[str]
+    profile_home: Path
+
+
+@dataclass(frozen=True, slots=True)
+class GrantDecision:
+    reason: GrantReason
+
+    @property
+    def granted(self) -> bool:
+        return self.reason is GrantReason.GRANTED
+
+
+GRANTED_KINDS = frozenset({SessionKind.IOS, SessionKind.BOT_CHAT, SessionKind.CLI, SessionKind.DESKTOP})
+
+
+def decide_grant(facts: SessionFacts) -> GrantDecision:
+    raise NotImplementedError
+
+
+def session_facts(authority, policy, config, session_id) -> SessionFacts:
+    raise NotImplementedError
+
+
+def tui_session_facts(platform: str, config) -> SessionFacts:
+    raise NotImplementedError
