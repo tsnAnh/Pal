@@ -83,11 +83,35 @@ enum ServiceSignInClipboard {
     }
 }
 
+struct ServiceSignInCodeCard: View {
+    let code: String
+    @State private var copied = false
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(code)
+                .font(.system(size: 30, weight: .semibold, design: .monospaced))
+                .foregroundStyle(PalTokens.textPrimary)
+                .textSelection(.enabled)
+                .accessibilityIdentifier("service-signin-code")
+            Button {
+                ServiceSignInClipboard.copy(code)
+                copied = true
+            } label: {
+                Label(copied ? String(localized: "Copied") : String(localized: "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(PillButtonStyle(kind: .neutral))
+            .accessibilityIdentifier("service-signin-copy-button")
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
 struct ServiceSignInDialogView: View {
     let center: ServiceSignInCenter
     let botName: (String) -> String
-    @State private var copied = false
-
     var body: some View {
         if let dialog = center.current {
             content(dialog)
@@ -99,9 +123,6 @@ struct ServiceSignInDialogView: View {
                 .background(PalTokens.elevated)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("service-signin-dialog")
-                .onChange(of: dialog.requestID) { _, _ in
-                    copied = false
-                }
         }
     }
 
@@ -169,7 +190,7 @@ struct ServiceSignInDialogView: View {
                 }
             }
             if dialog.flow == .deviceCode, let code = dialog.userCode, showsCode(dialog.phase) {
-                codeCard(code)
+                ServiceSignInCodeCard(code: code).id(code)
             }
             if let status = ServiceSignInWording.status(dialog) {
                 Text(status)
@@ -195,27 +216,6 @@ struct ServiceSignInDialogView: View {
         case .prompting, .signingIn: true
         case .keySet, .keyFailed, .signedIn, .failed, .expired: false
         }
-    }
-
-    private func codeCard(_ code: String) -> some View {
-        VStack(spacing: 10) {
-            Text(code)
-                .font(.system(size: 30, weight: .semibold, design: .monospaced))
-                .foregroundStyle(PalTokens.textPrimary)
-                .textSelection(.enabled)
-                .accessibilityIdentifier("service-signin-code")
-            Button {
-                ServiceSignInClipboard.copy(code)
-                copied = true
-            } label: {
-                Label(copied ? String(localized: "Copied") : String(localized: "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
-            }
-            .buttonStyle(PillButtonStyle(kind: .neutral))
-            .accessibilityIdentifier("service-signin-copy-button")
-        }
-        .frame(maxWidth: .infinity)
-        .padding(16)
-        .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     @ViewBuilder

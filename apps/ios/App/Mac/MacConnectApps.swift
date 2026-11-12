@@ -244,6 +244,8 @@ struct MacConnectApps: View {
     private var selectedSection: some View {
         switch model.selection {
         case ConnectChip.all:
+            GitHubAccountSection(model: model.github)
+                .padding(.horizontal, -PalMetrics.screenMargin)
             section(title: String(localized: "This Mac"), identifier: "connectAppsSection-iphone", viewAll: { model.selection = ConnectChip.iphone }) {
                 deviceGrid
             }

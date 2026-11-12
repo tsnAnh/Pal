@@ -177,6 +177,7 @@ struct ConnectAppsSheet: View {
 
     @ViewBuilder
     private var allSections: some View {
+        GitHubAccountSection(model: model.github)
         ConnectSectionHeader("This iPhone", accessibilityIdentifier: "connectAppsSection-iphone") { model.selection = ConnectChip.iphone }
         ForEach(model.deviceRows, id: \.renderID) { deviceRow($0) }
         ForEach(model.catalog.categories, id: \.self) { category in
