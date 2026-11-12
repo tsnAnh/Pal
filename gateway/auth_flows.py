@@ -267,6 +267,34 @@ class HeaderFlow:
         return None
 
 
+class OwnerComputerFlow:
+    """OAuth the gateway host cannot run: the vendor approves redirects only for apps on the owner's own computer,
+    so the owner's app signs in there and hands the tokens over (``auth.submit_oauth_tokens``), which ends this."""
+
+    kind = "oauth"
+    signin_on = "owner_computer"
+    user_code = None
+    verification_uri = None
+    expires_in = None
+
+    def __init__(self, server: str) -> None:
+        self.server = server
+        self._cancelled = asyncio.Event()
+
+    async def begin(self) -> None:
+        return None
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def wait(self) -> bool:
+        await self._cancelled.wait()
+        return False
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+
+
 class McpServerFlow:
     user_code = None
     verification_uri = None
@@ -285,11 +313,18 @@ class McpServerFlow:
     def server(self) -> str:
         return self._server
 
+    @property
+    def signin_on(self) -> Optional[str]:
+        return getattr(self._inner, "signin_on", None)
+
     async def begin(self) -> None:
         from hermes_cli.mcp_config import _get_mcp_servers
         cfg = (await asyncio.to_thread(_get_mcp_servers)).get(self._server)
+        from tools.mcp_oauth import signs_in_on_owner_computer
         kind = classify_mcp_server(cfg)
-        if kind == "oauth":
+        if kind == "oauth" and signs_in_on_owner_computer(cfg):
+            self._inner = OwnerComputerFlow(self._server)
+        elif kind == "oauth":
             self._inner = McpOAuthFlow(self._home, f"mcp:{self._server}")
         elif kind == "api_key":
             self._inner = KeyEntryFlow(self._server)

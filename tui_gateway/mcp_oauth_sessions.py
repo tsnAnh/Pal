@@ -66,6 +66,9 @@ def start_flow(
     ``url_timeout`` for the authorization URL. With ``client_redirect_uri`` (invalid values
     raise ``ValueError``) no gateway-side listener is bound."""
     from tools.mcp_dashboard_oauth import DashboardOAuthFlow
+    from tools.mcp_oauth import signs_in_on_owner_computer
+    if signs_in_on_owner_computer(cfg):
+        raise RuntimeError(f"'{server_name}' signs in on your own computer, not on this host. Sign in from the app on your Mac.")
     if client_redirect_uri is not None:
         client_redirect_uri = _validate_client_redirect_uri(client_redirect_uri)
     cutoff = time.time() - _SESSION_TTL_SECONDS  # opportunistic GC of expired sessions

@@ -7260,6 +7260,19 @@
             ],
             "default": null,
             "title": "Server"
+          },
+          "signin_on": {
+            "anyOf": [
+              {
+                "const": "owner_computer",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Signin On"
           }
         },
         "required": [
@@ -7430,6 +7443,135 @@
           "outcome"
         ],
         "title": "AuthSubmitCredentialResult",
+        "type": "object"
+      },
+      "AuthSubmitOauthTokensParams": {
+        "additionalProperties": false,
+        "properties": {
+          "service": {
+            "pattern": "^mcp:[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Service",
+            "type": "string"
+          },
+          "client_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Client Id",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Redirect Uri",
+            "type": "string"
+          },
+          "token_endpoint": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Token Endpoint",
+            "type": "string"
+          },
+          "issuer": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Issuer",
+            "type": "string"
+          },
+          "access_token": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "maxLength": 8192,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Refresh Token"
+          },
+          "expires_in": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires In"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scope"
+          },
+          "token_type": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Token Type"
+          }
+        },
+        "required": [
+          "service",
+          "client_id",
+          "redirect_uri",
+          "token_endpoint",
+          "issuer",
+          "access_token"
+        ],
+        "title": "AuthSubmitOauthTokensParams",
+        "type": "object"
+      },
+      "AuthSubmitOauthTokensResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "AuthSubmitOauthTokensResult",
         "type": "object"
       },
       "AutoContinue": {
@@ -28828,6 +28970,86 @@
         "title": "McpAuthMode",
         "type": "string"
       },
+      "McpAutoApproveGetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "minLength": 1,
+            "title": "Session Id",
+            "type": "string"
+          },
+          "server": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Server",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "server"
+        ],
+        "title": "McpAutoApproveGetParams",
+        "type": "object"
+      },
+      "McpAutoApproveGetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "eligible"
+        ],
+        "title": "McpAutoApproveGetResult",
+        "type": "object"
+      },
+      "McpAutoApproveSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "minLength": 1,
+            "title": "Session Id",
+            "type": "string"
+          },
+          "server": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Server",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session_id",
+          "server",
+          "enabled"
+        ],
+        "title": "McpAutoApproveSetParams",
+        "type": "object"
+      },
+      "McpAutoApproveSetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "McpAutoApproveSetResult",
+        "type": "object"
+      },
       "McpCatalogEntry": {
         "additionalProperties": false,
         "properties": {
@@ -28850,6 +29072,19 @@
             ],
             "default": null,
             "title": "Connector Slug"
+          },
+          "signin_on": {
+            "anyOf": [
+              {
+                "const": "owner_computer",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Signin On"
           },
           "installed": {
             "title": "Installed",
@@ -58581,6 +58816,24 @@
       }
     },
     {
+      "name": "auth.submit_oauth_tokens",
+      "summary": "The owner signed in to an MCP server on their own computer (auth.required signin_on owner_computer) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthSubmitOauthTokensParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthSubmitOauthTokensResult"
+        }
+      }
+    },
+    {
       "name": "bot.thread.links",
       "summary": "Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id.",
       "params": [
@@ -59585,6 +59838,42 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/LibraryListResult"
+        }
+      }
+    },
+    {
+      "name": "mcp.actions.auto_approve.get",
+      "summary": "Whether actions on an action-gated MCP server skip the approval card in this chat. eligible: the chat is one of the owner's own app chats and the server is action-gated; enabled is false whenever it is not eligible.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpAutoApproveGetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpAutoApproveGetResult"
+        }
+      }
+    },
+    {
+      "name": "mcp.actions.auto_approve.set",
+      "summary": "Turn the per-chat auto-approve switch on or off. Off by default, kept in memory for this chat only (a new chat, a reset or a gateway restart starts off), and the only way to set it. Refused with permission_denied unless the caller may approve in this chat and the chat is eligible (see mcp.actions.auto_approve.get). Money steps are never auto-approved.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpAutoApproveSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpAutoApproveSetResult"
         }
       }
     },
@@ -61234,7 +61523,7 @@
     },
     {
       "name": "auth.required",
-      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential.",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. signin_on owner_computer: the sign-in cannot run on the gateway host; sign in on the owner's own computer and hand the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential.",
       "params": [
         {
           "name": "payload",

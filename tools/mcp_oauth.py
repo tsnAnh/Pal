@@ -926,6 +926,12 @@ def _make_callback_waiter(port: int, cimd_url: str | None = None, timeout: float
 HermesOAuthClientProvider: Any = None
 
 
+def signs_in_on_owner_computer(cfg: object) -> bool:
+    """True for a server whose vendor approves OAuth redirects only for apps on the owner's own computer: the
+    gateway host never starts its browser flow, the owner's app signs in there and imports the tokens."""
+    return isinstance(cfg, dict) and cfg.get("signin_on") == "owner_computer"
+
+
 def remove_oauth_tokens(server_name: str, *, hermes_home: str | Path | None = None) -> None:
     """Delete stored OAuth tokens and client info for a server."""
     HermesTokenStorage(server_name, hermes_home=hermes_home).remove()

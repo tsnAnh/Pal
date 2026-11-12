@@ -1,4 +1,5 @@
 import PalBotProfile
+import PalConnect
 import PalDesign
 import SwiftUI
 
@@ -8,6 +9,7 @@ struct BotProfileView: View {
     let router: AppRouter
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(ActionAutoApprove.self) private var autoApprove
 
     init(model: BotProfileModel, suggestions: ConnectedServicesModel, router: AppRouter) {
         _model = State(initialValue: model)
@@ -30,6 +32,7 @@ struct BotProfileView: View {
         .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
         .task { await suggestions.load() }
+        .task(id: model.row?.conversationID) { await autoApprove.load(sessionID: model.row?.conversationID) }
         .toast($model.toast)
         .sheet(item: Binding(get: { model.editing }, set: { if $0 == nil { model.endEditing() } })) { editing in
             EditBotSheet(model: editing) { model.endEditing() }
@@ -176,6 +179,7 @@ struct BotProfileView: View {
                 .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
                 .padding(.top, ProfileMetrics.toggleToFooter)
                 .accessibilityIdentifier("profileNotificationsFooter")
+            AutoApproveCard(sessionID: model.row?.conversationID, upworkConnected: suggestions.services.isConnected(.upwork))
         }
     }
 }

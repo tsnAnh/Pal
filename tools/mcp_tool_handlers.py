@@ -131,6 +131,15 @@ def _trust_gate_check(server_name: str, tool_name: str, booked: Optional[list] =
     from tools import mcp_tool_costs as _costs
     # Trust and costs are the calling profile's own policy (an adopter of a shared connection keeps its own).
     key = _server_key(server_name)
+    if (action_policy := _core._server_action_policies.get(key)) is not None:
+        from tools import mcp_action_gate
+        error, grant = mcp_action_gate.gate(action_policy, server_name, tool_name, args)
+        if error is not None:
+            return error
+        if grant is not None:
+            if booked is None:
+                return grant.consume(server_name, tool_name, args)
+            booked.append(grant)
     trust = _core._server_trust_levels.get(key, _core._TRUST_FULL)
     gated = (trust == _core._TRUST_UNTRUSTED and not _tool_is_read_only(server_name, tool_name)
              and not _trust_granted(server_name, tool_name))
@@ -207,6 +216,16 @@ def _ask_for_call(server_name: str, tool_name: str, charge, booked: Optional[lis
         return tool_error(charge.refusal(spent))
     return tool_error(f"The user did not approve running write-capable MCP tool '{tool_name}' on untrusted server "
                       f"'{server_name}'. The command was NOT run. Do not retry without explicit user direction.")
+
+
+def _consume_grants(booked: list, server_name: str, tool_name: str, args: dict) -> Optional[str]:
+    """Spend the action approvals booked for this call right before dispatch: the arguments about to be sent
+    must be the ones the owner approved."""
+    from tools.mcp_action_gate import ActionGrant
+    for item in booked:
+        if isinstance(item, ActionGrant) and (error := item.consume(server_name, tool_name, args)) is not None:
+            return error
+    return None
 
 
 def _check_circuit_breaker(server_name: str) -> Optional[str]:
@@ -706,7 +725,9 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float, *,
         server, error = None, _check_circuit_breaker(server_name)
         if error is None:
             server, error = _acquire_call_server(server_name, tool_timeout)
-        if server is None:
+        if error is None:
+            error = _consume_grants(booked, server_name, tool_name, args)
+        if server is None or error is not None:
             for charge in booked:
                 charge.refund()
             return error

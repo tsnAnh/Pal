@@ -50,6 +50,9 @@ public struct AuthRequiredEvent: Sendable, Hashable {
     public var verificationURI: String?
     public var expiresIn: Int?
     public var server: String?
+    public var signinOn: String?
+
+    public var requiresMacSignIn: Bool { signinOn == ServiceSignInWire.ownerComputer }
 
     public init(
         requestID: String,
@@ -62,7 +65,8 @@ public struct AuthRequiredEvent: Sendable, Hashable {
         userCode: String? = nil,
         verificationURI: String? = nil,
         expiresIn: Int? = nil,
-        server: String? = nil
+        server: String? = nil,
+        signinOn: String? = nil
     ) {
         self.requestID = requestID
         self.service = service
@@ -75,6 +79,7 @@ public struct AuthRequiredEvent: Sendable, Hashable {
         self.verificationURI = verificationURI
         self.expiresIn = expiresIn
         self.server = server
+        self.signinOn = signinOn
     }
 
     public init?(event: GatewayEvent) {
@@ -99,7 +104,8 @@ public struct AuthRequiredEvent: Sendable, Hashable {
             userCode: payload["user_code"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
             verificationURI: payload["verification_uri"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
             expiresIn: payload["expires_in"]?.intValue,
-            server: payload["server"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+            server: payload["server"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 },
+            signinOn: payload["signin_on"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 }
@@ -164,6 +170,7 @@ public enum ServiceSignInWire {
     public static let declineMethod = "auth.decline"
     public static let submitCredentialMethod = "auth.submit_credential"
     public static let beginMethod = "auth.begin"
+    public static let ownerComputer = "owner_computer"
 
     public static func requestParams(_ requestID: String) -> JSONValue {
         ["request_id": .string(requestID)]

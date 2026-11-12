@@ -4,6 +4,14 @@ import Observation
 
 public typealias SystemBrowserOpener = @MainActor @Sendable (URL) -> Void
 
+public enum ServiceNativeOutcome: Sendable, Hashable {
+    case signedIn
+    case cancelled
+    case failed(String)
+}
+
+public typealias ServiceNativeSignIn = @MainActor @Sendable (String) async -> ServiceNativeOutcome
+
 public enum ServiceSignInPhase: Sendable, Hashable {
     case prompting
     case signingIn
@@ -26,6 +34,8 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var verificationURI: String?
     public var server: String?
     public var phase: ServiceSignInPhase
+    public var requiresMac = false
+    public var nativeSignInAvailable = false
 
     public var id: String { service }
 
@@ -40,7 +50,10 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
 
     public var takesKey: Bool { flow == .apiKey || flow == .header }
 
+    public var mustSignInOnMac: Bool { requiresMac && !nativeSignInAvailable }
+
     public var canSignIn: Bool {
+        if requiresMac { return nativeSignInAvailable }
         switch flow {
         case .deviceCode, .oauth: true
         case .apiKey, .header, .manual, .unknown: false
@@ -70,16 +83,20 @@ public final class ServiceSignInCenter {
 
     @ObservationIgnored private let call: Call
     @ObservationIgnored private let openBrowser: SystemBrowserOpener
+    @ObservationIgnored private let nativeSignIn: ServiceNativeSignIn?
     @ObservationIgnored private let dismissDelay: Duration
     @ObservationIgnored private var dismissals: [String: Task<Void, Never>] = [:]
+    @ObservationIgnored private var nativeSignIns: [String: Task<ServiceNativeOutcome, Never>] = [:]
 
     public init(
         call: @escaping Call,
         openBrowser: @escaping SystemBrowserOpener,
+        nativeSignIn: ServiceNativeSignIn? = nil,
         dismissDelay: Duration = ServiceSignInCenter.signedInDismissDelay
     ) {
         self.call = call
         self.openBrowser = openBrowser
+        self.nativeSignIn = nativeSignIn
         self.dismissDelay = dismissDelay
     }
 
@@ -95,6 +112,10 @@ public final class ServiceSignInCenter {
         guard let dialog = current, dialog.phase == .prompting, dialog.canSignIn else { return }
         let requestID = dialog.requestID
         let service = dialog.service
+        if dialog.requiresMac {
+            await signInNatively(service: service, requestID: requestID)
+            return
+        }
         switch dialog.flow {
         case .deviceCode:
             guard let url = Self.secureURL(dialog.verificationURI) else {
@@ -126,6 +147,25 @@ public final class ServiceSignInCenter {
         }
     }
 
+    private func signInNatively(service: String, requestID: String) async {
+        guard let nativeSignIn else { return }
+        setPhase(.signingIn, for: service)
+        let attempt = Task { await nativeSignIn(service) }
+        nativeSignIns[service] = attempt
+        let outcome = await attempt.value
+        nativeSignIns.removeValue(forKey: service)
+        switch outcome {
+        case .signedIn:
+            guard isWaiting(service, requestID) else { return }
+            setPhase(.signedIn, for: service)
+            scheduleDismissal(of: service)
+        case .cancelled:
+            setPhase(.prompting, for: service, ifRequest: requestID)
+        case .failed(let text):
+            setPhase(.failed(text), for: service, ifRequest: requestID)
+        }
+    }
+
     public func submitCredential(_ secret: SecretString) async {
         guard let dialog = current, dialog.takesKey, dialog.acceptsKey, !secret.isEmpty else { return }
         let requestID = dialog.requestID
@@ -146,6 +186,7 @@ public final class ServiceSignInCenter {
 
     public func notNow() async {
         guard let dialog = current else { return }
+        nativeSignIns.removeValue(forKey: dialog.service)?.cancel()
         remove(service: dialog.service)
         switch dialog.phase {
         case .prompting, .signingIn, .keySet, .keyFailed:
@@ -161,7 +202,7 @@ public final class ServiceSignInCenter {
             switch dialog.phase {
             case .signedIn, .failed, .expired:
                 dismissals.removeValue(forKey: event.service)?.cancel()
-                dialogs[index] = Self.dialog(from: event)
+                dialogs[index] = makeDialog(from: event)
             case .prompting, .signingIn, .keySet, .keyFailed:
                 dialog.requestID = event.requestID
                 dialog.serviceName = event.serviceName
@@ -174,7 +215,7 @@ public final class ServiceSignInCenter {
                 dialogs[index] = dialog
             }
         } else {
-            dialogs.append(Self.dialog(from: event))
+            dialogs.append(makeDialog(from: event))
         }
     }
 
@@ -229,7 +270,7 @@ public final class ServiceSignInCenter {
         dialogs[index].phase = phase
     }
 
-    private static func dialog(from event: AuthRequiredEvent) -> ServiceSignInDialog {
+    private func makeDialog(from event: AuthRequiredEvent) -> ServiceSignInDialog {
         ServiceSignInDialog(
             requestID: event.requestID,
             service: event.service,
@@ -241,7 +282,9 @@ public final class ServiceSignInCenter {
             userCode: event.userCode,
             verificationURI: event.verificationURI,
             server: event.server,
-            phase: .prompting
+            phase: .prompting,
+            requiresMac: event.requiresMacSignIn,
+            nativeSignInAvailable: nativeSignIn != nil
         )
     }
 

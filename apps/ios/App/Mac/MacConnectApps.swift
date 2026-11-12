@@ -46,6 +46,10 @@ struct MacConnectApps: View {
             ConnectorAccountsView(model: accounts)
                 .macSheetFrame()
         }
+        .sheet(item: $model.upworkApp) { app in
+            UpworkConnectionSheet(model: model, app: app)
+                .macSheetFrame()
+        }
         .sheet(item: $model.keyRequest) { request in
             CapabilityKeyEntrySheet(model: model, request: request)
                 .macSheetFrame()
@@ -363,7 +367,10 @@ struct MacConnectApps: View {
     }
 
     private func appRow(_ app: ConnectApp) -> some View {
-        let action: MacRowAction = if case .custom = app.source {
+        let state = model.cardState(app)
+        let action: MacRowAction = if app.requiresMacSignIn {
+            MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state == .reconnect) { model.upworkApp = app }
+        } else if case .custom = app.source {
             MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
         } else {
             switch app.state {
@@ -373,7 +380,8 @@ struct MacConnectApps: View {
             }
         }
         return tileRow(
-            title: app.name, summary: app.summary, identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id)
+            title: app.name, summary: app.requiresMacSignIn ? UpworkCardText.summary(state, fallback: app.summary) : app.summary,
+            identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id)
         ) { icon(for: app) }
     }
 

@@ -32,6 +32,10 @@ enum ServiceSignInWording {
         String(localized: "Sign in to \(dialog.serviceName) on the computer your bot runs on, then it can carry on.")
     }
 
+    static func onMac(_ dialog: ServiceSignInDialog) -> String {
+        String(localized: "Sign in to \(dialog.serviceName) on your Mac, then your bot can carry on. This iPhone can't finish that sign-in.")
+    }
+
     static func keyPrompt(_ dialog: ServiceSignInDialog, botName: (String) -> String) -> String {
         String(localized: "\(botName(dialog.bot)) needs a credential for \(dialog.serviceName) to keep going.")
     }
@@ -204,6 +208,8 @@ struct ServiceSignInDialogView: View {
     }
 
     private func subtitle(_ dialog: ServiceSignInDialog) -> String {
+        if dialog.mustSignInOnMac { return ServiceSignInWording.onMac(dialog) }
+        if dialog.requiresMac { return ServiceSignInWording.subtitle(dialog, botName: botName) }
         switch dialog.flow {
         case .deviceCode, .oauth: ServiceSignInWording.subtitle(dialog, botName: botName)
         case .apiKey, .header: ServiceSignInWording.keyPrompt(dialog, botName: botName)

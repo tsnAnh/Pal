@@ -5123,6 +5123,7 @@ export interface McpCatalogEntry {
   name: string
   description: string
   connector_slug?: string | null
+  signin_on?: 'owner_computer' | null
   installed: boolean
   enabled: boolean
   requires: string[]
@@ -6545,6 +6546,22 @@ export interface AuthBeginResult {
   reason?: string | null
 }
 export type AuthBeginOutcome = 'started' | 'unsupported' | 'refused' | 'unavailable'
+export interface AuthSubmitOauthTokensParams {
+  service: string
+  client_id: string
+  redirect_uri: string
+  token_endpoint: string
+  issuer: string
+  access_token: string
+  refresh_token?: string | null
+  expires_in?: number | null
+  scope?: string | null
+  token_type?: string | null
+}
+export interface AuthSubmitOauthTokensResult {
+  ok: boolean
+  reason?: string | null
+}
 export interface DeviceConnectorsListParams {
   device_id?: string | null
 }
@@ -6647,6 +6664,22 @@ export interface PushUnregisterParams {
 }
 export interface PushUnregisterResult {
   removed: boolean
+}
+export interface McpAutoApproveGetParams {
+  session_id: string
+  server: string
+}
+export interface McpAutoApproveGetResult {
+  enabled: boolean
+  eligible: boolean
+}
+export interface McpAutoApproveSetParams {
+  session_id: string
+  server: string
+  enabled: boolean
+}
+export interface McpAutoApproveSetResult {
+  enabled: boolean
 }
 /** ``query`` is trimmed and must be 1..200 characters. ``limit`` defaults to 20 and is clamped to 1..50. */
 export interface SessionSearchParams {
@@ -7400,6 +7433,7 @@ export interface AuthRequiredPayload {
   verification_uri?: string | null
   expires_in?: number | null
   server?: string | null
+  signin_on?: 'owner_computer' | null
 }
 export type AuthReason = 'missing' | 'expired' | 'revoked'
 export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual'
@@ -8401,6 +8435,8 @@ export interface CanonicalRpcMethods {
   'auth.signin': { params: AuthSigninParams; result: AuthSigninResult }
   /** The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored. */
   'auth.submit_credential': { params: AuthSubmitCredentialParams; result: AuthSubmitCredentialResult }
+  /** The owner signed in to an MCP server on their own computer (auth.required signin_on owner_computer) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed. */
+  'auth.submit_oauth_tokens': { params: AuthSubmitOauthTokensParams; result: AuthSubmitOauthTokensResult }
   /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
   'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
   /** This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat. */
@@ -8503,6 +8539,10 @@ export interface CanonicalRpcMethods {
   'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
   /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
   'library.list': { params: LibraryListParams; result: LibraryListResult }
+  /** Whether actions on an action-gated MCP server skip the approval card in this chat. eligible: the chat is one of the owner's own app chats and the server is action-gated; enabled is false whenever it is not eligible. */
+  'mcp.actions.auto_approve.get': { params: McpAutoApproveGetParams; result: McpAutoApproveGetResult }
+  /** Turn the per-chat auto-approve switch on or off. Off by default, kept in memory for this chat only (a new chat, a reset or a gateway restart starts off), and the only way to set it. Refused with permission_denied unless the caller may approve in this chat and the chat is eligible (see mcp.actions.auto_approve.get). Money steps are never auto-approved. */
+  'mcp.actions.auto_approve.set': { params: McpAutoApproveSetParams; result: McpAutoApproveSetResult }
   /** Curated MCP presets with per-profile installed/enabled state and the env keys each needs. */
   'mcp.catalog': { params: ProfileParams; result: McpCatalogResult }
   /** Add a server to the profile's config from a catalog preset and/or an explicit config. */
@@ -8649,6 +8689,7 @@ export const CANONICAL_RPC_METHODS = [
   'auth.revoke_self',
   'auth.signin',
   'auth.submit_credential',
+  'auth.submit_oauth_tokens',
   'bot.thread.links',
   'bot.thread.list',
   'bot.thread.read',
@@ -8705,6 +8746,8 @@ export const CANONICAL_RPC_METHODS = [
   'kanban.run',
   'library.asset',
   'library.list',
+  'mcp.actions.auto_approve.get',
+  'mcp.actions.auto_approve.set',
   'mcp.catalog',
   'mcp.servers.add',
   'mcp.servers.oauth.callback',
@@ -8849,7 +8892,7 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
-  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential. */
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. signin_on owner_computer: the sign-in cannot run on the gateway host; sign in on the owner's own computer and hand the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential. */
   'auth.required': AuthRequiredPayload
   /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is the provider's failure in plain words when the flow has one; it never carries a credential. */
   'auth.resolved': AuthResolvedPayload

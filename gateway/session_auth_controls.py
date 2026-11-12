@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from gateway import auth_prompts
 from hermes_state_runtime import RuntimeStoreError
 from tui_gateway.contracts.canonical_auth import (
-    AuthBeginParams, AuthDeclineParams, AuthSigninParams, AuthSubmitCredentialParams)
+    AuthBeginParams, AuthDeclineParams, AuthSigninParams, AuthSubmitCredentialParams, AuthSubmitOauthTokensParams)
 
 
 def _parse(model, params):
@@ -46,6 +46,24 @@ async def submit_credential(connection, ref, params):
     return {'outcome': outcome.value}
 
 
+async def submit_oauth_tokens(connection, ref, params):
+    _require_control(connection)
+    try:
+        parsed = AuthSubmitOauthTokensParams.model_validate(params)
+    except ValidationError:
+        raise RuntimeStoreError('invalid_params') from None
+    from tools import mcp_oauth_import
+    home = Path(connection.authority.profile_id)
+    server = parsed.service.partition(':')[2]
+    tokens = mcp_oauth_import.OwnerTokens(**{
+        key: value for key, value in parsed.model_dump().items() if key != 'service'})
+    reason = await mcp_oauth_import.import_owner_tokens(home, server, tokens)
+    if reason is not None:
+        return {'ok': False, 'reason': reason}
+    await auth_prompts.complete(connection.authority, home, parsed.service)
+    return {'ok': True}
+
+
 async def begin(connection, ref, params):
     _require_control(connection)
     parsed = _parse(AuthBeginParams, params)
@@ -78,4 +96,5 @@ async def begin(connection, ref, params):
 
 def handlers(connection):
     return {'auth.begin': partial(begin, connection), 'auth.signin': partial(signin, connection), 'auth.decline': partial(decline, connection),
-            'auth.submit_credential': partial(submit_credential, connection)}
+            'auth.submit_credential': partial(submit_credential, connection),
+            'auth.submit_oauth_tokens': partial(submit_oauth_tokens, connection)}

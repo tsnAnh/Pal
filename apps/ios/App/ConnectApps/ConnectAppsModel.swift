@@ -94,6 +94,8 @@ final class ConnectAppsModel {
     var disconnectTarget: ConnectDisconnectTarget?
     var showsSkills = false
     var accountsModel: ConnectorAccountsModel?
+    var upworkApp: ConnectApp?
+    private(set) var failures: [String: String] = [:]
     private(set) var mode: Mode = .list
 
     let botName: String
@@ -116,7 +118,7 @@ final class ConnectAppsModel {
         self.currentBot = currentBot
         service = ConnectAppsService(
             rpc: ConnectionRPC(model: connection), profile: profile, browser: browser,
-            systemBrowser: SystemBrowserAuthorization(), diagnostics: .osLog()
+            systemBrowser: SystemBrowserAuthorization(), nativeSignIn: UpworkSignIn.native(connection: connection), diagnostics: .osLog()
         )
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
@@ -200,8 +202,13 @@ final class ConnectAppsModel {
         }
     }
 
+    func cardState(_ app: ConnectApp, platform: ConnectorPlatform = .current) -> ConnectorCardState {
+        .resolve(ConnectorCardInput(app: app, isBusy: busy.contains(app.id), failureReason: failures[app.id]), platform: platform)
+    }
+
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
         busy.insert(app.id)
+        failures[app.id] = nil
         defer { busy.remove(app.id) }
         do {
             try await service.connect(app, credentials: credentials)
@@ -214,6 +221,10 @@ final class ConnectAppsModel {
     }
 
     func manageAccounts(_ app: ConnectApp) {
+        if app.requiresMacSignIn {
+            upworkApp = app
+            return
+        }
         guard case .hosted(let slug) = app.source else { return }
         accountsModel = ConnectorAccountsModel(
             app: app, slug: slug, botName: botName, service: service,
@@ -256,7 +267,8 @@ final class ConnectAppsModel {
 
     private func handle(_ error: ConnectAppsError, app: ConnectApp) {
         switch error {
-        case .cancelled: break
+        case .cancelled, .signInOnMac: break
+        case .signInFailed(let reason): failures[app.id] = reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
         case .signInRequired: report("Connecting \(app.name) needs you to sign in to Nous Portal on your Pal first.")
         case .unavailable, .failed: report("Couldn't connect \(app.name). Try again.")

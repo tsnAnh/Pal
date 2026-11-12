@@ -1,5 +1,6 @@
 #if os(macOS)
 import PalBotProfile
+import PalConnect
 import PalDesign
 import SwiftUI
 
@@ -31,6 +32,7 @@ struct MacInspector: View {
     @AppStorage("mac.inspector.suggestionsHidden") private var suggestionsHidden = false
 
     @Environment(MacShell.self) private var shell
+    @Environment(ActionAutoApprove.self) private var autoApprove
 
     init(botName: String, roster: RosterModel, router: AppRouter, bots: BotsKit) {
         self.botName = botName
@@ -67,6 +69,7 @@ struct MacInspector: View {
         .task { await profile.load() }
         .task { await routines.load() }
         .task { await suggestions.load() }
+        .task(id: sessionID) { await autoApprove.load(sessionID: sessionID) }
         .toast($profile.toast)
         .sheet(item: $creation) { created in
             NewRoutineSheet(model: created) { creation = nil }
@@ -88,6 +91,8 @@ struct MacInspector: View {
             Text("\(profile.displayName) becomes your primary bot. Nothing is copied or deleted.")
         }
     }
+
+    private var sessionID: String? { profile.row?.conversationID }
 
     private var closeButton: some View {
         GlassEffectContainer(spacing: 10) {
@@ -262,6 +267,29 @@ struct MacInspector: View {
                         .labelsHidden()
                         .toggleStyle(.macSwitch)
                         .accessibilityIdentifier("profileNotificationsToggle")
+                }
+            }
+            if autoApprove.showsSwitch(sessionID: sessionID, upworkConnected: suggestions.services.isConnected(.upwork)) {
+                InspectorSection(title: String(localized: "Upwork"), identifier: "inspectorUpwork") {
+                    EmptyView()
+                } content: {
+                    InspectorRow(identifier: "autoApproveRow", action: nil) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Approve Upwork actions automatically in this chat").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                            Text(autoApprove.didFail(sessionID) ? String(localized: "Couldn't change this. Try again.") : String(localized: "Off by default. Applies to this chat only."))
+                                .font(.system(size: 11))
+                                .foregroundStyle(PalTokens.textSecondary)
+                        }
+                        Spacer(minLength: 8)
+                        Toggle("Approve Upwork actions automatically in this chat", isOn: Binding(
+                            get: { autoApprove.entry(sessionID)?.enabled ?? false },
+                            set: { value in Task { await autoApprove.setEnabled(value, sessionID: sessionID) } }
+                        ))
+                        .labelsHidden()
+                        .toggleStyle(.macSwitch)
+                        .disabled(autoApprove.isPending(sessionID))
+                        .accessibilityIdentifier("autoApproveToggle")
+                    }
                 }
             }
         }

@@ -273,6 +273,8 @@ class AuthorityConnection:
         handlers.update(device_connector_handlers(self))
         from gateway.session_auth_controls import handlers as auth_handlers
         handlers.update(auth_handlers(self))
+        from gateway.session_mcp_action_controls import handlers as mcp_action_handlers
+        handlers.update(mcp_action_handlers(self))
         from gateway.session_bot_thread_controls import handlers as bot_thread_handlers
         handlers.update(bot_thread_handlers(self))
         from gateway.session_search_controls import handlers as search_handlers

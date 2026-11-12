@@ -17,6 +17,7 @@ Every sign-in, OAuth or "add to <service>" link opens in the system browser (`UI
 - Shared helper: `ExternalLink.open(_:)` in `App/Platform/ExternalLink.swift`. Only https and http URLs open.
 - New link: call `ExternalLink.open(url)`. Do not use `inAppBrowser(url:)`; it is for plain content links in the Library only.
 - Exception: `WebAuthenticationBrowser` (`ASWebAuthenticationSession`) stays for gateway and Connected apps sign-in, because those flows return to the app through the `dev.tsnanh.hermes.bot` callback or a loopback redirect that a plain `open` cannot deliver.
+- Upwork (`mcp:upwork`) signs in on the Mac only: `McpOAuthFlow` (PalConnect) runs discovery, dynamic client registration and PKCE against a `LoopbackRedirectListener`, opens the authorization URL through `ExternalLink.open` (`SystemBrowserAuthorization`, never `ASWebAuthenticationSession`) and hands the tokens to the gateway with `auth.submit_oauth_tokens`. The iPhone shows "Sign in on your Mac" (`ConnectorCardState.signInOnMac`).
 - Enforced by `ExternalLinkPolicyTests` in `Packages/PalKit/Tests/PalKitTests`, which scans `App/` for web surfaces outside their allowlist.
 
 ## Rule 3: connectors that need auth raise the sign-in dialog

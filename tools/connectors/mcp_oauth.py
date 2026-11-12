@@ -319,6 +319,10 @@ def start(
         raise RuntimeError(f"'{server_name}' is not a configured MCP server")
     if not cfg.get("url"):
         raise RuntimeError(f"'{server_name}' is a stdio server: it takes env keys, not OAuth")
+    from tools.mcp_oauth import signs_in_on_owner_computer
+    from hermes_cli.mcp_config import _oauth_tokens_present
+    if signs_in_on_owner_computer(cfg) and not _oauth_tokens_present(server_name):
+        raise RuntimeError(f"'{server_name}' signs in on your own computer, not on this host. Sign in from the app on your Mac.")
     cfg["auth"] = "oauth"
     hermes_home = str(get_hermes_home().expanduser().resolve(strict=False))
     flow = DashboardOAuthFlow(
