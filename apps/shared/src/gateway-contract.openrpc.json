@@ -5783,6 +5783,78 @@
           "$ref": "#/components/schemas/WakeStopResult"
         }
       }
+    },
+    {
+      "name": "webhook.routes.add",
+      "summary": "Create a route. Give secret or generate_secret, not both; a generated secret is returned once. The gateway loads the route on its next request, no restart. 4101 invalid, 4409 name taken, 5321 data.code webhook_disabled. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/WebhookRouteAddParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/WebhookRouteAddResult"
+        }
+      }
+    },
+    {
+      "name": "webhook.routes.list",
+      "summary": "Webhook routes of this gateway with their local path and public URL, never a secret. public_base_url is webapp.public_url, or null when unset. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/WebhookRoutesListResult"
+        }
+      }
+    },
+    {
+      "name": "webhook.routes.probe",
+      "summary": "Probe one stored route: an unsigned POST to the gateway's own listener, then to the public URL built from webapp.public_url (no redirects, TLS verified). The client names a route, never a URL. 4404 unknown route. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/WebhookRouteNameParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/WebhookProbeResult"
+        }
+      }
+    },
+    {
+      "name": "webhook.routes.remove",
+      "summary": "Remove a route created through this API or the CLI. 4404 unknown route. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/WebhookRouteNameParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/WebhookRouteRemoveResult"
+        }
+      }
     }
   ],
   "components": {
@@ -7283,7 +7355,8 @@
           "oauth",
           "api_key",
           "header",
-          "manual"
+          "manual",
+          "oauth_paste"
         ],
         "title": "AuthFlow",
         "type": "string"
@@ -7521,6 +7594,53 @@
           "recorded"
         ],
         "title": "AuthSigninResult",
+        "type": "object"
+      },
+      "AuthSubmitCallbackParams": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "value"
+        ],
+        "title": "AuthSubmitCallbackParams",
+        "type": "object"
+      },
+      "AuthSubmitCallbackResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/AuthCredentialOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "AuthSubmitCallbackResult",
         "type": "object"
       },
       "AuthSubmitCredentialParams": {
@@ -32790,6 +32910,7 @@
         "enum": [
           "api_key",
           "device_code",
+          "oauth_paste",
           "unsupported"
         ],
         "title": "ModelProviderKind",
@@ -58553,6 +58674,354 @@
         "title": "WakeStopResult",
         "type": "object"
       },
+      "WebhookDiagnosis": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "WebhookDiagnosis",
+        "type": "object"
+      },
+      "WebhookHop": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ms"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          }
+        },
+        "title": "WebhookHop",
+        "type": "object"
+      },
+      "WebhookProbeResult": {
+        "additionalProperties": false,
+        "properties": {
+          "local": {
+            "$ref": "#/components/schemas/WebhookHop"
+          },
+          "public": {
+            "$ref": "#/components/schemas/WebhookHop"
+          },
+          "diagnosis": {
+            "$ref": "#/components/schemas/WebhookDiagnosis"
+          },
+          "tunnel": {
+            "$ref": "#/components/schemas/WebhookTunnel"
+          }
+        },
+        "required": [
+          "local",
+          "public",
+          "diagnosis",
+          "tunnel"
+        ],
+        "title": "WebhookProbeResult",
+        "type": "object"
+      },
+      "WebhookRoute": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "public_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Public Url"
+          },
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "deliver": {
+            "title": "Deliver",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "profile",
+          "path",
+          "events",
+          "deliver",
+          "description",
+          "enabled"
+        ],
+        "title": "WebhookRoute",
+        "type": "object"
+      },
+      "WebhookRouteAddParams": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "title": "Name",
+            "type": "string"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Events",
+            "type": "array"
+          },
+          "deliver": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deliver"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Secret"
+          },
+          "generate_secret": {
+            "default": false,
+            "title": "Generate Secret",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "WebhookRouteAddParams",
+        "type": "object"
+      },
+      "WebhookRouteAddResult": {
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "$ref": "#/components/schemas/WebhookRoute"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Secret"
+          }
+        },
+        "required": [
+          "route"
+        ],
+        "title": "WebhookRouteAddResult",
+        "type": "object"
+      },
+      "WebhookRouteNameParams": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "WebhookRouteNameParams",
+        "type": "object"
+      },
+      "WebhookRouteRemoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "WebhookRouteRemoveResult",
+        "type": "object"
+      },
+      "WebhookRoutesListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "public_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Public Base Url"
+          },
+          "public_url_setting": {
+            "title": "Public Url Setting",
+            "type": "string"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/WebhookRoute"
+            },
+            "title": "Routes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "public_url_setting",
+          "routes"
+        ],
+        "title": "WebhookRoutesListResult",
+        "type": "object"
+      },
+      "WebhookTunnel": {
+        "additionalProperties": false,
+        "properties": {
+          "resolves": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Resolves"
+          },
+          "tls_expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tls Expires At"
+          }
+        },
+        "title": "WebhookTunnel",
+        "type": "object"
+      },
       "WorkerExecution": {
         "additionalProperties": true,
         "description": "A ``worker_executions`` row without its adoption digest.",
@@ -58939,6 +59408,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/AuthSigninResult"
+        }
+      }
+    },
+    {
+      "name": "auth.submit_callback",
+      "summary": "The user pasted the address the browser ended on for an oauth_paste auth.required request. The gateway, which holds the PKCE verifier, checks the address, the state and the code, exchanges it and stores the credential in the requesting profile; the pasted text is never echoed, logged or kept. stored: signed in. failed: reason says in plain words what to fix; the same request may be answered again unless auth.resolved already ended it (declined on the provider's page, expired, exchange refused). rejected: unknown, finished, foreign or already used request; nothing stored.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthSubmitCallbackParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthSubmitCallbackResult"
         }
       }
     },
@@ -61614,7 +62101,7 @@
     },
     {
       "name": "auth.required",
-      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential.",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. The payload never carries a credential.",
       "params": [
         {
           "name": "payload",

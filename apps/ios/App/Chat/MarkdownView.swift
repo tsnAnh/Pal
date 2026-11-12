@@ -63,6 +63,8 @@ private struct MarkdownBlockView: View {
             InlineText(text: block.text, highlight: highlight, isCurrentMatch: isCurrentMatch, style: level <= 2 ? .chatStatus : .chatBody, weight: .bold)
         case .code, .math:
             RichBlockView(block: block, isStreaming: isStreaming)
+        case .table(let table):
+            listRow { MarkdownTableView(table: table, highlight: highlight, isCurrentMatch: isCurrentMatch) }
         case .thematicBreak:
             Rectangle().fill(Color(theme.palette.separator)).frame(height: 1).padding(.vertical, 4)
         }
