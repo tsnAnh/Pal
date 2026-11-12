@@ -35,6 +35,8 @@ final class BotProfileModel {
 
     var isPrimary: Bool { profile?.isPrimary ?? false }
 
+    var isSetupUnfinished: Bool { profile?.isSetupUnfinished ?? false }
+
     var spec: BotAvatarSpec? { lookOverride ?? row?.spec }
 
     var routinesText: String? {
@@ -118,7 +120,8 @@ final class BotProfileModel {
         let seed = BotProfileEditSeed(
             name: displayName,
             look: BotLook(name: botName, shape: meta.shape, color: meta.color),
-            photo: currentPhoto
+            photo: currentPhoto,
+            needsLook: profile.isSetupUnfinished
         )
         editing = EditBotModel(profile: profile, seed: seed, services: services) { [weak self] spec, photo, photoChanged in
             await self?.saved(look: spec, photo: photo, photoChanged: photoChanged)
@@ -134,4 +137,5 @@ struct BotProfileEditSeed: Equatable {
     var name: String
     var look: BotLook
     var photo: Data?
+    var needsLook = false
 }

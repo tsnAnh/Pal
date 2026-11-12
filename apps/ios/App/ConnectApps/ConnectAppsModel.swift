@@ -52,6 +52,16 @@ enum ConnectDisconnectTarget: Identifiable {
 
 enum ConnectChip {
     static let all = "all"
+    static let iphone = "iphone"
+    static let mac = "mac"
+
+    static func deviceKind(_ id: String) -> DeviceKind? {
+        switch id {
+        case iphone: .ios
+        case mac: .mac
+        default: nil
+        }
+    }
 }
 
 @MainActor
@@ -97,6 +107,7 @@ final class ConnectAppsModel {
     private(set) var mode: Mode = .list
 
     let botName: String
+    let devices: DeviceConnectorsModel
     private let profile: String?
     private let service: ConnectAppsService
     private let capabilitiesService: CapabilitiesService
@@ -106,11 +117,12 @@ final class ConnectAppsModel {
     private let diagnostics = Diagnostics.osLog()
 
     init(
-        connection: ConnectionModel, profile: String?, botName: String, browser: any AuthorizationBrowser,
+        connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser,
         bots: [CustomConnectorBot] = [], currentBot: String? = nil
     ) {
         self.profile = profile
         self.botName = botName
+        devices = DeviceConnectorsModel(connection: connection, pool: pool, profile: profile)
         self.bots = bots
         self.currentBot = currentBot
         service = ConnectAppsService(
@@ -129,7 +141,7 @@ final class ConnectAppsModel {
 
     var connectedApps: [ConnectApp] { catalog.connectedApps }
 
-    var chips: [String] { [ConnectChip.all] + catalog.categories }
+    var chips: [String] { [ConnectChip.all, ConnectChip.iphone, ConnectChip.mac] + catalog.categories }
 
     var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
@@ -138,6 +150,7 @@ final class ConnectAppsModel {
     var searchedSkills: [InstalledSkill] { catalog.matchingSkills(trimmedQuery) }
 
     func start() async {
+        Task { await devices.start() }
         await reload()
         await loadCapabilities()
     }

@@ -96,7 +96,7 @@ struct MacModalHost: View {
                 MacSettingsModal(hub: hub, connection: connection, section: Bindable(shell).settingsSection)
             }
         case .createBot:
-            MacModalPanel(width: 404, height: 531, identifier: "createBotSheet", closeIdentifier: "createBotClose", close: { router.dismissSheet() }) {
+            MacModalPanel(width: 404, height: 571, identifier: "createBotSheet", closeIdentifier: "createBotClose", close: { router.dismissSheet() }) {
                 MacCreateBot(model: createBot, roster: roster, router: router)
             }
         case .connectApps:
@@ -104,6 +104,7 @@ struct MacModalHost: View {
                 MacConnectApps(
                     model: ConnectAppsModel(
                         connection: connection,
+                        pool: hostPool,
                         profile: router.connectAppsProfile,
                         botName: roster.displayName(forProfile: router.connectAppsProfile),
                         browser: WebAuthenticationBrowser(),

@@ -60,7 +60,7 @@ struct MacMessagesConnectorRow: View {
         }
     }
 }
-#else
+#elseif os(iOS)
 struct PhoneMessagesConnectorRow: View {
     @Environment(\.hermesTheme) private var theme
 

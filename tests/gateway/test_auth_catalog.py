@@ -57,6 +57,7 @@ def test_every_catalog_manifest_declares_its_auth_type_in_data():
 
 @pytest.mark.asyncio
 async def test_every_catalog_connector_that_needs_auth_can_raise_the_sign_in_event(authorities, monkeypatch):
+    monkeypatch.setattr('tui_gateway.mcp_oauth_sessions.start_flow', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('offline')))
     authority = await authorities('home')
     phone = await connect_phone(authority)
     flows = {'oauth': 'oauth', 'api_key': 'api_key'}

@@ -1,6 +1,7 @@
 import PalBotProfile
 import PalConnect
 import PalDesign
+import PalDevice
 import PalProtocol
 import SwiftUI
 
@@ -9,6 +10,7 @@ struct ConnectAppsSheet: View {
     let close: () -> Void
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.scenePhase) private var scenePhase
 
     private static let rowsPerSectionInAll = 4
 
@@ -29,6 +31,9 @@ struct ConnectAppsSheet: View {
         }
         .task { await model.start() }
         .onDisappear { Task { await model.stop() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await model.devices.refresh() } }
+        }
         .alert(item: $model.notice) { notice in
             Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
         }
@@ -148,6 +153,8 @@ struct ConnectAppsSheet: View {
     private func chipTitle(_ id: String) -> String {
         switch id {
         case ConnectChip.all: "All"
+        case ConnectChip.iphone: "iPhone"
+        case ConnectChip.mac: "Mac"
         default: id
         }
     }
@@ -156,6 +163,7 @@ struct ConnectAppsSheet: View {
     private var selectedSection: some View {
         switch model.selection {
         case ConnectChip.all: allSections
+        case ConnectChip.iphone, ConnectChip.mac: deviceSections(of: ConnectChip.deviceKind(model.selection) ?? .ios)
         case let category:
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSectionTitle")
             ForEach(model.catalog.apps(in: category)) { appRow($0) }
@@ -164,14 +172,56 @@ struct ConnectAppsSheet: View {
 
     @ViewBuilder
     private var allSections: some View {
+        if let section = model.devices.thisDevice { deviceSection(section) }
         ForEach(model.catalog.categories, id: \.self) { category in
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
             ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) }
         }
         SkillsCatalogEntry { model.showsSkills = true }
         capabilitiesSection
+        #if os(iOS)
         ConnectSectionHeader("On your Mac", accessibilityIdentifier: "onYourMacTitle")
         PhoneMessagesConnectorRow()
+        #endif
+    }
+
+    @ViewBuilder
+    private func deviceSections(of kind: DeviceKind) -> some View {
+        let sections = model.devices.sections(of: kind)
+        ForEach(sections) { deviceSection($0) }
+        if sections.isEmpty {
+            Text("No \(kind.sectionName) connected yet")
+                .font(.system(size: ConnectRowMetrics.captionSize))
+                .foregroundStyle(Color(theme.palette.textSecondary))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
+                .padding(.vertical, 8)
+                .accessibilityIdentifier("connectAppsNoDevices")
+        }
+    }
+
+    @ViewBuilder
+    private func deviceSection(_ section: DeviceSection) -> some View {
+        ConnectSectionHeader(section.title, accessibilityIdentifier: "connectAppsSection-device-\(section.id)")
+        ForEach(section.rows) { deviceRow($0, in: section) }
+    }
+
+    private func deviceRow(_ row: DeviceConnectorRow, in section: DeviceSection) -> some View {
+        let look = DeviceRowPresentation(row: row, isThisDevice: section.isThisDevice)
+        let prefix = section.isThisDevice ? "deviceConnector" : "deviceConnector-\(section.id)"
+        return ConnectAppRow(
+            title: row.entry.title, summary: look.summary, accessibilityIdentifier: "\(prefix)-\(row.id.rawValue)",
+            isBusy: section.isThisDevice && model.devices.busy.contains(row.id), trailing: deviceAction(look, row.id)
+        ) { DeviceTile(connector: row.id) }
+    }
+
+    private func deviceAction(_ look: DeviceRowPresentation, _ id: DeviceConnectorID) -> ConnectRowAction? {
+        guard let title = look.buttonTitle else { return nil }
+        switch look.action {
+        case .allow: return ConnectRowAction(title, kind: .accent) { Task { await model.devices.allow(id) } }
+        case .openSettings: return ConnectRowAction(title, kind: .accent) { model.devices.openSettings(for: id) }
+        case nil: return ConnectRowAction(title, kind: .dimmed) {}
+        }
     }
 
     @ViewBuilder

@@ -367,6 +367,42 @@
       }
     },
     {
+      "name": "bot_keys.set",
+      "summary": "Save (value set) or remove (value null) one key listed by bot_keys.status in the named bot's own secret store. The value travels only in this request and is never echoed, logged or shown to the model. 4101 invalid key name or value; 4403 not an owner connection; 5103 not saved, the previous value is kept.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/BotKeysSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotKeysSetResult"
+        }
+      }
+    },
+    {
+      "name": "bot_keys.status",
+      "summary": "Which of the extra tool, memory, app and messaging keys one bot has set, by name. Owner connections only; never carries a key value. 4403 for a bot's own connection.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/BotKeysStatusResult"
+        }
+      }
+    },
+    {
       "name": "bot_mode.about_you.get",
       "summary": "Owner facts (name, time zone) shared by every Bot Mode bot on this install.",
       "params": [
@@ -3477,6 +3513,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ProfilesDescribeResult"
+        }
+      }
+    },
+    {
+      "name": "profiles.describe_auto",
+      "summary": "Write a bot's description with the auxiliary model, as `hermes profile describe --auto`. Owner connections only (4403); overwrite=false keeps a description the owner wrote (4102 says so). Never a model tool.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfilesDescribeAutoParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ProfilesDescribeAutoResult"
         }
       }
     },
@@ -7247,7 +7301,8 @@
           "oauth",
           "api_key",
           "header",
-          "manual"
+          "manual",
+          "oauth_paste"
         ],
         "title": "AuthFlow",
         "type": "string"
@@ -7485,6 +7540,53 @@
           "recorded"
         ],
         "title": "AuthSigninResult",
+        "type": "object"
+      },
+      "AuthSubmitCallbackParams": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "value"
+        ],
+        "title": "AuthSubmitCallbackParams",
+        "type": "object"
+      },
+      "AuthSubmitCallbackResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/AuthCredentialOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "AuthSubmitCallbackResult",
         "type": "object"
       },
       "AuthSubmitCredentialParams": {
@@ -9178,6 +9280,151 @@
           }
         },
         "title": "BotAboutYouSetParams",
+        "type": "object"
+      },
+      "BotKeyGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/BotKeyRow"
+            },
+            "title": "Keys",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "keys"
+        ],
+        "title": "BotKeyGroup",
+        "type": "object"
+      },
+      "BotKeyRow": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "is_set": {
+            "title": "Is Set",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "is_set"
+        ],
+        "title": "BotKeyRow",
+        "type": "object"
+      },
+      "BotKeysSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "key_name": {
+            "pattern": "^[A-Z][A-Z0-9_]{2,63}$",
+            "title": "Key Name",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key_name"
+        ],
+        "title": "BotKeysSetParams",
+        "type": "object"
+      },
+      "BotKeysSetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "key_name": {
+            "title": "Key Name",
+            "type": "string"
+          },
+          "is_set": {
+            "title": "Is Set",
+            "type": "boolean"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/BotKeyGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile",
+          "key_name",
+          "is_set",
+          "groups"
+        ],
+        "title": "BotKeysSetResult",
+        "type": "object"
+      },
+      "BotKeysStatusResult": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/BotKeyGroup"
+            },
+            "title": "Groups",
+            "type": "array"
+          }
+        },
+        "required": [
+          "profile",
+          "groups"
+        ],
+        "title": "BotKeysStatusResult",
         "type": "object"
       },
       "BotRelayDeliverParams": {
@@ -32557,6 +32804,7 @@
         "enum": [
           "api_key",
           "device_code",
+          "oauth_paste",
           "unsupported"
         ],
         "title": "ModelProviderKind",
@@ -38794,6 +39042,49 @@
           "path"
         ],
         "title": "ProfilesDeleteResult",
+        "type": "object"
+      },
+      "ProfilesDescribeAutoParams": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "overwrite": {
+            "default": false,
+            "title": "Overwrite",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "ProfilesDescribeAutoParams",
+        "type": "object"
+      },
+      "ProfilesDescribeAutoResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "name",
+          "description"
+        ],
+        "title": "ProfilesDescribeAutoResult",
         "type": "object"
       },
       "ProfilesDescribeResult": {
@@ -59058,6 +59349,24 @@
       }
     },
     {
+      "name": "auth.submit_callback",
+      "summary": "The user pasted the address the browser ended on for an oauth_paste auth.required request. The gateway, which holds the PKCE verifier, checks the address, the state and the code, exchanges it and stores the credential in the requesting profile; the pasted text is never echoed, logged or kept. stored: signed in. failed: reason says in plain words what to fix; the same request may be answered again unless auth.resolved already ended it (declined on the provider's page, expired, exchange refused). rejected: unknown, finished, foreign or already used request; nothing stored.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthSubmitCallbackParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthSubmitCallbackResult"
+        }
+      }
+    },
+    {
       "name": "auth.submit_credential",
       "summary": "The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored.",
       "params": [
@@ -61729,7 +62038,7 @@
     },
     {
       "name": "auth.required",
-      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential.",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. The payload never carries a credential.",
       "params": [
         {
           "name": "payload",
