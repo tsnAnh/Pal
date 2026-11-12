@@ -129,6 +129,7 @@ async def test_a_multi_field_header_connector_gets_no_box(authorities, monkeypat
 
 @pytest.mark.asyncio
 async def test_oauth_and_device_code_requests_reject_a_credential(authorities, monkeypatch, canary):
+    monkeypatch.setattr('tui_gateway.mcp_oauth_sessions.start_flow', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('offline')))
     _servers(monkeypatch, {'acme': {'url': 'https://acme.example/mcp', 'auth': 'oauth'}})
     authority = await authorities('home')
     phone = await connect_phone(authority)
