@@ -29,7 +29,8 @@ public struct MarkdownBlock: Sendable, Equatable, Identifiable {
     public var text: AttributedString
     public var lists: [ListMarker]
     public var startsListItem: Bool
-    public var isQuoted: Bool
+    public var quoteIdentity: Int?
+    public var isQuoted: Bool { quoteIdentity != nil }
     public var isComplete: Bool = true
 
     public init(
@@ -38,7 +39,7 @@ public struct MarkdownBlock: Sendable, Equatable, Identifiable {
         text: AttributedString,
         lists: [ListMarker] = [],
         startsListItem: Bool = false,
-        isQuoted: Bool = false,
+        quoteIdentity: Int? = nil,
         isComplete: Bool = true
     ) {
         self.id = id
@@ -46,8 +47,20 @@ public struct MarkdownBlock: Sendable, Equatable, Identifiable {
         self.text = text
         self.lists = lists
         self.startsListItem = startsListItem
-        self.isQuoted = isQuoted
+        self.quoteIdentity = quoteIdentity
         self.isComplete = isComplete
+    }
+}
+
+public enum MarkdownLayoutItem: Sendable, Equatable, Identifiable {
+    case block(MarkdownBlock)
+    case quote(blocks: [MarkdownBlock])
+
+    public var id: String {
+        switch self {
+        case .block(let block): "b\(block.id)"
+        case .quote(let blocks): "q\(blocks.first?.id ?? 0)"
+        }
     }
 }
 
@@ -78,6 +91,26 @@ public struct MarkdownDocument: Sendable, Equatable {
         blocks = built
     }
 
+    public var layoutItems: [MarkdownLayoutItem] {
+        var items: [MarkdownLayoutItem] = []
+        var openQuote: (identity: Int, blocks: [MarkdownBlock])?
+        func closeQuote() {
+            if let quote = openQuote { items.append(.quote(blocks: quote.blocks)) }
+            openQuote = nil
+        }
+        for block in blocks {
+            guard let identity = block.quoteIdentity else {
+                closeQuote()
+                items.append(.block(block))
+                continue
+            }
+            if openQuote?.identity != identity { closeQuote() }
+            openQuote = (identity, (openQuote?.blocks ?? []) + [block])
+        }
+        closeQuote()
+        return items
+    }
+
     private static func parsedBlocks(_ source: String) -> [MarkdownBlock] {
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
         let options = AttributedString.MarkdownParsingOptions(
@@ -91,7 +124,7 @@ public struct MarkdownDocument: Sendable, Equatable {
     }
 
     private static func fallbackBlock(_ source: String) -> MarkdownBlock {
-        MarkdownBlock(id: 0, kind: .paragraph, text: AttributedString(source), lists: [], startsListItem: false, isQuoted: false)
+        MarkdownBlock(id: 0, kind: .paragraph, text: AttributedString(source), lists: [], startsListItem: false)
     }
 
     private struct Leaf {
@@ -117,7 +150,7 @@ public struct MarkdownDocument: Sendable, Equatable {
             let components = leaf.intent?.components ?? []
             guard let kind = kind(of: components.first?.kind) else { continue }
             var lists: [ListMarker] = []
-            var isQuoted = false
+            var quoteIdentity: Int?
             var itemIdentity: Int?
             for component in components.dropFirst().reversed() {
                 switch component.kind {
@@ -129,7 +162,7 @@ public struct MarkdownDocument: Sendable, Equatable {
                     itemIdentity = component.identity
                     if let index = lists.indices.last { lists[index].ordinal = ordinal }
                 case .blockQuote:
-                    isQuoted = true
+                    if quoteIdentity == nil { quoteIdentity = component.identity }
                 default:
                     break
                 }
@@ -142,7 +175,7 @@ public struct MarkdownDocument: Sendable, Equatable {
                 text: text(of: attributed, range: leaf.range, kind: kind),
                 lists: lists,
                 startsListItem: startsItem,
-                isQuoted: isQuoted
+                quoteIdentity: quoteIdentity
             ))
         }
         return built

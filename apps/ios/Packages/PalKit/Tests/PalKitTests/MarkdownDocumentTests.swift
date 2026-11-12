@@ -89,6 +89,51 @@ struct MarkdownDocumentTests {
         #expect(blocks.map(\.isQuoted) == [true, false])
     }
 
+    @Test func multiParagraphQuoteIsOneQuoteItem() {
+        let source = """
+        **Bản sửa đề xuất:**
+
+        > Intro paragraph of two sentences. Second sentence.
+        >
+        > FEATURES
+        > • one
+        > • two
+        > • three
+        > • four
+        > • five
+        >
+        > PixelPop is for everyone.
+        >
+        > PIXELPOP PREMIUM
+        > A long paragraph of several sentences that wraps over multiple lines at narrow widths.
+        >
+        > Terms of Use (EULA): https://example.com/terms
+        > Privacy Policy: https://example.com/privacy
+
+        A normal paragraph after the quote.
+        """
+        let items = MarkdownDocument(parsing: source).layoutItems
+        #expect(items.count == 3)
+        guard case .block(let lead) = items[0], case .quote(let quoted) = items[1], case .block(let tail) = items[2] else {
+            Issue.record("expected block, quote, block")
+            return
+        }
+        #expect(plain(lead) == "Bản sửa đề xuất:")
+        #expect(quoted.count == 5)
+        #expect(quoted.allSatisfy(\.isQuoted))
+        #expect(plain(quoted[1]).hasPrefix("FEATURES\n• one"))
+        #expect(plain(quoted[1]).hasSuffix("• five"))
+        #expect(plain(quoted[2]) == "PixelPop is for everyone.")
+        #expect(plain(quoted[4]).contains("Privacy Policy"))
+        #expect(!tail.isQuoted)
+        #expect(plain(tail) == "A normal paragraph after the quote.")
+    }
+
+    @Test func quotesSeparatedByPlainTextStayDistinct() {
+        let items = MarkdownDocument(parsing: "> one\n\nmiddle\n\n> two").layoutItems
+        #expect(items.count == 3)
+    }
+
     @Test func unclosedEmphasisWhileStreamingDoesNotCrashOrDropText() {
         let block = MarkdownDocument(parsing: "một **chưa đóng").blocks[0]
         #expect(plain(block).contains("chưa đóng"))
