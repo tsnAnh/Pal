@@ -1,3 +1,4 @@
+import PalProtocol
 
 public enum DeviceKind: String, Sendable, Hashable, CaseIterable {
     case ios

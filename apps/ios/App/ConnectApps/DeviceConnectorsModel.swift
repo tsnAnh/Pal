@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PalDevice
 import PalDiagnostics
+import PalProtocol
 
 struct DeviceSection: Identifiable, Equatable {
     let id: String

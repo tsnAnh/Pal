@@ -1,4 +1,5 @@
 import PalDevice
+import PalProtocol
 import Testing
 
 struct DeviceConnectorCatalogTests {
