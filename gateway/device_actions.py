@@ -29,6 +29,9 @@ SCREEN_MAX_IMAGE_BYTES = 300_000
 SCREEN_MAX_TEXT_CHARS = 24_000
 SCREEN_MAX_RESULT_BYTES = 480_000
 SCREEN_MIN_INTERVAL_SECONDS = 3.0
+CLIPBOARD_TEXT_CHARS = 24_000
+CLIPBOARD_WRITE_CHARS = 100_000
+CLIPBOARD_IMAGE_BASE64_CHARS = 65_536
 TEXT_MARKER = "\n…[truncated, {omitted} characters omitted]"
 
 
@@ -51,6 +54,7 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.SHELL, "Run commands", "Let bots run commands on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.FILES, "Files", "Let bots read and change files on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.SCREEN, "Screen", "Let bots see this Mac's screen", MAC_ONLY, False),
+    ConnectorInfo(Connector.CLIPBOARD, "Clipboard", "Let bots read and change this Mac's clipboard", MAC_ONLY, False),
     ConnectorInfo(Connector.APPS, "Apps", "Let bots open and switch apps on this Mac", MAC_ONLY, False),
 )
 
@@ -236,6 +240,21 @@ class ScreenCaptureArgs(_Args):
 
 class ScreenReadArgs(_Args):
     display: int = Field(default=1, ge=1, le=SCREEN_MAX_DISPLAY)
+
+
+class ClipboardReadArgs(_Args):
+    include_image: bool = False
+
+
+class ClipboardWriteArgs(_Args):
+    text: str | None = Field(default=None, min_length=1, max_length=CLIPBOARD_WRITE_CHARS)
+    image_base64: str | None = Field(default=None, min_length=1, max_length=CLIPBOARD_IMAGE_BASE64_CHARS)
+
+    @model_validator(mode="after")
+    def _one_kind(self):
+        if (self.text is None) == (self.image_base64 is None):
+            raise ValueError("pass exactly one of text or image_base64")
+        return self
 
 
 class AppsListArgs(_Args):
@@ -457,6 +476,21 @@ class ScreenReadResult(_Data):
     display: int = Field(ge=1, le=SCREEN_MAX_DISPLAY)
 
 
+class ClipboardReadResult(_Capped):
+    text_limits: ClassVar[dict[str, int]] = {"text": CLIPBOARD_TEXT_CHARS}
+    types: Annotated[list[Annotated[str, _clipped(40)]], _first(20)] = Field(default_factory=list)
+    concealed: bool = False
+    text: str | None = None
+    image_base64: str | None = Field(default=None, max_length=CLIPBOARD_IMAGE_BASE64_CHARS)
+    image_mime: Annotated[str, _clipped(40)] | None = None
+    image_bytes: int | None = Field(default=None, ge=0)
+
+
+class ClipboardWriteResult(_Data):
+    kind: Literal["text", "image"]
+    size: int = Field(ge=0)
+
+
 class AppInfo(_Data):
     name: Short
     bundle_id: Short | None = None
@@ -596,6 +630,13 @@ ACTIONS: dict[str, ActionSpec] = dict([
           SCREEN_MAX_RESULT_BYTES),
     _spec("screen.read", Connector.SCREEN, False, "read the text on one display, without an image",
           ScreenReadArgs, ScreenReadResult, lambda a: f"Read the text on display {a.display}", MAC_ONLY),
+    _spec("clipboard.read", Connector.CLIPBOARD, False,
+          "read the clipboard: text, and which other kinds of content it holds; include_image returns a small image",
+          ClipboardReadArgs, ClipboardReadResult, lambda a: "Read the clipboard", MAC_ONLY),
+    _spec("clipboard.write", Connector.CLIPBOARD, True, "replace the clipboard with text or a small image (base64)",
+          ClipboardWriteArgs, ClipboardWriteResult,
+          lambda a: "Replace the clipboard with " + (f"{len(a.text)} characters of text" if a.text is not None else "an image"),
+          MAC_ONLY),
     _spec("apps.list", Connector.APPS, False, "list running apps (name, bundle_id, pid, frontmost; at most 200)",
           AppsListArgs, AppsResult, lambda a: "List the running apps", MAC_ONLY),
     _spec("apps.open", Connector.APPS, True,

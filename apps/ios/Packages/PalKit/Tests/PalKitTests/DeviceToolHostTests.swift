@@ -189,6 +189,7 @@ struct DeviceToolWireTests {
             "shell.run": "shell", "files.read": "files", "files.list": "files", "files.write": "files",
             "screen.capture": "screen", "screen.read": "screen",
             "apps.list": "apps", "apps.open": "apps", "apps.quit": "apps", "windows.list": "apps", "windows.focus": "apps",
+            "clipboard.read": "clipboard", "clipboard.write": "clipboard",
         ]
         #expect(Set(DeviceToolAction.allCases.map(\.rawValue)) == Set(expected.keys))
         for action in DeviceToolAction.allCases { #expect(action.connector.rawValue == expected[action.rawValue]) }

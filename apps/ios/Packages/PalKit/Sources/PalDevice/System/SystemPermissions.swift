@@ -26,6 +26,7 @@ public struct SystemPermissions: DevicePermissions {
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
         case .apps: Self.appsStatus
+        case .clipboard: Self.clipboardStatus
         case .screen: Self.screenStatus()
         }
     }
@@ -48,6 +49,8 @@ public struct SystemPermissions: DevicePermissions {
             break
         case .apps:
             Self.requestApps()
+        case .clipboard:
+            break
         case .screen:
             Self.requestScreen()
         }
@@ -94,6 +97,14 @@ public struct SystemPermissions: DevicePermissions {
     private static var localAccessStatus: DeviceOSPermission {
         #if os(macOS)
         .granted
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static var clipboardStatus: DeviceOSPermission {
+        #if os(macOS)
+        GeneralPasteboard().accessAllowed ? .granted : .denied
         #else
         .unsupported
         #endif
@@ -176,16 +187,19 @@ extension DeviceProviders {
         let shell: (any ShellProviding)? = SystemShell()
         let files: (any FilesProviding)? = SystemFiles()
         let apps: (any AppsProviding)? = AppsController(workspace: SystemAppsWorkspace())
+        let clipboard: (any ClipboardProviding)? = SystemClipboard(store: GeneralPasteboard())
         let screen: (any ScreenProviding)? = GuardedScreen(source: SystemScreenSource(), activity: screenActivity)
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
         let apps: (any AppsProviding)? = nil
+        let clipboard: (any ClipboardProviding)? = nil
         let screen: (any ScreenProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, apps: apps, screen: screen
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, apps: apps,
+            clipboard: clipboard, screen: screen
         )
     }
 }

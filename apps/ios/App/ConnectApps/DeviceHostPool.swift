@@ -60,6 +60,7 @@ extension ConsentAsk {
         case .files: "Files"
         case .screen: "Screen"
         case .apps: "Apps"
+        case .clipboard: "Clipboard"
         }
     }
 
@@ -89,6 +90,8 @@ extension ConsentAsk {
         case .appsQuit: "quit an app on this Mac"
         case .windowsList: "see which windows are open on this Mac"
         case .windowsFocus: "bring a window to the front on this Mac"
+        case .clipboardRead: "read this Mac's clipboard"
+        case .clipboardWrite: "change this Mac's clipboard"
         }
     }
 }
