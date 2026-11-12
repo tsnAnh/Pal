@@ -1910,6 +1910,45 @@ export interface GatewayServiceInstallResult {
   status: GatewayServiceStatus
 }
 export type GatewayServiceInstallOutcome = 'installed' | 'already_installed' | 'unsupported' | 'failed'
+/** Client→server method params / server→client request params. Unknown keys are rejected. */
+export type Params = Record<string, never>
+/** A field that could not be read degrades to null, an empty list, ``unknown`` or ``unset``. An OAuth App token has no expiry, so ``expires_at`` is null. ``oauth_app_not_configured``: no token and no client ID. */
+export interface GithubTokenStatus {
+  state: GithubTokenState
+  login?: string | null
+  scopes: string[]
+  missing_scopes: string[]
+  expires_at?: string | null
+  token_kind: 'classic' | 'fine_grained' | 'unknown'
+  git_protocol: 'https' | 'ssh' | 'unset'
+}
+export type GithubTokenState = 'set' | 'missing' | 'invalid' | 'expired' | 'missing_scopes' | 'oauth_app_not_configured' | 'unknown'
+export interface GithubOauthStartResult {
+  session_id: string
+  user_code: string
+  verification_uri: string
+  expires_in: number
+  interval: number
+}
+export interface GithubOauthSessionParams {
+  session_id: string
+}
+export interface GithubOauthPollResult {
+  state: 'pending' | 'signed_in' | 'denied' | 'expired' | 'org_approval_needed' | 'failed'
+  login?: string | null
+  message?: string | null
+  code?: string | null
+  missing_scopes?: string[]
+}
+export interface GithubOauthCancelResult {
+  ok: boolean
+}
+export interface GithubOauthConfig {
+  client_id?: string | null
+}
+export interface GithubOauthConfigSetParams {
+  client_id?: string | null
+}
 export interface GroupsCapabilitiesParams {
   profile?: string | null
 }
@@ -2433,8 +2472,6 @@ export interface LibraryAssetResult {
   data_base64: string
   size: number
 }
-/** Client→server method params / server→client request params. Unknown keys are rejected. */
-export type Params = Record<string, never>
 /** ``machine_kind`` is ``Spark``, ``Mac``, ``PC`` or ``computer``. ``nvidia_platform`` is ``products.nvidia_platform()``: ``rtx_spark``, ``dgx_spark``, ``discrete`` or null. ``locale`` is the OS account's first UI language, null when the OS has none. */
 export interface MachineFactsResult {
   machine: MachineInfo
@@ -7558,6 +7595,18 @@ export interface RpcMethods {
   'gateway.service.restart': { params: GatewayServiceRestartParams; result: GatewayServiceRestartResult }
   /** Gateway service state on the connected host (running, stopped, not installed, restart needed). */
   'gateway.service.status': { params: ProfileParams; result: GatewayServiceStatus }
+  /** Drop a pending GitHub sign-in. */
+  'github.oauth.cancel': { params: GithubOauthSessionParams; result: GithubOauthCancelResult }
+  /** The OAuth App client ID (public, not a secret), or null when it is not set. */
+  'github.oauth.config.get': { params: Params; result: GithubOauthConfig }
+  /** Save (client_id set) or clear (null or empty) the OAuth App client ID in the host's config and drop any pending sign-in. 4101 invalid client ID. */
+  'github.oauth.config.set': { params: GithubOauthConfigSetParams; result: GithubOauthConfig }
+  /** State of the sign-in. On signed_in the token is already applied to gh and git is set to HTTPS. A failed state carries code: missing_scopes (with missing_scopes; nothing applied), apply_failed, oauth_app_rejected, unreachable or failed. org_approval_needed: an organization owner must approve Pal. */
+  'github.oauth.poll': { params: GithubOauthSessionParams; result: GithubOauthPollResult }
+  /** Start GitHub's device flow with Pal's own OAuth App; a pending sign-in is returned again instead of a second one. Error 5311 carries data.code: oauth_app_not_configured, oauth_app_rejected or unreachable. 4403 secondary profile. */
+  'github.oauth.start': { params: Params; result: GithubOauthStartResult }
+  /** The host's single GitHub token, read through gh without reading the token back: state, account, scope names, expiry and the git protocol. Never carries the token. 4403 secondary profile. */
+  'github.token.status': { params: Params; result: GithubTokenStatus }
   /** Resolve one exact pending approval raised by a local or peer room member. */
   'groups.approve': { params: GroupsApproveParams; result: GroupsApproveResult }
   /** Read one committed attachment for a live room viewer. */
@@ -8101,6 +8150,12 @@ export const RPC_METHODS = [
   'gateway.service.install',
   'gateway.service.restart',
   'gateway.service.status',
+  'github.oauth.cancel',
+  'github.oauth.config.get',
+  'github.oauth.config.set',
+  'github.oauth.poll',
+  'github.oauth.start',
+  'github.token.status',
   'groups.approve',
   'groups.attachment.download',
   'groups.attachment.upload',

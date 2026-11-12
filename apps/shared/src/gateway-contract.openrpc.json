@@ -1411,6 +1411,114 @@
       }
     },
     {
+      "name": "github.oauth.cancel",
+      "summary": "Drop a pending GitHub sign-in.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GithubOauthSessionParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubOauthCancelResult"
+        }
+      }
+    },
+    {
+      "name": "github.oauth.config.get",
+      "summary": "The OAuth App client ID (public, not a secret), or null when it is not set.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubOauthConfig"
+        }
+      }
+    },
+    {
+      "name": "github.oauth.config.set",
+      "summary": "Save (client_id set) or clear (null or empty) the OAuth App client ID in the host's config and drop any pending sign-in. 4101 invalid client ID.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GithubOauthConfigSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubOauthConfig"
+        }
+      }
+    },
+    {
+      "name": "github.oauth.poll",
+      "summary": "State of the sign-in. On signed_in the token is already applied to gh and git is set to HTTPS. A failed state carries code: missing_scopes (with missing_scopes; nothing applied), apply_failed, oauth_app_rejected, unreachable or failed. org_approval_needed: an organization owner must approve Pal.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GithubOauthSessionParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubOauthPollResult"
+        }
+      }
+    },
+    {
+      "name": "github.oauth.start",
+      "summary": "Start GitHub's device flow with Pal's own OAuth App; a pending sign-in is returned again instead of a second one. Error 5311 carries data.code: oauth_app_not_configured, oauth_app_rejected or unreachable. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubOauthStartResult"
+        }
+      }
+    },
+    {
+      "name": "github.token.status",
+      "summary": "The host's single GitHub token, read through gh without reading the token back: state, account, scope names, expiry and the git protocol. Never carries the token. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubTokenStatus"
+        }
+      }
+    },
+    {
       "name": "groups.approve",
       "summary": "Resolve one exact pending approval raised by a local or peer room member.",
       "params": [
@@ -24182,6 +24290,259 @@
           "active_runs"
         ],
         "title": "GatewayServiceStatus",
+        "type": "object"
+      },
+      "GithubOauthCancelResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "GithubOauthCancelResult",
+        "type": "object"
+      },
+      "GithubOauthConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
+          }
+        },
+        "title": "GithubOauthConfig",
+        "type": "object"
+      },
+      "GithubOauthConfigSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
+          }
+        },
+        "title": "GithubOauthConfigSetParams",
+        "type": "object"
+      },
+      "GithubOauthPollResult": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "pending",
+              "signed_in",
+              "denied",
+              "expired",
+              "org_approval_needed",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Login"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Code"
+          },
+          "missing_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Scopes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "GithubOauthPollResult",
+        "type": "object"
+      },
+      "GithubOauthSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "GithubOauthSessionParams",
+        "type": "object"
+      },
+      "GithubOauthStartResult": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "user_code": {
+            "title": "User Code",
+            "type": "string"
+          },
+          "verification_uri": {
+            "title": "Verification Uri",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "user_code",
+          "verification_uri",
+          "expires_in",
+          "interval"
+        ],
+        "title": "GithubOauthStartResult",
+        "type": "object"
+      },
+      "GithubTokenState": {
+        "enum": [
+          "set",
+          "missing",
+          "invalid",
+          "expired",
+          "missing_scopes",
+          "oauth_app_not_configured",
+          "unknown"
+        ],
+        "title": "GithubTokenState",
+        "type": "string"
+      },
+      "GithubTokenStatus": {
+        "additionalProperties": false,
+        "description": "A field that could not be read degrades to null, an empty list, ``unknown`` or ``unset``. An OAuth App\ntoken has no expiry, so ``expires_at`` is null. ``oauth_app_not_configured``: no token and no client ID.",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GithubTokenState"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Login"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "missing_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Scopes",
+            "type": "array"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires At"
+          },
+          "token_kind": {
+            "enum": [
+              "classic",
+              "fine_grained",
+              "unknown"
+            ],
+            "title": "Token Kind",
+            "type": "string"
+          },
+          "git_protocol": {
+            "enum": [
+              "https",
+              "ssh",
+              "unset"
+            ],
+            "title": "Git Protocol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "scopes",
+          "missing_scopes",
+          "token_kind",
+          "git_protocol"
+        ],
+        "title": "GithubTokenStatus",
         "type": "object"
       },
       "GoalContractSnapshot": {
