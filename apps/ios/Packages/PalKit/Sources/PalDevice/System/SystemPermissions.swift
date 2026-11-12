@@ -22,6 +22,7 @@ public struct SystemPermissions: DevicePermissions {
         case .alarms: Self.alarmsStatus()
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
+        case .apps: Self.appsStatus
         case .clipboard: Self.clipboardStatus
         }
     }
@@ -40,10 +41,33 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestAlarms()
         case .home:
             await Self.requestHome()
-        case .shell, .files, .clipboard:
+        case .shell, .files:
+            break
+        case .apps:
+            Self.requestApps()
+        case .clipboard:
             break
         }
         return await status(of: connector)
+    }
+
+    private static let appsAskedKey = "dev.tsnanh.pal.apps-permissions-asked"
+
+    private static var appsStatus: DeviceOSPermission {
+        #if os(macOS)
+        if AppsSystemAccess.screenRecordingGranted, AppsSystemAccess.accessibilityGranted { return .granted }
+        return UserDefaults.standard.bool(forKey: appsAskedKey) ? .denied : .notDetermined
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static func requestApps() {
+        #if os(macOS)
+        UserDefaults.standard.set(true, forKey: appsAskedKey)
+        AppsSystemAccess.requestScreenRecording()
+        AppsSystemAccess.requestAccessibility()
+        #endif
     }
 
     private static var localAccessStatus: DeviceOSPermission {
@@ -138,15 +162,17 @@ extension DeviceProviders {
         #if os(macOS)
         let shell: (any ShellProviding)? = SystemShell()
         let files: (any FilesProviding)? = SystemFiles()
+        let apps: (any AppsProviding)? = AppsController(workspace: SystemAppsWorkspace())
         let clipboard: (any ClipboardProviding)? = SystemClipboard(store: GeneralPasteboard())
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
+        let apps: (any AppsProviding)? = nil
         let clipboard: (any ClipboardProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, clipboard: clipboard
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, apps: apps, clipboard: clipboard
         )
     }
 }

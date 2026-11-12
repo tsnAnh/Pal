@@ -329,6 +329,94 @@ public protocol FilesProviding: Sendable {
     func write(path: String, content: String, append: Bool, createDirs: Bool) async throws -> FileWriteRecord
 }
 
+public struct AppRecord: Sendable, Equatable {
+    public var name: String
+    public var bundleID: String?
+    public var pid: Int
+    public var frontmost: Bool
+
+    public init(name: String, bundleID: String? = nil, pid: Int, frontmost: Bool = false) {
+        self.name = name
+        self.bundleID = bundleID
+        self.pid = pid
+        self.frontmost = frontmost
+    }
+}
+
+public struct WindowFrameRecord: Sendable, Equatable {
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+
+    public init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+}
+
+public struct WindowRecord: Sendable, Equatable {
+    public var id: Int
+    public var app: String
+    public var pid: Int
+    public var title: String?
+    public var frame: WindowFrameRecord
+    public var onScreen: Bool
+
+    public init(id: Int, app: String, pid: Int, title: String? = nil, frame: WindowFrameRecord, onScreen: Bool = true) {
+        self.id = id
+        self.app = app
+        self.pid = pid
+        self.title = title
+        self.frame = frame
+        self.onScreen = onScreen
+    }
+}
+
+public struct WindowListRecord: Sendable, Equatable {
+    public var windows: [WindowRecord]
+    public var titlesAvailable: Bool
+
+    public init(windows: [WindowRecord], titlesAvailable: Bool) {
+        self.windows = windows
+        self.titlesAvailable = titlesAvailable
+    }
+}
+
+public struct AppOpenRecord: Sendable, Equatable {
+    public var app: AppRecord
+    public var launched: Bool
+
+    public init(app: AppRecord, launched: Bool) {
+        self.app = app
+        self.launched = launched
+    }
+}
+
+public struct WindowFocusRecord: Sendable, Equatable {
+    public var app: AppRecord
+    public var windowID: Int?
+    public var raised: Bool
+    public var note: String?
+
+    public init(app: AppRecord, windowID: Int? = nil, raised: Bool = false, note: String? = nil) {
+        self.app = app
+        self.windowID = windowID
+        self.raised = raised
+        self.note = note
+    }
+}
+
+public protocol AppsProviding: Sendable {
+    func apps() async throws -> [AppRecord]
+    func open(app: String, target: String?) async throws -> AppOpenRecord
+    func quit(app: String) async throws -> AppRecord
+    func windows(app: String?, onScreenOnly: Bool) async throws -> WindowListRecord
+    func focus(windowID: Int?, app: String?) async throws -> WindowFocusRecord
+}
+
 public struct ClipboardImage: Sendable, Equatable {
     public var data: Data
     public var mime: String
@@ -380,6 +468,7 @@ public struct DeviceProviders: Sendable {
     public var home: (any HomeProviding)?
     public var shell: (any ShellProviding)?
     public var files: (any FilesProviding)?
+    public var apps: (any AppsProviding)?
     public var clipboard: (any ClipboardProviding)?
 
     public init(
@@ -391,6 +480,7 @@ public struct DeviceProviders: Sendable {
         home: (any HomeProviding)? = nil,
         shell: (any ShellProviding)? = nil,
         files: (any FilesProviding)? = nil,
+        apps: (any AppsProviding)? = nil,
         clipboard: (any ClipboardProviding)? = nil
     ) {
         self.calendar = calendar
@@ -401,6 +491,7 @@ public struct DeviceProviders: Sendable {
         self.home = home
         self.shell = shell
         self.files = files
+        self.apps = apps
         self.clipboard = clipboard
     }
 }

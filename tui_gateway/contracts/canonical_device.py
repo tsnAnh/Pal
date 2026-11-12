@@ -19,6 +19,7 @@ class DeviceConnectorId(WireEnum):
     SHELL = "shell"
     FILES = "files"
     CLIPBOARD = "clipboard"
+    APPS = "apps"
 
 
 class DeviceConnectorState(WireEnum):
@@ -54,6 +55,11 @@ class DeviceToolAction(WireEnum):
     FILES_WRITE = "files.write"
     CLIPBOARD_READ = "clipboard.read"
     CLIPBOARD_WRITE = "clipboard.write"
+    APPS_LIST = "apps.list"
+    APPS_OPEN = "apps.open"
+    APPS_QUIT = "apps.quit"
+    WINDOWS_LIST = "windows.list"
+    WINDOWS_FOCUS = "windows.focus"
 
 
 class DeviceToolErrorCode(WireEnum):
