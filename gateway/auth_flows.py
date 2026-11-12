@@ -269,10 +269,92 @@ class HeaderFlow:
         return None
 
 
+class McpPasteFlow:
+    """MCP OAuth whose registered loopback redirect only the gateway host can serve: the gateway holds the
+    verifier, any attached device opens the authorization URL and pastes the address the browser ended on."""
+
+    kind = "oauth_paste"
+    user_code = None
+    EXCHANGE_SECONDS = 60.0
+    POLL_SECONDS = 0.5
+
+    def __init__(self, home: Path, server: str) -> None:
+        self.server = server
+        self.expires_in = int(PASTE_TTL_SECONDS)
+        self._oauth = McpOAuthFlow(home, f"mcp:{server}")
+        self.verification_uri: Optional[str] = None
+        self.failure: Optional[str] = None
+        self._attempts = 0
+        self._consumed = False
+        self._deadline = 0.0
+        self._done = asyncio.Event()
+        self._succeeded = False
+
+    async def begin(self) -> None:
+        self.verification_uri = await self._oauth.authorize_url()
+        if not self.verification_uri:
+            raise RuntimeError("no authorization url")
+        self._deadline = time.monotonic() + PASTE_TTL_SECONDS
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def callback(self, value: str) -> tuple[str, Optional[str]]:
+        from hermes_cli.oauth_paste import CallbackError, parse_callback
+        from tui_gateway import mcp_oauth_sessions
+        oauth = self._oauth
+        if oauth._session_id is None or self._consumed or self._done.is_set():
+            return "rejected", None
+        if time.monotonic() > self._deadline:
+            return self._end(PASTE_EXPIRED)
+        pending = await asyncio.to_thread(
+            mcp_oauth_sessions.pending_callback, oauth._session_id, oauth._server, oauth._home_key())
+        if pending is None:
+            return "rejected", None
+        try:
+            parsed = parse_callback(value, redirect_uri=pending[0], state=pending[1])
+        except CallbackError as exc:
+            self._attempts += 1
+            if exc.retry and self._attempts < PASTE_MAX_RETRIES:
+                return "retry", exc.message
+            return self._end(exc.message)
+        self._consumed = True
+        delivered = await asyncio.to_thread(
+            mcp_oauth_sessions.deliver_callback_flow, oauth._session_id, oauth._server,
+            code=parsed.code, state=parsed.state)
+        if not delivered["ok"]:
+            return self._end(PASTE_FAILURE)
+        deadline = time.monotonic() + self.EXCHANGE_SECONDS
+        while time.monotonic() < deadline:
+            status = mcp_oauth_sessions.poll_flow(oauth._session_id, oauth._server).get("status")
+            if status == "approved":
+                self._succeeded = True
+                self._done.set()
+                return "stored", None
+            if status == "error":
+                break
+            await asyncio.sleep(self.POLL_SECONDS)
+        return self._end(PASTE_FAILURE)
+
+    def _end(self, reason: str) -> tuple[str, Optional[str]]:
+        self._consumed = True
+        self.failure = reason
+        self._done.set()
+        self._oauth.cancel()
+        return "failed", reason
+
+    async def wait(self) -> bool:
+        await self._done.wait()
+        return self._succeeded
+
+    def cancel(self) -> None:
+        self._consumed = True
+        self._done.set()
+        self._oauth.cancel()
+
+
 class McpServerFlow:
     user_code = None
-    verification_uri = None
-    expires_in = None
 
     def __init__(self, home: Path, service: str) -> None:
         self._home = home
@@ -299,7 +381,15 @@ class McpServerFlow:
         if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
             kind = "api_key"
         if kind == "oauth":
-            self._inner = McpOAuthFlow(self._home, f"mcp:{self._server}")
+            paste = McpPasteFlow(self._home, self._server)
+            try:
+                await paste.begin()
+                self._inner = paste
+            except Exception:
+                paste.cancel()
+                logger.warning("MCP paste sign-in for %s could not start; using the on-host redirect", self._server,
+                               exc_info=True)
+                self._inner = McpOAuthFlow(self._home, f"mcp:{self._server}")
         elif kind == "api_key":
             self._inner = KeyEntryFlow(self._server)
         elif kind == "header":
@@ -314,6 +404,22 @@ class McpServerFlow:
     @property
     def store(self):
         return getattr(self._inner, "store", None)
+
+    @property
+    def verification_uri(self):
+        return getattr(self._inner, "verification_uri", None)
+
+    @property
+    def expires_in(self):
+        return getattr(self._inner, "expires_in", None)
+
+    @property
+    def failure(self):
+        return getattr(self._inner, "failure", None)
+
+    @property
+    def callback(self):
+        return getattr(self._inner, "callback", None)
 
     async def confirm(self) -> bool:
         confirm = getattr(self._inner, "confirm", None)

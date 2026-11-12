@@ -2023,6 +2023,96 @@
       }
     },
     {
+      "name": "host.kit.add_project",
+      "summary": "Start `faker-kit add-project <owner/repo> --json`. The repo must be owner/repo (letters, digits, dot, dash, underscore). 4101 invalid repo, 4409 busy, 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/KitAddProjectParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KitJob"
+        }
+      }
+    },
+    {
+      "name": "host.kit.job",
+      "summary": "State of a kit job. A finished job stays readable until the next job starts. 4404 unknown job. A job cannot be cancelled.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/KitJobParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KitJob"
+        }
+      }
+    },
+    {
+      "name": "host.kit.reload",
+      "summary": "Start `faker-kit host reload <routes|gateway> --json`. 4409 busy, 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/KitReloadParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KitJob"
+        }
+      }
+    },
+    {
+      "name": "host.kit.status",
+      "summary": "Run `faker-kit host status --json` and return its known fields. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output or request_refused (the kit refused a caller that is not the owner's own shell; not retried). 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KitReport"
+        }
+      }
+    },
+    {
+      "name": "host.kit.update",
+      "summary": "Start `faker-kit host update --json` (update to latest) as the one running kit job, or return the identical running job. 4409 busy, 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KitJob"
+        }
+      }
+    },
+    {
       "name": "host.update.apply",
       "summary": "Owner only: start the host update, or return the one already running. Refused while a chat runs unless confirmed.",
       "params": [
@@ -28261,6 +28351,244 @@
           "receipt"
         ],
         "title": "KanbanRunResult",
+        "type": "object"
+      },
+      "KitAddProjectParams": {
+        "additionalProperties": false,
+        "properties": {
+          "repo": {
+            "maxLength": 100,
+            "title": "Repo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo"
+        ],
+        "title": "KitAddProjectParams",
+        "type": "object"
+      },
+      "KitError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/KitErrorCode"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "subcommand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Subcommand"
+          },
+          "tail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tail"
+          },
+          "kit_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Kit Code"
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Action"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "KitError",
+        "type": "object"
+      },
+      "KitErrorCode": {
+        "enum": [
+          "kit_unavailable",
+          "kit_unsupported",
+          "timeout",
+          "failed",
+          "invalid_output",
+          "request_refused",
+          "busy"
+        ],
+        "title": "KitErrorCode",
+        "type": "string"
+      },
+      "KitJob": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "update",
+              "add_project",
+              "reload"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KitReport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KitError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "job_id",
+          "operation",
+          "state"
+        ],
+        "title": "KitJob",
+        "type": "object"
+      },
+      "KitJobParams": {
+        "additionalProperties": false,
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id"
+        ],
+        "title": "KitJobParams",
+        "type": "object"
+      },
+      "KitReloadParams": {
+        "additionalProperties": false,
+        "properties": {
+          "target": {
+            "enum": [
+              "routes",
+              "gateway"
+            ],
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "title": "KitReloadParams",
+        "type": "object"
+      },
+      "KitReport": {
+        "additionalProperties": false,
+        "description": "The known fields of the kit's JSON; unknown fields are ignored.",
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Version"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message"
+          },
+          "next_action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Action"
+          }
+        },
+        "title": "KitReport",
         "type": "object"
       },
       "LanguageOption": {
