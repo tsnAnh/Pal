@@ -205,6 +205,9 @@ final class ConnectAppsModel {
         defer { busy.remove(app.id) }
         do {
             try await service.connect(app, credentials: credentials)
+            if let failure = await service.tokenFailure(app) {
+                report(failure == .authRefused ? "\(app.name) didn't accept that token. Check it and try again." : failure.message)
+            }
         } catch let error as ConnectAppsError {
             handle(error, app: app)
         } catch {

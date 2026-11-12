@@ -51,7 +51,7 @@ struct MacConnectApps: View {
                 .macSheetFrame()
         }
         .sheet(item: $model.credentialPrompt) { prompt in
-            CredentialSheet(prompt: prompt) { values in
+            CredentialSheet(prompt: prompt, botName: model.botName) { values in
                 Task { await model.connect(prompt.app, credentials: values) }
             }
             .macSheetFrame()
