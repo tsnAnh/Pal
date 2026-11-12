@@ -84,6 +84,7 @@ struct BotModelView: View {
             ) { picking = .primary }
             .disabled(model.isSaving)
         }
+        effortSection
         SectionCaption(String(localized: "Backup models"), accessibilityIdentifier: "botFallbackCaption")
             .padding(.top, PalMetrics.cardGap)
             .padding(.bottom, PalMetrics.captionToCardGap)
@@ -101,6 +102,50 @@ struct BotModelView: View {
             String(localized: "If \(displayName)'s model fails, these are tried in order."),
             accessibilityIdentifier: "botFallbackFootnote")
         statusLine
+    }
+
+    @ViewBuilder
+    private var effortSection: some View {
+        SectionCaption(String(localized: "Reasoning effort"), accessibilityIdentifier: "botEffortCaption")
+            .padding(.top, PalMetrics.cardGap)
+            .padding(.bottom, PalMetrics.captionToCardGap)
+        GroupedCard(accessibilityIdentifier: "botEffortCard") {
+            switch model.effortOptions {
+            case .levels(let levels):
+                effortMenu(levels)
+            case .unsupported:
+                SettingsRow.value(
+                    String(localized: "Effort"), value: String(localized: "Not supported"),
+                    subtitle: String(localized: "This model doesn't use reasoning effort."),
+                    accessibilityIdentifier: "botEffortRow")
+            case .unknown:
+                SettingsRow.value(
+                    String(localized: "Effort"), value: ReasoningEffort.title(model.effort),
+                    subtitle: String(localized: "Pal can't tell which levels this model supports."),
+                    accessibilityIdentifier: "botEffortRow")
+            }
+        }
+        CardFootnote(
+            String(localized: "Applies to new conversations. Ones already open keep their effort."),
+            accessibilityIdentifier: "botEffortFootnote")
+    }
+
+    private func effortMenu(_ levels: [String]) -> some View {
+        let selection = Binding<String>(
+            get: { model.effort ?? "" },
+            set: { level in Task { await model.chooseEffort(level) } })
+        return Menu {
+            Picker(String(localized: "Reasoning effort"), selection: selection) {
+                ForEach(levels, id: \.self) { level in
+                    Text(ReasoningEffort.title(level)).tag(level)
+                }
+            }
+        } label: {
+            SettingsRow.value(
+                String(localized: "Effort"), value: ReasoningEffort.title(model.effort),
+                accessibilityIdentifier: "botEffortRow")
+        }
+        .disabled(model.isSaving)
     }
 
     private func fallbackRow(_ choice: ModelChoice) -> some View {
