@@ -210,33 +210,29 @@ public struct ConnectAppsService: Sendable {
     }
 
     func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil) async throws {
-        let listener = try await LoopbackRedirectListener.start(diagnostics: diagnostics)
+        let listener: LoopbackRedirectListener
+        do {
+            listener = try await LoopbackRedirectListener.start(diagnostics: diagnostics)
+        } catch {
+            throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)
+        }
         defer { listener.cancel() }
-        var startParams: [String: JSONValue] = ["name": .string(name), "client_redirect_uri": .string(listener.redirectURI)]
-        if let clientID { startParams["client_id"] = .string(clientID) }
-        let started = try await call("mcp.servers.oauth.start", startParams)
-        guard let flow = started["session_id"]?.stringValue, let link = started["auth_url"]?.stringValue.flatMap(URL.init(string:)),
-              link.scheme?.lowercased() == "https" || link.scheme?.lowercased() == "http"
-        else { throw ConnectAppsError.failed }
+        let (flow, link) = try await startOAuth(name: name, redirectURI: listener.redirectURI, clientID: clientID)
         let parameters: [String: String]
         do {
             parameters = try await Self.awaitRedirect(listener: listener, browser: browser, url: link)
         } catch {
             _ = try? await call("mcp.servers.oauth.cancel", ["name": .string(name), "session_id": .string(flow)])
-            throw error is CancellationError || (error as? SignInError) == .cancelled ? ConnectAppsError.cancelled : ConnectAppsError.failed
+            if error is CancellationError || (error as? SignInError) == .cancelled { throw ConnectAppsError.cancelled }
+            throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)
         }
         var relay: [String: JSONValue] = ["name": .string(name), "session_id": .string(flow)]
         for key in ["code", "state", "error", "iss"] { if let value = parameters[key] { relay[key] = .string(value) } }
-        _ = try await call("mcp.servers.oauth.callback", relay)
-        for _ in 0..<timing.pollAttempts {
-            let poll = try await call("mcp.servers.oauth.poll", ["name": .string(name), "session_id": .string(flow)])
-            switch poll["status"]?.stringValue {
-            case "approved": return
-            case "error": throw ConnectAppsError.failed
-            default: try await Task.sleep(for: timing.pollInterval)
-            }
+        let delivered = try await call("mcp.servers.oauth.callback", relay)
+        if delivered["ok"]?.boolValue == false {
+            throw ConnectAppsError.signInFailed(McpSignInFailure.classify(delivered["error_message"]?.stringValue).reason)
         }
-        throw ConnectAppsError.failed
+        try await awaitApproval(name: name, flow: flow)
     }
 
     private enum Step: Sendable {

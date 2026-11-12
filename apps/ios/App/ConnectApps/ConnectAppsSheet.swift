@@ -59,6 +59,10 @@ struct ConnectAppsSheet: View {
             UpworkConnectionSheet(model: model, app: app)
                 .macSheetFrame()
         }
+        .sheet(item: $model.pastingApp, onDismiss: { Task { await model.cancelPaste() } }) { app in
+            OtherConnectorPasteSheet(model: model, app: app)
+                .macSheetFrame()
+        }
         .sheet(item: $model.keyRequest) { request in
             CapabilityKeyEntrySheet(model: model, request: request)
                 .presentationDetents([.medium])
@@ -310,7 +314,7 @@ struct ConnectAppsSheet: View {
             ConnectRowAction("Manage") { model.manage(app) }
         } else {
             switch app.state {
-        case .disconnected: ConnectRowAction("Connect") { Task { await model.connect(app) } }
+        case .disconnected: ConnectRowAction(OtherConnectorCardText.connectTitle(model.cardState(app))) { Task { await model.connect(app) } }
         case .needsAuthorization: ConnectRowAction("Authorize", kind: .accent) { Task { await model.connect(app) } }
         case .connected:
             if case .mcp(_, let requires) = app.source, !requires.isEmpty {
@@ -321,7 +325,8 @@ struct ConnectAppsSheet: View {
             }
         }
         return ConnectAppRow(
-            title: app.name, summary: app.summary, accessibilityIdentifier: "connectApp-\(app.id)",
+            title: app.name, summary: OtherConnectorCardText.summary(model.cardState(app), fallback: app.summary),
+            accessibilityIdentifier: "connectApp-\(app.id)",
             isBusy: model.busy.contains(app.id), trailing: action
         ) { icon(for: app) }
     }

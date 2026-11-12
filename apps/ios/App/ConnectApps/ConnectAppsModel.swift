@@ -95,7 +95,9 @@ final class ConnectAppsModel {
     var showsSkills = false
     var accountsModel: ConnectorAccountsModel?
     var upworkApp: ConnectApp?
-    private(set) var pasteSession: McpPasteSession?
+    private(set) var pasteSession: (any McpPasteSigning)?
+    var pastingApp: ConnectApp?
+    private var pasteTargetID = UpworkConnector.service
     private(set) var pasteState: SecretEntryState = .idle
     private(set) var failures: [String: String] = [:]
     private(set) var mode: Mode = .list
@@ -223,6 +225,7 @@ final class ConnectAppsModel {
                 return
             }
             pasteSession = session
+            pasteTargetID = app.id
             pasteState = .idle
         } catch let error as ConnectAppsError {
             handle(error, app: app)
@@ -238,13 +241,15 @@ final class ConnectAppsModel {
         switch await session.submit(value) {
         case .signedIn:
             pasteSession = nil
+            pastingApp = nil
             pasteState = .idle
         case .tryAgain(let note):
             pasteState = .failure(note)
         case .failed(let reason):
             pasteSession = nil
+            pastingApp = nil
             pasteState = .idle
-            failures[UpworkConnector.service] = reason
+            failures[pasteTargetID] = reason
         }
         await reload()
     }
@@ -256,15 +261,42 @@ final class ConnectAppsModel {
     func cancelPaste() async {
         guard let session = pasteSession else { return }
         pasteSession = nil
+        pastingApp = nil
         pasteState = .idle
         await session.cancel()
         await reload()
+    }
+
+    private func beginOtherPaste(_ app: ConnectApp) async {
+        guard pasteSession == nil else { return }
+        do {
+            let session = try await service.beginMcpPaste(app)
+            guard ExternalLink.open(session.authorizeURL) else {
+                await session.cancel()
+                failures[app.id] = McpOAuthError.browserUnavailable.reason
+                return
+            }
+            pasteSession = session
+            pasteTargetID = app.id
+            pasteState = .idle
+            pastingApp = app
+        } catch let error as ConnectAppsError {
+            handle(error, app: app)
+        } catch {
+            report("Couldn't connect \(app.name). Try again.")
+        }
     }
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
         busy.insert(app.id)
         failures[app.id] = nil
         defer { busy.remove(app.id) }
+        if case .mcp(_, let requires) = app.source, !app.requiresAppSignIn,
+           McpConnectRoute.decide(requires: requires, platform: ConnectorPlatform.current) == .pasteAddress {
+            await beginOtherPaste(app)
+            await reload()
+            return
+        }
         do {
             try await service.connect(app, credentials: credentials)
             if let failure = await service.tokenFailure(app) {
