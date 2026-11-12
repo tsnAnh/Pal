@@ -1,0 +1,53 @@
+manifest_version: 1
+
+name: github
+description: >-
+  Read-only GitHub: repositories, code, issues, pull requests, Actions runs and code scanning alerts.
+source: https://github.com/github/github-mcp-server
+
+# tools.default_enabled is the default-deny read allow-list: a write tool the server adds later is never registered.
+transport:
+  type: http
+  url: https://api.githubcopilot.com/mcp/
+  headers:
+    X-MCP-Readonly: "true"
+    X-MCP-Toolsets: repos,issues,pull_requests,actions,code_security
+
+auth:
+  type: api_key
+  env:
+    - name: MCP_GITHUB_API_KEY
+      prompt: GitHub fine-grained personal access token (read-only)
+
+tools:
+  default_enabled:
+    - get_file_contents
+    - get_repository_tree
+    - search_code
+    - search_repositories
+    - search_commits
+    - list_commits
+    - get_commit
+    - list_branches
+    - list_tags
+    - get_tag
+    - list_releases
+    - get_latest_release
+    - get_release_by_tag
+    - issue_read
+    - list_issues
+    - search_issues
+    - pull_request_read
+    - list_pull_requests
+    - search_pull_requests
+    - actions_get
+    - actions_list
+    - get_job_logs
+    - get_code_scanning_alert
+    - list_code_scanning_alerts
+
+post_install: |
+  Read-only: your bot can read repositories, issues, pull requests and Actions runs, and can never
+  change anything on GitHub. Create a fine-grained personal access token at github.com/settings/personal-access-tokens
+  with only these repository permissions set to Read-only: Contents, Issues, Pull requests, Actions, Metadata.
+  The token can read only the repositories you select when you create it.

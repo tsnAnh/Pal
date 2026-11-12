@@ -1,4 +1,5 @@
 #if os(macOS)
+import PalBotProfile
 import PalDesign
 import PalSettings
 import SwiftUI
@@ -8,6 +9,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
     case computer
     case permissions
     case vault
+    case publicAccess
     case shortcuts
     case usage
     case updates
@@ -20,6 +22,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .computer: String(localized: "Computer")
         case .permissions: String(localized: "Permissions")
         case .vault: String(localized: "Vault")
+        case .publicAccess: String(localized: "Public access")
         case .shortcuts: String(localized: "Keyboard Shortcuts")
         case .usage: String(localized: "Usage & Billing")
         case .updates: String(localized: "Updates")
@@ -32,6 +35,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .computer: "display"
         case .permissions: "shield"
         case .vault: "circle.square"
+        case .publicAccess: "network"
         case .shortcuts: "keyboard"
         case .usage: "chart.bar"
         case .updates: "icloud.and.arrow.down"
@@ -54,6 +58,7 @@ struct MacSettingsModal: View {
                 case .computer: MacComputerSection(hub: hub, connection: connection)
                 case .permissions: MacPermissionsSection(hub: hub)
                 case .vault: MacVaultSection(hub: hub)
+                case .publicAccess: MacPublicAccessSection(hub: hub)
                 case .shortcuts: MacShortcutSettingsSection()
                 case .usage: MacUsageSection(hub: hub)
                 case .updates: MacUpdatesSection()
@@ -647,6 +652,30 @@ private enum MacVaultFilter: String, CaseIterable, Identifiable {
         case .payments: entry.kind == .payment
         case .contact: entry.kind == .address
         }
+    }
+}
+
+private struct MacPublicAccessSection: View {
+    @State private var model: WebhookRoutesModel
+    @State private var adding = false
+
+    init(hub: SettingsHub) {
+        _model = State(initialValue: WebhookRoutesModel.make(hub: hub))
+    }
+
+    var body: some View {
+        MacSectionPage(
+            section: .publicAccess,
+            accessory: {
+                if model.canManage {
+                    Button("Add address") { adding = true }
+                        .buttonStyle(.palPill(height: 28, fontSize: 12, horizontalPadding: 14, fill: PalTokens.inverseFill, textColor: PalTokens.inverseText))
+                        .accessibilityIdentifier("publicAccessAddButton")
+                }
+            },
+            content: { PublicAccessContent(model: model, adding: $adding) }
+        )
+        .task { await model.refresh() }
     }
 }
 

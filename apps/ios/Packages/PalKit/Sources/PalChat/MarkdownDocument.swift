@@ -22,6 +22,7 @@ public struct MarkdownBlock: Sendable, Equatable, Identifiable {
         case code(language: String?)
         case thematicBreak
         case math
+        case table(MarkdownTable)
     }
 
     public var id: Int
@@ -146,39 +147,75 @@ public struct MarkdownDocument: Sendable, Equatable {
         }
         var seenItems: Set<Int> = []
         var built: [MarkdownBlock] = []
+        var openTable: TableBuilder?
         for leaf in leaves {
             let components = leaf.intent?.components ?? []
-            guard let kind = kind(of: components.first?.kind) else { continue }
-            var lists: [ListMarker] = []
-            var quoteIdentity: Int?
-            var itemIdentity: Int?
-            for component in components.dropFirst().reversed() {
-                switch component.kind {
-                case .orderedList:
-                    lists.append(ListMarker(style: .ordered, ordinal: 1))
-                case .unorderedList:
-                    lists.append(ListMarker(style: .bullet, ordinal: 1))
-                case .listItem(let ordinal):
-                    itemIdentity = component.identity
-                    if let index = lists.indices.last { lists[index].ordinal = ordinal }
-                case .blockQuote:
-                    if quoteIdentity == nil { quoteIdentity = component.identity }
-                default:
-                    break
+            if let cell = TableBuilder.cell(in: components) {
+                let cellText = text(of: attributed, range: leaf.range, kind: .paragraph)
+                if var open = openTable, open.identity == cell.tableIdentity {
+                    open.add(cell, cellText)
+                    openTable = open
+                    built[built.count - 1].kind = .table(open.table)
+                    continue
                 }
+                var builder = TableBuilder(identity: cell.tableIdentity, alignments: cell.alignments)
+                builder.add(cell, cellText)
+                openTable = builder
+                built.append(tableBlock(id: built.count, builder: builder, components: components, seenItems: &seenItems))
+                continue
             }
-            let startsItem: Bool
-            if let itemIdentity { startsItem = seenItems.insert(itemIdentity).inserted } else { startsItem = false }
+            openTable = nil
+            guard let kind = kind(of: components.first?.kind) else { continue }
+            let context = context(of: components, seenItems: &seenItems)
             built.append(MarkdownBlock(
                 id: built.count,
                 kind: kind,
                 text: text(of: attributed, range: leaf.range, kind: kind),
-                lists: lists,
-                startsListItem: startsItem,
-                quoteIdentity: quoteIdentity
+                lists: context.lists,
+                startsListItem: context.startsItem,
+                quoteIdentity: context.quoteIdentity
             ))
         }
         return built
+    }
+
+    private static func tableBlock(id: Int, builder: TableBuilder, components: [PresentationIntent.IntentType], seenItems: inout Set<Int>) -> MarkdownBlock {
+        let context = context(of: components, seenItems: &seenItems)
+        return MarkdownBlock(
+            id: id,
+            kind: .table(builder.table),
+            text: AttributedString(),
+            lists: context.lists,
+            startsListItem: context.startsItem,
+            quoteIdentity: context.quoteIdentity
+        )
+    }
+
+    private static func context(
+        of components: [PresentationIntent.IntentType],
+        seenItems: inout Set<Int>
+    ) -> (lists: [ListMarker], startsItem: Bool, quoteIdentity: Int?) {
+        var lists: [ListMarker] = []
+        var quoteIdentity: Int?
+        var itemIdentity: Int?
+        for component in components.dropFirst().reversed() {
+            switch component.kind {
+            case .orderedList:
+                lists.append(ListMarker(style: .ordered, ordinal: 1))
+            case .unorderedList:
+                lists.append(ListMarker(style: .bullet, ordinal: 1))
+            case .listItem(let ordinal):
+                itemIdentity = component.identity
+                if let index = lists.indices.last { lists[index].ordinal = ordinal }
+            case .blockQuote:
+                if quoteIdentity == nil { quoteIdentity = component.identity }
+            default:
+                break
+            }
+        }
+        let startsItem: Bool
+        if let itemIdentity { startsItem = seenItems.insert(itemIdentity).inserted } else { startsItem = false }
+        return (lists, startsItem, quoteIdentity)
     }
 
     private static func kind(of component: PresentationIntent.Kind?) -> MarkdownBlock.Kind? {
@@ -206,5 +243,79 @@ public struct MarkdownDocument: Sendable, Equatable {
             }
         }
         return copy
+    }
+
+    private struct TableBuilder {
+        struct Cell {
+            var tableIdentity: Int
+            var alignments: [MarkdownTable.Alignment]
+            var rowIdentity: Int
+            var isHeader: Bool
+            var column: Int
+        }
+
+        var identity: Int
+        var alignments: [MarkdownTable.Alignment]
+        var header: [Int: AttributedString] = [:]
+        var rowOrder: [Int] = []
+        var rows: [Int: [Int: AttributedString]] = [:]
+
+        static func cell(in components: [PresentationIntent.IntentType]) -> Cell? {
+            var column: Int?
+            var rowIdentity: Int?
+            var isHeader = false
+            for component in components {
+                switch component.kind {
+                case .tableCell(let index): column = index
+                case .tableHeaderRow:
+                    rowIdentity = component.identity
+                    isHeader = true
+                case .tableRow: rowIdentity = component.identity
+                case .table(let columns):
+                    guard let column, let rowIdentity else { return nil }
+                    return Cell(
+                        tableIdentity: component.identity,
+                        alignments: columns.map { $0.alignment.markdownAlignment },
+                        rowIdentity: rowIdentity,
+                        isHeader: isHeader,
+                        column: column
+                    )
+                default: break
+                }
+            }
+            return nil
+        }
+
+        mutating func add(_ cell: Cell, _ text: AttributedString) {
+            if cell.isHeader {
+                header[cell.column] = text
+                return
+            }
+            if rows[cell.rowIdentity] == nil { rowOrder.append(cell.rowIdentity) }
+            rows[cell.rowIdentity, default: [:]][cell.column] = text
+        }
+
+        var table: MarkdownTable {
+            let width = max(alignments.count, (header.keys.max() ?? -1) + 1)
+            func dense(_ cells: [Int: AttributedString]) -> [AttributedString] {
+                (0..<width).map { cells[$0] ?? AttributedString() }
+            }
+            return MarkdownTable(
+                alignments: alignments,
+                header: dense(header),
+                rows: rowOrder.map { dense(rows[$0] ?? [:]) }
+            )
+        }
+    }
+}
+
+private extension PresentationIntent.TableColumn.Alignment {
+    var markdownAlignment: MarkdownTable.Alignment {
+        switch self {
+        case .left: .leading
+        case .center: .center
+        case .right: .trailing
+        @unknown default: .leading
+        }
     }
 }

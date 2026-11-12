@@ -1983,6 +1983,60 @@ export interface GithubOauthConfig {
 export interface GithubOauthConfigSetParams {
   client_id?: string | null
 }
+export interface WebhookRoutesListResult {
+  enabled: boolean
+  public_base_url?: string | null
+  public_url_setting: string
+  routes: WebhookRoute[]
+}
+export interface WebhookRoute {
+  name: string
+  profile: string
+  path: string
+  public_url?: string | null
+  events: string[]
+  deliver: string
+  description: string
+  created_at?: string | null
+  enabled: boolean
+}
+export interface WebhookRouteAddParams {
+  name: string
+  profile?: string | null
+  events?: string[]
+  deliver?: string | null
+  secret?: string | null
+  generate_secret?: boolean
+}
+export interface WebhookRouteAddResult {
+  route: WebhookRoute
+  secret?: string | null
+}
+export interface WebhookRouteNameParams {
+  name: string
+}
+export interface WebhookRouteRemoveResult {
+  ok: boolean
+}
+export interface WebhookProbeResult {
+  local: WebhookHop
+  public: WebhookHop
+  diagnosis: WebhookDiagnosis
+  tunnel: WebhookTunnel
+}
+export interface WebhookHop {
+  status?: number | null
+  ms?: number | null
+  error?: string | null
+}
+export interface WebhookDiagnosis {
+  code: string
+  message: string
+}
+export interface WebhookTunnel {
+  resolves?: boolean | null
+  tls_expires_at?: string | null
+}
 export interface GroupsCapabilitiesParams {
   profile?: string | null
 }
@@ -8109,6 +8163,14 @@ export interface RpcMethods {
   'wake.status': { params: WakeStatusParams; result: WakeStatusResult }
   /** Stop this surface's listener; persist also writes wake_word.enabled: false. */
   'wake.stop': { params: WakeStopParams; result: WakeStopResult }
+  /** Create a route. Give secret or generate_secret, not both; a generated secret is returned once. The gateway loads the route on its next request, no restart. 4101 invalid, 4409 name taken, 5321 data.code webhook_disabled. 4403 secondary profile. */
+  'webhook.routes.add': { params: WebhookRouteAddParams; result: WebhookRouteAddResult }
+  /** Webhook routes of this gateway with their local path and public URL, never a secret. public_base_url is webapp.public_url, or null when unset. 4403 secondary profile. */
+  'webhook.routes.list': { params: Params; result: WebhookRoutesListResult }
+  /** Probe one stored route: an unsigned POST to the gateway's own listener, then to the public URL built from webapp.public_url (no redirects, TLS verified). The client names a route, never a URL. 4404 unknown route. 4403 secondary profile. */
+  'webhook.routes.probe': { params: WebhookRouteNameParams; result: WebhookProbeResult }
+  /** Remove a route created through this API or the CLI. 4404 unknown route. 4403 secondary profile. */
+  'webhook.routes.remove': { params: WebhookRouteNameParams; result: WebhookRouteRemoveResult }
 }
 export type RpcMethod = keyof RpcMethods
 export const RPC_METHODS = [
@@ -8429,7 +8491,11 @@ export const RPC_METHODS = [
   'wake.resume',
   'wake.start',
   'wake.status',
-  'wake.stop'
+  'wake.stop',
+  'webhook.routes.add',
+  'webhook.routes.list',
+  'webhook.routes.probe',
+  'webhook.routes.remove'
 ] as const satisfies readonly RpcMethod[]
 
 // ── Canonical (hermes-gateway-v1) methods only the session authority serves ──

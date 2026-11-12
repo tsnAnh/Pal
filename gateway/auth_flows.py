@@ -285,10 +285,17 @@ class McpServerFlow:
     def server(self) -> str:
         return self._server
 
+    def _catalog_declares_api_key(self) -> bool:
+        from hermes_cli.mcp_catalog import get_entry
+        entry = get_entry(self._server)
+        return entry is not None and entry.auth.type == "api_key"
+
     async def begin(self) -> None:
         from hermes_cli.mcp_config import _get_mcp_servers
         cfg = (await asyncio.to_thread(_get_mcp_servers)).get(self._server)
         kind = classify_mcp_server(cfg)
+        if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
+            kind = "api_key"
         if kind == "oauth":
             self._inner = McpOAuthFlow(self._home, f"mcp:{self._server}")
         elif kind == "api_key":
