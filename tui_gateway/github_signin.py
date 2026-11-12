@@ -17,6 +17,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional
 
+from agent.memory_provider import spawn_context_thread
+from hermes_cli.process_identity import release_process_group_once_empty, spawn_owned
+
 logger = logging.getLogger(__name__)
 
 HOST = "github.com"
@@ -150,6 +153,7 @@ def _stop(session: _Session) -> None:
         logger.warning("gh sign-in process did not exit after kill")
     if session.proc.stdout is not None:
         session.proc.stdout.close()
+    release_process_group_once_empty(session.proc.pid, proc=session.proc)
 
 
 def _clear(session: _Session) -> None:
@@ -176,13 +180,13 @@ def start() -> dict:
             _clear(_current)
         argv = ["gh", "auth", "login", "--hostname", HOST, "--git-protocol", "https", "--web", "--skip-ssh-key"]
         try:
-            proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True, env=host_env(browserless=True),
-                                    start_new_session=True)
+            proc = spawn_owned(argv, purpose="github-signin", stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                               env=host_env(browserless=True))
         except OSError as exc:
             raise SigninError("GitHub's command-line tool isn't installed on this computer") from exc
         session = _Session(secrets.token_urlsafe(12), proc, _clock() + DEVICE_CODE_EXPIRES_SECONDS)
-        threading.Thread(target=_read_prompt, args=(session,), daemon=True, name="gh-signin-reader").start()
+        spawn_context_thread(_read_prompt, name="gh-signin-reader", args=(session,)).start()
         if not session.ready.wait(CODE_WAIT_SECONDS) or not (session.user_code and session.verification_uri):
             _stop(session)
             raise SigninError("GitHub didn't give a sign-in code. Try again.")
