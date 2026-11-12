@@ -51,7 +51,7 @@ struct ConnectAppsSheet: View {
                 .macSheetFrame()
         }
         .sheet(item: $model.accountsModel) { accounts in
-            ConnectorAccountsView(model: accounts, style: .phone(theme))
+            ConnectorAccountsView(model: accounts)
                 .macSheetFrame()
         }
         .sheet(item: $model.keyRequest) { request in

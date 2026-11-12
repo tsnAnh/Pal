@@ -47,7 +47,7 @@ struct MacConnectApps: View {
             Text(disconnectMessage(target))
         }
         .sheet(item: $model.accountsModel) { accounts in
-            ConnectorAccountsView(model: accounts, style: .mac)
+            ConnectorAccountsView(model: accounts)
                 .macSheetFrame()
         }
         .sheet(item: $model.keyRequest) { request in

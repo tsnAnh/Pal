@@ -99,10 +99,11 @@ struct SkillsCatalogSheet: View {
     private var listBody: some View {
         switch model.phase {
         case .loading:
-            ProgressView().padding(.top, 60).accessibilityIdentifier("skillsLoading")
+            ProgressView().tint(Color(theme.palette.textSecondary)).padding(.top, 60).accessibilityIdentifier("skillsLoading")
         case .unavailable:
             VStack(spacing: 14) {
                 Text("Couldn't load skills")
+                    .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                 PillButton(String(localized: "Try again"), accessibilityIdentifier: "skillsRetry") { Task { await model.load() } }
             }
@@ -112,6 +113,7 @@ struct SkillsCatalogSheet: View {
             let rows = model.rows
             if rows.isEmpty {
                 Text(emptyText)
+                    .hermesText(.rowTitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                     .multilineTextAlignment(.center)
                     .padding(.top, 60)
@@ -159,10 +161,10 @@ struct SkillsCatalogSheet: View {
         if let outcome = model.outcome {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: outcome.isSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(outcome.isSuccess ? Color(theme.palette.toggleOnTrack) : Color.red)
+                    .foregroundStyle(outcome.isSuccess ? Color(theme.palette.toggleOnTrack) : Color(theme.palette.destructive))
                     .accessibilityHidden(true)
                 Text(outcome.message)
-                    .font(.system(size: ConnectRowMetrics.subtitleSize))
+                    .hermesText(.rowSubtitle)
                     .foregroundStyle(Color(theme.palette.textPrimary))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -200,13 +202,13 @@ struct SkillsCatalogSheet: View {
     private func detailHeader(_ row: SkillRow) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(stateTitle(row.state))
-                .font(.system(size: ConnectRowMetrics.subtitleSize, weight: .semibold))
+                .hermesText(.rowSubtitle)
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("skillDetailState")
             if case .loaded(let detail) = model.detailPhase, !detail.summary.isEmpty {
-                Text(detail.summary).foregroundStyle(Color(theme.palette.textPrimary))
+                Text(detail.summary).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textPrimary))
             } else if !row.summary.isEmpty {
-                Text(row.summary).foregroundStyle(Color(theme.palette.textPrimary))
+                Text(row.summary).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textPrimary))
             }
         }
     }
@@ -223,10 +225,10 @@ struct SkillsCatalogSheet: View {
     private func detailContent(_ row: SkillRow) -> some View {
         switch model.detailPhase {
         case .loading:
-            ProgressView().frame(maxWidth: .infinity).padding(.top, 20).accessibilityIdentifier("skillDetailLoading")
+            ProgressView().tint(Color(theme.palette.textSecondary)).frame(maxWidth: .infinity).padding(.top, 20).accessibilityIdentifier("skillDetailLoading")
         case .failed(let message):
             VStack(alignment: .leading, spacing: 12) {
-                Text(message).foregroundStyle(Color(theme.palette.textSecondary))
+                Text(message).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textSecondary))
                 PillButton(String(localized: "Try again"), accessibilityIdentifier: "skillDetailRetry") { Task { await model.loadDetail() } }
             }
             .accessibilityIdentifier("skillDetailFailed")
@@ -235,7 +237,7 @@ struct SkillsCatalogSheet: View {
             sourceBlock(source: detail.source ?? row.source, identifier: detail.identifier ?? row.identifier, trust: row.trust)
             if !detail.tags.isEmpty {
                 Text(detail.tags.joined(separator: ", "))
-                    .font(.system(size: ConnectRowMetrics.subtitleSize))
+                    .hermesText(.rowSubtitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
             }
             requirementsBlock(detail.requirements, row: row)
@@ -244,14 +246,14 @@ struct SkillsCatalogSheet: View {
 
     private func sourceBlock(source: String?, identifier: String?, trust: String?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Source").font(.system(size: ConnectRowMetrics.sectionTitleSize)).foregroundStyle(Color(theme.palette.textPrimary))
+            Text("Source").hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textPrimary))
             let parts = [source, trust].compactMap { $0 }.joined(separator: " · ")
             if !parts.isEmpty {
-                Text(parts).font(.system(size: ConnectRowMetrics.subtitleSize)).foregroundStyle(Color(theme.palette.textSecondary))
+                Text(parts).hermesText(.rowSubtitle).foregroundStyle(Color(theme.palette.textSecondary))
             }
             if let identifier {
                 Text(identifier)
-                    .font(.system(size: ConnectRowMetrics.subtitleSize, design: .monospaced))
+                    .hermesText(.rowSubtitle).monospaced()
                     .foregroundStyle(Color(theme.palette.textSecondary))
                     .textSelection(.enabled)
             }
@@ -262,32 +264,30 @@ struct SkillsCatalogSheet: View {
 
     private func requirementsBlock(_ requirements: SkillRequirements, row: SkillRow) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Requirements").font(.system(size: ConnectRowMetrics.sectionTitleSize)).foregroundStyle(Color(theme.palette.textPrimary))
+            Text("Requirements").hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textPrimary))
             if requirements.isEmpty {
                 Text("No extra setup needed.")
-                    .font(.system(size: ConnectRowMetrics.subtitleSize))
+                    .hermesText(.rowSubtitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
             }
             ForEach(requirements.environment) { key in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(key.name)
-                        .font(.system(size: ConnectRowMetrics.subtitleSize, design: .monospaced))
+                        .hermesText(.rowSubtitle).monospaced()
                         .foregroundStyle(Color(theme.palette.chipText))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Color(theme.palette.chipFill), in: Capsule())
                     let note = [key.prompt, key.isOptional ? String(localized: "Optional") : nil].compactMap { $0 }.joined(separator: " · ")
                     if !note.isEmpty {
-                        Text(note).font(.system(size: ConnectRowMetrics.subtitleSize)).foregroundStyle(Color(theme.palette.textSecondary))
+                        Text(note).hermesText(.rowSubtitle).foregroundStyle(Color(theme.palette.textSecondary))
                     }
                     if let help = key.help {
-                        Text(help).font(.system(size: ConnectRowMetrics.captionSize)).foregroundStyle(Color(theme.palette.textSecondary))
+                        Text(help).hermesText(.rowSubtitle).foregroundStyle(Color(theme.palette.textSecondary))
                     }
                     if !key.isOptional, row.isInstalled {
                         Button(String(localized: "Add key")) { model.beginKeyEntry(row, keyName: key.name) }
-                            .buttonStyle(.plain)
-                            .font(.system(size: ConnectRowMetrics.subtitleSize, weight: .semibold))
-                            .foregroundStyle(Color(theme.palette.textPrimary))
+                            .buttonStyle(.pill())
                             .accessibilityLabel(Text("Add key for \(key.name)"))
                             .accessibilityIdentifier("skillAddKey-\(key.name)")
                     }
@@ -297,13 +297,13 @@ struct SkillsCatalogSheet: View {
             }
             if requirements.needsSecrets, !row.isInstalled {
                 Text("Install this skill to add the keys \(botName) needs to use it.")
-                    .font(.system(size: ConnectRowMetrics.captionSize))
+                    .hermesText(.rowSubtitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                     .accessibilityIdentifier("skillRequirementsNote")
             }
             if !requirements.commands.isEmpty {
                 Text("Needs these tools installed on \(botName)'s computer: \(requirements.commands.joined(separator: ", "))")
-                    .font(.system(size: ConnectRowMetrics.subtitleSize))
+                    .hermesText(.rowSubtitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                     .accessibilityIdentifier("skillRequirementCommands")
             }
@@ -329,7 +329,7 @@ struct SkillsCatalogSheet: View {
                 removeButton(row, working: working)
             case .installed:
                 Text("Built in. It can't be removed from here.")
-                    .font(.system(size: ConnectRowMetrics.captionSize))
+                    .hermesText(.rowSubtitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
             }
         }
