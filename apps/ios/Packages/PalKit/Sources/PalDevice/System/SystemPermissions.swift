@@ -25,6 +25,7 @@ public struct SystemPermissions: DevicePermissions {
         case .shell, .files: Self.localAccessStatus
         case .notifications: await Self.notificationsStatus()
         case .apps: Self.appsStatus
+        case .clipboard: Self.clipboardStatus
         }
     }
 
@@ -48,6 +49,8 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestNotifications()
         case .apps:
             Self.requestApps()
+        case .clipboard:
+            break
         }
         return await status(of: connector)
     }
@@ -86,6 +89,14 @@ public struct SystemPermissions: DevicePermissions {
         case .notDetermined: .notDetermined
         default: .denied
         }
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static var clipboardStatus: DeviceOSPermission {
+        #if os(macOS)
+        GeneralPasteboard().accessAllowed ? .granted : .denied
         #else
         .unsupported
         #endif
@@ -175,15 +186,18 @@ extension DeviceProviders {
         let files: (any FilesProviding)? = SystemFiles()
         let apps: (any AppsProviding)? = AppsController(workspace: SystemAppsWorkspace())
         let notifications: (any NotificationsProviding)? = SystemNotifications()
+        let clipboard: (any ClipboardProviding)? = SystemClipboard(store: GeneralPasteboard())
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
         let apps: (any AppsProviding)? = nil
         let notifications: (any NotificationsProviding)? = nil
+        let clipboard: (any ClipboardProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, notifications: notifications, apps: apps
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, notifications: notifications,
+            apps: apps, clipboard: clipboard
         )
     }
 }

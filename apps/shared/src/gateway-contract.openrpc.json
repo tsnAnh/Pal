@@ -20694,6 +20694,7 @@
           "shell",
           "files",
           "notifications",
+          "clipboard",
           "apps"
         ],
         "title": "DeviceConnectorId",
@@ -20936,6 +20937,8 @@
           "files.write",
           "notify.post",
           "notify.cancel",
+          "clipboard.read",
+          "clipboard.write",
           "apps.list",
           "apps.open",
           "apps.quit",
