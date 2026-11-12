@@ -26,6 +26,8 @@ extension InboundKind {
     private static let backgroundBatch = try! NSRegularExpression(
         pattern: "\\A\\[IMPORTANT: (\\d+) background process results arrived "
     )
+    private static let cleanExit = "Background process "
+    private static let cleanExitSuffix = " completed normally (exit code 0)"
     private static let botStamp = try! NSRegularExpression(
         pattern: "\\AMessage from 🤖 (.+?) \\(@([A-Za-z0-9_-]+)\\): ?(.*)\\z",
         options: [.dotMatchesLineSeparators]
@@ -49,6 +51,14 @@ extension InboundKind {
 
     public static func backgroundTaskCount(in text: String) -> Int {
         batchCount(in: text.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 1
+    }
+
+    public static func isSuccessfulCompletion(_ text: String) -> Bool {
+        let clean = text.components(separatedBy: "[IMPORTANT: ").dropFirst().filter { notice in
+            let header = notice.prefix { !$0.isNewline }
+            return header.hasPrefix(cleanExit) && header.contains(cleanExitSuffix)
+        }
+        return clean.count >= backgroundTaskCount(in: text)
     }
 
     private static func batchCount(in trimmed: String) -> Int? {
