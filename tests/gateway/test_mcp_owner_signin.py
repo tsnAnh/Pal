@@ -76,6 +76,11 @@ async def test_an_ordinary_oauth_server_keeps_its_gateway_flow_and_carries_no_hi
     phone = await connect_phone(authority)
     monkeypatch.setattr('hermes_cli.mcp_config._get_mcp_servers',
                         lambda config=None: {'acme': {'url': 'https://acme.example/mcp', 'auth': 'oauth'}})
+
+    async def begin(self):
+        self.verification_uri = 'https://acme.example/authorize'
+
+    monkeypatch.setattr('gateway.auth_flows.McpPasteFlow.begin', begin)
     task = asyncio.ensure_future(_in_home(home_of(authority), lambda: auth_required.resolve(
         'mcp_acme_x', {}, tool_error('x', needs_reauth=True, server='acme'), lambda: '{}')))
     await _wait_for(lambda: len(_required(phone)) == 1)
