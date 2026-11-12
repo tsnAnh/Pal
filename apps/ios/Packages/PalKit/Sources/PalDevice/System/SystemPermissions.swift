@@ -31,6 +31,7 @@ public struct SystemPermissions: DevicePermissions {
         case .apps: Self.appsStatus
         case .clipboard: Self.clipboardStatus
         case .screen: Self.screenStatus()
+        case .messages: Self.messagesStatus
         }
     }
 
@@ -56,7 +57,7 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestNotifications()
         case .apps:
             Self.requestApps()
-        case .clipboard:
+        case .clipboard, .messages:
             break
         case .screen:
             Self.requestScreen()
@@ -115,6 +116,18 @@ public struct SystemPermissions: DevicePermissions {
         case .authorized, .provisional: .granted
         case .notDetermined: .notDetermined
         default: .denied
+        }
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static var messagesStatus: DeviceOSPermission {
+        #if os(macOS)
+        switch MessagesAccessProbe.current() {
+        case .ready: .granted
+        case .permissionNeeded: .denied
+        case .unavailable: .unsupported
         }
         #else
         .unsupported
@@ -216,6 +229,7 @@ extension DeviceProviders {
         let notifications: (any NotificationsProviding)? = SystemNotifications()
         let clipboard: (any ClipboardProviding)? = SystemClipboard(store: GeneralPasteboard())
         let screen: (any ScreenProviding)? = GuardedScreen(source: SystemScreenSource(), activity: screenActivity)
+        let messages: (any MessagesProviding)? = MessagesProvider.system()
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
@@ -224,11 +238,12 @@ extension DeviceProviders {
         let clipboard: (any ClipboardProviding)? = nil
         let input: (any InputProviding)? = nil
         let screen: (any ScreenProviding)? = nil
+        let messages: (any MessagesProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
             location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, notifications: notifications,
-            apps: apps, clipboard: clipboard, screen: screen, input: input
+            apps: apps, clipboard: clipboard, screen: screen, input: input, messages: messages
         )
     }
 }

@@ -59,6 +59,9 @@ public actor DeviceToolExecutor {
             return .failure(.invalidArgs, "\(request.action) does not belong to \(request.connector).")
         }
         let connector = action.connector
+        if connector.isOwnerSwitched, await ledger.state(for: connector) != .allowed {
+            return .failure(.failed, MessagesSwitch.offMessage)
+        }
         if let refusal = await osPermission(for: connector, action: action, profile: request.profile) { return refusal }
         do {
             return .success(try await dispatch(action, request.args, budget: budget, profile: request.profile))
@@ -103,6 +106,7 @@ public actor DeviceToolExecutor {
         case .notifications: "Notifications"
         case .apps: "Apps"
         case .clipboard: "Clipboard"
+        case .messages: "Messages"
         }
     }
 
@@ -173,6 +177,8 @@ extension DeviceToolExecutor {
         case .windowsFocus: try await focusWindow(raw)
         case .clipboardRead: try await readClipboard(raw)
         case .clipboardWrite: try await writeClipboard(raw)
+        case .messagesRecent, .messagesSearch, .messagesRead, .messagesSend:
+            try await MessagesToolHandler.run(action, raw, provider: provider(\.messages), zone: zone)
         }
     }
 
