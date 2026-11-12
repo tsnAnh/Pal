@@ -7,12 +7,14 @@ public struct NewBotRequest: Sendable, Equatable {
     public var kind: String
     public var colorHex: String
     public var seed: String?
+    public var cloneFrom: String
 
-    public init(name: String, kind: String, colorHex: String, seed: String? = nil) {
+    public init(name: String, kind: String, colorHex: String, seed: String? = nil, cloneFrom: String = "default") {
         self.name = name
         self.kind = kind
         self.colorHex = colorHex
         self.seed = seed
+        self.cloneFrom = cloneFrom
     }
 }
 
@@ -51,7 +53,7 @@ public actor BotProvisioner {
 
     public func create(_ request: NewBotRequest) async throws -> CreatedBot {
         let identity = BotIdentity(entered: request.name)
-        guard identity.isValid, Self.isColor(request.colorHex), Self.isKind(request.kind), Self.isSeed(request.seed) else {
+        guard identity.isValid, Self.isColor(request.colorHex), Self.isKind(request.kind), Self.isSeed(request.seed), Self.isSource(request.cloneFrom) else {
             throw BotAdminError.invalidName
         }
         if let running = inFlight[identity.slug] { return try await running.value }
@@ -103,7 +105,7 @@ public actor BotProvisioner {
             greetsUnprompted: listing.capabilities.botBirthNotice
         )
         pending[identity.slug] = entry
-        _ = try await gateway.call("profiles.create", Self.createParams(identity))
+        _ = try await gateway.call("profiles.create", Self.createParams(identity, cloneFrom: request.cloneFrom))
         entry.created = true
         pending[identity.slug] = entry
         return entry
@@ -121,10 +123,10 @@ public actor BotProvisioner {
         }
     }
 
-    static func createParams(_ identity: BotIdentity) -> JSONValue {
+    static func createParams(_ identity: BotIdentity, cloneFrom: String = "default") -> JSONValue {
         var params: [String: JSONValue] = [
             "name": .string(identity.slug),
-            "clone_from": "default",
+            "clone_from": .string(cloneFrom),
             "share_auth": true,
             "soul": .string(soul(for: identity)),
         ]
@@ -161,6 +163,11 @@ public actor BotProvisioner {
     private static func isSeed(_ value: String?) -> Bool {
         guard let value else { return true }
         return !value.isEmpty && value.count <= BotIdentity.maximumSlugLength
+            && value.unicodeScalars.allSatisfy { $0.isASCII && (Character($0).isLetter || Character($0).isNumber || $0 == "-" || $0 == "_") }
+    }
+
+    private static func isSource(_ value: String) -> Bool {
+        !value.isEmpty && value.count <= 64
             && value.unicodeScalars.allSatisfy { $0.isASCII && (Character($0).isLetter || Character($0).isNumber || $0 == "-" || $0 == "_") }
     }
 

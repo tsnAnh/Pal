@@ -28,6 +28,8 @@ struct MacCreateBot: View {
                 .padding(.top, 15)
             MacCreateBotSwatches(model: model)
                 .padding(.top, 16)
+            CreateBotSourceRow(model: model, roster: roster)
+                .padding(.top, 12)
             Spacer(minLength: 0)
             PalHairline(color: PalTokens.panelBorder)
             MacCreateBotFooter(model: model, router: router, onCreate: create)

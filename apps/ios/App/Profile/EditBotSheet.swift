@@ -45,6 +45,7 @@ struct EditBotSheet: View {
                             .accessibilityLabel(Text("Name"))
                             .accessibilityIdentifier("editBotName")
                         BotLookPicker(shape: shapeBinding, colorHex: $model.look.colorHex, seed: model.look.seed)
+                        EditBotPersonaSection(model: model)
                         if let failure = model.failure {
                             Text(failure)
                                 .hermesText(.rowSubtitle)

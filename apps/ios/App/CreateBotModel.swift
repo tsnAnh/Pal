@@ -25,8 +25,11 @@ final class CreateBotModel {
 
     var shape = BotLookCatalog.defaultShape
     var colorHex = BotLookCatalog.defaultSwatch.hex
+    var cloneFrom = CreateBotModel.mainBot
     private(set) var isCreating = false
     private(set) var failure: Failure?
+
+    static let mainBot = "default"
 
     let seed = String(UUID().uuidString.lowercased().prefix(8))
 
@@ -53,7 +56,7 @@ final class CreateBotModel {
         isCreating = true
         failure = nil
         defer { isCreating = false }
-        let request = NewBotRequest(name: name, kind: shape.rawValue, colorHex: colorHex, seed: seed)
+        let request = NewBotRequest(name: name, kind: shape.rawValue, colorHex: colorHex, seed: seed, cloneFrom: cloneFrom)
         do {
             return try await roster.create(request, spec: spec)
         } catch BotAdminError.incomplete(let profile) {
