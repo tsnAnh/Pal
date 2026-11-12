@@ -16,6 +16,7 @@ enum SettingsRoute: Hashable {
     case hostUpdate
     case modelProviders
     case githubToken
+    case publicAccess
     case botModels
     case speechMemory
     case importMemory

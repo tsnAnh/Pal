@@ -25,6 +25,8 @@ struct CreateBotSheet: View {
                         .padding(.top, 60)
                     BotLookPicker(shape: $model.shape, colorHex: $model.colorHex, seed: model.seed)
                         .padding(.top, 26)
+                    CreateBotSourceRow(model: model, roster: roster)
+                        .padding(.top, 20)
                 }
                 .padding(.bottom, 24)
             }

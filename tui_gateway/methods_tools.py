@@ -1466,6 +1466,7 @@ def _(rid, params: dict) -> dict:
             "connector_slug": getattr(entry, "connector_slug", None),
             "installed": bool(mcp_catalog.is_installed(entry.name)),
             "enabled": bool(mcp_catalog.is_enabled(entry.name)), "requires": requires,
+            "setup": (getattr(entry, "post_install", "") or "").strip(),
             "transport": str(getattr(transport, "kind", "") or transport or "stdio")})
     return _ok(rid, {"servers": out})
 
@@ -1522,6 +1523,8 @@ def _(rid, params: dict) -> dict:
         if entry is not None:
             for key, value in catalog._build_server_config(entry, install_dir=None).items():
                 server_config.setdefault(key, value)
+            if entry.tools.default_enabled:
+                server_config.setdefault("tools", {"include": list(entry.tools.default_enabled)})
         else:
             try:
                 mc._apply_mcp_preset(
@@ -1579,8 +1582,9 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 4063, "value is not a valid credential")
         hc.save_env_value(env_var, normalized)
         is_default = env_var == mc._env_key_for_server(name)
-        entry["headers"] = (
-            mc._bearer_auth_headers(name) if is_default else {"Authorization": f"Bearer ${{{env_var}}}"})
+        bearer = mc._bearer_auth_headers(name) if is_default else {"Authorization": f"Bearer ${{{env_var}}}"}
+        kept = {k: v for k, v in (entry.get("headers") or {}).items() if str(k).lower() != "authorization"}
+        entry["headers"] = {**kept, **bearer}
     else:
         hc.save_env_value(env_var, str(value))
         env_block = entry.get("env")

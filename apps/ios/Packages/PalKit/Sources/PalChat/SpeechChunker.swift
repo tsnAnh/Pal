@@ -56,6 +56,7 @@ public struct SpeechChunker: Sendable {
                 switch block.kind {
                 case .code, .math, .thematicBreak: nil
                 case .paragraph, .heading: String(block.text.characters)
+                case .table(let table): table.plainText
                 }
             }
             .joined(separator: "\n")

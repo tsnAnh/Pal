@@ -46,6 +46,22 @@ method("profiles.delete", params=ProfilesDeleteParams, result=ProfilesDeleteResu
        doc="Delete a bot and its home (ws twin of DELETE /api/profiles/{name}); refuses the primary bot and the bot serving the connection.")
 
 
+class ProfilesDescribeAutoParams(Params):
+    name: str
+    overwrite: bool = False
+
+
+class ProfilesDescribeAutoResult(Result):
+    ok: bool
+    name: str
+    description: str
+
+
+method("profiles.describe_auto", params=ProfilesDescribeAutoParams, result=ProfilesDescribeAutoResult,
+       doc="Write a bot's description with the auxiliary model, as `hermes profile describe --auto`. Owner connections only "
+           "(4403); overwrite=false keeps a description the owner wrote (4102 says so). Never a model tool.")
+
+
 class MessagingSlackStatus(Result):
     """One bot's Slack connection. Credentials are never echoed: only whether each is set. ``state`` is the
     gateway's verdict for the Slack adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``,

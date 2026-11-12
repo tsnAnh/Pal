@@ -3,6 +3,7 @@ module is listed here so the generator and the runtime see the same catalog."""
 
 from . import (
     billing_delegation_pets,
+    bot_keys,
     bot_settings,
     bot_teach,
     capabilities,
@@ -14,6 +15,7 @@ from . import (
     events,
     gateway_service,
     github_token,
+    webhook_routes,
     groups_bot_relay,
     host_update,
     i18n,

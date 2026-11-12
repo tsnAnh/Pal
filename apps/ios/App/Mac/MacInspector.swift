@@ -162,6 +162,19 @@ struct MacInspector: View {
                 .padding(.horizontal, 24)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("profileName")
+            if profile.isSetupUnfinished {
+                Text("Setup wasn't finished")
+                    .font(.system(size: 11))
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .padding(.top, 8)
+                    .accessibilityIdentifier("profileSetupUnfinished")
+                Button("Delete", role: .destructive) { router.deletingBot = botName }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 11))
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .padding(.top, 2)
+                    .accessibilityIdentifier("profileDeleteUnfinished")
+            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -242,6 +255,12 @@ struct MacInspector: View {
                 InspectorRow(identifier: "profileMessagingRow", action: { router.push(.messagingSettings(botName: botName)) }) {
                     Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
                     Text("Messaging settings").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                }
+                InspectorRow(identifier: "profileKeysRow", action: { router.push(.botKeys(botName: botName)) }) {
+                    Image(systemName: "key").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    Text("Keys").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
                 }
