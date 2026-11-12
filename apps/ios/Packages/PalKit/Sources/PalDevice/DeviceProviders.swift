@@ -459,7 +459,7 @@ public struct DeviceProviders: Sendable {
         home: (any HomeProviding)? = nil,
         shell: (any ShellProviding)? = nil,
         files: (any FilesProviding)? = nil,
-        notifications: (any NotificationsProviding)? = nil
+        notifications: (any NotificationsProviding)? = nil,
         apps: (any AppsProviding)? = nil
     ) {
         self.calendar = calendar
