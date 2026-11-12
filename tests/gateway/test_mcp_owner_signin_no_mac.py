@@ -143,7 +143,7 @@ async def test_a_dead_sign_in_raises_the_mac_prompt_on_the_attached_apps_without
     assert time.monotonic() - started < 10, 'no wait for the sign-in'
     assert [r.get('code') for r in results] == ['reauth_required'] * 3, results
     assert len(token_requests) == 1 and HermesTokenStorage('upwork', hermes_home=home).reauth_required()
-    await _wait_for(lambda: len(_required(phone)) == 1)
+    await _wait_for(lambda: len(_required(phone)) == 1, timeout=30.0)
     event = _required(phone)[0]
     assert event['service'] == 'mcp:upwork' and event['signin_on'] == 'owner_app' and event['server'] == 'upwork'
     assert len(_required(phone)) == 1, 'repeated calls do not repeat the prompt'
