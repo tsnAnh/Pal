@@ -1,19 +1,14 @@
 import SwiftUI
 
 public extension View {
-    func palGlass<S: Shape>(_ shape: S, tint: Color? = nil, interactive: Bool = true) -> some View {
-        glassEffect(PalGlass.style(tint: tint, interactive: interactive), in: shape)
-    }
-
-    func palElevatedGlass<S: Shape>(_ shape: S) -> some View {
-        background(PalTokens.elevated, in: shape).palGlass(shape)
+    func palGlass<S: Shape>(_ shape: S, interactive: Bool = true) -> some View {
+        glassEffect(PalGlass.style(interactive: interactive), in: shape)
     }
 }
 
 enum PalGlass {
-    static func style(tint: Color?, interactive: Bool) -> Glass {
-        var glass = Glass.regular
-        if let tint { glass = glass.tint(tint) }
+    static func style(interactive: Bool) -> Glass {
+        let glass = Glass.regular
         return interactive ? glass.interactive() : glass
     }
 }

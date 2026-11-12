@@ -27,7 +27,7 @@ struct MacChatHeader: View {
                     .padding(.leading, 8)
                     .padding(.trailing, 12)
                     .frame(height: 34)
-                    .palElevatedGlass(Capsule())
+                    .palGlass(Capsule())
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -45,7 +45,7 @@ struct MacChatHeader: View {
                                 .font(.system(size: 13))
                                 .foregroundStyle(PalTokens.textPrimary)
                                 .frame(width: 65, height: 33)
-                                .palElevatedGlass(Capsule())
+                                .palGlass(Capsule())
                                 .contentShape(Capsule())
                         }
                         .buttonStyle(.plain)

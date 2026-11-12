@@ -47,7 +47,7 @@ public struct FloatingSearchBar: View {
     private var isSearching: Bool { isFocused || !text.isEmpty }
 
     private var glass: Glass {
-        .regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.9))
+        .regular
     }
 
     public var body: some View {
@@ -108,7 +108,6 @@ public struct FloatingSearchBar: View {
         }
         .padding(.horizontal, 18)
         .frame(maxWidth: .infinity, minHeight: PalMetrics.searchBarHeight, maxHeight: PalMetrics.searchBarHeight)
-        .background(Color(theme.palette.glassCapsuleFill).opacity(0.85), in: Capsule())
         .glassEffect(glass, in: .capsule)
     }
 
@@ -121,7 +120,6 @@ public struct FloatingSearchBar: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .background(Color(theme.palette.glassCapsuleFill).opacity(0.85), in: Circle())
         .glassEffect(glass.interactive(), in: .circle)
         .accessibilityLabel(Text(label))
         .accessibilityIdentifier(identifier)
@@ -164,7 +162,7 @@ public struct FloatingSearchLauncher: View {
     }
 
     private var glass: Glass {
-        .regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.9))
+        .regular
     }
 
     public var body: some View {
@@ -179,7 +177,6 @@ public struct FloatingSearchLauncher: View {
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .background(Color(theme.palette.glassCapsuleFill).opacity(0.85), in: Circle())
         .glassEffect(glass.interactive(), in: .circle)
                     .accessibilityLabel(Text(leadingButton.accessibilityLabel))
                     .accessibilityIdentifier(leadingButton.accessibilityIdentifier)
@@ -199,7 +196,6 @@ public struct FloatingSearchLauncher: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .background(Color(theme.palette.glassCapsuleFill).opacity(0.85), in: Capsule())
                 .glassEffect(glass.interactive(), in: .capsule)
                 .accessibilityLabel(Text(accessibilityLabel))
                 .accessibilityIdentifier(accessibilityIdentifier)

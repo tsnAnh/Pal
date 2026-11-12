@@ -146,7 +146,7 @@ private struct MacMessageHoverBar: View {
                     .accessibilityLabel(Text("More"))
                     .accessibilityIdentifier("messageMore")
             }
-            .palGlass(Capsule(), tint: PalTokens.elevated.opacity(0.9))
+            .palGlass(Capsule())
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("messageActionBar")

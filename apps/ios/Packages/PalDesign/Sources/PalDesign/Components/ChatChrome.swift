@@ -150,7 +150,7 @@ public struct GlassCircleLabel: View {
             .font(.system(size: diameter * 0.42, weight: .medium))
             .foregroundStyle(Color(theme.palette.textPrimary))
             .frame(width: diameter, height: diameter)
-            .glassEffect(.regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.55)).interactive(), in: .circle)
+            .palGlass(Circle())
             .contentShape(Circle())
     }
 }
@@ -170,7 +170,7 @@ public struct ScrollToBottomButton: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color(theme.palette.textPrimary))
                 .frame(width: ChatMetrics.scrollButtonDiameter, height: ChatMetrics.scrollButtonDiameter)
-                .glassEffect(.regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.55)).interactive(), in: .circle)
+                .palGlass(Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

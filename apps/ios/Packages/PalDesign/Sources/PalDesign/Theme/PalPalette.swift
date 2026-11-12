@@ -13,7 +13,6 @@ public struct PalPalette: Equatable, Sendable {
     public var chipText: RGB
     public var chipSelectedFill: RGB
     public var chipSelectedText: RGB
-    public var glassCapsuleFill: RGB
     public var pillFill: RGB
     public var pillText: RGB
     public var pillDimmedText: RGB
@@ -46,7 +45,6 @@ extension PalPalette {
         palette.groupedCard = RGB(hex: 0x1c1c1e)
         palette.cardStroke = RGB(hex: 0x2c2c2e)
         palette.separator = RGB(hex: 0x2c2c2e)
-        palette.glassCapsuleFill = RGB(hex: 0x1c1c1e)
         palette.chipFill = RGB(hex: 0x1c1c1e)
         palette.pillFill = RGB(hex: 0x1c1c1e)
         palette.tileStroke = RGB(hex: 0x2c2c2e)
@@ -77,7 +75,6 @@ extension PalPalette {
             chipText: solid(PalSwatches.textPrimary),
             chipSelectedFill: inverseFill,
             chipSelectedText: inverseText,
-            glassCapsuleFill: elevated,
             pillFill: RGB(hex: PalSwatches.control.ink(isDark: isDark).hex),
             pillText: solid(PalSwatches.textPrimary),
             pillDimmedText: solid(PalSwatches.textTertiary),
@@ -121,7 +118,6 @@ extension PalPalette {
         palette.circleButtonFill = apply(circleButtonFill, Self.surfaceTint)
         palette.chipFill = apply(chipFill, Self.surfaceTint)
         palette.pillFill = apply(pillFill, Self.surfaceTint)
-        palette.glassCapsuleFill = apply(glassCapsuleFill, Self.surfaceTint)
         palette.cardStroke = apply(cardStroke, Self.strokeTint)
         palette.separator = apply(separator, Self.strokeTint)
         palette.circleButtonStroke = apply(circleButtonStroke, Self.strokeTint)
