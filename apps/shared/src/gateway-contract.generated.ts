@@ -485,6 +485,31 @@ export interface ProjectFacts {
   verifyCommands: string[]
   contextFiles: string[]
 }
+export interface BotKeysStatusResult {
+  profile: string
+  groups: BotKeyGroup[]
+}
+export interface BotKeyGroup {
+  id: string
+  label: string
+  keys: BotKeyRow[]
+}
+export interface BotKeyRow {
+  name: string
+  label: string
+  is_set: boolean
+}
+export interface BotKeysSetParams {
+  profile?: string | null
+  key_name: string
+  value?: string | null
+}
+export interface BotKeysSetResult {
+  profile: string
+  key_name: string
+  is_set: boolean
+  groups: BotKeyGroup[]
+}
 export interface ProfilesRenameParams {
   name: string
   new_name: string
@@ -507,6 +532,15 @@ export interface ProfilesDeleteResult {
   identity_settled?: boolean | null
   settlement_pending?: boolean | null
   retry_command?: string | null
+}
+export interface ProfilesDescribeAutoParams {
+  name: string
+  overwrite?: boolean
+}
+export interface ProfilesDescribeAutoResult {
+  ok: boolean
+  name: string
+  description: string
 }
 /** One bot's Slack connection. Credentials are never echoed: only whether each is set. ``state`` is the gateway's verdict for the Slack adapter (``connected``, ``not_configured``, ``disabled``, ``pending_restart``, ``gateway_stopped``, ``startup_failed``, ``retrying``, ...). When Slack refused the connection, ``error_code`` is Slack's own code (``missing_scope``, ``invalid_auth``, ``token_revoked``, ...) and ``needed_scope`` / ``provided_scope`` name the scopes involved; none of these is a secret. */
 export interface MessagingSlackStatus {
@@ -7570,6 +7604,10 @@ export interface RpcMethods {
   'bot.teach.status': { params: ProfileParams; result: BotTeachStatus }
   /** End the recording; creates the disabled draft and returns the prompt that asks the bot to write it. */
   'bot.teach.stop': { params: BotTeachStopParams; result: BotTeachStopResult }
+  /** Save (value set) or remove (value null) one key listed by bot_keys.status in the named bot's own secret store. The value travels only in this request and is never echoed, logged or shown to the model. 4101 invalid key name or value; 4403 not an owner connection; 5103 not saved, the previous value is kept. */
+  'bot_keys.set': { params: BotKeysSetParams; result: BotKeysSetResult }
+  /** Which of the extra tool, memory, app and messaging keys one bot has set, by name. Owner connections only; never carries a key value. 4403 for a bot's own connection. */
+  'bot_keys.status': { params: ProfileParams; result: BotKeysStatusResult }
   /** Owner facts (name, time zone) shared by every Bot Mode bot on this install. */
   'bot_mode.about_you.get': { params: BotAboutYouGetParams; result: BotAboutYouFacts }
   /** Save owner facts install-wide; validates the time zone and answers the normalized values. */
@@ -7928,6 +7966,8 @@ export interface RpcMethods {
   'profiles.delete': { params: ProfilesDeleteParams; result: ProfilesDeleteResult }
   /** Everything the profile editor shows: soul, model pin, skills, toolsets, MCP servers. */
   'profiles.describe': { params: ProfileNameParams; result: ProfilesDescribeResult }
+  /** Write a bot's description with the auxiliary model, as `hermes profile describe --auto`. Owner connections only (4403); overwrite=false keeps a description the owner wrote (4102 says so). Never a model tool. */
+  'profiles.describe_auto': { params: ProfilesDescribeAutoParams; result: ProfilesDescribeAutoResult }
   /** A profile asset as a data URL. */
   'profiles.get_asset': { params: ProfilesGetAssetParams; result: ProfilesGetAssetResult }
   /** Restore the profile's identity to before the named change (newest change only). */
@@ -8203,6 +8243,8 @@ export const RPC_METHODS = [
   'bot.teach.start',
   'bot.teach.status',
   'bot.teach.stop',
+  'bot_keys.set',
+  'bot_keys.status',
   'bot_mode.about_you.get',
   'bot_mode.about_you.set',
   'bot_relay.deliver',
@@ -8382,6 +8424,7 @@ export const RPC_METHODS = [
   'profiles.create',
   'profiles.delete',
   'profiles.describe',
+  'profiles.describe_auto',
   'profiles.get_asset',
   'profiles.identity.undo',
   'profiles.list',

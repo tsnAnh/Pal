@@ -215,6 +215,9 @@ struct RootView: View {
                 model: BotModelsModel(client: bots.services.models(name)),
                 displayName: roster.bot(named: name)?.displayName ?? name
             )
+        case .botKeys(let name):
+            let displayName = roster.bot(named: name)?.displayName ?? name
+            BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name), displayName: displayName)
         case .messagingSettings(let name):
             MessagingSettingsView(model: MessagingSettingsModel(
                 botName: name,

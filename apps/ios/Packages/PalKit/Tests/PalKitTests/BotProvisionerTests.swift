@@ -1,6 +1,6 @@
 import Foundation
 import PalProtocol
-import PalRoster
+@testable import PalRoster
 import PalTransport
 import Synchronization
 import Testing
@@ -40,6 +40,24 @@ struct BotProvisionerTests {
         #expect(meta["custom"] == true)
         #expect(meta["created"] == .int(1_800_000_000_000))
         #expect(fake.calls("profiles.configure").count == 1)
+    }
+
+    @Test func startFromDefaultsToTheMainBotAndFollowsTheRequest() {
+        let identity = BotIdentity(entered: "Atlas")
+        #expect(NewBotRequest(name: "Atlas", kind: "cloud", colorHex: "#10dc69").cloneFrom == "default")
+        #expect(BotProvisioner.createParams(identity)["clone_from"] == "default")
+        #expect(BotProvisioner.createParams(identity, cloneFrom: "scout")["clone_from"] == "scout")
+    }
+
+    @Test func aSourceThatIsNotAProfileNameIsRejectedBeforeAnyCall() async throws {
+        let fake = FakeRoster(names: ["default"])
+        let (provisioner, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        await #expect(throws: BotAdminError.invalidName) {
+            try await provisioner.create(NewBotRequest(name: "Atlas", kind: "cloud", colorHex: "#10dc69", cloneFrom: "../x"))
+        }
+        #expect(fake.calls("profiles.create").isEmpty)
     }
 
     @Test func theLookKeepsTheSeedThePreviewWasDrawnWith() async throws {

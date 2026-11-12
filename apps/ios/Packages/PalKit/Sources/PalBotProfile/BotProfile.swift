@@ -23,6 +23,10 @@ public struct BotProfile: Sendable, Equatable {
         self.meta = meta
     }
 
+    public var isSetupUnfinished: Bool {
+        !isPrimary && name.lowercased() != "default" && !meta.hasLook
+    }
+
     init(row: ProfileRowWire) {
         let meta = BotMeta(row: row)
         name = row.name
