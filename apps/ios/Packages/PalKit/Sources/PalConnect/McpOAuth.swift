@@ -17,6 +17,7 @@ public enum McpOAuthError: Error, Sendable, Equatable {
     case tokenExchangeFailed
     case randomnessUnavailable
     case rejectedByGateway(String?)
+    case serverAddFailed(String?)
     case gatewayUnavailable
     case handshakeUsed
     case pasted(PasteError)
@@ -34,6 +35,7 @@ public enum McpOAuthError: Error, Sendable, Equatable {
         case .tokenExchangeFailed: "The sign-in couldn't be completed. Try again."
         case .randomnessUnavailable: "This device couldn't prepare a secure sign-in."
         case .rejectedByGateway(let text): text ?? "Your Pal couldn't save the sign-in."
+        case .serverAddFailed(let text): text.map { "Your Pal couldn't set up Upwork: \($0)" } ?? "Your Pal couldn't set up Upwork."
         case .gatewayUnavailable: "We couldn't reach your Pal to save the sign-in."
         case .handshakeUsed: "This sign-in was already used. Start again."
         case .pasted(let failure): failure.userText

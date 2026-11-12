@@ -145,10 +145,8 @@ public struct McpNativeSignIn: Sendable {
 extension ConnectAppsService {
     func connectUpwork(_ app: ConnectApp) async throws {
         guard let nativeSignIn else { throw ConnectAppsError.unavailable }
-        let alreadyAdded = app.state != .disconnected
-        if !alreadyAdded {
-            _ = try await call("mcp.servers.add", ["name": .string(UpworkConnector.presetName), "preset": .string(UpworkConnector.presetName)])
-        }
+        let added = try await addUpworkServer(if: app.state == .disconnected)
+        let alreadyAdded = !added
         do {
             try await nativeSignIn.run()
         } catch {
@@ -158,12 +156,22 @@ extension ConnectAppsService {
         }
     }
 
+    private func addUpworkServer(if needed: Bool) async throws -> Bool {
+        guard needed else { return false }
+        do {
+            _ = try await rawCall("mcp.servers.add", ["name": .string(UpworkConnector.presetName), "preset": .string(UpworkConnector.presetName)])
+            return true
+        } catch let error as GatewayTransportError {
+            guard case .rpc(let rpc) = error else { throw ConnectAppsError.signInFailed(McpOAuthError.gatewayUnavailable.reason) }
+            if rpc.code == 4090 { return false }
+            if Self.map(error) == .signInRequired { throw ConnectAppsError.signInRequired }
+            throw ConnectAppsError.signInFailed(McpOAuthError.serverAddFailed(McpOAuthSubmission.readable(rpc.message)).reason)
+        }
+    }
+
     public func beginUpworkPaste(_ app: ConnectApp) async throws -> McpPasteSession {
         guard let nativeSignIn else { throw ConnectAppsError.unavailable }
-        let adding = app.state == .disconnected
-        if adding {
-            _ = try await call("mcp.servers.add", ["name": .string(UpworkConnector.presetName), "preset": .string(UpworkConnector.presetName)])
-        }
+        let adding = try await addUpworkServer(if: app.state == .disconnected)
         let service = self
         let remove: (@Sendable () async -> Void)?
         if adding {

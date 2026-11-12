@@ -230,7 +230,7 @@ final class ConnectAppsModel {
         } catch let error as ConnectAppsError {
             handle(error, app: app)
         } catch {
-            report("Couldn't connect \(app.name). Try again.")
+            fail(app, "Couldn't connect \(app.name). Try again.")
         }
         await reload()
     }
@@ -283,7 +283,7 @@ final class ConnectAppsModel {
         } catch let error as ConnectAppsError {
             handle(error, app: app)
         } catch {
-            report("Couldn't connect \(app.name). Try again.")
+            fail(app, "Couldn't connect \(app.name). Try again.")
         }
     }
 
@@ -305,7 +305,7 @@ final class ConnectAppsModel {
         } catch let error as ConnectAppsError {
             handle(error, app: app)
         } catch {
-            report("Couldn't connect \(app.name). Try again.")
+            fail(app, "Couldn't connect \(app.name). Try again.")
         }
         await reload()
     }
@@ -357,11 +357,20 @@ final class ConnectAppsModel {
 
     private func handle(_ error: ConnectAppsError, app: ConnectApp) {
         switch error {
-        case .cancelled: break
+        case .cancelled:
+            if app.requiresAppSignIn { failures[app.id] = McpOAuthError.cancelled.reason }
         case .signInFailed(let reason): failures[app.id] = reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
-        case .signInRequired: report("Connecting \(app.name) needs you to sign in to Nous Portal on your Pal first.")
-        case .unavailable, .failed: report("Couldn't connect \(app.name). Try again.")
+        case .signInRequired: fail(app, "Connecting \(app.name) needs you to sign in to Nous Portal on your Pal first.")
+        case .unavailable, .failed: fail(app, "Couldn't connect \(app.name). Try again.")
+        }
+    }
+
+    private func fail(_ app: ConnectApp, _ message: String) {
+        if app.requiresAppSignIn {
+            failures[app.id] = message
+        } else {
+            report(message)
         }
     }
 
