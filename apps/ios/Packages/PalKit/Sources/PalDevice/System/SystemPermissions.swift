@@ -24,6 +24,7 @@ public struct SystemPermissions: DevicePermissions {
         case .shell, .files: Self.localAccessStatus
         case .input: AccessibilityAccess.status
         case .apps: Self.appsStatus
+        case .clipboard: Self.clipboardStatus
         }
     }
 
@@ -47,6 +48,8 @@ public struct SystemPermissions: DevicePermissions {
             AccessibilityAccess.request()
         case .apps:
             Self.requestApps()
+        case .clipboard:
+            break
         }
         return await status(of: connector)
     }
@@ -73,6 +76,14 @@ public struct SystemPermissions: DevicePermissions {
     private static var localAccessStatus: DeviceOSPermission {
         #if os(macOS)
         .granted
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static var clipboardStatus: DeviceOSPermission {
+        #if os(macOS)
+        GeneralPasteboard().accessAllowed ? .granted : .denied
         #else
         .unsupported
         #endif
@@ -156,15 +167,18 @@ extension DeviceProviders {
         let files: (any FilesProviding)? = SystemFiles()
         let apps: (any AppsProviding)? = AppsController(workspace: SystemAppsWorkspace())
         let input: (any InputProviding)? = InputController.shared
+        let clipboard: (any ClipboardProviding)? = SystemClipboard(store: GeneralPasteboard())
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
         let apps: (any AppsProviding)? = nil
+        let clipboard: (any ClipboardProviding)? = nil
         let input: (any InputProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, apps: apps, input: input
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, apps: apps,
+            clipboard: clipboard, input: input
         )
     }
 }

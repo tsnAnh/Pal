@@ -20694,6 +20694,7 @@
           "shell",
           "files",
           "input",
+          "clipboard",
           "apps"
         ],
         "title": "DeviceConnectorId",
@@ -20941,6 +20942,8 @@
           "input.scroll",
           "input.type",
           "input.key",
+          "clipboard.read",
+          "clipboard.write",
           "apps.list",
           "apps.open",
           "apps.quit",

@@ -10,12 +10,13 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
     case shell
     case files
     case apps
+    case clipboard
     case input
 
     public var needsOSPermission: Bool {
         switch self {
         case .shell, .files, .apps: false
-        case .calendar, .home, .reminders, .contacts, .location, .alarms, .input: true
+        case .calendar, .home, .reminders, .contacts, .location, .alarms, .clipboard, .input: true
         }
     }
 }
@@ -117,6 +118,8 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
     case appsQuit = "apps.quit"
     case windowsList = "windows.list"
     case windowsFocus = "windows.focus"
+    case clipboardRead = "clipboard.read"
+    case clipboardWrite = "clipboard.write"
     case inputDisplays = "input.displays"
     case inputMove = "input.move"
     case inputClick = "input.click"
@@ -136,6 +139,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
         case .shellRun: .shell
         case .filesRead, .filesList, .filesWrite: .files
         case .appsList, .appsOpen, .appsQuit, .windowsList, .windowsFocus: .apps
+        case .clipboardRead, .clipboardWrite: .clipboard
         case .inputDisplays, .inputMove, .inputClick, .inputDrag, .inputScroll, .inputType, .inputKey: .input
         }
     }
@@ -383,6 +387,15 @@ public struct WindowsListArgs: Decodable, Sendable {
 public struct WindowsFocusArgs: Decodable, Sendable {
     public var windowId: Int?
     public var app: String?
+}
+
+public struct ClipboardReadArgs: Decodable, Sendable {
+    public var includeImage: Bool?
+}
+
+public struct ClipboardWriteArgs: Decodable, Sendable {
+    public var text: String?
+    public var imageBase64: String?
 }
 
 public struct InputMoveArgs: Decodable, Sendable {
@@ -794,5 +807,35 @@ public struct WindowsFocusWire: Encodable, Sendable, Equatable {
         self.windowId = windowId
         self.raised = raised
         self.note = note
+    }
+}
+
+public struct ClipboardReadWire: Encodable, Sendable, Equatable {
+    public var types: [String]
+    public var concealed: Bool
+    public var text: String?
+    public var imageBase64: String?
+    public var imageMime: String?
+    public var imageBytes: Int?
+    public var truncated: Bool
+
+    public init(types: [String], concealed: Bool, text: String?, imageBase64: String?, imageMime: String?, imageBytes: Int?, truncated: Bool) {
+        self.types = types
+        self.concealed = concealed
+        self.text = text
+        self.imageBase64 = imageBase64
+        self.imageMime = imageMime
+        self.imageBytes = imageBytes
+        self.truncated = truncated
+    }
+}
+
+public struct ClipboardWriteWire: Encodable, Sendable, Equatable {
+    public var kind: String
+    public var size: Int
+
+    public init(kind: String, size: Int) {
+        self.kind = kind
+        self.size = size
     }
 }

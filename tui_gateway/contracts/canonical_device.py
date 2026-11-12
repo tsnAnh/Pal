@@ -19,6 +19,7 @@ class DeviceConnectorId(WireEnum):
     SHELL = "shell"
     FILES = "files"
     INPUT = "input"
+    CLIPBOARD = "clipboard"
     APPS = "apps"
 
 
@@ -60,6 +61,8 @@ class DeviceToolAction(WireEnum):
     INPUT_SCROLL = "input.scroll"
     INPUT_TYPE = "input.type"
     INPUT_KEY = "input.key"
+    CLIPBOARD_READ = "clipboard.read"
+    CLIPBOARD_WRITE = "clipboard.write"
     APPS_LIST = "apps.list"
     APPS_OPEN = "apps.open"
     APPS_QUIT = "apps.quit"

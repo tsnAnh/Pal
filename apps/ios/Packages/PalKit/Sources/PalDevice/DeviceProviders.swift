@@ -417,6 +417,48 @@ public protocol AppsProviding: Sendable {
     func focus(windowID: Int?, app: String?) async throws -> WindowFocusRecord
 }
 
+public struct ClipboardImage: Sendable, Equatable {
+    public var data: Data
+    public var mime: String
+
+    public init(data: Data, mime: String) {
+        self.data = data
+        self.mime = mime
+    }
+}
+
+public struct ClipboardReadRecord: Sendable, Equatable {
+    public var types: [String]
+    public var concealed: Bool
+    public var text: CapturedText?
+    public var image: ClipboardImage?
+    public var imageBytes: Int?
+
+    public init(types: [String], concealed: Bool = false, text: CapturedText? = nil, image: ClipboardImage? = nil, imageBytes: Int? = nil) {
+        self.types = types
+        self.concealed = concealed
+        self.text = text
+        self.image = image
+        self.imageBytes = imageBytes
+    }
+}
+
+public struct ClipboardWriteRecord: Sendable, Equatable {
+    public var kind: String
+    public var size: Int
+
+    public init(kind: String, size: Int) {
+        self.kind = kind
+        self.size = size
+    }
+}
+
+public protocol ClipboardProviding: Sendable {
+    func read(includeImage: Bool, textLimit: Int, imageLimit: Int) async throws -> ClipboardReadRecord
+    func write(text: String) async throws -> ClipboardWriteRecord
+    func write(imageBase64: String, imageLimit: Int) async throws -> ClipboardWriteRecord
+}
+
 public struct InputDisplayRecord: Sendable, Equatable {
     public var id: Int
     public var name: String?
@@ -508,6 +550,7 @@ public struct DeviceProviders: Sendable {
     public var shell: (any ShellProviding)?
     public var files: (any FilesProviding)?
     public var apps: (any AppsProviding)?
+    public var clipboard: (any ClipboardProviding)?
     public var input: (any InputProviding)?
 
     public init(
@@ -520,6 +563,7 @@ public struct DeviceProviders: Sendable {
         shell: (any ShellProviding)? = nil,
         files: (any FilesProviding)? = nil,
         apps: (any AppsProviding)? = nil,
+        clipboard: (any ClipboardProviding)? = nil,
         input: (any InputProviding)? = nil
     ) {
         self.calendar = calendar
@@ -531,6 +575,7 @@ public struct DeviceProviders: Sendable {
         self.shell = shell
         self.files = files
         self.apps = apps
+        self.clipboard = clipboard
         self.input = input
     }
 }
