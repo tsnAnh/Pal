@@ -182,7 +182,14 @@ public struct ConnectAppsService: Sendable {
     private func connectMcp(name: String, requires: [String], credentials: [String: String]) async throws {
         let missing = requires.filter { credentials[$0]?.isEmpty != false }
         guard missing.isEmpty else { throw ConnectAppsError.credentialsRequired(missing) }
-        _ = try await call("mcp.servers.add", ["name": .string(name), "preset": .string(name)])
+        let alreadyAdded: Bool
+        do {
+            _ = try await rawCall("mcp.servers.add", ["name": .string(name), "preset": .string(name)])
+            alreadyAdded = false
+        } catch let error as GatewayTransportError {
+            guard !requires.isEmpty, case .rpc(let rpc) = error, rpc.code == 4090 else { throw Self.map(error) }
+            alreadyAdded = true
+        }
         do {
             if requires.isEmpty {
                 try await authorizeMcp(name: name, browser: browser)
@@ -192,9 +199,15 @@ public struct ConnectAppsService: Sendable {
                 }
             }
         } catch {
-            _ = try? await call("mcp.servers.remove", ["name": .string(name)])
+            if !alreadyAdded { _ = try? await call("mcp.servers.remove", ["name": .string(name)]) }
             throw error
         }
+    }
+
+    public func tokenFailure(_ app: ConnectApp) async -> ConnectorFailure? {
+        guard case .mcp(let name, let requires) = app.source, !requires.isEmpty else { return nil }
+        do { _ = try await testCustomConnector(name: name) } catch { return ConnectorFailure.from(error) }
+        return nil
     }
 
     func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil) async throws {

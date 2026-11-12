@@ -232,4 +232,30 @@ struct ConnectAppsServiceTests {
         try await service(rpc).disconnect(app)
         #expect(rpc.params("mcp.servers.remove").first?["name"]?.stringValue == "linear")
     }
+
+    @Test func aTokenConnectorCardCarriesItsSetupTextAndAsksForTheKey() throws {
+        let row: JSONValue = ["name": "github", "description": "Read-only GitHub", "requires": ["MCP_GITHUB_API_KEY"], "setup": "Read-only. Contents, Issues."]
+        let preset = try row.decoded(as: McpPresetEntry.self)
+        let catalog = ConnectCatalog.make(hosted: [], states: [], mcp: [preset])
+        let app = try #require(catalog.apps.first)
+        #expect(app.setup == "Read-only. Contents, Issues.")
+        #expect(app.source == .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]))
+        #expect(app.state == .disconnected)
+    }
+
+    @Test func updatingTheTokenOfAnAddedServerKeepsTheServerEvenWhenTheWriteFails() async {
+        let rpc = ScriptedRPC([
+            "mcp.servers.add": { _ in throw GatewayTransportError.rpc(RPCError(code: 4090, message: "exists")) },
+            "mcp.servers.set_api_key": { _ in throw GatewayTransportError.rpc(RPCError(code: 4001, message: "bad")) },
+        ])
+        let app = ConnectApp(id: "mcp:github", name: "Github", summary: "", category: "Other", iconURL: nil, source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected)
+        await #expect(throws: (any Error).self) { try await service(rpc).connect(app, credentials: ["MCP_GITHUB_API_KEY": "v"]) }
+        #expect(!rpc.methods().contains("mcp.servers.remove"))
+    }
+
+    @Test func aRefusedTokenIsReportedAfterTheServerTestsIt() async {
+        let rpc = ScriptedRPC(["mcp.servers.test": { _ in ["ok": false, "reason": "auth_refused", "tools": []] }])
+        let app = ConnectApp(id: "mcp:github", name: "Github", summary: "", category: "Other", iconURL: nil, source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected)
+        #expect(await service(rpc).tokenFailure(app) == .authRefused)
+    }
 }

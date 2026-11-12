@@ -317,11 +317,18 @@ class McpServerFlow:
     def signin_on(self) -> Optional[str]:
         return getattr(self._inner, "signin_on", None)
 
+    def _catalog_declares_api_key(self) -> bool:
+        from hermes_cli.mcp_catalog import get_entry
+        entry = get_entry(self._server)
+        return entry is not None and entry.auth.type == "api_key"
+
     async def begin(self) -> None:
         from hermes_cli.mcp_config import _get_mcp_servers
         cfg = (await asyncio.to_thread(_get_mcp_servers)).get(self._server)
         from tools.mcp_oauth import signs_in_on_owner_computer
         kind = classify_mcp_server(cfg)
+        if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
+            kind = "api_key"
         if kind == "oauth" and signs_in_on_owner_computer(cfg):
             self._inner = OwnerComputerFlow(self._server)
         elif kind == "oauth":

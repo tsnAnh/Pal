@@ -1912,41 +1912,6 @@ export interface GatewayServiceInstallResult {
 export type GatewayServiceInstallOutcome = 'installed' | 'already_installed' | 'unsupported' | 'failed'
 /** Client→server method params / server→client request params. Unknown keys are rejected. */
 export type Params = Record<string, never>
-/** ``git_protocol`` is gh's value for github.com (``unset`` when gh cannot say). A field that could not be read degrades to null, ``unset`` or false. */
-export interface GithubStatus {
-  signed_in: boolean
-  login?: string | null
-  host: 'github.com'
-  git_protocol: 'https' | 'ssh' | 'unset'
-  ssh_host_key_known: boolean
-  problems: GithubProblem[]
-}
-export interface GithubProblem {
-  id: GithubProblemId
-  message: string
-  fix: GithubProblemFix
-}
-export type GithubProblemId = 'gh_signed_out' | 'git_ssh_unknown_host'
-export type GithubProblemFix = 'github.signin' | 'github.git_protocol.fix'
-/** The one-time device code and where to enter it. ``expires_in`` and ``interval`` are seconds. */
-export interface GithubSigninStartResult {
-  session_id: string
-  user_code: string
-  verification_uri: string
-  expires_in: number
-  interval: number
-}
-export interface GithubSigninSessionParams {
-  session_id: string
-}
-export interface GithubSigninPollResult {
-  state: 'pending' | 'signed_in' | 'expired' | 'failed'
-  login?: string | null
-  message?: string | null
-}
-export interface GithubSigninCancelResult {
-  ok: boolean
-}
 /** A field that could not be read degrades to null, an empty list, ``unknown`` or ``unset``. An OAuth App token has no expiry, so ``expires_at`` is null. ``oauth_app_not_configured``: no token and no client ID. */
 export interface GithubTokenStatus {
   state: GithubTokenState
@@ -7664,8 +7629,6 @@ export interface RpcMethods {
   'gateway.service.restart': { params: GatewayServiceRestartParams; result: GatewayServiceRestartResult }
   /** Gateway service state on the connected host (running, stopped, not installed, restart needed). */
   'gateway.service.status': { params: ProfileParams; result: GatewayServiceStatus }
-  /** Set git and gh to HTTPS for github.com (idempotent) and return the fresh status. */
-  'github.git_protocol.fix': { params: Params; result: GithubStatus }
   /** Drop a pending GitHub sign-in. */
   'github.oauth.cancel': { params: GithubOauthSessionParams; result: GithubOauthCancelResult }
   /** The OAuth App client ID (public, not a secret), or null when it is not set. */
@@ -7676,14 +7639,6 @@ export interface RpcMethods {
   'github.oauth.poll': { params: GithubOauthSessionParams; result: GithubOauthPollResult }
   /** Start GitHub's device flow with Pal's own OAuth App; a pending sign-in is returned again instead of a second one. Error 5311 carries data.code: oauth_app_not_configured, oauth_app_rejected or unreachable. 4403 secondary profile. */
   'github.oauth.start': { params: Params; result: GithubOauthStartResult }
-  /** Stop a pending GitHub sign-in and its gh process. */
-  'github.signin.cancel': { params: GithubSigninSessionParams; result: GithubSigninCancelResult }
-  /** State of the sign-in; on signed_in the git protocol fix is already applied. */
-  'github.signin.poll': { params: GithubSigninSessionParams; result: GithubSigninPollResult }
-  /** Start GitHub's device flow through gh; a pending sign-in is returned again instead of a second one. */
-  'github.signin.start': { params: Params; result: GithubSigninStartResult }
-  /** GitHub sign-in and git/gh health on the host: the host user's single gh login and its problems. */
-  'github.status': { params: Params; result: GithubStatus }
   /** The host's single GitHub token, read through gh without reading the token back: state, account, scope names, expiry and the git protocol. Never carries the token. 4403 secondary profile. */
   'github.token.status': { params: Params; result: GithubTokenStatus }
   /** Resolve one exact pending approval raised by a local or peer room member. */
@@ -8229,16 +8184,11 @@ export const RPC_METHODS = [
   'gateway.service.install',
   'gateway.service.restart',
   'gateway.service.status',
-  'github.git_protocol.fix',
   'github.oauth.cancel',
   'github.oauth.config.get',
   'github.oauth.config.set',
   'github.oauth.poll',
   'github.oauth.start',
-  'github.signin.cancel',
-  'github.signin.poll',
-  'github.signin.start',
-  'github.status',
   'github.token.status',
   'groups.approve',
   'groups.attachment.download',
