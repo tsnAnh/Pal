@@ -48,6 +48,22 @@ class AuthSpec:
     # Pre-registered OAuth client block copied verbatim to ``mcp_servers.<name>.oauth`` (vendors
     # without Dynamic Client Registration). Secrets stay ``${VAR}`` references declared in ``env``.
     oauth: dict[str, Any] = field(default_factory=dict)
+    # Where the browser sign-in must run. "owner_app": the vendor only approves redirects for apps on
+    # the owner's own computer, so the gateway never starts the flow and the owner's app imports the tokens.
+    signin_on: Optional[str] = None
+
+
+_SIGNIN_ON_VALUES = frozenset({"owner_app"})
+
+
+@dataclass
+class ActionPolicySpec:
+    """Per-server default-deny action gate (``tools/mcp_action_gate.py``): only ``read_tools`` run without
+    the owner's approval, ``refused_tools`` never run, every other tool asks first."""
+
+    read_tools: list[str] = field(default_factory=list)
+    refused_tools: list[str] = field(default_factory=list)
+    refused_message: str = ""
 
 
 # ``auth.oauth`` keys a manifest may pin; everything else is a user-side tuning knob.
@@ -118,6 +134,7 @@ class CatalogEntry:
     install: Optional[InstallSpec] = None
     post_install: str = ""
     suggest: Optional[SuggestSpec] = None
+    action_policy: Optional[ActionPolicySpec] = None
     manifest_path: Path = field(default_factory=Path)
 
     @property
@@ -241,9 +258,31 @@ def _parse_auth(path: Path, raw: Any, name: str, http: bool) -> AuthSpec:
     undeclared = sorted({ref for v in oauth.values() if isinstance(v, str) for ref in _ENV_REF_RE.findall(v)} - declared)
     if undeclared:
         raise CatalogError(f"{path}: auth.oauth references env vars not declared in auth.env: {undeclared}")
+    signin_on = auth_raw.get("signin_on")
+    if signin_on is not None and (a_type != "oauth" or signin_on not in _SIGNIN_ON_VALUES):
+        raise CatalogError(f"{path}: auth.signin_on is only valid with auth.type 'oauth' and one of "
+                           f"{sorted(_SIGNIN_ON_VALUES)}")
     return AuthSpec(
         type=a_type, env=env_list, provider=auth_raw.get("provider"),
-        scopes=list(auth_raw.get("scopes") or []), env_var=auth_raw.get("env_var"), oauth=dict(oauth))
+        scopes=list(auth_raw.get("scopes") or []), env_var=auth_raw.get("env_var"), oauth=dict(oauth),
+        signin_on=signin_on)
+
+
+def _parse_action_policy(path: Path, raw: Any) -> Optional[ActionPolicySpec]:
+    if raw is None:
+        return None
+    policy = _require_mapping(path, "action_policy", raw)
+    unknown = sorted(set(policy) - {"read_tools", "refused_tools", "refused_message"})
+    if unknown:
+        raise CatalogError(f"{path}: action_policy has unknown keys {unknown}")
+    for key in ("read_tools", "refused_tools"):
+        _require_str_list(path, f"action_policy.{key}", policy.get(key) or [])
+    message = policy.get("refused_message") or ""
+    if not isinstance(message, str):
+        raise CatalogError(f"{path}: action_policy.refused_message must be a string")
+    return ActionPolicySpec(
+        read_tools=list(policy.get("read_tools") or []), refused_tools=list(policy.get("refused_tools") or []),
+        refused_message=message.strip())
 
 
 def _parse_tools(path: Path, raw: Any) -> ToolsSpec:
@@ -351,12 +390,14 @@ def _parse_manifest(path: Path) -> CatalogEntry:
     auth = _parse_auth(path, data.get("auth"), name, transport.type == "http")
     tools = _parse_tools(path, data.get("tools"))
     suggest = _parse_suggest(path, data.get("suggest"))
+    action_policy = _parse_action_policy(path, data.get("action_policy"))
     connector_slug = _parse_connector_slug(path, data.get("connector_slug"))
     install = _parse_install(path, data.get("install"))
     return CatalogEntry(
         name=name, description=description, source=str(data.get("source") or "").strip(),
         transport=transport, auth=auth, connector_slug=connector_slug, tools=tools, install=install,
-        post_install=str(data.get("post_install") or ""), suggest=suggest, manifest_path=path,
+        post_install=str(data.get("post_install") or ""), suggest=suggest, action_policy=action_policy,
+        manifest_path=path,
     )
 
 
@@ -569,10 +610,17 @@ def _build_server_config(entry: CatalogEntry, install_dir: Optional[Path]) -> di
             cfg["auth"] = "oauth"
             if entry.auth.oauth:
                 cfg["oauth"] = dict(entry.auth.oauth)
+            if entry.auth.signin_on:
+                cfg["signin_on"] = entry.auth.signin_on
         elif entry.auth.type == "api_key":
             from hermes_cli.mcp_config import _bearer_auth_headers
 
             cfg["headers"] = {**t.headers, **_bearer_auth_headers(entry.name)}
+    if entry.action_policy is not None:
+        cfg["action_policy"] = {
+            "read_tools": list(entry.action_policy.read_tools),
+            "refused_tools": list(entry.action_policy.refused_tools),
+            "refused_message": entry.action_policy.refused_message}
     return cfg
 
 

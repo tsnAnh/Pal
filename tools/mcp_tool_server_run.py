@@ -200,7 +200,10 @@ class MCPServerRunMixin:
         # immediately.
         self._was_parked = True
         self._park_reason = revival_reason
-        self._deregister_tools()
+        # A dead sign-in keeps its tools listed: the model's next call then gets the typed sign-in-again error
+        # instead of a vanished tool, and the cached tool list of a running chat is not rewritten.
+        if not (self._auth_park is not None and self._auth_park[0].reauth_required()):
+            self._deregister_tools()
         self._reconnect_event.clear()
         paused = False
         while True:

@@ -73,6 +73,16 @@ def _record_cost_policy(server_name: str, config: dict, key) -> None:
         _core._server_cost_policies[key] = policy
 
 
+def _record_action_policy(config: dict, key) -> None:
+    """Declared ``action_policy`` for *key*; caller holds ``_core._lock``. A declared policy never degrades to none."""
+    from tools.mcp_action_gate import policy_from_config
+    policy = policy_from_config(config)
+    if policy is None:
+        _core._server_action_policies.pop(key, None)
+    else:
+        _core._server_action_policies[key] = policy
+
+
 def _record_tool_trust_metadata(server_name: str, config: dict, tools: list[Any], key=None) -> None:
     """Capture per-server trust and per-tool readOnlyHint at discovery — the security boundary: the call-time gate
     classifies from data we control, never re-read server-supplied state. *key* is the connection (default: the
@@ -83,6 +93,7 @@ def _record_tool_trust_metadata(server_name: str, config: dict, tools: list[Any]
             key = _server_key(server_name)
         _core._server_trust_levels[key] = _normalize_server_trust((config or {}).get("trust"))
         _record_cost_policy(server_name, config, key)
+        _record_action_policy(config, key)
         hints = _core._tool_read_only_hints.setdefault(key, {})
         hints.update({t.name: _annotation_read_only_hint(t) for t in tools if getattr(t, "name", None)})
 
@@ -105,6 +116,7 @@ def _record_scope_trust(server_name: str, config: dict, scope: str) -> None:
         key = _server_key(server_name, scope, current=False)
         _core._server_trust_levels[key] = _normalize_server_trust((config or {}).get("trust"))
         _record_cost_policy(server_name, config, key)
+        _record_action_policy(config, key)
 
 
 def _track_mcp_tool_server(tool_name: str, server_name: str) -> None:
@@ -179,6 +191,7 @@ def _remove_server_scope(key, scope: str) -> None:
             _core._server_tool_scopes.pop(key, None)
         _core._server_trust_levels.pop(_server_key(server_name, scope, current=False), None)
         _core._server_cost_policies.pop(_server_key(server_name, scope, current=False), None)
+        _core._server_action_policies.pop(_server_key(server_name, scope, current=False), None)
     _restore_server_toolset_alias(key)
 
 

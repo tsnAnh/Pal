@@ -7,6 +7,7 @@ struct PalServiceScreen: View {
     let back: () -> Void
 
     @State private var model: GatewayServiceModel
+    @State private var host: HostServerModel
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
@@ -14,10 +15,11 @@ struct PalServiceScreen: View {
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
         _model = State(initialValue: GatewayServiceModel(client: GatewayServiceClient(gateway: gateway)))
+        _host = State(initialValue: HostServerModel(client: HostServerClient(gateway: gateway)))
     }
 
     var body: some View {
-        SettingsPage(title: "Pal service", identifier: "hermesServiceScreen", back: back) {
+        SettingsPage(title: "Server", identifier: "hermesServiceScreen", back: back) {
             GroupedCard(accessibilityIdentifier: "hermesServiceStateCard") {
                 SettingsRow.value("Status", value: stateText, accessibilityIdentifier: "hermesServiceState")
                 if let since = model.info?.startedAt {
@@ -29,10 +31,26 @@ struct PalServiceScreen: View {
             if let info = model.info {
                 actions(info)
             }
+            if model.loadFailed || model.isUnreachable {
+                GroupedCard(accessibilityIdentifier: "hermesServiceRetryCard") {
+                    SettingsRow(
+                        title: "Check again", trailing: .none, accessibilityIdentifier: "hermesServiceRetryRow",
+                        action: { Task { await model.load() } })
+                        .disabled(model.isBusy)
+                }
+            }
             CardFootnote(model.noticeText ?? footnote, accessibilityIdentifier: "hermesServiceFootnote")
+            ServerHealthSection(host: host)
+            ServerLogSection(host: host)
         }
-        .task { await model.load() }
-        .refreshable { await model.load() }
+        .task {
+            await model.load()
+            await host.refresh()
+        }
+        .refreshable {
+            await model.load()
+            await host.refresh()
+        }
     }
 
     @ViewBuilder
@@ -41,7 +59,7 @@ struct PalServiceScreen: View {
             GroupedCard(accessibilityIdentifier: "hermesServiceActionCard") {
                 if info.canRestart {
                     SettingsRow(
-                        title: model.activity == .restarting ? "Restarting…" : "Restart Pal",
+                        title: model.activity == .restarting ? restartingTitle : "Restart Pal",
                         subtitle: info.activeRuns > 0 ? "A chat is running. Restart once it finishes." : nil, trailing: .none,
                         accessibilityIdentifier: "hermesServiceRestartRow",
                         action: { Task { await model.restart() } }
@@ -61,7 +79,13 @@ struct PalServiceScreen: View {
         }
     }
 
+    private var restartingTitle: String {
+        guard let progress = model.progress else { return "Restarting…" }
+        return "Restarting… waiting for Pal (\(progress.attempt) of \(progress.limit))"
+    }
+
     private var stateText: String {
+        if model.isUnreachable { return "Not responding" }
         guard let info = model.info else { return model.loadFailed ? "Unavailable" : " " }
         return switch info.state {
         case .running: "Running"

@@ -1393,6 +1393,24 @@
       }
     },
     {
+      "name": "gateway.guards.status",
+      "summary": "The bot loop guard limits the gateway enforces now, one entry per gateway.bot_loop_guard key: the effective value, whether it came from config or the default, and whether the hard limit in code clamped it. Read-only; reads the live config, so an edit shows without a restart. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GuardsStatus"
+        }
+      }
+    },
+    {
       "name": "gateway.service.install",
       "summary": "Install the gateway as a login service where the host supports one.",
       "params": [
@@ -2149,20 +2167,20 @@
       }
     },
     {
-      "name": "host.kit.add_project",
-      "summary": "Start `faker-kit add-project <owner/repo> --json`. The repo must be owner/repo (letters, digits, dot, dash, underscore). 4101 invalid repo, 4409 busy, 4403 secondary profile.",
+      "name": "host.health",
+      "summary": "Read-only health of the computer running Pal: version, runtime, free disk, uptime, profile counts and the doctor's plain-words problems. Owner only (4403 secondary profile); not a model tool.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/KitAddProjectParams"
+            "$ref": "#/components/schemas/Params"
           }
         }
       ],
       "result": {
         "name": "result",
         "schema": {
-          "$ref": "#/components/schemas/KitJob"
+          "$ref": "#/components/schemas/HostHealth"
         }
       }
     },
@@ -2186,7 +2204,7 @@
     },
     {
       "name": "host.kit.reload",
-      "summary": "Start `faker-kit host reload <routes|gateway> --json`. 4409 busy, 4403 secondary profile.",
+      "summary": "Start `faker-kit host reload <routes|gateway> --json --secret-stdin`. 4409 busy, 4403 secondary profile.",
       "params": [
         {
           "name": "params",
@@ -2203,8 +2221,26 @@
       }
     },
     {
+      "name": "host.kit.rotate",
+      "summary": "Start `faker-kit host rotate --json --secret-stdin`: replace the app's credential. The report carries credential.rotated and created_at, never the value. credential_missing before the first update. 4409 busy, 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KitJob"
+        }
+      }
+    },
+    {
       "name": "host.kit.status",
-      "summary": "Run `faker-kit host status --json` and return its known fields. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output or request_refused (the kit refused a caller that is not the owner's own shell; not retried). 4403 secondary profile.",
+      "summary": "Run `faker-kit host status --json --secret-stdin` and return its known fields; the app's credential is read from the host's secret file on every call and sent on stdin, never returned. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output, credential_missing (the first update creates it), credential_unreadable or request_refused (this machine is not set up for the app; not retried). 4409 busy (the kit is updating), 4403 secondary profile.",
       "params": [
         {
           "name": "params",
@@ -2222,7 +2258,7 @@
     },
     {
       "name": "host.kit.update",
-      "summary": "Start `faker-kit host update --json` (update to latest) as the one running kit job, or return the identical running job. 4409 busy, 4403 secondary profile.",
+      "summary": "Start `faker-kit host update --json --secret-stdin` (update to latest) as the one running kit job, or return the identical running job. With no credential file yet the first update runs without it and the kit creates one (report.credential.created). 4409 busy, 4403 secondary profile.",
       "params": [
         {
           "name": "params",
@@ -2235,6 +2271,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/KitJob"
+        }
+      }
+    },
+    {
+      "name": "host.logs.tail",
+      "summary": "Last lines of one allow-listed Pal log (gateway, agent or errors), newest last, bounded by line and byte caps, with token-shaped text redacted before it leaves the host. Owner only (4403 secondary profile); not a model tool.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/HostLogsTailParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/HostLogsTail"
         }
       }
     },
@@ -7675,6 +7729,19 @@
             ],
             "default": null,
             "title": "Server"
+          },
+          "signin_on": {
+            "anyOf": [
+              {
+                "const": "owner_app",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Signin On"
           }
         },
         "required": [
@@ -7892,6 +7959,135 @@
           "outcome"
         ],
         "title": "AuthSubmitCredentialResult",
+        "type": "object"
+      },
+      "AuthSubmitOauthTokensParams": {
+        "additionalProperties": false,
+        "properties": {
+          "service": {
+            "pattern": "^mcp:[a-z0-9][a-z0-9._-]{0,63}$",
+            "title": "Service",
+            "type": "string"
+          },
+          "client_id": {
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Client Id",
+            "type": "string"
+          },
+          "redirect_uri": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Redirect Uri",
+            "type": "string"
+          },
+          "token_endpoint": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Token Endpoint",
+            "type": "string"
+          },
+          "issuer": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Issuer",
+            "type": "string"
+          },
+          "access_token": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "title": "Access Token",
+            "type": "string"
+          },
+          "refresh_token": {
+            "anyOf": [
+              {
+                "maxLength": 8192,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Refresh Token"
+          },
+          "expires_in": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires In"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "maxLength": 1024,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Scope"
+          },
+          "token_type": {
+            "anyOf": [
+              {
+                "maxLength": 32,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Token Type"
+          }
+        },
+        "required": [
+          "service",
+          "client_id",
+          "redirect_uri",
+          "token_endpoint",
+          "issuer",
+          "access_token"
+        ],
+        "title": "AuthSubmitOauthTokensParams",
+        "type": "object"
+      },
+      "AuthSubmitOauthTokensResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "AuthSubmitOauthTokensResult",
         "type": "object"
       },
       "AutoContinue": {
@@ -27309,6 +27505,66 @@
         "title": "GroupsStopResult",
         "type": "object"
       },
+      "GuardValue": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Value"
+          },
+          "source": {
+            "enum": [
+              "config",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "clamped": {
+            "title": "Clamped",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "source",
+          "clamped"
+        ],
+        "title": "GuardValue",
+        "type": "object"
+      },
+      "GuardsStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "guards": {
+            "items": {
+              "$ref": "#/components/schemas/GuardValue"
+            },
+            "title": "Guards",
+            "type": "array"
+          }
+        },
+        "required": [
+          "guards"
+        ],
+        "title": "GuardsStatus",
+        "type": "object"
+      },
       "HandoffFailParams": {
         "additionalProperties": false,
         "properties": {
@@ -27489,6 +27745,232 @@
           "fire_count"
         ],
         "title": "HeartbeatSnapshot",
+        "type": "object"
+      },
+      "HostHealth": {
+        "additionalProperties": false,
+        "description": "``doctor_ran`` is false when the doctor could not run (``problems`` is then empty and the app must not\nread it as healthy). ``disk_free_bytes`` is for the volume holding Pal's data.",
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Version"
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Commit"
+          },
+          "python_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Python Version"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Platform"
+          },
+          "disk_free_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Disk Free Bytes"
+          },
+          "disk_total_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Disk Total Bytes"
+          },
+          "host_uptime_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Host Uptime Seconds"
+          },
+          "profile_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Count"
+          },
+          "running_gateway_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Running Gateway Count"
+          },
+          "doctor_ran": {
+            "title": "Doctor Ran",
+            "type": "boolean"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/HostProblem"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "doctor_ran",
+          "problems"
+        ],
+        "title": "HostHealth",
+        "type": "object"
+      },
+      "HostLogName": {
+        "enum": [
+          "gateway",
+          "agent",
+          "errors"
+        ],
+        "title": "HostLogName",
+        "type": "string"
+      },
+      "HostLogsTail": {
+        "additionalProperties": false,
+        "description": "Newest line last, token-shaped text already replaced. ``available`` is false when the log file does\nnot exist yet. ``truncated`` means older lines were dropped to fit the byte cap.",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/HostLogName"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "lines",
+          "has_more",
+          "truncated",
+          "available"
+        ],
+        "title": "HostLogsTail",
+        "type": "object"
+      },
+      "HostLogsTailParams": {
+        "additionalProperties": false,
+        "description": "``skip`` is how many of the newest lines to leave out, so the next older page is\n``skip = skip + len(lines)``.",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/HostLogName",
+            "default": "gateway"
+          },
+          "lines": {
+            "default": 200,
+            "maximum": 500,
+            "minimum": 1,
+            "title": "Lines",
+            "type": "integer"
+          },
+          "skip": {
+            "default": 0,
+            "maximum": 100000,
+            "minimum": 0,
+            "title": "Skip",
+            "type": "integer"
+          }
+        },
+        "title": "HostLogsTailParams",
+        "type": "object"
+      },
+      "HostProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "severity": {
+            "enum": [
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "message"
+        ],
+        "title": "HostProblem",
         "type": "object"
       },
       "HostUpdateApplyParams": {
@@ -28769,19 +29251,59 @@
         "title": "KanbanRunResult",
         "type": "object"
       },
-      "KitAddProjectParams": {
+      "KitCredential": {
         "additionalProperties": false,
         "properties": {
-          "repo": {
-            "maxLength": 100,
-            "title": "Repo",
-            "type": "string"
+          "present": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Present"
+          },
+          "created": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created"
+          },
+          "rotated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rotated"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
           }
         },
-        "required": [
-          "repo"
-        ],
-        "title": "KitAddProjectParams",
+        "title": "KitCredential",
         "type": "object"
       },
       "KitError": {
@@ -28858,7 +29380,9 @@
           "failed",
           "invalid_output",
           "request_refused",
-          "busy"
+          "busy",
+          "credential_missing",
+          "credential_unreadable"
         ],
         "title": "KitErrorCode",
         "type": "string"
@@ -28873,8 +29397,8 @@
           "operation": {
             "enum": [
               "update",
-              "add_project",
-              "reload"
+              "reload",
+              "rotate"
             ],
             "title": "Operation",
             "type": "string"
@@ -29002,6 +29526,17 @@
             ],
             "default": null,
             "title": "Next Action"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KitCredential"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "title": "KitReport",
@@ -30302,6 +30837,86 @@
         "title": "McpAuthMode",
         "type": "string"
       },
+      "McpAutoApproveGetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "minLength": 1,
+            "title": "Session Id",
+            "type": "string"
+          },
+          "server": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Server",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "server"
+        ],
+        "title": "McpAutoApproveGetParams",
+        "type": "object"
+      },
+      "McpAutoApproveGetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "eligible": {
+            "title": "Eligible",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled",
+          "eligible"
+        ],
+        "title": "McpAutoApproveGetResult",
+        "type": "object"
+      },
+      "McpAutoApproveSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "minLength": 1,
+            "title": "Session Id",
+            "type": "string"
+          },
+          "server": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "title": "Server",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "session_id",
+          "server",
+          "enabled"
+        ],
+        "title": "McpAutoApproveSetParams",
+        "type": "object"
+      },
+      "McpAutoApproveSetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "McpAutoApproveSetResult",
+        "type": "object"
+      },
       "McpCatalogEntry": {
         "additionalProperties": false,
         "properties": {
@@ -30325,6 +30940,19 @@
             "default": null,
             "title": "Connector Slug"
           },
+          "signin_on": {
+            "anyOf": [
+              {
+                "const": "owner_app",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Signin On"
+          },
           "installed": {
             "title": "Installed",
             "type": "boolean"
@@ -30343,6 +30971,18 @@
           "transport": {
             "title": "Transport",
             "type": "string"
+          },
+          "needs_auth_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Needs Auth Reason"
           }
         },
         "required": [
@@ -30877,6 +31517,18 @@
             "default": false,
             "title": "Needs Auth",
             "type": "boolean"
+          },
+          "needs_auth_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Needs Auth Reason"
           }
         },
         "required": [
@@ -60465,6 +61117,24 @@
       }
     },
     {
+      "name": "auth.submit_oauth_tokens",
+      "summary": "The owner signed in to an MCP server on their own computer (auth.required signin_on owner_app) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthSubmitOauthTokensParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthSubmitOauthTokensResult"
+        }
+      }
+    },
+    {
       "name": "bot.thread.links",
       "summary": "Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id.",
       "params": [
@@ -61469,6 +62139,42 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/LibraryListResult"
+        }
+      }
+    },
+    {
+      "name": "mcp.actions.auto_approve.get",
+      "summary": "Whether actions on an action-gated MCP server skip the approval card in this chat. eligible: the chat is one of the owner's own app chats and the server is action-gated; enabled is false whenever it is not eligible.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpAutoApproveGetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpAutoApproveGetResult"
+        }
+      }
+    },
+    {
+      "name": "mcp.actions.auto_approve.set",
+      "summary": "Turn the per-chat auto-approve switch on or off. Off by default, kept in memory for this chat only (a new chat, a reset or a gateway restart starts off), and the only way to set it. Refused with permission_denied unless the caller may approve in this chat and the chat is eligible (see mcp.actions.auto_approve.get). Money steps are never auto-approved.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/McpAutoApproveSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/McpAutoApproveSetResult"
         }
       }
     },
@@ -63118,7 +63824,7 @@
     },
     {
       "name": "auth.required",
-      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. The payload never carries a credential.",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. signin_on owner_app: the sign-in cannot run on the gateway host; the app on any of the owner's devices runs the sign-in and hands the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential.",
       "params": [
         {
           "name": "payload",

@@ -1,4 +1,5 @@
 import PalChat
+import PalConnect
 import PalDesign
 import PalProtocol
 import PalRoster
@@ -23,6 +24,7 @@ struct ChatView: View {
     @Environment(\.hermesTheme) private var theme
     @Environment(\.scenePhase) private var scenePhase
     @Environment(SettingsHub.self) private var hub
+    @Environment(ActionAutoApprove.self) private var autoApprove
     #if os(macOS)
     @Environment(MacShell.self) private var shell
     #else
@@ -72,6 +74,7 @@ struct ChatView: View {
             .scrollEdgeEffectHidden(true, for: .top)
             .overlay(alignment: .top) { topFade }
             .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
+            .safeAreaInset(edge: .top, spacing: 0) { AutoApproveBanner(sessionID: model.bot.conversationID) }
             .teachPresentations(teach, surface: .chat)
             .onScrollGeometryChange(for: Bool.self) { geometry in
                 geometry.visibleRect.maxY >= geometry.contentSize.height - 120
@@ -146,6 +149,7 @@ struct ChatView: View {
         .overlay { MessageMenuHost(request: $messageMenu) }
         #endif
         .task { model.start() }
+        .task(id: model.bot.conversationID) { await autoApprove.load(sessionID: model.bot.conversationID) }
         .task(id: model.connection) {
             connectionIsSlow = false
             guard model.connection != .live else { return }

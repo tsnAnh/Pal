@@ -13,13 +13,25 @@ default) a bot answering the reply this bot delivered to it is not answered agai
 from __future__ import annotations
 
 import hashlib
+import logging
+import math
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass
 from typing import Callable, Deque, Dict, Hashable, Tuple
 
-__all__ = ["BotLoopGuard", "BotLoopGuardSettings", "configured_bot_user", "load_settings", "settings_from_config"]
+__all__ = [
+    "MAX_HOPS_CAP",
+    "BotLoopGuard",
+    "BotLoopGuardSettings",
+    "configured_bot_user",
+    "load_settings",
+    "resolve_config",
+    "settings_from_config",
+]
+
+logger = logging.getLogger(__name__)
 
 _TRUTHY = frozenset({"true", "1", "yes", "on"})
 _FALSY = frozenset({"false", "0", "no", "off"})
@@ -35,48 +47,83 @@ class BotLoopGuardSettings:
     bot_replies_expect_reply: bool = False
 
 
-def _as_bool(raw, default: bool) -> bool:
+MAX_HOPS_CAP = 50
+LIMITS: dict[str, tuple[float, float]] = {
+    "max_events": (1, 1000),
+    "window_seconds": (1, 86400),
+    "cooldown_seconds": (1, 86400),
+    "max_hops": (1, MAX_HOPS_CAP),
+}
+_BOOL_KEYS = ("enabled", "bot_replies_expect_reply")
+_warned: set[tuple[str, str]] = set()
+_WARNED_MAX = 256
+
+
+@dataclass(frozen=True)
+class ResolvedValue:
+    key: str
+    value: bool | int | float
+    source: str
+    clamped: bool = False
+
+
+def _warn_once(key: str, raw, why: str) -> None:
+    mark = (key, repr(raw))
+    if mark in _warned or len(_warned) >= _WARNED_MAX:
+        return
+    _warned.add(mark)
+    logger.warning("gateway.bot_loop_guard.%s=%r %s; using the limit in code instead.", key, raw, why)
+
+
+def _resolve_bool(key: str, raw, default: bool) -> ResolvedValue:
+    if raw is None:
+        return ResolvedValue(key, default, "default")
     if isinstance(raw, bool):
-        return raw
-    text = str(raw).strip().lower() if raw is not None else ""
+        return ResolvedValue(key, raw, "config")
+    text = str(raw).strip().lower()
     if text in _TRUTHY:
-        return True
+        return ResolvedValue(key, True, "config")
     if text in _FALSY:
-        return False
-    return default
+        return ResolvedValue(key, False, "config")
+    _warn_once(key, raw, "is not true or false")
+    return ResolvedValue(key, default, "default")
 
 
-def _as_positive(raw, default: float) -> float:
-    if isinstance(raw, bool):
-        return default
+def _resolve_number(key: str, raw, default: float) -> ResolvedValue:
+    if raw is None:
+        return ResolvedValue(key, default, "default")
+    low, high = LIMITS[key]
+    whole = isinstance(default, int)
     try:
-        value = float(raw)
+        number = float(raw) if not isinstance(raw, bool) else math.nan
     except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
+        number = math.nan
+    if not math.isfinite(number) or number <= 0 or (whole and number != int(number)):
+        _warn_once(key, raw, "is not a positive number")
+        return ResolvedValue(key, default, "default")
+    clamped = min(max(number, low), high)
+    if clamped != number:
+        _warn_once(key, raw, f"is above the hard limit of {high:g}")
+    return ResolvedValue(key, int(clamped) if whole else clamped, "config", clamped != number)
 
 
-def _as_positive_int(raw, default: int) -> int:
-    value = _as_positive(raw, 0.0)
-    return int(value) if value >= 1 and value == int(value) else default
-
-
-def settings_from_config(cfg) -> BotLoopGuardSettings:
-    """Read ``gateway.bot_loop_guard`` from a loaded config dict. Unusable values keep the default."""
+def resolve_config(cfg) -> dict[str, ResolvedValue]:
+    """Every ``gateway.bot_loop_guard`` key with its effective value, where it came from and whether the
+    hard limit in code clamped it. A missing, non-numeric, zero, negative or boolean value falls back to the
+    default, so a typo never turns the guard off; only ``enabled: false`` does."""
     from hermes_cli.config import cfg_get
 
     block = cfg_get(cfg, "gateway", "bot_loop_guard", default=None)
-    if not isinstance(block, dict):
-        return BotLoopGuardSettings()
+    block = block if isinstance(block, dict) else {}
     defaults = BotLoopGuardSettings()
-    return BotLoopGuardSettings(
-        enabled=_as_bool(block.get("enabled"), defaults.enabled),
-        max_events=_as_positive_int(block.get("max_events"), defaults.max_events),
-        window_seconds=_as_positive(block.get("window_seconds"), defaults.window_seconds),
-        cooldown_seconds=_as_positive(block.get("cooldown_seconds"), defaults.cooldown_seconds),
-        max_hops=_as_positive_int(block.get("max_hops"), defaults.max_hops),
-        bot_replies_expect_reply=_as_bool(block.get("bot_replies_expect_reply"), defaults.bot_replies_expect_reply),
-    )
+    resolved = {key: _resolve_bool(key, block.get(key), getattr(defaults, key)) for key in _BOOL_KEYS}
+    resolved.update({key: _resolve_number(key, block.get(key), getattr(defaults, key)) for key in LIMITS})
+    return resolved
+
+
+def settings_from_config(cfg) -> BotLoopGuardSettings:
+    """Read ``gateway.bot_loop_guard`` from a loaded config dict (see ``resolve_config``)."""
+    return BotLoopGuardSettings(**{key: item.value for key, item in resolve_config(cfg).items()})
 
 
 def configured_bot_user(platform_config, user_id) -> bool:

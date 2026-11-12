@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 ERROR_TYPE = "auth_required"
+REAUTH_REQUIRED = "reauth_required"
 MAX_SCANNED_RESULT_CHARS = 200_000
 REASONS = ("missing", "expired", "revoked")
 AUTH_TYPES = ("device_code", "oauth", "api_key", "header", "none")
@@ -20,7 +21,13 @@ _GH_REASONS = (
                            r"|to use github cli in automation, set the gh_token", re.IGNORECASE)),
 )
 _ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-_SERVICE_NAMES = {"github": "GitHub"}
+_SERVICE_NAMES = {"github": "GitHub", "email:himalaya": "Email"}
+EMAIL_SERVICE = "email:himalaya"
+_HIMALAYA_AUTH_FAILURE = re.compile(
+    r"authentication\s*failed|authenticationfailed|invalid credentials|\blogin failed|\bauthenticate failed"
+    r"|\b535\b.{0,60}(?:auth|credential|password)|username and password not accepted|bad credentials"
+    r"|\[AUTH\]|application-specific password required", re.IGNORECASE)
+_HIMALAYA_MISSING = re.compile(r"himalaya:\s*(?:command )?not found|no such file or directory.{0,20}himalaya", re.IGNORECASE)
 _MARKERS = ('"auth_required"', '"needs_reauth"', '"CONNECTION_REQUIRED"', '"CONNECTION_EXPIRED"')
 
 
@@ -29,6 +36,7 @@ class AuthNeed:
     service: str
     reason: str = "missing"
     flow: Optional[str] = None
+    blocking: bool = True
 
 
 def service_display_name(service: str) -> str:
@@ -45,6 +53,16 @@ def auth_required_result(service: str, reason: str = "missing", *, flow: Optiona
     return tool_error(text, error_type=ERROR_TYPE, auth_required=body)
 
 
+def reauth_reason(server: str) -> str:
+    return f"Sign in again: {service_display_name(f'mcp:{server}')} stopped accepting the saved sign-in"
+
+
+def reauth_required_result(server: str) -> str:
+    from tools.registry import tool_error
+    return tool_error(f"{reauth_reason(server)}. Do NOT retry; tell the owner to sign in again on their Mac in Pal.",
+                      code=REAUTH_REQUIRED, needs_reauth=True, server=server)
+
+
 def http_auth_failure(service: str, status: int, headers: Any = None) -> Optional[str]:
     if status == 401 or (status == 403 and _has_auth_challenge(headers)):
         return auth_required_result(service, "expired" if status == 401 else "missing")
@@ -56,26 +74,49 @@ def _has_auth_challenge(headers: Any) -> bool:
     return bool(getter and (getter("www-authenticate") or getter("WWW-Authenticate")))
 
 
-def _gh_invoked(command: str) -> bool:
+def _invokes(command: str, program: str) -> bool:
     try:
         words = shlex.split(command, posix=True)
     except ValueError:
         return False
     while words and _ENV_ASSIGNMENT.match(words[0]):
         words.pop(0)
-    return bool(words) and words[0] == "gh"
+    return bool(words) and words[0] == program
 
 
 def match_gh_failure(command: str, output: str, exit_code: Any) -> Optional[AuthNeed]:
     if isinstance(exit_code, bool) or not isinstance(exit_code, int) or exit_code == 0:
         return None
-    if not isinstance(command, str) or not isinstance(output, str) or not _gh_invoked(command):
+    if not isinstance(command, str) or not isinstance(output, str) or not _invokes(command, "gh"):
         return None
     tail = output[-2000:]
     for reason, pattern in _GH_REASONS:
         if pattern.search(tail) and (reason == "missing" or _GH_LOGIN_HINT.search(tail)):
             return AuthNeed("github", reason, flow="device_code")
     return None
+
+
+def match_himalaya_failure(command: str, output: str, exit_code: Any) -> Optional[AuthNeed]:
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int) or exit_code == 0:
+        return None
+    if not isinstance(command, str) or not isinstance(output, str) or not _invokes(command, "himalaya"):
+        return None
+    if _HIMALAYA_AUTH_FAILURE.search(output[-2000:]):
+        return AuthNeed(EMAIL_SERVICE, "expired", flow="api_key")
+    return None
+
+
+def himalaya_not_installed(function_name: str, function_args: Any, result: Any) -> bool:
+    if function_name != "terminal" or not isinstance(function_args, dict) or not isinstance(result, str):
+        return False
+    if not _invokes(str(function_args.get("command", "")), "himalaya") or len(result) > MAX_SCANNED_RESULT_CHARS:
+        return False
+    try:
+        body = json.loads(result)
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("exit_code") not in (0, None) and bool(
+        _HIMALAYA_MISSING.search(str(body.get("output", ""))[-2000:]))
 
 
 def _hosted_connector_need(body: dict) -> Optional[AuthNeed]:
@@ -111,13 +152,13 @@ def detect(function_name: str, function_args: Any, result: Any) -> Optional[Auth
         return AuthNeed(typed["service"], reason if reason in REASONS else "missing",
                         flow if isinstance(flow, str) else None)
     if body.get("needs_reauth") is True and isinstance(body.get("server"), str):
-        return AuthNeed(f"mcp:{body['server']}", "expired")
+        return AuthNeed(f"mcp:{body['server']}", "expired", blocking=body.get("code") != REAUTH_REQUIRED)
     hosted = _hosted_connector_need(body)
     if hosted is not None:
         return hosted
     if function_name == "terminal" and isinstance(function_args, dict):
-        return match_gh_failure(function_args.get("command", ""), str(body.get("output", "")),
-                                body.get("exit_code"))
+        command, output, code = function_args.get("command", ""), str(body.get("output", "")), body.get("exit_code")
+        return match_gh_failure(command, output, code) or match_himalaya_failure(command, output, code)
     return None
 
 
@@ -137,7 +178,14 @@ def _failure(kind: str, need: AuthNeed, bot: str, error_type: str) -> str:
     return tool_error(text, error_type=error_type, auth_required={"service": need.service})
 
 
+_NOT_INSTALLED_TEXT = ("The email tool is not installed on this device yet. Do not try to install it or ask the "
+                       "user to open a terminal; tell the user email is not available here yet.")
+
+
 def resolve(function_name: str, function_args: Any, result: Any, retry) -> Any:
+    if himalaya_not_installed(function_name, function_args, result):
+        from tools.registry import tool_error
+        return tool_error(_NOT_INSTALLED_TEXT, error_type="himalaya_not_installed")
     need = detect(function_name, function_args, result)
     if need is None:
         return result
@@ -145,6 +193,9 @@ def resolve(function_name: str, function_args: Any, result: Any, retry) -> Any:
     from hermes_constants import get_hermes_home, profile_name_for_home
     home = get_hermes_home()
     bot = profile_name_for_home(home) or "default"
+    if not need.blocking:
+        auth_prompts.offer_from_thread(home, need, bot)
+        return result
     outcome = auth_prompts.call_from_thread(home, need, bot)
     Resolution = auth_prompts.Resolution
     if outcome is Resolution.UNAVAILABLE:

@@ -13,6 +13,7 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     case unavailable
     case cancelled
     case credentialsRequired([String])
+    case signInFailed(String)
     case failed
 }
 
@@ -35,15 +36,18 @@ public struct ConnectAppsService: Sendable {
     let systemBrowser: any AuthorizationBrowser
     let timing: ConnectAppsTiming
     let diagnostics: Diagnostics
+    let nativeSignIn: McpNativeSignIn?
 
     public init(
         rpc: any ConnectRPC,
         profile: String?,
         browser: any AuthorizationBrowser,
         systemBrowser: any AuthorizationBrowser = UnavailableAuthorizationBrowser(),
+        nativeSignIn: McpNativeSignIn? = nil,
         timing: ConnectAppsTiming = .standard,
         diagnostics: Diagnostics = .silent
     ) {
+        self.nativeSignIn = nativeSignIn
         self.rpc = rpc
         self.profile = profile
         self.browser = browser
@@ -108,6 +112,7 @@ public struct ConnectAppsService: Sendable {
     public func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async throws {
         switch app.source {
         case .hosted(let slug): try await connectHosted(slug: slug, reconnect: app.state == .needsAuthorization)
+        case .mcp where app.requiresAppSignIn: try await connectUpwork(app)
         case .mcp(let name, let requires): try await connectMcp(name: name, requires: requires, credentials: credentials)
         case .custom(let info):
             do { _ = try await testCustomConnector(name: info.name) } catch { throw ConnectAppsError.failed }

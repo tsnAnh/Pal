@@ -236,6 +236,38 @@ class KeyEntryFlow:
         return None
 
 
+class EmailPasswordFlow:
+    kind = "api_key"
+    user_code = None
+    verification_uri = None
+    expires_in = None
+    ENV_VAR = "HIMALAYA_PASSWORD"
+
+    def __init__(self) -> None:
+        self._stored = asyncio.Event()
+
+    async def store(self, value: str) -> bool:
+        text = credential_text(value)
+        if text is None:
+            return False
+        await save_credential(self.ENV_VAR, text)
+        self._stored.set()
+        return True
+
+    async def begin(self) -> None:
+        return None
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def wait(self) -> bool:
+        await self._stored.wait()
+        return True
+
+    def cancel(self) -> None:
+        return None
+
+
 class HeaderFlow:
     kind = "header"
     user_code = None
@@ -267,6 +299,34 @@ class HeaderFlow:
 
     def cancel(self) -> None:
         return None
+
+
+class OwnerComputerFlow:
+    """OAuth the gateway host cannot run: the vendor approves redirects only for apps on the owner's own computer,
+    so the owner's app signs in there and hands the tokens over (``auth.submit_oauth_tokens``), which ends this."""
+
+    kind = "oauth"
+    signin_on = "owner_app"
+    user_code = None
+    verification_uri = None
+    expires_in = None
+
+    def __init__(self, server: str) -> None:
+        self.server = server
+        self._cancelled = asyncio.Event()
+
+    async def begin(self) -> None:
+        return None
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def wait(self) -> bool:
+        await self._cancelled.wait()
+        return False
+
+    def cancel(self) -> None:
+        self._cancelled.set()
 
 
 class McpPasteFlow:
@@ -369,6 +429,10 @@ class McpServerFlow:
     def server(self) -> str:
         return self._server
 
+    @property
+    def signin_on(self) -> Optional[str]:
+        return getattr(self._inner, "signin_on", None)
+
     def _catalog_declares_api_key(self) -> bool:
         from hermes_cli.mcp_catalog import get_entry
         entry = get_entry(self._server)
@@ -377,10 +441,13 @@ class McpServerFlow:
     async def begin(self) -> None:
         from hermes_cli.mcp_config import _get_mcp_servers
         cfg = (await asyncio.to_thread(_get_mcp_servers)).get(self._server)
+        from tools.mcp_oauth import signs_in_on_owner_app
         kind = classify_mcp_server(cfg)
         if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
             kind = "api_key"
-        if kind == "oauth":
+        if kind == "oauth" and signs_in_on_owner_app(cfg):
+            self._inner = OwnerComputerFlow(self._server)
+        elif kind == "oauth":
             paste = McpPasteFlow(self._home, self._server)
             try:
                 await paste.begin()
@@ -680,3 +747,4 @@ register("github", GithubDeviceFlow)
 register("mcp", McpServerFlow)
 register("connector", HostedConnectorFlow)
 register("provider", provider_flow)
+register("email", lambda home, service: EmailPasswordFlow())

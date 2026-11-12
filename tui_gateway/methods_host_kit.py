@@ -39,15 +39,6 @@ def _(rid, params: dict) -> dict:
     return _kit_owner_only(rid, lambda kit: kit.start("update", "update"))
 
 
-@method("host.kit.add_project")
-def _(rid, params: dict) -> dict:
-    from tui_gateway import kit_host
-    repo = params.get("repo")
-    if not isinstance(repo, str) or not kit_host.REPO.fullmatch(repo) or ".." in repo:
-        return _err(rid, _REPO_INVALID, "That doesn't look like owner/repo")
-    return _kit_owner_only(rid, lambda kit: kit.start("add_project", "add-project", repo))
-
-
 @method("host.kit.reload")
 def _(rid, params: dict) -> dict:
     from tui_gateway import kit_host
@@ -55,6 +46,11 @@ def _(rid, params: dict) -> dict:
     if target not in kit_host.RELOAD_TARGETS:
         return _err(rid, _REPO_INVALID, "Reload routes or gateway")
     return _kit_owner_only(rid, lambda kit: kit.start("reload", "reload", target))
+
+
+@method("host.kit.rotate")
+def _(rid, params: dict) -> dict:
+    return _kit_owner_only(rid, lambda kit: kit.start("rotate", "rotate"))
 
 
 @method("host.kit.job")

@@ -55,6 +55,10 @@ struct ConnectAppsSheet: View {
             ConnectorAccountsView(model: accounts)
                 .macSheetFrame()
         }
+        .sheet(item: $model.upworkApp) { app in
+            UpworkConnectionSheet(model: model, app: app)
+                .macSheetFrame()
+        }
         .sheet(item: $model.keyRequest) { request in
             CapabilityKeyEntrySheet(model: model, request: request)
                 .presentationDetents([.medium])
@@ -306,7 +310,21 @@ struct ConnectAppsSheet: View {
         }
     }
 
+    private func upworkRow(_ app: ConnectApp) -> some View {
+        let state = model.cardState(app)
+        return ConnectAppRow(
+            title: app.name, summary: UpworkCardText.summary(state, fallback: app.summary), accessibilityIdentifier: "connectApp-\(app.id)",
+            isBusy: state == .connecting,
+            trailing: ConnectRowAction(UpworkCardText.actionTitle(state), kind: state.isReconnect ? .accent : .neutral) { model.upworkApp = app }
+        ) { icon(for: app) }
+    }
+
+    @ViewBuilder
     private func appRow(_ app: ConnectApp) -> some View {
+        if app.requiresAppSignIn { upworkRow(app) } else { plainRow(app) }
+    }
+
+    private func plainRow(_ app: ConnectApp) -> some View {
         let action: ConnectRowAction = if case .custom = app.source {
             ConnectRowAction("Manage") { model.manage(app) }
         } else {

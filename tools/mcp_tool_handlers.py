@@ -131,6 +131,15 @@ def _trust_gate_check(server_name: str, tool_name: str, booked: Optional[list] =
     from tools import mcp_tool_costs as _costs
     # Trust and costs are the calling profile's own policy (an adopter of a shared connection keeps its own).
     key = _server_key(server_name)
+    if (action_policy := _core._server_action_policies.get(key)) is not None:
+        from tools import mcp_action_gate
+        error, grant = mcp_action_gate.gate(action_policy, server_name, tool_name, args)
+        if error is not None:
+            return error
+        if grant is not None:
+            if booked is None:
+                return grant.consume(server_name, tool_name, args)
+            booked.append(grant)
     trust = _core._server_trust_levels.get(key, _core._TRUST_FULL)
     gated = (trust == _core._TRUST_UNTRUSTED and not _tool_is_read_only(server_name, tool_name)
              and not _trust_granted(server_name, tool_name))
@@ -207,6 +216,16 @@ def _ask_for_call(server_name: str, tool_name: str, charge, booked: Optional[lis
         return tool_error(charge.refusal(spent))
     return tool_error(f"The user did not approve running write-capable MCP tool '{tool_name}' on untrusted server "
                       f"'{server_name}'. The command was NOT run. Do not retry without explicit user direction.")
+
+
+def _consume_grants(booked: list, server_name: str, tool_name: str, args: dict) -> Optional[str]:
+    """Spend the action approvals booked for this call right before dispatch: the arguments about to be sent
+    must be the ones the owner approved."""
+    from tools.mcp_action_gate import ActionGrant
+    for item in booked:
+        if isinstance(item, ActionGrant) and (error := item.consume(server_name, tool_name, args)) is not None:
+            return error
+    return None
 
 
 def _check_circuit_breaker(server_name: str) -> Optional[str]:
@@ -313,6 +332,16 @@ def _retry_once(server_name: str, retry_call, op_description: str, what: str):
     return _record_call_outcome(server_name, result)
 
 
+def _reauth_pending_error(server_name: str) -> Optional[str]:
+    """The typed sign-in-again error when this server's saved sign-in was rejected and nothing new has been
+    handed over since; None otherwise. A stat of one marker file, so every call can afford it."""
+    from tools.mcp_oauth import pending_reauth_reason
+    if pending_reauth_reason(server_name) is None:
+        return None
+    from tools.auth_required import reauth_required_result
+    return reauth_required_result(server_name)
+
+
 def _handle_auth_error_and_retry(server_name: str, exc: BaseException, retry_call, op_description: str):
     """OAuth recovery + one retry; None when *exc* is not an auth error. ``handle_401`` decides
     viability; if viable, signal a reconnect (fresh credentials), wait ready, retry once. Any
@@ -335,6 +364,10 @@ def _handle_auth_error_and_retry(server_name: str, exc: BaseException, retry_cal
         result = _retry_once(server_name, retry_call, op_description, "auth recovery")
         if result is not None:
             return result
+    from tools.mcp_oauth import server_signs_in_on_owner_app
+    if server_signs_in_on_owner_app(server_name):
+        from tools.auth_required import reauth_required_result
+        return reauth_required_result(server_name)
     return _strike(server_name, _NEEDS_REAUTH_MSG.format(s=server_name, detail=_auth_error_detail(exc)),
                    needs_reauth=True, server=server_name)
 
@@ -700,13 +733,17 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float, *,
     def _handler(args: dict, **kwargs) -> Any:
         # Security boundary: untrusted-server write tools need approval before ANY transport work (incl. lazy spawn).
         booked: list = []  # a costed call's charge; refunded when the call never reaches the server
+        if (error := _reauth_pending_error(server_name)) is not None:
+            return error
         error = _trust_gate_check(server_name, tool_name, booked, args)
         if error is not None:
             return error
         server, error = None, _check_circuit_breaker(server_name)
         if error is None:
             server, error = _acquire_call_server(server_name, tool_timeout)
-        if server is None:
+        if error is None:
+            error = _consume_grants(booked, server_name, tool_name, args)
+        if server is None or error is not None:
             for charge in booked:
                 charge.refund()
             return error

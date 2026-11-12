@@ -528,6 +528,9 @@ _tool_read_only_hints: dict[Any, dict[str, bool]] = {}
 # Declared per-tool costs + per-chat spend limit (``tools.mcp_tool_costs.CostPolicy``), keyed like
 # ``_server_trust_levels``: the consuming profile's policy. Absent = no costs, behaviour unchanged.
 _server_cost_policies: dict[Any, Any] = {}
+# Default-deny action gate (``tools.mcp_action_gate.ActionPolicy``) of a server that declares ``action_policy``,
+# keyed like ``_server_trust_levels``. Absent = no gate.
+_server_action_policies: dict[Any, Any] = {}
 
 _TRUST_FULL, _TRUST_UNTRUSTED = "full", "untrusted"
 

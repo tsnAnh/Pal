@@ -207,6 +207,11 @@ class OAuthNonInteractiveError(RuntimeError):
     """Raised when OAuth requires browser interaction in a non-interactive env."""
 
 
+class OwnerSigninRequired(OAuthNonInteractiveError):
+    """A server that signs in on the owner's computer no longer accepts the stored sign-in; only a new
+    hand-over from that computer helps, so nothing on this host retries or opens a browser."""
+
+
 # Port of the most recent callback-port resolution. Legacy global; per-flow closures are the
 # real mechanism (concurrent flows must not share it).
 _oauth_port: int | None = None
@@ -401,7 +406,7 @@ def _write_json(path: Path, data: dict) -> None:
 
     mkdir_under_hermes_home(path.parent)
     secure_parent_dir(path)
-    atomic_json_write(path, data, mode=0o600, default=str)
+    atomic_json_write(path, data, mode=0o600, fsync_dir=True, default=str)
 
 
 def _model_json(model: Any) -> dict:
@@ -429,9 +434,10 @@ class HermesTokenStorage:
     _client_info_path = partialmethod(_path, ".client.json")
     _meta_path = partialmethod(_path, ".meta.json")
     _cimd_rejected_path = partialmethod(_path, ".cimd-off")
+    _reauth_path = partialmethod(_path, ".reauth")
 
-    def _state_paths(self) -> tuple[Path, Path, Path]:
-        return self._tokens_path(), self._client_info_path(), self._meta_path()
+    def _state_paths(self) -> tuple[Path, ...]:
+        return self._tokens_path(), self._client_info_path(), self._meta_path(), self._reauth_path()
 
     @staticmethod
     def _load_model(path: Path, sdk_name: str, label: str, fixup=None):
@@ -585,13 +591,21 @@ class HermesTokenStorage:
         """True when this server has refused our metadata document before."""
         return self._cimd_rejected_path().exists()
 
+    def mark_reauth_required(self) -> None:
+        """Durably record that the authorization server rejected the stored refresh token, so no later call,
+        reconnect or restart presents the dead token again. Cleared by ``remove()``, which every new sign-in runs."""
+        _write_json(self._reauth_path(), {"reason": "refresh_rejected", "at": time.time()})
+
+    def reauth_required(self) -> bool:
+        return self._reauth_path().exists()
+
     def remove(self, *, keep_metadata: bool = False) -> None:
         """Delete all stored OAuth state for this server; ``keep_metadata`` spares ``.meta.json`` so a
         re-login can still announce the discovered ``authorization_endpoint`` when the authorization
         server's metadata document cannot be re-fetched (#115329)."""
         # The ``.refresh.lock`` sidecar is deliberately kept: flock is inode-bound, so unlinking it
         # while a peer holds the fence would let the next acquirer lock a fresh inode (two holders).
-        for p in (self._tokens_path(), self._client_info_path(), self._cimd_rejected_path(),
+        for p in (self._tokens_path(), self._client_info_path(), self._cimd_rejected_path(), self._reauth_path(),
                   *(() if keep_metadata else (self._meta_path(),))):
             p.unlink(missing_ok=True)
 
@@ -924,6 +938,25 @@ def _make_callback_waiter(port: int, cimd_url: str | None = None, timeout: float
 
 # Legacy build_oauth_auth provider class, built lazily (SDK) and cached here.
 HermesOAuthClientProvider: Any = None
+
+
+def signs_in_on_owner_app(cfg: object) -> bool:
+    """True for a server whose vendor approves OAuth redirects only for apps on the owner's own computer: the
+    gateway host never starts its browser flow, the owner's app signs in there and imports the tokens."""
+    return isinstance(cfg, dict) and cfg.get("signin_on") == "owner_app"
+
+
+def server_signs_in_on_owner_app(server_name: str) -> bool:
+    from hermes_cli.mcp_config import _get_mcp_servers
+    return signs_in_on_owner_app(_get_mcp_servers().get(server_name))
+
+
+def pending_reauth_reason(server_name: str) -> str | None:
+    """The plain reason this server needs a new sign-in from the owner's computer, None when it does not."""
+    if not HermesTokenStorage(server_name).reauth_required():
+        return None
+    from tools.auth_required import reauth_reason
+    return reauth_reason(server_name)
 
 
 def remove_oauth_tokens(server_name: str, *, hermes_home: str | Path | None = None) -> None:

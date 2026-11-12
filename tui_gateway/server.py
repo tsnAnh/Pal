@@ -2033,7 +2033,7 @@ from . import (
     methods_teach as _methods_teach, methods_library as _methods_library, methods_permissions as _methods_permissions,
     methods_onboarding as _methods_onboarding, methods_i18n as _methods_i18n, methods_machine as _methods_machine,
     methods_shared_metrics as _methods_shared_metrics, methods_plugin_catalog as _methods_plugin_catalog,
-    methods_account as _methods_account, methods_gateway_service as _methods_gateway_service, methods_github_token as _methods_github_token, methods_google_workspace as _methods_google_workspace, methods_webhook_routes as _methods_webhook_routes, methods_bot_keys as _methods_bot_keys, methods_host_kit as _methods_host_kit, methods_host_update as _methods_host_update,
+    methods_account as _methods_account, methods_gateway_service as _methods_gateway_service, methods_github_token as _methods_github_token, methods_google_workspace as _methods_google_workspace, methods_guards as _methods_guards, methods_webhook_routes as _methods_webhook_routes, methods_bot_keys as _methods_bot_keys, methods_host_kit as _methods_host_kit, methods_host as _methods_host, methods_host_update as _methods_host_update,
     methods_model_providers as _methods_model_providers,
     methods_speech_memory as _methods_speech_memory)
 
@@ -2048,7 +2048,7 @@ for _m in (
     _methods_bot_relay, _prompt_turn, _billing_view, _methods_projects, _methods_session_foreign,
     _methods_session_control, _methods_subagents, _methods_vault, _methods_free_tier, _methods_connectors,
     _methods_connectors_account, _methods_display, _methods_display_watch, _methods_teach, _methods_library, _methods_permissions, _methods_onboarding,
-    _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog, _methods_account, _methods_gateway_service, _methods_github_token, _methods_google_workspace, _methods_webhook_routes, _methods_bot_keys, _methods_host_kit, _methods_host_update, _methods_model_providers,
+    _methods_i18n, _methods_machine, _methods_shared_metrics, _methods_plugin_catalog, _methods_account, _methods_gateway_service, _methods_github_token, _methods_google_workspace, _methods_guards, _methods_webhook_routes, _methods_bot_keys, _methods_host_kit, _methods_host, _methods_host_update, _methods_model_providers,
     _methods_speech_memory):
     _m.register(sys.modules[__name__])
 del _m

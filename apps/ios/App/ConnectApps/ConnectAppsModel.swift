@@ -104,6 +104,10 @@ final class ConnectAppsModel {
     var disconnectTarget: ConnectDisconnectTarget?
     var showsSkills = false
     var accountsModel: ConnectorAccountsModel?
+    var upworkApp: ConnectApp?
+    private(set) var pasteSession: McpPasteSession?
+    private(set) var pasteState: SecretEntryState = .idle
+    private(set) var failures: [String: String] = [:]
     private(set) var mode: Mode = .list
 
     let botName: String
@@ -127,7 +131,7 @@ final class ConnectAppsModel {
         self.currentBot = currentBot
         service = ConnectAppsService(
             rpc: ConnectionRPC(model: connection), profile: profile, browser: browser,
-            systemBrowser: SystemBrowserAuthorization(), diagnostics: .osLog()
+            systemBrowser: SystemBrowserAuthorization(), nativeSignIn: UpworkSignIn.native(connection: connection), diagnostics: .osLog()
         )
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
         capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
@@ -210,8 +214,66 @@ final class ConnectAppsModel {
         }
     }
 
+    func cardState(_ app: ConnectApp) -> ConnectorCardState {
+        return .resolve(ConnectorCardInput(app: app, isBusy: busy.contains(app.id), failureReason: failures[app.id]))
+    }
+
+    var isPastingAddress: Bool { pasteSession != nil }
+
+    func beginPaste(_ app: ConnectApp) async {
+        guard pasteSession == nil else { return }
+        busy.insert(app.id)
+        failures[app.id] = nil
+        defer { busy.remove(app.id) }
+        do {
+            let session = try await service.beginUpworkPaste(app)
+            guard ExternalLink.open(session.authorizeURL) else {
+                await session.cancel()
+                failures[app.id] = McpOAuthError.browserUnavailable.reason
+                return
+            }
+            pasteSession = session
+            pasteState = .idle
+        } catch let error as ConnectAppsError {
+            handle(error, app: app)
+        } catch {
+            report("Couldn't connect \(app.name). Try again.")
+        }
+        await reload()
+    }
+
+    func submitPastedAddress(_ value: String) async {
+        guard let session = pasteSession, pasteState.acceptsInput else { return }
+        pasteState = .submitting
+        switch await session.submit(value) {
+        case .signedIn:
+            pasteSession = nil
+            pasteState = .idle
+        case .tryAgain(let note):
+            pasteState = .failure(note)
+        case .failed(let reason):
+            pasteSession = nil
+            pasteState = .idle
+            failures[UpworkConnector.service] = reason
+        }
+        await reload()
+    }
+
+    func reopenPasteSignIn() {
+        if let url = pasteSession?.authorizeURL { ExternalLink.open(url) }
+    }
+
+    func cancelPaste() async {
+        guard let session = pasteSession else { return }
+        pasteSession = nil
+        pasteState = .idle
+        await session.cancel()
+        await reload()
+    }
+
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
         busy.insert(app.id)
+        failures[app.id] = nil
         defer { busy.remove(app.id) }
         do {
             try await service.connect(app, credentials: credentials)
@@ -227,6 +289,10 @@ final class ConnectAppsModel {
     }
 
     func manageAccounts(_ app: ConnectApp) {
+        if app.requiresAppSignIn {
+            upworkApp = app
+            return
+        }
         guard case .hosted(let slug) = app.source else { return }
         accountsModel = ConnectorAccountsModel(
             app: app, slug: slug, botName: botName, service: service,
@@ -270,6 +336,7 @@ final class ConnectAppsModel {
     private func handle(_ error: ConnectAppsError, app: ConnectApp) {
         switch error {
         case .cancelled: break
+        case .signInFailed(let reason): failures[app.id] = reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
         case .signInRequired: report("Connecting \(app.name) needs you to sign in to Nous Portal on your Pal first.")
         case .unavailable, .failed: report("Couldn't connect \(app.name). Try again.")

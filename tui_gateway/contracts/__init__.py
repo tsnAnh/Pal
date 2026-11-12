@@ -16,9 +16,11 @@ from . import (
     gateway_service,
     github_token,
     google_workspace,
+    guards,
     host_kit,
     webhook_routes,
     groups_bot_relay,
+    host,
     host_update,
     i18n,
     liveness,
@@ -37,7 +39,7 @@ from . import (
     tools_mcp_plugins,
     account,
 )
-from . import canonical, canonical_bot_threads, canonical_bridge, canonical_auth, canonical_device, canonical_devices, canonical_reach, canonical_search
+from . import canonical, canonical_bot_threads, canonical_bridge, canonical_auth, canonical_device, canonical_devices, canonical_mcp_actions, canonical_reach, canonical_search
 from .base import JsonValue, Params, Payload, Result, WireEnum
 from .registry import CANONICAL_METHODS, CANONICAL_NAMESPACES, EVENTS, METHODS, SERVER_REQUESTS
 

@@ -2026,16 +2026,32 @@ export interface GoogleSigninCancelParams {
 export interface GoogleSigninCancelResult {
   ok: boolean
 }
+export interface GuardsStatus {
+  guards: GuardValue[]
+}
+export interface GuardValue {
+  key: string
+  value: boolean | number
+  source: 'config' | 'default'
+  clamped: boolean
+}
 /** The known fields of the kit's JSON; unknown fields are ignored. */
 export interface KitReport {
   version?: string | null
   status?: string | null
   message?: string | null
   next_action?: string | null
+  credential?: KitCredential | null
+}
+export interface KitCredential {
+  present?: boolean | null
+  created?: boolean | null
+  rotated?: boolean | null
+  created_at?: string | null
 }
 export interface KitJob {
   job_id: string
-  operation: 'update' | 'add_project' | 'reload'
+  operation: 'update' | 'reload' | 'rotate'
   state: 'running' | 'succeeded' | 'failed'
   report?: KitReport | null
   error?: KitError | null
@@ -2048,10 +2064,7 @@ export interface KitError {
   kit_code?: string | null
   next_action?: string | null
 }
-export type KitErrorCode = 'kit_unavailable' | 'kit_unsupported' | 'timeout' | 'failed' | 'invalid_output' | 'request_refused' | 'busy'
-export interface KitAddProjectParams {
-  repo: string
-}
+export type KitErrorCode = 'kit_unavailable' | 'kit_unsupported' | 'timeout' | 'failed' | 'invalid_output' | 'request_refused' | 'busy' | 'credential_missing' | 'credential_unreadable'
 export interface KitReloadParams {
   target: 'routes' | 'gateway'
 }
@@ -2555,6 +2568,39 @@ export interface BotRelayReplyParams {
   reply?: string | null
   error?: string | null
   reason?: string | null
+}
+/** ``doctor_ran`` is false when the doctor could not run (``problems`` is then empty and the app must not read it as healthy). ``disk_free_bytes`` is for the volume holding Pal's data. */
+export interface HostHealth {
+  version?: string | null
+  commit?: string | null
+  python_version?: string | null
+  platform?: string | null
+  disk_free_bytes?: number | null
+  disk_total_bytes?: number | null
+  host_uptime_seconds?: number | null
+  profile_count?: number | null
+  running_gateway_count?: number | null
+  doctor_ran: boolean
+  problems: HostProblem[]
+}
+export interface HostProblem {
+  severity: 'warning' | 'error'
+  message: string
+}
+/** ``skip`` is how many of the newest lines to leave out, so the next older page is ``skip = skip + len(lines)``. */
+export interface HostLogsTailParams {
+  name?: HostLogName
+  lines?: number
+  skip?: number
+}
+export type HostLogName = 'gateway' | 'agent' | 'errors'
+/** Newest line last, token-shaped text already replaced. ``available`` is false when the log file does not exist yet. ``truncated`` means older lines were dropped to fit the byte cap. */
+export interface HostLogsTail {
+  name: HostLogName
+  lines: string[]
+  has_more: boolean
+  truncated: boolean
+  available: boolean
 }
 export type HostUpdateCheckParams = Record<string, never>
 /** ``error`` is set only when ``status`` is ``unknown``. ``commits_behind`` is null when the channel pins a release or the count is unknown. ``release_notes_url`` is null unless the install tracks a GitHub remote. */
@@ -5322,10 +5368,12 @@ export interface McpCatalogEntry {
   name: string
   description: string
   connector_slug?: string | null
+  signin_on?: 'owner_app' | null
   installed: boolean
   enabled: boolean
   requires: string[]
   transport: string
+  needs_auth_reason?: string | null
 }
 export interface McpServersListResult {
   servers: McpServerSummary[]
@@ -5363,6 +5411,7 @@ export interface McpServerRuntimeRow {
   source: McpServerSource
   plugin?: string | null
   needs_auth?: boolean
+  needs_auth_reason?: string | null
 }
 export type McpRuntimeStatus = 'connected' | 'disabled' | 'connecting' | 'failed' | 'lazy' | 'configured'
 /** ``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools). ``headers`` {Name: Value} and ``bearer_token`` are written to the profile's .env, only ``${VAR}`` templates persist; ``client_id`` is a pre-registered OAuth client id (not a secret). */
@@ -6752,6 +6801,22 @@ export interface AuthBeginResult {
   reason?: string | null
 }
 export type AuthBeginOutcome = 'started' | 'unsupported' | 'refused' | 'unavailable'
+export interface AuthSubmitOauthTokensParams {
+  service: string
+  client_id: string
+  redirect_uri: string
+  token_endpoint: string
+  issuer: string
+  access_token: string
+  refresh_token?: string | null
+  expires_in?: number | null
+  scope?: string | null
+  token_type?: string | null
+}
+export interface AuthSubmitOauthTokensResult {
+  ok: boolean
+  reason?: string | null
+}
 export interface DeviceConnectorsListParams {
   device_id?: string | null
 }
@@ -6854,6 +6919,22 @@ export interface PushUnregisterParams {
 }
 export interface PushUnregisterResult {
   removed: boolean
+}
+export interface McpAutoApproveGetParams {
+  session_id: string
+  server: string
+}
+export interface McpAutoApproveGetResult {
+  enabled: boolean
+  eligible: boolean
+}
+export interface McpAutoApproveSetParams {
+  session_id: string
+  server: string
+  enabled: boolean
+}
+export interface McpAutoApproveSetResult {
+  enabled: boolean
 }
 /** ``query`` is trimmed and must be 1..200 characters. ``limit`` defaults to 20 and is clamped to 1..50. */
 export interface SessionSearchParams {
@@ -7607,6 +7688,7 @@ export interface AuthRequiredPayload {
   verification_uri?: string | null
   expires_in?: number | null
   server?: string | null
+  signin_on?: 'owner_app' | null
 }
 export type AuthReason = 'missing' | 'expired' | 'revoked'
 export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual' | 'oauth_paste'
@@ -7798,6 +7880,8 @@ export interface RpcMethods {
   'free_tier.status': { params: ProfileParams; result: FreeTierStatusResult }
   /** What THIS build enforces (a client withholds a feature unless advertised). */
   'gateway.capabilities': { params: PingParams; result: GatewayCapabilitiesResult }
+  /** The bot loop guard limits the gateway enforces now, one entry per gateway.bot_loop_guard key: the effective value, whether it came from config or the default, and whether the hard limit in code clamped it. Read-only; reads the live config, so an edit shows without a restart. 4403 secondary profile. */
+  'gateway.guards.status': { params: Params; result: GuardsStatus }
   /** Install the gateway as a login service where the host supports one. */
   'gateway.service.install': { params: ProfileParams; result: GatewayServiceInstallResult }
   /** Ask the host's service manager to restart the gateway; refused while a chat is running. */
@@ -7882,16 +7966,20 @@ export interface RpcMethods {
   'handoff.request': { params: HandoffRequestParams; result: HandoffRequestResult }
   /** Poll the handoff row for this session. */
   'handoff.state': { params: SessionParams; result: HandoffStateResult }
-  /** Start `faker-kit add-project <owner/repo> --json`. The repo must be owner/repo (letters, digits, dot, dash, underscore). 4101 invalid repo, 4409 busy, 4403 secondary profile. */
-  'host.kit.add_project': { params: KitAddProjectParams; result: KitJob }
+  /** Read-only health of the computer running Pal: version, runtime, free disk, uptime, profile counts and the doctor's plain-words problems. Owner only (4403 secondary profile); not a model tool. */
+  'host.health': { params: Params; result: HostHealth }
   /** State of a kit job. A finished job stays readable until the next job starts. 4404 unknown job. A job cannot be cancelled. */
   'host.kit.job': { params: KitJobParams; result: KitJob }
-  /** Start `faker-kit host reload <routes|gateway> --json`. 4409 busy, 4403 secondary profile. */
+  /** Start `faker-kit host reload <routes|gateway> --json --secret-stdin`. 4409 busy, 4403 secondary profile. */
   'host.kit.reload': { params: KitReloadParams; result: KitJob }
-  /** Run `faker-kit host status --json` and return its known fields. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output or request_refused (the kit refused a caller that is not the owner's own shell; not retried). 4403 secondary profile. */
+  /** Start `faker-kit host rotate --json --secret-stdin`: replace the app's credential. The report carries credential.rotated and created_at, never the value. credential_missing before the first update. 4409 busy, 4403 secondary profile. */
+  'host.kit.rotate': { params: Params; result: KitJob }
+  /** Run `faker-kit host status --json --secret-stdin` and return its known fields; the app's credential is read from the host's secret file on every call and sent on stdin, never returned. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output, credential_missing (the first update creates it), credential_unreadable or request_refused (this machine is not set up for the app; not retried). 4409 busy (the kit is updating), 4403 secondary profile. */
   'host.kit.status': { params: Params; result: KitReport }
-  /** Start `faker-kit host update --json` (update to latest) as the one running kit job, or return the identical running job. 4409 busy, 4403 secondary profile. */
+  /** Start `faker-kit host update --json --secret-stdin` (update to latest) as the one running kit job, or return the identical running job. With no credential file yet the first update runs without it and the kit creates one (report.credential.created). 4409 busy, 4403 secondary profile. */
   'host.kit.update': { params: Params; result: KitJob }
+  /** Last lines of one allow-listed Pal log (gateway, agent or errors), newest last, bounded by line and byte caps, with token-shaped text redacted before it leaves the host. Owner only (4403 secondary profile); not a model tool. */
+  'host.logs.tail': { params: HostLogsTailParams; result: HostLogsTail }
   /** Owner only: start the host update, or return the one already running. Refused while a chat runs unless confirmed. */
   'host.update.apply': { params: HostUpdateApplyParams; result: HostUpdateApplyResult }
   /** Owner only: compare this install with the latest on its update channel and list what blocks an update. */
@@ -8398,6 +8486,7 @@ export const RPC_METHODS = [
   'free_tier.provision',
   'free_tier.status',
   'gateway.capabilities',
+  'gateway.guards.status',
   'gateway.service.install',
   'gateway.service.restart',
   'gateway.service.status',
@@ -8440,11 +8529,13 @@ export const RPC_METHODS = [
   'handoff.fail',
   'handoff.request',
   'handoff.state',
-  'host.kit.add_project',
+  'host.health',
   'host.kit.job',
   'host.kit.reload',
+  'host.kit.rotate',
   'host.kit.status',
   'host.kit.update',
+  'host.logs.tail',
   'host.update.apply',
   'host.update.check',
   'host.update.status',
@@ -8679,6 +8770,8 @@ export interface CanonicalRpcMethods {
   'auth.submit_callback': { params: AuthSubmitCallbackParams; result: AuthSubmitCallbackResult }
   /** The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored. */
   'auth.submit_credential': { params: AuthSubmitCredentialParams; result: AuthSubmitCredentialResult }
+  /** The owner signed in to an MCP server on their own computer (auth.required signin_on owner_app) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed. */
+  'auth.submit_oauth_tokens': { params: AuthSubmitOauthTokensParams; result: AuthSubmitOauthTokensResult }
   /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
   'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
   /** This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat. */
@@ -8781,6 +8874,10 @@ export interface CanonicalRpcMethods {
   'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
   /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
   'library.list': { params: LibraryListParams; result: LibraryListResult }
+  /** Whether actions on an action-gated MCP server skip the approval card in this chat. eligible: the chat is one of the owner's own app chats and the server is action-gated; enabled is false whenever it is not eligible. */
+  'mcp.actions.auto_approve.get': { params: McpAutoApproveGetParams; result: McpAutoApproveGetResult }
+  /** Turn the per-chat auto-approve switch on or off. Off by default, kept in memory for this chat only (a new chat, a reset or a gateway restart starts off), and the only way to set it. Refused with permission_denied unless the caller may approve in this chat and the chat is eligible (see mcp.actions.auto_approve.get). Money steps are never auto-approved. */
+  'mcp.actions.auto_approve.set': { params: McpAutoApproveSetParams; result: McpAutoApproveSetResult }
   /** Curated MCP presets with per-profile installed/enabled state and the env keys each needs. */
   'mcp.catalog': { params: ProfileParams; result: McpCatalogResult }
   /** Add a server to the profile's config from a catalog preset and/or an explicit config. */
@@ -8928,6 +9025,7 @@ export const CANONICAL_RPC_METHODS = [
   'auth.signin',
   'auth.submit_callback',
   'auth.submit_credential',
+  'auth.submit_oauth_tokens',
   'bot.thread.links',
   'bot.thread.list',
   'bot.thread.read',
@@ -8984,6 +9082,8 @@ export const CANONICAL_RPC_METHODS = [
   'kanban.run',
   'library.asset',
   'library.list',
+  'mcp.actions.auto_approve.get',
+  'mcp.actions.auto_approve.set',
   'mcp.catalog',
   'mcp.servers.add',
   'mcp.servers.oauth.callback',
@@ -9128,7 +9228,7 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
-  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. The payload never carries a credential. */
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. signin_on owner_app: the sign-in cannot run on the gateway host; the app on any of the owner's devices runs the sign-in and hands the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential. */
   'auth.required': AuthRequiredPayload
   /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is the provider's failure in plain words when the flow has one; it never carries a credential. */
   'auth.resolved': AuthResolvedPayload
