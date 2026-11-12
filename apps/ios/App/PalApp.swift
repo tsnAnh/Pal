@@ -277,6 +277,7 @@ struct RootView: View {
                     ConnectAppsSheet(
                         model: ConnectAppsModel(
                             connection: model,
+                            pool: hostPool,
                             profile: router.connectAppsProfile,
                             botName: roster.displayName(forProfile: router.connectAppsProfile),
                             browser: WebAuthenticationBrowser(),
