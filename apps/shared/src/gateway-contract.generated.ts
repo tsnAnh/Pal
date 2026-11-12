@@ -2563,7 +2563,7 @@ export interface ModelProvider {
   reason?: string | null
   can_remove: boolean
 }
-export type ModelProviderKind = 'api_key' | 'device_code' | 'unsupported'
+export type ModelProviderKind = 'api_key' | 'device_code' | 'oauth_paste' | 'unsupported'
 export type ModelProviderState = 'set' | 'not_set' | 'expired' | 'unsupported'
 export type ModelProviderScope = 'profile' | 'account'
 export interface ModelProviderRemoveParams {
@@ -6595,6 +6595,14 @@ export interface AuthSubmitCredentialResult {
   outcome: AuthCredentialOutcome
 }
 export type AuthCredentialOutcome = 'stored' | 'failed' | 'rejected'
+export interface AuthSubmitCallbackParams {
+  request_id: string
+  value: string
+}
+export interface AuthSubmitCallbackResult {
+  outcome: AuthCredentialOutcome
+  reason?: string | null
+}
 export interface AuthBeginParams {
   service: string
 }
@@ -7494,7 +7502,7 @@ export interface AuthRequiredPayload {
   signin_on?: 'owner_app' | null
 }
 export type AuthReason = 'missing' | 'expired' | 'revoked'
-export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual'
+export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual' | 'oauth_paste'
 export interface AuthResolvedPayload {
   request_id: string
   outcome: AuthOutcome
@@ -8506,6 +8514,8 @@ export interface CanonicalRpcMethods {
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
   /** The user chose Sign in on an auth.required request. For oauth the gateway starts the flow and returns authorization_url to open in the system browser; for device_code it only acknowledges (the gateway is already polling). recorded is false for an unknown, finished or foreign request. */
   'auth.signin': { params: AuthSigninParams; result: AuthSigninResult }
+  /** The user pasted the address the browser ended on for an oauth_paste auth.required request. The gateway, which holds the PKCE verifier, checks the address, the state and the code, exchanges it and stores the credential in the requesting profile; the pasted text is never echoed, logged or kept. stored: signed in. failed: reason says in plain words what to fix; the same request may be answered again unless auth.resolved already ended it (declined on the provider's page, expired, exchange refused). rejected: unknown, finished, foreign or already used request; nothing stored. */
+  'auth.submit_callback': { params: AuthSubmitCallbackParams; result: AuthSubmitCallbackResult }
   /** The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored. */
   'auth.submit_credential': { params: AuthSubmitCredentialParams; result: AuthSubmitCredentialResult }
   /** The owner signed in to an MCP server on their own computer (auth.required signin_on owner_app) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed. */
@@ -8761,6 +8771,7 @@ export const CANONICAL_RPC_METHODS = [
   'auth.decline',
   'auth.revoke_self',
   'auth.signin',
+  'auth.submit_callback',
   'auth.submit_credential',
   'auth.submit_oauth_tokens',
   'bot.thread.links',
@@ -8965,7 +8976,7 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
-  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. signin_on owner_app: the sign-in cannot run on the gateway host; sign in on the owner's own computer and hand the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential. */
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. signin_on owner_app: the sign-in cannot run on the gateway host; the app on any of the owner's devices runs the sign-in and hands the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential. */
   'auth.required': AuthRequiredPayload
   /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is the provider's failure in plain words when the flow has one; it never carries a credential. */
   'auth.resolved': AuthResolvedPayload

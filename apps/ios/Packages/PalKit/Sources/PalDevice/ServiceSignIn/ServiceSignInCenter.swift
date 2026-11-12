@@ -43,6 +43,7 @@ public enum ServiceSignInPhase: Sendable, Hashable {
     case pasteAddress(String?)
     case keySet
     case keyFailed(String)
+    case callbackFailed(String)
     case signedIn
     case failed(String)
     case expired
@@ -71,7 +72,7 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var acceptsKey: Bool {
         switch phase {
         case .prompting, .keyFailed: true
-        case .signingIn, .pasteAddress, .keySet, .signedIn, .failed, .expired: false
+        case .signingIn, .pasteAddress, .keySet, .callbackFailed, .signedIn, .failed, .expired: false
         }
     }
 
@@ -88,7 +89,7 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var canSignIn: Bool {
         if requiresAppSignIn { return automaticSignInAvailable || pasteSignInAvailable }
         switch flow {
-        case .deviceCode, .oauth: return true
+        case .deviceCode, .oauth, .oauthPaste: return true
         case .apiKey, .header, .manual, .unknown: return false
         }
     }
@@ -182,6 +183,18 @@ public final class ServiceSignInCenter {
             } catch {
                 setPhase(.failed(Self.startFailure), for: service, ifRequest: requestID)
             }
+        case .oauthPaste:
+            guard let url = Self.secureURL(dialog.verificationURI) else {
+                setPhase(.failed(Self.pageFailure), for: service)
+                return
+            }
+            setPhase(.signingIn, for: service)
+            openBrowser(url)
+            do {
+                _ = try await call(ServiceSignInWire.signInMethod, ServiceSignInWire.requestParams(requestID))
+            } catch {
+                setPhase(.failed(Self.startFailure), for: service, ifRequest: requestID)
+            }
         case .apiKey, .header, .manual, .unknown:
             return
         }
@@ -244,6 +257,28 @@ public final class ServiceSignInCenter {
         }
     }
 
+    public func submitCallback(_ text: String) async {
+        guard let dialog = current, dialog.flow == .oauthPaste, let pasted = PastedCallback(text) else { return }
+        switch dialog.phase {
+        case .signingIn, .callbackFailed: break
+        case .prompting, .keySet, .keyFailed, .signedIn, .failed, .expired: return
+        }
+        let requestID = dialog.requestID
+        let service = dialog.service
+        setPhase(.signingIn, for: service)
+        do {
+            let params = ServiceSignInWire.submitCallbackParams(requestID: requestID, value: pasted.value)
+            let result = AuthCallbackResult(try await call(ServiceSignInWire.submitCallbackMethod, params))
+            switch result.outcome {
+            case .stored: break
+            case .failed, .unknown: setPhase(.callbackFailed(result.reason ?? Self.callbackFailure), for: service, ifRequest: requestID)
+            case .rejected: setPhase(.expired, for: service, ifRequest: requestID)
+            }
+        } catch {
+            setPhase(.callbackFailed(Self.callbackFailure), for: service, ifRequest: requestID)
+        }
+    }
+
     public func submitCredential(_ secret: SecretString) async {
         guard let dialog = current, dialog.takesKey, dialog.acceptsKey, !secret.isEmpty else { return }
         let requestID = dialog.requestID
@@ -268,7 +303,7 @@ public final class ServiceSignInCenter {
         remove(service: dialog.service)
         await pasteSignIn?.cancel(dialog.service)
         switch dialog.phase {
-        case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed:
+        case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed, .callbackFailed:
             _ = try? await call(ServiceSignInWire.declineMethod, ServiceSignInWire.requestParams(dialog.requestID))
         case .signedIn, .failed, .expired:
             return
@@ -282,7 +317,7 @@ public final class ServiceSignInCenter {
             case .signedIn, .failed, .expired:
                 dismissals.removeValue(forKey: event.service)?.cancel()
                 dialogs[index] = makeDialog(from: event)
-            case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed:
+            case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed, .callbackFailed:
                 dialog.requestID = event.requestID
                 dialog.serviceName = event.serviceName
                 dialog.bot = event.bot
@@ -381,6 +416,7 @@ public final class ServiceSignInCenter {
     static let pageFailure = "We couldn't open the sign-in page."
     static let startFailure = "We couldn't start sign-in. Please try again later."
     static let keyFailure = "Couldn't save that. Check it and try again."
+    public static let callbackFailure = "That address didn't work. Copy it again from the browser and try again."
     static let didNotFinish = "Sign-in didn't finish."
     static let timedOut = "Sign-in took too long and was stopped."
 }

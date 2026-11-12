@@ -22,6 +22,7 @@ class AuthFlow(WireEnum):
     API_KEY = "api_key"
     HEADER = "header"
     MANUAL = "manual"
+    OAUTH_PASTE = "oauth_paste"
 
 
 class AuthOutcome(WireEnum):
@@ -51,9 +52,13 @@ event("auth.required", AuthRequiredPayload,
           "sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code "
           "carries user_code and verification_uri to open in the system browser; oauth is started with "
           "auth.signin; api_key and header ask for one masked credential for the service: answer with "
-          "auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. "
-          "signin_on owner_app: the sign-in cannot run on the gateway host; sign in on the owner's own "
-          "computer and hand the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). "
+          "auth.submit_credential (the value travels only in that request); oauth_paste carries the "
+          "authorization URL in verification_uri (open it in the system browser; it ends on an address that "
+          "cannot load) and is finished by pasting that address with auth.submit_callback from any app; "
+          "manual has no in-app sign-in. "
+          "signin_on owner_app: the sign-in cannot run on the gateway host; the app on any of the owner's "
+          "devices runs the sign-in and hands the tokens over with auth.submit_oauth_tokens (auth.signin only "
+          "acknowledges). "
           "The payload never carries a credential.")
 
 
@@ -118,6 +123,26 @@ canonical_method("auth.submit_credential", params=AuthSubmitCredentialParams, re
                      "echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. "
                      "failed: not saved (invalid value or store error), the same request may be answered again. "
                      "rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored.")
+
+
+class AuthSubmitCallbackParams(Params):
+    request_id: str = Field(pattern=AUTH_REQUEST_ID_PATTERN)
+    value: str = Field(min_length=1, max_length=4096, repr=False)
+
+
+class AuthSubmitCallbackResult(Result):
+    outcome: AuthCredentialOutcome
+    reason: str | None = None
+
+
+canonical_method("auth.submit_callback", params=AuthSubmitCallbackParams, result=AuthSubmitCallbackResult,
+                 doc="The user pasted the address the browser ended on for an oauth_paste auth.required request. "
+                     "The gateway, which holds the PKCE verifier, checks the address, the state and the code, "
+                     "exchanges it and stores the credential in the requesting profile; the pasted text is never "
+                     "echoed, logged or kept. stored: signed in. failed: reason says in plain words what to fix; "
+                     "the same request may be answered again unless auth.resolved already ended it (declined "
+                     "on the provider's page, expired, exchange refused). rejected: unknown, finished, foreign "
+                     "or already used request; nothing stored.")
 
 
 class AuthBeginOutcome(WireEnum):

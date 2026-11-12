@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 import threading
+import time
 from pathlib import Path
 from typing import Callable, Optional, Protocol
 
@@ -510,6 +512,85 @@ class ProviderDeviceFlow:
                 session["cancelled"] = True
 
 
+PASTE_TTL_SECONDS = 300.0
+PASTE_MAX_RETRIES = 5
+PASTE_FAILURE = "The provider did not accept the sign-in. Start again."
+PASTE_EXPIRED = "The sign-in expired. Start again."
+
+
+class ProviderPasteFlow:
+    """Authorization-code + PKCE sign-in whose loopback redirect cannot be served: the gateway holds the
+    verifier, the owner pastes the address the browser ended on from any attached device."""
+
+    kind = "oauth_paste"
+    user_code = None
+    expires_in = int(PASTE_TTL_SECONDS)
+
+    def __init__(self, provider: str, cfg) -> None:
+        self.provider = provider
+        self._cfg = cfg
+        self._pending = None
+        self._deadline = 0.0
+        self._attempts = 0
+        self._consumed = False
+        self._done = asyncio.Event()
+        self._succeeded = False
+        self.verification_uri: Optional[str] = None
+        self.failure: Optional[str] = None
+
+    async def begin(self) -> None:
+        from hermes_cli import auth_oauth_pkce_plugin as pkce
+        port = 49152 + secrets.randbelow(16384) if not self._cfg.redirect_port else int(self._cfg.redirect_port)
+        self._pending = await asyncio.to_thread(pkce.begin_authorization, self.provider, self._cfg, redirect_port=port)
+        self.verification_uri = self._pending.authorize_url
+        self._deadline = time.monotonic() + PASTE_TTL_SECONDS
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def callback(self, value: str) -> tuple[str, Optional[str]]:
+        """("stored" | "retry" | "failed" | "rejected", reason). A paste that carries a code for this state is
+        consumed whether or not the exchange succeeds."""
+        from hermes_cli import auth_oauth_pkce_plugin as pkce
+        from hermes_cli.auth_constants import AuthError
+        from hermes_cli.oauth_paste import CallbackError, parse_callback
+        if self._pending is None or self._consumed or self._done.is_set():
+            return "rejected", None
+        if time.monotonic() > self._deadline:
+            return self._end(PASTE_EXPIRED)
+        try:
+            parsed = parse_callback(value, redirect_uri=self._pending.redirect_uri, state=self._pending.state)
+        except CallbackError as exc:
+            self._attempts += 1
+            if exc.retry and self._attempts < PASTE_MAX_RETRIES:
+                return "retry", exc.message
+            return self._end(exc.message)
+        self._consumed = True
+        try:
+            tokens = await asyncio.to_thread(pkce.exchange_code, self.provider, self._cfg, self._pending, parsed.code)
+            await asyncio.to_thread(pkce.store_grant, self.provider, self._cfg, tokens)
+        except (AuthError, OSError, ValueError, KeyError, RuntimeError) as exc:
+            logger.warning("%s sign-in could not be completed (%s)", self.provider, type(exc).__name__)
+            return self._end(PASTE_FAILURE)
+        self._succeeded = True
+        self._done.set()
+        return "stored", None
+
+    def _end(self, reason: str) -> tuple[str, Optional[str]]:
+        self._consumed = True
+        self.failure = reason
+        self._done.set()
+        return "failed", reason
+
+    async def wait(self) -> bool:
+        await self._done.wait()
+        return self._succeeded
+
+    def cancel(self) -> None:
+        self._consumed = True
+        self._done.set()
+
+
 def provider_flow(home: Path, service: str) -> SigninFlow:
     from hermes_cli import model_provider_control as control
     provider = service.partition(":")[2]
@@ -519,6 +600,8 @@ def provider_flow(home: Path, service: str) -> SigninFlow:
         return ProviderKeyFlow(provider)
     if kind == "device_code":
         return ProviderDeviceFlow(home, provider)
+    if kind == "oauth_paste":
+        return ProviderPasteFlow(provider, control.pkce_config(provider))
     return ManualFlow()
 
 
