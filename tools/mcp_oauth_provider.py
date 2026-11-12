@@ -94,7 +94,21 @@ class HermesProviderMixin:
         # reject httpx's default (#75576).
         self._hermes_token_user_agent = token_user_agent
 
+    def _hermes_signs_in_on_owner_app(self) -> bool:
+        from tools.mcp_oauth import server_signs_in_on_owner_app
+        name = getattr(self, "_hermes_server_name", "")
+        return bool(name) and server_signs_in_on_owner_app(name)
+
+    def _hermes_raise_if_reauth_required(self) -> None:
+        from tools.mcp_oauth import HermesTokenStorage, OwnerSigninRequired
+        storage = self.context.storage
+        if isinstance(storage, HermesTokenStorage) and storage.reauth_required():
+            raise OwnerSigninRequired("The saved sign-in was rejected and a new one must be handed over from the owner's computer")
+
     async def _perform_authorization(self):
+        if self._hermes_signs_in_on_owner_app():
+            from tools.mcp_oauth import OwnerSigninRequired
+            raise OwnerSigninRequired("This server signs in on the owner's computer, not on this host")
         info = self.context.client_info
         grants = getattr(info, "grant_types", None) or []
         if (getattr(self, "_hermes_oauth_flow", "browser") == "device"
@@ -247,6 +261,7 @@ class HermesProviderMixin:
         the original request with the winner's access token, never POSTing
         the burned refresh token.
         """
+        self._hermes_raise_if_reauth_required()
         while True:
             inner = super().async_auth_flow(request)
             discovery_failures: list[str] = []
@@ -468,6 +483,8 @@ class HermesProviderMixin:
                 )
                 return True
             self.context.clear_tokens()
+            if response.status_code in (400, 401) and self._hermes_signs_in_on_owner_app():
+                self._hermes_reject_refresh_token()
             return False
         from httpx import HTTPError
         from mcp.shared.auth import OAuthToken
@@ -490,6 +507,15 @@ class HermesProviderMixin:
                 token_response.scope = prior.scope
         await self._store_tokens(token_response)
         return True
+
+    def _hermes_reject_refresh_token(self) -> None:
+        """The one refresh this sign-in gets has failed for good: persist that before anything can present
+        the dead token again, then fail the call instead of falling into a browser flow nobody can finish."""
+        from tools.mcp_oauth import HermesTokenStorage, OwnerSigninRequired
+        storage = self.context.storage
+        if isinstance(storage, HermesTokenStorage):
+            storage.mark_reauth_required()
+        raise OwnerSigninRequired("The authorization server rejected the saved refresh token")
 
     async def _hermes_reload_tokens_after_refresh_failure(self) -> bool:
         """Re-read tokens from disk after a rejected refresh.

@@ -83,7 +83,7 @@ def _required_frame(req: _Request) -> dict:
         request_id=req.request_id, service=req.service, service_name=service_display_name(req.service),
         bot=req.bots[0], bots=list(req.bots), reason=req.reason, flow=req.flow.kind,
         user_code=req.flow.user_code, verification_uri=req.flow.verification_uri, expires_in=req.flow.expires_in,
-        server=getattr(req.flow, 'server', None)))
+        server=getattr(req.flow, 'server', None), signin_on=getattr(req.flow, 'signin_on', None)))
 
 
 async def _broadcast(transports: list, frame: dict) -> list:
@@ -207,7 +207,7 @@ async def signin(authority, request_id: str) -> tuple[bool, str | None]:
     confirm = getattr(req.flow, "confirm", None)
     if confirm is not None and not await confirm():
         return False, None
-    if req.flow.kind == "oauth" and req.authorize_url is None:
+    if req.flow.kind == "oauth" and req.authorize_url is None and getattr(req.flow, "signin_on", None) is None:
         try:
             req.authorize_url = await req.flow.authorize_url()
         except Exception:
@@ -218,6 +218,16 @@ async def signin(authority, request_id: str) -> tuple[bool, str | None]:
             await _conclude(req, Resolution.FAILED)
             return False, None
     return True, req.authorize_url
+
+
+async def complete(authority, home: Path, service: str) -> bool:
+    """The service was signed in outside the prompt (the owner's computer handed over its tokens): end the
+    waiting request, if any, as signed in."""
+    req = _active.get(_key(home, service))
+    if req is None or req.authority is not authority or req.future.done():
+        return False
+    await _conclude(req, Resolution.SIGNED_IN)
+    return True
 
 
 async def submit_credential(authority, request_id: str, value: str) -> CredentialOutcome:
@@ -288,6 +298,33 @@ def forget_transport(transport) -> int:
                 req.flow.cancel()
                 _finish(req, Resolution.NO_APP)
     return dropped
+
+
+async def _offer(authority, home: Path, need: AuthNeed, bot: str) -> None:
+    if _active.get(_key(home, need.service)) is None:
+        await request_signin(authority, home, need, bot)
+
+
+def offer_from_thread(home: Path, need: AuthNeed, bot: str) -> None:
+    """Raise the sign-in prompt on the attached apps without making the calling turn wait for the answer."""
+    from gateway.session_cron import owner_for_home
+    bound = owner_for_home(home)
+    if bound is None:
+        return
+    authority, loop = bound
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is loop:
+        return
+    future = asyncio.run_coroutine_threadsafe(_offer(authority, home, need, bot), loop)
+
+    def log_failure(done) -> None:
+        if not done.cancelled() and (exc := done.exception()) is not None:
+            logger.warning("sign-in offer for %s failed (%s)", need.service, type(exc).__name__)
+
+    future.add_done_callback(log_failure)
 
 
 def call_from_thread(home: Path, need: AuthNeed, bot: str) -> Resolution:

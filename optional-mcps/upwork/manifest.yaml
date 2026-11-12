@@ -1,0 +1,64 @@
+manifest_version: 1
+
+name: upwork
+description: Search Upwork jobs and freelancers, read proposals, contracts and messages, and send proposals or messages only after you approve each one.
+source: https://www.upwork.com
+
+transport:
+  type: http
+  url: https://mcp.upwork.com/mcp
+
+auth:
+  type: oauth
+  signin_on: owner_app
+
+# The tool names below are the naming-convention guess (the server could not be reached when this was
+# written). A wrong read name only makes a read ask for approval; it can never let a write run.
+action_policy:
+  read_tools:
+    - get_current_user
+    - get_my_profile
+    - get_organization
+    - search_jobs
+    - get_job
+    - get_job_details
+    - search_freelancers
+    - get_freelancer
+    - get_freelancer_profile
+    - list_proposals
+    - get_proposal
+    - list_contracts
+    - get_contract
+    - list_milestones
+    - get_milestone
+    - list_offers
+    - get_offer
+    - list_rooms
+    - get_room
+    - list_messages
+    - get_room_messages
+    - get_connects_balance
+    - list_categories
+  refused_tools:
+    - fund_escrow
+    - fund_milestone
+    - accept_offer
+    - pay_milestone
+    - release_milestone
+    - release_escrow
+    - release_payment
+    - make_payment
+    - send_payment
+    - pay_invoice
+  refused_message: This step moves money, so the assistant never does it. Do it yourself on upwork.com.
+
+suggest:
+  keywords:
+    - upwork
+  hosts:
+    - upwork.com
+
+post_install: |
+  Sign in to Upwork from any Pal app (Mac, iPhone or iPad). Upwork only approves a sign-in redirect
+  to the device itself, so the sign-in is not started from the Hermes host. The Pal app finishes it
+  and hands the tokens to the gateway, which keeps and refreshes them.

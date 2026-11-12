@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from .base import Params, Payload, Result, WireEnum
@@ -42,6 +44,7 @@ class AuthRequiredPayload(Payload):
     verification_uri: str | None = None
     expires_in: int | None = None
     server: str | None = None
+    signin_on: Literal["owner_app"] | None = None
 
 
 event("auth.required", AuthRequiredPayload,
@@ -53,6 +56,9 @@ event("auth.required", AuthRequiredPayload,
           "authorization URL in verification_uri (open it in the system browser; it ends on an address that "
           "cannot load) and is finished by pasting that address with auth.submit_callback from any app; "
           "manual has no in-app sign-in. "
+          "signin_on owner_app: the sign-in cannot run on the gateway host; the app on any of the owner's "
+          "devices runs the sign-in and hands the tokens over with auth.submit_oauth_tokens (auth.signin only "
+          "acknowledges). "
           "The payload never carries a credential.")
 
 
@@ -163,3 +169,30 @@ canonical_method("auth.begin", params=AuthBeginParams, result=AuthBeginResult,
                      "auth.signin / auth.decline and ends with auth.resolved. unsupported: the provider cannot "
                      "be set up from an app (reason says why). refused: this connection may not change that "
                      "credential. unavailable: no connected app can show the prompt.")
+
+
+class AuthSubmitOauthTokensParams(Params):
+    service: str = Field(pattern=r"^mcp:[a-z0-9][a-z0-9._-]{0,63}$")
+    client_id: str = Field(min_length=1, max_length=512)
+    redirect_uri: str = Field(min_length=1, max_length=2048)
+    token_endpoint: str = Field(min_length=1, max_length=2048)
+    issuer: str = Field(min_length=1, max_length=2048)
+    access_token: str = Field(min_length=1, max_length=8192, repr=False)
+    refresh_token: str | None = Field(default=None, min_length=1, max_length=8192, repr=False)
+    expires_in: int | None = Field(default=None, ge=1)
+    scope: str | None = Field(default=None, max_length=1024)
+    token_type: str | None = Field(default=None, max_length=32)
+
+
+class AuthSubmitOauthTokensResult(Result):
+    ok: bool
+    reason: str | None = None
+
+
+canonical_method("auth.submit_oauth_tokens", params=AuthSubmitOauthTokensParams, result=AuthSubmitOauthTokensResult,
+                 doc="The owner signed in to an MCP server on their own computer (auth.required signin_on "
+                     "owner_app) and hands over the public client it registered and the tokens. The gateway "
+                     "stores them for the connecting profile, connects the server and ends any waiting sign-in "
+                     "request as signed_in. Public clients only: a client_secret is not accepted. The tokens are "
+                     "never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, "
+                     "server_mismatch, invalid_request or save_failed.")

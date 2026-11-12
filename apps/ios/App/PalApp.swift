@@ -1,6 +1,7 @@
 import AppIntents
 import PalBotProfile
 import PalClient
+import PalConnect
 import PalDesign
 import PalDevice
 import PalDiagnostics
@@ -21,6 +22,7 @@ struct PalApp: App {
     @State private var consent: DevicePermissionPresenter
     @State private var hostPool: DeviceHostPool
     @State private var signIn: ServiceSignInCenter
+    @State private var autoApprove: ActionAutoApprove
     @State private var links: BotLinks
     @State private var directory = BotDirectory()
     #if os(macOS)
@@ -44,9 +46,12 @@ struct PalApp: App {
         _hostPool = State(initialValue: DeviceHostPool(connection: model, consent: consent))
         let signIn = ServiceSignInCenter(
             call: { method, params in try await model.rpc(method, params) },
-            openBrowser: { _ = ExternalLink.open($0) }
+            openBrowser: { _ = ExternalLink.open($0) },
+            nativeSignIn: UpworkSignIn.serviceHandler(connection: model),
+            pasteSignIn: UpworkSignIn.servicePasteRoute(connection: model)
         )
         _signIn = State(initialValue: signIn)
+        _autoApprove = State(initialValue: ActionAutoApprove { method, params in try await model.rpc(method, params) })
         roster.gatewayEventSink = { event in
             Task { @MainActor in signIn.receive(event) }
         }
@@ -70,6 +75,7 @@ struct PalApp: App {
                 .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
                 .environment(appearance)
                 .environment(signIn)
+                .environment(autoApprove)
                 #if os(macOS)
                 .environment(shell)
                 .environment(shortcuts)
@@ -93,6 +99,7 @@ struct PalApp: App {
                 }
                 .onChange(of: model.phase) { _, phase in
                     guard phase == .signedOut else { return }
+                    autoApprove.forget()
                     roster.reset()
                     router.popToRoot()
                     Task { await hostPool.reset() }

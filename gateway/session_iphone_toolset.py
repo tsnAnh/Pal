@@ -85,12 +85,22 @@ def _bot_chat(authority, session_id) -> bool:
 _POLICY_KINDS = {'ios': SessionKind.IOS, 'cli': SessionKind.CLI, 'gui': SessionKind.DESKTOP}
 
 
+OWNER_APP_KINDS = frozenset({SessionKind.IOS, SessionKind.DESKTOP, SessionKind.BOT_CHAT})
+
+
+def _kind(bot_chat: bool, policy) -> SessionKind:
+    return SessionKind.BOT_CHAT if bot_chat else _POLICY_KINDS.get(policy.source, SessionKind.OTHER)
+
+
+def session_kind(authority, policy, session_id) -> SessionKind:
+    return _kind(_bot_chat(authority, session_id), policy)
+
+
 def session_facts(authority, policy, config, session_id) -> SessionFacts:
     from agent.skill_utils import parse_config_string_list
     bot_chat = _bot_chat(authority, session_id)
-    kind = SessionKind.BOT_CHAT if bot_chat else _POLICY_KINDS.get(policy.source, SessionKind.OTHER)
     return SessionFacts(
-        kind=kind,
+        kind=_kind(bot_chat, policy),
         picked_toolsets=not bot_chat and 'toolsets' in json.loads(policy.request_json),
         safe_mode=policy.safe_mode,
         disabled_toolsets=frozenset(parse_config_string_list((config.get('agent') or {}).get('disabled_toolsets'))),

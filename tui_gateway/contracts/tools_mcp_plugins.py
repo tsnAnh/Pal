@@ -8,6 +8,8 @@ Every ``mcp.servers.*``, ``mcp.catalog``, ``skills.manage`` and ``plugins.manage
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import Field
 
 from .base import JsonValue, Params, Result, WireEnum
@@ -395,10 +397,12 @@ class McpCatalogEntry(Result):
     name: str
     description: str
     connector_slug: str | None = None
+    signin_on: Literal["owner_app"] | None = None
     installed: bool
     enabled: bool
     requires: list[str]
     transport: str
+    needs_auth_reason: str | None = None
 
 
 class McpCatalogResult(Result):
@@ -463,6 +467,7 @@ class McpServerRuntimeRow(Result):
     plugin: str | None = None
     # Parked on a rejected OAuth credential (older backends omit it).
     needs_auth: bool = False
+    needs_auth_reason: str | None = None
 
 
 class McpServersStatusResult(Result):

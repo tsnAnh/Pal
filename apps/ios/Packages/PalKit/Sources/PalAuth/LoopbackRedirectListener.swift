@@ -10,18 +10,24 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
     private let queue = DispatchQueue(label: "dev.tsnanh.hermes.loopback-redirect")
     private let listener: NWListener
     private let diagnostics: Diagnostics
+    private let expectedState: String?
     private var outcome: Result<[String: String], SignInError>?
     private var waiter: CheckedContinuation<[String: String], any Error>?
     private var finished = false
 
     public var redirectURI: String { "http://127.0.0.1:\(port)\(Self.callbackPath)" }
 
-    private init(listener: NWListener, diagnostics: Diagnostics) {
+    private init(listener: NWListener, diagnostics: Diagnostics, expectedState: String?) {
         self.listener = listener
         self.diagnostics = diagnostics
+        self.expectedState = expectedState
     }
 
-    public static func start(timeout: Duration = .seconds(300), diagnostics: Diagnostics = .silent) async throws -> LoopbackRedirectListener {
+    public static func start(
+        timeout: Duration = .seconds(300),
+        expectedState: String? = nil,
+        diagnostics: Diagnostics = .silent
+    ) async throws -> LoopbackRedirectListener {
         let parameters = NWParameters.tcp
         parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
         parameters.allowLocalEndpointReuse = false
@@ -31,7 +37,7 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
         } catch {
             throw SignInError.listenerFailed
         }
-        let instance = LoopbackRedirectListener(listener: nwListener, diagnostics: diagnostics)
+        let instance = LoopbackRedirectListener(listener: nwListener, diagnostics: diagnostics, expectedState: expectedState)
         try await instance.begin(timeout: timeout)
         diagnostics.info("loopback", "listening on 127.0.0.1:\(instance.port)")
         return instance
@@ -148,6 +154,11 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
             reply(on: connection, status: "404 Not Found", body: Self.page("Not found."), then: nil)
             return
         }
+        if let expectedState, !Self.stateMatches(request, expectedState: expectedState) {
+            diagnostics.warning("loopback", "ignored redirect with a different state")
+            reply(on: connection, status: "400 Bad Request", body: Self.page("This sign-in link is not valid."), then: nil)
+            return
+        }
         diagnostics.info("loopback", "received redirect callback")
         reply(
             on: connection,
@@ -170,6 +181,10 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
             connection.cancel()
         })
         completion?()
+    }
+
+    static func stateMatches(_ parameters: [String: String], expectedState: String) -> Bool {
+        parameters["state"].map { ConstantTime.equal($0, expectedState) } ?? false
     }
 
     static func parse(head: Data, expectedHost: String) -> [String: String]? {

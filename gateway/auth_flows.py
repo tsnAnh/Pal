@@ -301,6 +301,34 @@ class HeaderFlow:
         return None
 
 
+class OwnerComputerFlow:
+    """OAuth the gateway host cannot run: the vendor approves redirects only for apps on the owner's own computer,
+    so the owner's app signs in there and hands the tokens over (``auth.submit_oauth_tokens``), which ends this."""
+
+    kind = "oauth"
+    signin_on = "owner_app"
+    user_code = None
+    verification_uri = None
+    expires_in = None
+
+    def __init__(self, server: str) -> None:
+        self.server = server
+        self._cancelled = asyncio.Event()
+
+    async def begin(self) -> None:
+        return None
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def wait(self) -> bool:
+        await self._cancelled.wait()
+        return False
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+
+
 class McpPasteFlow:
     """MCP OAuth whose registered loopback redirect only the gateway host can serve: the gateway holds the
     verifier, any attached device opens the authorization URL and pastes the address the browser ended on."""
@@ -401,6 +429,10 @@ class McpServerFlow:
     def server(self) -> str:
         return self._server
 
+    @property
+    def signin_on(self) -> Optional[str]:
+        return getattr(self._inner, "signin_on", None)
+
     def _catalog_declares_api_key(self) -> bool:
         from hermes_cli.mcp_catalog import get_entry
         entry = get_entry(self._server)
@@ -409,10 +441,13 @@ class McpServerFlow:
     async def begin(self) -> None:
         from hermes_cli.mcp_config import _get_mcp_servers
         cfg = (await asyncio.to_thread(_get_mcp_servers)).get(self._server)
+        from tools.mcp_oauth import signs_in_on_owner_app
         kind = classify_mcp_server(cfg)
         if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
             kind = "api_key"
-        if kind == "oauth":
+        if kind == "oauth" and signs_in_on_owner_app(cfg):
+            self._inner = OwnerComputerFlow(self._server)
+        elif kind == "oauth":
             paste = McpPasteFlow(self._home, self._server)
             try:
                 await paste.begin()

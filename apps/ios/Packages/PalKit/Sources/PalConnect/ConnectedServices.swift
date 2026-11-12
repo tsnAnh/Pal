@@ -2,6 +2,7 @@ import Foundation
 
 public enum ServiceKind: String, Sendable, CaseIterable {
     case slack
+    case upwork
 
     public var connectorSlug: String { rawValue }
 }
@@ -18,8 +19,12 @@ public struct ConnectedServices: Sendable, Equatable {
     public init(catalog: ConnectCatalog?) {
         connected = catalog.map { catalog in
             Set(catalog.apps.compactMap { app -> String? in
-                guard app.isConnected, case .hosted(let slug) = app.source else { return nil }
-                return slug
+                guard app.isConnected else { return nil }
+                switch app.source {
+                case .hosted(let slug): return slug
+                case .mcp(let name, _): return name
+                case .custom: return nil
+                }
             })
         }
     }
