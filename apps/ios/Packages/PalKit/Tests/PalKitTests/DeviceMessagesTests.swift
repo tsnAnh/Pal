@@ -91,7 +91,7 @@ private func failure(_ outcome: DeviceToolOutcome) -> (DeviceToolErrorCode, Stri
         for (permission, button, summary) in cases {
             guard let entry else { Issue.record("no Messages entry"); return }
             let row = DeviceConnectorRow(entry: entry, state: DeviceConnectorRowState(osPermission: permission))
-            let look = DeviceRowPresentation(row: row, isThisDevice: true)
+            let look = DeviceRowPresentation(row: row)
             #expect(look.buttonTitle == button && look.summary == summary)
         }
     }
