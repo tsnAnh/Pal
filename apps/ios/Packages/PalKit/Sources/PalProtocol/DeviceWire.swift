@@ -22,6 +22,8 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
         }
     }
 
+    public var isAlwaysOn: Bool { self == .shell || self == .files }
+
     public var asksOSPermissionOnUse: Bool { self != .screen && self != .notifications && self != .input }
 }
 

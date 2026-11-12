@@ -354,8 +354,7 @@ struct DeviceTile: View {
         case .contacts: "person.crop.circle.fill"
         case .location: "location.fill"
         case .alarms: "alarm.fill"
-        case .shell: "terminal.fill"
-        case .files: "folder.fill"
+        case .shell, .files: "desktopcomputer"
         case .input: "cursorarrow.click.2"
         case .screen: "display"
         case .notifications: "bell.fill"
@@ -372,8 +371,7 @@ struct DeviceTile: View {
         case .contacts: RGB(hex: 0x8e8e93)
         case .location: RGB(hex: 0x1c65cb)
         case .alarms: RGB(hex: 0x2c2c2e)
-        case .shell: RGB(hex: 0x3a3a3c)
-        case .files: RGB(hex: 0x1c8ef0)
+        case .shell, .files: RGB(hex: 0x3a3a3c)
         case .input: RGB(hex: 0x6e4ccf)
         case .screen: RGB(hex: 0x6e4bd8)
         case .notifications: RGB(hex: 0xe5493a)

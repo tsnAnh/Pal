@@ -77,6 +77,7 @@ public actor DeviceToolExecutor {
     }
 
     private func gate(_ connector: DeviceConnectorID, action: DeviceToolAction, request: DeviceToolRequest) async -> DeviceToolOutcome? {
+        if connector.isAlwaysOn { return nil }
         var state = await ledger.state(for: connector)
         if state == nil || state == .off {
             _ = try? await ledger.refresh()
@@ -113,8 +114,7 @@ public actor DeviceToolExecutor {
         case .contacts: "Contacts"
         case .location: "Location"
         case .alarms: "Alarms"
-        case .shell: "Run commands"
-        case .files: "Files"
+        case .shell, .files: "This Mac"
         case .input: "Mouse and keyboard"
         case .screen: "Screen"
         case .notifications: "Notifications"
