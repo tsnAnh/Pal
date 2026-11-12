@@ -2,11 +2,14 @@
 import PalBotProfile
 import PalConnect
 import PalDesign
+import PalDevice
+import PalProtocol
 import SwiftUI
 
 struct MacConnectApps: View {
     @State private var model: ConnectAppsModel
 
+    @Environment(\.scenePhase) private var scenePhase
 
     private static let rowsPerSectionInAll = 6
     private let columns = [GridItem(.flexible(), spacing: 30), GridItem(.flexible(), spacing: 30)]
@@ -29,6 +32,9 @@ struct MacConnectApps: View {
         .accessibilityIdentifier("connectApps")
         .task { await model.start() }
         .onDisappear { Task { await model.stop() } }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await model.devices.refresh() } }
+        }
         .alert(item: $model.notice) { notice in
             Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
         }
@@ -195,6 +201,8 @@ struct MacConnectApps: View {
     private func chipTitle(_ id: String) -> String {
         switch id {
         case ConnectChip.all: String(localized: "All")
+        case ConnectChip.iphone: String(localized: "iPhone")
+        case ConnectChip.mac: String(localized: "Mac")
         default: id
         }
     }
@@ -239,12 +247,15 @@ struct MacConnectApps: View {
     private var selectedSection: some View {
         switch model.selection {
         case ConnectChip.all:
+            if let section = model.devices.thisDevice { deviceSection(section) }
             ForEach(model.catalog.categories, id: \.self) { category in
                 section(title: category, identifier: "connectAppsSection-\(category)", viewAll: { model.selection = category }) {
                     appGrid(Array(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)))
                 }
             }
             capabilitiesSection
+        case ConnectChip.iphone, ConnectChip.mac:
+            deviceSections(of: ConnectChip.deviceKind(model.selection) ?? .mac)
         case let category:
             section(title: category, identifier: "connectAppsSectionTitle", viewAll: nil) {
                 appGrid(model.catalog.apps(in: category))
@@ -351,6 +362,64 @@ struct MacConnectApps: View {
                     .accessibilityIdentifier("capabilitiesList")
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private func deviceSections(of kind: DeviceKind) -> some View {
+        let sections = model.devices.sections(of: kind)
+        ForEach(sections) { deviceSection($0) }
+        if sections.isEmpty {
+            Text("No \(kind.sectionName) connected yet")
+                .font(.system(size: 11))
+                .foregroundStyle(PalTokens.textSecondary)
+                .accessibilityIdentifier("connectAppsNoDevices")
+        }
+    }
+
+    private func deviceSection(_ device: DeviceSection) -> some View {
+        section(title: device.title, identifier: "connectAppsSection-device-\(device.id)", viewAll: nil) {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
+                ForEach(device.rows) { deviceRow($0, in: device) }
+            }
+        }
+    }
+
+    private func deviceRow(_ row: DeviceConnectorRow, in device: DeviceSection) -> some View {
+        let look = DeviceRowPresentation(row: row, isThisDevice: device.isThisDevice)
+        let prefix = device.isThisDevice ? "deviceConnector" : "deviceConnector-\(device.id)"
+        let identifier = "\(prefix)-\(row.id.rawValue)"
+        return HStack(spacing: 8) {
+            DeviceTile(connector: row.id).scaleEffect(0.95).frame(width: 38, height: 38)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(row.entry.title)
+                    .font(.system(size: 12))
+                    .foregroundStyle(PalTokens.textPrimary)
+                    .lineLimit(1)
+                Text(look.summary)
+                    .font(.system(size: 11))
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            if device.isThisDevice, model.devices.busy.contains(row.id) {
+                ProgressView().controlSize(.small)
+            } else if let action = deviceAction(look, row.id) {
+                action.view(identifier: "\(identifier)-action")
+            }
+        }
+        .frame(height: 60.5)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func deviceAction(_ look: DeviceRowPresentation, _ id: DeviceConnectorID) -> MacRowAction? {
+        guard let title = look.buttonTitle else { return nil }
+        let localized = String(localized: String.LocalizationValue(title))
+        switch look.action {
+        case .allow: return MacRowAction(title: localized, prominent: true) { Task { await model.devices.allow(id) } }
+        case .openSettings: return MacRowAction(title: localized, prominent: true) { model.devices.openSettings(for: id) }
+        case nil: return MacRowAction(title: localized, checked: true) {}
         }
     }
 
