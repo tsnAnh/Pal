@@ -7247,7 +7247,8 @@
           "oauth",
           "api_key",
           "header",
-          "manual"
+          "manual",
+          "oauth_paste"
         ],
         "title": "AuthFlow",
         "type": "string"
@@ -7485,6 +7486,53 @@
           "recorded"
         ],
         "title": "AuthSigninResult",
+        "type": "object"
+      },
+      "AuthSubmitCallbackParams": {
+        "additionalProperties": false,
+        "properties": {
+          "request_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "value": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "request_id",
+          "value"
+        ],
+        "title": "AuthSubmitCallbackParams",
+        "type": "object"
+      },
+      "AuthSubmitCallbackResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/AuthCredentialOutcome"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "AuthSubmitCallbackResult",
         "type": "object"
       },
       "AuthSubmitCredentialParams": {
@@ -32552,6 +32600,7 @@
         "enum": [
           "api_key",
           "device_code",
+          "oauth_paste",
           "unsupported"
         ],
         "title": "ModelProviderKind",
@@ -59053,6 +59102,24 @@
       }
     },
     {
+      "name": "auth.submit_callback",
+      "summary": "The user pasted the address the browser ended on for an oauth_paste auth.required request. The gateway, which holds the PKCE verifier, checks the address, the state and the code, exchanges it and stores the credential in the requesting profile; the pasted text is never echoed, logged or kept. stored: signed in. failed: reason says in plain words what to fix; the same request may be answered again unless auth.resolved already ended it (declined on the provider's page, expired, exchange refused). rejected: unknown, finished, foreign or already used request; nothing stored.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/AuthSubmitCallbackParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/AuthSubmitCallbackResult"
+        }
+      }
+    },
+    {
       "name": "auth.submit_credential",
       "summary": "The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored.",
       "params": [
@@ -61724,7 +61791,7 @@
     },
     {
       "name": "auth.required",
-      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. The payload never carries a credential.",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. The payload never carries a credential.",
       "params": [
         {
           "name": "payload",

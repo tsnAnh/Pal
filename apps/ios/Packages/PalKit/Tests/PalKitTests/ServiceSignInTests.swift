@@ -116,6 +116,24 @@ struct ServiceSignInWireTests {
         #expect(event.expiresIn == 900)
     }
 
+    @Test func oauthPasteFlowDecodes() throws {
+        let event = try #require(AuthRequiredEvent(event: requiredEvent(flow: "oauth_paste", code: nil)))
+        #expect(event.flow == .oauthPaste)
+        #expect(event.userCode == nil)
+        #expect(AuthCallbackResult(["outcome": "failed", "reason": "Try again."]) == AuthCallbackResult(outcome: .failed, reason: "Try again."))
+        #expect(AuthCallbackResult(["outcome": "stored", "reason": ""]).reason == nil)
+        #expect(AuthCallbackResult(["outcome": "weird"]).outcome == .unknown)
+    }
+
+    @Test func pastedCallbackNormalizes() {
+        #expect(PastedCallback("  http://127.0.0.1:1/cb?code=a \n")?.value == "http://127.0.0.1:1/cb?code=a")
+        #expect(PastedCallback("") == nil)
+        #expect(PastedCallback(" \n\t ") == nil)
+        #expect(PastedCallback(String(repeating: "a", count: 4096)) != nil)
+        #expect(PastedCallback(String(repeating: "a", count: 4097)) == nil)
+        #expect("\(PastedCallback("secret")!)" == "PastedCallback(redacted)")
+    }
+
     @Test func unknownEnumsFallBack() throws {
         let event = try #require(AuthRequiredEvent(event: requiredEvent(flow: "passkey", reason: "stolen")))
         #expect(event.flow == .unknown)
@@ -225,6 +243,87 @@ struct ServiceSignInCenterTests {
         file.receive(requiredEvent(flow: "oauth", code: nil, uri: nil))
         await file.signIn()
         #expect(opened.all.isEmpty)
+    }
+
+    @Test func oauthPasteOpensBrowserOnceAndAcknowledges() async throws {
+        let recorder = Recorder()
+        let opened = Opened()
+        let center = makeCenter(recorder, opened)
+        center.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/authorize?state=s"))
+        #expect(center.current?.flow == .oauthPaste)
+        #expect(center.current?.canSignIn == true)
+        #expect(center.current?.takesKey == false)
+        await center.signIn()
+        await center.signIn()
+        #expect(opened.all.map(\.absoluteString) == ["https://auth.example.com/authorize?state=s"])
+        #expect(recorder.methods() == ["auth.signin"])
+        #expect(center.current?.phase == .signingIn)
+    }
+
+    @Test func oauthPasteRejectsInsecureAuthorizationURL() async {
+        let recorder = Recorder()
+        let opened = Opened()
+        let center = makeCenter(recorder, opened)
+        center.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "http://auth.example.com/authorize"))
+        await center.signIn()
+        #expect(opened.all.isEmpty)
+        #expect(recorder.methods().isEmpty)
+        if case .failed = center.current?.phase {} else { Issue.record("expected failure") }
+    }
+
+    @Test func submitCallbackSendsPastedValueAndWaitsForResolution() async throws {
+        let recorder = Recorder(reply: ["outcome": "stored"])
+        let center = makeCenter(recorder, Opened(), delay: .seconds(30))
+        center.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/a"))
+        await center.submitCallback("http://127.0.0.1:1455/cb?code=c&state=s")
+        #expect(recorder.methods().isEmpty)
+        await center.signIn()
+        await center.submitCallback("  http://127.0.0.1:1455/cb?code=c&state=s \n")
+        let params = try #require(recorder.params("auth.submit_callback").first ?? nil)
+        #expect(params["request_id"]?.stringValue == "r1")
+        #expect(params["value"]?.stringValue == "http://127.0.0.1:1455/cb?code=c&state=s")
+        #expect(center.current?.phase == .signingIn)
+        center.receive(resolvedEvent("r1", "signed_in"))
+        #expect(center.current?.phase == .signedIn)
+        await center.submitCallback("http://127.0.0.1:1455/cb?code=c&state=s")
+        #expect(recorder.params("auth.submit_callback").count == 1)
+    }
+
+    @Test func submitCallbackFailureKeepsPasteOpenAndAllowsRetry() async {
+        let recorder = Recorder(reply: ["outcome": "failed", "reason": "That address is for a different sign-in."])
+        let center = makeCenter(recorder, Opened())
+        center.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/a"))
+        await center.signIn()
+        await center.submitCallback("http://127.0.0.1/cb?code=x")
+        #expect(center.current?.phase == .callbackFailed("That address is for a different sign-in."))
+        await center.submitCallback("http://127.0.0.1/cb?code=y&state=s")
+        #expect(recorder.params("auth.submit_callback").count == 2)
+        #expect(center.current?.phase == .callbackFailed("That address is for a different sign-in."))
+        center.receive(resolvedEvent("r1", "failed"))
+        if case .failed = center.current?.phase {} else { Issue.record("expected ended flow") }
+    }
+
+    @Test func submitCallbackRejectedExpiresAndTransportErrorKeepsPasteOpen() async {
+        let rejected = makeCenter(Recorder(reply: ["outcome": "rejected"]), Opened())
+        rejected.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/a"))
+        await rejected.signIn()
+        await rejected.submitCallback("http://127.0.0.1/cb?code=x")
+        #expect(rejected.current?.phase == .expired)
+
+        let offline = ServiceSignInCenter(
+            call: { method, _ in
+                if method == "auth.submit_callback" { throw DeviceToolHostError.offline }
+                return ["recorded": true]
+            },
+            openBrowser: { _ in },
+            dismissDelay: .seconds(30)
+        )
+        offline.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/a"))
+        await offline.submitCallback("http://127.0.0.1/cb?code=x")
+        #expect(offline.current?.phase == .prompting)
+        await offline.signIn()
+        await offline.submitCallback("http://127.0.0.1/cb?code=x")
+        #expect(offline.current?.phase == .callbackFailed(ServiceSignInCenter.callbackFailure))
     }
 
     @Test func manualFlowHasNoSignIn() async {

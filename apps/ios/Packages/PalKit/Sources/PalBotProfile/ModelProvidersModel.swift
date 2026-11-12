@@ -87,7 +87,7 @@ public final class ModelProvidersModel {
         switch outcome {
         case .signedIn:
             await refresh()
-            rows[id] = .succeeded(kind == .deviceCode ? "Signed in." : "Key saved.")
+            rows[id] = .succeeded(kind == .deviceCode || kind == .oauthPaste ? "Signed in." : "Key saved.")
         case .declined:
             rows[id] = .cancelled
         case .timedOut:
