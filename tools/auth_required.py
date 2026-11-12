@@ -17,7 +17,8 @@ _GH_REASONS = (
     ("revoked", re.compile(r"\b(token\b.{0,40}\brevoked|revoked\b.{0,40}\btoken)", re.IGNORECASE)),
     ("expired", re.compile(r"HTTP 401|bad credentials|token in \S+ is invalid|\bexpired\b", re.IGNORECASE)),
     ("missing", re.compile(r"not logged in|you are not logged into any github hosts|authentication required"
-                           r"|to use github cli in automation, set the gh_token", re.IGNORECASE)),
+                           r"|to use github cli in automation, set the gh_token|to get started with github cli",
+                           re.IGNORECASE)),
 )
 _ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
 _SERVICE_NAMES = {"github": "GitHub"}
