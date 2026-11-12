@@ -25,6 +25,7 @@ private struct PendingShortcut: Equatable {
 
 struct MacShortcutSettingsSection: View {
     @Environment(ShortcutStore.self) private var store
+    @Environment(\.hermesTheme) private var theme
     @State private var recording: ShortcutAction?
     @State private var pending: PendingShortcut?
     @State private var refusal: (action: ShortcutAction, message: String)?
@@ -92,7 +93,7 @@ struct MacShortcutSettingsSection: View {
             if let message = refusal, message.action == action {
                 Text(message.message)
                     .font(.system(size: 11))
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color(theme.palette.destructive))
                     .accessibilityIdentifier("shortcutRefusal-\(action.rawValue)")
             }
             if let pending, pending.action == action { conflictBar(pending) }
@@ -121,7 +122,7 @@ struct MacShortcutSettingsSection: View {
             .background(isRecording ? PalTokens.selected : PalTokens.control, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             .overlay {
                 if isRecording {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Color.accentColor, lineWidth: 1.5)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(PalTokens.toggleOn, lineWidth: 1.5)
                 }
             }
             .background { if isRecording { MacShortcutRecorder { handle($0, for: action) } } }
