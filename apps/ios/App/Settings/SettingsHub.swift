@@ -13,6 +13,7 @@ enum SettingsRoute: Hashable {
     case botComputer
     case devices
     case hermesService
+    case hostUpdate
     case modelProviders
     case githubToken
     case hostKit
