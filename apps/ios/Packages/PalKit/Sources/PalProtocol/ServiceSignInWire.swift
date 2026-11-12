@@ -14,6 +14,7 @@ public enum ServiceSignInReason: String, Sendable, Hashable {
 public enum ServiceSignInFlow: String, Sendable, Hashable, CaseIterable {
     case deviceCode = "device_code"
     case oauth
+    case oauthPaste = "oauth_paste"
     case apiKey = "api_key"
     case header
     case manual
@@ -159,14 +160,34 @@ public enum AuthCredentialOutcome: String, Sendable, Hashable {
     }
 }
 
+public struct AuthCallbackResult: Sendable, Hashable {
+    public var outcome: AuthCredentialOutcome
+    public var reason: String?
+
+    public init(outcome: AuthCredentialOutcome, reason: String? = nil) {
+        self.outcome = outcome
+        self.reason = reason
+    }
+
+    public init(_ value: JSONValue) {
+        outcome = AuthCredentialOutcome(value)
+        reason = value["reason"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+    }
+}
+
 public enum ServiceSignInWire {
     public static let signInMethod = "auth.signin"
     public static let declineMethod = "auth.decline"
     public static let submitCredentialMethod = "auth.submit_credential"
+    public static let submitCallbackMethod = "auth.submit_callback"
     public static let beginMethod = "auth.begin"
 
     public static func requestParams(_ requestID: String) -> JSONValue {
         ["request_id": .string(requestID)]
+    }
+
+    public static func submitCallbackParams(requestID: String, value: String) -> JSONValue {
+        ["request_id": .string(requestID), "value": .string(value)]
     }
 
     public static func submitCredentialParams(requestID: String, value: SecretString) -> JSONValue {

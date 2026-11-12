@@ -8,6 +8,7 @@ from .registry import method
 class ModelProviderKind(WireEnum):
     api_key = "api_key"
     device_code = "device_code"
+    oauth_paste = "oauth_paste"
     unsupported = "unsupported"
 
 

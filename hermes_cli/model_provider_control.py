@@ -56,9 +56,17 @@ def has_device_profile(provider_id: str) -> bool:
     return _device_login_profile(provider_id) is not None
 
 
+def pkce_config(provider_id: str):
+    from hermes_cli.auth_oauth_pkce_plugin import pkce_config_of
+    from providers import get_provider_profile
+    return pkce_config_of(get_provider_profile(provider_id))
+
+
 def kind_of(pconfig) -> tuple[str, Optional[str]]:
     if pconfig.slug in DEVICE_CODE_BUILTIN or has_device_profile(pconfig.slug):
         return "device_code", None
+    if pkce_config(pconfig.slug) is not None:
+        return "oauth_paste", None
     if pconfig.auth_type == "api_key" and pconfig.api_key_env_vars:
         return "api_key", None
     if pconfig.slug == "custom":
@@ -72,6 +80,10 @@ def _state_of(pconfig, kind: str) -> str:
     from hermes_cli.auth import get_auth_status, get_provider_auth_state
     try:
         raw = get_auth_status(pconfig.slug)
+        if kind == "oauth_paste":
+            if raw.get("logged_in") or raw.get("needs_refresh"):
+                return "set"
+            return "expired" if raw.get("accounts") else "not_set"
         if raw.get("logged_in") or raw.get("configured"):
             return "set"
         if kind == "device_code" and (raw.get("relogin_required") or raw.get("expired")
@@ -133,7 +145,7 @@ def remove_credential(provider_id: str) -> None:
         for var in _exclusive_env_vars(pconfig):
             remove_provider_env_credential(var)
         clear_provider_auth(provider_id)
-    elif kind == "device_code":
+    elif kind in ("device_code", "oauth_paste"):
         _logout(provider_id, clear_provider_auth)
     else:
         raise ValueError("not removable here")

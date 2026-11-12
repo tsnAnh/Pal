@@ -244,6 +244,30 @@ async def submit_credential(authority, request_id: str, value: str) -> Credentia
     return CredentialOutcome.STORED
 
 
+async def submit_callback(authority, request_id: str, value: str) -> tuple[CredentialOutcome, str | None]:
+    req = _owned(authority, request_id)
+    deliver = getattr(req.flow, "callback", None) if req is not None else None
+    if req is None or deliver is None or req.future.done() or req.answering:
+        return CredentialOutcome.REJECTED, None
+    req.answering = True
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    scope = set_hermes_home_override(req.home)
+    try:
+        status, reason = await deliver(value)
+    finally:
+        reset_hermes_home_override(scope)
+    req.answering = False
+    if status == "stored":
+        await _conclude(req, Resolution.SIGNED_IN)
+        return CredentialOutcome.STORED, None
+    if status == "retry":
+        return CredentialOutcome.FAILED, reason
+    if status == "failed":
+        await _conclude(req, Resolution.FAILED)
+        return CredentialOutcome.FAILED, reason
+    return CredentialOutcome.REJECTED, None
+
+
 async def decline(authority, request_id: str) -> bool:
     req = _owned(authority, request_id)
     if req is None or req.future.done():
