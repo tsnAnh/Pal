@@ -12,9 +12,30 @@ struct MarkdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(document.blocks) { block in
-                MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+            ForEach(document.layoutItems) { item in
+                switch item {
+                case .block(let block):
+                    blockView(block)
+                case .quote(let blocks):
+                    quoteView(blocks)
+                }
             }
+        }
+    }
+
+    private func blockView(_ block: MarkdownBlock) -> some View {
+        MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+    }
+
+    private func quoteView(_ blocks: [MarkdownBlock]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(blocks) { block in
+                blockView(block)
+            }
+        }
+        .padding(.leading, 13)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Color(theme.palette.textTertiary)).frame(width: 3)
         }
     }
 }
@@ -49,17 +70,12 @@ private struct MarkdownBlockView: View {
 
     @ViewBuilder
     private func listRow<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
-        if block.lists.isEmpty && !block.isQuoted {
+        if block.lists.isEmpty {
             content()
         } else {
             HStack(alignment: .firstTextBaseline, spacing: 0) {
-                if block.isQuoted {
-                    Rectangle().fill(Color(theme.palette.textTertiary)).frame(width: 3).padding(.trailing, 10)
-                }
-                if !block.lists.isEmpty {
-                    Color.clear.frame(width: indentStep * CGFloat(block.lists.count - 1), height: 1)
-                    marker.frame(width: indentStep, alignment: .leading)
-                }
+                Color.clear.frame(width: indentStep * CGFloat(block.lists.count - 1), height: 1)
+                marker.frame(width: indentStep, alignment: .leading)
                 content()
             }
         }
