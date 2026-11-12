@@ -38,12 +38,16 @@ def offered(authority, policy, session_id):
     return {tool['function']['name'] for tool in tools or []} & DEVICE_TOOLS
 
 
-def switch_mac(home, state):
+def switch_mac(home, registered):
     from gateway import device_connectors as connectors
-    from gateway.device_connectors import Connector, ConnectorState
+    from gateway.device_connectors import Connector
+    if not registered:
+        return
     connectors.register_device(home, 'mac-device-0001', 'Work Mac', kind='mac')
-    for connector in Connector:
-        connectors.update(home, 'mac-device-0001', connector, state=ConnectorState.ALLOWED if state and connector is Connector.SHELL else ConnectorState.OFF)
+    path = home / connectors.FILE_NAME
+    stored = json.loads(path.read_text())
+    stored['devices']['mac-device-0001']['connectors'] = {c.value: {'state': 'off'} for c in Connector}
+    path.write_text(json.dumps(stored))
 
 
 KINDS = {
@@ -62,13 +66,13 @@ NOT_ENABLED = {
 }
 
 
-async def sessions(tmp_path, monkeypatch, kinds, connector_on):
+async def sessions(tmp_path, monkeypatch, kinds, registered):
     monkeypatch.chdir(tmp_path)
     store, _runner, authority, owner = _owner(tmp_path / 'home', monkeypatch, {'model': {'default': 'm'}})
     profile_home = tmp_path / authority.profile_id
     profile_home.mkdir()
     for home in (tmp_path / 'home', profile_home):
-        switch_mac(home, connector_on)
+        switch_mac(home, registered)
     made = {}
     for name, extra in kinds.items():
         live, policy = await _create(owner, authority, name, tmp_path, **extra)
@@ -77,13 +81,13 @@ async def sessions(tmp_path, monkeypatch, kinds, connector_on):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('connector_on', [True, False])
-async def test_cli_bot_chat_ios_and_desktop_sessions_are_offered_the_device_tools_exactly_when_a_connector_is_on(
-        tmp_path, monkeypatch, connector_on):
-    store, authority, owner, made = await sessions(tmp_path, monkeypatch, KINDS, connector_on)
+@pytest.mark.parametrize('registered', [True, False])
+async def test_cli_bot_chat_ios_and_desktop_sessions_are_offered_the_device_tools_exactly_when_a_device_is_registered(
+        tmp_path, monkeypatch, registered):
+    store, authority, owner, made = await sessions(tmp_path, monkeypatch, KINDS, registered)
     try:
         for name, (policy, session_id) in made.items():
-            assert offered(authority, policy, session_id) == (DEVICE_TOOLS if connector_on else set()), name
+            assert offered(authority, policy, session_id) == (DEVICE_TOOLS if registered else set()), name
     finally:
         await owner.close()
         store.close_all_db_handles()
@@ -124,13 +128,9 @@ def test_every_connector_of_the_catalog_has_a_family_under_test():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('family', sorted(FAMILIES))
-async def test_a_family_alone_switched_on_makes_cli_and_bot_chat_sessions_offer_the_tools(tmp_path, monkeypatch, family):
-    from gateway import device_connectors as connectors
-    from gateway.device_connectors import Connector, ConnectorState
-    store, authority, owner, made = await sessions(tmp_path, monkeypatch, {k: KINDS[k] for k in ('cli', 'bot_chat')}, False)
+async def test_a_stored_off_for_any_family_never_hides_the_tools_from_cli_and_bot_chat_sessions(tmp_path, monkeypatch, family):
+    store, authority, owner, made = await sessions(tmp_path, monkeypatch, {k: KINDS[k] for k in ('cli', 'bot_chat')}, True)
     try:
-        for home in (tmp_path / 'home', tmp_path / authority.profile_id):
-            connectors.update(home, 'mac-device-0001', Connector(family), state=ConnectorState.ALLOWED)
         for name, (policy, session_id) in made.items():
             assert offered(authority, policy, session_id) == DEVICE_TOOLS, name
     finally:
@@ -140,18 +140,30 @@ async def test_a_family_alone_switched_on_makes_cli_and_bot_chat_sessions_offer_
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('family', sorted(FAMILIES))
-async def test_a_family_reaches_the_owners_mac_only_while_its_connector_is_on(authorities, family):
+async def test_every_family_reaches_the_owners_mac_with_no_switch_and_ignores_an_off_set_call(authorities, family):
     action, args, answer = FAMILIES[family]
     authority = await authorities()
     mac = await connect_phone(authority, 'Work Mac', kind='mac', model='MacBookPro18,3',
                               responder=lambda payload: {'ok': True, 'result': answer})
-    await set_state(mac, family, 'off')
-    off = await call_device(authority, 'Work Mac', action, args)
-    assert off['code'] == 'connector_off' and mac.requests() == []
-    await set_state(mac, family, 'allowed')
+    if family != 'input':
+        await set_state(mac, family, 'off')
     result = await call_device(authority, 'Work Mac', action, args)
     assert result['success'] is True and result['untrusted_content'] is True
     assert [(r['action'], r['connector']) for r in mac.requests()] == [(action, family)]
+    await mac.connection.close()
+
+
+@pytest.mark.asyncio
+async def test_stop_refuses_mouse_and_keyboard_until_the_app_resumes_it(authorities):
+    action, args, answer = FAMILIES['input']
+    authority = await authorities()
+    mac = await connect_phone(authority, 'Work Mac', kind='mac', model='MacBookPro18,3',
+                              responder=lambda payload: {'ok': True, 'result': answer})
+    await set_state(mac, 'input', 'off')
+    stopped = await call_device(authority, 'Work Mac', action, args)
+    assert stopped['code'] == 'connector_off' and mac.requests() == []
+    await set_state(mac, 'input', 'allowed')
+    assert (await call_device(authority, 'Work Mac', action, args))['success'] is True
     await mac.connection.close()
 
 

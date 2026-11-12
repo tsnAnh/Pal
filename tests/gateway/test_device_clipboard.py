@@ -31,19 +31,13 @@ async def mac(authority, label='Work Mac', responder=text_answer, on=True):
 
 
 @pytest.mark.asyncio
-async def test_the_clipboard_is_off_until_the_mac_switches_it_on(authorities):
+async def test_the_clipboard_needs_no_switch_and_ignores_a_set_off(authorities):
     authority = await authorities()
     work = await mac(authority, on=False)
-    assert 'clipboard' not in (await call_devices_list(authority))['devices'][0]['capabilities']
-    for action, args in (('clipboard.read', {}), ('clipboard.write', {'text': 'x'})):
-        result = await call_device(authority, 'Work Mac', action, args)
-        assert result['code'] == 'connector_off' and 'Work Mac' in result['error']
-    assert work.requests() == []
-    await set_state(work, 'clipboard', 'allowed')
     assert (await call_devices_list(authority))['devices'][0]['capabilities']['clipboard'] == 'allowed'
     assert (await call_device(authority, 'Work Mac', 'clipboard.read', {}))['success'] is True
     await set_state(work, 'clipboard', 'off')
-    assert (await call_device(authority, 'Work Mac', 'clipboard.read', {}))['code'] == 'connector_off'
+    assert (await call_device(authority, 'Work Mac', 'clipboard.read', {}))['success'] is True
     await work.connection.close()
 
 
@@ -156,14 +150,14 @@ async def test_another_profiles_mac_is_not_reachable(authorities, tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_only_the_mac_itself_can_switch_the_clipboard_on(authorities):
+async def test_only_the_mac_itself_can_set_the_clipboard_state(authorities):
     authority = await authorities()
     work = await mac(authority, on=False)
     pocket = await connect_phone(authority, 'Sam iPhone')
     reply = await pocket.call('device_connectors.set', {
         'id': 'clipboard', 'state': 'allowed', 'device_id': device_id_for('Work Mac')})
     assert 'permission_denied' in json.dumps(reply)
-    assert (await call_device(authority, 'Work Mac', 'clipboard.read', {}))['code'] == 'connector_off'
+    assert (await call_device(authority, 'Work Mac', 'clipboard.read', {}))['success'] is True
     await work.connection.close()
     await pocket.connection.close()
 

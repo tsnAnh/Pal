@@ -64,23 +64,17 @@ async def test_each_apps_action_reaches_the_mac_and_comes_back_marked_as_data(au
 
 
 @pytest.mark.asyncio
-async def test_the_apps_connector_is_off_by_default_and_the_tool_is_offered_only_once_it_is_on(authorities):
+async def test_the_apps_connector_is_always_on_and_ignores_a_set_off(authorities):
     from gateway import device_connectors
     from tui_gateway.contracts.canonical_device import DeviceConnectorId
     authority = await authorities()
     work = await mac(authority, 'Work Mac', responder=apps_answer)
     home = home_of(authority)
-    assert 'apps' not in (await call_devices_list(authority))['devices'][0]['capabilities']
-    assert device_connectors.open_devices(home, DeviceConnectorId.APPS) == {}
-    for action, args in CALLS:
-        result = await call_device(authority, 'Work Mac', action, args)
-        assert result['code'] == 'connector_off' and 'Apps' in result['error']
-    assert work.requests() == []
-    await set_state(work, 'apps', 'allowed')
     assert (await call_devices_list(authority))['devices'][0]['capabilities']['apps'] == 'allowed'
+    assert list(device_connectors.open_devices(home, DeviceConnectorId.APPS)) == [device_id_for('Work Mac')]
     assert (await call_device(authority, 'Work Mac', 'apps.list'))['success'] is True
     await set_state(work, 'apps', 'off')
-    assert (await call_device(authority, 'Work Mac', 'apps.list'))['code'] == 'connector_off'
+    assert (await call_device(authority, 'Work Mac', 'apps.list'))['success'] is True
     await work.connection.close()
 
 
@@ -129,15 +123,16 @@ async def test_another_profiles_mac_is_not_reachable(authorities):
 
 
 @pytest.mark.asyncio
-async def test_a_connector_still_asking_keeps_the_approval_gate_for_opening_quitting_and_focusing(authorities, monkeypatch):
+async def test_an_ask_set_call_for_apps_is_ignored_so_opening_quitting_and_focusing_run_without_a_prompt(
+        authorities, monkeypatch):
     authority = await authorities()
     work = await mac(authority, 'Work Mac', responder=apps_answer)
     await set_state(work, 'apps', 'ask')
     approvals = Approvals(monkeypatch, 'deny')
     for action, args in (('apps.open', {'app': 'TextEdit'}), ('apps.quit', {'app': 'TextEdit'}),
                          ('windows.focus', {'app': 'TextEdit'})):
-        assert (await call_device(authority, 'Work Mac', action, args))['code'] == 'approval_denied'
-    assert work.requests() == [] and len(approvals.prompts) == 3
+        assert (await call_device(authority, 'Work Mac', action, args))['success'] is True
+    assert len(work.requests()) == 3 and approvals.prompts == []
     await work.connection.close()
 
 
