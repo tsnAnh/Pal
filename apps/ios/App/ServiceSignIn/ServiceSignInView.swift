@@ -211,9 +211,9 @@ struct ServiceSignInDialogView: View {
         if dialog.mustSignInOnMac { return ServiceSignInWording.onMac(dialog) }
         if dialog.requiresMac { return ServiceSignInWording.subtitle(dialog, botName: botName) }
         switch dialog.flow {
-        case .deviceCode, .oauth: ServiceSignInWording.subtitle(dialog, botName: botName)
-        case .apiKey, .header: ServiceSignInWording.keyPrompt(dialog, botName: botName)
-        case .manual, .unknown: ServiceSignInWording.manual(dialog)
+        case .deviceCode, .oauth: return ServiceSignInWording.subtitle(dialog, botName: botName)
+        case .apiKey, .header: return ServiceSignInWording.keyPrompt(dialog, botName: botName)
+        case .manual, .unknown: return ServiceSignInWording.manual(dialog)
         }
     }
 
