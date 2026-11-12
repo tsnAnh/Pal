@@ -13,7 +13,6 @@ _hits: dict[tuple[str, str], deque[float]] = {}
 
 
 def claim(bot: str, device_id: str, *, now: float | None = None) -> float | None:
-    """Count one notification; return seconds to wait when either limit is full."""
     stamp = time.monotonic() if now is None else now
     with _lock:
         buckets = {("bot", f"{bot}\0{device_id}"): PER_BOT, ("device", device_id): PER_DEVICE}
