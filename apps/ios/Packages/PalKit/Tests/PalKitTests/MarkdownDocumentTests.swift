@@ -120,7 +120,7 @@ struct MarkdownDocumentTests {
         }
         #expect(plain(lead) == "Bản sửa đề xuất:")
         #expect(quoted.count == 5)
-        #expect(quoted.allSatisfy(\.isQuoted))
+        #expect(quoted.allSatisfy { $0.isQuoted })
         #expect(plain(quoted[1]).hasPrefix("FEATURES\n• one"))
         #expect(plain(quoted[1]).hasSuffix("• five"))
         #expect(plain(quoted[2]) == "PixelPop is for everyone.")
