@@ -60,6 +60,7 @@ final class DevicePermissionPresenter: ConsentPrompting {
     private func openSettings(for connector: DeviceConnectorID) {
         let url: URL? = switch connector {
         case .input: SystemSettings.accessibilitySettingsURL
+        case .messages: SystemSettings.fullDiskAccessURL
         case .screen: SystemSettings.screenRecordingURL
         default: SystemSettings.appSettingsURL
         }
@@ -100,6 +101,10 @@ extension ConsentAsk {
         case .windowsFocus: "bring a window to the front on this Mac"
         case .clipboardRead: "read this Mac's clipboard"
         case .clipboardWrite: "change this Mac's clipboard"
+        case .messagesRecent: "see your recent messages on this Mac"
+        case .messagesSearch: "search your messages on this Mac"
+        case .messagesRead: "read a conversation in Messages on this Mac"
+        case .messagesSend: "send a message from this Mac"
         }
     }
 }

@@ -76,11 +76,11 @@ private struct HostRig {
     }
 }
 
-private func hostRig(states: [String: String], device: FakeDevice = FakeDevice()) async throws -> HostRig {
+private func hostRig(states: [String: String], device: FakeDevice = FakeDevice(), messages: (any MessagesProviding)? = nil) async throws -> HostRig {
     let script = DeviceGateway(states: states)
     let gateway = try await FakeGateway.start { method, params, connection in script.handle(method, params, connection) }
     let url = gateway.url
-    let providers = DeviceProviders(calendar: device, reminders: device, contacts: device, location: device, alarms: device, home: device)
+    let providers = DeviceProviders(calendar: device, reminders: device, contacts: device, location: device, alarms: device, home: device, messages: messages)
     let stack = DeviceToolStack.make(
         connect: { try await GatewayConnection.dial(url: url, ticket: "device-test") },
         providers: providers,
@@ -128,6 +128,19 @@ struct DeviceToolHostTests {
         let response = try #require(rig.script.responses().first)
         #expect(response["ok"]?.boolValue == true)
         #expect(!rig.device.callNames.isEmpty)
+        await rig.stop()
+    }
+
+    @Test func theMessagesSwitchStaysOffUntilTheOwnerTurnsItOn() async throws {
+        let rig = try await hostRig(states: [:], messages: FakeMessages())
+        _ = try await rig.stack.ledger.refresh()
+        #expect(await rig.stack.ledger.state(for: .messages) == .off)
+        #expect(await rig.stack.ledger.state(for: .calendar) == .allowed)
+        rig.gateway.push(requestEvent("req-00000006", action: "messages.recent", connector: "messages"))
+        #expect(await eventually { rig.script.responses().count == 1 })
+        let response = try #require(rig.script.responses().first)
+        #expect(response["ok"]?.boolValue == false)
+        #expect(response["error"]?["code"]?.stringValue == "failed")
         await rig.stop()
     }
 
@@ -189,6 +202,7 @@ struct DeviceToolWireTests {
             "notify.post": "notifications", "notify.cancel": "notifications",
             "apps.list": "apps", "apps.open": "apps", "apps.quit": "apps", "windows.list": "apps", "windows.focus": "apps",
             "clipboard.read": "clipboard", "clipboard.write": "clipboard",
+            "messages.recent": "messages", "messages.search": "messages", "messages.read": "messages", "messages.send": "messages",
         ]
         #expect(Set(DeviceToolAction.allCases.map(\.rawValue)) == Set(expected.keys))
         for action in DeviceToolAction.allCases { #expect(action.connector.rawValue == expected[action.rawValue]) }
