@@ -20694,6 +20694,7 @@
           "shell",
           "files",
           "input",
+          "screen",
           "notifications",
           "clipboard",
           "apps"
@@ -20943,6 +20944,8 @@
           "input.scroll",
           "input.type",
           "input.key",
+          "screen.capture",
+          "screen.read",
           "notify.post",
           "notify.cancel",
           "clipboard.read",

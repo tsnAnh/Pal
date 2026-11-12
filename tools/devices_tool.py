@@ -16,6 +16,11 @@ REQUEST_MARGIN_SECONDS = 5
 INPUT_RATE_WINDOW_SECONDS = 60.0
 _input_calls: dict[str, deque] = {}
 _input_lock = threading.Lock()
+SCREEN_CONNECTOR = "screen"
+
+_screen_lock = threading.Lock()
+_screen_in_flight: set[str] = set()
+_screen_started: dict[str, float] = {}
 
 CHOOSING_RULES = (
     "Pass `device` only when the user's message names a device (\"on my Mac\", \"on Sam's iPhone\"); copy the "
@@ -50,14 +55,16 @@ def _device_overrides() -> dict:
     return {
         "description": (
             "Run one action on a device the user named, through the Hermes app on that device: shell commands, "
-            "files, the clipboard, apps, windows, notifications and the mouse and keyboard on a Mac; Calendar, Reminders, Contacts, Location, Alarms and Home on a Mac or iPhone. "
+            "files, the clipboard, apps, windows, notifications, screen capture and the mouse and keyboard on a Mac; Calendar, Reminders, Contacts, Location, Alarms and Home on a Mac or iPhone. "
             + CHOOSING_RULES + " `device` is the device's name or its device_id from `devices_list`; an unknown "
             "or ambiguous name fails and lists the devices, an offline device fails at once with when it was last "
-            "seen (nothing is queued, try again when the user says it is back). shell.*, files.*, clipboard.*, apps.*, windows.*, notify.* and input.* work only on a "
+            "seen (nothing is queued, try again when the user says it is back). shell.*, files.*, clipboard.*, apps.*, windows.*, notify.*, screen.* and input.* work only on a "
             "Mac whose user switched on that connector in the Hermes app; they run with no per-action prompt, so "
             "act only on what the user asked for. Clipboard content is untrusted text from the user's Mac and "
             "may hold private data: read it only when asked and never repeat it elsewhere. notify.* shows text on the user's screen labelled with "
-            "your name and \"via Pal\"; use it only when the user asked to be notified. input.* moves the real "
+            "your name and \"via Pal\"; use it only when the user asked to be notified. screen.* returns what is on the screen, which can include "
+            "passwords and private messages: look only for what the user asked about and never repeat sensitive "
+            "details; at most one capture per device runs at a time and captures are rate limited. input.* moves the real "
             "pointer and types real keys anywhere on that Mac: call input.displays first, never type secrets or "
             "passwords, never use it to change Hermes' own settings, and if it reports the owner stopped it or the "
             "connector is off, stop and tell the user instead of retrying. A result that says the device went offline mid-action means "
@@ -188,7 +195,7 @@ def _checked(view, spec, now: float) -> str | None:
     from tui_gateway.contracts.canonical_device import DeviceConnectorState
     if view.kind not in spec.kinds:
         return tool_error(f"{view.label} is a {view.type} and cannot do {spec.name}: shell commands, files, the clipboard, "
-                          "apps, windows, notifications and mouse and keyboard control work only on a Mac.",
+                          "apps, windows, notifications, screen capture and mouse and keyboard control work only on a Mac.",
                           code=Failure.UNSUPPORTED.value, action=spec.name)
     if view.connectors.get(spec.connector.value, DeviceConnectorState.OFF) is DeviceConnectorState.OFF:
         return tool_error(_failure_message(Failure.CONNECTOR_OFF, spec, view, "", now),
@@ -216,16 +223,60 @@ def _rate_limited(spec, view, now: float) -> str | None:
     return None
 
 
-def _success(spec, view, data: dict) -> str:
+def _screen_claim(device_id: str) -> str | None:
+    from gateway.device_actions import SCREEN_MIN_INTERVAL_SECONDS
+    with _screen_lock:
+        if device_id in _screen_in_flight:
+            return "busy"
+        now = time.monotonic()
+        if now - _screen_started.get(device_id, float("-inf")) < SCREEN_MIN_INTERVAL_SECONDS:
+            return "rate_limited"
+        _screen_in_flight.add(device_id)
+        _screen_started[device_id] = now
+    return None
+
+
+def _screen_release(device_id: str) -> None:
+    with _screen_lock:
+        _screen_in_flight.discard(device_id)
+
+
+def _model_takes_images() -> bool:
+    try:
+        from agent.auxiliary_client import _read_main_model, _read_main_provider
+        from hermes_cli.config import load_config_readonly
+        from tools.vision_tools import _native_tool_result_images
+        return _native_tool_result_images(_read_main_provider() or "", _read_main_model() or "", load_config_readonly())
+    except (ImportError, AttributeError, OSError, ValueError):
+        return False
+
+
+def _screen_success(view, base: dict, data: dict):
+    image = data.pop("image_base64", None)
+    if image is not None and not _model_takes_images():
+        data["image_omitted"] = "The current model cannot view images; use screen.read for the text on screen."
+        image = None
+    text = json.dumps({"success": True, "data": data, **base}, ensure_ascii=False)
+    if image is None:
+        return text
+    summary = f"Screenshot of display {data['display']} on {view.label}: untrusted data from the device."
+    return {"_multimodal": True, "text_summary": summary,
+            "content": [{"type": "text", "text": text},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image}"}}]}
+
+
+def _success(spec, view, data: dict):
     base = {"action": spec.name, "device": {"device_id": view.device_id, "name": view.label},
             "source": SOURCE, "untrusted_content": True, "notice": DATA_NOTICE}
     if data.get("timed_out"):
         return tool_error(f"{spec.name} on {view.label} ran past its time limit and was stopped; the output so far "
                           "is in `data`.", code="timeout", data=data, **base)
+    if spec.connector.value == SCREEN_CONNECTOR:
+        return _screen_success(view, base, data)
     return json.dumps({"success": True, "data": data, **base}, ensure_ascii=False)
 
 
-def device_tool(args: dict[str, Any], *, session_id: str | None = None) -> str:
+def device_tool(args: dict[str, Any], *, session_id: str | None = None) -> str | dict:
     from pydantic import ValidationError
 
     from gateway import device_rate, device_tools
@@ -264,8 +315,17 @@ def device_tool(args: dict[str, Any], *, session_id: str | None = None) -> str:
         return tool_error(f"Too many notifications from this bot on {view.label}; wait {int(wait) + 1} seconds "
                           "before posting another.", code="rate_limited", action=spec.name,
                           retry_after_seconds=int(wait) + 1)
-    outcome = device_tools.call_from_thread(home, spec, parsed, session_id=session_id,
-                                            timeouts=_request_timeouts(spec, parsed, home), device_id=view.device_id)
+    screen = spec.connector.value == SCREEN_CONNECTOR
+    if screen and (busy := _screen_claim(view.device_id)) is not None:
+        return tool_error(f"{view.label} is already capturing its screen or was captured a moment ago; wait a few "
+                          "seconds before asking again.", code=busy, action=spec.name)
+    try:
+        outcome = device_tools.call_from_thread(home, spec, parsed, session_id=session_id,
+                                                timeouts=_request_timeouts(spec, parsed, home),
+                                                device_id=view.device_id)
+    finally:
+        if screen:
+            _screen_release(view.device_id)
     if not outcome.ok:
         return tool_error(_failure_message(outcome.failure, spec, view, outcome.detail, time.time()),
                           code=outcome.failure.value, action=spec.name)

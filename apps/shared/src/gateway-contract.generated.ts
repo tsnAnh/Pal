@@ -6524,7 +6524,7 @@ export interface DeviceConnectorStatus {
   state: DeviceConnectorState
   os_permission: DeviceOsPermission
 }
-export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files' | 'input' | 'notifications' | 'clipboard' | 'apps'
+export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files' | 'input' | 'screen' | 'notifications' | 'clipboard' | 'apps'
 export type DeviceConnectorState = 'allowed' | 'ask' | 'off'
 export type DeviceOsPermission = 'granted' | 'denied' | 'not_determined' | 'unsupported'
 export interface DeviceConnectorsSetParams {
@@ -7383,7 +7383,7 @@ export interface DeviceToolRequestPayload {
   session_id?: string | null
   deadline_seconds: number
 }
-export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set' | 'shell.run' | 'files.read' | 'files.list' | 'files.write' | 'input.displays' | 'input.move' | 'input.click' | 'input.drag' | 'input.scroll' | 'input.type' | 'input.key' | 'notify.post' | 'notify.cancel' | 'clipboard.read' | 'clipboard.write' | 'apps.list' | 'apps.open' | 'apps.quit' | 'windows.list' | 'windows.focus'
+export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set' | 'shell.run' | 'files.read' | 'files.list' | 'files.write' | 'input.displays' | 'input.move' | 'input.click' | 'input.drag' | 'input.scroll' | 'input.type' | 'input.key' | 'screen.capture' | 'screen.read' | 'notify.post' | 'notify.cancel' | 'clipboard.read' | 'clipboard.write' | 'apps.list' | 'apps.open' | 'apps.quit' | 'windows.list' | 'windows.focus'
 export interface DeviceToolCancelPayload {
   request_id: string
   reason: DeviceToolCancelReason

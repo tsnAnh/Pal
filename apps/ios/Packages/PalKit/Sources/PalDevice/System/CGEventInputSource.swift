@@ -56,11 +56,16 @@ public struct CGEventInputSource: InputEventSource {
         CGGetActiveDisplayList(0, nil, &count)
         var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
         CGGetActiveDisplayList(count, &ids, &count)
-        return ids.prefix(Int(count)).map { id in
+        let main = CGMainDisplayID()
+        let ordered = ids.prefix(Int(count)).sorted { left, right in
+            if (left == main) != (right == main) { return left == main }
+            return left < right
+        }
+        return ordered.enumerated().map { index, id in
             let bounds = CGDisplayBounds(id)
             let pixels = CGDisplayCopyDisplayMode(id).map { Double($0.pixelWidth) } ?? bounds.width
             return InputDisplayRecord(
-                id: Int(id), isMain: CGDisplayIsMain(id) != 0, x: bounds.origin.x, y: bounds.origin.y,
+                id: index + 1, isMain: CGDisplayIsMain(id) != 0, x: bounds.origin.x, y: bounds.origin.y,
                 width: bounds.width, height: bounds.height, scale: bounds.width > 0 ? pixels / bounds.width : 1
             )
         }

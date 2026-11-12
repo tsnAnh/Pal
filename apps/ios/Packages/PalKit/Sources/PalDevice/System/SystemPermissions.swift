@@ -1,4 +1,7 @@
 import Contacts
+#if os(macOS)
+import CoreGraphics
+#endif
 import CoreLocation
 import EventKit
 import Foundation
@@ -27,6 +30,7 @@ public struct SystemPermissions: DevicePermissions {
         case .notifications: await Self.notificationsStatus()
         case .apps: Self.appsStatus
         case .clipboard: Self.clipboardStatus
+        case .screen: Self.screenStatus()
         }
     }
 
@@ -54,6 +58,8 @@ public struct SystemPermissions: DevicePermissions {
             Self.requestApps()
         case .clipboard:
             break
+        case .screen:
+            Self.requestScreen()
         }
         return await status(of: connector)
     }
@@ -74,6 +80,24 @@ public struct SystemPermissions: DevicePermissions {
         UserDefaults.standard.set(true, forKey: appsAskedKey)
         AppsSystemAccess.requestScreenRecording()
         AppsSystemAccess.requestAccessibility()
+        #endif
+    }
+
+    private static let screenRequestedKey = "dev.tsnanh.hermes.screen-recording-requested"
+
+    private static func screenStatus() -> DeviceOSPermission {
+        #if os(macOS)
+        if CGPreflightScreenCaptureAccess() { return .granted }
+        return UserDefaults.standard.bool(forKey: screenRequestedKey) ? .denied : .notDetermined
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static func requestScreen() {
+        #if os(macOS)
+        UserDefaults.standard.set(true, forKey: screenRequestedKey)
+        _ = CGRequestScreenCaptureAccess()
         #endif
     }
 
@@ -173,7 +197,7 @@ public struct SystemPermissions: DevicePermissions {
 }
 
 extension DeviceProviders {
-    public static func system() -> DeviceProviders {
+    public static func system(screenActivity: @escaping @Sendable (Bool) -> Void = { _ in }) -> DeviceProviders {
         #if canImport(AlarmKit) && os(iOS)
         let alarms: (any AlarmsProviding)? = SystemAlarms()
         #else
@@ -191,6 +215,7 @@ extension DeviceProviders {
         let input: (any InputProviding)? = InputController.shared
         let notifications: (any NotificationsProviding)? = SystemNotifications()
         let clipboard: (any ClipboardProviding)? = SystemClipboard(store: GeneralPasteboard())
+        let screen: (any ScreenProviding)? = GuardedScreen(source: SystemScreenSource(), activity: screenActivity)
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
@@ -198,11 +223,12 @@ extension DeviceProviders {
         let notifications: (any NotificationsProviding)? = nil
         let clipboard: (any ClipboardProviding)? = nil
         let input: (any InputProviding)? = nil
+        let screen: (any ScreenProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
             location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, notifications: notifications,
-            apps: apps, clipboard: clipboard, input: input
+            apps: apps, clipboard: clipboard, screen: screen, input: input
         )
     }
 }

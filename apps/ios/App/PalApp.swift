@@ -284,6 +284,7 @@ struct RootView: View {
                 SearchHost(roster: roster, router: router)
             }
             #else
+            .overlay(alignment: .top) { ScreenCaptureBadge(indicator: hostPool.screenIndicator) }
             .overlay {
                 MacModalHost(connection: model, roster: roster, router: router, hostPool: hostPool, createBot: createBot, hub: hub)
             }

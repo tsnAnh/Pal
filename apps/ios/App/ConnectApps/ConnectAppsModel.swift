@@ -328,8 +328,14 @@ final class ConnectAppsModel {
         rebuildDeviceRows()
     }
 
-    func openSettings(for connector: DeviceConnectorID? = nil) {
-        guard let url = connector == .input ? SystemSettings.accessibilitySettingsURL : SystemSettings.appSettingsURL else { return }
+    func openSettings() {
+        guard let url = SystemSettings.appSettingsURL else { return }
+        SystemSettings.open(url)
+    }
+
+    func openSettings(for row: DeviceRow) {
+        guard row.id == .screen || row.id == .input else { return openSettings() }
+        guard let url = row.id == .input ? SystemSettings.accessibilitySettingsURL : SystemSettings.screenRecordingURL else { return }
         SystemSettings.open(url)
     }
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import re
 from collections.abc import Callable
@@ -30,6 +32,11 @@ INPUT_MAX_TYPED_CHARS = 500
 INPUT_MAX_SCROLL_LINES = 50
 INPUT_MAX_COORDINATE = 100_000
 INPUT_MAX_CALLS_PER_MINUTE = 60
+SCREEN_MAX_DISPLAY = 16
+SCREEN_MAX_IMAGE_BYTES = 300_000
+SCREEN_MAX_TEXT_CHARS = 24_000
+SCREEN_MAX_RESULT_BYTES = 480_000
+SCREEN_MIN_INTERVAL_SECONDS = 3.0
 CLIPBOARD_TEXT_CHARS = 24_000
 CLIPBOARD_WRITE_CHARS = 100_000
 CLIPBOARD_IMAGE_BASE64_CHARS = 65_536
@@ -55,6 +62,7 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.SHELL, "Run commands", "Let bots run commands on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.FILES, "Files", "Let bots read and change files on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.INPUT, "Mouse and keyboard", "Let bots control this Mac's mouse and keyboard", MAC_ONLY, False),
+    ConnectorInfo(Connector.SCREEN, "Screen", "Let bots see this Mac's screen", MAC_ONLY, False),
     ConnectorInfo(Connector.NOTIFICATIONS, "Notifications", "Let bots show notifications on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.CLIPBOARD, "Clipboard", "Let bots read and change this Mac's clipboard", MAC_ONLY, False),
     ConnectorInfo(Connector.APPS, "Apps", "Let bots open and switch apps on this Mac", MAC_ONLY, False),
@@ -244,7 +252,7 @@ MouseButton = Literal["left", "right", "middle"]
 class _Point(_Args):
     x: Coordinate | None = None
     y: Coordinate | None = None
-    display: int | None = Field(default=None, ge=0)
+    display: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def _both_or_neither(self):
@@ -281,7 +289,7 @@ class InputDragArgs(_Args):
     from_y: Coordinate
     to_x: Coordinate
     to_y: Coordinate
-    display: int | None = Field(default=None, ge=0)
+    display: int | None = Field(default=None, ge=1)
     button: MouseButton = "left"
 
 
@@ -308,6 +316,15 @@ class InputTypeArgs(_Args):
 
 class InputKeyArgs(_Args):
     key: str = Field(min_length=1, max_length=40, pattern=r"^\S+$")
+class ScreenCaptureArgs(_Args):
+    display: int = Field(default=1, ge=1, le=SCREEN_MAX_DISPLAY)
+    read_text: bool = False
+
+
+class ScreenReadArgs(_Args):
+    display: int = Field(default=1, ge=1, le=SCREEN_MAX_DISPLAY)
+
+
 class NotifyPostArgs(_Args):
     title: NotifyText = Field(min_length=1, max_length=NOTIFY_TITLE_CHARS)
     body: NotifyText = Field(min_length=1, max_length=NOTIFY_BODY_CHARS)
@@ -488,7 +505,7 @@ class AccessoryResult(_Data):
 
 
 class InputDisplay(_Data):
-    id: int = Field(ge=0)
+    id: int = Field(ge=1)
     name: Short | None = None
     main: bool = False
     x: float
@@ -562,6 +579,29 @@ class FilesListResult(_Capped):
 class FilesWriteResult(_Data):
     path: Long
     bytes_written: int = Field(ge=0)
+
+
+def _jpeg(value: str) -> str:
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("image is not base64") from exc
+    if len(raw) > SCREEN_MAX_IMAGE_BYTES or not raw.startswith(b"\xff\xd8\xff"):
+        raise ValueError("image is not a JPEG within the size cap")
+    return value
+
+
+class ScreenCaptureResult(_Data):
+    image_base64: Annotated[str, Field(max_length=SCREEN_MAX_IMAGE_BYTES * 4 // 3 + 4), AfterValidator(_jpeg)]
+    width: int = Field(ge=1, le=16384)
+    height: int = Field(ge=1, le=16384)
+    display: int = Field(ge=1, le=SCREEN_MAX_DISPLAY)
+    text: Annotated[str, BeforeValidator(lambda v: cap_text(v, SCREEN_MAX_TEXT_CHARS)[0] if isinstance(v, str) else v)] | None = None
+
+
+class ScreenReadResult(_Data):
+    text: Annotated[str, BeforeValidator(lambda v: cap_text(v, SCREEN_MAX_TEXT_CHARS)[0] if isinstance(v, str) else v)]
+    display: int = Field(ge=1, le=SCREEN_MAX_DISPLAY)
 
 
 class ClipboardReadResult(_Capped):
@@ -657,6 +697,7 @@ class ActionSpec:
     result: type[_Data]
     describe: Callable[[Any], str]
     kinds: frozenset[str] = APPLE_KINDS
+    max_result_bytes: int | None = None
 
     @property
     def rate_limited(self) -> bool:
@@ -668,8 +709,9 @@ class ActionSpec:
 
 
 def _spec(name: str, connector: Connector, write: bool, purpose: str, args: type[_Args], result: type[_Data],
-          describe: Callable[[Any], str], kinds: frozenset[str] = APPLE_KINDS) -> tuple[str, ActionSpec]:
-    return name, ActionSpec(name, connector, write, purpose, args, result, describe, kinds)
+          describe: Callable[[Any], str], kinds: frozenset[str] = APPLE_KINDS,
+          max_result_bytes: int | None = None) -> tuple[str, ActionSpec]:
+    return name, ActionSpec(name, connector, write, purpose, args, result, describe, kinds, max_result_bytes)
 
 
 ACTIONS: dict[str, ActionSpec] = dict([
@@ -718,7 +760,7 @@ ACTIONS: dict[str, ActionSpec] = dict([
           "list the displays (id, origin x y, width, height in points, scale) and the pointer position; every "
           "coordinate is in points, origin at the top-left of the main display, y grows downward, a secondary "
           "display can have negative x or y; give `display` to make x y relative to that display's top-left; "
-          "multiply by scale for pixels of a screenshot",
+          "multiply by scale for pixels of a screenshot; display numbers are the ones screen.capture uses (1 = main)",
           InputDisplaysArgs, InputDisplaysResult, lambda a: "Read the screen sizes and pointer position", MAC_ONLY),
     _spec("input.move", Connector.INPUT, True, "move the pointer to x y (points) or by dx dy",
           InputMoveArgs, InputResult, lambda a: "Move the mouse pointer", MAC_ONLY),
@@ -736,6 +778,12 @@ ACTIONS: dict[str, ActionSpec] = dict([
           InputTypeArgs, InputResult, lambda a: f"Type {len(a.text)} characters", MAC_ONLY),
     _spec("input.key", Connector.INPUT, True, "press a key or combo such as return, escape, cmd+c, cmd+shift+4",
           InputKeyArgs, InputResult, lambda a: f"Press {_quoted(a.key)}", MAC_ONLY),
+    _spec("screen.capture", Connector.SCREEN, False,
+          "screenshot of one display (display 1 is the main one); read_text also returns the text recognized on it",
+          ScreenCaptureArgs, ScreenCaptureResult, lambda a: f"Take a screenshot of display {a.display}", MAC_ONLY,
+          SCREEN_MAX_RESULT_BYTES),
+    _spec("screen.read", Connector.SCREEN, False, "read the text on one display, without an image",
+          ScreenReadArgs, ScreenReadResult, lambda a: f"Read the text on display {a.display}", MAC_ONLY),
     _spec("notify.post", Connector.NOTIFICATIONS, True,
           "show a notification on the Mac, labelled with the bot's name and \"via Pal\"; give an identifier to "
           "replace an earlier one; title max 80, subtitle max 80, body max 240 characters; sound is off unless true; "

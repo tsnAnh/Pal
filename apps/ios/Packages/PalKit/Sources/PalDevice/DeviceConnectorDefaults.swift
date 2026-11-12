@@ -12,6 +12,7 @@ public enum DeviceConnectorDefaults {
         case .shell: ("Run commands", "Let bots run commands on this Mac")
         case .files: ("Files", "Let bots read and change files on this Mac")
         case .input: ("Mouse and keyboard", "Let bots control this Mac's mouse and keyboard")
+        case .screen: ("Screen", "Let bots see this Mac's screen")
         case .notifications: ("Notifications", "Let bots show notifications on this Mac")
         case .clipboard: ("Clipboard", "Let bots read and change this Mac's clipboard")
         case .apps: ("Apps", "Let bots open and switch apps on this Mac")
@@ -23,6 +24,7 @@ public enum DeviceConnectorDefaults {
         case .shell: "A bot can then run commands on this Mac without asking each time."
         case .files: "A bot can then read and change files on this Mac without asking each time."
         case .input: "A bot can then click and type anywhere on this Mac without asking, including approving payments, sending messages and deleting files. Press Escape three times quickly, or choose Stop in the Pal menu bar item, to turn it off at once."
+        case .screen: "A bot can then see everything on this Mac's screen, including passwords and private messages, without asking each time."
         case .notifications: "A bot can then show text on your screen at any time, which could be used to mislead you. Each one says which bot it is from."
         case .clipboard: "The clipboard often holds passwords and private text. A bot can then read it and replace it without asking each time."
         case .apps: "A bot can then open and quit apps, bring windows to the front, and see which apps and window titles are open on this Mac without asking each time."

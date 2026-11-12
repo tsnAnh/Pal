@@ -206,7 +206,7 @@ def _settle(pending: _Pending, outcome: Outcome) -> bool:
 def _interpret_result(spec: ActionSpec, result: Any) -> Outcome:
     if not isinstance(result, dict):
         return Outcome(failure=Failure.INVALID_RESULT, detail="the phone sent a result that is not an object")
-    allowed = MAX_TRUNCATABLE_RAW_BYTES if spec.truncates else MAX_RESULT_BYTES
+    allowed = spec.max_result_bytes or (MAX_TRUNCATABLE_RAW_BYTES if spec.truncates else MAX_RESULT_BYTES)
     if len(json.dumps(result, ensure_ascii=False)) > allowed:
         return Outcome(failure=Failure.INVALID_RESULT, detail="the phone sent more data than allowed")
     try:

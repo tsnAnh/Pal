@@ -95,15 +95,13 @@ public actor DeviceToolExecutor {
     private func osPermission(for connector: DeviceConnectorID) async -> DeviceToolOutcome? {
         guard connector.needsOSPermission else { return nil }
         var status = await permissions.status(of: connector)
-        if status == .notDetermined, connector != .input { status = await permissions.request(connector) }
-        if status == .notDetermined, connector != .notifications { status = await permissions.request(connector) }
+        if status == .notDetermined, connector.asksOSPermissionOnUse { status = await permissions.request(connector) }
         await ledger.reportOSPermission(status, for: connector)
         switch status {
         case .granted: return nil
         case .unsupported: return .failure(.unsupported, "This device cannot use \(Self.title(connector)).")
         case .denied, .notDetermined:
-            let place = connector == .input ? "System Settings > Privacy & Security > Accessibility" : "this device's Settings"
-            return .failure(.permissionDenied, "Allow \(Self.title(connector)) for Pal in \(place).")
+            return .failure(.permissionDenied, Self.permissionHint(connector))
         }
     }
 
@@ -118,10 +116,17 @@ public actor DeviceToolExecutor {
         case .shell: "Run commands"
         case .files: "Files"
         case .input: "Mouse and keyboard"
+        case .screen: "Screen"
         case .notifications: "Notifications"
         case .apps: "Apps"
         case .clipboard: "Clipboard"
         }
+    }
+
+    static func permissionHint(_ connector: DeviceConnectorID) -> String {
+        if connector == .input { return "Allow Pal under Accessibility in System Settings > Privacy & Security, then turn Mouse and keyboard on again in Pal." }
+        if connector == .screen { return "Allow Pal under Screen Recording in System Settings, then turn Screen on again in Pal." }
+        return "Allow \(title(connector)) for Pal in this device's Settings."
     }
 
     static func outcome(for error: DeviceProviderError) -> DeviceToolOutcome {
@@ -174,6 +179,8 @@ extension DeviceToolExecutor {
         case .filesWrite: try await writeFile(raw)
         case .inputDisplays, .inputMove, .inputClick, .inputDrag, .inputScroll, .inputType, .inputKey:
             try await InputToolHandler.run(action, raw, provider: provider(\.input))
+        case .screenCapture: try await captureScreen(raw)
+        case .screenRead: try await readScreen(raw)
         case .notifyPost: try await postNotification(raw, profile: profile)
         case .notifyCancel: try await cancelNotification(raw, profile: profile)
         case .appsList: try await listApps(raw)
@@ -207,6 +214,21 @@ extension DeviceToolExecutor {
         return try DeviceWire.encode(ShellRunWire(
             exitCode: record.exitCode, stdout: out.text, stderr: err.text, timedOut: record.timedOut, truncated: out.truncated || err.truncated
         ))
+    }
+
+    private func captureScreen(_ raw: JSONValue) async throws -> JSONValue {
+        let args: ScreenCaptureArgs = try DeviceWire.decodeArgs(raw)
+        let record = try await provider(\.screen).capture(display: Self.clamp(args.display, 1, 1...16), readText: args.readText ?? false)
+        return try DeviceWire.encode(ScreenCaptureWire(
+            imageBase64: record.jpeg.base64EncodedString(), width: record.width, height: record.height,
+            display: record.display, text: record.text
+        ))
+    }
+
+    private func readScreen(_ raw: JSONValue) async throws -> JSONValue {
+        let args: ScreenReadArgs = try DeviceWire.decodeArgs(raw)
+        let display = Self.clamp(args.display, 1, 1...16)
+        return try DeviceWire.encode(ScreenReadWire(text: try await provider(\.screen).readText(display: display), display: display))
     }
 
     private func readFile(_ raw: JSONValue) async throws -> JSONValue {
