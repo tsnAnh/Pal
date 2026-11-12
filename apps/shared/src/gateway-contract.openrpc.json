@@ -20692,7 +20692,8 @@
           "location",
           "alarms",
           "shell",
-          "files"
+          "files",
+          "apps"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -20931,7 +20932,12 @@
           "shell.run",
           "files.read",
           "files.list",
-          "files.write"
+          "files.write",
+          "apps.list",
+          "apps.open",
+          "apps.quit",
+          "windows.list",
+          "windows.focus"
         ],
         "title": "DeviceToolAction",
         "type": "string"

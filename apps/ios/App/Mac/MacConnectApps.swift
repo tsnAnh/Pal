@@ -447,9 +447,24 @@ struct MacConnectApps: View {
                     .padding(.bottom, 10)
                     .accessibilityIdentifier("\(identifier)-warning")
             }
+            if row.needsSettings { permissionNotice(identifier: identifier) }
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
+    }
+
+    private func permissionNotice(identifier: String) -> some View {
+        HStack(spacing: 8) {
+            Text("Window titles and raising a single window need Screen Recording and Accessibility access.")
+                .font(.system(size: 11))
+                .foregroundStyle(PalTokens.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Button("Open System Settings") { model.openSettings() }
+                .controlSize(.small)
+                .accessibilityIdentifier("\(identifier)-settings")
+        }
+        .padding(.bottom, 10)
     }
 
     private func buttonRow(_ row: DeviceRow) -> some View {
