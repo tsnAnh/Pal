@@ -1454,6 +1454,7 @@ def _(rid, params: dict) -> dict:
 def _(rid, params: dict) -> dict:
     """``{servers: [{name, description, installed, enabled, requires: [env keys], transport}]}`` per profile."""
     mcp_catalog = _tools_mod("hermes_cli.mcp_catalog")
+    pending_reauth_reason = _tools_mod("tools.mcp_oauth").pending_reauth_reason
     out = []
     for entry in mcp_catalog.list_catalog():
         try:
@@ -1467,7 +1468,8 @@ def _(rid, params: dict) -> dict:
             "signin_on": getattr(getattr(entry, "auth", None), "signin_on", None),
             "installed": bool(mcp_catalog.is_installed(entry.name)),
             "enabled": bool(mcp_catalog.is_enabled(entry.name)), "requires": requires,
-            "transport": str(getattr(transport, "kind", "") or transport or "stdio")})
+            "transport": str(getattr(transport, "kind", "") or transport or "stdio"),
+            "needs_auth_reason": pending_reauth_reason(entry.name)})
     return _ok(rid, {"servers": out})
 
 
@@ -1491,7 +1493,7 @@ def _(rid, params: dict) -> dict:
     configured, plugins = _mcp_server_rows()
     include_runtime = (_tools_mod("agent.secret_scope").is_multiplex_active()
                        or hc.hermes_home_key() == hc.hermes_home_key(hc.get_process_hermes_home()))
-    safe = ("name", "transport", "tools", "connected", "disabled", "status", "needs_auth")
+    safe = ("name", "transport", "tools", "connected", "disabled", "status", "needs_auth", "needs_auth_reason")
     servers = _tools_mod("tools.mcp_tool_discovery").get_mcp_status(configured, include_runtime=include_runtime)
     return _ok(rid, {"servers": [
         {**{k: e[k] for k in safe if k in e}, "source": "plugin" if plugins[e["name"]] is not None else "config",

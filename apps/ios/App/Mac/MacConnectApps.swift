@@ -369,7 +369,7 @@ struct MacConnectApps: View {
     private func appRow(_ app: ConnectApp) -> some View {
         let state = model.cardState(app)
         let action: MacRowAction = if app.requiresMacSignIn {
-            MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state == .reconnect) { model.upworkApp = app }
+            MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state.isReconnect) { model.upworkApp = app }
         } else if case .custom = app.source {
             MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
         } else {

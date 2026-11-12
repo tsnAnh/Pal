@@ -276,6 +276,33 @@ def forget_transport(transport) -> int:
     return dropped
 
 
+async def _offer(authority, home: Path, need: AuthNeed, bot: str) -> None:
+    if _active.get(_key(home, need.service)) is None:
+        await request_signin(authority, home, need, bot)
+
+
+def offer_from_thread(home: Path, need: AuthNeed, bot: str) -> None:
+    """Raise the sign-in prompt on the attached apps without making the calling turn wait for the answer."""
+    from gateway.session_cron import owner_for_home
+    bound = owner_for_home(home)
+    if bound is None:
+        return
+    authority, loop = bound
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is loop:
+        return
+    future = asyncio.run_coroutine_threadsafe(_offer(authority, home, need, bot), loop)
+
+    def log_failure(done) -> None:
+        if not done.cancelled() and (exc := done.exception()) is not None:
+            logger.warning("sign-in offer for %s failed (%s)", need.service, type(exc).__name__)
+
+    future.add_done_callback(log_failure)
+
+
 def call_from_thread(home: Path, need: AuthNeed, bot: str) -> Resolution:
     from gateway.session_cron import owner_for_home
     bound = owner_for_home(home)

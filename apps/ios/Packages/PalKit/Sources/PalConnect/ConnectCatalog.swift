@@ -59,19 +59,22 @@ public struct McpPresetEntry: Decodable, Sendable, Equatable {
     public var installed: Bool
     public var enabled: Bool
     public var requires: [String]
+    public var needsAuthReason: String?
 
-    public init(name: String, description: String, connectorSlug: String? = nil, installed: Bool = false, enabled: Bool = false, requires: [String] = []) {
+    public init(name: String, description: String, connectorSlug: String? = nil, installed: Bool = false, enabled: Bool = false, requires: [String] = [], needsAuthReason: String? = nil) {
         self.name = name
         self.description = description
         self.connectorSlug = connectorSlug
         self.installed = installed
         self.enabled = enabled
         self.requires = requires
+        self.needsAuthReason = needsAuthReason
     }
 
     enum CodingKeys: String, CodingKey {
         case name, description, installed, enabled, requires
         case connectorSlug = "connector_slug"
+        case needsAuthReason = "needs_auth_reason"
     }
 }
 
@@ -95,8 +98,9 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
     public var iconURL: URL?
     public var source: ConnectAppSource
     public var state: ConnectAppState
+    public var authReason: String?
 
-    public init(id: String, name: String, summary: String, category: String, iconURL: URL?, source: ConnectAppSource, state: ConnectAppState) {
+    public init(id: String, name: String, summary: String, category: String, iconURL: URL?, source: ConnectAppSource, state: ConnectAppState, authReason: String? = nil) {
         self.id = id
         self.name = name
         self.summary = summary
@@ -104,6 +108,7 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
         self.iconURL = iconURL
         self.source = source
         self.state = state
+        self.authReason = authReason
     }
 
     public var isConnected: Bool { state == .connected }
@@ -187,7 +192,7 @@ public struct ConnectCatalog: Sendable, Equatable {
             ConnectApp(
                 id: "mcp:\(preset.name)", name: displayName(preset.name), summary: preset.description, category: otherCategory,
                 iconURL: nil, source: .mcp(name: preset.name, requires: preset.requires),
-                state: preset.installed && preset.enabled ? .connected : .disconnected
+                state: mcpState(preset), authReason: preset.needsAuthReason
             )
         }
         let presetNames = Set(mcp.map(\.name))
@@ -201,6 +206,12 @@ public struct ConnectCatalog: Sendable, Equatable {
         }
         apps.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         return ConnectCatalog(apps: apps, skills: skills)
+    }
+
+    static func mcpState(_ preset: McpPresetEntry) -> ConnectAppState {
+        guard preset.installed && preset.enabled else { return .disconnected }
+        let reason = preset.needsAuthReason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return reason.isEmpty ? .connected : .needsAuthorization
     }
 
     static func hostedState(_ state: HostedConnectorState?) -> ConnectAppState {

@@ -332,6 +332,16 @@ def _retry_once(server_name: str, retry_call, op_description: str, what: str):
     return _record_call_outcome(server_name, result)
 
 
+def _reauth_pending_error(server_name: str) -> Optional[str]:
+    """The typed sign-in-again error when this server's saved sign-in was rejected and nothing new has been
+    handed over since; None otherwise. A stat of one marker file, so every call can afford it."""
+    from tools.mcp_oauth import pending_reauth_reason
+    if pending_reauth_reason(server_name) is None:
+        return None
+    from tools.auth_required import reauth_required_result
+    return reauth_required_result(server_name)
+
+
 def _handle_auth_error_and_retry(server_name: str, exc: BaseException, retry_call, op_description: str):
     """OAuth recovery + one retry; None when *exc* is not an auth error. ``handle_401`` decides
     viability; if viable, signal a reconnect (fresh credentials), wait ready, retry once. Any
@@ -354,6 +364,10 @@ def _handle_auth_error_and_retry(server_name: str, exc: BaseException, retry_cal
         result = _retry_once(server_name, retry_call, op_description, "auth recovery")
         if result is not None:
             return result
+    from tools.mcp_oauth import server_signs_in_on_owner_computer
+    if server_signs_in_on_owner_computer(server_name):
+        from tools.auth_required import reauth_required_result
+        return reauth_required_result(server_name)
     return _strike(server_name, _NEEDS_REAUTH_MSG.format(s=server_name, detail=_auth_error_detail(exc)),
                    needs_reauth=True, server=server_name)
 
@@ -719,6 +733,8 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float, *,
     def _handler(args: dict, **kwargs) -> Any:
         # Security boundary: untrusted-server write tools need approval before ANY transport work (incl. lazy spawn).
         booked: list = []  # a costed call's charge; refunded when the call never reaches the server
+        if (error := _reauth_pending_error(server_name)) is not None:
+            return error
         error = _trust_gate_check(server_name, tool_name, booked, args)
         if error is not None:
             return error

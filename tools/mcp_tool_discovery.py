@@ -880,7 +880,12 @@ def get_mcp_status(configured: Optional[dict[str, dict]] = None, *, include_runt
         elif status == "lazy":
             entry["tools"] = lazy_tools[name]
         # Parked on a rejected OAuth credential: the one failure only the user can fix (sign in again).
-        entry["needs_auth"] = bool(server is not None and not live and server._auth_park is not None)
+        from tools.mcp_oauth import pending_reauth_reason
+        reauth_reason = pending_reauth_reason(name)
+        entry["needs_auth"] = reauth_reason is not None or bool(
+            server is not None and not live and server._auth_park is not None)
+        if reauth_reason is not None:
+            entry["needs_auth_reason"] = reauth_reason
         result.append(entry)
     return result
 

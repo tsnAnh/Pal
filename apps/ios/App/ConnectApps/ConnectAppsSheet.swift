@@ -264,7 +264,7 @@ struct ConnectAppsSheet: View {
         return ConnectAppRow(
             title: app.name, summary: UpworkCardText.summary(state, fallback: app.summary), accessibilityIdentifier: "connectApp-\(app.id)",
             isBusy: state == .connecting,
-            trailing: ConnectRowAction(UpworkCardText.actionTitle(state), kind: state == .reconnect ? .accent : .neutral) { model.upworkApp = app }
+            trailing: ConnectRowAction(UpworkCardText.actionTitle(state), kind: state.isReconnect ? .accent : .neutral) { model.upworkApp = app }
         ) { icon(for: app) }
     }
 

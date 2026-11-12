@@ -6,7 +6,7 @@ enum UpworkCardText {
     static func summary(_ state: ConnectorCardState, fallback: String) -> String {
         switch state {
         case .failed(let reason): reason
-        case .signInOnMac: String(localized: "Sign in on your Mac")
+        case .signInOnMac(let reason): reason == nil ? String(localized: "Sign in on your Mac") : String(localized: "Sign in again on a Mac")
         case .reconnect: String(localized: "Sign in again to keep using Upwork")
         case .connecting: String(localized: "Signing in…")
         case .connect, .connected: fallback
@@ -29,8 +29,8 @@ enum UpworkCardText {
         case .connecting: String(localized: "Signing in…")
         case .connected: String(localized: "Connected")
         case .failed(let reason): reason
-        case .reconnect: String(localized: "Needs you to sign in again")
-        case .signInOnMac: String(localized: "Sign in on your Mac")
+        case .reconnect(let reason): reason ?? String(localized: "Needs you to sign in again")
+        case .signInOnMac(let reason): reason ?? String(localized: "Sign in on your Mac")
         }
     }
 

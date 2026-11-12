@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 ERROR_TYPE = "auth_required"
+REAUTH_REQUIRED = "reauth_required"
 MAX_SCANNED_RESULT_CHARS = 200_000
 REASONS = ("missing", "expired", "revoked")
 AUTH_TYPES = ("device_code", "oauth", "api_key", "header", "none")
@@ -30,6 +31,7 @@ class AuthNeed:
     service: str
     reason: str = "missing"
     flow: Optional[str] = None
+    blocking: bool = True
 
 
 def service_display_name(service: str) -> str:
@@ -44,6 +46,16 @@ def auth_required_result(service: str, reason: str = "missing", *, flow: Optiona
     body = {"service": service, "reason": reason, **({"flow": flow} if flow else {})}
     text = message or f"Sign-in to {service_display_name(service)} is required before this call can succeed."
     return tool_error(text, error_type=ERROR_TYPE, auth_required=body)
+
+
+def reauth_reason(server: str) -> str:
+    return f"Sign in again on a Mac: {service_display_name(f'mcp:{server}')} stopped accepting the saved sign-in"
+
+
+def reauth_required_result(server: str) -> str:
+    from tools.registry import tool_error
+    return tool_error(f"{reauth_reason(server)}. Do NOT retry; tell the owner to sign in again on their Mac in Pal.",
+                      code=REAUTH_REQUIRED, needs_reauth=True, server=server)
 
 
 def http_auth_failure(service: str, status: int, headers: Any = None) -> Optional[str]:
@@ -112,7 +124,7 @@ def detect(function_name: str, function_args: Any, result: Any) -> Optional[Auth
         return AuthNeed(typed["service"], reason if reason in REASONS else "missing",
                         flow if isinstance(flow, str) else None)
     if body.get("needs_reauth") is True and isinstance(body.get("server"), str):
-        return AuthNeed(f"mcp:{body['server']}", "expired")
+        return AuthNeed(f"mcp:{body['server']}", "expired", blocking=body.get("code") != REAUTH_REQUIRED)
     hosted = _hosted_connector_need(body)
     if hosted is not None:
         return hosted
@@ -146,6 +158,9 @@ def resolve(function_name: str, function_args: Any, result: Any, retry) -> Any:
     from hermes_constants import get_hermes_home, profile_name_for_home
     home = get_hermes_home()
     bot = profile_name_for_home(home) or "default"
+    if not need.blocking:
+        auth_prompts.offer_from_thread(home, need, bot)
+        return result
     outcome = auth_prompts.call_from_thread(home, need, bot)
     Resolution = auth_prompts.Resolution
     if outcome is Resolution.UNAVAILABLE:

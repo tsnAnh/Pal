@@ -5,15 +5,17 @@ import PalProtocol
 import Synchronization
 import Testing
 
-private func upwork(_ state: ConnectAppState) -> ConnectApp {
+private let rejectedSignIn = "Sign in again on a Mac: Upwork stopped accepting the saved sign-in"
+
+private func upwork(_ state: ConnectAppState, reason: String? = nil) -> ConnectApp {
     ConnectApp(
         id: "mcp:upwork", name: "Upwork", summary: "", category: "Other", iconURL: nil,
-        source: .mcp(name: "upwork", requires: []), state: state
+        source: .mcp(name: "upwork", requires: []), state: state, authReason: reason
     )
 }
 
-private func resolve(_ state: ConnectAppState, platform: ConnectorPlatform, busy: Bool = false, failure: String? = nil) -> ConnectorCardState {
-    .resolve(ConnectorCardInput(app: upwork(state), isBusy: busy, failureReason: failure), platform: platform)
+private func resolve(_ state: ConnectAppState, platform: ConnectorPlatform, busy: Bool = false, failure: String? = nil, reason: String? = nil) -> ConnectorCardState {
+    return .resolve(ConnectorCardInput(app: upwork(state, reason: reason), isBusy: busy, failureReason: failure), platform: platform)
 }
 
 @Suite("Connector card state")
@@ -22,15 +24,15 @@ struct ConnectorCardStateTests {
         #expect(resolve(.disconnected, platform: .mac) == .connect)
         #expect(resolve(.disconnected, platform: .mac, busy: true) == .connecting)
         #expect(resolve(.connected, platform: .mac) == .connected)
-        #expect(resolve(.needsAuthorization, platform: .mac) == .reconnect)
+        #expect(resolve(.needsAuthorization, platform: .mac) == .reconnect(reason: nil))
         #expect(resolve(.disconnected, platform: .mac, failure: "Upwork refused it.") == .failed("Upwork refused it."))
         #expect(resolve(.disconnected, platform: .mac, failure: "") == .connect)
     }
 
     @Test func iPhoneNeverOffersAConnectThatWouldFail() {
-        #expect(resolve(.disconnected, platform: .iPhone) == .signInOnMac)
-        #expect(resolve(.needsAuthorization, platform: .iPhone) == .signInOnMac)
-        #expect(resolve(.disconnected, platform: .iPhone, failure: "x") == .signInOnMac)
+        #expect(resolve(.disconnected, platform: .iPhone) == .signInOnMac(reason: nil))
+        #expect(resolve(.needsAuthorization, platform: .iPhone) == .signInOnMac(reason: nil))
+        #expect(resolve(.disconnected, platform: .iPhone, failure: "x") == .signInOnMac(reason: nil))
         #expect(resolve(.connected, platform: .iPhone) == .connected)
         #expect(resolve(.disconnected, platform: .iPhone, busy: true) == .connecting)
     }
@@ -45,7 +47,40 @@ struct ConnectorCardStateTests {
             id: "mcp:notion", name: "Notion", summary: "", category: "Other", iconURL: nil,
             source: .mcp(name: "notion", requires: []), state: .needsAuthorization
         )
-        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: preset), platform: .iPhone) == .reconnect)
+        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: preset), platform: .iPhone) == .reconnect(reason: nil))
+    }
+
+    @Test func aRejectedSignInShowsTheGatewaysReasonOnEveryDevice() {
+        #expect(resolve(.needsAuthorization, platform: .iPhone, reason: rejectedSignIn) == .signInOnMac(reason: rejectedSignIn))
+        #expect(resolve(.needsAuthorization, platform: .mac, reason: rejectedSignIn) == .reconnect(reason: rejectedSignIn))
+        #expect(resolve(.needsAuthorization, platform: .iPhone, reason: "  \n") == .signInOnMac(reason: nil))
+        #expect(resolve(.needsAuthorization, platform: .mac, reason: "") == .reconnect(reason: nil))
+    }
+
+    @Test func onlyTheMacCanStartTheSignInAgain() {
+        #expect(resolve(.needsAuthorization, platform: .mac, reason: rejectedSignIn).isReconnect)
+        #expect(!resolve(.needsAuthorization, platform: .iPhone, reason: rejectedSignIn).isReconnect)
+        #expect(resolve(.needsAuthorization, platform: .iPhone, reason: rejectedSignIn, busy: true) == .connecting)
+    }
+
+    @Test func theCatalogReadsTheReasonFromTheStatusTheGatewayGives() throws {
+        let decoded = try JSONDecoder().decode(
+            McpPresetEntry.self,
+            from: Data(#"{"name":"upwork","description":"","installed":true,"enabled":true,"needs_auth_reason":"\#(rejectedSignIn)"}"#.utf8)
+        )
+        let catalog = ConnectCatalog.make(hosted: [], states: [], mcp: [decoded])
+        let app = try #require(catalog.apps.first)
+        #expect(app.state == .needsAuthorization)
+        #expect(app.authReason == rejectedSignIn)
+        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: app), platform: .iPhone) == .signInOnMac(reason: rejectedSignIn))
+        #expect(!ConnectedServices(catalog: catalog).isConnected(.upwork))
+    }
+
+    @Test func aBlankReasonLeavesTheAppConnected() {
+        let healthy = McpPresetEntry(name: "upwork", description: "", installed: true, enabled: true, needsAuthReason: nil)
+        let blank = McpPresetEntry(name: "upwork", description: "", installed: true, enabled: true, needsAuthReason: "  ")
+        #expect(ConnectCatalog.make(hosted: [], states: [], mcp: [healthy]).apps.first?.state == .connected)
+        #expect(ConnectCatalog.make(hosted: [], states: [], mcp: [blank]).apps.first?.state == .connected)
     }
 
     @Test func onlyTheUpworkPresetNeedsTheMac() {

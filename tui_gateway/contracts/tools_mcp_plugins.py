@@ -402,6 +402,7 @@ class McpCatalogEntry(Result):
     enabled: bool
     requires: list[str]
     transport: str
+    needs_auth_reason: str | None = None
 
 
 class McpCatalogResult(Result):
@@ -466,6 +467,7 @@ class McpServerRuntimeRow(Result):
     plugin: str | None = None
     # Parked on a rejected OAuth credential (older backends omit it).
     needs_auth: bool = False
+    needs_auth_reason: str | None = None
 
 
 class McpServersStatusResult(Result):
