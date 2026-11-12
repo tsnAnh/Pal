@@ -48,7 +48,7 @@ struct RoomAuthorLabel: View {
         HStack(spacing: 6) {
             RoomMemberAvatar(member: member, roster: roster, size: 18)
             Text(name)
-                .font(.caption.weight(.medium))
+                .hermesText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textSecondary)
         }
         .padding(.leading, 6)
@@ -61,17 +61,12 @@ struct RoomMemberAvatar: View {
     let roster: RosterModel
     let size: CGFloat
 
-    @Environment(\.hermesTheme) private var theme
-
     var body: some View {
         if let member, let bot = roster.bot(named: member.profile) {
             BotAvatarView(spec: bot.spec, size: size * 1.15)
                 .frame(width: size, height: size)
         } else {
-            Circle()
-                .fill(Color(theme.palette.chipSelectedFill))
-                .frame(width: size, height: size)
-                .overlay(Text(String((member?.displayName ?? "?").prefix(1)).uppercased()).font(.system(size: size * 0.5, weight: .semibold)))
+            InitialAvatar(initial: String((member?.displayName ?? "?").prefix(1)).uppercased(), diameter: size)
         }
     }
 }
@@ -95,11 +90,25 @@ struct RoomNoticeRow: View {
 
     var body: some View {
         Text(text)
-            .font(.footnote)
+            .hermesText(.rowSubtitle)
             .foregroundStyle(PalTokens.textTertiary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
             .accessibilityIdentifier("roomNotice")
+    }
+}
+
+private struct RoomChip: ViewModifier {
+    @Environment(\.hermesTheme) private var theme
+
+    func body(content: Content) -> some View {
+        content
+            .hermesText(.chip)
+            .foregroundStyle(Color(theme.palette.chipText))
+            .padding(.horizontal, PalMetrics.chipHorizontalPadding)
+            .frame(height: PalMetrics.chipHeight)
+            .background(Color(theme.palette.chipFill), in: Capsule())
+            .contentShape(Capsule())
     }
 }
 
@@ -111,11 +120,8 @@ struct RoomAttachmentChip: View {
     var body: some View {
         Button(action: download) {
             Label(attachment.name, systemImage: attachment.kind == "image" ? "photo" : attachment.kind == "pdf" ? "doc.richtext" : "doc")
-                .font(.footnote)
                 .lineLimit(1)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(PalTokens.selected, in: Capsule())
+                .modifier(RoomChip())
         }
         .buttonStyle(.plain)
         .disabled(!canDownload)
@@ -139,7 +145,7 @@ struct RoomActionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(name)
-                .font(.caption.weight(.medium))
+                .hermesText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textSecondary)
                 .padding(.leading, 6)
             if action.isApproval {
@@ -152,8 +158,8 @@ struct RoomActionCard: View {
                 }
             } else {
                 HStack(spacing: 10) {
-                    Button("Retry", action: retry).buttonStyle(.glass).accessibilityIdentifier("roomRetry")
-                    Button("Discard", role: .destructive, action: discard).buttonStyle(.glass).accessibilityIdentifier("roomDiscard")
+                    Button("Retry", action: retry).roomPill().accessibilityIdentifier("roomRetry")
+                    Button("Discard", role: .destructive, action: discard).roomPill().accessibilityIdentifier("roomDiscard")
                 }
                 .disabled(isBusy)
             }
@@ -173,6 +179,16 @@ struct RoomActionCard: View {
     }
 }
 
+private extension Button {
+    func roomPill() -> some View {
+        #if os(macOS)
+        buttonStyle(.palPill(height: 28, fontSize: 12))
+        #else
+        buttonStyle(.pill())
+        #endif
+    }
+}
+
 struct RoomMemberStrip: View {
     let room: Room
     let roster: RosterModel
@@ -186,12 +202,10 @@ struct RoomMemberStrip: View {
                     Button { mention(member) } label: {
                         HStack(spacing: 6) {
                             RoomMemberAvatar(member: member, roster: roster, size: 18)
-                            Text(member.displayName).font(.footnote).lineLimit(1)
+                            Text(member.displayName).lineLimit(1)
                             if busy.contains(member.memberID) { ProgressView().controlSize(.mini) }
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(PalTokens.selected, in: Capsule())
+                        .modifier(RoomChip())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(Text(busy.contains(member.memberID) ? "\(member.displayName), working" : "\(member.displayName)"))
