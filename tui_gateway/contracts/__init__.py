@@ -19,6 +19,7 @@ from . import (
     host_kit,
     webhook_routes,
     groups_bot_relay,
+    host,
     host_update,
     i18n,
     liveness,

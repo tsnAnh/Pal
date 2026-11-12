@@ -2041,6 +2041,24 @@
       }
     },
     {
+      "name": "host.health",
+      "summary": "Read-only health of the computer running Pal: version, runtime, free disk, uptime, profile counts and the doctor's plain-words problems. Owner only (4403 secondary profile); not a model tool.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/HostHealth"
+        }
+      }
+    },
+    {
       "name": "host.kit.add_project",
       "summary": "Start `faker-kit add-project <owner/repo> --json`. The repo must be owner/repo (letters, digits, dot, dash, underscore). 4101 invalid repo, 4409 busy, 4403 secondary profile.",
       "params": [
@@ -2127,6 +2145,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/KitJob"
+        }
+      }
+    },
+    {
+      "name": "host.logs.tail",
+      "summary": "Last lines of one allow-listed Pal log (gateway, agent or errors), newest last, bounded by line and byte caps, with token-shaped text redacted before it leaves the host. Owner only (4403 secondary profile); not a model tool.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/HostLogsTailParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/HostLogsTail"
         }
       }
     },
@@ -27156,6 +27192,232 @@
           "fire_count"
         ],
         "title": "HeartbeatSnapshot",
+        "type": "object"
+      },
+      "HostHealth": {
+        "additionalProperties": false,
+        "description": "``doctor_ran`` is false when the doctor could not run (``problems`` is then empty and the app must not\nread it as healthy). ``disk_free_bytes`` is for the volume holding Pal's data.",
+        "properties": {
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Version"
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Commit"
+          },
+          "python_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Python Version"
+          },
+          "platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Platform"
+          },
+          "disk_free_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Disk Free Bytes"
+          },
+          "disk_total_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Disk Total Bytes"
+          },
+          "host_uptime_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Host Uptime Seconds"
+          },
+          "profile_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile Count"
+          },
+          "running_gateway_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Running Gateway Count"
+          },
+          "doctor_ran": {
+            "title": "Doctor Ran",
+            "type": "boolean"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/HostProblem"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "doctor_ran",
+          "problems"
+        ],
+        "title": "HostHealth",
+        "type": "object"
+      },
+      "HostLogName": {
+        "enum": [
+          "gateway",
+          "agent",
+          "errors"
+        ],
+        "title": "HostLogName",
+        "type": "string"
+      },
+      "HostLogsTail": {
+        "additionalProperties": false,
+        "description": "Newest line last, token-shaped text already replaced. ``available`` is false when the log file does\nnot exist yet. ``truncated`` means older lines were dropped to fit the byte cap.",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/HostLogName"
+          },
+          "lines": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Lines",
+            "type": "array"
+          },
+          "has_more": {
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "lines",
+          "has_more",
+          "truncated",
+          "available"
+        ],
+        "title": "HostLogsTail",
+        "type": "object"
+      },
+      "HostLogsTailParams": {
+        "additionalProperties": false,
+        "description": "``skip`` is how many of the newest lines to leave out, so the next older page is\n``skip = skip + len(lines)``.",
+        "properties": {
+          "name": {
+            "$ref": "#/components/schemas/HostLogName",
+            "default": "gateway"
+          },
+          "lines": {
+            "default": 200,
+            "maximum": 500,
+            "minimum": 1,
+            "title": "Lines",
+            "type": "integer"
+          },
+          "skip": {
+            "default": 0,
+            "maximum": 100000,
+            "minimum": 0,
+            "title": "Skip",
+            "type": "integer"
+          }
+        },
+        "title": "HostLogsTailParams",
+        "type": "object"
+      },
+      "HostProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "severity": {
+            "enum": [
+              "warning",
+              "error"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "message"
+        ],
+        "title": "HostProblem",
         "type": "object"
       },
       "HostUpdateApplyParams": {

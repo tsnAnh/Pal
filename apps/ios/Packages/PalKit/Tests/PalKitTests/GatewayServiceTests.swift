@@ -69,6 +69,21 @@ struct GatewayServiceTests {
         guard case .pending = outcome else { Issue.record("expected pending, got \(outcome)"); return }
     }
 
+    @Test("a restart that never comes back reports how long it waited and the last error")
+    func restartDidNotReturn() async {
+        let bots = ScriptedBots()
+        bots.script("gateway.service.status", status(instance: "gen-1"))
+        bots.script("gateway.service.restart", action("started", status: status(instance: "gen-1")))
+        for _ in 0..<4 { bots.script("gateway.service.status") { _ in throw GatewayTransportError.closed(.normal) } }
+        let gateway = GatewayServiceClient(gateway: bots.gateway, pollInterval: .seconds(2), pollLimit: 4, sleep: { _ in })
+        let seen = Mutex<[GatewayServiceProgress]>([])
+        let outcome = await gateway.restart(progress: { progress in seen.withLock { $0.append(progress) } })
+        guard case .pending(_, let wait?) = outcome else { Issue.record("expected pending with wait, got \(outcome)"); return }
+        #expect(wait.seconds == 8 && wait.lastError == "the connection is closed")
+        #expect(seen.withLock { $0.map(\.attempt) } == [1, 2, 3, 4])
+        #expect(seen.withLock { $0.last?.elapsedSeconds } == 6)
+    }
+
     @Test("a connection that drops during the restart request keeps waiting for the new instance")
     func dropMidRequest() async {
         let bots = ScriptedBots()
