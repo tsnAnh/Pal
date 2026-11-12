@@ -13,7 +13,6 @@ from . import (
     display,
     events,
     gateway_service,
-    github,
     groups_bot_relay,
     i18n,
     liveness,

@@ -1910,43 +1910,6 @@ export interface GatewayServiceInstallResult {
   status: GatewayServiceStatus
 }
 export type GatewayServiceInstallOutcome = 'installed' | 'already_installed' | 'unsupported' | 'failed'
-/** Client→server method params / server→client request params. Unknown keys are rejected. */
-export type Params = Record<string, never>
-/** ``git_protocol`` is gh's value for github.com (``unset`` when gh cannot say). A field that could not be read degrades to null, ``unset`` or false. */
-export interface GithubStatus {
-  signed_in: boolean
-  login?: string | null
-  host: 'github.com'
-  git_protocol: 'https' | 'ssh' | 'unset'
-  ssh_host_key_known: boolean
-  problems: GithubProblem[]
-}
-export interface GithubProblem {
-  id: GithubProblemId
-  message: string
-  fix: GithubProblemFix
-}
-export type GithubProblemId = 'gh_signed_out' | 'git_ssh_unknown_host'
-export type GithubProblemFix = 'github.signin' | 'github.git_protocol.fix'
-/** The one-time device code and where to enter it. ``expires_in`` and ``interval`` are seconds. */
-export interface GithubSigninStartResult {
-  session_id: string
-  user_code: string
-  verification_uri: string
-  expires_in: number
-  interval: number
-}
-export interface GithubSigninSessionParams {
-  session_id: string
-}
-export interface GithubSigninPollResult {
-  state: 'pending' | 'signed_in' | 'expired' | 'failed'
-  login?: string | null
-  message?: string | null
-}
-export interface GithubSigninCancelResult {
-  ok: boolean
-}
 export interface GroupsCapabilitiesParams {
   profile?: string | null
 }
@@ -2470,6 +2433,8 @@ export interface LibraryAssetResult {
   data_base64: string
   size: number
 }
+/** Client→server method params / server→client request params. Unknown keys are rejected. */
+export type Params = Record<string, never>
 /** ``machine_kind`` is ``Spark``, ``Mac``, ``PC`` or ``computer``. ``nvidia_platform`` is ``products.nvidia_platform()``: ``rtx_spark``, ``dgx_spark``, ``discrete`` or null. ``locale`` is the OS account's first UI language, null when the OS has none. */
 export interface MachineFactsResult {
   machine: MachineInfo
@@ -7592,16 +7557,6 @@ export interface RpcMethods {
   'gateway.service.restart': { params: GatewayServiceRestartParams; result: GatewayServiceRestartResult }
   /** Gateway service state on the connected host (running, stopped, not installed, restart needed). */
   'gateway.service.status': { params: ProfileParams; result: GatewayServiceStatus }
-  /** Set git and gh to HTTPS for github.com (idempotent) and return the fresh status. */
-  'github.git_protocol.fix': { params: Params; result: GithubStatus }
-  /** Stop a pending GitHub sign-in and its gh process. */
-  'github.signin.cancel': { params: GithubSigninSessionParams; result: GithubSigninCancelResult }
-  /** State of the sign-in; on signed_in the git protocol fix is already applied. */
-  'github.signin.poll': { params: GithubSigninSessionParams; result: GithubSigninPollResult }
-  /** Start GitHub's device flow through gh; a pending sign-in is returned again instead of a second one. */
-  'github.signin.start': { params: Params; result: GithubSigninStartResult }
-  /** GitHub sign-in and git/gh health on the host: the host user's single gh login and its problems. */
-  'github.status': { params: Params; result: GithubStatus }
   /** Resolve one exact pending approval raised by a local or peer room member. */
   'groups.approve': { params: GroupsApproveParams; result: GroupsApproveResult }
   /** Read one committed attachment for a live room viewer. */
@@ -8145,11 +8100,6 @@ export const RPC_METHODS = [
   'gateway.service.install',
   'gateway.service.restart',
   'gateway.service.status',
-  'github.git_protocol.fix',
-  'github.signin.cancel',
-  'github.signin.poll',
-  'github.signin.start',
-  'github.status',
   'groups.approve',
   'groups.attachment.download',
   'groups.attachment.upload',
