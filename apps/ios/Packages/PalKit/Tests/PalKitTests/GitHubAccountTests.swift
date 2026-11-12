@@ -41,7 +41,7 @@ private func model(_ bots: ScriptedBots, sleeps: Sleeps = Sleeps()) -> GitHubAcc
     GitHubAccountModel(client: GitHubClient(gateway: bots.gateway), sleep: sleeps.sleep)
 }
 
-private let methodNotFound = GatewayTransportError.rpc(RPCError(code: -32601, message: "method not found"))
+private let rpcMethodNotFound = GatewayTransportError.rpc(RPCError(code: -32601, message: "method not found"))
 
 @Suite("GitHub account")
 @MainActor
@@ -52,7 +52,7 @@ struct GitHubAccountTests {
         bots.script("github.status", statusJSON(problems: [problem("git_ssh_unknown_host", fix: "github.git_protocol.fix")]))
         let github = model(bots)
         await github.refresh()
-        guard case .ready(let status) = github.phase else { return Issue.record("not ready") }
+        guard case .ready(let status) = github.phase else { Issue.record("not ready"); return }
         #expect(status.accountLine == "Signed in as octo")
         #expect(status.gitProtocol == .https)
         #expect(status.problems.map(\.fix) == [.gitProtocol])
@@ -65,7 +65,7 @@ struct GitHubAccountTests {
         bots.script("github.status", ["git_protocol": "gopher", "extra": 1, "problems": [["id": "from_the_future", "fix": "do.something"]]])
         let github = model(bots)
         await github.refresh()
-        guard case .ready(let status) = github.phase else { return Issue.record("not ready") }
+        guard case .ready(let status) = github.phase else { Issue.record("not ready"); return }
         #expect(status.signedIn == nil)
         #expect(status.accountLine == "Unknown")
         #expect(status.gitProtocol == .unknown)
@@ -77,7 +77,7 @@ struct GitHubAccountTests {
     @Test("an older gateway shows the unsupported state, a failing one shows unavailable")
     func methodNotFound() async {
         let bots = ScriptedBots()
-        bots.script("github.status") { _ in throw methodNotFound }
+        bots.script("github.status") { _ in throw rpcMethodNotFound }
         let github = model(bots)
         await github.refresh()
         #expect(github.phase == .unsupported)
@@ -108,13 +108,13 @@ struct GitHubAccountTests {
         bots.script("github.status", statusJSON())
         let github = model(bots, sleeps: sleeps)
         await github.beginSignIn()
-        guard case .code(let code) = github.signIn else { return Issue.record("no code") }
+        guard case .code(let code) = github.signIn else { Issue.record("no code"); return }
         #expect(code.userCode == "ABCD-1234")
         await github.pollTask?.value
         #expect(github.signIn == .signedIn(login: "octo"))
         #expect(sleeps.recorded == [.seconds(3), .seconds(3)])
         #expect(bots.calls(to: "github.status").count == 1)
-        guard case .ready(let status) = github.phase else { return Issue.record("not refreshed") }
+        guard case .ready(let status) = github.phase else { Issue.record("not refreshed"); return }
         #expect(status.login == "octo")
     }
 
