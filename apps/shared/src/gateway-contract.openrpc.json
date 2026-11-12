@@ -1555,6 +1555,132 @@
       }
     },
     {
+      "name": "google_workspace.client.set",
+      "summary": "Save the Desktop OAuth client (pasted client file, or client ID and secret) where the skill reads it. 4101 data.code invalid_client or not_desktop_client. A different client ID signs the account out.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GoogleClientSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleWorkspaceStatus"
+        }
+      }
+    },
+    {
+      "name": "google_workspace.signin.cancel",
+      "summary": "Drop a pending Google sign-in.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GoogleSigninCancelParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleSigninCancelResult"
+        }
+      }
+    },
+    {
+      "name": "google_workspace.signin.finish",
+      "summary": "Complete the sign-in from the address the browser ended on. state retry: ask for the paste again. Single use; the paste is never kept.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GoogleSigninFinishParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleSigninFinishResult"
+        }
+      }
+    },
+    {
+      "name": "google_workspace.signin.start",
+      "summary": "Start a PKCE sign-in for the ticked services (read-only unless listed in write_services) and return the Google URL to open. The verifier stays on the gateway under flow_id; finish from any owner device.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GoogleSigninStartParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleSigninStartResult"
+        }
+      }
+    },
+    {
+      "name": "google_workspace.signout",
+      "summary": "Sign out: revoke at Google best effort and delete the token only. With remove_setup the client file goes too.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GoogleSignoutParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleWorkspaceStatus"
+        }
+      }
+    },
+    {
+      "name": "google_workspace.status",
+      "summary": "Sign-in state of the google-workspace skill, read from its local files only (never calls Google): not_configured, needs_sign_in, signed_in or reauth_needed, with the account email and granted services. Owner only; 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleWorkspaceStatus"
+        }
+      }
+    },
+    {
+      "name": "google_workspace.verify",
+      "summary": "Explicit check: refresh the access token if stale and ask Google who is signed in, once. A revoked grant becomes reauth_needed for every device. 5321 data.code unreachable leaves the state unchanged.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleWorkspaceStatus"
+        }
+      }
+    },
+    {
       "name": "groups.approve",
       "summary": "Resolve one exact pending approval raised by a local or peer room member.",
       "params": [
@@ -25222,6 +25348,291 @@
           "gates"
         ],
         "title": "GoalSnapshot",
+        "type": "object"
+      },
+      "GoogleClientSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "client_json": {
+            "anyOf": [
+              {
+                "maxLength": 16384,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Json"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Secret"
+          }
+        },
+        "title": "GoogleClientSetParams",
+        "type": "object"
+      },
+      "GoogleService": {
+        "enum": [
+          "gmail",
+          "calendar",
+          "drive",
+          "contacts",
+          "sheets",
+          "docs"
+        ],
+        "title": "GoogleService",
+        "type": "string"
+      },
+      "GoogleSigninCancelParams": {
+        "additionalProperties": false,
+        "properties": {
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "flow_id"
+        ],
+        "title": "GoogleSigninCancelParams",
+        "type": "object"
+      },
+      "GoogleSigninCancelResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "GoogleSigninCancelResult",
+        "type": "object"
+      },
+      "GoogleSigninFinishParams": {
+        "additionalProperties": false,
+        "properties": {
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "pasted": {
+            "maxLength": 4096,
+            "title": "Pasted",
+            "type": "string"
+          }
+        },
+        "required": [
+          "flow_id",
+          "pasted"
+        ],
+        "title": "GoogleSigninFinishParams",
+        "type": "object"
+      },
+      "GoogleSigninFinishResult": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "signed_in",
+              "retry",
+              "denied",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Code"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GoogleWorkspaceStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "GoogleSigninFinishResult",
+        "type": "object"
+      },
+      "GoogleSigninStartParams": {
+        "additionalProperties": false,
+        "properties": {
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/GoogleService"
+            },
+            "title": "Services",
+            "type": "array"
+          },
+          "write_services": {
+            "items": {
+              "$ref": "#/components/schemas/GoogleService"
+            },
+            "title": "Write Services",
+            "type": "array"
+          }
+        },
+        "required": [
+          "services"
+        ],
+        "title": "GoogleSigninStartParams",
+        "type": "object"
+      },
+      "GoogleSigninStartResult": {
+        "additionalProperties": false,
+        "properties": {
+          "flow_id": {
+            "title": "Flow Id",
+            "type": "string"
+          },
+          "auth_url": {
+            "title": "Auth Url",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "flow_id",
+          "auth_url",
+          "expires_in"
+        ],
+        "title": "GoogleSigninStartResult",
+        "type": "object"
+      },
+      "GoogleSignoutParams": {
+        "additionalProperties": false,
+        "properties": {
+          "remove_setup": {
+            "default": false,
+            "title": "Remove Setup",
+            "type": "boolean"
+          }
+        },
+        "title": "GoogleSignoutParams",
+        "type": "object"
+      },
+      "GoogleWorkspaceState": {
+        "enum": [
+          "not_configured",
+          "needs_sign_in",
+          "signed_in",
+          "reauth_needed"
+        ],
+        "title": "GoogleWorkspaceState",
+        "type": "string"
+      },
+      "GoogleWorkspaceStatus": {
+        "additionalProperties": false,
+        "description": "``services`` have at least read access, ``write_services`` also have write access, both read from the\ntoken's scope list. ``reauth_reason`` is set with ``reauth_needed``: ``token_missing``, ``token_unreadable``,\n``revoked`` or ``client_rejected``.",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GoogleWorkspaceState"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Email"
+          },
+          "services": {
+            "items": {
+              "$ref": "#/components/schemas/GoogleService"
+            },
+            "title": "Services",
+            "type": "array"
+          },
+          "write_services": {
+            "items": {
+              "$ref": "#/components/schemas/GoogleService"
+            },
+            "title": "Write Services",
+            "type": "array"
+          },
+          "reauth_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reauth Reason"
+          }
+        },
+        "required": [
+          "state",
+          "services",
+          "write_services"
+        ],
+        "title": "GoogleWorkspaceStatus",
         "type": "object"
       },
       "GroupsApproveParams": {

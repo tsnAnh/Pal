@@ -1983,6 +1983,49 @@ export interface GithubOauthConfig {
 export interface GithubOauthConfigSetParams {
   client_id?: string | null
 }
+/** ``services`` have at least read access, ``write_services`` also have write access, both read from the token's scope list. ``reauth_reason`` is set with ``reauth_needed``: ``token_missing``, ``token_unreadable``, ``revoked`` or ``client_rejected``. */
+export interface GoogleWorkspaceStatus {
+  state: GoogleWorkspaceState
+  email?: string | null
+  services: GoogleService[]
+  write_services: GoogleService[]
+  reauth_reason?: string | null
+}
+export type GoogleWorkspaceState = 'not_configured' | 'needs_sign_in' | 'signed_in' | 'reauth_needed'
+export type GoogleService = 'gmail' | 'calendar' | 'drive' | 'contacts' | 'sheets' | 'docs'
+export interface GoogleClientSetParams {
+  client_json?: string | null
+  client_id?: string | null
+  client_secret?: string | null
+}
+export interface GoogleSignoutParams {
+  remove_setup?: boolean
+}
+export interface GoogleSigninStartParams {
+  services: GoogleService[]
+  write_services?: GoogleService[]
+}
+export interface GoogleSigninStartResult {
+  flow_id: string
+  auth_url: string
+  expires_in: number
+}
+export interface GoogleSigninFinishParams {
+  flow_id: string
+  pasted: string
+}
+export interface GoogleSigninFinishResult {
+  state: 'signed_in' | 'retry' | 'denied' | 'failed'
+  code?: string | null
+  message?: string | null
+  status?: GoogleWorkspaceStatus | null
+}
+export interface GoogleSigninCancelParams {
+  flow_id: string
+}
+export interface GoogleSigninCancelResult {
+  ok: boolean
+}
 /** The known fields of the kit's JSON; unknown fields are ignored. */
 export interface KitReport {
   version?: string | null
@@ -7773,6 +7816,20 @@ export interface RpcMethods {
   'github.oauth.start': { params: Params; result: GithubOauthStartResult }
   /** The host's single GitHub token, read through gh without reading the token back: state, account, scope names, expiry and the git protocol. Never carries the token. 4403 secondary profile. */
   'github.token.status': { params: Params; result: GithubTokenStatus }
+  /** Save the Desktop OAuth client (pasted client file, or client ID and secret) where the skill reads it. 4101 data.code invalid_client or not_desktop_client. A different client ID signs the account out. */
+  'google_workspace.client.set': { params: GoogleClientSetParams; result: GoogleWorkspaceStatus }
+  /** Drop a pending Google sign-in. */
+  'google_workspace.signin.cancel': { params: GoogleSigninCancelParams; result: GoogleSigninCancelResult }
+  /** Complete the sign-in from the address the browser ended on. state retry: ask for the paste again. Single use; the paste is never kept. */
+  'google_workspace.signin.finish': { params: GoogleSigninFinishParams; result: GoogleSigninFinishResult }
+  /** Start a PKCE sign-in for the ticked services (read-only unless listed in write_services) and return the Google URL to open. The verifier stays on the gateway under flow_id; finish from any owner device. */
+  'google_workspace.signin.start': { params: GoogleSigninStartParams; result: GoogleSigninStartResult }
+  /** Sign out: revoke at Google best effort and delete the token only. With remove_setup the client file goes too. */
+  'google_workspace.signout': { params: GoogleSignoutParams; result: GoogleWorkspaceStatus }
+  /** Sign-in state of the google-workspace skill, read from its local files only (never calls Google): not_configured, needs_sign_in, signed_in or reauth_needed, with the account email and granted services. Owner only; 4403 secondary profile. */
+  'google_workspace.status': { params: Params; result: GoogleWorkspaceStatus }
+  /** Explicit check: refresh the access token if stale and ask Google who is signed in, once. A revoked grant becomes reauth_needed for every device. 5321 data.code unreachable leaves the state unchanged. */
+  'google_workspace.verify': { params: Params; result: GoogleWorkspaceStatus }
   /** Resolve one exact pending approval raised by a local or peer room member. */
   'groups.approve': { params: GroupsApproveParams; result: GroupsApproveResult }
   /** Read one committed attachment for a live room viewer. */
@@ -8350,6 +8407,13 @@ export const RPC_METHODS = [
   'github.oauth.poll',
   'github.oauth.start',
   'github.token.status',
+  'google_workspace.client.set',
+  'google_workspace.signin.cancel',
+  'google_workspace.signin.finish',
+  'google_workspace.signin.start',
+  'google_workspace.signout',
+  'google_workspace.status',
+  'google_workspace.verify',
   'groups.approve',
   'groups.attachment.download',
   'groups.attachment.upload',

@@ -15,6 +15,7 @@ from . import (
     events,
     gateway_service,
     github_token,
+    google_workspace,
     host_kit,
     webhook_routes,
     groups_bot_relay,
