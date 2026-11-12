@@ -104,6 +104,7 @@ struct MacModalHost: View {
                 MacConnectApps(
                     model: ConnectAppsModel(
                         connection: connection,
+                        pool: hostPool,
                         profile: router.connectAppsProfile,
                         botName: roster.displayName(forProfile: router.connectAppsProfile),
                         browser: WebAuthenticationBrowser(),
