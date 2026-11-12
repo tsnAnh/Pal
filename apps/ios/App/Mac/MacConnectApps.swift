@@ -443,7 +443,7 @@ struct MacConnectApps: View {
                 Button(String(localized: "Open System Settings")) { model.openSettings(for: row) }
                     .accessibilityIdentifier("\(identifier)-settings")
             }
-            if row.action != .allow {
+            if row.action != .allow || row.id == .input {
                 Text(warning)
                     .font(.system(size: 11))
                     .foregroundStyle(PalTokens.textSecondary)

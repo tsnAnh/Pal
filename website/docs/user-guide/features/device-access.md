@@ -22,6 +22,7 @@ Every bot can see the devices you are logged in on (the Mac and iPhone apps) and
 |---|---|
 | Mac or iPhone | `calendar.*`, `reminders.*`, `contacts.search`, `location.*`, `alarms.*`, `timers.start`, `home.*` |
 | Mac only | `shell.run` (command, cwd, timeout_seconds), `files.read`, `files.list`, `files.write` (path, content) |
+| Mac only | `input.displays`, `input.move`, `input.click`, `input.drag`, `input.scroll`, `input.type`, `input.key` (mouse and keyboard) |
 | Mac only | `clipboard.read` (include_image), `clipboard.write` (text or image_base64) |
 | Mac only | `apps.list`, `apps.open` (app by name or bundle id, optional `target` file path or web link), `apps.quit` (asks the app to quit normally, never force-quits), `windows.list`, `windows.focus` (window_id or app) |
 | Mac only | `screen.capture` (display, read_text), `screen.read` (display) |
@@ -39,4 +40,14 @@ Clipboard reads return at most 23 KB of text (cut with `truncated: true`) and an
 - **Commands, Files, Clipboard, Apps and Screen are off by default** on every Mac. Only the person using that Mac switches them on, in the Hermes app's connector settings on that Mac (another device cannot switch them on for it). Turning Apps on is also when macOS asks for Screen Recording and Accessibility access (both optional; the Mac app shows a button to System Settings while either is missing). Once on, bots run those actions with no prompt per action; switching them off stops it at once. The clipboard often holds passwords and private text, and one switch covers both reading and replacing it; its content is untrusted data and is never logged. Screen ("Let bots see this Mac's screen") also needs the macOS Screen Recording permission, which Pal asks for only when that switch is turned on; a bot can then see everything on screen, including passwords and private messages. Pal shows "A bot is looking at your screen" while a capture runs, allows one capture at a time per device and at most one every 3 seconds, keeps screenshots in memory only (no temp files), and never logs them.
 - Apple connectors keep their existing state: `ask` still shows the device's consent prompt and the approval card for changes, `allowed` runs without prompting.
 - A bot reaches only devices logged in to the profile it runs in. Other profiles and other installs are invisible to it: they are not listed and an action naming them fails as an unknown device.
+- There is no screen capture.
+
+## Mouse and keyboard (Mac only)
+
+The "Mouse and keyboard" connector is off by default and is switched on only in the Mac app, which then asks macOS for the Accessibility permission. A bot can then click and type anywhere on that Mac with no prompt per action, including approving payments, sending messages and deleting files.
+
+- **Coordinates** are screen points, origin at the top-left of the main display, y growing downward. A secondary display can have negative x or y. `input.displays` returns each display's id, origin, size in points and scale (multiply by scale for screenshot pixels) and the pointer position. Pass `display` to give x and y relative to that display.
+- **Limits:** at most 60 input calls a minute per Mac; `input.type` at most 500 characters; `input.scroll` at most 50 lines; at least 8 ms between events.
+- **Stop at once:** press Escape three times within 1.5 seconds, or choose Stop in the Pal menu bar item, or turn the switch off. In-flight input is cancelled and the switch goes off until you turn it on again. While a bot is controlling the Mac, the menu bar item says so, and stays for 5 seconds after.
+- **Refusals:** a password field (secure input), a locked screen or login window, and Pal's own windows are never controlled; the result says so and the bot must not retry.
 - There is no screen control (no clicks or typing); the Screen connector above only looks.

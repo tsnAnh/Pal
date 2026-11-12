@@ -115,6 +115,7 @@ public actor DeviceToolExecutor {
         case .alarms: "Alarms"
         case .shell: "Run commands"
         case .files: "Files"
+        case .input: "Mouse and keyboard"
         case .screen: "Screen"
         case .notifications: "Notifications"
         case .apps: "Apps"
@@ -123,6 +124,7 @@ public actor DeviceToolExecutor {
     }
 
     static func permissionHint(_ connector: DeviceConnectorID) -> String {
+        if connector == .input { return "Allow Pal under Accessibility in System Settings > Privacy & Security, then turn Mouse and keyboard on again in Pal." }
         if connector == .screen { return "Allow Pal under Screen Recording in System Settings, then turn Screen on again in Pal." }
         return "Allow \(title(connector)) for Pal in this device's Settings."
     }
@@ -175,6 +177,8 @@ extension DeviceToolExecutor {
         case .filesRead: try await readFile(raw)
         case .filesList: try await listFiles(raw)
         case .filesWrite: try await writeFile(raw)
+        case .inputDisplays, .inputMove, .inputClick, .inputDrag, .inputScroll, .inputType, .inputKey:
+            try await InputToolHandler.run(action, raw, provider: provider(\.input))
         case .screenCapture: try await captureScreen(raw)
         case .screenRead: try await readScreen(raw)
         case .notifyPost: try await postNotification(raw, profile: profile)

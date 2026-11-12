@@ -40,7 +40,7 @@ enum PlatformCapabilities {
         #if os(iOS)
         [.calendar, .home, .reminders, .contacts, .location, .alarms]
         #else
-        [.calendar, .reminders, .contacts, .location, .shell, .files, .apps, .clipboard, .notifications, .screen]
+        [.calendar, .reminders, .contacts, .location, .shell, .files, .apps, .clipboard, .notifications, .screen, .input]
         #endif
     }
 

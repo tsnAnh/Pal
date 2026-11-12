@@ -26,6 +26,7 @@ public struct SystemPermissions: DevicePermissions {
         case .alarms: Self.alarmsStatus()
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
+        case .input: AccessibilityAccess.status
         case .notifications: await Self.notificationsStatus()
         case .apps: Self.appsStatus
         case .clipboard: Self.clipboardStatus
@@ -49,6 +50,8 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestHome()
         case .shell, .files:
             break
+        case .input:
+            AccessibilityAccess.request()
         case .notifications:
             await Self.requestNotifications()
         case .apps:
@@ -209,6 +212,7 @@ extension DeviceProviders {
         let shell: (any ShellProviding)? = SystemShell()
         let files: (any FilesProviding)? = SystemFiles()
         let apps: (any AppsProviding)? = AppsController(workspace: SystemAppsWorkspace())
+        let input: (any InputProviding)? = InputController.shared
         let notifications: (any NotificationsProviding)? = SystemNotifications()
         let clipboard: (any ClipboardProviding)? = SystemClipboard(store: GeneralPasteboard())
         let screen: (any ScreenProviding)? = GuardedScreen(source: SystemScreenSource(), activity: screenActivity)
@@ -218,12 +222,13 @@ extension DeviceProviders {
         let apps: (any AppsProviding)? = nil
         let notifications: (any NotificationsProviding)? = nil
         let clipboard: (any ClipboardProviding)? = nil
+        let input: (any InputProviding)? = nil
         let screen: (any ScreenProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
             location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, notifications: notifications,
-            apps: apps, clipboard: clipboard, screen: screen
+            apps: apps, clipboard: clipboard, screen: screen, input: input
         )
     }
 }

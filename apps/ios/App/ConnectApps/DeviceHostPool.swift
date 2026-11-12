@@ -58,6 +58,7 @@ extension ConsentAsk {
         case .alarms: "Alarms"
         case .shell: "Run commands"
         case .files: "Files"
+        case .input: "Mouse and keyboard"
         case .screen: "Screen"
         case .notifications: "Notifications"
         case .apps: "Apps"
@@ -84,6 +85,9 @@ extension ConsentAsk {
         case .filesRead: "read a file on this Mac"
         case .filesList: "look through a folder on this Mac"
         case .filesWrite: "change a file on this Mac"
+        case .inputDisplays: "see this Mac's screen sizes"
+        case .inputMove, .inputClick, .inputDrag, .inputScroll: "use this Mac's mouse"
+        case .inputType, .inputKey: "use this Mac's keyboard"
         case .screenCapture: "take a screenshot of this Mac"
         case .screenRead: "read the text on this Mac's screen"
         case .notifyPost: "show a notification on this Mac"
@@ -107,6 +111,9 @@ final class DeviceHostPool {
     private let consent: DeviceConsentPresenter
     private let defaults: UserDefaults
     private var stacks: [String: DeviceToolStack] = [:]
+    #if os(macOS)
+    private var inputSafety: InputSafety?
+    #endif
     let screenIndicator = ScreenCaptureIndicator()
 
     init(connection: ConnectionModel, consent: DeviceConsentPresenter, defaults: UserDefaults = .standard) {
@@ -127,8 +134,31 @@ final class DeviceHostPool {
             diagnostics: .osLog()
         )
         stacks[key] = stack
+        #if os(macOS)
+        if inputSafety == nil {
+            let safety = InputSafety { [weak self] in await self?.switchOffInput() }
+            safety.start()
+            inputSafety = safety
+        }
+        #endif
         await stack.host.start()
         return stack
+    }
+
+    func switchOffInput() async {
+        for stack in stacks.values { _ = try? await stack.ledger.set(.input, state: .off) }
+    }
+
+    func stopInput() {
+        #if os(macOS)
+        InputController.shared.stop()
+        #endif
+    }
+
+    func rearmInput() {
+        #if os(macOS)
+        InputController.shared.rearm()
+        #endif
     }
 
     func remember(_ profile: String?) {
