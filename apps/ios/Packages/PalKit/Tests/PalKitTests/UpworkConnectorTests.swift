@@ -47,7 +47,7 @@ struct ConnectorCardStateTests {
         #expect(resolve(.needsAuthorization, reason: "  \n") == .reconnect(reason: nil))
         #expect(resolve(.needsAuthorization, reason: "") == .reconnect(reason: nil))
         #expect(resolve(.needsAuthorization, reason: rejectedSignIn).isReconnect)
-        #expect(resolve(.needsAuthorization, reason: rejectedSignIn, busy: true) == .connecting)
+        #expect(resolve(.needsAuthorization, busy: true, reason: rejectedSignIn) == .connecting)
     }
 
     @Test func everyDeviceHasARouteToSignInAgain() {
