@@ -160,7 +160,8 @@ struct McpOAuthHandshakeTests {
         #expect((params["state"] ?? "").count >= 16)
 
         let registration = try #require(server.requests(to: "/register").first)
-        let registered = try #require(try JSONSerialization.jsonObject(with: try #require(registration.body)) as? [String: Any])
+        let registrationBody = try #require(registration.body)
+        let registered = try #require(try JSONSerialization.jsonObject(with: registrationBody) as? [String: Any])
         #expect(registered["token_endpoint_auth_method"] as? String == "none")
         #expect(registered["application_type"] as? String == "native")
         #expect(registered["redirect_uris"] as? [String] == [redirect])
@@ -275,7 +276,8 @@ struct McpOAuthHandshakeTests {
         _ = try await flow(server, browser).authorize()
         #expect(query(try #require(browser.openedURLs.first))["scope"] == nil)
         let registration = try #require(server.requests(to: "/register").first)
-        let registered = try #require(try JSONSerialization.jsonObject(with: try #require(registration.body)) as? [String: Any])
+        let registrationBody = try #require(registration.body)
+        let registered = try #require(try JSONSerialization.jsonObject(with: registrationBody) as? [String: Any])
         #expect(registered["scope"] == nil)
     }
 
