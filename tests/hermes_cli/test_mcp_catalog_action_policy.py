@@ -21,7 +21,7 @@ def _parse(tmp_path, body):
 def test_the_manifest_policy_reaches_the_installed_server_block_unchanged():
     entry = mcp_catalog.get_entry("upwork")
     cfg = mcp_catalog._build_server_config(entry, None)
-    assert cfg["url"] == "https://mcp.upwork.com/mcp" and cfg["auth"] == "oauth" and cfg["signin_on"] == "owner_computer"
+    assert cfg["url"] == "https://mcp.upwork.com/mcp" and cfg["auth"] == "oauth" and cfg["signin_on"] == "owner_app"
     policy = mcp_action_gate.policy_from_config(cfg)
     assert policy.read_tools == frozenset(entry.action_policy.read_tools)
     assert "upwork.com" in policy.refused_message
@@ -46,7 +46,7 @@ def test_a_server_without_a_policy_gets_no_gate_key(tmp_path):
     "action_policy: {read_tools: search}\n",
     "action_policy: {read_tools: [a], bogus: 1}\n",
     "action_policy: {refused_message: 3}\n",
-    "auth: {type: api_key, signin_on: owner_computer}\n",
+    "auth: {type: api_key, signin_on: owner_app}\n",
     "auth: {type: oauth, signin_on: elsewhere}\n",
 ])
 def test_a_malformed_policy_or_sign_in_declaration_is_a_manifest_error(tmp_path, body):

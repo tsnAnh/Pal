@@ -145,7 +145,7 @@ async def test_a_dead_sign_in_raises_the_mac_prompt_on_the_attached_apps_without
     assert len(token_requests) == 1 and HermesTokenStorage('upwork', hermes_home=home).reauth_required()
     await _wait_for(lambda: len(_required(phone)) == 1)
     event = _required(phone)[0]
-    assert event['service'] == 'mcp:upwork' and event['signin_on'] == 'owner_computer' and event['server'] == 'upwork'
+    assert event['service'] == 'mcp:upwork' and event['signin_on'] == 'owner_app' and event['server'] == 'upwork'
     assert len(_required(phone)) == 1, 'repeated calls do not repeat the prompt'
     assert (await phone.call('auth.submit_oauth_tokens', HANDOVER))['result'] == {'ok': True}
     assert phone.events('auth.resolved')[-1]['outcome'] == 'signed_in'

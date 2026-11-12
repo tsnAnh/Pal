@@ -189,11 +189,30 @@ struct ChatComposer: View {
         focused.wrappedValue = true
     }
 
-    #if os(macOS)
-    private var isComposingText: Bool {
-        (NSApp.keyWindow?.firstResponder as? NSTextView)?.hasMarkedText() == true
+    private func handleReturn(_ press: KeyPress) -> KeyPress.Result {
+        let action = ComposerKeys.returnAction(
+            modifiers: press.modifiers.composerModifiers,
+            isComposing: isComposingText,
+            platform: ComposerInput.platform,
+            hasCompletionSelection: selectedFileRef != nil
+        )
+        switch action {
+        case .send:
+            if hasContent, canSend { send() }
+            return .handled
+        case .acceptCompletion:
+            if let item = selectedFileRef { pickFileRef(item) }
+            return .handled
+        case .newline:
+            return ComposerInput.insertNewline() ? .handled : .ignored
+        case .ignore:
+            return .ignored
+        }
     }
 
+    private var isComposingText: Bool { ComposerInput.isComposing }
+
+    #if os(macOS)
     private func moveFileRefSelection(by step: Int) -> KeyPress.Result {
         guard !fileRefMatches.isEmpty, !isComposingText else { return .ignored }
         fileRefIndex = (fileRefIndex + step + fileRefMatches.count) % fileRefMatches.count
@@ -287,16 +306,8 @@ struct ChatComposer: View {
                 pickFileRef(item, descend: true)
                 return .handled
             }
-            .onKeyPress(.return, phases: .down) { press in
-                guard press.modifiers.isDisjoint(with: [.shift, .option]) else { return .ignored }
-                if let item = selectedFileRef, !isComposingText {
-                    pickFileRef(item)
-                    return .handled
-                }
-                if hasContent, canSend { send() }
-                return .handled
-            }
             #endif
+            .onKeyPress(.return, phases: .down, action: handleReturn)
             .padding(.horizontal, 6)
             .frame(minHeight: buttonDiameter)
             .accessibilityLabel(Text("Message \(botName)"))

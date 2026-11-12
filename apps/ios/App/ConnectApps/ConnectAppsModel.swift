@@ -105,7 +105,6 @@ final class ConnectAppsModel {
     private let service: ConnectAppsService
     private let capabilitiesService: CapabilitiesService
     private let skillsService: SkillsCatalogService
-    let github: GitHubAccountModel
     private let bots: [CustomConnectorBot]
     private let currentBot: String?
     private let diagnostics = Diagnostics.osLog()
@@ -123,9 +122,7 @@ final class ConnectAppsModel {
             systemBrowser: SystemBrowserAuthorization(), nativeSignIn: UpworkSignIn.native(connection: connection), diagnostics: .osLog()
         )
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
-        let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        capabilitiesService = CapabilitiesService(gateway: gateway)
-        github = GitHubAccountModel(client: GitHubClient(gateway: gateway))
+        capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
     }
 
     var customConnector: CustomConnectorModel? {
@@ -267,6 +264,9 @@ final class ConnectAppsModel {
         defer { busy.remove(app.id) }
         do {
             try await service.connect(app, credentials: credentials)
+            if let failure = await service.tokenFailure(app) {
+                report(failure == .authRefused ? "\(app.name) didn't accept that token. Check it and try again." : failure.message)
+            }
         } catch let error as ConnectAppsError {
             handle(error, app: app)
         } catch {

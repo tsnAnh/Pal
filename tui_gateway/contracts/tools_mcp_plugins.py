@@ -397,7 +397,7 @@ class McpCatalogEntry(Result):
     name: str
     description: str
     connector_slug: str | None = None
-    signin_on: Literal["owner_computer"] | None = None
+    signin_on: Literal["owner_app"] | None = None
     installed: bool
     enabled: bool
     requires: list[str]

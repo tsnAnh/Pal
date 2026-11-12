@@ -20,7 +20,7 @@ from tests.tools.test_mcp_oauth_import import ACCESS, REFRESH, TOKEN_ENDPOINT, U
 from tools import auth_required, mcp_oauth_import as imp
 from tools.mcp_oauth import HermesTokenStorage, OwnerSigninRequired
 
-REASON = "Sign in again on a Mac: Upwork stopped accepting the saved sign-in"
+REASON = "Sign in again: Upwork stopped accepting the saved sign-in"
 ROTATED = "rt-rotated-9e41d27a"
 
 pytest_plugins = ("tests.tools.test_mcp_action_gate",)
@@ -186,7 +186,7 @@ def test_every_app_reads_the_reason_from_the_catalog_and_the_status_until_a_new_
     expire_access_token()
     _call("search_jobs")
     catalog, status = _rows()
-    assert catalog["needs_auth_reason"] == REASON and catalog["signin_on"] == "owner_computer"
+    assert catalog["needs_auth_reason"] == REASON and catalog["signin_on"] == "owner_app"
     assert status["needs_auth"] is True and status["needs_auth_reason"] == REASON
     assert asyncio.run(imp.import_owner_tokens(home, "upwork", _tokens(refresh_token="rt-new-3b7c"))) is None
     catalog, status = _rows()

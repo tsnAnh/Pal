@@ -55,7 +55,7 @@ struct MacConnectApps: View {
                 .macSheetFrame()
         }
         .sheet(item: $model.credentialPrompt) { prompt in
-            CredentialSheet(prompt: prompt) { values in
+            CredentialSheet(prompt: prompt, botName: model.botName) { values in
                 Task { await model.connect(prompt.app, credentials: values) }
             }
             .macSheetFrame()
@@ -243,8 +243,6 @@ struct MacConnectApps: View {
     private var selectedSection: some View {
         switch model.selection {
         case ConnectChip.all:
-            GitHubAccountSection(model: model.github)
-                .padding(.horizontal, -PalMetrics.screenMargin)
             ForEach(model.catalog.categories, id: \.self) { category in
                 section(title: category, identifier: "connectAppsSection-\(category)", viewAll: { model.selection = category }) {
                     appGrid(Array(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)))

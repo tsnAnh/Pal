@@ -60,8 +60,9 @@ public struct McpPresetEntry: Decodable, Sendable, Equatable {
     public var enabled: Bool
     public var requires: [String]
     public var needsAuthReason: String?
+    public var setup: String
 
-    public init(name: String, description: String, connectorSlug: String? = nil, installed: Bool = false, enabled: Bool = false, requires: [String] = [], needsAuthReason: String? = nil) {
+    public init(name: String, description: String, connectorSlug: String? = nil, installed: Bool = false, enabled: Bool = false, requires: [String] = [], needsAuthReason: String? = nil, setup: String = "") {
         self.name = name
         self.description = description
         self.connectorSlug = connectorSlug
@@ -69,12 +70,24 @@ public struct McpPresetEntry: Decodable, Sendable, Equatable {
         self.enabled = enabled
         self.requires = requires
         self.needsAuthReason = needsAuthReason
+        self.setup = setup
     }
 
     enum CodingKeys: String, CodingKey {
-        case name, description, installed, enabled, requires
+        case name, description, installed, enabled, requires, setup
         case connectorSlug = "connector_slug"
         case needsAuthReason = "needs_auth_reason"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+        connectorSlug = try container.decodeIfPresent(String.self, forKey: .connectorSlug)
+        installed = try container.decodeIfPresent(Bool.self, forKey: .installed) ?? false
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
+        requires = try container.decodeIfPresent([String].self, forKey: .requires) ?? []
+        setup = try container.decodeIfPresent(String.self, forKey: .setup) ?? ""
     }
 }
 
@@ -99,8 +112,9 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
     public var source: ConnectAppSource
     public var state: ConnectAppState
     public var authReason: String?
+    public var setup: String
 
-    public init(id: String, name: String, summary: String, category: String, iconURL: URL?, source: ConnectAppSource, state: ConnectAppState, authReason: String? = nil) {
+    public init(id: String, name: String, summary: String, category: String, iconURL: URL?, source: ConnectAppSource, state: ConnectAppState, authReason: String? = nil, setup: String = "") {
         self.id = id
         self.name = name
         self.summary = summary
@@ -109,6 +123,7 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
         self.source = source
         self.state = state
         self.authReason = authReason
+        self.setup = setup
     }
 
     public var isConnected: Bool { state == .connected }
@@ -192,7 +207,7 @@ public struct ConnectCatalog: Sendable, Equatable {
             ConnectApp(
                 id: "mcp:\(preset.name)", name: displayName(preset.name), summary: preset.description, category: otherCategory,
                 iconURL: nil, source: .mcp(name: preset.name, requires: preset.requires),
-                state: mcpState(preset), authReason: preset.needsAuthReason
+                state: mcpState(preset), authReason: preset.needsAuthReason, setup: preset.setup
             )
         }
         let presetNames = Set(mcp.map(\.name))

@@ -60,7 +60,7 @@ struct ConnectAppsSheet: View {
                 .macSheetFrame()
         }
         .sheet(item: $model.credentialPrompt) { prompt in
-            CredentialSheet(prompt: prompt) { values in
+            CredentialSheet(prompt: prompt, botName: model.botName) { values in
                 Task { await model.connect(prompt.app, credentials: values) }
             }
             .macSheetFrame()
@@ -168,7 +168,6 @@ struct ConnectAppsSheet: View {
 
     @ViewBuilder
     private var allSections: some View {
-        GitHubAccountSection(model: model.github)
         ForEach(model.catalog.categories, id: \.self) { category in
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
             ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) }
@@ -280,7 +279,12 @@ struct ConnectAppsSheet: View {
             switch app.state {
         case .disconnected: ConnectRowAction("Connect") { Task { await model.connect(app) } }
         case .needsAuthorization: ConnectRowAction("Authorize", kind: .accent) { Task { await model.connect(app) } }
-        case .connected: ConnectRowAction("Manage") { model.manageAccounts(app) }
+        case .connected:
+            if case .mcp(_, let requires) = app.source, !requires.isEmpty {
+                ConnectRowAction("Update token") { Task { await model.connect(app) } }
+            } else {
+                ConnectRowAction("Manage") { model.manageAccounts(app) }
+            }
             }
         }
         return ConnectAppRow(
@@ -300,13 +304,13 @@ struct ConnectAppsSheet: View {
 
 struct CredentialSheet: View {
     let prompt: CredentialPrompt
+    let botName: String
     let submit: ([String: String]) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.hermesTheme) private var theme
     @State private var values: [String: String] = [:]
 
-    private var complete: Bool { prompt.keys.allSatisfy { values[$0]?.isEmpty == false } }
+    private var pending: String? { prompt.keys.first { values[$0] == nil } }
 
     var body: some View {
         SheetChrome(
@@ -314,26 +318,33 @@ struct CredentialSheet: View {
             accessibilityIdentifier: "connectCredentials",
             onLeading: { dismiss() },
             content: {
-                VStack(spacing: 16) {
-                    ForEach(prompt.keys, id: \.self) { key in
-                        SecureField(key, text: Binding(get: { values[key] ?? "" }, set: { values[key] = $0 }))
-                            .textContentType(.password)
-                            .neverAutocapitalized()
-                            .autocorrectionDisabled()
-                            .padding(.horizontal, 16)
-                            .frame(height: 48)
-                            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
-                            .accessibilityIdentifier("connectCredential-\(key)")
-                    }
-                    PillButton("Connect", kind: complete ? .accent : .dimmed, size: .large, accessibilityIdentifier: "connectCredentialsSubmit") {
-                        submit(values)
-                        dismiss()
-                    }
+                if let key = pending {
+                    SecretEntryView(
+                        connectorName: prompt.app.name,
+                        accountLabel: botName,
+                        purpose: prompt.app.setup.isEmpty ? String(localized: "Paste the key for \(key). It is saved for \(botName) only and can't be read back.") : prompt.app.setup,
+                        fieldLabel: key,
+                        submitTitle: String(localized: "Connect"),
+                        state: .idle,
+                        identifiers: SecretEntryIdentifiers(
+                            field: "connectCredential-\(key)", submit: "connectCredentialsSubmit",
+                            cancel: "connectCredentialsCancel", status: "connectCredentialsStatus"
+                        ),
+                        onSubmit: { value in
+                            values[key] = value
+                            if pending == nil {
+                                submit(values)
+                                dismiss()
+                            }
+                        },
+                        onCancel: { dismiss() }
+                    )
+                    .id(key)
+                    .padding(.horizontal, PalMetrics.screenMargin)
                 }
-                .padding(.horizontal, PalMetrics.screenMargin)
             }
         )
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }
 

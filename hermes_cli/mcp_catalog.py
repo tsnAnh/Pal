@@ -48,12 +48,12 @@ class AuthSpec:
     # Pre-registered OAuth client block copied verbatim to ``mcp_servers.<name>.oauth`` (vendors
     # without Dynamic Client Registration). Secrets stay ``${VAR}`` references declared in ``env``.
     oauth: dict[str, Any] = field(default_factory=dict)
-    # Where the browser sign-in must run. "owner_computer": the vendor only approves redirects for apps on
+    # Where the browser sign-in must run. "owner_app": the vendor only approves redirects for apps on
     # the owner's own computer, so the gateway never starts the flow and the owner's app imports the tokens.
     signin_on: Optional[str] = None
 
 
-_SIGNIN_ON_VALUES = frozenset({"owner_computer"})
+_SIGNIN_ON_VALUES = frozenset({"owner_app"})
 
 
 @dataclass
@@ -81,6 +81,7 @@ class TransportSpec:
     # Static env for the stdio subprocess (telemetry opt-outs, mode flags). NOT for secrets — those
     # go through auth.env so they are prompted for and land in ~/.hermes/.env.
     env: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -110,8 +111,8 @@ class ToolsSpec:
 class SuggestSpec:
     """Composer-suggestion metadata (desktop "brand pill" triggers).
 
-    GitHub is intentionally NOT in the catalog and must not be suggested here: its hosted MCP needs a
-    per-host OAuth app (generic DCR 404s) and the bundled github/* skills are far more capable.
+    GitHub ships as a read-only token connector (its hosted OAuth needs a per-host OAuth app, generic
+    DCR 404s), so it needs no suggestion triggers here.
     """
 
     keywords: list[str] = field(default_factory=list)  # lowercase whole-word/phrase triggers
@@ -135,6 +136,10 @@ class CatalogEntry:
     suggest: Optional[SuggestSpec] = None
     action_policy: Optional[ActionPolicySpec] = None
     manifest_path: Path = field(default_factory=Path)
+
+    @property
+    def env_keys(self) -> list[str]:
+        return [spec.name for spec in self.auth.env if spec.secret and spec.required]
 
 
 class CatalogError(Exception):
@@ -199,9 +204,19 @@ def _parse_transport(path: Path, raw: Any) -> TransportSpec:
         isinstance(k, str) and isinstance(v, str) for k, v in env_raw.items()
     ):
         raise CatalogError(f"{path}: transport.env must be a mapping of string to string")
+    headers_raw = transport_raw.get("headers") or {}
+    if not isinstance(headers_raw, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in headers_raw.items()
+    ):
+        raise CatalogError(f"{path}: transport.headers must be a mapping of string to string")
+    if headers_raw and t_type != "http":
+        raise CatalogError(f"{path}: transport.headers is only valid with an http transport")
+    if any(k.lower() == "authorization" or _ENV_REF_RE.search(v) for k, v in headers_raw.items()):
+        raise CatalogError(f"{path}: transport.headers is for static non-secret headers only")
     transport = TransportSpec(
         type=t_type, command=transport_raw.get("command"), args=[str(a) for a in args],
-        url=transport_raw.get("url"), version=transport_raw.get("version"), env=dict(env_raw))
+        url=transport_raw.get("url"), version=transport_raw.get("version"), env=dict(env_raw),
+        headers=dict(headers_raw))
     if t_type == "stdio" and not transport.command:
         raise CatalogError(f"{path}: stdio transport requires 'command'")
     if t_type == "http" and not transport.url:
@@ -589,6 +604,8 @@ def _build_server_config(entry: CatalogEntry, install_dir: Optional[Path]) -> di
             cfg["env"] = dict(t.env)
     elif t.type == "http":
         cfg["url"] = t.url
+        if t.headers:
+            cfg["headers"] = dict(t.headers)
         if entry.auth.type == "oauth":
             cfg["auth"] = "oauth"
             if entry.auth.oauth:
@@ -598,7 +615,7 @@ def _build_server_config(entry: CatalogEntry, install_dir: Optional[Path]) -> di
         elif entry.auth.type == "api_key":
             from hermes_cli.mcp_config import _bearer_auth_headers
 
-            cfg["headers"] = _bearer_auth_headers(entry.name)
+            cfg["headers"] = {**t.headers, **_bearer_auth_headers(entry.name)}
     if entry.action_policy is not None:
         cfg["action_policy"] = {
             "read_tools": list(entry.action_policy.read_tools),

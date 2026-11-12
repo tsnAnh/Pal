@@ -1411,24 +1411,6 @@
       }
     },
     {
-      "name": "github.git_protocol.fix",
-      "summary": "Set git and gh to HTTPS for github.com (idempotent) and return the fresh status.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/Params"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/GithubStatus"
-        }
-      }
-    },
-    {
       "name": "github.oauth.cancel",
       "summary": "Drop a pending GitHub sign-in.",
       "params": [
@@ -1515,78 +1497,6 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/GithubOauthStartResult"
-        }
-      }
-    },
-    {
-      "name": "github.signin.cancel",
-      "summary": "Stop a pending GitHub sign-in and its gh process.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/GithubSigninSessionParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/GithubSigninCancelResult"
-        }
-      }
-    },
-    {
-      "name": "github.signin.poll",
-      "summary": "State of the sign-in; on signed_in the git protocol fix is already applied.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/GithubSigninSessionParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/GithubSigninPollResult"
-        }
-      }
-    },
-    {
-      "name": "github.signin.start",
-      "summary": "Start GitHub's device flow through gh; a pending sign-in is returned again instead of a second one.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/Params"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/GithubSigninStartResult"
-        }
-      }
-    },
-    {
-      "name": "github.status",
-      "summary": "GitHub sign-in and git/gh health on the host: the host user's single gh login and its problems.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/Params"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/GithubStatus"
         }
       }
     },
@@ -5765,6 +5675,78 @@
           "$ref": "#/components/schemas/WakeStopResult"
         }
       }
+    },
+    {
+      "name": "webhook.routes.add",
+      "summary": "Create a route. Give secret or generate_secret, not both; a generated secret is returned once. The gateway loads the route on its next request, no restart. 4101 invalid, 4409 name taken, 5321 data.code webhook_disabled. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/WebhookRouteAddParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/WebhookRouteAddResult"
+        }
+      }
+    },
+    {
+      "name": "webhook.routes.list",
+      "summary": "Webhook routes of this gateway with their local path and public URL, never a secret. public_base_url is webapp.public_url, or null when unset. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/WebhookRoutesListResult"
+        }
+      }
+    },
+    {
+      "name": "webhook.routes.probe",
+      "summary": "Probe one stored route: an unsigned POST to the gateway's own listener, then to the public URL built from webapp.public_url (no redirects, TLS verified). The client names a route, never a URL. 4404 unknown route. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/WebhookRouteNameParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/WebhookProbeResult"
+        }
+      }
+    },
+    {
+      "name": "webhook.routes.remove",
+      "summary": "Remove a route created through this API or the CLI. 4404 unknown route. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/WebhookRouteNameParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/WebhookRouteRemoveResult"
+        }
+      }
     }
   ],
   "components": {
@@ -7372,7 +7354,7 @@
           "signin_on": {
             "anyOf": [
               {
-                "const": "owner_computer",
+                "const": "owner_app",
                 "type": "string"
               },
               {
@@ -24690,207 +24672,6 @@
         "title": "GithubOauthStartResult",
         "type": "object"
       },
-      "GithubProblem": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/GithubProblemId"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "fix": {
-            "$ref": "#/components/schemas/GithubProblemFix"
-          }
-        },
-        "required": [
-          "id",
-          "message",
-          "fix"
-        ],
-        "title": "GithubProblem",
-        "type": "object"
-      },
-      "GithubProblemFix": {
-        "enum": [
-          "github.signin",
-          "github.git_protocol.fix"
-        ],
-        "title": "GithubProblemFix",
-        "type": "string"
-      },
-      "GithubProblemId": {
-        "enum": [
-          "gh_signed_out",
-          "git_ssh_unknown_host"
-        ],
-        "title": "GithubProblemId",
-        "type": "string"
-      },
-      "GithubSigninCancelResult": {
-        "additionalProperties": false,
-        "properties": {
-          "ok": {
-            "title": "Ok",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "ok"
-        ],
-        "title": "GithubSigninCancelResult",
-        "type": "object"
-      },
-      "GithubSigninPollResult": {
-        "additionalProperties": false,
-        "properties": {
-          "state": {
-            "enum": [
-              "pending",
-              "signed_in",
-              "expired",
-              "failed"
-            ],
-            "title": "State",
-            "type": "string"
-          },
-          "login": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Login"
-          },
-          "message": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Message"
-          }
-        },
-        "required": [
-          "state"
-        ],
-        "title": "GithubSigninPollResult",
-        "type": "object"
-      },
-      "GithubSigninSessionParams": {
-        "additionalProperties": false,
-        "properties": {
-          "session_id": {
-            "title": "Session Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "session_id"
-        ],
-        "title": "GithubSigninSessionParams",
-        "type": "object"
-      },
-      "GithubSigninStartResult": {
-        "additionalProperties": false,
-        "description": "The one-time device code and where to enter it. ``expires_in`` and ``interval`` are seconds.",
-        "properties": {
-          "session_id": {
-            "title": "Session Id",
-            "type": "string"
-          },
-          "user_code": {
-            "title": "User Code",
-            "type": "string"
-          },
-          "verification_uri": {
-            "title": "Verification Uri",
-            "type": "string"
-          },
-          "expires_in": {
-            "title": "Expires In",
-            "type": "integer"
-          },
-          "interval": {
-            "title": "Interval",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "session_id",
-          "user_code",
-          "verification_uri",
-          "expires_in",
-          "interval"
-        ],
-        "title": "GithubSigninStartResult",
-        "type": "object"
-      },
-      "GithubStatus": {
-        "additionalProperties": false,
-        "description": "``git_protocol`` is gh's value for github.com (``unset`` when gh cannot say). A field that could not\nbe read degrades to null, ``unset`` or false.",
-        "properties": {
-          "signed_in": {
-            "title": "Signed In",
-            "type": "boolean"
-          },
-          "login": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Login"
-          },
-          "host": {
-            "const": "github.com",
-            "title": "Host",
-            "type": "string"
-          },
-          "git_protocol": {
-            "enum": [
-              "https",
-              "ssh",
-              "unset"
-            ],
-            "title": "Git Protocol",
-            "type": "string"
-          },
-          "ssh_host_key_known": {
-            "title": "Ssh Host Key Known",
-            "type": "boolean"
-          },
-          "problems": {
-            "items": {
-              "$ref": "#/components/schemas/GithubProblem"
-            },
-            "title": "Problems",
-            "type": "array"
-          }
-        },
-        "required": [
-          "signed_in",
-          "host",
-          "git_protocol",
-          "ssh_host_key_known",
-          "problems"
-        ],
-        "title": "GithubStatus",
-        "type": "object"
-      },
       "GithubTokenState": {
         "enum": [
           "set",
@@ -29437,7 +29218,7 @@
           "signin_on": {
             "anyOf": [
               {
-                "const": "owner_computer",
+                "const": "owner_app",
                 "type": "string"
               },
               {
@@ -29465,6 +29246,18 @@
           "transport": {
             "title": "Transport",
             "type": "string"
+          },
+          "needs_auth_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Needs Auth Reason"
           }
         },
         "required": [
@@ -29999,6 +29792,18 @@
             "default": false,
             "title": "Needs Auth",
             "type": "boolean"
+          },
+          "needs_auth_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Needs Auth Reason"
           }
         },
         "required": [
@@ -58769,6 +58574,354 @@
         "title": "WakeStopResult",
         "type": "object"
       },
+      "WebhookDiagnosis": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "WebhookDiagnosis",
+        "type": "object"
+      },
+      "WebhookHop": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Status"
+          },
+          "ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ms"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          }
+        },
+        "title": "WebhookHop",
+        "type": "object"
+      },
+      "WebhookProbeResult": {
+        "additionalProperties": false,
+        "properties": {
+          "local": {
+            "$ref": "#/components/schemas/WebhookHop"
+          },
+          "public": {
+            "$ref": "#/components/schemas/WebhookHop"
+          },
+          "diagnosis": {
+            "$ref": "#/components/schemas/WebhookDiagnosis"
+          },
+          "tunnel": {
+            "$ref": "#/components/schemas/WebhookTunnel"
+          }
+        },
+        "required": [
+          "local",
+          "public",
+          "diagnosis",
+          "tunnel"
+        ],
+        "title": "WebhookProbeResult",
+        "type": "object"
+      },
+      "WebhookRoute": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "profile": {
+            "title": "Profile",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "public_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Public Url"
+          },
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "deliver": {
+            "title": "Deliver",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "profile",
+          "path",
+          "events",
+          "deliver",
+          "description",
+          "enabled"
+        ],
+        "title": "WebhookRoute",
+        "type": "object"
+      },
+      "WebhookRouteAddParams": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "title": "Name",
+            "type": "string"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Events",
+            "type": "array"
+          },
+          "deliver": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Deliver"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "maxLength": 256,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Secret"
+          },
+          "generate_secret": {
+            "default": false,
+            "title": "Generate Secret",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "WebhookRouteAddParams",
+        "type": "object"
+      },
+      "WebhookRouteAddResult": {
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "$ref": "#/components/schemas/WebhookRoute"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Secret"
+          }
+        },
+        "required": [
+          "route"
+        ],
+        "title": "WebhookRouteAddResult",
+        "type": "object"
+      },
+      "WebhookRouteNameParams": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "WebhookRouteNameParams",
+        "type": "object"
+      },
+      "WebhookRouteRemoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "WebhookRouteRemoveResult",
+        "type": "object"
+      },
+      "WebhookRoutesListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "public_base_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Public Base Url"
+          },
+          "public_url_setting": {
+            "title": "Public Url Setting",
+            "type": "string"
+          },
+          "routes": {
+            "items": {
+              "$ref": "#/components/schemas/WebhookRoute"
+            },
+            "title": "Routes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "public_url_setting",
+          "routes"
+        ],
+        "title": "WebhookRoutesListResult",
+        "type": "object"
+      },
+      "WebhookTunnel": {
+        "additionalProperties": false,
+        "properties": {
+          "resolves": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Resolves"
+          },
+          "tls_expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tls Expires At"
+          }
+        },
+        "title": "WebhookTunnel",
+        "type": "object"
+      },
       "WorkerExecution": {
         "additionalProperties": true,
         "description": "A ``worker_executions`` row without its adoption digest.",
@@ -59178,7 +59331,7 @@
     },
     {
       "name": "auth.submit_oauth_tokens",
-      "summary": "The owner signed in to an MCP server on their own computer (auth.required signin_on owner_computer) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed.",
+      "summary": "The owner signed in to an MCP server on their own computer (auth.required signin_on owner_app) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed.",
       "params": [
         {
           "name": "params",
@@ -61884,7 +62037,7 @@
     },
     {
       "name": "auth.required",
-      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. signin_on owner_computer: the sign-in cannot run on the gateway host; sign in on the owner's own computer and hand the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential.",
+      "summary": "A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. signin_on owner_app: the sign-in cannot run on the gateway host; sign in on the owner's own computer and hand the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential.",
       "params": [
         {
           "name": "payload",

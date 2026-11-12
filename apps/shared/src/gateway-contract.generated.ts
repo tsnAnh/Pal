@@ -1912,41 +1912,6 @@ export interface GatewayServiceInstallResult {
 export type GatewayServiceInstallOutcome = 'installed' | 'already_installed' | 'unsupported' | 'failed'
 /** Client→server method params / server→client request params. Unknown keys are rejected. */
 export type Params = Record<string, never>
-/** ``git_protocol`` is gh's value for github.com (``unset`` when gh cannot say). A field that could not be read degrades to null, ``unset`` or false. */
-export interface GithubStatus {
-  signed_in: boolean
-  login?: string | null
-  host: 'github.com'
-  git_protocol: 'https' | 'ssh' | 'unset'
-  ssh_host_key_known: boolean
-  problems: GithubProblem[]
-}
-export interface GithubProblem {
-  id: GithubProblemId
-  message: string
-  fix: GithubProblemFix
-}
-export type GithubProblemId = 'gh_signed_out' | 'git_ssh_unknown_host'
-export type GithubProblemFix = 'github.signin' | 'github.git_protocol.fix'
-/** The one-time device code and where to enter it. ``expires_in`` and ``interval`` are seconds. */
-export interface GithubSigninStartResult {
-  session_id: string
-  user_code: string
-  verification_uri: string
-  expires_in: number
-  interval: number
-}
-export interface GithubSigninSessionParams {
-  session_id: string
-}
-export interface GithubSigninPollResult {
-  state: 'pending' | 'signed_in' | 'expired' | 'failed'
-  login?: string | null
-  message?: string | null
-}
-export interface GithubSigninCancelResult {
-  ok: boolean
-}
 /** A field that could not be read degrades to null, an empty list, ``unknown`` or ``unset``. An OAuth App token has no expiry, so ``expires_at`` is null. ``oauth_app_not_configured``: no token and no client ID. */
 export interface GithubTokenStatus {
   state: GithubTokenState
@@ -1983,6 +1948,60 @@ export interface GithubOauthConfig {
 }
 export interface GithubOauthConfigSetParams {
   client_id?: string | null
+}
+export interface WebhookRoutesListResult {
+  enabled: boolean
+  public_base_url?: string | null
+  public_url_setting: string
+  routes: WebhookRoute[]
+}
+export interface WebhookRoute {
+  name: string
+  profile: string
+  path: string
+  public_url?: string | null
+  events: string[]
+  deliver: string
+  description: string
+  created_at?: string | null
+  enabled: boolean
+}
+export interface WebhookRouteAddParams {
+  name: string
+  profile?: string | null
+  events?: string[]
+  deliver?: string | null
+  secret?: string | null
+  generate_secret?: boolean
+}
+export interface WebhookRouteAddResult {
+  route: WebhookRoute
+  secret?: string | null
+}
+export interface WebhookRouteNameParams {
+  name: string
+}
+export interface WebhookRouteRemoveResult {
+  ok: boolean
+}
+export interface WebhookProbeResult {
+  local: WebhookHop
+  public: WebhookHop
+  diagnosis: WebhookDiagnosis
+  tunnel: WebhookTunnel
+}
+export interface WebhookHop {
+  status?: number | null
+  ms?: number | null
+  error?: string | null
+}
+export interface WebhookDiagnosis {
+  code: string
+  message: string
+}
+export interface WebhookTunnel {
+  resolves?: boolean | null
+  tls_expires_at?: string | null
 }
 export interface GroupsCapabilitiesParams {
   profile?: string | null
@@ -5160,11 +5179,12 @@ export interface McpCatalogEntry {
   name: string
   description: string
   connector_slug?: string | null
-  signin_on?: 'owner_computer' | null
+  signin_on?: 'owner_app' | null
   installed: boolean
   enabled: boolean
   requires: string[]
   transport: string
+  needs_auth_reason?: string | null
 }
 export interface McpServersListResult {
   servers: McpServerSummary[]
@@ -5202,6 +5222,7 @@ export interface McpServerRuntimeRow {
   source: McpServerSource
   plugin?: string | null
   needs_auth?: boolean
+  needs_auth_reason?: string | null
 }
 export type McpRuntimeStatus = 'connected' | 'disabled' | 'connecting' | 'failed' | 'lazy' | 'configured'
 /** ``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools). ``headers`` {Name: Value} and ``bearer_token`` are written to the profile's .env, only ``${VAR}`` templates persist; ``client_id`` is a pre-registered OAuth client id (not a secret). */
@@ -7470,7 +7491,7 @@ export interface AuthRequiredPayload {
   verification_uri?: string | null
   expires_in?: number | null
   server?: string | null
-  signin_on?: 'owner_computer' | null
+  signin_on?: 'owner_app' | null
 }
 export type AuthReason = 'missing' | 'expired' | 'revoked'
 export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual'
@@ -7664,8 +7685,6 @@ export interface RpcMethods {
   'gateway.service.restart': { params: GatewayServiceRestartParams; result: GatewayServiceRestartResult }
   /** Gateway service state on the connected host (running, stopped, not installed, restart needed). */
   'gateway.service.status': { params: ProfileParams; result: GatewayServiceStatus }
-  /** Set git and gh to HTTPS for github.com (idempotent) and return the fresh status. */
-  'github.git_protocol.fix': { params: Params; result: GithubStatus }
   /** Drop a pending GitHub sign-in. */
   'github.oauth.cancel': { params: GithubOauthSessionParams; result: GithubOauthCancelResult }
   /** The OAuth App client ID (public, not a secret), or null when it is not set. */
@@ -7676,14 +7695,6 @@ export interface RpcMethods {
   'github.oauth.poll': { params: GithubOauthSessionParams; result: GithubOauthPollResult }
   /** Start GitHub's device flow with Pal's own OAuth App; a pending sign-in is returned again instead of a second one. Error 5311 carries data.code: oauth_app_not_configured, oauth_app_rejected or unreachable. 4403 secondary profile. */
   'github.oauth.start': { params: Params; result: GithubOauthStartResult }
-  /** Stop a pending GitHub sign-in and its gh process. */
-  'github.signin.cancel': { params: GithubSigninSessionParams; result: GithubSigninCancelResult }
-  /** State of the sign-in; on signed_in the git protocol fix is already applied. */
-  'github.signin.poll': { params: GithubSigninSessionParams; result: GithubSigninPollResult }
-  /** Start GitHub's device flow through gh; a pending sign-in is returned again instead of a second one. */
-  'github.signin.start': { params: Params; result: GithubSigninStartResult }
-  /** GitHub sign-in and git/gh health on the host: the host user's single gh login and its problems. */
-  'github.status': { params: Params; result: GithubStatus }
   /** The host's single GitHub token, read through gh without reading the token back: state, account, scope names, expiry and the git protocol. Never carries the token. 4403 secondary profile. */
   'github.token.status': { params: Params; result: GithubTokenStatus }
   /** Resolve one exact pending approval raised by a local or peer room member. */
@@ -8148,6 +8159,14 @@ export interface RpcMethods {
   'wake.status': { params: WakeStatusParams; result: WakeStatusResult }
   /** Stop this surface's listener; persist also writes wake_word.enabled: false. */
   'wake.stop': { params: WakeStopParams; result: WakeStopResult }
+  /** Create a route. Give secret or generate_secret, not both; a generated secret is returned once. The gateway loads the route on its next request, no restart. 4101 invalid, 4409 name taken, 5321 data.code webhook_disabled. 4403 secondary profile. */
+  'webhook.routes.add': { params: WebhookRouteAddParams; result: WebhookRouteAddResult }
+  /** Webhook routes of this gateway with their local path and public URL, never a secret. public_base_url is webapp.public_url, or null when unset. 4403 secondary profile. */
+  'webhook.routes.list': { params: Params; result: WebhookRoutesListResult }
+  /** Probe one stored route: an unsigned POST to the gateway's own listener, then to the public URL built from webapp.public_url (no redirects, TLS verified). The client names a route, never a URL. 4404 unknown route. 4403 secondary profile. */
+  'webhook.routes.probe': { params: WebhookRouteNameParams; result: WebhookProbeResult }
+  /** Remove a route created through this API or the CLI. 4404 unknown route. 4403 secondary profile. */
+  'webhook.routes.remove': { params: WebhookRouteNameParams; result: WebhookRouteRemoveResult }
 }
 export type RpcMethod = keyof RpcMethods
 export const RPC_METHODS = [
@@ -8229,16 +8248,11 @@ export const RPC_METHODS = [
   'gateway.service.install',
   'gateway.service.restart',
   'gateway.service.status',
-  'github.git_protocol.fix',
   'github.oauth.cancel',
   'github.oauth.config.get',
   'github.oauth.config.set',
   'github.oauth.poll',
   'github.oauth.start',
-  'github.signin.cancel',
-  'github.signin.poll',
-  'github.signin.start',
-  'github.status',
   'github.token.status',
   'groups.approve',
   'groups.attachment.download',
@@ -8470,7 +8484,11 @@ export const RPC_METHODS = [
   'wake.resume',
   'wake.start',
   'wake.status',
-  'wake.stop'
+  'wake.stop',
+  'webhook.routes.add',
+  'webhook.routes.list',
+  'webhook.routes.probe',
+  'webhook.routes.remove'
 ] as const satisfies readonly RpcMethod[]
 
 // ── Canonical (hermes-gateway-v1) methods only the session authority serves ──
@@ -8490,7 +8508,7 @@ export interface CanonicalRpcMethods {
   'auth.signin': { params: AuthSigninParams; result: AuthSigninResult }
   /** The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored. */
   'auth.submit_credential': { params: AuthSubmitCredentialParams; result: AuthSubmitCredentialResult }
-  /** The owner signed in to an MCP server on their own computer (auth.required signin_on owner_computer) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed. */
+  /** The owner signed in to an MCP server on their own computer (auth.required signin_on owner_app) and hands over the public client it registered and the tokens. The gateway stores them for the connecting profile, connects the server and ends any waiting sign-in request as signed_in. Public clients only: a client_secret is not accepted. The tokens are never echoed, logged or shown to the model. ok false names why in reason: not_oauth_service, server_mismatch, invalid_request or save_failed. */
   'auth.submit_oauth_tokens': { params: AuthSubmitOauthTokensParams; result: AuthSubmitOauthTokensResult }
   /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
   'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
@@ -8947,7 +8965,7 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
-  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. signin_on owner_computer: the sign-in cannot run on the gateway host; sign in on the owner's own computer and hand the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential. */
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. signin_on owner_app: the sign-in cannot run on the gateway host; sign in on the owner's own computer and hand the tokens over with auth.submit_oauth_tokens (auth.signin only acknowledges). The payload never carries a credential. */
   'auth.required': AuthRequiredPayload
   /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is the provider's failure in plain words when the flow has one; it never carries a credential. */
   'auth.resolved': AuthResolvedPayload

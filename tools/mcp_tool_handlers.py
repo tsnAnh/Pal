@@ -364,8 +364,8 @@ def _handle_auth_error_and_retry(server_name: str, exc: BaseException, retry_cal
         result = _retry_once(server_name, retry_call, op_description, "auth recovery")
         if result is not None:
             return result
-    from tools.mcp_oauth import server_signs_in_on_owner_computer
-    if server_signs_in_on_owner_computer(server_name):
+    from tools.mcp_oauth import server_signs_in_on_owner_app
+    if server_signs_in_on_owner_app(server_name):
         from tools.auth_required import reauth_required_result
         return reauth_required_result(server_name)
     return _strike(server_name, _NEEDS_REAUTH_MSG.format(s=server_name, detail=_auth_error_detail(exc)),
