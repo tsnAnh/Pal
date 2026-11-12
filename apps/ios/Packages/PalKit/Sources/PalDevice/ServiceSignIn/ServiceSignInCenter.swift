@@ -55,8 +55,8 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var canSignIn: Bool {
         if requiresMac { return nativeSignInAvailable }
         switch flow {
-        case .deviceCode, .oauth: true
-        case .apiKey, .header, .manual, .unknown: false
+        case .deviceCode, .oauth: return true
+        case .apiKey, .header, .manual, .unknown: return false
         }
     }
 }
