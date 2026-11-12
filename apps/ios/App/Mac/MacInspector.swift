@@ -231,7 +231,7 @@ struct MacInspector: View {
             } content: {
                 InspectorRow(identifier: "profileModelRow", action: { router.push(.botModel(botName: botName)) }) {
                     Image(systemName: "cpu").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
-                    Text("Model and backups").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                    Text("Model, effort and backups").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
                 }

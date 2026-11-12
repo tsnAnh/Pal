@@ -116,6 +116,7 @@ public actor DeviceToolExecutor {
         case .shell: "Run commands"
         case .files: "Files"
         case .screen: "Screen"
+        case .apps: "Apps"
         }
     }
 
@@ -174,6 +175,11 @@ extension DeviceToolExecutor {
         case .filesWrite: try await writeFile(raw)
         case .screenCapture: try await captureScreen(raw)
         case .screenRead: try await readScreen(raw)
+        case .appsList: try await listApps(raw)
+        case .appsOpen: try await openApp(raw)
+        case .appsQuit: try await quitApp(raw)
+        case .windowsList: try await listWindows(raw)
+        case .windowsFocus: try await focusWindow(raw)
         }
     }
 
@@ -239,6 +245,76 @@ extension DeviceToolExecutor {
         let path = try DevicePath.resolve(args.path)
         let record = try await provider(\.files).write(path: path, content: args.content, append: args.append ?? false, createDirs: args.createDirs ?? false)
         return try DeviceWire.encode(FileWriteWire(path: record.path, bytesWritten: record.bytesWritten))
+    }
+
+    private static let maximumApps = 200
+    private static let maximumWindows = 200
+
+    private func appWire(_ app: AppRecord) -> AppWire {
+        AppWire(name: app.name, bundleId: app.bundleID, pid: app.pid, frontmost: app.frontmost)
+    }
+
+    private func appName(_ raw: String) throws -> String {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name.count <= 200 else { throw DeviceProviderError.invalidArgs("app must be an app name or bundle id of at most 200 characters.") }
+        return name
+    }
+
+    private func listApps(_ raw: JSONValue) async throws -> JSONValue {
+        let args: AppsListArgs = try DeviceWire.decodeArgs(raw)
+        let limit = Self.clamp(args.limit, Self.maximumApps, 1...Self.maximumApps)
+        let apps = try await provider(\.apps).apps()
+        return try DeviceWire.encode(AppsListWire(apps: apps.prefix(limit).map(appWire), truncated: apps.count > limit))
+    }
+
+    private static let openableSchemes: Set<String> = ["http", "https", "mailto"]
+
+    private func openApp(_ raw: JSONValue) async throws -> JSONValue {
+        let args: AppsOpenArgs = try DeviceWire.decodeArgs(raw)
+        let name = try appName(args.app)
+        let target = try args.target.map { text -> String in
+            if let scheme = URL(string: text)?.scheme?.lowercased() {
+                guard Self.openableSchemes.contains(scheme) else { throw DeviceProviderError.invalidArgs("target must be a web link, a mailto link, or a file path.") }
+                return text
+            }
+            return try DevicePath.resolve(text)
+        }
+        let record = try await provider(\.apps).open(app: name, target: target)
+        return try DeviceWire.encode(AppOpenWire(app: appWire(record.app), launched: record.launched))
+    }
+
+    private func quitApp(_ raw: JSONValue) async throws -> JSONValue {
+        let args: AppsQuitArgs = try DeviceWire.decodeArgs(raw)
+        let record = try await provider(\.apps).quit(app: appName(args.app))
+        return try DeviceWire.encode(AppQuitWire(app: appWire(record), quitRequested: true))
+    }
+
+    private func listWindows(_ raw: JSONValue) async throws -> JSONValue {
+        let args: WindowsListArgs = try DeviceWire.decodeArgs(raw)
+        let limit = Self.clamp(args.limit, Self.maximumWindows, 1...Self.maximumWindows)
+        let app = try args.app.map { try appName($0) }
+        let record = try await provider(\.apps).windows(app: app, onScreenOnly: args.onScreenOnly ?? false)
+        let windows = record.windows.prefix(limit).map {
+            WindowWire(
+                windowId: $0.id, app: $0.app, pid: $0.pid, title: record.titlesAvailable ? $0.title : nil,
+                frame: WindowFrameWire(x: $0.frame.x, y: $0.frame.y, width: $0.frame.width, height: $0.frame.height),
+                onScreen: $0.onScreen
+            )
+        }
+        let note = record.titlesAvailable ? nil : Self.titlesNote
+        return try DeviceWire.encode(WindowsListWire(
+            windows: Array(windows), titlesAvailable: record.titlesAvailable, truncated: record.windows.count > limit, note: note
+        ))
+    }
+
+    static let titlesNote = "Window titles need Screen Recording permission for Pal (System Settings > Privacy & Security)."
+
+    private func focusWindow(_ raw: JSONValue) async throws -> JSONValue {
+        let args: WindowsFocusArgs = try DeviceWire.decodeArgs(raw)
+        let app = try args.app.map { try appName($0) }
+        guard args.windowId != nil || app != nil else { throw DeviceProviderError.invalidArgs("Pass window_id or app.") }
+        let record = try await provider(\.apps).focus(windowID: args.windowId, app: app)
+        return try DeviceWire.encode(WindowsFocusWire(app: appWire(record.app), windowId: record.windowID, raised: record.raised, note: record.note))
     }
 
     private func listEvents(_ raw: JSONValue) async throws -> JSONValue {

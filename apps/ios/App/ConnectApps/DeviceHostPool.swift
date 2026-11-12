@@ -59,6 +59,7 @@ extension ConsentAsk {
         case .shell: "Run commands"
         case .files: "Files"
         case .screen: "Screen"
+        case .apps: "Apps"
         }
     }
 
@@ -83,6 +84,11 @@ extension ConsentAsk {
         case .filesWrite: "change a file on this Mac"
         case .screenCapture: "take a screenshot of this Mac"
         case .screenRead: "read the text on this Mac's screen"
+        case .appsList: "see which apps are running on this Mac"
+        case .appsOpen: "open an app on this Mac"
+        case .appsQuit: "quit an app on this Mac"
+        case .windowsList: "see which windows are open on this Mac"
+        case .windowsFocus: "bring a window to the front on this Mac"
         }
     }
 }

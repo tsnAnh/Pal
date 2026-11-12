@@ -9,11 +9,12 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
     case alarms
     case shell
     case files
+    case apps
     case screen
 
     public var needsOSPermission: Bool {
         switch self {
-        case .shell, .files: false
+        case .shell, .files, .apps: false
         case .calendar, .home, .reminders, .contacts, .location, .alarms, .screen: true
         }
     }
@@ -115,6 +116,11 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
     case filesWrite = "files.write"
     case screenCapture = "screen.capture"
     case screenRead = "screen.read"
+    case appsList = "apps.list"
+    case appsOpen = "apps.open"
+    case appsQuit = "apps.quit"
+    case windowsList = "windows.list"
+    case windowsFocus = "windows.focus"
 
     public var connector: DeviceConnectorID {
         switch self {
@@ -127,6 +133,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
         case .shellRun: .shell
         case .filesRead, .filesList, .filesWrite: .files
         case .screenCapture, .screenRead: .screen
+        case .appsList, .appsOpen, .appsQuit, .windowsList, .windowsFocus: .apps
         }
     }
 }
@@ -358,6 +365,30 @@ public struct FilesWriteArgs: Decodable, Sendable {
     public var content: String
     public var append: Bool?
     public var createDirs: Bool?
+}
+
+public struct AppsListArgs: Decodable, Sendable {
+    public var limit: Int?
+}
+
+public struct AppsOpenArgs: Decodable, Sendable {
+    public var app: String
+    public var target: String?
+}
+
+public struct AppsQuitArgs: Decodable, Sendable {
+    public var app: String
+}
+
+public struct WindowsListArgs: Decodable, Sendable {
+    public var app: String?
+    public var onScreenOnly: Bool?
+    public var limit: Int?
+}
+
+public struct WindowsFocusArgs: Decodable, Sendable {
+    public var windowId: Int?
+    public var app: String?
 }
 
 public struct CalendarEventWire: Encodable, Sendable, Equatable {
@@ -604,5 +635,109 @@ public struct ScreenReadWire: Encodable, Sendable, Equatable {
     public init(text: String, display: Int) {
         self.text = text
         self.display = display
+    }
+}
+
+public struct AppWire: Encodable, Sendable, Equatable {
+    public var name: String
+    public var bundleId: String?
+    public var pid: Int
+    public var frontmost: Bool
+
+    public init(name: String, bundleId: String?, pid: Int, frontmost: Bool) {
+        self.name = name
+        self.bundleId = bundleId
+        self.pid = pid
+        self.frontmost = frontmost
+    }
+}
+
+public struct AppsListWire: Encodable, Sendable, Equatable {
+    public var apps: [AppWire]
+    public var truncated: Bool
+
+    public init(apps: [AppWire], truncated: Bool) {
+        self.apps = apps
+        self.truncated = truncated
+    }
+}
+
+public struct AppOpenWire: Encodable, Sendable, Equatable {
+    public var app: AppWire
+    public var launched: Bool
+
+    public init(app: AppWire, launched: Bool) {
+        self.app = app
+        self.launched = launched
+    }
+}
+
+public struct AppQuitWire: Encodable, Sendable, Equatable {
+    public var app: AppWire
+    public var quitRequested: Bool
+
+    public init(app: AppWire, quitRequested: Bool) {
+        self.app = app
+        self.quitRequested = quitRequested
+    }
+}
+
+public struct WindowFrameWire: Encodable, Sendable, Equatable {
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+
+    public init(x: Double, y: Double, width: Double, height: Double) {
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+    }
+}
+
+public struct WindowWire: Encodable, Sendable, Equatable {
+    public var windowId: Int
+    public var app: String
+    public var pid: Int
+    public var title: String?
+    public var frame: WindowFrameWire
+    public var onScreen: Bool
+
+    public init(windowId: Int, app: String, pid: Int, title: String?, frame: WindowFrameWire, onScreen: Bool) {
+        self.windowId = windowId
+        self.app = app
+        self.pid = pid
+        self.title = title
+        self.frame = frame
+        self.onScreen = onScreen
+    }
+}
+
+public struct WindowsListWire: Encodable, Sendable, Equatable {
+    public var windows: [WindowWire]
+    public var titlesAvailable: Bool
+    public var truncated: Bool
+    public var note: String?
+
+    public init(windows: [WindowWire], titlesAvailable: Bool, truncated: Bool, note: String?) {
+        self.windows = windows
+        self.titlesAvailable = titlesAvailable
+        self.truncated = truncated
+        self.note = note
+    }
+}
+
+public struct WindowsFocusWire: Encodable, Sendable, Equatable {
+    public var app: AppWire
+    public var windowId: Int?
+    public var raised: Bool
+    public var note: String?
+
+    public init(app: AppWire, windowId: Int?, raised: Bool, note: String?) {
+        self.app = app
+        self.windowId = windowId
+        self.raised = raised
+        self.note = note
     }
 }

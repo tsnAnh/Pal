@@ -21,6 +21,7 @@ FAMILIES = {
     'shell': ('shell.run', {'command': 'uname -srm'}, {'exit_code': 0, 'stdout': 'Darwin 25.0 arm64\n'}),
     'files': ('files.list', {'path': '~/'}, {'path': '/Users/sam', 'entries': []}),
     'screen': ('screen.read', {}, {'text': 'Inbox', 'display': 1}),
+    'apps': ('apps.list', {}, {'apps': []}),
 }
 
 

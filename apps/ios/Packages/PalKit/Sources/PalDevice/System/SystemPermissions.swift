@@ -25,6 +25,7 @@ public struct SystemPermissions: DevicePermissions {
         case .alarms: Self.alarmsStatus()
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
+        case .apps: Self.appsStatus
         case .screen: Self.screenStatus()
         }
     }
@@ -45,10 +46,31 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestHome()
         case .shell, .files:
             break
+        case .apps:
+            Self.requestApps()
         case .screen:
             Self.requestScreen()
         }
         return await status(of: connector)
+    }
+
+    private static let appsAskedKey = "dev.tsnanh.pal.apps-permissions-asked"
+
+    private static var appsStatus: DeviceOSPermission {
+        #if os(macOS)
+        if AppsSystemAccess.screenRecordingGranted, AppsSystemAccess.accessibilityGranted { return .granted }
+        return UserDefaults.standard.bool(forKey: appsAskedKey) ? .denied : .notDetermined
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static func requestApps() {
+        #if os(macOS)
+        UserDefaults.standard.set(true, forKey: appsAskedKey)
+        AppsSystemAccess.requestScreenRecording()
+        AppsSystemAccess.requestAccessibility()
+        #endif
     }
 
     private static let screenRequestedKey = "dev.tsnanh.hermes.screen-recording-requested"
@@ -153,15 +175,17 @@ extension DeviceProviders {
         #if os(macOS)
         let shell: (any ShellProviding)? = SystemShell()
         let files: (any FilesProviding)? = SystemFiles()
+        let apps: (any AppsProviding)? = AppsController(workspace: SystemAppsWorkspace())
         let screen: (any ScreenProviding)? = GuardedScreen(source: SystemScreenSource(), activity: screenActivity)
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
+        let apps: (any AppsProviding)? = nil
         let screen: (any ScreenProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, screen: screen
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, apps: apps, screen: screen
         )
     }
 }

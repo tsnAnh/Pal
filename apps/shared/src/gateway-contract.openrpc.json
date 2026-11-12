@@ -20693,7 +20693,8 @@
           "alarms",
           "shell",
           "files",
-          "screen"
+          "screen",
+          "apps"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -20934,7 +20935,12 @@
           "files.list",
           "files.write",
           "screen.capture",
-          "screen.read"
+          "screen.read",
+          "apps.list",
+          "apps.open",
+          "apps.quit",
+          "windows.list",
+          "windows.focus"
         ],
         "title": "DeviceToolAction",
         "type": "string"

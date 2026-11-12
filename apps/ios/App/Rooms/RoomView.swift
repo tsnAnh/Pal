@@ -151,35 +151,56 @@ struct RoomView: View {
     }
 
     private var titleCapsule: some View {
-        Button { showsDetails = true } label: {
-            HStack(spacing: 9) {
-                Image(systemName: "person.2.fill").font(.system(size: 13))
-                Text(model.room.name).hermesText(.botName).lineLimit(1)
-            }
-            .foregroundStyle(Color(theme.palette.textPrimary))
-            .padding(.horizontal, 13)
-            .frame(height: ChatMetrics.headerButtonDiameter)
-            .glassEffect(.regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.55)), in: .capsule)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(model.room.name))
-        .accessibilityHint(Text("Shows details for this group chat"))
-        .accessibilityIdentifier("roomTitle")
+        Button { showsDetails = true } label: { titleLabel }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(model.room.name))
+            .accessibilityHint(Text("Shows details for this group chat"))
+            .accessibilityIdentifier("roomTitle")
     }
 
     #if os(macOS)
+    private var titleLabel: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "person.2.fill").font(.system(size: 13))
+            Text(model.room.name).hermesText(.botName).lineLimit(1)
+        }
+        .foregroundStyle(PalTokens.textPrimary)
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .palElevatedGlass(Capsule())
+        .contentShape(Capsule())
+    }
+
     private var header: some View {
         GlassEffectContainer(spacing: 24) {
             ZStack {
                 titleCapsule
                 HStack {
                     Spacer()
-                    stopButton.buttonStyle(.plain).foregroundStyle(PalTokens.textPrimary)
+                    if model.canStop {
+                        stopButton
+                            .buttonStyle(.plain)
+                            .foregroundStyle(PalTokens.textPrimary)
+                            .frame(width: 33, height: 33)
+                            .palElevatedGlass(Circle())
+                            .contentShape(Circle())
+                    }
                 }
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 12)
             .frame(height: MacMetrics.topBarHeight)
         }
+    }
+    #else
+    private var titleLabel: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "person.2.fill").font(.system(size: 13))
+            Text(model.room.name).hermesText(.botName).lineLimit(1)
+        }
+        .foregroundStyle(Color(theme.palette.textPrimary))
+        .padding(.horizontal, 13)
+        .frame(height: ChatMetrics.headerButtonDiameter)
+        .glassEffect(.regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.55)), in: .capsule)
     }
     #endif
 

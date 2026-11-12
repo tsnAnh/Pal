@@ -28,10 +28,11 @@ struct DeviceRow: Identifiable, Equatable {
     let subtitle: String
     let action: Action
     let warning: String?
+    var needsSettings = false
 
     var isSwitch: Bool { warning != nil }
 
-    var renderID: String { "\(id.rawValue)-\(action)" }
+    var renderID: String { "\(id.rawValue)-\(action)-\(needsSettings)" }
 }
 
 struct ConnectNotice: Identifiable {
@@ -268,16 +269,19 @@ final class ConnectAppsModel {
             let defaults = DeviceConnectorDefaults.entry(for: id)
             let local = localPermissions[id]
             let action: DeviceRow.Action
-            if local == .denied || (local == nil && status?.osPermission == .denied && status?.state != .allowed) {
+            let isAllowed = status?.state == .allowed
+            let worksWithoutPermission = id == .apps
+            if !worksWithoutPermission, local == .denied || (local == nil && status?.osPermission == .denied && !isAllowed) {
                 action = .allowInSettings
-            } else if status?.state == .allowed, local == nil || local == .granted {
+            } else if isAllowed, worksWithoutPermission || local == nil || local == .granted {
                 action = .connected
             } else {
                 action = .allow
             }
             return DeviceRow(
                 id: id, title: status?.title ?? defaults.title, subtitle: status?.subtitle ?? defaults.subtitle,
-                action: action, warning: DeviceConnectorDefaults.warning(for: id)
+                action: action, warning: DeviceConnectorDefaults.warning(for: id),
+                needsSettings: worksWithoutPermission && isAllowed && local != nil && local != .granted
             )
         }
     }
@@ -299,7 +303,9 @@ final class ConnectAppsModel {
                 diagnostics.info("device", "set \(row.id.rawValue) ok")
                 pool.remember(profile)
             case .denied, .notDetermined:
-                try await ledger.set(row.id, osPermission: .denied)
+                let state: DeviceConnectorState? = row.id == .apps ? .allowed : nil
+                try await ledger.set(row.id, state: state, osPermission: .denied)
+                if state != nil { pool.remember(profile) }
             case .unsupported:
                 report("\(row.title) isn't available on this device.")
             }
@@ -320,9 +326,14 @@ final class ConnectAppsModel {
         rebuildDeviceRows()
     }
 
+    func openSettings() {
+        guard let url = SystemSettings.appSettingsURL else { return }
+        SystemSettings.open(url)
+    }
+
     func openSettings(for row: DeviceRow) {
-        let target = row.id == .screen ? SystemSettings.screenRecordingURL : SystemSettings.appSettingsURL
-        guard let url = target else { return }
+        guard row.id == .screen else { return openSettings() }
+        guard let url = SystemSettings.screenRecordingURL else { return }
         SystemSettings.open(url)
     }
 
