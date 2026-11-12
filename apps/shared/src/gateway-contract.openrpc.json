@@ -29174,6 +29174,18 @@
           "transport": {
             "title": "Transport",
             "type": "string"
+          },
+          "needs_auth_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Needs Auth Reason"
           }
         },
         "required": [
@@ -29708,6 +29720,18 @@
             "default": false,
             "title": "Needs Auth",
             "type": "boolean"
+          },
+          "needs_auth_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Needs Auth Reason"
           }
         },
         "required": [

@@ -5130,6 +5130,7 @@ export interface McpCatalogEntry {
   enabled: boolean
   requires: string[]
   transport: string
+  needs_auth_reason?: string | null
 }
 export interface McpServersListResult {
   servers: McpServerSummary[]
@@ -5167,6 +5168,7 @@ export interface McpServerRuntimeRow {
   source: McpServerSource
   plugin?: string | null
   needs_auth?: boolean
+  needs_auth_reason?: string | null
 }
 export type McpRuntimeStatus = 'connected' | 'disabled' | 'connecting' | 'failed' | 'lazy' | 'configured'
 /** ``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/tools). ``headers`` {Name: Value} and ``bearer_token`` are written to the profile's .env, only ``${VAR}`` templates persist; ``client_id`` is a pre-registered OAuth client id (not a secret). */
