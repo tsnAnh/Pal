@@ -406,7 +406,7 @@ private struct BotCapsule: View {
         }
         .padding(.horizontal, 13)
         .frame(height: ChatMetrics.headerButtonDiameter)
-        .glassEffect(.regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.55)), in: .capsule)
+        .palGlass(Capsule(), interactive: false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(bot.displayName))
         .accessibilityValue(Text(activity.accessibilityValue))

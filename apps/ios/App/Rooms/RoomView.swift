@@ -167,7 +167,7 @@ struct RoomView: View {
         .foregroundStyle(PalTokens.textPrimary)
         .padding(.horizontal, 12)
         .frame(height: 34)
-        .palElevatedGlass(Capsule())
+        .palGlass(Capsule())
         .contentShape(Capsule())
     }
 
@@ -182,7 +182,7 @@ struct RoomView: View {
                             .buttonStyle(.plain)
                             .foregroundStyle(PalTokens.textPrimary)
                             .frame(width: 33, height: 33)
-                            .palElevatedGlass(Circle())
+                            .palGlass(Circle())
                             .contentShape(Circle())
                     }
                 }
@@ -200,7 +200,7 @@ struct RoomView: View {
         .foregroundStyle(Color(theme.palette.textPrimary))
         .padding(.horizontal, 13)
         .frame(height: ChatMetrics.headerButtonDiameter)
-        .glassEffect(.regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.55)), in: .capsule)
+        .palGlass(Capsule(), interactive: false)
     }
     #endif
 

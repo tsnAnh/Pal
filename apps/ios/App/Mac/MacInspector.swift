@@ -136,7 +136,7 @@ struct MacInspector: View {
             .font(.system(size: 12, weight: .regular))
             .foregroundStyle(PalTokens.textSecondary)
             .frame(width: 32, height: 32)
-            .palElevatedGlass(Circle())
+            .palGlass(Circle())
             .contentShape(Circle())
     }
 

@@ -102,7 +102,7 @@ struct MacIconButton: View {
                 .font(.system(size: 14, weight: .regular))
                 .foregroundStyle(PalTokens.textSecondary)
                 .frame(width: diameter, height: diameter)
-                .palElevatedGlass(Circle())
+                .palGlass(Circle())
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -416,7 +416,7 @@ private struct MacSidebarFooter: View {
                     MacConnectAppsGlyph(size: 15)
                         .foregroundStyle(PalTokens.textSecondary)
                         .frame(width: 34, height: 34)
-                        .palElevatedGlass(Circle())
+                        .palGlass(Circle())
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)

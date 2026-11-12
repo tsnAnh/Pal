@@ -16,7 +16,7 @@ private struct ToastModifier: ViewModifier {
                         .foregroundStyle(Color(theme.palette.textPrimary))
                         .padding(.horizontal, 20)
                         .frame(height: PalMetrics.pillHeight + 8)
-                        .background(Color(theme.palette.glassCapsuleFill), in: Capsule())
+                        .palGlass(Capsule(), interactive: false)
                         .overlay(Capsule().strokeBorder(Color(theme.palette.circleButtonStroke), lineWidth: PalMetrics.circleButtonStrokeWidth))
                         .padding(.bottom, 28)
                         .transition(.move(edge: .bottom).combined(with: .opacity))

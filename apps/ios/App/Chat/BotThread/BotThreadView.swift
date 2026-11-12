@@ -135,7 +135,7 @@ struct BotThreadView: View {
         }
         .padding(.horizontal, 13)
         .frame(height: ChatMetrics.headerButtonDiameter)
-        .glassEffect(.regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.55)), in: .capsule)
+        .palGlass(Capsule(), interactive: false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(participants.map(\.displayName).formatted(.list(type: .and))))
         .accessibilityIdentifier("threadTitle")
@@ -208,7 +208,7 @@ private struct ReadOnlyPill: View {
             .foregroundStyle(Color(theme.palette.textPrimary))
             .padding(.horizontal, 16)
             .frame(height: ChatMetrics.threadPillHeight)
-            .glassEffect(.regular.tint(Color(theme.palette.glassCapsuleFill).opacity(0.55)), in: .capsule)
+            .palGlass(Capsule(), interactive: false)
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("threadReadOnlyPill")
     }

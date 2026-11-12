@@ -31,8 +31,7 @@ struct MessageMenuSurface: ViewModifier {
     func body(content: Content) -> some View {
         content
             .padding(5)
-            .background(PalTokens.elevated, in: shape)
-            .glassEffect(.regular.tint(PalTokens.elevated), in: shape)
+            .palGlass(shape, interactive: false)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
             .shadow(color: .black.opacity(0.35), radius: 22, y: 10)
             .accessibilityElement(children: .contain)
