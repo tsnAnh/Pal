@@ -41,21 +41,21 @@ struct RichSourceFallback: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(note)
-                .font(.footnote)
+                .hermesText(.chip)
                 .foregroundStyle(PalTokens.textSecondary)
             ScrollView(.horizontal) {
                 Text(source)
-                    .font(.system(.callout, design: .monospaced))
+                    .hermesText(.chatCode)
+                    .font(RichCode.font)
                     .foregroundStyle(PalTokens.textPrimary)
                     .textSelection(.enabled)
                     .padding(10)
             }
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-            .background(PalTokens.textPrimary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+            .background(PalTokens.textPrimary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             if offersCopy {
                 Button("Copy source") { Pasteboard.string = source }
-                    .font(.footnote)
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.pill())
             }
         }
     }

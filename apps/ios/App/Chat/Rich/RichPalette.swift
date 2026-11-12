@@ -76,9 +76,11 @@ struct RichPalette {
         }
     }
 
-    var addedTint: Color { isDark ? Color.green.opacity(0.20) : Color.green.opacity(0.16) }
-    var removedTint: Color { isDark ? Color.red.opacity(0.22) : Color.red.opacity(0.14) }
-    var hunkTint: Color { Color.blue.opacity(isDark ? 0.14 : 0.08) }
+    private var appPalette: PalPalette { isDark ? .measuredDark : .derivedLight }
+
+    var addedTint: Color { Color(appPalette.workingDot).opacity(isDark ? 0.24 : 0.20) }
+    var removedTint: Color { Color(appPalette.destructive).opacity(isDark ? 0.22 : 0.14) }
+    var hunkTint: Color { Color(appPalette.accentBlue).opacity(isDark ? 0.18 : 0.08) }
 }
 
 enum RichCode {

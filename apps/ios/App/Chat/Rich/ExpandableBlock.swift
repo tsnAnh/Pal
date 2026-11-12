@@ -40,7 +40,8 @@ struct ExpandableBlock<Content: View>: View {
                     withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
                 } label: {
                     Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.footnote.weight(.semibold))
+                        .hermesText(.chip)
+                        .fontWeight(.semibold)
                         .foregroundStyle(PalTokens.textSecondary)
                         .frame(maxWidth: .infinity, minHeight: Self.hitHeight)
                         .contentShape(Rectangle())

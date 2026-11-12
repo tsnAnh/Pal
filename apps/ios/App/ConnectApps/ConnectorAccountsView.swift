@@ -4,28 +4,21 @@ import SwiftUI
 
 struct ConnectorAccountsView: View {
     @State private var model: ConnectorAccountsModel
-    let style: CustomConnectorStyle
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.hermesTheme) private var theme
 
-    init(model: ConnectorAccountsModel, style: CustomConnectorStyle) {
+    init(model: ConnectorAccountsModel) {
         _model = State(initialValue: model)
-        self.style = style
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(model.app.name).font(style.titleFont).foregroundStyle(style.primary)
-                Spacer()
-                Button("Done") { dismiss() }.accessibilityIdentifier("connectorAccountsDone")
-            }
-            .padding(.horizontal, style.margin)
-            .padding(.vertical, 14)
-            Rectangle().fill(style.divider).frame(height: 1)
-            content
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("connectorAccounts")
+        SheetChrome(
+            title: model.app.name,
+            accessibilityIdentifier: "connectorAccounts",
+            leadingAccessibilityIdentifier: "connectorAccountsDone",
+            onLeading: { dismiss() },
+            content: { content }
+        )
         .task { await model.load() }
         .confirmationDialog(
             model.removal.map { "Remove \($0.name)?" } ?? "",
@@ -44,24 +37,29 @@ struct ConnectorAccountsView: View {
     private var content: some View {
         switch model.phase {
         case .loading:
-            ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .failed(let message):
-            VStack(spacing: 12) {
-                Text(message).font(style.bodyFont).foregroundStyle(style.secondary)
-                Button("Try again") { Task { await model.load() } }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        case .ready:
-            ScrollView {
-                VStack(alignment: .leading, spacing: style.spacing) {
-                    status
-                    accountsSection
-                    policySection
+            page {
+                GroupedCard(accessibilityIdentifier: "connectorAccountsLoading") {
+                    LoadingRow(title: String(localized: "Accounts"), identifier: "connectorAccountsLoadingRow")
                 }
-                .padding(style.margin)
-                .frame(maxWidth: style.maxWidth, alignment: .leading)
+            }
+        case .failed(let message):
+            page { FailureCard(message: message, identifier: "connectorAccountsFailure") { Task { await model.load() } } }
+        case .ready:
+            page {
+                status
+                accountsSection
+                policySection
             }
         }
+    }
+
+    private func page<Body: View>(@ViewBuilder _ body: () -> Body) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: PalMetrics.cardGap) { body() }
+                .padding(.bottom, 32)
+        }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
     }
 
     @ViewBuilder
@@ -69,80 +67,79 @@ struct ConnectorAccountsView: View {
         switch model.save {
         case .idle: EmptyView()
         case .saving:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Saving…").font(style.captionFont).foregroundStyle(style.secondary)
-            }
+            CardFootnote(String(localized: "Saving…"), accessibilityIdentifier: "connectorAccountsSaving")
         case .saved(let message):
-            Text(message).font(style.captionFont).foregroundStyle(style.secondary).accessibilityIdentifier("connectorAccountsSaved")
+            CardFootnote(message, accessibilityIdentifier: "connectorAccountsSaved")
         case .failed(let message):
-            Text(message).font(style.captionFont).foregroundStyle(.red).accessibilityIdentifier("connectorAccountsError")
+            problemLine(message, identifier: "connectorAccountsError")
         }
     }
 
-    private func heading(_ title: LocalizedStringKey) -> some View {
-        Text(title).font(style.labelFont).foregroundStyle(style.secondary)
+    private func problemLine(_ text: String, identifier: String) -> some View {
+        Text(text)
+            .hermesText(.rowSubtitle)
+            .foregroundStyle(Color(theme.palette.destructive))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset - 3)
+            .accessibilityIdentifier(identifier)
     }
 
     private var accountsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            heading("Accounts")
+        VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
+            SectionCaption(String(localized: "Accounts"), accessibilityIdentifier: "connectorAccountsCaption")
             if model.accounts.isEmpty {
-                Text("No accounts are connected.").font(style.bodyFont).foregroundStyle(style.secondary)
+                CardFootnote(String(localized: "No accounts are connected."), accessibilityIdentifier: "connectorAccountsEmpty")
             }
-            ForEach(model.active) { account in accountRow(account) }
-            ForEach(model.retired) { account in
-                accountRow(account, retired: true)
+            ForEach(model.active) { account in accountCard(account) }
+            ForEach(model.retired) { account in accountCard(account, retired: true) }
+        }
+    }
+
+    @ViewBuilder
+    private func accountCard(_ account: ConnectorAccount, retired: Bool = false) -> some View {
+        GroupedCard(accessibilityIdentifier: "connectorAccount-\(account.id)") {
+            if model.editing == account.id {
+                renameRows
+            } else {
+                SettingsRow(
+                    title: account.name, subtitle: rowNote(account, retired: retired),
+                    accessibilityIdentifier: "connectorAccountName-\(account.id)"
+                )
+                if !retired {
+                    SettingsRow(
+                        title: String(localized: "Rename"), accessibilityIdentifier: "connectorAccountRename-\(account.id)",
+                        action: { model.beginRename(account) }
+                    )
+                    .disabled(model.busyAccount != nil)
+                }
+                SettingsRow.destructive(String(localized: "Remove"), accessibilityIdentifier: "connectorAccountRemove-\(account.id)") {
+                    model.removal = account
+                }
+                .disabled(model.busyAccount != nil)
             }
         }
     }
 
     @ViewBuilder
-    private func accountRow(_ account: ConnectorAccount, retired: Bool = false) -> some View {
-        if model.editing == account.id {
-            VStack(alignment: .leading, spacing: 6) {
-                TextField("Account name", text: $model.draft)
-                    .textFieldStyle(.plain)
-                    .font(style.bodyFont)
-                    .padding(.horizontal, 12)
-                    .frame(height: style.fieldHeight)
-                    .background(style.field, in: RoundedRectangle(cornerRadius: style.fieldRadius))
-                    .autocorrectionDisabled()
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .onSubmit { Task { await model.submitRename() } }
-                    .accessibilityIdentifier("connectorAccountNameField")
-                if let problem = model.draftProblem {
-                    Text(problem).font(style.captionFont).foregroundStyle(.red)
-                }
-                HStack {
-                    Button("Save") { Task { await model.submitRename() } }
-                        .disabled(model.draftProblem != nil || model.busyAccount != nil)
-                        .accessibilityIdentifier("connectorAccountRenameSave")
-                    Button("Cancel") { model.cancelRename() }
-                }
-            }
-        } else {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(account.name).font(style.bodyFont).foregroundStyle(style.primary)
-                    if let note = rowNote(account, retired: retired) {
-                        Text(note).font(style.captionFont).foregroundStyle(account.needsReconnect ? .orange : style.secondary)
-                    }
-                }
-                Spacer()
-                if !retired {
-                    Button("Rename") { model.beginRename(account) }
-                        .disabled(model.busyAccount != nil)
-                        .accessibilityIdentifier("connectorAccountRename-\(account.id)")
-                }
-                Button("Remove", role: .destructive) { model.removal = account }
-                    .disabled(model.busyAccount != nil)
-                    .accessibilityIdentifier("connectorAccountRemove-\(account.id)")
-            }
-            .buttonStyle(.borderless)
+    private var renameRows: some View {
+        TextField(String(localized: "Account name"), text: $model.draft)
+            .textFieldStyle(.plain)
+            .hermesText(.rowTitle)
+            .autocorrectionDisabled()
+            .neverAutocapitalized()
+            .onSubmit { Task { await model.submitRename() } }
+            .padding(.horizontal, PalMetrics.rowInset)
+            .frame(minHeight: PalMetrics.rowMinimumHeight)
+            .accessibilityIdentifier("connectorAccountNameField")
+        if let problem = model.draftProblem {
+            problemLine(problem, identifier: "connectorAccountNameProblem")
         }
+        SettingsRow(
+            title: String(localized: "Save"), accessibilityIdentifier: "connectorAccountRenameSave",
+            action: { Task { await model.submitRename() } }
+        )
+        .disabled(model.draftProblem != nil || model.busyAccount != nil)
+        SettingsRow(title: String(localized: "Cancel"), accessibilityIdentifier: "connectorAccountRenameCancel") { model.cancelRename() }
     }
 
     private func rowNote(_ account: ConnectorAccount, retired: Bool) -> String? {
@@ -152,17 +149,20 @@ struct ConnectorAccountsView: View {
     }
 
     private var policySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            heading("What \(model.botName) may do")
-            Toggle(isOn: Binding(get: { model.enabled }, set: { value in Task { await model.setEnabled(value) } })) {
-                Text("Let \(model.botName) use \(model.app.name)").font(style.bodyFont).foregroundStyle(style.primary)
+        VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
+            SectionCaption(String(localized: "What \(model.botName) may do"), accessibilityIdentifier: "connectorPolicyCaption")
+            GroupedCard(accessibilityIdentifier: "connectorPolicy") {
+                SettingsRow.toggle(
+                    String(localized: "Let \(model.botName) use \(model.app.name)"),
+                    isOn: Binding(get: { model.enabled }, set: { value in Task { await model.setEnabled(value) } }),
+                    accessibilityIdentifier: "connectorPolicyEnabled"
+                )
+                .disabled(!model.canEditPolicy || model.save == .saving)
             }
-            .disabled(!model.canEditPolicy || model.save == .saving)
-            .accessibilityIdentifier("connectorPolicyEnabled")
             if model.lockedByOrganization {
-                Text("Your organization turned this app off.").font(style.captionFont).foregroundStyle(style.secondary)
+                CardFootnote(String(localized: "Your organization turned this app off."), accessibilityIdentifier: "connectorPolicyLocked")
             } else if model.policy.revision == nil {
-                Text("These settings can't be changed here.").font(style.captionFont).foregroundStyle(style.secondary)
+                CardFootnote(String(localized: "These settings can't be changed here."), accessibilityIdentifier: "connectorPolicyReadOnly")
             }
             if model.enabled && !model.lockedByOrganization { toolsList }
         }
@@ -171,24 +171,27 @@ struct ConnectorAccountsView: View {
     @ViewBuilder
     private var toolsList: some View {
         if model.toolsFailed {
-            Text("Couldn't load the tools.").font(style.captionFont).foregroundStyle(style.secondary)
+            CardFootnote(String(localized: "Couldn't load the tools."), accessibilityIdentifier: "connectorToolsFailed")
         } else if !model.tools.isEmpty {
-            heading("Tools")
-            ForEach(model.tools) { tool in
-                let locked = model.lockedTools.contains(tool.slug)
-                Toggle(isOn: Binding(
-                    get: { !locked && !model.disabledTools.contains(tool.slug) },
-                    set: { value in Task { await model.setTool(tool, allowed: value) } }
-                )) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(tool.name).font(style.bodyFont).foregroundStyle(style.primary)
-                        Text(locked ? String(localized: "Turned off by your organization") : tool.description)
-                            .font(style.captionFont).foregroundStyle(style.secondary).lineLimit(2)
-                    }
-                }
-                .disabled(locked || !model.canEditPolicy || model.save == .saving)
-                .accessibilityIdentifier("connectorPolicyTool-\(tool.slug)")
+            SectionCaption(String(localized: "Tools"), accessibilityIdentifier: "connectorToolsCaption")
+                .padding(.top, PalMetrics.cardGap - PalMetrics.captionToCardGap)
+            GroupedCard(accessibilityIdentifier: "connectorTools") {
+                ForEach(model.tools) { tool in toolRow(tool) }
             }
         }
+    }
+
+    private func toolRow(_ tool: HostedConnectorTool) -> some View {
+        let locked = model.lockedTools.contains(tool.slug)
+        return SettingsRow.toggle(
+            tool.name,
+            subtitle: locked ? String(localized: "Turned off by your organization") : (tool.description.isEmpty ? nil : tool.description),
+            isOn: Binding(
+                get: { !locked && !model.disabledTools.contains(tool.slug) },
+                set: { value in Task { await model.setTool(tool, allowed: value) } }
+            ),
+            accessibilityIdentifier: "connectorPolicyTool-\(tool.slug)"
+        )
+        .disabled(locked || !model.canEditPolicy || model.save == .saving)
     }
 }

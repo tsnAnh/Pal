@@ -21,6 +21,7 @@ FAMILIES = {
     'shell': ('shell.run', {'command': 'uname -srm'}, {'exit_code': 0, 'stdout': 'Darwin 25.0 arm64\n'}),
     'files': ('files.list', {'path': '~/'}, {'path': '/Users/sam', 'entries': []}),
     'notifications': ('notify.post', {'title': 'Hi', 'body': 'There'}, {'identifier': 'n1'}),
+    'apps': ('apps.list', {}, {'apps': []}),
 }
 
 

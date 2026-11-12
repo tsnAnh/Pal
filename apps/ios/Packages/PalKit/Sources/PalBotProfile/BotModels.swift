@@ -20,17 +20,22 @@ public struct ModelCatalogProvider: Sendable, Hashable, Identifiable, Decodable 
     public let name: String
     public let models: [String]
     public let hasCredential: Bool
+    public let capabilities: [String: ModelCapability]
 
-    public init(id: String, name: String, models: [String], hasCredential: Bool = true) {
+    public init(
+        id: String, name: String, models: [String], hasCredential: Bool = true,
+        capabilities: [String: ModelCapability] = [:]
+    ) {
         self.id = id
         self.name = name
         self.models = models
         self.hasCredential = hasCredential
+        self.capabilities = capabilities
     }
 
     enum CodingKeys: String, CodingKey {
         case id = "slug"
-        case name, models, authenticated
+        case name, models, authenticated, capabilities
     }
 
     public init(from decoder: any Decoder) throws {
@@ -39,6 +44,7 @@ public struct ModelCatalogProvider: Sendable, Hashable, Identifiable, Decodable 
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? id
         models = try container.decodeIfPresent([String].self, forKey: .models) ?? []
         hasCredential = try container.decodeIfPresent(Bool.self, forKey: .authenticated) ?? true
+        capabilities = (try? container.decodeIfPresent([String: ModelCapability].self, forKey: .capabilities)) ?? [:]
     }
 }
 
@@ -105,8 +111,8 @@ struct BotModelWriteWire: Decodable {
 }
 
 public struct BotModelClient: Sendable {
-    private let gateway: BotsGateway
-    private let profile: String
+    let gateway: BotsGateway
+    let profile: String
 
     public init(gateway: BotsGateway, profile: String) {
         self.gateway = gateway

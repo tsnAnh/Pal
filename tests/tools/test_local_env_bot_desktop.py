@@ -52,3 +52,61 @@ def test_routing_does_not_stamp_bot_desktop_activity(monkeypatch):
     _make_run_env({})
     # A plain terminal command is not screen use; idle_stop_minutes must stay effective.
     assert stamps == []
+
+
+_SCREEN = {
+    "DISPLAY": ":20",
+    "XAUTHORITY": "/p/bot-desktop/Xauthority",
+    "DBUS_SESSION_BUS_ADDRESS": "unix:path=/p/bus",
+    "XDG_CONFIG_HOME": "/p/bot-desktop/xdg",
+    "XDG_CACHE_HOME": "/p/bot-desktop/xdg/.cache",
+    "XDG_DATA_HOME": "/p/bot-desktop/xdg/.local-share",
+}
+_XDG = ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME")
+
+
+def _host_xdg(monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", "/host/config")
+    monkeypatch.setenv("XDG_CACHE_HOME", "/host/cache")
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+
+
+def _assert_host_xdg(env):
+    assert env["XDG_CONFIG_HOME"] == "/host/config"
+    assert env["XDG_CACHE_HOME"] == "/host/cache"
+    assert "XDG_DATA_HOME" not in env and "XDG_STATE_HOME" not in env
+    assert not any("bot-desktop/xdg" in v for v in env.values())
+
+
+def test_terminal_keeps_host_xdg_while_screen_runs(monkeypatch):
+    _publish(monkeypatch, dict(_SCREEN))
+    _host_xdg(monkeypatch)
+    env = _make_run_env({})
+    _assert_host_xdg(env)
+    assert env["DISPLAY"] == ":20"
+
+
+def test_background_process_keeps_host_xdg_while_screen_runs(monkeypatch):
+    from tools.process_registry import ProcessRegistry
+
+    _publish(monkeypatch, dict(_SCREEN))
+    _host_xdg(monkeypatch)
+    _assert_host_xdg(ProcessRegistry._spawn_env({}))
+
+
+def test_no_screen_leaves_terminal_xdg_alone(monkeypatch):
+    _publish(monkeypatch, {})
+    _host_xdg(monkeypatch)
+    _assert_host_xdg(_make_run_env({}))
+
+
+def test_display_launch_helper_still_gets_redirected_xdg(monkeypatch):
+    from tools.bot_desktop import runtime
+
+    monkeypatch.setattr(runtime, "published_env", lambda: dict(_SCREEN))
+    monkeypatch.setattr(runtime, "touch_activity", lambda: None)
+    _host_xdg(monkeypatch)
+    env = runtime.desktop_env()
+    for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME"):
+        assert env[key] == _SCREEN[key]

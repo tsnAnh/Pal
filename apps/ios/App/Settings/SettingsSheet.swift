@@ -55,6 +55,7 @@ private struct SettingsDestination: View {
         case .devices: DevicesScreen(hub: hub, connection: connection, back: back)
         case .hermesService: PalServiceScreen(hub: hub, back: back)
         case .modelProviders: ModelProvidersScreen(hub: hub, back: back)
+        case .botModels: BotModelsScreen(hub: hub, back: back)
         case .speechMemory: SpeechMemoryScreen(hub: hub, back: back)
         case .importMemory: ImportMemoryScreen(hub: hub, back: back)
         case .botNotifications: BotNotificationsScreen(hub: hub, back: back)
@@ -158,6 +159,7 @@ struct SettingsRootView: View {
                 timeZoneRow
                 SettingsRow.navigate("Bot Computer", accessibilityIdentifier: "settingsBotComputerRow", action: { open(.botComputer) })
                 SettingsRow.navigate("Model providers", accessibilityIdentifier: "settingsModelProvidersRow", action: { open(.modelProviders) })
+                SettingsRow.navigate("Bot models", accessibilityIdentifier: "settingsBotModelsRow", action: { open(.botModels) })
                 SettingsRow.navigate("Voice and memory", accessibilityIdentifier: "settingsSpeechMemoryRow", action: { open(.speechMemory) })
                 SettingsRow.navigate("Pal service", accessibilityIdentifier: "settingsHermesServiceRow", action: { open(.hermesService) })
                 SettingsRow.navigate("Manage your devices", accessibilityIdentifier: "settingsDevicesRow", action: { open(.devices) })

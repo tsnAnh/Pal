@@ -40,10 +40,11 @@ private struct GeneratingImagePlaceholder: View {
             VStack(spacing: 8) {
                 ProgressView().controlSize(.small)
                 Text("Creating an image")
-                    .font(.footnote.weight(.medium))
+                    .hermesText(.chip)
+                    .fontWeight(.medium)
                 if let prompt {
                     Text(prompt)
-                        .font(.caption)
+                        .hermesText(.rowSubtitle)
                         .multilineTextAlignment(.center)
                         .lineLimit(3)
                         .padding(.horizontal, 12)
@@ -53,6 +54,7 @@ private struct GeneratingImagePlaceholder: View {
         }
         .frame(width: GeneratedImageMetrics.width, height: GeneratedImageMetrics.width / shape.ratio)
         .clipShape(RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous).stroke(Color(theme.palette.cardStroke), lineWidth: 1))
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) { dimmed = true }
@@ -72,12 +74,13 @@ private struct FailedImageNotice: View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: "photo.badge.exclamationmark")
             Text(reason)
-                .font(.footnote)
+                .hermesText(.chip)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(Color(theme.palette.textSecondary))
         .padding(12)
         .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous).stroke(Color(theme.palette.cardStroke), lineWidth: 1))
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("imageGenerationFailed")
     }

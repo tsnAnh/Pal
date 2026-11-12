@@ -20693,7 +20693,8 @@
           "alarms",
           "shell",
           "files",
-          "notifications"
+          "notifications",
+          "apps"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -20934,7 +20935,12 @@
           "files.list",
           "files.write",
           "notify.post",
-          "notify.cancel"
+          "notify.cancel",
+          "apps.list",
+          "apps.open",
+          "apps.quit",
+          "windows.list",
+          "windows.focus"
         ],
         "title": "DeviceToolAction",
         "type": "string"
