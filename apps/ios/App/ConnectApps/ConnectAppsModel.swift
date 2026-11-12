@@ -101,7 +101,6 @@ final class ConnectAppsModel {
     private let service: ConnectAppsService
     private let capabilitiesService: CapabilitiesService
     private let skillsService: SkillsCatalogService
-    let github: GitHubAccountModel
     private let bots: [CustomConnectorBot]
     private let currentBot: String?
     private let diagnostics = Diagnostics.osLog()
@@ -119,9 +118,7 @@ final class ConnectAppsModel {
             systemBrowser: SystemBrowserAuthorization(), diagnostics: .osLog()
         )
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
-        let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        capabilitiesService = CapabilitiesService(gateway: gateway)
-        github = GitHubAccountModel(client: GitHubClient(gateway: gateway))
+        capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
     }
 
     var customConnector: CustomConnectorModel? {
