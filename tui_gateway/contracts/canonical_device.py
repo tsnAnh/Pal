@@ -19,6 +19,7 @@ class DeviceConnectorId(WireEnum):
     SHELL = "shell"
     FILES = "files"
     SCREEN = "screen"
+    NOTIFICATIONS = "notifications"
     CLIPBOARD = "clipboard"
     APPS = "apps"
 
@@ -56,6 +57,8 @@ class DeviceToolAction(WireEnum):
     FILES_WRITE = "files.write"
     SCREEN_CAPTURE = "screen.capture"
     SCREEN_READ = "screen.read"
+    NOTIFY_POST = "notify.post"
+    NOTIFY_CANCEL = "notify.cancel"
     CLIPBOARD_READ = "clipboard.read"
     CLIPBOARD_WRITE = "clipboard.write"
     APPS_LIST = "apps.list"

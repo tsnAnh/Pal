@@ -188,6 +188,7 @@ struct DeviceToolWireTests {
             "alarms.list": "alarms", "timers.start": "alarms", "home.list_accessories": "home", "home.set": "home",
             "shell.run": "shell", "files.read": "files", "files.list": "files", "files.write": "files",
             "screen.capture": "screen", "screen.read": "screen",
+            "notify.post": "notifications", "notify.cancel": "notifications",
             "apps.list": "apps", "apps.open": "apps", "apps.quit": "apps", "windows.list": "apps", "windows.focus": "apps",
             "clipboard.read": "clipboard", "clipboard.write": "clipboard",
         ]

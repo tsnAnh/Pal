@@ -356,6 +356,7 @@ struct DeviceTile: View {
         case .shell: "terminal.fill"
         case .files: "folder.fill"
         case .screen: "display"
+        case .notifications: "bell.fill"
         case .apps: "macwindow"
         case .clipboard: "doc.on.clipboard.fill"
         }
@@ -372,6 +373,7 @@ struct DeviceTile: View {
         case .shell: RGB(hex: 0x3a3a3c)
         case .files: RGB(hex: 0x1c8ef0)
         case .screen: RGB(hex: 0x6e4bd8)
+        case .notifications: RGB(hex: 0xe5493a)
         case .apps: RGB(hex: 0x5e5ce6)
         case .clipboard: RGB(hex: 0x8e6bd8)
         }

@@ -20694,6 +20694,7 @@
           "shell",
           "files",
           "screen",
+          "notifications",
           "clipboard",
           "apps"
         ],
@@ -20937,6 +20938,8 @@
           "files.write",
           "screen.capture",
           "screen.read",
+          "notify.post",
+          "notify.cancel",
           "clipboard.read",
           "clipboard.write",
           "apps.list",
