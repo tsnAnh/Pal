@@ -424,13 +424,13 @@ struct MacConnectApps: View {
             MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
         } else {
             switch app.state {
-        case .disconnected: MacRowAction(title: String(localized: "Connect"), prominent: false) { Task { await model.connect(app) } }
+        case .disconnected: MacRowAction(title: OtherConnectorCardText.connectTitle(state), prominent: false) { Task { await model.connect(app) } }
         case .needsAuthorization: MacRowAction(title: String(localized: "Authorize"), prominent: true) { Task { await model.connect(app) } }
         case .connected: MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manageAccounts(app) }
             }
         }
         return tileRow(
-            title: app.name, summary: app.requiresAppSignIn ? UpworkCardText.summary(state, fallback: app.summary) : app.summary,
+            title: app.name, summary: app.requiresAppSignIn ? UpworkCardText.summary(state, fallback: app.summary) : OtherConnectorCardText.summary(state, fallback: app.summary),
             identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id)
         ) { icon(for: app) }
     }
