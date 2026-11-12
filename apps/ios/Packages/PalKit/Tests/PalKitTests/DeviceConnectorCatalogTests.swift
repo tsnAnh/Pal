@@ -10,7 +10,7 @@ struct DeviceConnectorCatalogTests {
 
     @Test func macListsExactlyTheMacConnectors() {
         let ids = DeviceConnectorCatalog.entries(for: .mac).map(\.id)
-        #expect(ids == [.calendar, .home, .reminders, .contacts, .location, .alarms, .notifications, .input, .clipboard, .screen, .apps])
+        #expect(ids == [.calendar, .home, .reminders, .contacts, .location, .alarms, .notifications, .input, .clipboard, .screen, .apps, .messages])
     }
 
     @Test func shellAndFilesNeverGetARow() {

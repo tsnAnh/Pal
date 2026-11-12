@@ -51,11 +51,11 @@ private func messagesRequest(_ action: String, args: JSONValue = [:]) -> DeviceT
     )
 }
 
-private func executor(_ messages: any MessagesProviding, state: DeviceConnectorState = .allowed) async -> DeviceToolExecutor {
-    let ledger = ConnectorLedger(api: FakeConnectorsAPI([.messages: state]))
+private func executor(_ messages: any MessagesProviding, permissions: FakePermissions = FakePermissions()) async -> DeviceToolExecutor {
+    let ledger = ConnectorLedger(api: FakeConnectorsAPI([.messages: .allowed]))
     _ = try? await ledger.refresh()
     return DeviceToolExecutor(
-        providers: DeviceProviders(messages: messages), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(),
+        providers: DeviceProviders(messages: messages), permissions: permissions, ledger: ledger, consent: FakeConsent(),
         environment: DeviceToolEnvironment(timeZone: { TimeZone(secondsFromGMT: 0) ?? .current }, deadlineMargin: .zero)
     )
 }
@@ -71,62 +71,51 @@ private func failure(_ outcome: DeviceToolOutcome) -> (DeviceToolErrorCode, Stri
 }
 
 @Suite struct DeviceMessagesRowTests {
-    @Test func theMacRowIsOffByDefaultAndOffersNoSettingsButton() {
-        let row = MessagesConnectorRow.make(host: .mac, state: nil, access: nil)
-        #expect(row.title == "Messages" && row.hasSwitch && !row.isOn && row.status == "Off" && row.action == nil)
-        #expect(row.subtitle == "Lets your bots read your messages on this Mac. They can see private conversations. Needs Full Disk Access.")
-        let off = MessagesConnectorRow.make(host: .mac, state: .off, access: .permissionNeeded)
-        #expect(!off.isOn && off.action == nil)
-    }
-
-    @Test func turningItOnWithoutFullDiskAccessShowsTheOpenSettingsAction() {
-        let row = MessagesConnectorRow.make(host: .mac, state: .allowed, access: .permissionNeeded)
-        #expect(row.isOn && row.action == .openFullDiskAccess && row.status == "Needs Full Disk Access")
-        #expect(MessagesConnectorRow.openSettingsTitle == "Open Full Disk Access settings")
-    }
-
-    @Test func readyAndUnavailableAndCheckingStatesAreTold() {
-        #expect(MessagesConnectorRow.make(host: .mac, state: .allowed, access: .ready).status == "On")
-        #expect(MessagesConnectorRow.make(host: .mac, state: .allowed, access: .ready).action == nil)
-        #expect(MessagesConnectorRow.make(host: .mac, state: .allowed, access: .unavailable).status == "Messages isn't available on this Mac")
-        #expect(MessagesConnectorRow.make(host: .mac, state: .allowed, access: nil).status == "Checking access")
-        #expect(!MessagesConnectorRow.make(host: .mac, state: .ask, access: .ready).isOn)
-    }
-
-    @Test func thePhoneRowIsInformationalOnly() {
-        let row = MessagesConnectorRow.make(host: .phone, state: .allowed, access: .ready)
-        #expect(!row.hasSwitch && !row.isOn && row.action == nil && row.status == nil)
-        #expect(row.subtitle == "Messages can only be read and sent from your Mac. Pal on your iPhone can still show this Mac's Messages status and approve send requests.")
-    }
-
-    @Test func theConnectorIsOwnerSwitchedAndItsActionsBelongToIt() {
-        #expect(DeviceConnectorID.messages.isOwnerSwitched && !DeviceConnectorID.clipboard.isOwnerSwitched)
-        #expect(!DeviceConnectorID.messages.needsOSPermission)
+    @Test func theConnectorIsAnOrdinaryMacCatalogEntryAndItsActionsBelongToIt() {
+        #expect(DeviceConnectorID.messages.needsOSPermission && !DeviceConnectorID.messages.asksOSPermissionOnUse)
+        #expect(DeviceConnectorCatalog.entries(for: .mac).contains { $0.id == .messages && $0.subtitle == "Read and send your messages" })
+        #expect(!DeviceConnectorCatalog.entries(for: .ios).contains { $0.id == .messages })
         for name in ["messages.recent", "messages.search", "messages.read", "messages.send"] {
             #expect(DeviceToolAction(rawValue: name)?.connector == .messages)
         }
         #expect(DeviceProviders(messages: FakeMessages()).availableConnectors == [.messages])
     }
+
+    @Test func theRowStatesFollowTheFullDiskAccessPermission() {
+        let entry = DeviceConnectorCatalog.entries(for: .mac).first { $0.id == .messages }
+        let cases: [(DeviceOSPermission, String?, String)] = [
+            (.notDetermined, "Allow", "Read and send your messages"),
+            (.denied, "Open Settings", "Needs a system permission"),
+            (.granted, "Allowed", "Read and send your messages"),
+        ]
+        for (permission, button, summary) in cases {
+            guard let entry else { Issue.record("no Messages entry"); return }
+            let row = DeviceConnectorRow(entry: entry, state: DeviceConnectorRowState(osPermission: permission))
+            let look = DeviceRowPresentation(row: row)
+            #expect(look.buttonTitle == button && look.summary == summary)
+        }
+    }
 }
 
-@Suite struct DeviceMessagesSwitchTests {
-    @Test func aSwitchThatIsNotOnRefusesEveryActionWithoutTouchingTheProvider() async {
-        for state in [DeviceConnectorState.off, .ask] {
+@Suite struct DeviceMessagesAccessTests {
+    private static let requests: [(String, JSONValue)] = [
+        ("messages.recent", [:]), ("messages.search", ["query": "x"]), ("messages.read", ["chat_id": "c"]),
+        ("messages.send", ["recipient": "+15551230000", "text": "hi"]),
+    ]
+
+    @Test func untilTheOwnerAllowsItEveryActionIsRefusedWithoutTouchingTheProvider() async {
+        for status in [DeviceOSPermission.notDetermined, .denied] {
             let provider = FakeMessages()
-            let run = await executor(provider, state: state)
-            let requests: [(String, JSONValue)] = [
-                ("messages.recent", [:]), ("messages.search", ["query": "x"]), ("messages.read", ["chat_id": "c"]),
-                ("messages.send", ["recipient": "+15551230000", "text": "hi"]),
-            ]
-            for (action, args) in requests {
+            let run = await executor(provider, permissions: FakePermissions(statuses: [.messages: status]))
+            for (action, args) in Self.requests {
                 let refusal = failure(await run.execute(messagesRequest(action, args: args)))
-                #expect(refusal?.0 == .failed && refusal?.1 == MessagesSwitch.offMessage)
+                #expect(refusal?.0 == .permissionNeeded)
             }
             #expect(provider.calls.withLock { $0.isEmpty })
         }
     }
 
-    @Test func anOnSwitchRunsTheProviderWithClampedLimits() async throws {
+    @Test func allowedAccessRunsTheProviderWithClampedLimits() async throws {
         let provider = FakeMessages()
         let run = await executor(provider)
         _ = await run.execute(messagesRequest("messages.recent", args: ["limit": 0, "messages_per_chat": 99]))
@@ -514,12 +503,12 @@ private let base = 700_000_000.0
         #expect(await reader.access() == .permissionNeeded)
     }
 
-    @Test func aSwitchThatIsOffNeverOpensTheDatabase() async {
+    @Test func theDatabaseIsNeverOpenedBeforeTheOwnerAllowsIt() async {
         let database = ThrowingDatabase(error: .failed)
         let reader = MessagesProvider(database: database, names: FakeNames(), scripts: FakeScripts())
-        let off = await executor(reader, state: .off)
-        let outcome = failure(await off.execute(messagesRequest("messages.recent")))
-        #expect(outcome?.1 == MessagesSwitch.offMessage && database.opens.withLock { $0 } == 0)
+        let run = await executor(reader, permissions: FakePermissions(statuses: [.messages: .notDetermined]))
+        let outcome = failure(await run.execute(messagesRequest("messages.recent")))
+        #expect(outcome?.0 == .permissionNeeded && database.opens.withLock { $0 } == 0)
     }
 }
 
@@ -610,8 +599,8 @@ private let base = 700_000_000.0
         _ = await run(reader, "messages.send", ["recipient": "", "text": "hi"])
         _ = await run(reader, "messages.send", ["recipient": "+15551230000", "text": ""])
         #expect(scripts.calls.withLock { $0.isEmpty })
-        let off = await executor(reader, state: .off)
-        _ = await off.execute(messagesRequest("messages.send", args: ["recipient": "+15551230000", "text": "hi"]))
+        let unallowed = await executor(reader, permissions: FakePermissions(statuses: [.messages: .notDetermined]))
+        _ = await unallowed.execute(messagesRequest("messages.send", args: ["recipient": "+15551230000", "text": "hi"]))
         #expect(scripts.calls.withLock { $0.isEmpty })
     }
 

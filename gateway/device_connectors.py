@@ -75,9 +75,6 @@ def _state(device: dict, info) -> ConnectorState:
     entry = _entry(device, info.connector)
     if info.connector is STOPPABLE:
         return ConnectorState.OFF if entry.get("stopped") is True else ConnectorState.ALLOWED
-    if info.opt_in:
-        stored = _enum_or(ConnectorState, entry.get("state"), ConnectorState.OFF)
-        return ConnectorState.ALLOWED if stored is ConnectorState.ALLOWED else ConnectorState.OFF
     if not info.on_by_default:
         return ConnectorState.ALLOWED
     stored = _enum_or(ConnectorState, entry.get("state"), ConnectorState.ASK)
@@ -88,8 +85,6 @@ def _settable(connector: Connector, state: ConnectorState) -> bool:
     if connector is STOPPABLE:
         return True
     info = connector_info(connector)
-    if info.opt_in:
-        return state is not ConnectorState.ASK
     return info.on_by_default and state is not ConnectorState.OFF
 
 
@@ -104,7 +99,7 @@ def _status(device: dict) -> list[ConnectorStatus]:
         info.connector, info.title, info.subtitle,
         _state(device, info),
         _enum_or(OsPermission, _entry(device, info.connector).get("os_permission"), OsPermission.NOT_DETERMINED),
-        not info.opt_in)
+        True)
         for info in CONNECTOR_CATALOG if kind in info.kinds]
 
 

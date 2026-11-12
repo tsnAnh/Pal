@@ -54,6 +54,7 @@ public enum DeviceConnectorCatalog {
         entry(.clipboard, "Clipboard", "Read and change the clipboard", [.mac]),
         entry(.screen, "Screen", "See what is on the screen", [.mac]),
         entry(.apps, "Apps and windows", "Open, switch and quit apps and windows", [.mac]),
+        entry(.messages, "Messages", "Read and send your messages", [.mac]),
     ]
 }
 
