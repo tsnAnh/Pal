@@ -20692,7 +20692,8 @@
           "location",
           "alarms",
           "shell",
-          "files"
+          "files",
+          "input"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -20931,7 +20932,14 @@
           "shell.run",
           "files.read",
           "files.list",
-          "files.write"
+          "files.write",
+          "input.displays",
+          "input.move",
+          "input.click",
+          "input.drag",
+          "input.scroll",
+          "input.type",
+          "input.key"
         ],
         "title": "DeviceToolAction",
         "type": "string"

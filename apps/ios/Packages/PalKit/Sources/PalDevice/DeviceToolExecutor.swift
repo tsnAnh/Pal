@@ -95,13 +95,14 @@ public actor DeviceToolExecutor {
     private func osPermission(for connector: DeviceConnectorID) async -> DeviceToolOutcome? {
         guard connector.needsOSPermission else { return nil }
         var status = await permissions.status(of: connector)
-        if status == .notDetermined { status = await permissions.request(connector) }
+        if status == .notDetermined, connector != .input { status = await permissions.request(connector) }
         await ledger.reportOSPermission(status, for: connector)
         switch status {
         case .granted: return nil
         case .unsupported: return .failure(.unsupported, "This device cannot use \(Self.title(connector)).")
         case .denied, .notDetermined:
-            return .failure(.permissionDenied, "Allow \(Self.title(connector)) for Pal in this device's Settings.")
+            let place = connector == .input ? "System Settings > Privacy & Security > Accessibility" : "this device's Settings"
+            return .failure(.permissionDenied, "Allow \(Self.title(connector)) for Pal in \(place).")
         }
     }
 
@@ -115,6 +116,7 @@ public actor DeviceToolExecutor {
         case .alarms: "Alarms"
         case .shell: "Run commands"
         case .files: "Files"
+        case .input: "Mouse and keyboard"
         }
     }
 
@@ -166,6 +168,8 @@ extension DeviceToolExecutor {
         case .filesRead: try await readFile(raw)
         case .filesList: try await listFiles(raw)
         case .filesWrite: try await writeFile(raw)
+        case .inputDisplays, .inputMove, .inputClick, .inputDrag, .inputScroll, .inputType, .inputKey:
+            try await InputToolHandler.run(action, raw, provider: provider(\.input))
         }
     }
 

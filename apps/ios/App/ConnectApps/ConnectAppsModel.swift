@@ -296,6 +296,7 @@ final class ConnectAppsModel {
             switch status {
             case .granted:
                 try await ledger.set(row.id, state: .allowed, osPermission: .granted)
+                if row.id == .input { pool.rearmInput() }
                 diagnostics.info("device", "set \(row.id.rawValue) ok")
                 pool.remember(profile)
             case .denied, .notDetermined:
@@ -316,12 +317,13 @@ final class ConnectAppsModel {
 
     func turnOff(_ row: DeviceRow) async {
         guard let ledger else { return }
+        if row.id == .input { pool.stopInput() }
         do { try await ledger.set(row.id, state: .off) } catch { report("Couldn't turn off \(row.title). Try again.") }
         rebuildDeviceRows()
     }
 
-    func openSettings() {
-        guard let url = SystemSettings.appSettingsURL else { return }
+    func openSettings(for connector: DeviceConnectorID? = nil) {
+        guard let url = connector == .input ? SystemSettings.accessibilitySettingsURL : SystemSettings.appSettingsURL else { return }
         SystemSettings.open(url)
     }
 

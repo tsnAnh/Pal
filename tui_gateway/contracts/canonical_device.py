@@ -18,6 +18,7 @@ class DeviceConnectorId(WireEnum):
     ALARMS = "alarms"
     SHELL = "shell"
     FILES = "files"
+    INPUT = "input"
 
 
 class DeviceConnectorState(WireEnum):
@@ -51,6 +52,13 @@ class DeviceToolAction(WireEnum):
     FILES_READ = "files.read"
     FILES_LIST = "files.list"
     FILES_WRITE = "files.write"
+    INPUT_DISPLAYS = "input.displays"
+    INPUT_MOVE = "input.move"
+    INPUT_CLICK = "input.click"
+    INPUT_DRAG = "input.drag"
+    INPUT_SCROLL = "input.scroll"
+    INPUT_TYPE = "input.type"
+    INPUT_KEY = "input.key"
 
 
 class DeviceToolErrorCode(WireEnum):

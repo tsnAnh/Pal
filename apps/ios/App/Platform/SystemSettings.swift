@@ -17,6 +17,15 @@ enum SystemSettings {
     }
 
     @MainActor
+    static var accessibilitySettingsURL: URL? {
+        #if os(macOS)
+        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+        #else
+        nil
+        #endif
+    }
+
+    @MainActor
     static var notificationSettingsURL: URL? {
         #if os(iOS)
         URL(string: UIApplication.openSettingsURLString)

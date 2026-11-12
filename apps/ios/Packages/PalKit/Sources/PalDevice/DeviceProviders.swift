@@ -329,6 +329,87 @@ public protocol FilesProviding: Sendable {
     func write(path: String, content: String, append: Bool, createDirs: Bool) async throws -> FileWriteRecord
 }
 
+public struct InputDisplayRecord: Sendable, Equatable {
+    public var id: Int
+    public var name: String?
+    public var isMain: Bool
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+    public var scale: Double
+
+    public init(id: Int, name: String? = nil, isMain: Bool, x: Double, y: Double, width: Double, height: Double, scale: Double) {
+        self.id = id
+        self.name = name
+        self.isMain = isMain
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.scale = scale
+    }
+
+    public func contains(x px: Double, y py: Double) -> Bool {
+        px >= x && px < x + width && py >= y && py < y + height
+    }
+}
+
+public struct InputDisplaysRecord: Sendable, Equatable {
+    public var displays: [InputDisplayRecord]
+    public var pointerX: Double
+    public var pointerY: Double
+
+    public init(displays: [InputDisplayRecord], pointerX: Double, pointerY: Double) {
+        self.displays = displays
+        self.pointerX = pointerX
+        self.pointerY = pointerY
+    }
+}
+
+public struct InputPostRecord: Sendable, Equatable {
+    public var events: Int
+    public var pointerX: Double?
+    public var pointerY: Double?
+
+    public init(events: Int, pointerX: Double? = nil, pointerY: Double? = nil) {
+        self.events = events
+        self.pointerX = pointerX
+        self.pointerY = pointerY
+    }
+}
+
+public struct InputPoint: Sendable, Equatable {
+    public var x: Double
+    public var y: Double
+    public var display: Int?
+
+    public init(x: Double, y: Double, display: Int? = nil) {
+        self.x = x
+        self.y = y
+        self.display = display
+    }
+}
+
+public enum InputButton: String, Sendable, Hashable {
+    case left, right, middle
+}
+
+public enum InputMoveTarget: Sendable, Equatable {
+    case absolute(InputPoint)
+    case relative(dx: Double, dy: Double)
+}
+
+public protocol InputProviding: Sendable {
+    func displays() async throws -> InputDisplaysRecord
+    func move(_ target: InputMoveTarget) async throws -> InputPostRecord
+    func click(at point: InputPoint?, button: InputButton, clicks: Int) async throws -> InputPostRecord
+    func drag(from: InputPoint, to: InputPoint, button: InputButton) async throws -> InputPostRecord
+    func scroll(at point: InputPoint?, dx: Int, dy: Int) async throws -> InputPostRecord
+    func type(_ text: String) async throws -> InputPostRecord
+    func press(key: String) async throws -> InputPostRecord
+}
+
 public struct DeviceProviders: Sendable {
     public var calendar: (any CalendarProviding)?
     public var reminders: (any RemindersProviding)?
@@ -338,6 +419,7 @@ public struct DeviceProviders: Sendable {
     public var home: (any HomeProviding)?
     public var shell: (any ShellProviding)?
     public var files: (any FilesProviding)?
+    public var input: (any InputProviding)?
 
     public init(
         calendar: (any CalendarProviding)? = nil,
@@ -347,7 +429,8 @@ public struct DeviceProviders: Sendable {
         alarms: (any AlarmsProviding)? = nil,
         home: (any HomeProviding)? = nil,
         shell: (any ShellProviding)? = nil,
-        files: (any FilesProviding)? = nil
+        files: (any FilesProviding)? = nil,
+        input: (any InputProviding)? = nil
     ) {
         self.calendar = calendar
         self.reminders = reminders
@@ -357,6 +440,7 @@ public struct DeviceProviders: Sendable {
         self.home = home
         self.shell = shell
         self.files = files
+        self.input = input
     }
 }
 

@@ -20,6 +20,10 @@ MAC_ONLY = frozenset({"mac"})
 MAX_PATH_CHARS = 1000
 SHELL_DEFAULT_TIMEOUT_SECONDS = 30
 SHELL_MAX_TIMEOUT_SECONDS = 300
+INPUT_MAX_TYPED_CHARS = 500
+INPUT_MAX_SCROLL_LINES = 50
+INPUT_MAX_COORDINATE = 100_000
+INPUT_MAX_CALLS_PER_MINUTE = 60
 TEXT_MARKER = "\n…[truncated, {omitted} characters omitted]"
 
 
@@ -41,6 +45,7 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.ALARMS, "Alarms", "Set alarms and timers"),
     ConnectorInfo(Connector.SHELL, "Run commands", "Let bots run commands on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.FILES, "Files", "Let bots read and change files on this Mac", MAC_ONLY, False),
+    ConnectorInfo(Connector.INPUT, "Mouse and keyboard", "Let bots control this Mac's mouse and keyboard", MAC_ONLY, False),
 )
 
 
@@ -218,6 +223,79 @@ class FilesWriteArgs(_Args):
     create_dirs: bool = False
 
 
+Coordinate = Annotated[float, Field(ge=-INPUT_MAX_COORDINATE, le=INPUT_MAX_COORDINATE, allow_inf_nan=False)]
+MouseButton = Literal["left", "right", "middle"]
+
+
+class _Point(_Args):
+    x: Coordinate | None = None
+    y: Coordinate | None = None
+    display: int | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def _both_or_neither(self):
+        if (self.x is None) != (self.y is None):
+            raise ValueError("pass x and y together")
+        return self
+
+
+class InputDisplaysArgs(_Args):
+    pass
+
+
+class InputMoveArgs(_Point):
+    dx: Coordinate | None = None
+    dy: Coordinate | None = None
+
+    @model_validator(mode="after")
+    def _absolute_or_relative(self):
+        relative = self.dx is not None or self.dy is not None
+        if relative and (self.dx is None or self.dy is None or self.x is not None):
+            raise ValueError("pass either x and y, or dx and dy")
+        if not relative and self.x is None:
+            raise ValueError("pass x and y, or dx and dy")
+        return self
+
+
+class InputClickArgs(_Point):
+    button: MouseButton = "left"
+    clicks: Literal[1, 2] = 1
+
+
+class InputDragArgs(_Args):
+    from_x: Coordinate
+    from_y: Coordinate
+    to_x: Coordinate
+    to_y: Coordinate
+    display: int | None = Field(default=None, ge=0)
+    button: MouseButton = "left"
+
+
+class InputScrollArgs(_Point):
+    dx: int = Field(default=0, ge=-INPUT_MAX_SCROLL_LINES, le=INPUT_MAX_SCROLL_LINES)
+    dy: int = Field(default=0, ge=-INPUT_MAX_SCROLL_LINES, le=INPUT_MAX_SCROLL_LINES)
+
+    @model_validator(mode="after")
+    def _scrolls(self):
+        if self.dx == 0 and self.dy == 0:
+            raise ValueError("dx or dy must not be 0")
+        return self
+
+
+class InputTypeArgs(_Args):
+    text: str = Field(min_length=1, max_length=INPUT_MAX_TYPED_CHARS)
+
+    @model_validator(mode="after")
+    def _printable(self):
+        if "\x00" in self.text:
+            raise ValueError("text must not contain NUL characters")
+        return self
+
+
+class InputKeyArgs(_Args):
+    key: str = Field(min_length=1, max_length=40, pattern=r"^\S+$")
+
+
 class CalendarEvent(_Data):
     id: Identifier
     title: Short
@@ -332,6 +410,29 @@ class AccessoriesResult(_Data):
 
 class AccessoryResult(_Data):
     accessory: Accessory
+
+
+class InputDisplay(_Data):
+    id: int = Field(ge=0)
+    name: Short | None = None
+    main: bool = False
+    x: float
+    y: float
+    width: float = Field(ge=0)
+    height: float = Field(ge=0)
+    scale: float = Field(gt=0)
+
+
+class InputDisplaysResult(_Data):
+    displays: Annotated[list[InputDisplay], _first(16)]
+    pointer_x: float
+    pointer_y: float
+
+
+class InputResult(_Data):
+    events: int = Field(ge=0)
+    pointer_x: float | None = None
+    pointer_y: float | None = None
 
 
 class _Capped(_Data):
@@ -463,6 +564,28 @@ ACTIONS: dict[str, ActionSpec] = dict([
           FilesListArgs, FilesListResult, lambda a: f"List the folder {_quoted(a.path)}", MAC_ONLY),
     _spec("files.write", Connector.FILES, True, "write or append text to a file",
           FilesWriteArgs, FilesWriteResult, lambda a: f"Write the file {_quoted(a.path)}", MAC_ONLY),
+    _spec("input.displays", Connector.INPUT, False,
+          "list the displays (id, origin x y, width, height in points, scale) and the pointer position; every "
+          "coordinate is in points, origin at the top-left of the main display, y grows downward, a secondary "
+          "display can have negative x or y; give `display` to make x y relative to that display's top-left; "
+          "multiply by scale for pixels of a screenshot",
+          InputDisplaysArgs, InputDisplaysResult, lambda a: "Read the screen sizes and pointer position", MAC_ONLY),
+    _spec("input.move", Connector.INPUT, True, "move the pointer to x y (points) or by dx dy",
+          InputMoveArgs, InputResult, lambda a: "Move the mouse pointer", MAC_ONLY),
+    _spec("input.click", Connector.INPUT, True,
+          "click button left|right|middle, clicks 1|2, at x y (points) or at the pointer when omitted",
+          InputClickArgs, InputResult, lambda a: f"Click the {a.button} mouse button", MAC_ONLY),
+    _spec("input.drag", Connector.INPUT, True, "press at from_x from_y, drag to to_x to_y, release",
+          InputDragArgs, InputResult, lambda a: "Drag the mouse", MAC_ONLY),
+    _spec("input.scroll", Connector.INPUT, True,
+          f"scroll by dx dy lines (at most {INPUT_MAX_SCROLL_LINES}; dy negative scrolls down), at x y or the pointer",
+          InputScrollArgs, InputResult, lambda a: "Scroll", MAC_ONLY),
+    _spec("input.type", Connector.INPUT, True,
+          f"type text as keystrokes into the focused field (at most {INPUT_MAX_TYPED_CHARS} characters; fails on a "
+          "password field)",
+          InputTypeArgs, InputResult, lambda a: f"Type {len(a.text)} characters", MAC_ONLY),
+    _spec("input.key", Connector.INPUT, True, "press a key or combo such as return, escape, cmd+c, cmd+shift+4",
+          InputKeyArgs, InputResult, lambda a: f"Press {_quoted(a.key)}", MAC_ONLY),
 ])
 
 

@@ -9,11 +9,12 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
     case alarms
     case shell
     case files
+    case input
 
     public var needsOSPermission: Bool {
         switch self {
         case .shell, .files: false
-        case .calendar, .home, .reminders, .contacts, .location, .alarms: true
+        case .calendar, .home, .reminders, .contacts, .location, .alarms, .input: true
         }
     }
 }
@@ -110,6 +111,13 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
     case filesRead = "files.read"
     case filesList = "files.list"
     case filesWrite = "files.write"
+    case inputDisplays = "input.displays"
+    case inputMove = "input.move"
+    case inputClick = "input.click"
+    case inputDrag = "input.drag"
+    case inputScroll = "input.scroll"
+    case inputType = "input.type"
+    case inputKey = "input.key"
 
     public var connector: DeviceConnectorID {
         switch self {
@@ -121,6 +129,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
         case .homeListAccessories, .homeSet: .home
         case .shellRun: .shell
         case .filesRead, .filesList, .filesWrite: .files
+        case .inputDisplays, .inputMove, .inputClick, .inputDrag, .inputScroll, .inputType, .inputKey: .input
         }
     }
 }
@@ -343,6 +352,93 @@ public struct FilesWriteArgs: Decodable, Sendable {
     public var content: String
     public var append: Bool?
     public var createDirs: Bool?
+}
+
+public struct InputMoveArgs: Decodable, Sendable {
+    public var x: Double?
+    public var y: Double?
+    public var dx: Double?
+    public var dy: Double?
+    public var display: Int?
+}
+
+public struct InputClickArgs: Decodable, Sendable {
+    public var x: Double?
+    public var y: Double?
+    public var display: Int?
+    public var button: String?
+    public var clicks: Int?
+}
+
+public struct InputDragArgs: Decodable, Sendable {
+    public var fromX: Double
+    public var fromY: Double
+    public var toX: Double
+    public var toY: Double
+    public var display: Int?
+    public var button: String?
+}
+
+public struct InputScrollArgs: Decodable, Sendable {
+    public var x: Double?
+    public var y: Double?
+    public var display: Int?
+    public var dx: Int?
+    public var dy: Int?
+}
+
+public struct InputTypeArgs: Decodable, Sendable {
+    public var text: String
+}
+
+public struct InputKeyArgs: Decodable, Sendable {
+    public var key: String
+}
+
+public struct InputDisplayWire: Encodable, Sendable, Equatable {
+    public var id: Int
+    public var name: String?
+    public var main: Bool
+    public var x: Double
+    public var y: Double
+    public var width: Double
+    public var height: Double
+    public var scale: Double
+
+    public init(id: Int, name: String?, main: Bool, x: Double, y: Double, width: Double, height: Double, scale: Double) {
+        self.id = id
+        self.name = name
+        self.main = main
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.scale = scale
+    }
+}
+
+public struct InputDisplaysWire: Encodable, Sendable, Equatable {
+    public var displays: [InputDisplayWire]
+    public var pointerX: Double
+    public var pointerY: Double
+
+    public init(displays: [InputDisplayWire], pointerX: Double, pointerY: Double) {
+        self.displays = displays
+        self.pointerX = pointerX
+        self.pointerY = pointerY
+    }
+}
+
+public struct InputResultWire: Encodable, Sendable, Equatable {
+    public var events: Int
+    public var pointerX: Double?
+    public var pointerY: Double?
+
+    public init(events: Int, pointerX: Double?, pointerY: Double?) {
+        self.events = events
+        self.pointerX = pointerX
+        self.pointerY = pointerY
+    }
 }
 
 public struct CalendarEventWire: Encodable, Sendable, Equatable {

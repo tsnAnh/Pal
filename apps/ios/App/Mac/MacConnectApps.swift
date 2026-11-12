@@ -439,7 +439,13 @@ struct MacConnectApps: View {
                 }
             }
             .frame(height: 60.5)
-            if row.action == .connected {
+            if row.action == .allowInSettings {
+                Button(String(localized: "Open Accessibility Settings")) { model.openSettings(for: row.id) }
+                    .buttonStyle(.link)
+                    .font(.system(size: 11))
+                    .accessibilityIdentifier("\(identifier)-open-settings")
+            }
+            if row.action == .connected || row.id == .input {
                 Text(warning)
                     .font(.system(size: 11))
                     .foregroundStyle(PalTokens.textSecondary)

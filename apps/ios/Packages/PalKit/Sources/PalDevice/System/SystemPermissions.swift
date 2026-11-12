@@ -22,6 +22,7 @@ public struct SystemPermissions: DevicePermissions {
         case .alarms: Self.alarmsStatus()
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
+        case .input: AccessibilityAccess.status
         }
     }
 
@@ -41,6 +42,8 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestHome()
         case .shell, .files:
             break
+        case .input:
+            AccessibilityAccess.request()
         }
         return await status(of: connector)
     }
@@ -129,13 +132,15 @@ extension DeviceProviders {
         #if os(macOS)
         let shell: (any ShellProviding)? = SystemShell()
         let files: (any FilesProviding)? = SystemFiles()
+        let input: (any InputProviding)? = InputController.shared
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
+        let input: (any InputProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, input: input
         )
     }
 }
