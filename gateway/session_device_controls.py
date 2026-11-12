@@ -45,7 +45,7 @@ def _own_device_id(connection) -> str | None:
 def _result(device_id: str, statuses) -> dict:
     return {'device_id': device_id, 'connectors': [
         {'id': s.connector.value, 'title': s.title, 'subtitle': s.subtitle, 'state': s.state.value,
-         'os_permission': s.os_permission.value} for s in statuses]}
+         'os_permission': s.os_permission.value, 'always_on': s.always_on} for s in statuses]}
 
 
 def _unreadable(exc: device_connectors.StoreUnreadable) -> RuntimeStoreError:

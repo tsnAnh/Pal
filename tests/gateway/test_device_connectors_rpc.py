@@ -58,7 +58,7 @@ async def test_state_and_os_permission_persist_per_connector_across_a_new_connec
     again = await connect_phone(authority)
     listed = (await again.call('device_connectors.list', {}))['result']['connectors']
     assert {c['id']: (c['state'], c['os_permission']) for c in listed} == {
-        'calendar': ('allowed', 'not_determined'), 'home': ('off', 'not_determined'),
+        'calendar': ('allowed', 'not_determined'), 'home': ('ask', 'not_determined'),
         'reminders': ('ask', 'not_determined'), 'contacts': ('ask', 'not_determined'),
         'location': ('allowed', 'granted'), 'alarms': ('ask', 'unsupported')}
     await again.connection.close()
@@ -90,7 +90,7 @@ async def test_a_device_reports_only_its_own_os_permission_and_unknown_devices_a
     assert _error(foreign) == 'permission_denied'
     managed = await first.call('device_connectors.set', {
         'id': 'contacts', 'state': 'off', 'device_id': device_id_for('Other')})
-    assert {c['id']: c['state'] for c in managed['result']['connectors']}['contacts'] == 'off'
+    assert {c['id']: c['state'] for c in managed['result']['connectors']}['contacts'] == 'ask'
     missing = await first.call('device_connectors.list', {'device_id': 'nobody-12345'})
     assert _error(missing) == 'not_found'
     await first.connection.close()

@@ -20820,6 +20820,11 @@
           },
           "os_permission": {
             "$ref": "#/components/schemas/DeviceOsPermission"
+          },
+          "always_on": {
+            "default": false,
+            "title": "Always On",
+            "type": "boolean"
           }
         },
         "required": [

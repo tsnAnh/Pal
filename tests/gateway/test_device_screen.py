@@ -67,15 +67,14 @@ async def call_raw(authority, payload):
 
 
 @pytest.mark.asyncio
-async def test_screen_is_off_until_the_mac_user_switches_it_on(authorities):
+async def test_screen_needs_no_switch_and_ignores_a_set_off(authorities):
     authority = await authorities()
     work = await mac(authority, state=None)
-    listed = await call_devices_list(authority)
-    assert 'screen' not in listed['devices'][0]['capabilities']
-    result = await call_device(authority, 'Work Mac', 'screen.capture')
-    assert result['code'] == 'connector_off' and work.requests() == []
-    await set_state(work, 'screen', 'allowed')
     assert (await call_devices_list(authority))['devices'][0]['capabilities']['screen'] == 'allowed'
+    await set_state(work, 'screen', 'off')
+    assert (await call_devices_list(authority))['devices'][0]['capabilities']['screen'] == 'allowed'
+    result = await call_device(authority, 'Work Mac', 'screen.capture')
+    assert result.get('code') != 'connector_off' and len(work.requests()) == 1
     await work.connection.close()
 
 

@@ -62,31 +62,26 @@ async def test_a_bot_cancels_a_notification_by_identifier(authorities):
 
 
 @pytest.mark.asyncio
-async def test_notifications_are_off_until_the_mac_itself_switches_them_on(authorities):
+async def test_notifications_need_no_switch_and_ignore_a_set_off(authorities):
     authority = await authorities()
     work = await mac(authority, on=False)
     listed = (await call_devices_list(authority))['devices'][0]
-    assert 'notifications' not in listed['capabilities']
-    for action, args in (('notify.post', {'title': 'a', 'body': 'b'}), ('notify.cancel', {'identifier': 'x'})):
-        result = await call_device(authority, 'Work Mac', action, args)
-        assert result['code'] == 'connector_off' and 'Work Mac' in result['error']
-    assert work.requests() == []
-    await set_state(work, 'notifications', 'allowed')
+    assert listed['capabilities']['notifications'] == 'allowed'
     assert (await call_device(authority, 'Work Mac', 'notify.post', {'title': 'a', 'body': 'b'}))['success'] is True
     await set_state(work, 'notifications', 'off')
-    assert (await call_device(authority, 'Work Mac', 'notify.post', {'title': 'a', 'body': 'b'}))['code'] == 'connector_off'
+    assert (await call_device(authority, 'Work Mac', 'notify.post', {'title': 'a', 'body': 'b'}))['success'] is True
     await work.connection.close()
 
 
 @pytest.mark.asyncio
-async def test_only_the_mac_itself_can_switch_its_notifications_on(authorities):
+async def test_only_the_mac_itself_can_set_its_notifications_state(authorities):
     authority = await authorities()
     work = await mac(authority, on=False)
     pocket = await connect_phone(authority, 'Sam iPhone', model='iPhone15,2')
     reply = await pocket.call('device_connectors.set', {
         'id': 'notifications', 'state': 'allowed', 'device_id': device_id_for('Work Mac')})
     assert 'permission_denied' in json.dumps(reply)
-    assert (await call_device(authority, 'Work Mac', 'notify.post', {'title': 'a', 'body': 'b'}))['code'] == 'connector_off'
+    assert (await call_device(authority, 'Work Mac', 'notify.post', {'title': 'a', 'body': 'b'}))['success'] is True
     await work.connection.close()
     await pocket.connection.close()
 
@@ -240,13 +235,14 @@ async def test_the_tool_text_tells_the_bot_about_attribution_and_the_caps(author
     assert 'notify.post' in text and 'via Pal' in text and 'at most 5 per minute' in text
 
 
-def test_the_connector_is_off_by_default_on_a_mac_and_absent_on_an_iphone(tmp_path):
+def test_the_connector_is_always_on_for_a_mac_and_absent_on_an_iphone(tmp_path):
     from gateway import device_connectors
     from tui_gateway.contracts.canonical_device import DeviceConnectorId, DeviceConnectorState
     device_connectors.register_device(tmp_path, 'device-mac-0001', 'Work Mac', kind='mac')
     device_connectors.register_device(tmp_path, 'device-ios-0001', 'Sam iPhone', kind='ios')
     mac_rows = {row.connector: row.state for row in device_connectors.statuses(tmp_path, 'device-mac-0001')}
     ios_rows = {row.connector for row in device_connectors.statuses(tmp_path, 'device-ios-0001')}
-    assert mac_rows[DeviceConnectorId.NOTIFICATIONS] is DeviceConnectorState.OFF
+    assert mac_rows[DeviceConnectorId.NOTIFICATIONS] is DeviceConnectorState.ALLOWED
     assert DeviceConnectorId.NOTIFICATIONS not in ios_rows
-    assert device_connectors.open_devices(tmp_path, DeviceConnectorId.NOTIFICATIONS) == {}
+    assert device_connectors.open_devices(tmp_path, DeviceConnectorId.NOTIFICATIONS) == {
+        'device-mac-0001': DeviceConnectorState.ALLOWED}
