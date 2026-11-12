@@ -628,6 +628,18 @@ public struct DeviceProviders: Sendable {
     }
 }
 
+extension DeviceProviders {
+    public var availableConnectors: [DeviceConnectorID] {
+        let present: [(DeviceConnectorID, Bool)] = [
+            (.calendar, calendar != nil), (.reminders, reminders != nil), (.contacts, contacts != nil), (.location, location != nil),
+            (.alarms, alarms != nil), (.home, home != nil), (.shell, shell != nil), (.files, files != nil),
+            (.notifications, notifications != nil), (.screen, screen != nil), (.apps, apps != nil),
+            (.clipboard, clipboard != nil), (.input, input != nil),
+        ]
+        return present.filter(\.1).map(\.0)
+    }
+}
+
 public protocol DevicePermissions: Sendable {
     func status(of connector: DeviceConnectorID) async -> DeviceOSPermission
     func request(_ connector: DeviceConnectorID) async -> DeviceOSPermission
@@ -646,5 +658,5 @@ public struct ConsentAsk: Sendable, Equatable {
 }
 
 public protocol ConsentPrompting: Sendable {
-    func askConsent(_ ask: ConsentAsk) async -> Bool
+    func permissionNeeded(_ ask: ConsentAsk, status: DeviceOSPermission)
 }

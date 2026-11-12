@@ -1,3 +1,4 @@
+import PalDevice
 import SwiftUI
 
 enum ConnectAppsLaunch {
@@ -28,27 +29,29 @@ extension RosterModel {
     }
 }
 
-private struct DeviceConsentAlert: ViewModifier {
-    let presenter: DeviceConsentPresenter
+private struct DevicePermissionAlert: ViewModifier {
+    let presenter: DevicePermissionPresenter
 
     func body(content: Content) -> some View {
         content.alert(
-            presenter.pending.map { "Let \($0.botName) use your \($0.ask.connectorTitle)?" } ?? "",
+            presenter.pending.map { "\($0.botName) wants to \($0.ask.intent)" } ?? "",
             isPresented: Binding(get: { presenter.pending != nil }, set: { _ in }),
             presenting: presenter.pending
-        ) { _ in
-            Button("Allow") { presenter.answer(true) }
-                .accessibilityIdentifier("deviceConsentAllow")
-            Button("Don't Allow", role: .cancel) { presenter.answer(false) }
-                .accessibilityIdentifier("deviceConsentDeny")
+        ) { pending in
+            Button(pending.status == .notDetermined ? "Continue" : "Open System Settings") { presenter.accept() }
+                .accessibilityIdentifier("devicePermissionAccept")
+            Button("Not Now", role: .cancel) { presenter.dismiss() }
+                .accessibilityIdentifier("devicePermissionDismiss")
         } message: { pending in
-            Text("\(pending.botName) wants to \(pending.ask.intent).")
+            Text(pending.status == .notDetermined
+                ? "macOS asks for your OK next. You can change this later in System Settings."
+                : "macOS has this turned off for Pal. Allow it in System Settings, then ask \(pending.botName) again.")
         }
     }
 }
 
 extension View {
-    func deviceConsentAlert(_ presenter: DeviceConsentPresenter) -> some View {
-        modifier(DeviceConsentAlert(presenter: presenter))
+    func devicePermissionAlert(_ presenter: DevicePermissionPresenter) -> some View {
+        modifier(DevicePermissionAlert(presenter: presenter))
     }
 }

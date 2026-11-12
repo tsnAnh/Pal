@@ -39,6 +39,7 @@ public actor DeviceToolHost {
     private let ledger: ConnectorLedger
     private let timing: DeviceToolHostTiming
     private let diagnostics: Diagnostics
+    private let alwaysOn: [DeviceConnectorID]
     private var runTask: Task<Void, Never>?
     private var connection: GatewayConnection?
     private var inFlight: [String: Task<Void, Never>] = [:]
@@ -49,8 +50,10 @@ public actor DeviceToolHost {
         executor: DeviceToolExecutor,
         ledger: ConnectorLedger,
         timing: DeviceToolHostTiming = .standard,
-        diagnostics: Diagnostics = .silent
+        diagnostics: Diagnostics = .silent,
+        alwaysOn: [DeviceConnectorID] = []
     ) {
+        self.alwaysOn = alwaysOn
         self.connect = connect
         self.executor = executor
         self.ledger = ledger
@@ -112,6 +115,7 @@ public actor DeviceToolHost {
 
     private func serve(_ live: GatewayConnection) async {
         _ = try? await ledger.refresh()
+        for id in alwaysOn where await ledger.state(for: id) != .allowed { _ = try? await ledger.set(id, state: .allowed) }
         await withTaskGroup(of: Void.self) { group in
             group.addTask { [weak self] in
                 for await event in live.events { await self?.handle(event, on: live) }

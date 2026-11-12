@@ -157,6 +157,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
 
 public enum DeviceToolErrorCode: String, Codable, Sendable, Hashable {
     case permissionDenied = "permission_denied"
+    case permissionNeeded = "permission_needed"
     case consentDeclined = "consent_declined"
     case unsupported
     case invalidArgs = "invalid_args"

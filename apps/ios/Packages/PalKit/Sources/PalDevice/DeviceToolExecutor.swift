@@ -59,8 +59,7 @@ public actor DeviceToolExecutor {
             return .failure(.invalidArgs, "\(request.action) does not belong to \(request.connector).")
         }
         let connector = action.connector
-        if let refusal = await gate(connector, action: action, request: request) { return refusal }
-        if let refusal = await osPermission(for: connector) { return refusal }
+        if let refusal = await osPermission(for: connector, action: action, profile: request.profile) { return refusal }
         do {
             return .success(try await dispatch(action, request.args, budget: budget, profile: request.profile))
         } catch DeviceProviderError.unsupported {
@@ -76,23 +75,7 @@ public actor DeviceToolExecutor {
         }
     }
 
-    private func gate(_ connector: DeviceConnectorID, action: DeviceToolAction, request: DeviceToolRequest) async -> DeviceToolOutcome? {
-        var state = await ledger.state(for: connector)
-        if state == nil || state == .off {
-            _ = try? await ledger.refresh()
-            state = await ledger.state(for: connector)
-        }
-        guard let state, state.isEnabled else {
-            return .failure(.consentDeclined, "\(Self.title(connector)) is turned off on this device.")
-        }
-        guard request.needsConsent else { return nil }
-        let granted = await consent.askConsent(ConsentAsk(connector: connector, action: action, profile: request.profile))
-        guard granted else { return .failure(.consentDeclined, "You chose not to allow \(Self.title(connector)).") }
-        _ = try? await ledger.set(connector, state: .allowed)
-        return nil
-    }
-
-    private func osPermission(for connector: DeviceConnectorID) async -> DeviceToolOutcome? {
+    private func osPermission(for connector: DeviceConnectorID, action: DeviceToolAction, profile: String) async -> DeviceToolOutcome? {
         guard connector.needsOSPermission else { return nil }
         var status = await permissions.status(of: connector)
         if status == .notDetermined, connector.asksOSPermissionOnUse { status = await permissions.request(connector) }
@@ -101,7 +84,8 @@ public actor DeviceToolExecutor {
         case .granted: return nil
         case .unsupported: return .failure(.unsupported, "This device cannot use \(Self.title(connector)).")
         case .denied, .notDetermined:
-            return .failure(.permissionDenied, Self.permissionHint(connector))
+            consent.permissionNeeded(ConsentAsk(connector: connector, action: action, profile: profile), status: status)
+            return .failure(.permissionNeeded, Self.permissionHint(connector))
         }
     }
 
@@ -113,8 +97,7 @@ public actor DeviceToolExecutor {
         case .contacts: "Contacts"
         case .location: "Location"
         case .alarms: "Alarms"
-        case .shell: "Run commands"
-        case .files: "Files"
+        case .shell, .files: "This Mac"
         case .input: "Mouse and keyboard"
         case .screen: "Screen"
         case .notifications: "Notifications"
@@ -124,8 +107,8 @@ public actor DeviceToolExecutor {
     }
 
     static func permissionHint(_ connector: DeviceConnectorID) -> String {
-        if connector == .input { return "Allow Pal under Accessibility in System Settings > Privacy & Security, then turn Mouse and keyboard on again in Pal." }
-        if connector == .screen { return "Allow Pal under Screen Recording in System Settings, then turn Screen on again in Pal." }
+        if connector == .input { return "Allow Pal under Accessibility in System Settings > Privacy & Security, then ask again." }
+        if connector == .screen { return "Allow Pal under Screen Recording in System Settings, then ask again." }
         return "Allow \(title(connector)) for Pal in this device's Settings."
     }
 

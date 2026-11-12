@@ -9,7 +9,6 @@ struct ConnectAppsSheet: View {
     let close: () -> Void
 
     @Environment(\.hermesTheme) private var theme
-    @Environment(\.scenePhase) private var scenePhase
 
     private static let rowsPerSectionInAll = 4
 
@@ -30,18 +29,15 @@ struct ConnectAppsSheet: View {
         }
         .task { await model.start() }
         .onDisappear { Task { await model.stop() } }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refreshPermissions() } }
-        }
         .alert(item: $model.notice) { notice in
             Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
         }
         .alert(
-            model.disconnectTarget.map { "\(disconnectVerb($0)) \($0.name)?" } ?? "",
+            model.disconnectTarget.map { "Disconnect \($0.name)?" } ?? "",
             isPresented: Binding(get: { model.disconnectTarget != nil }, set: { if !$0 { model.disconnectTarget = nil } }),
             presenting: model.disconnectTarget
         ) { target in
-            Button(disconnectVerb(target), role: .destructive) { Task { await model.disconnect(target) } }
+            Button("Disconnect", role: .destructive) { Task { await model.disconnect(target) } }
             Button("Cancel", role: .cancel) {}
         } message: { target in
             Text(disconnectMessage(target))
@@ -126,15 +122,8 @@ struct ConnectAppsSheet: View {
         )
     }
 
-    private func disconnectVerb(_ target: ConnectDisconnectTarget) -> String {
-        if case .device = target { "Turn off" } else { "Disconnect" }
-    }
-
     private func disconnectMessage(_ target: ConnectDisconnectTarget) -> String {
-        switch target {
-        case .device: "\(model.botName) won't be able to use it until you turn it back on."
-        case .app: "\(model.botName) loses access to this app until you connect it again."
-        }
+        "\(model.botName) loses access to this app until you connect it again."
     }
 
     @ViewBuilder
@@ -159,7 +148,6 @@ struct ConnectAppsSheet: View {
     private func chipTitle(_ id: String) -> String {
         switch id {
         case ConnectChip.all: "All"
-        case ConnectChip.iphone: "iPhone"
         default: id
         }
     }
@@ -168,7 +156,6 @@ struct ConnectAppsSheet: View {
     private var selectedSection: some View {
         switch model.selection {
         case ConnectChip.all: allSections
-        case ConnectChip.iphone: iphoneSection(showsCaption: true)
         case let category:
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSectionTitle")
             ForEach(model.catalog.apps(in: category)) { appRow($0) }
@@ -178,8 +165,6 @@ struct ConnectAppsSheet: View {
     @ViewBuilder
     private var allSections: some View {
         GitHubAccountSection(model: model.github)
-        ConnectSectionHeader("This iPhone", accessibilityIdentifier: "connectAppsSection-iphone") { model.selection = ConnectChip.iphone }
-        ForEach(model.deviceRows, id: \.renderID) { deviceRow($0) }
         ForEach(model.catalog.categories, id: \.self) { category in
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
             ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) }
@@ -218,32 +203,15 @@ struct ConnectAppsSheet: View {
     }
 
     @ViewBuilder
-    private func iphoneSection(showsCaption: Bool) -> some View {
-        ConnectSectionHeader("This iPhone", accessibilityIdentifier: "connectAppsSectionTitle")
-        if showsCaption {
-            Text("Turn iPhone connectors on here, or \(model.botName) will ask the first time it needs one.")
-                .font(.system(size: ConnectRowMetrics.captionSize))
-                .foregroundStyle(Color(theme.palette.textSecondary))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
-                .padding(.bottom, 10)
-                .accessibilityIdentifier("connectAppsIphoneCaption")
-        }
-        ForEach(model.deviceRows, id: \.renderID) { deviceRow($0) }
-    }
-
-    @ViewBuilder
     private var searchResults: some View {
-        let devices = model.searchedDevices
         let apps = model.searchedApps
         let skills = model.searchedSkills
-        if devices.isEmpty, apps.isEmpty, skills.isEmpty {
+        if apps.isEmpty, skills.isEmpty {
             Text("No matches")
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .padding(.top, 60)
                 .accessibilityIdentifier("connectAppsNoMatches")
         }
-        ForEach(devices, id: \.renderID) { deviceRow($0) }
         ForEach(apps) { appRow($0) }
         if !skills.isEmpty {
             ConnectSectionHeader("Skills", accessibilityIdentifier: "connectAppsSection-skills")
@@ -266,22 +234,11 @@ struct ConnectAppsSheet: View {
     @ViewBuilder
     private var yourPluginsContent: some View {
         let apps = model.connectedApps
-        let devices = model.connectedDeviceRows
-        if apps.isEmpty, devices.isEmpty {
+        if apps.isEmpty {
             Text("Nothing connected yet")
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .padding(.top, 60)
                 .accessibilityIdentifier("yourPluginsEmpty")
-        }
-        if !devices.isEmpty {
-            ConnectSectionHeader("This iPhone", accessibilityIdentifier: "yourPluginsSection-iphone")
-            ForEach(devices) { row in
-                ConnectAppRow(
-                    title: row.title, summary: row.subtitle, accessibilityIdentifier: "yourPlugin-device-\(row.id.rawValue)",
-                    isBusy: model.busy.contains("device:\(row.id.rawValue)"),
-                    trailing: ConnectRowAction("Turn off") { model.disconnectTarget = .device(row) }
-                ) { DeviceTile(connector: row.id) }
-            }
         }
         if !apps.isEmpty {
             ConnectSectionHeader("Apps", accessibilityIdentifier: "yourPluginsSection-apps")
@@ -319,66 +276,6 @@ struct ConnectAppsSheet: View {
         switch app.source {
         case .hosted: RemoteLogoTile(url: app.iconURL)
         case .mcp, .custom: PluginGlyphTile()
-        }
-    }
-
-    private func deviceRow(_ row: DeviceRow) -> some View {
-        let action: ConnectRowAction = switch row.action {
-        case .allow: ConnectRowAction("Allow", kind: .accent) { Task { await model.allow(row) } }
-        case .allowInSettings: ConnectRowAction("Allow in Settings", kind: .accent) { model.openSettings(for: row) }
-        case .connected: ConnectRowAction("Connected", kind: .dimmed) { model.disconnectTarget = .device(row) }
-        }
-        return ConnectAppRow(
-            title: row.title, summary: row.subtitle, accessibilityIdentifier: "deviceConnector-\(row.id.rawValue)",
-            isBusy: model.busy.contains("device:\(row.id.rawValue)"), trailing: action
-        ) { DeviceTile(connector: row.id) }
-    }
-}
-
-struct DeviceTile: View {
-    let connector: DeviceConnectorID
-
-    var body: some View {
-        AppTile(style: .filled(color)) {
-            Image(systemName: symbol)
-                .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(.white)
-        }
-    }
-
-    private var symbol: String {
-        switch connector {
-        case .calendar: "calendar"
-        case .home: "house.fill"
-        case .reminders: "checklist"
-        case .contacts: "person.crop.circle.fill"
-        case .location: "location.fill"
-        case .alarms: "alarm.fill"
-        case .shell: "terminal.fill"
-        case .files: "folder.fill"
-        case .input: "cursorarrow.click.2"
-        case .screen: "display"
-        case .notifications: "bell.fill"
-        case .apps: "macwindow"
-        case .clipboard: "doc.on.clipboard.fill"
-        }
-    }
-
-    private var color: RGB {
-        switch connector {
-        case .calendar: RGB(hex: 0xe5493a)
-        case .home: RGB(hex: 0xf58903)
-        case .reminders: RGB(hex: 0x2d7cf6)
-        case .contacts: RGB(hex: 0x8e8e93)
-        case .location: RGB(hex: 0x1c65cb)
-        case .alarms: RGB(hex: 0x2c2c2e)
-        case .shell: RGB(hex: 0x3a3a3c)
-        case .files: RGB(hex: 0x1c8ef0)
-        case .input: RGB(hex: 0x6e4ccf)
-        case .screen: RGB(hex: 0x6e4bd8)
-        case .notifications: RGB(hex: 0xe5493a)
-        case .apps: RGB(hex: 0x5e5ce6)
-        case .clipboard: RGB(hex: 0x8e6bd8)
         }
     }
 }

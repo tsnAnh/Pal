@@ -16,25 +16,6 @@ struct ConnectionRPC: ConnectRPC {
     }
 }
 
-struct DeviceRow: Identifiable, Equatable {
-    enum Action: Equatable {
-        case allow
-        case allowInSettings
-        case connected
-    }
-
-    let id: DeviceConnectorID
-    let title: String
-    let subtitle: String
-    let action: Action
-    let warning: String?
-    var needsSettings = false
-
-    var isSwitch: Bool { warning != nil }
-
-    var renderID: String { "\(id.rawValue)-\(action)-\(needsSettings)" }
-}
-
 struct ConnectNotice: Identifiable {
     let id = UUID()
     let title: String
@@ -55,26 +36,22 @@ struct CapabilityKeyRequest: Identifiable, Equatable {
 
 enum ConnectDisconnectTarget: Identifiable {
     case app(ConnectApp)
-    case device(DeviceRow)
 
     var id: String {
         switch self {
         case .app(let app): app.id
-        case .device(let row): "device:\(row.id.rawValue)"
         }
     }
 
     var name: String {
         switch self {
         case .app(let app): app.name
-        case .device(let row): row.title
         }
     }
 }
 
 enum ConnectChip {
     static let all = "all"
-    static let iphone = "iphone"
 }
 
 @MainActor
@@ -106,7 +83,6 @@ final class ConnectAppsModel {
     private(set) var phase: Phase = .loading
     private(set) var capabilitiesPhase: CapabilitiesPhase = .hidden
     private(set) var catalog = ConnectCatalog()
-    private(set) var deviceRows: [DeviceRow] = []
     private(set) var busy: Set<String> = []
     var selection = ConnectChip.all
     var query = ""
@@ -128,21 +104,14 @@ final class ConnectAppsModel {
     let github: GitHubAccountModel
     private let bots: [CustomConnectorBot]
     private let currentBot: String?
-    private let pool: DeviceHostPool
-    private let permissions = SystemPermissions()
     private let diagnostics = Diagnostics.osLog()
-    private var statuses: [DeviceConnectorStatus] = []
-    private var localPermissions: [DeviceConnectorID: DeviceOSPermission] = [:]
-    private var ledger: ConnectorLedger?
-    private var observation: UUID?
 
     init(
-        connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser,
+        connection: ConnectionModel, profile: String?, botName: String, browser: any AuthorizationBrowser,
         bots: [CustomConnectorBot] = [], currentBot: String? = nil
     ) {
         self.profile = profile
         self.botName = botName
-        self.pool = pool
         self.bots = bots
         self.currentBot = currentBot
         service = ConnectAppsService(
@@ -153,36 +122,25 @@ final class ConnectAppsModel {
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
         capabilitiesService = CapabilitiesService(gateway: gateway)
         github = GitHubAccountModel(client: GitHubClient(gateway: gateway))
-        rebuildDeviceRows()
     }
 
     var customConnector: CustomConnectorModel? {
         if case .customConnector(let connector) = mode { connector } else { nil }
     }
 
-    var connectedCount: Int {
-        catalog.connectedApps.count + deviceRows.filter { $0.action == .connected }.count
-    }
+    var connectedCount: Int { catalog.connectedApps.count }
 
     var connectedApps: [ConnectApp] { catalog.connectedApps }
 
-    var connectedDeviceRows: [DeviceRow] { deviceRows.filter { $0.action == .connected } }
-
-    var chips: [String] { [ConnectChip.all, ConnectChip.iphone] + catalog.categories }
+    var chips: [String] { [ConnectChip.all] + catalog.categories }
 
     var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     var searchedApps: [ConnectApp] { catalog.matching(trimmedQuery) }
 
-    var searchedDevices: [DeviceRow] {
-        let needle = trimmedQuery
-        return deviceRows.filter { $0.title.localizedStandardContains(needle) || $0.subtitle.localizedStandardContains(needle) }
-    }
-
     var searchedSkills: [InstalledSkill] { catalog.matchingSkills(trimmedQuery) }
 
     func start() async {
-        await attachDevices()
         await reload()
         await loadCapabilities()
     }
@@ -231,8 +189,6 @@ final class ConnectAppsModel {
 
     func stop() async {
         await customConnector?.discard()
-        if let observation, let ledger { await ledger.stopObserving(observation) }
-        observation = nil
     }
 
     func reload() async {
@@ -242,104 +198,6 @@ final class ConnectAppsModel {
         } catch {
             if catalog.apps.isEmpty { phase = .unavailable }
         }
-    }
-
-    func refreshPermissions() async {
-        for id in DeviceConnectorID.allCases { localPermissions[id] = await permissions.status(of: id) }
-        rebuildDeviceRows()
-    }
-
-    private func attachDevices() async {
-        guard ledger == nil, let stack = await pool.stack(for: profile) else { return }
-        ledger = stack.ledger
-        let model = self
-        observation = await stack.ledger.observe { snapshot in
-            Task { @MainActor in model.apply(snapshot) }
-        }
-        await refreshPermissions()
-        _ = try? await stack.ledger.refresh()
-    }
-
-    private func apply(_ snapshot: [DeviceConnectorStatus]) {
-        statuses = snapshot
-        rebuildDeviceRows()
-        diagnostics.info("device", "ledger snapshot \(snapshot.count) connected=\(deviceRows.filter { $0.action == .connected }.count)")
-    }
-
-    private func rebuildDeviceRows() {
-        deviceRows = PlatformCapabilities.deviceConnectors.map { id in
-            let status = statuses.first { $0.id == id }
-            let defaults = DeviceConnectorDefaults.entry(for: id)
-            let local = localPermissions[id]
-            let action: DeviceRow.Action
-            let isAllowed = status?.state == .allowed
-            let worksWithoutPermission = id == .apps
-            if !worksWithoutPermission, local == .denied || (local == nil && status?.osPermission == .denied && !isAllowed) {
-                action = .allowInSettings
-            } else if isAllowed, worksWithoutPermission || local == nil || local == .granted {
-                action = .connected
-            } else {
-                action = .allow
-            }
-            return DeviceRow(
-                id: id, title: status?.title ?? defaults.title, subtitle: status?.subtitle ?? defaults.subtitle,
-                action: action, warning: DeviceConnectorDefaults.warning(for: id),
-                needsSettings: worksWithoutPermission && isAllowed && local != nil && local != .granted
-            )
-        }
-    }
-
-    func allow(_ row: DeviceRow) async {
-        let key = "device:\(row.id.rawValue)"
-        busy.insert(key)
-        defer { busy.remove(key) }
-        guard let ledger else { return report("Couldn't reach \(botName) right now. Try again in a moment.") }
-        do {
-            if !(await ledger.isLoaded) { _ = try await ledger.refresh() }
-            var status = await permissions.status(of: row.id)
-            if status == .notDetermined { status = await permissions.request(row.id) }
-            diagnostics.info("device", "allow \(row.id.rawValue) os=\(status.rawValue)")
-            localPermissions[row.id] = status
-            switch status {
-            case .granted:
-                try await ledger.set(row.id, state: .allowed, osPermission: .granted)
-                if row.id == .input { pool.rearmInput() }
-                diagnostics.info("device", "set \(row.id.rawValue) ok")
-                pool.remember(profile)
-            case .denied, .notDetermined:
-                let state: DeviceConnectorState? = row.id == .apps ? .allowed : nil
-                try await ledger.set(row.id, state: state, osPermission: .denied)
-                if state != nil { pool.remember(profile) }
-            case .unsupported:
-                report("\(row.title) isn't available on this device.")
-            }
-        } catch {
-            diagnostics.info("device", "allow \(row.id.rawValue) failed: \(Diagnostics.describe(error))")
-            report("Couldn't turn on \(row.title). Try again.")
-        }
-        rebuildDeviceRows()
-    }
-
-    func setEnabled(_ row: DeviceRow, _ isOn: Bool) async {
-        if isOn { await allow(row) } else { await turnOff(row) }
-    }
-
-    func turnOff(_ row: DeviceRow) async {
-        guard let ledger else { return }
-        if row.id == .input { pool.stopInput() }
-        do { try await ledger.set(row.id, state: .off) } catch { report("Couldn't turn off \(row.title). Try again.") }
-        rebuildDeviceRows()
-    }
-
-    func openSettings() {
-        guard let url = SystemSettings.appSettingsURL else { return }
-        SystemSettings.open(url)
-    }
-
-    func openSettings(for row: DeviceRow) {
-        guard row.id == .screen || row.id == .input else { return openSettings() }
-        guard let url = row.id == .input ? SystemSettings.accessibilitySettingsURL : SystemSettings.screenRecordingURL else { return }
-        SystemSettings.open(url)
     }
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
@@ -388,8 +246,6 @@ final class ConnectAppsModel {
 
     func disconnect(_ target: ConnectDisconnectTarget) async {
         switch target {
-        case .device(let row):
-            await turnOff(row)
         case .app(let app):
             busy.insert(app.id)
             defer { busy.remove(app.id) }

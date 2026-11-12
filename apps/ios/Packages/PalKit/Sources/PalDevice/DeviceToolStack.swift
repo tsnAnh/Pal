@@ -38,7 +38,7 @@ public struct DeviceToolStack: Sendable {
         let deferred = DeferredConnectorsAPI()
         let ledger = ConnectorLedger(api: deferred)
         let executor = DeviceToolExecutor(providers: providers, permissions: permissions, ledger: ledger, consent: consent, environment: environment)
-        let host = DeviceToolHost(connect: connect, executor: executor, ledger: ledger, timing: timing, diagnostics: diagnostics)
+        let host = DeviceToolHost(connect: connect, executor: executor, ledger: ledger, timing: timing, diagnostics: diagnostics, alwaysOn: providers.availableConnectors)
         deferred.bind(host.connectors)
         return DeviceToolStack(host: host, ledger: ledger, executor: executor)
     }

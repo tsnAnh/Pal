@@ -46,7 +46,7 @@ private func makeRig(
     let permissions = FakePermissions(statuses: [.notifications: permission])
     let executor = DeviceToolExecutor(
         providers: DeviceProviders(notifications: SystemNotifications(center: center)),
-        permissions: permissions, ledger: ledger, consent: FakeConsent(true),
+        permissions: permissions, ledger: ledger, consent: FakeConsent(),
         environment: DeviceToolEnvironment(deadlineMargin: .zero)
     )
     return (executor, center, permissions)
@@ -133,17 +133,16 @@ private func failure(_ outcome: DeviceToolOutcome) -> DeviceToolErrorCode? {
         guard case .success = outcome else { Issue.record("expected success"); return }
     }
 
-    @Test func aSwitchedOffConnectorShowsNothing() async {
+    @Test func aStoredOffIsIgnored() async {
         let rig = await makeRig(state: .off)
-        let outcome = await rig.executor.execute(call("notify.post", ["title": "t", "body": "b"]))
-        #expect(failure(outcome) == .consentDeclined)
-        #expect(rig.center.added.isEmpty)
+        guard case .success = await rig.executor.execute(call("notify.post", ["title": "t", "body": "b"])) else { Issue.record("expected success"); return }
+        #expect(rig.center.added.count == 1)
     }
 
     @Test func aDeniedMacOSPermissionFailsWithAClearErrorAndNeverAsksAgain() async {
         let rig = await makeRig(permission: .denied)
         let outcome = await rig.executor.execute(call("notify.post", ["title": "t", "body": "b"]))
-        #expect(failure(outcome) == .permissionDenied)
+        #expect(failure(outcome) == .permissionNeeded)
         #expect(rig.center.added.isEmpty)
         #expect(rig.permissions.requested.withLock { $0.isEmpty })
     }
@@ -151,7 +150,7 @@ private func failure(_ outcome: DeviceToolOutcome) -> DeviceToolErrorCode? {
     @Test func thePermissionIsNeverRequestedAtCallTime() async {
         let rig = await makeRig(permission: .notDetermined)
         let outcome = await rig.executor.execute(call("notify.post", ["title": "t", "body": "b"]))
-        #expect(failure(outcome) == .permissionDenied)
+        #expect(failure(outcome) == .permissionNeeded)
         #expect(rig.permissions.requested.withLock { $0.isEmpty })
     }
 
@@ -159,10 +158,5 @@ private func failure(_ outcome: DeviceToolOutcome) -> DeviceToolErrorCode? {
         let rig = await makeRig(center: FakeCenter(failing: true))
         let outcome = await rig.executor.execute(call("notify.post", ["title": "t", "body": "b"]))
         #expect(failure(outcome) == .failed)
-    }
-
-    @Test func theSwitchWarnsAboutMisleadingText() {
-        #expect(DeviceConnectorDefaults.warning(for: .notifications)?.contains("mislead") == true)
-        #expect(DeviceConnectorDefaults.entry(for: .notifications).subtitle == "Let bots show notifications on this Mac")
     }
 }

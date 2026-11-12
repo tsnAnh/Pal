@@ -141,7 +141,7 @@ private func screenRig(
     let screen = GuardedScreen(source: source)
     let executor = DeviceToolExecutor(
         providers: providers ? DeviceProviders(screen: screen) : DeviceProviders(),
-        permissions: permissions, ledger: ledger, consent: FakeConsent(true),
+        permissions: permissions, ledger: ledger, consent: FakeConsent(),
         environment: DeviceToolEnvironment(deadlineMargin: .zero)
     )
     return ScreenRig(executor: executor, permissions: permissions, source: source)
@@ -186,19 +186,15 @@ struct DeviceScreenExecutorTests {
                 Issue.record("expected failure, got \(outcome)")
                 return
             }
-            #expect(code == .permissionDenied && text.contains("Screen Recording"))
+            #expect(code == .permissionNeeded && text.contains("Screen Recording"))
             #expect(rig.permissions.requested.withLock { $0 }.isEmpty && rig.source.frames == 0)
         }
     }
 
-    @Test func aSwitchedOffConnectorNeverCaptures() async {
+    @Test func aStoredOffIsIgnored() async {
         let rig = await screenRig(state: .off)
-        let outcome = await rig.executor.execute(screenCall("screen.capture"))
-        guard case .failure(let code, _) = outcome else {
-            Issue.record("expected failure, got \(outcome)")
-            return
-        }
-        #expect(code == .consentDeclined && rig.source.frames == 0)
+        guard case .success = await rig.executor.execute(screenCall("screen.capture")) else { Issue.record("expected success"); return }
+        #expect(rig.source.frames > 0)
     }
 
     @Test func aDeviceWithoutAScreenProviderAnswersUnsupported() async {
@@ -211,9 +207,7 @@ struct DeviceScreenExecutorTests {
         #expect(code == .unsupported)
     }
 
-    @Test func theConnectorIsNamedForPeopleWarnsAndAsksForThePermissionOnlyWhenSwitchedOn() {
-        #expect(DeviceConnectorDefaults.entry(for: .screen) == ("Screen", "Let bots see this Mac's screen"))
-        #expect(DeviceConnectorDefaults.warning(for: .screen)?.contains("passwords and private messages") == true)
+    @Test func theActionsBelongToScreenAndTheOSPromptIsNotRaisedInline() {
         #expect([DeviceToolAction.screenCapture, .screenRead].allSatisfy { $0.connector == .screen })
         #expect(DeviceConnectorID.screen.needsOSPermission && !DeviceConnectorID.screen.asksOSPermissionOnUse)
         #expect(DeviceConnectorID.calendar.asksOSPermissionOnUse)

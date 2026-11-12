@@ -107,6 +107,17 @@ struct InputControlTests {
         #expect(try await input.press(key: "return").events == 2)
     }
 
+    @Test func stopThenResumeAnnouncesBothAndReopensTheController() {
+        let input = controller(FakeSource())
+        let seen = Mutex<[InputActivity]>([])
+        input.observe { activity in seen.withLock { $0.append(activity) } }
+        input.stop()
+        #expect(input.isStopped)
+        input.rearm()
+        #expect(!input.isStopped)
+        #expect(seen.withLock { $0 } == [.stopped, .resumed])
+    }
+
     @Test func stoppingMidActionCutsTheRemainingEventsOff() async {
         let source = FakeSource()
         let holder = ControllerHolder()
@@ -184,13 +195,13 @@ struct InputControlTests {
         let permissions = FakePermissions(statuses: [.input: .notDetermined])
         let executor = DeviceToolExecutor(
             providers: DeviceProviders(input: controller(source)), permissions: permissions, ledger: ledger,
-            consent: FakeConsent(true), environment: DeviceToolEnvironment(deadlineMargin: .zero)
+            consent: FakeConsent(), environment: DeviceToolEnvironment(deadlineMargin: .zero)
         )
         let outcome = await executor.execute(DeviceToolRequest(
             requestID: "req-00000001", action: "input.key", connector: "input", args: ["key": "return"]
         ))
         guard case .failure(let code, let message) = outcome else { Issue.record("expected a failure"); return }
-        #expect(code == .permissionDenied && message.contains("Accessibility"))
+        #expect(code == .permissionNeeded && message.contains("Accessibility"))
         #expect(permissions.requested.withLock { $0.isEmpty })
         #expect(source.posted.isEmpty)
     }
@@ -201,7 +212,7 @@ struct InputControlTests {
         _ = try? await ledger.refresh()
         let executor = DeviceToolExecutor(
             providers: DeviceProviders(input: controller(FakeSource())), permissions: FakePermissions(), ledger: ledger,
-            consent: FakeConsent(true), environment: DeviceToolEnvironment(deadlineMargin: .zero)
+            consent: FakeConsent(), environment: DeviceToolEnvironment(deadlineMargin: .zero)
         )
         let outcome = await executor.execute(DeviceToolRequest(
             requestID: "req-00000002", action: "input.click", connector: "input", args: ["x": 10, "y": 10, "display": 1]
@@ -218,7 +229,7 @@ struct InputControlTests {
         let ledger = ConnectorLedger(api: api)
         _ = try? await ledger.refresh()
         let executor = DeviceToolExecutor(
-            providers: DeviceProviders(), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true),
+            providers: DeviceProviders(), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(),
             environment: DeviceToolEnvironment(deadlineMargin: .zero)
         )
         let outcome = await executor.execute(DeviceToolRequest(

@@ -7,7 +7,6 @@ import SwiftUI
 struct MacConnectApps: View {
     @State private var model: ConnectAppsModel
 
-    @Environment(\.scenePhase) private var scenePhase
 
     private static let rowsPerSectionInAll = 6
     private let columns = [GridItem(.flexible(), spacing: 30), GridItem(.flexible(), spacing: 30)]
@@ -30,18 +29,15 @@ struct MacConnectApps: View {
         .accessibilityIdentifier("connectApps")
         .task { await model.start() }
         .onDisappear { Task { await model.stop() } }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refreshPermissions() } }
-        }
         .alert(item: $model.notice) { notice in
             Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
         }
         .alert(
-            model.disconnectTarget.map { "\(disconnectVerb($0)) \($0.name)?" } ?? "",
+            model.disconnectTarget.map { String(localized: "Disconnect \($0.name)?") } ?? "",
             isPresented: Binding(get: { model.disconnectTarget != nil }, set: { if !$0 { model.disconnectTarget = nil } }),
             presenting: model.disconnectTarget
         ) { target in
-            Button(disconnectVerb(target), role: .destructive) { Task { await model.disconnect(target) } }
+            Button(String(localized: "Disconnect"), role: .destructive) { Task { await model.disconnect(target) } }
             Button("Cancel", role: .cancel) {}
         } message: { target in
             Text(disconnectMessage(target))
@@ -199,7 +195,6 @@ struct MacConnectApps: View {
     private func chipTitle(_ id: String) -> String {
         switch id {
         case ConnectChip.all: String(localized: "All")
-        case ConnectChip.iphone: String(localized: "This Mac")
         default: id
         }
     }
@@ -246,17 +241,12 @@ struct MacConnectApps: View {
         case ConnectChip.all:
             GitHubAccountSection(model: model.github)
                 .padding(.horizontal, -PalMetrics.screenMargin)
-            section(title: String(localized: "This Mac"), identifier: "connectAppsSection-iphone", viewAll: { model.selection = ConnectChip.iphone }) {
-                deviceGrid
-            }
             ForEach(model.catalog.categories, id: \.self) { category in
                 section(title: category, identifier: "connectAppsSection-\(category)", viewAll: { model.selection = category }) {
                     appGrid(Array(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)))
                 }
             }
             capabilitiesSection
-        case ConnectChip.iphone:
-            section(title: String(localized: "This Mac"), identifier: "connectAppsSectionTitle", viewAll: nil) { deviceGrid }
         case let category:
             section(title: category, identifier: "connectAppsSectionTitle", viewAll: nil) {
                 appGrid(model.catalog.apps(in: category))
@@ -266,19 +256,17 @@ struct MacConnectApps: View {
 
     @ViewBuilder
     private var searchResults: some View {
-        let devices = model.searchedDevices
         let apps = model.searchedApps
         let skills = model.searchedSkills
-        if devices.isEmpty, apps.isEmpty, skills.isEmpty {
+        if apps.isEmpty, skills.isEmpty {
             Text("No matches")
                 .foregroundStyle(PalTokens.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
                 .accessibilityIdentifier("connectAppsNoMatches")
         }
-        if !devices.isEmpty || !apps.isEmpty {
+        if !apps.isEmpty {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
-                ForEach(devices, id: \.renderID) { deviceRow($0) }
                 ForEach(apps) { appRow($0) }
             }
         }
@@ -296,26 +284,12 @@ struct MacConnectApps: View {
     @ViewBuilder
     private var yourPluginsContent: some View {
         let apps = model.connectedApps
-        let devices = model.connectedDeviceRows
-        if apps.isEmpty, devices.isEmpty {
+        if apps.isEmpty {
             Text("Nothing connected yet")
                 .foregroundStyle(PalTokens.textSecondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
                 .accessibilityIdentifier("yourPluginsEmpty")
-        }
-        if !devices.isEmpty {
-            section(title: String(localized: "This Mac"), identifier: "yourPluginsSection-iphone", viewAll: nil) {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
-                    ForEach(devices) { row in
-                        tileRow(
-                            title: row.title, summary: row.subtitle, identifier: "yourPlugin-device-\(row.id.rawValue)",
-                            trailing: MacRowAction(title: String(localized: "Turn off"), prominent: false) { model.disconnectTarget = .device(row) },
-                            busy: model.busy.contains("device:\(row.id.rawValue)")
-                        ) { DeviceTile(connector: row.id).scaleEffect(0.95).frame(width: 38, height: 38) }
-                    }
-                }
-            }
         }
         if !apps.isEmpty {
             section(title: String(localized: "Apps"), identifier: "yourPluginsSection-apps", viewAll: nil) {
@@ -382,12 +356,6 @@ struct MacConnectApps: View {
         }
     }
 
-    private var deviceGrid: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
-            ForEach(model.deviceRows, id: \.renderID) { deviceRow($0) }
-        }
-    }
-
     private func appGrid(_ apps: [ConnectApp]) -> some View {
         LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
             ForEach(apps) { appRow($0) }
@@ -407,82 +375,6 @@ struct MacConnectApps: View {
         return tileRow(
             title: app.name, summary: app.summary, identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id)
         ) { icon(for: app) }
-    }
-
-    @ViewBuilder
-    private func deviceRow(_ row: DeviceRow) -> some View {
-        if let warning = row.warning { switchRow(row, warning: warning) } else { buttonRow(row) }
-    }
-
-    private func switchRow(_ row: DeviceRow, warning: String) -> some View {
-        let isOn = Binding(get: { row.action == .connected }, set: { value in Task { await model.setEnabled(row, value) } })
-        let identifier = "deviceConnector-\(row.id.rawValue)"
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                DeviceTile(connector: row.id).scaleEffect(0.95).frame(width: 38, height: 38)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(row.title)
-                        .font(.system(size: 12))
-                        .foregroundStyle(PalTokens.textPrimary)
-                        .lineLimit(1)
-                    Text(row.subtitle)
-                        .font(.system(size: 11))
-                        .foregroundStyle(PalTokens.textSecondary)
-                        .lineLimit(2)
-                }
-                Spacer(minLength: 8)
-                if model.busy.contains("device:\(row.id.rawValue)") {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Toggle(isOn: isOn) { Text(row.title) }
-                        .labelsHidden()
-                        .toggleStyle(.macSwitch)
-                        .accessibilityIdentifier("\(identifier)-action")
-                }
-            }
-            .frame(height: 60.5)
-            if row.action == .allowInSettings {
-                Button(String(localized: "Open System Settings")) { model.openSettings(for: row) }
-                    .accessibilityIdentifier("\(identifier)-settings")
-            }
-            if row.action != .allow || row.id == .input {
-                Text(warning)
-                    .font(.system(size: 11))
-                    .foregroundStyle(PalTokens.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 10)
-                    .accessibilityIdentifier("\(identifier)-warning")
-            }
-            if row.needsSettings { permissionNotice(identifier: identifier) }
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(identifier)
-    }
-
-    private func permissionNotice(identifier: String) -> some View {
-        HStack(spacing: 8) {
-            Text("Window titles and raising a single window need Screen Recording and Accessibility access.")
-                .font(.system(size: 11))
-                .foregroundStyle(PalTokens.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button("Open System Settings") { model.openSettings() }
-                .controlSize(.small)
-                .accessibilityIdentifier("\(identifier)-settings")
-        }
-        .padding(.bottom, 10)
-    }
-
-    private func buttonRow(_ row: DeviceRow) -> some View {
-        let action: MacRowAction = switch row.action {
-        case .allow: MacRowAction(title: String(localized: "Allow"), prominent: true) { Task { await model.allow(row) } }
-        case .allowInSettings: MacRowAction(title: String(localized: "Allow in Settings"), prominent: true) { model.openSettings(for: row) }
-        case .connected: MacRowAction(title: String(localized: "Connected"), checked: true) { model.disconnectTarget = .device(row) }
-        }
-        return tileRow(
-            title: row.title, summary: row.subtitle, identifier: "deviceConnector-\(row.id.rawValue)", trailing: action,
-            busy: model.busy.contains("device:\(row.id.rawValue)")
-        ) { DeviceTile(connector: row.id).scaleEffect(0.95).frame(width: 38, height: 38) }
     }
 
     @ViewBuilder
@@ -516,15 +408,8 @@ struct MacConnectApps: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private func disconnectVerb(_ target: ConnectDisconnectTarget) -> String {
-        if case .device = target { String(localized: "Turn off") } else { String(localized: "Disconnect") }
-    }
-
     private func disconnectMessage(_ target: ConnectDisconnectTarget) -> String {
-        switch target {
-        case .device: String(localized: "\(model.botName) won't be able to use it until you turn it back on.")
-        case .app: String(localized: "\(model.botName) loses access to this app until you connect it again.")
-        }
+        String(localized: "\(model.botName) loses access to this app until you connect it again.")
     }
 }
 

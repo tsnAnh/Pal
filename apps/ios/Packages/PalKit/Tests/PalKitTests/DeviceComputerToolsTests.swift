@@ -94,13 +94,12 @@ private struct ComputerRig {
 private func computerRig(
     _ states: [DeviceConnectorID: DeviceConnectorState] = [.shell: .allowed, .files: .allowed],
     computer: FakeComputer = FakeComputer(),
-    providers: Bool = true,
-    consent: Bool = true
+    providers: Bool = true
 ) async -> ComputerRig {
     let api = FakeConnectorsAPI(states)
     let ledger = ConnectorLedger(api: api)
     _ = try? await ledger.refresh()
-    let fakeConsent = FakeConsent(consent)
+    let fakeConsent = FakeConsent()
     let permissions = FakePermissions()
     let executor = DeviceToolExecutor(
         providers: providers ? DeviceProviders(shell: computer, files: computer) : DeviceProviders(),
@@ -176,46 +175,44 @@ struct DeviceComputerExecutorTests {
     }
 
     @Test(arguments: validCalls)
-    func aTurnedOffConnectorIsDeclinedAndNeverRuns(action: String, args: JSONValue) async {
+    func shellAndFilesAnswerWithNoSwitchState(action: String, args: JSONValue) async {
         let rig = await computerRig([:])
         let outcome = await rig.executor.execute(call(action, args: args))
-        #expect(failed(outcome)?.0 == .consentDeclined)
-        #expect(rig.computer.untouched)
+        #expect(succeeded(outcome) != nil)
+        #expect(!rig.computer.untouched)
     }
 
     @Test(arguments: validCalls)
-    func aConnectorTheServerNeverListedIsDeclined(action: String, args: JSONValue) async {
+    func shellAndFilesNeverAskConsentOrWriteSwitchState(action: String, args: JSONValue) async {
+        let rig = await computerRig([.shell: .off, .files: .ask])
+        let outcome = await rig.executor.execute(call(action, args: args, needsConsent: true))
+        #expect(succeeded(outcome) != nil)
+        #expect(rig.consent.asked.withLock { $0 }.isEmpty)
+        #expect(rig.api.sets.isEmpty)
+    }
+
+    @Test(arguments: validCalls)
+    func shellAndFilesWorkWhenTheServerNeverListedThem(action: String, args: JSONValue) async {
         let ledger = ConnectorLedger(api: UnlistedConnectorsAPI())
         _ = try? await ledger.refresh()
         let computer = FakeComputer()
         let executor = DeviceToolExecutor(
-            providers: DeviceProviders(shell: computer, files: computer), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true)
+            providers: DeviceProviders(shell: computer, files: computer), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent()
         )
-        let outcome = await executor.execute(call(action, args: args))
-        #expect(failed(outcome)?.0 == .consentDeclined)
-        #expect(computer.untouched)
+        #expect(succeeded(await executor.execute(call(action, args: args))) != nil)
     }
 
-    @Test func oneConnectorBeingOnDoesNotOpenTheOther() async {
-        let rig = await computerRig([.files: .allowed])
-        let outcome = await rig.executor.execute(call("shell.run", args: ["command": "echo hi"]))
-        #expect(failed(outcome)?.0 == .consentDeclined)
-        #expect(rig.computer.untouched)
-    }
-
-    @Test func aDeclinedAskNeverRunsTheCommand() async {
-        let rig = await computerRig([.shell: .ask], consent: false)
-        let outcome = await rig.executor.execute(call("shell.run", args: ["command": "echo hi"], needsConsent: true))
-        #expect(failed(outcome)?.0 == .consentDeclined)
-        #expect(rig.computer.untouched)
-        #expect(rig.consent.asked.withLock { $0 }.map(\.action) == [.shellRun])
-    }
-
-    @Test func anAllowedAskRunsAndRemembersTheChoice() async {
-        let rig = await computerRig([.files: .ask], consent: true)
-        let outcome = await rig.executor.execute(call("files.read", args: ["path": "/tmp/a.txt"], needsConsent: true))
-        #expect(succeeded(outcome) != nil)
-        #expect(rig.api.sets.contains { $0.0 == .files && $0.1 == .allowed })
+    @Test func gatewayEntriesForShellAndFilesWithUnknownFieldsDecode() throws {
+        let payload: JSONValue = [
+            "device_id": "device-1234",
+            "connectors": [
+                ["id": "shell", "title": "Run commands", "subtitle": "x", "state": "allowed", "always_on": true],
+                ["id": "files", "title": "Files", "subtitle": "x", "state": "allowed", "always_on": true, "future": 1],
+                ["id": "clipboard", "title": "Clipboard", "subtitle": "x", "state": "off"],
+            ],
+        ]
+        let result = try payload.decoded(as: DeviceConnectorsResult.self)
+        #expect(result.connectors.map(\.id) == [.shell, .files, .clipboard])
     }
 
     @Test func noOSPermissionIsEverRequested() async {
@@ -380,14 +377,6 @@ struct DeviceComputerExecutorTests {
         let refusal = failed(await rig.executor.execute(call("files.read", args: ["path": "/secret/x"])))
         #expect(refusal?.0 == .permissionDenied)
         #expect(refusal?.1.contains("/secret/x") == true)
-    }
-
-    @Test func theTwoConnectorsAreNamedForPeopleAndWarnWhenTurnedOn() {
-        #expect(DeviceConnectorDefaults.entry(for: .shell) == ("Run commands", "Let bots run commands on this Mac"))
-        #expect(DeviceConnectorDefaults.entry(for: .files) == ("Files", "Let bots read and change files on this Mac"))
-        #expect(DeviceConnectorDefaults.warning(for: .shell) == "A bot can then run commands on this Mac without asking each time.")
-        #expect(DeviceConnectorDefaults.warning(for: .files)?.contains("read and change files on this Mac") == true)
-        #expect(DeviceConnectorDefaults.warning(for: .calendar) == nil)
     }
 
     @Test func theActionsBelongToTheirConnectors() {
@@ -573,7 +562,7 @@ struct SystemShellTests {
         let ledger = ConnectorLedger(api: api)
         _ = try? await ledger.refresh()
         let executor = DeviceToolExecutor(
-            providers: DeviceProviders(shell: shell), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true)
+            providers: DeviceProviders(shell: shell), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent()
         )
         let outcome = await executor.execute(call("shell.run", args: ["command": "head -c 100000 /dev/zero | tr '\\0' 'a'"], deadline: 60))
         let value = try #require(succeeded(outcome))
@@ -725,7 +714,7 @@ struct SystemFilesTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: path)
         let ledger = ConnectorLedger(api: FakeConnectorsAPI([.files: .allowed]))
         _ = try? await ledger.refresh()
-        let executor = DeviceToolExecutor(providers: DeviceProviders(files: files), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true))
+        let executor = DeviceToolExecutor(providers: DeviceProviders(files: files), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent())
         let refusal = failed(await executor.execute(call("files.read", args: ["path": .string(path)])))
         let resolved = try DevicePath.resolve(path)
         #expect(refusal?.0 == .permissionDenied)
