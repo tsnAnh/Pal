@@ -2513,6 +2513,39 @@ export interface BotRelayReplyParams {
   error?: string | null
   reason?: string | null
 }
+/** ``doctor_ran`` is false when the doctor could not run (``problems`` is then empty and the app must not read it as healthy). ``disk_free_bytes`` is for the volume holding Pal's data. */
+export interface HostHealth {
+  version?: string | null
+  commit?: string | null
+  python_version?: string | null
+  platform?: string | null
+  disk_free_bytes?: number | null
+  disk_total_bytes?: number | null
+  host_uptime_seconds?: number | null
+  profile_count?: number | null
+  running_gateway_count?: number | null
+  doctor_ran: boolean
+  problems: HostProblem[]
+}
+export interface HostProblem {
+  severity: 'warning' | 'error'
+  message: string
+}
+/** ``skip`` is how many of the newest lines to leave out, so the next older page is ``skip = skip + len(lines)``. */
+export interface HostLogsTailParams {
+  name?: HostLogName
+  lines?: number
+  skip?: number
+}
+export type HostLogName = 'gateway' | 'agent' | 'errors'
+/** Newest line last, token-shaped text already replaced. ``available`` is false when the log file does not exist yet. ``truncated`` means older lines were dropped to fit the byte cap. */
+export interface HostLogsTail {
+  name: HostLogName
+  lines: string[]
+  has_more: boolean
+  truncated: boolean
+  available: boolean
+}
 export type HostUpdateCheckParams = Record<string, never>
 /** ``error`` is set only when ``status`` is ``unknown``. ``commits_behind`` is null when the channel pins a release or the count is unknown. ``release_notes_url`` is null unless the install tracks a GitHub remote. */
 export interface HostUpdateCheckResult {
@@ -7825,6 +7858,8 @@ export interface RpcMethods {
   'handoff.request': { params: HandoffRequestParams; result: HandoffRequestResult }
   /** Poll the handoff row for this session. */
   'handoff.state': { params: SessionParams; result: HandoffStateResult }
+  /** Read-only health of the computer running Pal: version, runtime, free disk, uptime, profile counts and the doctor's plain-words problems. Owner only (4403 secondary profile); not a model tool. */
+  'host.health': { params: Params; result: HostHealth }
   /** Start `faker-kit add-project <owner/repo> --json`. The repo must be owner/repo (letters, digits, dot, dash, underscore). 4101 invalid repo, 4409 busy, 4403 secondary profile. */
   'host.kit.add_project': { params: KitAddProjectParams; result: KitJob }
   /** State of a kit job. A finished job stays readable until the next job starts. 4404 unknown job. A job cannot be cancelled. */
@@ -7835,6 +7870,8 @@ export interface RpcMethods {
   'host.kit.status': { params: Params; result: KitReport }
   /** Start `faker-kit host update --json` (update to latest) as the one running kit job, or return the identical running job. 4409 busy, 4403 secondary profile. */
   'host.kit.update': { params: Params; result: KitJob }
+  /** Last lines of one allow-listed Pal log (gateway, agent or errors), newest last, bounded by line and byte caps, with token-shaped text redacted before it leaves the host. Owner only (4403 secondary profile); not a model tool. */
+  'host.logs.tail': { params: HostLogsTailParams; result: HostLogsTail }
   /** Owner only: start the host update, or return the one already running. Refused while a chat runs unless confirmed. */
   'host.update.apply': { params: HostUpdateApplyParams; result: HostUpdateApplyResult }
   /** Owner only: compare this install with the latest on its update channel and list what blocks an update. */
@@ -8376,11 +8413,13 @@ export const RPC_METHODS = [
   'handoff.fail',
   'handoff.request',
   'handoff.state',
+  'host.health',
   'host.kit.add_project',
   'host.kit.job',
   'host.kit.reload',
   'host.kit.status',
   'host.kit.update',
+  'host.logs.tail',
   'host.update.apply',
   'host.update.check',
   'host.update.status',

@@ -34,9 +34,20 @@ public struct GatewayServiceInfo: Sendable, Equatable {
     public var canInstall: Bool { state == .notInstalled }
 }
 
+public struct GatewayServiceWait: Sendable, Equatable {
+    public let seconds: Int
+    public let lastError: String?
+}
+
+public struct GatewayServiceProgress: Sendable, Equatable {
+    public let attempt: Int
+    public let limit: Int
+    public let elapsedSeconds: Int
+}
+
 public enum GatewayServiceOutcome: Sendable, Equatable {
     case done(GatewayServiceInfo)
-    case pending(GatewayServiceInfo?)
+    case pending(GatewayServiceInfo?, GatewayServiceWait? = nil)
     case busy(String)
     case refused(String)
     case unsupported(String)
@@ -94,14 +105,20 @@ public struct GatewayServiceClient: Sendable {
 
     public func status() async throws -> GatewayServiceInfo {
         do {
-            let result = try await gateway.call("gateway.service.status")
-            return try gateway.decoded(GatewayServiceStatusWire.self, result).info
+            return try await readStatus()
         } catch {
             throw BotsError.surface(error)
         }
     }
 
-    public func restart(force: Bool = false) async -> GatewayServiceOutcome {
+    private func readStatus() async throws -> GatewayServiceInfo {
+        let result = try await gateway.call("gateway.service.status")
+        return try gateway.decoded(GatewayServiceStatusWire.self, result).info
+    }
+
+    public func restart(
+        force: Bool = false, progress: (@Sendable (GatewayServiceProgress) -> Void)? = nil
+    ) async -> GatewayServiceOutcome {
         let before = try? await status()
         let action: GatewayServiceActionWire
         do {
@@ -111,10 +128,10 @@ public struct GatewayServiceClient: Sendable {
         } catch GatewayTransportError.rpc {
             return .failed(Self.couldNotRestart)
         } catch {
-            return await awaitNewInstance(replacing: before?.instance)
+            return await awaitNewInstance(replacing: before?.instance, progress: progress)
         }
         switch action.outcome {
-        case "started": return await awaitNewInstance(replacing: action.status.instance)
+        case "started": return await awaitNewInstance(replacing: action.status.instance, progress: progress)
         case "busy": return .busy(action.reason ?? Self.couldNotRestart)
         case "refused": return .refused(action.reason ?? Self.couldNotRestart)
         case "unsupported", "not_installed": return .unsupported(action.reason ?? Self.couldNotRestart)
@@ -140,15 +157,35 @@ public struct GatewayServiceClient: Sendable {
         return try gateway.decoded(GatewayServiceActionWire.self, result)
     }
 
-    private func awaitNewInstance(replacing previous: String?) async -> GatewayServiceOutcome {
+    private func awaitNewInstance(
+        replacing previous: String?, progress: (@Sendable (GatewayServiceProgress) -> Void)?
+    ) async -> GatewayServiceOutcome {
         var last: GatewayServiceInfo?
-        for _ in 0..<pollLimit {
+        var lastError: String?
+        let step = Int(pollInterval.components.seconds)
+        for attempt in 1...max(pollLimit, 1) {
+            progress?(GatewayServiceProgress(attempt: attempt, limit: pollLimit, elapsedSeconds: (attempt - 1) * step))
             do { try await sleep(pollInterval) } catch { return .pending(last) }
-            guard let info = try? await status() else { continue }
-            last = info
-            if info.isRunning, let instance = info.instance, instance != previous { return .done(info) }
+            do {
+                let info = try await readStatus()
+                last = info
+                lastError = nil
+                if info.isRunning, let instance = info.instance, instance != previous { return .done(info) }
+            } catch {
+                lastError = Self.describe(error)
+            }
         }
-        return .pending(last)
+        return .pending(last, GatewayServiceWait(seconds: pollLimit * step, lastError: lastError))
+    }
+
+    static func describe(_ error: any Error) -> String {
+        switch error {
+        case GatewayTransportError.closed: "the connection is closed"
+        case GatewayTransportError.timedOut: "the gateway did not answer"
+        case GatewayTransportError.rpc: "the gateway refused the request"
+        case BotsError.invalidResponse: "the gateway sent an unreadable answer"
+        default: "the gateway is not reachable"
+        }
     }
 
     static let couldNotRestart = "Pal couldn't restart."
