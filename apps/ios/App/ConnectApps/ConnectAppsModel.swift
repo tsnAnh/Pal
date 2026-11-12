@@ -52,16 +52,6 @@ enum ConnectDisconnectTarget: Identifiable {
 
 enum ConnectChip {
     static let all = "all"
-    static let iphone = "iphone"
-    static let mac = "mac"
-
-    static func deviceKind(_ id: String) -> DeviceKind? {
-        switch id {
-        case iphone: .ios
-        case mac: .mac
-        default: nil
-        }
-    }
 }
 
 @MainActor
@@ -126,7 +116,7 @@ final class ConnectAppsModel {
     ) {
         self.profile = profile
         self.botName = botName
-        devices = DeviceConnectorsModel(connection: connection, pool: pool, profile: profile)
+        devices = DeviceConnectorsModel(pool: pool, profile: profile)
         self.bots = bots
         self.currentBot = currentBot
         service = ConnectAppsService(
@@ -145,7 +135,7 @@ final class ConnectAppsModel {
 
     var connectedApps: [ConnectApp] { catalog.connectedApps }
 
-    var chips: [String] { [ConnectChip.all, ConnectChip.iphone, ConnectChip.mac] + catalog.categories }
+    var chips: [String] { [ConnectChip.all] + catalog.categories }
 
     var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
