@@ -161,7 +161,7 @@ struct SettingsRootView: View {
                 SettingsRow.navigate("Bot Computer", accessibilityIdentifier: "settingsBotComputerRow", action: { open(.botComputer) })
                 SettingsRow.navigate("Model providers", accessibilityIdentifier: "settingsModelProvidersRow", action: { open(.modelProviders) })
                 SettingsRow.navigate(
-                    "GitHub token for this machine", subtitle: GitHubTokenCopy.rowSubtitle,
+                    GitHubTokenCopy.title, subtitle: GitHubTokenCopy.rowSubtitle,
                     accessibilityIdentifier: "settingsGitHubTokenRow", action: { open(.githubToken) }
                 )
                 SettingsRow.navigate("Bot models", accessibilityIdentifier: "settingsBotModelsRow", action: { open(.botModels) })

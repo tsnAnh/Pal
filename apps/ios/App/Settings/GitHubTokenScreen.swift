@@ -1,12 +1,13 @@
 import PalBotProfile
 import PalDesign
-import PalProtocol
 import SwiftUI
 
 enum GitHubTokenCopy {
+    static let title = "GitHub for this machine"
     static let rowSubtitle = "Used by gh and the faker-kit tools on this host"
-    static let setup = "One token serves every bot on this host. It needs the classic scopes repo and workflow; workflow also lets bots update workflow files and merge such pull requests. A fine-grained token on an organization needs the organization's approval. The token is never shown again after you save it."
-    static let tokensURL = URL(string: "https://github.com/settings/tokens")!
+    static let setup = "One sign-in serves every bot on this host. Pal never sees the token."
+    static let registration = "Register once: GitHub Settings, Developer settings, OAuth Apps, New. Name: Pal. Homepage and callback: any URL. Tick Enable Device Flow. Copy the client ID and paste it here. If your organization restricts third-party apps, an owner must approve Pal."
+    static let developersURL = URL(string: "https://github.com/settings/developers")!
 }
 
 struct GitHubTokenScreen: View {
@@ -14,7 +15,8 @@ struct GitHubTokenScreen: View {
     let back: () -> Void
 
     @State private var model: GitHubTokenModel
-    @State private var entering = false
+    @State private var showingSignIn = false
+    @State private var clientID = ""
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
@@ -25,80 +27,149 @@ struct GitHubTokenScreen: View {
     }
 
     var body: some View {
-        SettingsPage(title: "GitHub token", identifier: "githubTokenScreen", back: back) {
+        SettingsPage(title: GitHubTokenCopy.title, identifier: "githubTokenScreen", back: back) {
             VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
                 GroupedCard(accessibilityIdentifier: "githubTokenCard") {
                     SettingsRow.value(
-                        "GitHub token for this machine", value: model.headline, subtitle: model.status?.detail,
+                        GitHubTokenCopy.title, value: model.headline, subtitle: model.status?.detail,
                         accessibilityIdentifier: "githubTokenState")
-                    if model.canSet {
+                    if model.needsClientID {
+                        clientIDRows
+                    } else if model.canSignIn {
                         SettingsRow(
-                            title: model.status?.isSet == true ? "Replace token" : "Set token", trailing: .none,
-                            accessibilityIdentifier: "githubTokenSet", action: { open() })
+                            title: model.status?.isSignedIn == true ? "Sign in again" : "Sign in", trailing: .none,
+                            accessibilityIdentifier: "githubTokenSignIn", action: signIn)
                     }
                     SettingsRow(
                         title: "Refresh", trailing: .none, accessibilityIdentifier: "githubTokenRefresh",
                         action: { Task { await model.refresh() } })
-                    SettingsRow.external("Create a token on GitHub", accessibilityIdentifier: "githubTokenCreate") {
-                        ExternalLink.open(GitHubTokenCopy.tokensURL)
+                    if model.needsClientID {
+                        SettingsRow.external("Open GitHub developer settings", accessibilityIdentifier: "githubTokenRegister") {
+                            ExternalLink.open(GitHubTokenCopy.developersURL)
+                        }
                     }
                 }
-                outcome
+                if let footnote = model.footnote {
+                    CardFootnote(footnote, accessibilityIdentifier: "githubTokenFootnote")
+                }
             }
-            CardFootnote(GitHubTokenCopy.setup, accessibilityIdentifier: "githubTokenSetup")
+            CardFootnote(
+                model.needsClientID ? GitHubTokenCopy.registration : GitHubTokenCopy.setup,
+                accessibilityIdentifier: "githubTokenSetup")
         }
         .task { await model.refresh() }
         .refreshable { await model.refresh() }
-        .sheet(isPresented: $entering) {
-            GitHubTokenEntrySheet(model: model) { entering = false }
-                .presentationDetents([.medium])
+        .sheet(isPresented: $showingSignIn, onDismiss: { Task { await model.closeSignIn() } }) {
+            GitHubSignInCodeSheet(model: model) { showingSignIn = false }
                 .macSheetFrame()
         }
     }
 
     @ViewBuilder
-    private var outcome: some View {
-        if let footnote = model.footnote {
-            CardFootnote(footnote, accessibilityIdentifier: "githubTokenFootnote")
-        } else if model.setState == .saved {
-            CardFootnote("Token saved.", accessibilityIdentifier: "githubTokenSaved")
+    private var clientIDRows: some View {
+        TextField("Client ID", text: $clientID, prompt: Text("OAuth app client ID"))
+            .textFieldStyle(.plain)
+            .autocorrectionDisabled()
+            .submitLabel(.done)
+            .onSubmit { Task { await model.saveClientID(clientID) } }
+            .padding(.horizontal, PalMetrics.rowInset)
+            .frame(minHeight: PalMetrics.rowMinimumHeight)
+            .accessibilityLabel(Text("Client ID"))
+            .accessibilityIdentifier("githubTokenClientID")
+        SettingsRow(
+            title: clientIDTitle, value: clientIDValue, trailing: .none,
+            accessibilityIdentifier: "githubTokenClientIDSave", action: { Task { await model.saveClientID(clientID) } })
+    }
+
+    private var clientIDTitle: String {
+        model.clientIDState == .saving ? "Saving…" : "Save client ID"
+    }
+
+    private var clientIDValue: String? {
+        switch model.clientIDState {
+        case .saved: "Saved"
+        case .failed: "Couldn't save"
+        case .idle, .saving: nil
         }
     }
 
-    private func open() {
-        model.resetSetState()
-        entering = true
+    private func signIn() {
+        showingSignIn = true
+        Task { await model.beginSignIn() }
     }
 }
 
-private struct GitHubTokenEntrySheet: View {
+private struct GitHubSignInCodeSheet: View {
     let model: GitHubTokenModel
     let close: () -> Void
 
-    private var state: SecretEntryState {
-        switch model.setState {
-        case .idle: .idle
-        case .submitting: .submitting
-        case .saved: .success
-        case .failed(let text): .failure(text)
+    var body: some View {
+        VStack(spacing: 16) {
+            Text("Sign in to GitHub")
+                .hermesText(.sheetTitle)
+                .foregroundStyle(PalTokens.textPrimary)
+            content
+        }
+        .frame(maxWidth: .infinity)
+        .padding(24)
+        .background(PalTokens.elevated)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("githubSignInSheet")
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        #endif
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.signIn {
+        case .starting, nil:
+            ProgressView().accessibilityIdentifier("githubSignInStarting")
+        case .code(let code):
+            VStack(spacing: 16) {
+                message("Open GitHub and enter this code to approve Pal.")
+                ServiceSignInCodeCard(code: code.userCode).id(code.sessionID)
+                PillButton("Open GitHub", kind: .accent, size: .large, accessibilityIdentifier: "githubSignInOpen") {
+                    ExternalLink.open(code.verificationURL)
+                }
+                message("Waiting for approval…")
+                closeButton("Cancel")
+            }
+        case .signedIn(let login):
+            message(login.map { "Signed in as \($0)." } ?? "Signed in.")
+            closeButton("Done", kind: .accent)
+        case .denied:
+            message("Sign-in was denied.")
+            retryButtons
+        case .expired:
+            message("That code expired.")
+            retryButtons
+        case .organizationApproval:
+            message("An organization owner must approve Pal in the organization's settings, then sign in again.")
+            retryButtons
+        case .failed(let text):
+            message(text)
+            retryButtons
         }
     }
 
-    var body: some View {
-        SecretEntryView(
-            connectorName: "GitHub token",
-            accountLabel: "This machine",
-            purpose: "Paste a GitHub token with the repo and workflow scopes. It is saved on this host for every bot and can't be read back.",
-            fieldLabel: "Token",
-            state: state,
-            identifiers: SecretEntryIdentifiers(
-                field: "githubTokenField", submit: "githubTokenSave", cancel: "githubTokenCancel", status: "githubTokenStatus"),
-            onSubmit: { value in Task { await model.set(SecretString(value)) } },
-            onCancel: close
-        )
-        .padding(24)
-        .onChange(of: model.setState) { _, new in
-            if new == .saved { close() }
+    private var retryButtons: some View {
+        VStack(spacing: 8) {
+            PillButton("Try again", kind: .accent, size: .large, accessibilityIdentifier: "githubSignInRetry") {
+                Task { await model.beginSignIn() }
+            }
+            closeButton("Close")
         }
+    }
+
+    private func closeButton(_ title: String, kind: PillKind = .dimmed) -> some View {
+        PillButton(title, kind: kind, size: .large, accessibilityIdentifier: "githubSignInClose", action: close)
+    }
+
+    private func message(_ text: String) -> some View {
+        Text(text)
+            .hermesText(.rowSubtitle)
+            .foregroundStyle(PalTokens.textSecondary)
+            .multilineTextAlignment(.center)
     }
 }
