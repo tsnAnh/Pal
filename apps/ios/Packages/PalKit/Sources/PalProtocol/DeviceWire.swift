@@ -9,11 +9,12 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
     case alarms
     case shell
     case files
+    case clipboard
 
     public var needsOSPermission: Bool {
         switch self {
         case .shell, .files: false
-        case .calendar, .home, .reminders, .contacts, .location, .alarms: true
+        case .calendar, .home, .reminders, .contacts, .location, .alarms, .clipboard: true
         }
     }
 }
@@ -110,6 +111,8 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
     case filesRead = "files.read"
     case filesList = "files.list"
     case filesWrite = "files.write"
+    case clipboardRead = "clipboard.read"
+    case clipboardWrite = "clipboard.write"
 
     public var connector: DeviceConnectorID {
         switch self {
@@ -121,6 +124,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
         case .homeListAccessories, .homeSet: .home
         case .shellRun: .shell
         case .filesRead, .filesList, .filesWrite: .files
+        case .clipboardRead, .clipboardWrite: .clipboard
         }
     }
 }
@@ -345,6 +349,15 @@ public struct FilesWriteArgs: Decodable, Sendable {
     public var createDirs: Bool?
 }
 
+public struct ClipboardReadArgs: Decodable, Sendable {
+    public var includeImage: Bool?
+}
+
+public struct ClipboardWriteArgs: Decodable, Sendable {
+    public var text: String?
+    public var imageBase64: String?
+}
+
 public struct CalendarEventWire: Encodable, Sendable, Equatable {
     public var id: String
     public var title: String
@@ -563,5 +576,35 @@ public struct FileWriteWire: Encodable, Sendable, Equatable {
     public init(path: String, bytesWritten: Int) {
         self.path = path
         self.bytesWritten = bytesWritten
+    }
+}
+
+public struct ClipboardReadWire: Encodable, Sendable, Equatable {
+    public var types: [String]
+    public var concealed: Bool
+    public var text: String?
+    public var imageBase64: String?
+    public var imageMime: String?
+    public var imageBytes: Int?
+    public var truncated: Bool
+
+    public init(types: [String], concealed: Bool, text: String?, imageBase64: String?, imageMime: String?, imageBytes: Int?, truncated: Bool) {
+        self.types = types
+        self.concealed = concealed
+        self.text = text
+        self.imageBase64 = imageBase64
+        self.imageMime = imageMime
+        self.imageBytes = imageBytes
+        self.truncated = truncated
+    }
+}
+
+public struct ClipboardWriteWire: Encodable, Sendable, Equatable {
+    public var kind: String
+    public var size: Int
+
+    public init(kind: String, size: Int) {
+        self.kind = kind
+        self.size = size
     }
 }

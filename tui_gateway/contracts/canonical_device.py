@@ -18,6 +18,7 @@ class DeviceConnectorId(WireEnum):
     ALARMS = "alarms"
     SHELL = "shell"
     FILES = "files"
+    CLIPBOARD = "clipboard"
 
 
 class DeviceConnectorState(WireEnum):
@@ -51,6 +52,8 @@ class DeviceToolAction(WireEnum):
     FILES_READ = "files.read"
     FILES_LIST = "files.list"
     FILES_WRITE = "files.write"
+    CLIPBOARD_READ = "clipboard.read"
+    CLIPBOARD_WRITE = "clipboard.write"
 
 
 class DeviceToolErrorCode(WireEnum):

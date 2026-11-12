@@ -355,6 +355,7 @@ struct DeviceTile: View {
         case .alarms: "alarm.fill"
         case .shell: "terminal.fill"
         case .files: "folder.fill"
+        case .clipboard: "doc.on.clipboard.fill"
         }
     }
 
@@ -368,6 +369,7 @@ struct DeviceTile: View {
         case .alarms: RGB(hex: 0x2c2c2e)
         case .shell: RGB(hex: 0x3a3a3c)
         case .files: RGB(hex: 0x1c8ef0)
+        case .clipboard: RGB(hex: 0x8e6bd8)
         }
     }
 }

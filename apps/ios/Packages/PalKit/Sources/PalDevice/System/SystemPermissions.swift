@@ -22,6 +22,7 @@ public struct SystemPermissions: DevicePermissions {
         case .alarms: Self.alarmsStatus()
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
+        case .clipboard: Self.clipboardStatus
         }
     }
 
@@ -39,7 +40,7 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestAlarms()
         case .home:
             await Self.requestHome()
-        case .shell, .files:
+        case .shell, .files, .clipboard:
             break
         }
         return await status(of: connector)
@@ -48,6 +49,14 @@ public struct SystemPermissions: DevicePermissions {
     private static var localAccessStatus: DeviceOSPermission {
         #if os(macOS)
         .granted
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static var clipboardStatus: DeviceOSPermission {
+        #if os(macOS)
+        GeneralPasteboard().accessAllowed ? .granted : .denied
         #else
         .unsupported
         #endif
@@ -129,13 +138,15 @@ extension DeviceProviders {
         #if os(macOS)
         let shell: (any ShellProviding)? = SystemShell()
         let files: (any FilesProviding)? = SystemFiles()
+        let clipboard: (any ClipboardProviding)? = SystemClipboard(store: GeneralPasteboard())
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
+        let clipboard: (any ClipboardProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, clipboard: clipboard
         )
     }
 }

@@ -22,12 +22,13 @@ Every bot can see the devices you are logged in on (the Mac and iPhone apps) and
 |---|---|
 | Mac or iPhone | `calendar.*`, `reminders.*`, `contacts.search`, `location.*`, `alarms.*`, `timers.start`, `home.*` |
 | Mac only | `shell.run` (command, cwd, timeout_seconds), `files.read`, `files.list`, `files.write` (path, content) |
+| Mac only | `clipboard.read` (include_image), `clipboard.write` (text or image_base64) |
 
-Output is capped at 128 KB; longer output is cut with a `[truncated, N characters omitted]` marker and `truncated: true`. An iPhone asked for `shell.*` or `files.*` answers `unsupported`.
+Output is capped at 128 KB; longer output is cut with a `[truncated, N characters omitted]` marker and `truncated: true`. Clipboard reads return at most 23 KB of text (cut with `truncated: true`) and an image only when `include_image` is set and it is at most 48 KB; `types` lists what the clipboard holds (`text`, `image`, `file_urls`). Items an app marked concealed or transient (password managers) come back as `concealed: true` with no content. Clipboard writes take up to 100,000 characters of text or a PNG/JPEG of at most 48 KB and are marked auto-generated so clipboard managers can skip them. An iPhone asked for `shell.*`, `files.*` or `clipboard.*` answers `unsupported`.
 
 ## Who stays in control
 
-- **Commands and Files are off by default** on every Mac. Only the person using that Mac switches them on, in the Hermes app's connector settings on that Mac (another device cannot switch them on for it). Once on, bots run those actions with no prompt per action; switching them off stops it at once.
+- **Commands, Files and Clipboard are off by default** on every Mac. Only the person using that Mac switches them on, in the Hermes app's connector settings on that Mac (another device cannot switch them on for it). Once on, bots run those actions with no prompt per action; switching them off stops it at once. The clipboard often holds passwords and private text, and one switch covers both reading and replacing it; its content is untrusted data and is never logged.
 - Apple connectors keep their existing state: `ask` still shows the device's consent prompt and the approval card for changes, `allowed` runs without prompting.
 - A bot reaches only devices logged in to the profile it runs in. Other profiles and other installs are invisible to it: they are not listed and an action naming them fails as an unknown device.
 - There is no screen capture and no screen control.

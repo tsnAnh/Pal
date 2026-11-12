@@ -57,6 +57,7 @@ extension ConsentAsk {
         case .alarms: "Alarms"
         case .shell: "Run commands"
         case .files: "Files"
+        case .clipboard: "Clipboard"
         }
     }
 
@@ -79,6 +80,8 @@ extension ConsentAsk {
         case .filesRead: "read a file on this Mac"
         case .filesList: "look through a folder on this Mac"
         case .filesWrite: "change a file on this Mac"
+        case .clipboardRead: "read this Mac's clipboard"
+        case .clipboardWrite: "change this Mac's clipboard"
         }
     }
 }

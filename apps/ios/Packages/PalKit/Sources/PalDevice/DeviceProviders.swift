@@ -329,6 +329,48 @@ public protocol FilesProviding: Sendable {
     func write(path: String, content: String, append: Bool, createDirs: Bool) async throws -> FileWriteRecord
 }
 
+public struct ClipboardImage: Sendable, Equatable {
+    public var data: Data
+    public var mime: String
+
+    public init(data: Data, mime: String) {
+        self.data = data
+        self.mime = mime
+    }
+}
+
+public struct ClipboardReadRecord: Sendable, Equatable {
+    public var types: [String]
+    public var concealed: Bool
+    public var text: CapturedText?
+    public var image: ClipboardImage?
+    public var imageBytes: Int?
+
+    public init(types: [String], concealed: Bool = false, text: CapturedText? = nil, image: ClipboardImage? = nil, imageBytes: Int? = nil) {
+        self.types = types
+        self.concealed = concealed
+        self.text = text
+        self.image = image
+        self.imageBytes = imageBytes
+    }
+}
+
+public struct ClipboardWriteRecord: Sendable, Equatable {
+    public var kind: String
+    public var size: Int
+
+    public init(kind: String, size: Int) {
+        self.kind = kind
+        self.size = size
+    }
+}
+
+public protocol ClipboardProviding: Sendable {
+    func read(includeImage: Bool, textLimit: Int, imageLimit: Int) async throws -> ClipboardReadRecord
+    func write(text: String) async throws -> ClipboardWriteRecord
+    func write(imageBase64: String, imageLimit: Int) async throws -> ClipboardWriteRecord
+}
+
 public struct DeviceProviders: Sendable {
     public var calendar: (any CalendarProviding)?
     public var reminders: (any RemindersProviding)?
@@ -338,6 +380,7 @@ public struct DeviceProviders: Sendable {
     public var home: (any HomeProviding)?
     public var shell: (any ShellProviding)?
     public var files: (any FilesProviding)?
+    public var clipboard: (any ClipboardProviding)?
 
     public init(
         calendar: (any CalendarProviding)? = nil,
@@ -347,7 +390,8 @@ public struct DeviceProviders: Sendable {
         alarms: (any AlarmsProviding)? = nil,
         home: (any HomeProviding)? = nil,
         shell: (any ShellProviding)? = nil,
-        files: (any FilesProviding)? = nil
+        files: (any FilesProviding)? = nil,
+        clipboard: (any ClipboardProviding)? = nil
     ) {
         self.calendar = calendar
         self.reminders = reminders
@@ -357,6 +401,7 @@ public struct DeviceProviders: Sendable {
         self.home = home
         self.shell = shell
         self.files = files
+        self.clipboard = clipboard
     }
 }
 

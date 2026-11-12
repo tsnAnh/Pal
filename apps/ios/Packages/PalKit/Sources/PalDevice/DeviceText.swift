@@ -13,6 +13,8 @@ public struct CapturedText: Sendable, Equatable {
 public enum DeviceTextLimit {
     public static let output = 48 * 1024
     public static let fileContent = 96 * 1024
+    public static let clipboardText = 23_000
+    public static let clipboardImage = 48 * 1024
     public static let slack = 4
 }
 

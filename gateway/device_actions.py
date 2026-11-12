@@ -20,6 +20,9 @@ MAC_ONLY = frozenset({"mac"})
 MAX_PATH_CHARS = 1000
 SHELL_DEFAULT_TIMEOUT_SECONDS = 30
 SHELL_MAX_TIMEOUT_SECONDS = 300
+CLIPBOARD_TEXT_CHARS = 24_000
+CLIPBOARD_WRITE_CHARS = 100_000
+CLIPBOARD_IMAGE_BASE64_CHARS = 65_536
 TEXT_MARKER = "\n…[truncated, {omitted} characters omitted]"
 
 
@@ -41,6 +44,7 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.ALARMS, "Alarms", "Set alarms and timers"),
     ConnectorInfo(Connector.SHELL, "Run commands", "Let bots run commands on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.FILES, "Files", "Let bots read and change files on this Mac", MAC_ONLY, False),
+    ConnectorInfo(Connector.CLIPBOARD, "Clipboard", "Let bots read and change this Mac's clipboard", MAC_ONLY, False),
 )
 
 
@@ -218,6 +222,21 @@ class FilesWriteArgs(_Args):
     create_dirs: bool = False
 
 
+class ClipboardReadArgs(_Args):
+    include_image: bool = False
+
+
+class ClipboardWriteArgs(_Args):
+    text: str | None = Field(default=None, min_length=1, max_length=CLIPBOARD_WRITE_CHARS)
+    image_base64: str | None = Field(default=None, min_length=1, max_length=CLIPBOARD_IMAGE_BASE64_CHARS)
+
+    @model_validator(mode="after")
+    def _one_kind(self):
+        if (self.text is None) == (self.image_base64 is None):
+            raise ValueError("pass exactly one of text or image_base64")
+        return self
+
+
 class CalendarEvent(_Data):
     id: Identifier
     title: Short
@@ -384,6 +403,21 @@ class FilesWriteResult(_Data):
     bytes_written: int = Field(ge=0)
 
 
+class ClipboardReadResult(_Capped):
+    text_limits: ClassVar[dict[str, int]] = {"text": CLIPBOARD_TEXT_CHARS}
+    types: Annotated[list[Annotated[str, _clipped(40)]], _first(20)] = Field(default_factory=list)
+    concealed: bool = False
+    text: str | None = None
+    image_base64: str | None = Field(default=None, max_length=CLIPBOARD_IMAGE_BASE64_CHARS)
+    image_mime: Annotated[str, _clipped(40)] | None = None
+    image_bytes: int | None = Field(default=None, ge=0)
+
+
+class ClipboardWriteResult(_Data):
+    kind: Literal["text", "image"]
+    size: int = Field(ge=0)
+
+
 def fit_result(data: dict, limit: int) -> dict:
     fitted = dict(data)
     while len(json.dumps(fitted, ensure_ascii=False)) > limit:
@@ -463,6 +497,13 @@ ACTIONS: dict[str, ActionSpec] = dict([
           FilesListArgs, FilesListResult, lambda a: f"List the folder {_quoted(a.path)}", MAC_ONLY),
     _spec("files.write", Connector.FILES, True, "write or append text to a file",
           FilesWriteArgs, FilesWriteResult, lambda a: f"Write the file {_quoted(a.path)}", MAC_ONLY),
+    _spec("clipboard.read", Connector.CLIPBOARD, False,
+          "read the clipboard: text, and which other kinds of content it holds; include_image returns a small image",
+          ClipboardReadArgs, ClipboardReadResult, lambda a: "Read the clipboard", MAC_ONLY),
+    _spec("clipboard.write", Connector.CLIPBOARD, True, "replace the clipboard with text or a small image (base64)",
+          ClipboardWriteArgs, ClipboardWriteResult,
+          lambda a: "Replace the clipboard with " + (f"{len(a.text)} characters of text" if a.text is not None else "an image"),
+          MAC_ONLY),
 ])
 
 
