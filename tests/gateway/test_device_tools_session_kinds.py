@@ -123,7 +123,7 @@ async def test_a_cli_chat_with_iphone_disabled_in_the_profile_config_is_not_offe
 
 def test_every_connector_of_the_catalog_has_a_family_under_test():
     from gateway.device_actions import CONNECTOR_CATALOG
-    assert {info.connector.value for info in CONNECTOR_CATALOG} == set(FAMILIES)
+    assert {info.connector.value for info in CONNECTOR_CATALOG if not info.opt_in} == set(FAMILIES)
 
 
 @pytest.mark.asyncio

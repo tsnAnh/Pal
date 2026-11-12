@@ -21214,7 +21214,8 @@
           "screen",
           "notifications",
           "clipboard",
-          "apps"
+          "apps",
+          "messages"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -21476,7 +21477,11 @@
           "apps.open",
           "apps.quit",
           "windows.list",
-          "windows.focus"
+          "windows.focus",
+          "messages.recent",
+          "messages.search",
+          "messages.read",
+          "messages.send"
         ],
         "title": "DeviceToolAction",
         "type": "string"

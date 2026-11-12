@@ -26,6 +26,15 @@ enum SystemSettings {
     }
 
     @MainActor
+    static var fullDiskAccessURL: URL? {
+        #if os(macOS)
+        URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
+        #else
+        nil
+        #endif
+    }
+
+    @MainActor
     static var screenRecordingURL: URL? {
         #if os(macOS)
         URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
