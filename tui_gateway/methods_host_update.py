@@ -17,7 +17,7 @@ _UPDATE_FORBIDDEN = 4403
 _UPDATE_FAILED = 5321
 
 
-def _owner_only(rid, action):
+def _update_owner_only(rid, action):
     from tui_gateway import host_update
     from tui_gateway.ws_legacy_fallback import connection_profile_home
     if connection_profile_home() is not None:
@@ -31,17 +31,17 @@ def _owner_only(rid, action):
 
 @method("host.update.check")
 def _(rid, params: dict) -> dict:
-    return _owner_only(rid, lambda update: update.check())
+    return _update_owner_only(rid, lambda update: update.check())
 
 
 @method("host.update.apply")
 def _(rid, params: dict) -> dict:
-    return _owner_only(rid, lambda update: update.apply(confirm_turns=bool(params.get("confirm_turns"))))
+    return _update_owner_only(rid, lambda update: update.apply(confirm_turns=bool(params.get("confirm_turns"))))
 
 
 @method("host.update.status")
 def _(rid, params: dict) -> dict:
-    return _owner_only(rid, lambda update: update.status())
+    return _update_owner_only(rid, lambda update: update.status())
 
 
 def register(server) -> None:

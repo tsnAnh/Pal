@@ -204,6 +204,7 @@ def apply(*, confirm_turns: bool) -> dict:
 
 def _detach_kwargs() -> dict:
     from hermes_cli._subprocess_compat import windows_detach_popen_kwargs
+    # detached-spawn: ok — the update ends by restarting the gateway, so it must outlive it
     return windows_detach_popen_kwargs()
 
 
