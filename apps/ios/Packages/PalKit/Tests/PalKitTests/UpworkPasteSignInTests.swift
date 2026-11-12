@@ -130,8 +130,10 @@ struct PastedAuthorizationTests {
     @Test func onlyFormatSlipsKeepTheAttemptOpen() {
         let open: [PasteError] = [.empty, .tooLong, .malformed, .wrongAddress, .duplicateParameter, .missingState, .missingCode]
         let burned: [PasteError] = [.stateMismatch, .denied, .failed]
-        #expect(open.allSatisfy(\.keepsAttemptOpen))
-        #expect(burned.allSatisfy { !$0.keepsAttemptOpen })
+        let openStaysOpen = open.allSatisfy { $0.keepsAttemptOpen }
+        let burnedStaysOpen = burned.contains { $0.keepsAttemptOpen }
+        #expect(openStaysOpen)
+        #expect(!burnedStaysOpen)
     }
 }
 
