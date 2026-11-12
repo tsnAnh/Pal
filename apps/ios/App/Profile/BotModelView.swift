@@ -54,10 +54,8 @@ struct BotModelView: View {
         .task { await model.load() }
         .refreshable { await model.load() }
         .sheet(item: $picking) { mode in
-            NavigationStack {
-                BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback) { picking = nil }
-            }
-            .macSheetFrame()
+            BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback) { picking = nil }
+                .macSheetFrame()
         }
         .confirmationDialog(
             "Use this model?",
@@ -176,6 +174,23 @@ private struct BotModelPicker: View {
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
+        SheetChrome(
+            title: mode == .primary ? String(localized: "Choose a model") : String(localized: "Add a backup model"),
+            accessibilityIdentifier: "botModelPicker",
+            leadingAccessibilityIdentifier: "botModelPickerCancel",
+            onLeading: finish
+        ) {
+            list
+        }
+        .sheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }) {
+            NavigationStack {
+                ModelProvidersScreen(hub: hub) { showsKeys = false }
+            }
+            .macSheetFrame()
+        }
+    }
+
+    private var list: some View {
         ScrollView {
             VStack(spacing: 0) {
                 TextField("Search models", text: $query)
@@ -226,28 +241,6 @@ private struct BotModelPicker: View {
             }
             .padding(.top, 16)
             .padding(.bottom, 32)
-        }
-        .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
-        .accessibilityIdentifier("botModelPicker")
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(mode == .primary ? "Choose a model" : "Add a backup model")
-                    .hermesText(.sheetTitle)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .accessibilityAddTraits(.isHeader)
-            }
-            .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { finish() }
-                    .accessibilityIdentifier("botModelPickerCancel")
-            }
-        }
-        .toolbarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }) {
-            NavigationStack {
-                ModelProvidersScreen(hub: hub) { showsKeys = false }
-            }
-            .macSheetFrame()
         }
     }
 
