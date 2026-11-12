@@ -9,11 +9,12 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
     case alarms
     case shell
     case files
+    case notifications
 
     public var needsOSPermission: Bool {
         switch self {
         case .shell, .files: false
-        case .calendar, .home, .reminders, .contacts, .location, .alarms: true
+        case .calendar, .home, .reminders, .contacts, .location, .alarms, .notifications: true
         }
     }
 }
@@ -110,6 +111,8 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
     case filesRead = "files.read"
     case filesList = "files.list"
     case filesWrite = "files.write"
+    case notifyPost = "notify.post"
+    case notifyCancel = "notify.cancel"
 
     public var connector: DeviceConnectorID {
         switch self {
@@ -121,6 +124,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
         case .homeListAccessories, .homeSet: .home
         case .shellRun: .shell
         case .filesRead, .filesList, .filesWrite: .files
+        case .notifyPost, .notifyCancel: .notifications
         }
     }
 }
@@ -343,6 +347,26 @@ public struct FilesWriteArgs: Decodable, Sendable {
     public var content: String
     public var append: Bool?
     public var createDirs: Bool?
+}
+
+public struct NotifyPostArgs: Decodable, Sendable {
+    public var title: String
+    public var body: String
+    public var subtitle: String?
+    public var sound: Bool?
+    public var identifier: String?
+}
+
+public struct NotifyCancelArgs: Decodable, Sendable {
+    public var identifier: String
+}
+
+public struct NotifyWire: Encodable, Sendable, Equatable {
+    public var identifier: String
+
+    public init(identifier: String) {
+        self.identifier = identifier
+    }
 }
 
 public struct CalendarEventWire: Encodable, Sendable, Equatable {

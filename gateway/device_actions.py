@@ -18,6 +18,10 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f  ‪-‮⁦-⁩]")
 APPLE_KINDS = frozenset({"ios", "mac"})
 MAC_ONLY = frozenset({"mac"})
 MAX_PATH_CHARS = 1000
+NOTIFY_TITLE_CHARS = 80
+NOTIFY_SUBTITLE_CHARS = 80
+NOTIFY_BODY_CHARS = 240
+NOTIFY_ID_CHARS = 64
 SHELL_DEFAULT_TIMEOUT_SECONDS = 30
 SHELL_MAX_TIMEOUT_SECONDS = 300
 TEXT_MARKER = "\n…[truncated, {omitted} characters omitted]"
@@ -41,6 +45,7 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.ALARMS, "Alarms", "Set alarms and timers"),
     ConnectorInfo(Connector.SHELL, "Run commands", "Let bots run commands on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.FILES, "Files", "Let bots read and change files on this Mac", MAC_ONLY, False),
+    ConnectorInfo(Connector.NOTIFICATIONS, "Notifications", "Let bots show notifications on this Mac", MAC_ONLY, False),
 )
 
 
@@ -86,6 +91,8 @@ FilePath = Annotated[str, Field(min_length=1, max_length=MAX_PATH_CHARS), AfterV
 Long = Annotated[str, _clipped(1000)]
 Identifier = Annotated[str, Field(min_length=1, max_length=200)]
 IsoDateTime = Annotated[str, Field(min_length=10, max_length=40), AfterValidator(_iso)]
+NotifyText = Annotated[str, BeforeValidator(lambda value: clean_text(value, 10_000) if isinstance(value, str) else value)]
+NotifyId = Annotated[str, Field(min_length=1, max_length=NOTIFY_ID_CHARS, pattern=r"^[A-Za-z0-9._-]+$")]
 Weekday = Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 
@@ -216,6 +223,24 @@ class FilesWriteArgs(_Args):
     content: str = Field(max_length=200_000)
     append: bool = False
     create_dirs: bool = False
+
+
+class NotifyPostArgs(_Args):
+    title: NotifyText = Field(min_length=1, max_length=NOTIFY_TITLE_CHARS)
+    body: NotifyText = Field(min_length=1, max_length=NOTIFY_BODY_CHARS)
+    subtitle: NotifyText | None = Field(default=None, max_length=NOTIFY_SUBTITLE_CHARS)
+    sound: bool = False
+    identifier: NotifyId | None = None
+
+    @model_validator(mode="after")
+    def _has_text(self):
+        if not self.title.strip() or not self.body.strip():
+            raise ValueError("title and body must not be blank")
+        return self
+
+
+class NotifyCancelArgs(_Args):
+    identifier: NotifyId
 
 
 class CalendarEvent(_Data):
@@ -352,6 +377,10 @@ class _Capped(_Data):
         return data
 
 
+class NotifyResult(_Data):
+    identifier: NotifyId
+
+
 class ShellRunResult(_Capped):
     text_limits: ClassVar[dict[str, int]] = {"stdout": 48_000, "stderr": 48_000}
     exit_code: int | None = None
@@ -412,6 +441,10 @@ class ActionSpec:
     kinds: frozenset[str] = APPLE_KINDS
 
     @property
+    def rate_limited(self) -> bool:
+        return self.name == "notify.post"
+
+    @property
     def truncates(self) -> bool:
         return issubclass(self.result, _Capped)
 
@@ -463,6 +496,14 @@ ACTIONS: dict[str, ActionSpec] = dict([
           FilesListArgs, FilesListResult, lambda a: f"List the folder {_quoted(a.path)}", MAC_ONLY),
     _spec("files.write", Connector.FILES, True, "write or append text to a file",
           FilesWriteArgs, FilesWriteResult, lambda a: f"Write the file {_quoted(a.path)}", MAC_ONLY),
+    _spec("notify.post", Connector.NOTIFICATIONS, True,
+          "show a notification on the Mac, labelled with the bot's name and \"via Pal\"; give an identifier to "
+          "replace an earlier one; title max 80, subtitle max 80, body max 240 characters; sound is off unless true; "
+          "at most 5 per minute per bot",
+          NotifyPostArgs, NotifyResult, lambda a: "Show a notification on this Mac", MAC_ONLY),
+    _spec("notify.cancel", Connector.NOTIFICATIONS, True,
+          "remove a notification this bot posted, by its identifier",
+          NotifyCancelArgs, NotifyResult, lambda a: "Remove a notification this bot posted", MAC_ONLY),
 ])
 
 

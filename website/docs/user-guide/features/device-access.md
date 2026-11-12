@@ -22,11 +22,13 @@ Every bot can see the devices you are logged in on (the Mac and iPhone apps) and
 |---|---|
 | Mac or iPhone | `calendar.*`, `reminders.*`, `contacts.search`, `location.*`, `alarms.*`, `timers.start`, `home.*` |
 | Mac only | `shell.run` (command, cwd, timeout_seconds), `files.read`, `files.list`, `files.write` (path, content) |
+| Mac only | `notify.post` (title, body, subtitle, sound, identifier), `notify.cancel` (identifier) |
 
-Output is capped at 128 KB; longer output is cut with a `[truncated, N characters omitted]` marker and `truncated: true`. An iPhone asked for `shell.*` or `files.*` answers `unsupported`.
+Output is capped at 128 KB; longer output is cut with a `[truncated, N characters omitted]` marker and `truncated: true`. An iPhone asked for `shell.*`, `files.*` or `notify.*` answers `unsupported`.
 
 ## Who stays in control
 
+- **Notifications are off by default** too. Once the person on the Mac switches them on (macOS asks for permission at that moment), a bot can show text on that screen, labelled with its name and "via Pal", and remove only the notifications it posted. Title 80, subtitle 80 and body 240 characters; five a minute per bot and ten a minute per Mac; no sound unless the bot asks, no buttons, no links. A bot cannot read or list any notification.
 - **Commands and Files are off by default** on every Mac. Only the person using that Mac switches them on, in the Hermes app's connector settings on that Mac (another device cannot switch them on for it). Once on, bots run those actions with no prompt per action; switching them off stops it at once.
 - Apple connectors keep their existing state: `ask` still shows the device's consent prompt and the approval card for changes, `allowed` runs without prompting.
 - A bot reaches only devices logged in to the profile it runs in. Other profiles and other installs are invisible to it: they are not listed and an action naming them fails as an unknown device.

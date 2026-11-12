@@ -3,6 +3,7 @@ import CoreLocation
 import EventKit
 import Foundation
 import PalProtocol
+import UserNotifications
 #if canImport(AlarmKit) && os(iOS)
 import AlarmKit
 #endif
@@ -22,6 +23,7 @@ public struct SystemPermissions: DevicePermissions {
         case .alarms: Self.alarmsStatus()
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
+        case .notifications: await Self.notificationsStatus()
         }
     }
 
@@ -41,6 +43,8 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestHome()
         case .shell, .files:
             break
+        case .notifications:
+            await Self.requestNotifications()
         }
         return await status(of: connector)
     }
@@ -50,6 +54,24 @@ public struct SystemPermissions: DevicePermissions {
         .granted
         #else
         .unsupported
+        #endif
+    }
+
+    private static func notificationsStatus() async -> DeviceOSPermission {
+        #if os(macOS)
+        switch await UNUserNotificationCenter.current().notificationSettings().authorizationStatus {
+        case .authorized, .provisional: .granted
+        case .notDetermined: .notDetermined
+        default: .denied
+        }
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static func requestNotifications() async {
+        #if os(macOS)
+        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])
         #endif
     }
 
@@ -129,13 +151,15 @@ extension DeviceProviders {
         #if os(macOS)
         let shell: (any ShellProviding)? = SystemShell()
         let files: (any FilesProviding)? = SystemFiles()
+        let notifications: (any NotificationsProviding)? = SystemNotifications()
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
+        let notifications: (any NotificationsProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, notifications: notifications
         )
     }
 }

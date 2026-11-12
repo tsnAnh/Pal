@@ -18,6 +18,7 @@ class DeviceConnectorId(WireEnum):
     ALARMS = "alarms"
     SHELL = "shell"
     FILES = "files"
+    NOTIFICATIONS = "notifications"
 
 
 class DeviceConnectorState(WireEnum):
@@ -51,6 +52,8 @@ class DeviceToolAction(WireEnum):
     FILES_READ = "files.read"
     FILES_LIST = "files.list"
     FILES_WRITE = "files.write"
+    NOTIFY_POST = "notify.post"
+    NOTIFY_CANCEL = "notify.cancel"
 
 
 class DeviceToolErrorCode(WireEnum):

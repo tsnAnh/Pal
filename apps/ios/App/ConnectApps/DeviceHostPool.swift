@@ -57,6 +57,7 @@ extension ConsentAsk {
         case .alarms: "Alarms"
         case .shell: "Run commands"
         case .files: "Files"
+        case .notifications: "Notifications"
         }
     }
 
@@ -79,6 +80,8 @@ extension ConsentAsk {
         case .filesRead: "read a file on this Mac"
         case .filesList: "look through a folder on this Mac"
         case .filesWrite: "change a file on this Mac"
+        case .notifyPost: "show a notification on this Mac"
+        case .notifyCancel: "remove a notification it showed on this Mac"
         }
     }
 }
