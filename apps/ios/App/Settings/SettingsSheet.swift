@@ -55,6 +55,7 @@ private struct SettingsDestination: View {
         case .devices: DevicesScreen(hub: hub, connection: connection, back: back)
         case .hermesService: PalServiceScreen(hub: hub, back: back)
         case .modelProviders: ModelProvidersScreen(hub: hub, back: back)
+        case .githubToken: GitHubTokenScreen(hub: hub, back: back)
         case .botModels: BotModelsScreen(hub: hub, back: back)
         case .speechMemory: SpeechMemoryScreen(hub: hub, back: back)
         case .importMemory: ImportMemoryScreen(hub: hub, back: back)
@@ -159,6 +160,10 @@ struct SettingsRootView: View {
                 timeZoneRow
                 SettingsRow.navigate("Bot Computer", accessibilityIdentifier: "settingsBotComputerRow", action: { open(.botComputer) })
                 SettingsRow.navigate("Model providers", accessibilityIdentifier: "settingsModelProvidersRow", action: { open(.modelProviders) })
+                SettingsRow.navigate(
+                    "GitHub token for this machine", subtitle: GitHubTokenCopy.rowSubtitle,
+                    accessibilityIdentifier: "settingsGitHubTokenRow", action: { open(.githubToken) }
+                )
                 SettingsRow.navigate("Bot models", accessibilityIdentifier: "settingsBotModelsRow", action: { open(.botModels) })
                 SettingsRow.navigate("Voice and memory", accessibilityIdentifier: "settingsSpeechMemoryRow", action: { open(.speechMemory) })
                 SettingsRow.navigate("Pal service", accessibilityIdentifier: "settingsHermesServiceRow", action: { open(.hermesService) })
