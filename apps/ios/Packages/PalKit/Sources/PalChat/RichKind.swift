@@ -77,7 +77,7 @@ public extension MarkdownBlock {
         switch kind {
         case .code(let language): RichClassifier.classify(language: language, body: String(text.characters))
         case .math: .latex
-        case .paragraph, .heading, .thematicBreak: .plain
+        case .paragraph, .heading, .thematicBreak, .table: .plain
         }
     }
 
