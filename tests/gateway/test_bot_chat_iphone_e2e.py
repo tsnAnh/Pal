@@ -16,7 +16,7 @@ def tool_names(request):
     return [tool['function']['name'] for tool in request.get('tools') or []]
 
 
-def test_a_bot_chat_started_on_the_desktop_carries_the_iphone_tool_once_a_phone_is_registered(tmp_path):
+def test_desktop_chats_carry_the_iphone_tool_once_a_phone_is_registered(tmp_path):
     home, user = tmp_path / 'state', tmp_path / 'user'
     home.mkdir(mode=0o700)
     user.mkdir()
@@ -76,7 +76,7 @@ def test_a_bot_chat_started_on_the_desktop_carries_the_iphone_tool_once_a_phone_
     requests = [request for request in model.requests if request.get('tools') or request.get('messages')]
     plain_turn = requests[:seen['plain_requests']]
     chat_turns = requests[seen['plain_requests']:]
-    assert plain_turn and all('iphone' not in tool_names(request) for request in plain_turn)
+    assert plain_turn and all('iphone' in tool_names(request) for request in plain_turn if request.get('tools'))
     assert chat_turns and all('iphone' in tool_names(request) for request in chat_turns if request.get('tools'))
     assert len({tools_of(request) for request in chat_turns if request.get('tools')}) == 1, (
         'the tool list never changed across the phone disconnecting, connecting and disconnecting')
