@@ -79,5 +79,24 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"ok": True, "name": canonical, "path": str(path)})
 
 
+@method("profiles.describe_auto")
+def _(rid, params: dict) -> dict:
+    name, _profile_dir, err = _resolve_profile(rid, params)
+    if err is not None:
+        return err
+    from tui_gateway.ws_legacy_fallback import connection_profile_home
+    if connection_profile_home() is not None:
+        return _err(rid, 4403, "Only the owner can write a bot's description")
+    from hermes_cli import profile_describer
+    try:
+        outcome = profile_describer.describe_profile(name, overwrite=is_truthy_value(params.get("overwrite", False)))
+    except Exception:
+        logger.exception("profiles.describe_auto failed")
+        return _err(rid, _PROFILE_ADMIN_FAILED, "Could not write a description right now; nothing was changed.")
+    if not outcome.ok:
+        return _err(rid, _PROFILE_ADMIN_REFUSED, outcome.reason or "Could not write a description.")
+    return _ok(rid, {"ok": True, "name": outcome.profile_name, "description": outcome.description or ""})
+
+
 def register(server) -> None:
     bind_module(globals(), server, skip=("_",))
