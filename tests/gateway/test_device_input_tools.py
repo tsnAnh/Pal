@@ -31,12 +31,15 @@ async def mac(authority, label='Work Mac', responder=posted, state='allowed'):
 
 
 @pytest.mark.asyncio
-async def test_input_is_off_by_default_and_a_bot_gets_connector_off(authorities):
+async def test_input_needs_no_switch_and_a_stop_refuses_until_the_app_resumes_it(authorities):
     authority = await authorities()
     work = await mac(authority, state=None)
-    assert 'input' not in (await call_devices_list(authority))['devices'][0]['capabilities']
+    assert (await call_devices_list(authority))['devices'][0]['capabilities']['input'] == 'allowed'
+    await set_state(work, 'input', 'off')
     result = await call_device(authority, 'Work Mac', 'input.click', {'x': 5, 'y': 6})
     assert result['code'] == 'connector_off' and 'stop' in result['error'] and work.requests() == []
+    await set_state(work, 'input', 'allowed')
+    assert (await call_device(authority, 'Work Mac', 'input.click', {'x': 5, 'y': 6})).get('code') != 'connector_off'
     await work.connection.close()
 
 
@@ -71,14 +74,14 @@ async def test_the_stop_gesture_turning_the_switch_off_fails_the_next_call(autho
 
 
 @pytest.mark.asyncio
-async def test_only_the_mac_itself_can_switch_input_on(authorities):
+async def test_only_the_mac_itself_can_stop_or_resume_input(authorities):
     authority = await authorities()
     work = await mac(authority, state=None)
     pocket = await connect_phone(authority, 'Sam iPhone')
-    reply = await pocket.call('device_connectors.set', {'id': 'input', 'state': 'allowed',
+    reply = await pocket.call('device_connectors.set', {'id': 'input', 'state': 'off',
                                                         'device_id': device_id_for('Work Mac')})
     assert 'permission_denied' in json.dumps(reply)
-    assert (await call_device(authority, 'Work Mac', 'input.click', {}))['code'] == 'connector_off'
+    assert (await call_device(authority, 'Work Mac', 'input.click', {})).get('code') != 'connector_off'
     await work.connection.close()
     await pocket.connection.close()
 

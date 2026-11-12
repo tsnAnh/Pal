@@ -6558,6 +6558,7 @@ export interface DeviceConnectorStatus {
   subtitle: string
   state: DeviceConnectorState
   os_permission: DeviceOsPermission
+  always_on?: boolean
 }
 export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files' | 'input' | 'screen' | 'notifications' | 'clipboard' | 'apps'
 export type DeviceConnectorState = 'allowed' | 'ask' | 'off'

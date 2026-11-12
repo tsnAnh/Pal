@@ -97,6 +97,7 @@ class DeviceConnectorStatus(Result):
     subtitle: str
     state: DeviceConnectorState
     os_permission: DeviceOsPermission
+    always_on: bool = False
 
 
 class DeviceConnectorsResult(Result):

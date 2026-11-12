@@ -129,7 +129,7 @@ async def test_devices_list_shows_every_device_with_type_state_last_seen_and_cap
     rows = {row['name']: row for row in listed['devices']}
     assert set(rows) == {'Work Mac', 'Sam iPhone'}
     assert rows['Work Mac']['type'] == 'Mac' and rows['Work Mac']['status'] == 'online'
-    assert rows['Work Mac']['capabilities']['shell'] == 'allowed' and 'files' not in rows['Work Mac']['capabilities']
+    assert rows['Work Mac']['capabilities']['shell'] == 'allowed' and rows['Work Mac']['capabilities']['files'] == 'allowed'
     assert rows['Sam iPhone']['type'] == 'iPhone' and rows['Sam iPhone']['status'] == 'offline'
     assert rows['Sam iPhone']['capabilities']['reminders'] == 'allowed' and 'shell' not in rows['Sam iPhone']['capabilities']
     assert rows['Sam iPhone']['last_seen_at'].endswith('Z') and 'ago' in rows['Sam iPhone']['last_seen'] or \
@@ -274,31 +274,66 @@ async def test_an_iphone_asked_to_run_a_shell_command_or_read_files_is_unsupport
 
 
 @pytest.mark.asyncio
-async def test_shell_and_files_are_off_until_the_mac_itself_switches_them_on(authorities, monkeypatch):
+async def test_shell_and_files_work_on_a_registered_mac_with_no_switch(authorities, monkeypatch):
     authority = await authorities()
-    work = await mac(authority, 'Work Mac', responder=shell_answer)
+    work = await mac(authority, 'Work Mac',
+                     responder=lambda p: shell_answer(p) if p['action'] == 'shell.run' else files_answer(p))
     listed = (await call_devices_list(authority))['devices'][0]
-    assert 'shell' not in listed['capabilities'] and 'files' not in listed['capabilities']
-    for action, args in (('shell.run', {'command': 'uname'}), ('files.read', {'path': '~/a.txt'})):
-        result = await call_device(authority, 'Work Mac', action, args)
-        assert result['code'] == 'connector_off' and 'Work Mac' in result['error']
-    assert work.requests() == []
-    await set_state(work, 'shell', 'allowed')
+    assert listed['capabilities']['shell'] == 'allowed' and listed['capabilities']['files'] == 'allowed'
     assert (await call_device(authority, 'Work Mac', 'shell.run', {'command': 'uname'}))['success'] is True
+    assert (await call_device(authority, 'Work Mac', 'files.read', {'path': '~/a.txt'}))['success'] is True
     await work.connection.close()
 
 
 @pytest.mark.asyncio
-async def test_only_the_device_itself_can_switch_on_commands_and_files(authorities, monkeypatch):
+async def test_a_stored_off_for_shell_and_files_is_ignored_and_never_rewritten(authorities, caplog):
+    from gateway.device_connectors import FILE_NAME
+    authority = await authorities()
+    work = await mac(authority, 'Work Mac', responder=shell_answer)
+    path = home_of(authority) / FILE_NAME
+    stored = json.loads(path.read_text())
+    stored['devices'][device_id_for('Work Mac')]['connectors'] = {'shell': {'state': 'off'}, 'files': {'state': 'off'}}
+    path.write_text(json.dumps(stored))
+    before = path.read_text()
+    assert (await call_device(authority, 'Work Mac', 'shell.run', {'command': 'uname'}))['success'] is True
+    assert path.read_text() == before
+    assert before not in caplog.text and str(path) not in caplog.text
+    await work.connection.close()
+
+
+@pytest.mark.asyncio
+async def test_old_apps_see_shell_and_files_always_on_and_a_set_call_stores_nothing(authorities):
+    from gateway.device_connectors import FILE_NAME
+    authority = await authorities()
+    work = await mac(authority, 'Work Mac')
+    path = home_of(authority) / FILE_NAME
+    before = path.read_text()
+    listed = (await work.call('device_connectors.list', {}))['result']['connectors']
+    rows = {row['id']: row for row in listed}
+    for connector in ('shell', 'files'):
+        assert rows[connector]['state'] == 'allowed' and rows[connector]['always_on'] is True
+        answer = (await work.call('device_connectors.set', {'id': connector, 'state': 'off'}))['result']
+        assert {row['id']: row for row in answer['connectors']}[connector]['state'] == 'allowed'
+    assert path.read_text() == before
+    await work.connection.close()
+
+
+@pytest.mark.asyncio
+async def test_no_registered_device_means_no_device_tools(authorities):
+    from gateway import device_connectors
+    authority = await authorities()
+    assert device_connectors.any_enabled(home_of(authority)) is False
+
+
+@pytest.mark.asyncio
+async def test_only_the_device_itself_can_stop_or_resume_mouse_and_keyboard(authorities, monkeypatch):
     authority = await authorities()
     work = await mac(authority, 'Work Mac', responder=shell_answer)
     pocket = await connect_phone(authority, 'Sam iPhone')
-    for connector in ('shell', 'files'):
-        reply = await pocket.call('device_connectors.set', {
-            'id': connector, 'state': 'allowed', 'device_id': device_id_for('Work Mac')})
-        assert reply['error']['message'] == 'permission_denied' or 'permission_denied' in json.dumps(reply)
-    result = await call_device(authority, 'Work Mac', 'shell.run', {'command': 'uname'})
-    assert result['code'] == 'connector_off' and work.requests() == []
+    reply = await pocket.call('device_connectors.set', {
+        'id': 'input', 'state': 'off', 'device_id': device_id_for('Work Mac')})
+    assert 'permission_denied' in json.dumps(reply)
+    assert (await call_device(authority, 'Work Mac', 'shell.run', {'command': 'uname'}))['success'] is True
     await work.connection.close()
     await pocket.connection.close()
 

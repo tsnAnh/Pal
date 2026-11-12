@@ -6,11 +6,12 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 
-from gateway.device_actions import APPLE_KINDS, CONNECTOR_CATALOG, Connector
+from gateway.device_actions import APPLE_KINDS, CONNECTOR_CATALOG, Connector, connector_info
 from tui_gateway.contracts.canonical_device import DeviceConnectorState as ConnectorState
 from tui_gateway.contracts.canonical_device import DeviceOsPermission as OsPermission
 from utils import atomic_json_write
 
+STOPPABLE = Connector.INPUT
 FILE_NAME = "device_connectors.json"
 SCHEMA_VERSION = 1
 MAX_DEVICES = 16
@@ -31,6 +32,7 @@ class ConnectorStatus:
     subtitle: str
     state: ConnectorState
     os_permission: OsPermission
+    always_on: bool = False
 
 
 _lock = threading.RLock()
@@ -69,6 +71,16 @@ def _entry(device: dict, connector: Connector) -> dict:
     return entry if isinstance(entry, dict) else {}
 
 
+def _state(device: dict, info) -> ConnectorState:
+    entry = _entry(device, info.connector)
+    if info.connector is STOPPABLE:
+        return ConnectorState.OFF if entry.get("stopped") is True else ConnectorState.ALLOWED
+    if not info.on_by_default:
+        return ConnectorState.ALLOWED
+    stored = _enum_or(ConnectorState, entry.get("state"), ConnectorState.ASK)
+    return ConnectorState.ASK if stored is ConnectorState.OFF else stored
+
+
 def kind_of(device: dict) -> str:
     kind = device.get("kind")
     return kind if isinstance(kind, str) and kind else "ios"
@@ -78,9 +90,9 @@ def _status(device: dict) -> list[ConnectorStatus]:
     kind = kind_of(device)
     return [ConnectorStatus(
         info.connector, info.title, info.subtitle,
-        _enum_or(ConnectorState, _entry(device, info.connector).get("state"),
-                 ConnectorState.ASK if info.on_by_default else ConnectorState.OFF),
-        _enum_or(OsPermission, _entry(device, info.connector).get("os_permission"), OsPermission.NOT_DETERMINED))
+        _state(device, info),
+        _enum_or(OsPermission, _entry(device, info.connector).get("os_permission"), OsPermission.NOT_DETERMINED),
+        True)
         for info in CONNECTOR_CATALOG if kind in info.kinds]
 
 
@@ -117,9 +129,15 @@ def update(home: Path, device_id: str, connector: Connector, *, state: Connector
         device = devices.get(device_id)
         if not isinstance(device, dict):
             raise UnknownDevice(device_id)
+        if connector is not STOPPABLE and (state is ConnectorState.OFF or not connector_info(connector).on_by_default):
+            state = None
+        if state is None and os_permission is None:
+            return _status(device)
         connectors = device.setdefault("connectors", {})
         entry = dict(_entry(device, connector))
-        if state is not None:
+        if connector is STOPPABLE and state is not None:
+            entry["stopped"] = state is ConnectorState.OFF
+        elif state is not None:
             entry["state"] = state.value
         if os_permission is not None:
             entry["os_permission"] = os_permission.value
