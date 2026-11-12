@@ -1988,10 +1988,11 @@ export interface KitReport {
   version?: string | null
   status?: string | null
   message?: string | null
+  next_action?: string | null
 }
 export interface KitJob {
   job_id: string
-  operation: 'refresh' | 'update' | 'add_project' | 'reload'
+  operation: 'update' | 'add_project' | 'reload'
   state: 'running' | 'succeeded' | 'failed'
   report?: KitReport | null
   error?: KitError | null
@@ -2001,8 +2002,10 @@ export interface KitError {
   message: string
   subcommand?: string | null
   tail?: string | null
+  kit_code?: string | null
+  next_action?: string | null
 }
-export type KitErrorCode = 'kit_unavailable' | 'kit_unsupported' | 'timeout' | 'failed' | 'invalid_output' | 'busy'
+export type KitErrorCode = 'kit_unavailable' | 'kit_unsupported' | 'timeout' | 'failed' | 'invalid_output' | 'request_refused' | 'busy'
 export interface KitAddProjectParams {
   repo: string
 }
@@ -7792,13 +7795,11 @@ export interface RpcMethods {
   'host.kit.add_project': { params: KitAddProjectParams; result: KitJob }
   /** State of a kit job. A finished job stays readable until the next job starts. 4404 unknown job. A job cannot be cancelled. */
   'host.kit.job': { params: KitJobParams; result: KitJob }
-  /** Start `faker-kit refresh --json` as the one running kit job, or return the identical running job. Poll host.kit.job. Error 4409 (data.code busy) while a different kit job runs. 4403 secondary profile. */
-  'host.kit.refresh': { params: Params; result: KitJob }
-  /** Start `faker-kit reload <routes|gateway> --json`. 4409 busy, 4403 secondary profile. */
+  /** Start `faker-kit host reload <routes|gateway> --json`. 4409 busy, 4403 secondary profile. */
   'host.kit.reload': { params: KitReloadParams; result: KitJob }
-  /** Run `faker-kit status --json` and return its known fields. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed or invalid_output. 4403 secondary profile. */
+  /** Run `faker-kit host status --json` and return its known fields. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output or request_refused (the kit refused a caller that is not the owner's own shell; not retried). 4403 secondary profile. */
   'host.kit.status': { params: Params; result: KitReport }
-  /** Start `faker-kit update --json` (update to latest) as the one running kit job, or return the identical running job. 4409 busy, 4403 secondary profile. */
+  /** Start `faker-kit host update --json` (update to latest) as the one running kit job, or return the identical running job. 4409 busy, 4403 secondary profile. */
   'host.kit.update': { params: Params; result: KitJob }
   /** Pack + overlay messages for one language and surface; the renderer merges them over its bundled catalog. */
   'i18n.catalog': { params: I18nCatalogParams; result: I18nCatalogResult }
@@ -8337,7 +8338,6 @@ export const RPC_METHODS = [
   'handoff.state',
   'host.kit.add_project',
   'host.kit.job',
-  'host.kit.refresh',
   'host.kit.reload',
   'host.kit.status',
   'host.kit.update',

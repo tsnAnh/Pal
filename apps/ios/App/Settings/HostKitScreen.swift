@@ -53,11 +53,6 @@ struct HostKitScreen: View {
     private var actionsCard: some View {
         GroupedCard(accessibilityIdentifier: "hostKitActionsCard") {
             SettingsRow(
-                title: title(.refresh, idle: "Refresh kit", busy: "Refreshing…"), trailing: .none,
-                accessibilityIdentifier: "hostKitRefreshRow", action: { Task { await model.refresh() } }
-            )
-            .disabled(!model.canAct)
-            SettingsRow(
                 title: title(.update, idle: "Update to latest", busy: "Updating…"), trailing: .none,
                 accessibilityIdentifier: "hostKitUpdateRow", action: { Task { await model.update() } }
             )
@@ -140,10 +135,9 @@ struct HostKitScreen: View {
     private var outcomeText: String? {
         switch model.outcome {
         case nil: return nil
-        case .succeeded(_, let report)?: return report.message ?? "Done."
+        case .succeeded(_, let report)?: return [report.message ?? "Done.", report.nextAction].compactMap { $0 }.joined(separator: " ")
         case .failed(_, let failure)?:
-            guard let tail = failure.tail else { return failure.message }
-            return "\(failure.message) \(tail)"
+            return [failure.message, failure.tail].compactMap { $0 }.joined(separator: " ")
         }
     }
 }

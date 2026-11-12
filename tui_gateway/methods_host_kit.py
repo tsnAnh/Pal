@@ -34,11 +34,6 @@ def _(rid, params: dict) -> dict:
     return _kit_owner_only(rid, lambda kit: kit.run("status"))
 
 
-@method("host.kit.refresh")
-def _(rid, params: dict) -> dict:
-    return _kit_owner_only(rid, lambda kit: kit.start("refresh", "refresh"))
-
-
 @method("host.kit.update")
 def _(rid, params: dict) -> dict:
     return _kit_owner_only(rid, lambda kit: kit.start("update", "update"))

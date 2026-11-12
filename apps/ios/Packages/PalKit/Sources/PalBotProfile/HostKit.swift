@@ -4,7 +4,6 @@ import PalProtocol
 import PalTransport
 
 public enum KitOperation: String, Sendable, Equatable {
-    case refresh
     case update
     case addProject = "add_project"
     case reload
@@ -37,11 +36,13 @@ public struct KitReport: Sendable, Equatable {
     public let version: String?
     public let status: String?
     public let message: String?
+    public let nextAction: String?
 
     init(_ value: JSONValue?) {
         version = Self.text(value?["version"]?.stringValue)
         status = Self.text(value?["status"]?.stringValue)
         message = Self.text(value?["message"]?.stringValue)
+        nextAction = Self.text(value?["next_action"]?.stringValue)
     }
 
     private static func text(_ value: String?) -> String? {
@@ -59,6 +60,7 @@ public enum KitFailure: Error, Sendable, Equatable {
     case invalidRepo
     case failed(tail: String?)
     case invalidOutput(tail: String?)
+    case requestRefused
     case unreachable
 
     static func classify(_ error: any Error) -> KitFailure {
@@ -80,6 +82,7 @@ public enum KitFailure: Error, Sendable, Equatable {
         case "timeout": return .timeout
         case "busy": return .busy
         case "invalid_output": return .invalidOutput(tail: tail)
+        case "request_refused": return .requestRefused
         default: return .failed(tail: tail)
         }
     }
@@ -94,6 +97,8 @@ public enum KitFailure: Error, Sendable, Equatable {
         case .invalidRepo: "Enter the project as owner/repo."
         case .failed: "The kit reported a failure."
         case .invalidOutput: "The kit's answer wasn't readable."
+        case .requestRefused:
+            "The kit refused this request because it did not come from the owner's own shell. This needs a gateway identity in the kit; nothing is wrong on your side."
         case .unreachable: "Couldn't reach the kit. Try again."
         }
     }
@@ -198,8 +203,14 @@ public final class KitModel {
         if case .ready(let report) = phase { report } else { nil }
     }
 
+    public var isRefused: Bool {
+        if case .failed(.requestRefused) = phase { return true }
+        if case .failed(_, .requestRefused)? = outcome { return true }
+        return false
+    }
+
     public var canAct: Bool {
-        guard running == nil else { return false }
+        guard running == nil, !isRefused else { return false }
         switch phase {
         case .loading, .failed(.gatewayUnsupported): return false
         default: return true
@@ -209,6 +220,7 @@ public final class KitModel {
     public func refreshStatus() async {
         do {
             phase = .ready(try await client.status())
+            if case .failed(_, .requestRefused)? = outcome { outcome = nil }
         } catch is CancellationError {
             return
         } catch {
@@ -216,7 +228,6 @@ public final class KitModel {
         }
     }
 
-    public func refresh() async { await run(.refresh) }
     public func update() async { await run(.update) }
     public func reload(_ target: KitReloadTarget) async { await run(.reload, target: target) }
 

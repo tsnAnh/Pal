@@ -42,6 +42,7 @@ private func model(_ bots: ScriptedBots) -> KitModel {
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "kit_unavailable"])) == .kitUnavailable)
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "kit_unsupported", "subcommand": "reload"])) == .kitUnsupported(subcommand: "reload"))
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "timeout"])) == .timeout)
+        #expect(KitFailure.classify(rpcError(5321, data: ["code": "request_refused", "kit_code": "request_refused"])) == .requestRefused)
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "failed", "tail": "boom"])) == .failed(tail: "boom"))
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "invalid_output", "tail": "x"])) == .invalidOutput(tail: "x"))
         #expect(KitFailure.classify(GatewayTransportError.timedOut) == .unreachable)
@@ -103,16 +104,48 @@ private func model(_ bots: ScriptedBots) -> KitModel {
     @MainActor
     @Test func busyAndRepeatedPollFailuresAreTyped() async {
         let busy = ScriptedBots()
-        busy.script("host.kit.refresh") { _ in throw rpcError(4409, data: ["code": "busy"]) }
+        busy.script("host.kit.update") { _ in throw rpcError(4409, data: ["code": "busy"]) }
         let first = model(busy)
-        await first.refresh()
-        #expect(first.outcome == .failed(.refresh, .busy))
+        await first.update()
+        #expect(first.outcome == .failed(.update, .busy))
 
         let lost = ScriptedBots()
-        lost.script("host.kit.refresh", jobJSON("running"))
+        lost.script("host.kit.update", jobJSON("running"))
         for _ in 0..<KitModel.maxPollFailures { lost.script("host.kit.job") { _ in throw rpcError(-32000) } }
         let second = model(lost)
-        await second.refresh()
-        #expect(second.outcome == .failed(.refresh, .unreachable))
+        await second.update()
+        #expect(second.outcome == .failed(.update, .unreachable))
+    }
+
+    @MainActor
+    @Test func aRefusalIsItsOwnStateAndStopsFurtherActions() async {
+        let bots = ScriptedBots()
+        bots.script("host.kit.status", .object(["version": "1"]))
+        bots.script("host.kit.update", jobJSON("failed", error: ["code": "request_refused"]))
+        let kit = model(bots)
+        await kit.refreshStatus()
+        #expect(kit.canAct)
+        await kit.update()
+        #expect(kit.outcome == .failed(.update, .requestRefused))
+        #expect(kit.isRefused && !kit.canAct)
+        #expect(KitFailure.requestRefused.message.contains("did not come from the owner's own shell"))
+        #expect(bots.calls(to: "host.kit.update").count == 1)
+
+        let refused = ScriptedBots()
+        refused.script("host.kit.status") { _ in throw rpcError(5321, data: ["code": "request_refused"]) }
+        let blocked = model(refused)
+        await blocked.refreshStatus()
+        #expect(blocked.phase == .failed(.requestRefused) && !blocked.canAct)
+    }
+
+    @MainActor
+    @Test func nextActionIsTextOnly() async {
+        let bots = ScriptedBots()
+        bots.script("host.kit.reload", jobJSON("succeeded", report: ["next_action": "run: restart the app"]))
+        bots.script("host.kit.status", .object([:]))
+        let kit = model(bots)
+        await kit.reload(.routes)
+        #expect(kit.outcome == .succeeded(.reload, KitReport(["next_action": "run: restart the app"])))
+        #expect(bots.calls.map(\.method) == ["host.kit.reload", "host.kit.status"])
     }
 }
