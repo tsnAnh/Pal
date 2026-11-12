@@ -1411,6 +1411,96 @@
       }
     },
     {
+      "name": "github.git_protocol.fix",
+      "summary": "Set git and gh to HTTPS for github.com (idempotent) and return the fresh status.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubStatus"
+        }
+      }
+    },
+    {
+      "name": "github.signin.cancel",
+      "summary": "Stop a pending GitHub sign-in and its gh process.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GithubSigninSessionParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubSigninCancelResult"
+        }
+      }
+    },
+    {
+      "name": "github.signin.poll",
+      "summary": "State of the sign-in; on signed_in the git protocol fix is already applied.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GithubSigninSessionParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubSigninPollResult"
+        }
+      }
+    },
+    {
+      "name": "github.signin.start",
+      "summary": "Start GitHub's device flow through gh; a pending sign-in is returned again instead of a second one.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubSigninStartResult"
+        }
+      }
+    },
+    {
+      "name": "github.status",
+      "summary": "GitHub sign-in and git/gh health on the host: the host user's single gh login and its problems.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubStatus"
+        }
+      }
+    },
+    {
       "name": "groups.approve",
       "summary": "Resolve one exact pending approval raised by a local or peer room member.",
       "params": [
@@ -24177,6 +24267,207 @@
           "active_runs"
         ],
         "title": "GatewayServiceStatus",
+        "type": "object"
+      },
+      "GithubProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GithubProblemId"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "fix": {
+            "$ref": "#/components/schemas/GithubProblemFix"
+          }
+        },
+        "required": [
+          "id",
+          "message",
+          "fix"
+        ],
+        "title": "GithubProblem",
+        "type": "object"
+      },
+      "GithubProblemFix": {
+        "enum": [
+          "github.signin",
+          "github.git_protocol.fix"
+        ],
+        "title": "GithubProblemFix",
+        "type": "string"
+      },
+      "GithubProblemId": {
+        "enum": [
+          "gh_signed_out",
+          "git_ssh_unknown_host"
+        ],
+        "title": "GithubProblemId",
+        "type": "string"
+      },
+      "GithubSigninCancelResult": {
+        "additionalProperties": false,
+        "properties": {
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "title": "GithubSigninCancelResult",
+        "type": "object"
+      },
+      "GithubSigninPollResult": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "pending",
+              "signed_in",
+              "expired",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Login"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "GithubSigninPollResult",
+        "type": "object"
+      },
+      "GithubSigninSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "GithubSigninSessionParams",
+        "type": "object"
+      },
+      "GithubSigninStartResult": {
+        "additionalProperties": false,
+        "description": "The one-time device code and where to enter it. ``expires_in`` and ``interval`` are seconds.",
+        "properties": {
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "user_code": {
+            "title": "User Code",
+            "type": "string"
+          },
+          "verification_uri": {
+            "title": "Verification Uri",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "interval": {
+            "title": "Interval",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "user_code",
+          "verification_uri",
+          "expires_in",
+          "interval"
+        ],
+        "title": "GithubSigninStartResult",
+        "type": "object"
+      },
+      "GithubStatus": {
+        "additionalProperties": false,
+        "description": "``git_protocol`` is gh's value for github.com (``unset`` when gh cannot say). A field that could not\nbe read degrades to null, ``unset`` or false.",
+        "properties": {
+          "signed_in": {
+            "title": "Signed In",
+            "type": "boolean"
+          },
+          "login": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Login"
+          },
+          "host": {
+            "const": "github.com",
+            "title": "Host",
+            "type": "string"
+          },
+          "git_protocol": {
+            "enum": [
+              "https",
+              "ssh",
+              "unset"
+            ],
+            "title": "Git Protocol",
+            "type": "string"
+          },
+          "ssh_host_key_known": {
+            "title": "Ssh Host Key Known",
+            "type": "boolean"
+          },
+          "problems": {
+            "items": {
+              "$ref": "#/components/schemas/GithubProblem"
+            },
+            "title": "Problems",
+            "type": "array"
+          }
+        },
+        "required": [
+          "signed_in",
+          "host",
+          "git_protocol",
+          "ssh_host_key_known",
+          "problems"
+        ],
+        "title": "GithubStatus",
         "type": "object"
       },
       "GoalContractSnapshot": {
