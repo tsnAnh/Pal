@@ -183,7 +183,7 @@ extension DeviceProviders {
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, apps: apps, notifications: notifications
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, notifications: notifications, apps: apps
         )
     }
 }
