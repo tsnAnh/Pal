@@ -1998,10 +1998,17 @@ export interface KitReport {
   status?: string | null
   message?: string | null
   next_action?: string | null
+  credential?: KitCredential | null
+}
+export interface KitCredential {
+  present?: boolean | null
+  created?: boolean | null
+  rotated?: boolean | null
+  created_at?: string | null
 }
 export interface KitJob {
   job_id: string
-  operation: 'update' | 'add_project' | 'reload'
+  operation: 'update' | 'reload' | 'rotate'
   state: 'running' | 'succeeded' | 'failed'
   report?: KitReport | null
   error?: KitError | null
@@ -2014,10 +2021,7 @@ export interface KitError {
   kit_code?: string | null
   next_action?: string | null
 }
-export type KitErrorCode = 'kit_unavailable' | 'kit_unsupported' | 'timeout' | 'failed' | 'invalid_output' | 'request_refused' | 'busy'
-export interface KitAddProjectParams {
-  repo: string
-}
+export type KitErrorCode = 'kit_unavailable' | 'kit_unsupported' | 'timeout' | 'failed' | 'invalid_output' | 'request_refused' | 'busy' | 'credential_missing' | 'credential_unreadable'
 export interface KitReloadParams {
   target: 'routes' | 'gateway'
 }
@@ -7907,15 +7911,15 @@ export interface RpcMethods {
   'handoff.state': { params: SessionParams; result: HandoffStateResult }
   /** Read-only health of the computer running Pal: version, runtime, free disk, uptime, profile counts and the doctor's plain-words problems. Owner only (4403 secondary profile); not a model tool. */
   'host.health': { params: Params; result: HostHealth }
-  /** Start `faker-kit add-project <owner/repo> --json`. The repo must be owner/repo (letters, digits, dot, dash, underscore). 4101 invalid repo, 4409 busy, 4403 secondary profile. */
-  'host.kit.add_project': { params: KitAddProjectParams; result: KitJob }
   /** State of a kit job. A finished job stays readable until the next job starts. 4404 unknown job. A job cannot be cancelled. */
   'host.kit.job': { params: KitJobParams; result: KitJob }
-  /** Start `faker-kit host reload <routes|gateway> --json`. 4409 busy, 4403 secondary profile. */
+  /** Start `faker-kit host reload <routes|gateway> --json --secret-stdin`. 4409 busy, 4403 secondary profile. */
   'host.kit.reload': { params: KitReloadParams; result: KitJob }
-  /** Run `faker-kit host status --json` and return its known fields. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output or request_refused (the kit refused a caller that is not the owner's own shell; not retried). 4403 secondary profile. */
+  /** Start `faker-kit host rotate --json --secret-stdin`: replace the app's credential. The report carries credential.rotated and created_at, never the value. credential_missing before the first update. 4409 busy, 4403 secondary profile. */
+  'host.kit.rotate': { params: Params; result: KitJob }
+  /** Run `faker-kit host status --json --secret-stdin` and return its known fields; the app's credential is read from the host's secret file on every call and sent on stdin, never returned. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output, credential_missing (the first update creates it), credential_unreadable or request_refused (this machine is not set up for the app; not retried). 4409 busy (the kit is updating), 4403 secondary profile. */
   'host.kit.status': { params: Params; result: KitReport }
-  /** Start `faker-kit host update --json` (update to latest) as the one running kit job, or return the identical running job. 4409 busy, 4403 secondary profile. */
+  /** Start `faker-kit host update --json --secret-stdin` (update to latest) as the one running kit job, or return the identical running job. With no credential file yet the first update runs without it and the kit creates one (report.credential.created). 4409 busy, 4403 secondary profile. */
   'host.kit.update': { params: Params; result: KitJob }
   /** Last lines of one allow-listed Pal log (gateway, agent or errors), newest last, bounded by line and byte caps, with token-shaped text redacted before it leaves the host. Owner only (4403 secondary profile); not a model tool. */
   'host.logs.tail': { params: HostLogsTailParams; result: HostLogsTail }
@@ -8462,9 +8466,9 @@ export const RPC_METHODS = [
   'handoff.request',
   'handoff.state',
   'host.health',
-  'host.kit.add_project',
   'host.kit.job',
   'host.kit.reload',
+  'host.kit.rotate',
   'host.kit.status',
   'host.kit.update',
   'host.logs.tail',
