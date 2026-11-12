@@ -1393,6 +1393,24 @@
       }
     },
     {
+      "name": "gateway.guards.status",
+      "summary": "The bot loop guard limits the gateway enforces now, one entry per gateway.bot_loop_guard key: the effective value, whether it came from config or the default, and whether the hard limit in code clamped it. Read-only; reads the live config, so an edit shows without a restart. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GuardsStatus"
+        }
+      }
+    },
+    {
       "name": "gateway.service.install",
       "summary": "Install the gateway as a login service where the host supports one.",
       "params": [
@@ -27074,6 +27092,66 @@
           "cancelled"
         ],
         "title": "GroupsStopResult",
+        "type": "object"
+      },
+      "GuardValue": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "Value"
+          },
+          "source": {
+            "enum": [
+              "config",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "clamped": {
+            "title": "Clamped",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "key",
+          "value",
+          "source",
+          "clamped"
+        ],
+        "title": "GuardValue",
+        "type": "object"
+      },
+      "GuardsStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "guards": {
+            "items": {
+              "$ref": "#/components/schemas/GuardValue"
+            },
+            "title": "Guards",
+            "type": "array"
+          }
+        },
+        "required": [
+          "guards"
+        ],
+        "title": "GuardsStatus",
         "type": "object"
       },
       "HandoffFailParams": {
