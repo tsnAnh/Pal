@@ -4,7 +4,7 @@ import SwiftUI
 
 enum HostKitCopy {
     static let title = "Kit"
-    static let rowSubtitle = "Version, update, projects and reloads on this host"
+    static let rowSubtitle = "Version, update, key and reloads on this host"
     static let footnote = "The kit on the computer you're connected to. Operations run one at a time."
 }
 
@@ -13,8 +13,8 @@ struct HostKitScreen: View {
     let back: () -> Void
 
     @State private var model: KitModel
-    @State private var repo = ""
     @State private var confirmingGatewayReload = false
+    @State private var confirmingRotate = false
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
@@ -31,10 +31,12 @@ struct HostKitScreen: View {
                 if let status = model.report?.status {
                     SettingsRow.value("Status", value: status, subtitle: model.report?.message, accessibilityIdentifier: "hostKitStatus")
                 }
+                if let credential = model.credentialText {
+                    SettingsRow.value("Key", value: credential, accessibilityIdentifier: "hostKitCredential")
+                }
             }
             if model.phase != .failed(.gatewayUnsupported) {
                 actionsCard
-                projectCard
                 reloadCard
             }
             outcomeNote
@@ -48,34 +50,26 @@ struct HostKitScreen: View {
         } message: {
             Text("Chats on this host reconnect once it is back.")
         }
+        .confirmationDialog("Replace the app's key to the kit?", isPresented: $confirmingRotate, titleVisibility: .visible) {
+            Button("Replace key", role: .destructive) { Task { await model.rotate() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The app uses the new key from its next request.")
+        }
     }
 
     private var actionsCard: some View {
         GroupedCard(accessibilityIdentifier: "hostKitActionsCard") {
             SettingsRow(
-                title: title(.update, idle: "Update to latest", busy: "Updating…"), trailing: .none,
+                title: title(.update, idle: "Update kit", busy: "Updating…"), trailing: .none,
                 accessibilityIdentifier: "hostKitUpdateRow", action: { Task { await model.update() } }
             )
             .disabled(!model.canAct)
-        }
-    }
-
-    private var projectCard: some View {
-        GroupedCard(accessibilityIdentifier: "hostKitProjectCard") {
-            TextField("Project", text: $repo, prompt: Text("owner/repo"))
-                .textFieldStyle(.plain)
-                .autocorrectionDisabled()
-                .submitLabel(.done)
-                .onSubmit(addProject)
-                .padding(.horizontal, PalMetrics.rowInset)
-                .frame(minHeight: PalMetrics.rowMinimumHeight)
-                .accessibilityLabel(Text("Project"))
-                .accessibilityIdentifier("hostKitProjectField")
             SettingsRow(
-                title: title(.addProject, idle: "Add project", busy: "Adding…"), value: projectValue, trailing: .none,
-                accessibilityIdentifier: "hostKitAddProjectRow", action: addProject
+                title: title(.rotate, idle: "Rotate key", busy: "Rotating…"), trailing: .none,
+                accessibilityIdentifier: "hostKitRotateRow", action: { confirmingRotate = true }
             )
-            .disabled(!model.canAct || !KitRepo.isValid(repo.trimmingCharacters(in: .whitespacesAndNewlines)))
+            .disabled(!model.canRotate)
         }
     }
 
@@ -105,25 +99,14 @@ struct HostKitScreen: View {
         model.running == operation ? busy : idle
     }
 
-    private func addProject() {
-        Task { await model.addProject(repo) }
-    }
-
     private var versionText: String {
         switch model.phase {
         case .loading: " "
         case .ready(let report): report.version ?? "Unknown"
         case .failed(.kitUnavailable): "Not installed"
+        case .failed(.busy): "Updating…"
         case .failed(.gatewayUnsupported): "Not supported yet"
         case .failed: "Unavailable"
-        }
-    }
-
-    private var projectValue: String? {
-        switch model.outcome {
-        case .succeeded(.addProject, _)?: "Saved"
-        case .failed(.addProject, _)?: "Failed"
-        default: nil
         }
     }
 

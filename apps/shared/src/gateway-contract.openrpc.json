@@ -2059,24 +2059,6 @@
       }
     },
     {
-      "name": "host.kit.add_project",
-      "summary": "Start `faker-kit add-project <owner/repo> --json`. The repo must be owner/repo (letters, digits, dot, dash, underscore). 4101 invalid repo, 4409 busy, 4403 secondary profile.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/KitAddProjectParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/KitJob"
-        }
-      }
-    },
-    {
       "name": "host.kit.job",
       "summary": "State of a kit job. A finished job stays readable until the next job starts. 4404 unknown job. A job cannot be cancelled.",
       "params": [
@@ -2096,7 +2078,7 @@
     },
     {
       "name": "host.kit.reload",
-      "summary": "Start `faker-kit host reload <routes|gateway> --json`. 4409 busy, 4403 secondary profile.",
+      "summary": "Start `faker-kit host reload <routes|gateway> --json --secret-stdin`. 4409 busy, 4403 secondary profile.",
       "params": [
         {
           "name": "params",
@@ -2113,8 +2095,26 @@
       }
     },
     {
+      "name": "host.kit.rotate",
+      "summary": "Start `faker-kit host rotate --json --secret-stdin`: replace the app's credential. The report carries credential.rotated and created_at, never the value. credential_missing before the first update. 4409 busy, 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KitJob"
+        }
+      }
+    },
+    {
       "name": "host.kit.status",
-      "summary": "Run `faker-kit host status --json` and return its known fields. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output or request_refused (the kit refused a caller that is not the owner's own shell; not retried). 4403 secondary profile.",
+      "summary": "Run `faker-kit host status --json --secret-stdin` and return its known fields; the app's credential is read from the host's secret file on every call and sent on stdin, never returned. Owner-only. Error 5321 carries data (KitError): kit_unavailable, kit_unsupported, timeout, failed, invalid_output, credential_missing (the first update creates it), credential_unreadable or request_refused (this machine is not set up for the app; not retried). 4409 busy (the kit is updating), 4403 secondary profile.",
       "params": [
         {
           "name": "params",
@@ -2132,7 +2132,7 @@
     },
     {
       "name": "host.kit.update",
-      "summary": "Start `faker-kit host update --json` (update to latest) as the one running kit job, or return the identical running job. 4409 busy, 4403 secondary profile.",
+      "summary": "Start `faker-kit host update --json --secret-stdin` (update to latest) as the one running kit job, or return the identical running job. With no credential file yet the first update runs without it and the kit creates one (report.credential.created). 4409 busy, 4403 secondary profile.",
       "params": [
         {
           "name": "params",
@@ -28840,19 +28840,59 @@
         "title": "KanbanRunResult",
         "type": "object"
       },
-      "KitAddProjectParams": {
+      "KitCredential": {
         "additionalProperties": false,
         "properties": {
-          "repo": {
-            "maxLength": 100,
-            "title": "Repo",
-            "type": "string"
+          "present": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Present"
+          },
+          "created": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created"
+          },
+          "rotated": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Rotated"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
           }
         },
-        "required": [
-          "repo"
-        ],
-        "title": "KitAddProjectParams",
+        "title": "KitCredential",
         "type": "object"
       },
       "KitError": {
@@ -28929,7 +28969,9 @@
           "failed",
           "invalid_output",
           "request_refused",
-          "busy"
+          "busy",
+          "credential_missing",
+          "credential_unreadable"
         ],
         "title": "KitErrorCode",
         "type": "string"
@@ -28944,8 +28986,8 @@
           "operation": {
             "enum": [
               "update",
-              "add_project",
-              "reload"
+              "reload",
+              "rotate"
             ],
             "title": "Operation",
             "type": "string"
@@ -29073,6 +29115,17 @@
             ],
             "default": null,
             "title": "Next Action"
+          },
+          "credential": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KitCredential"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "title": "KitReport",

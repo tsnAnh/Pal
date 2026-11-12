@@ -5,26 +5,29 @@ import logging
 import os
 import re
 import signal
+import stat
 import subprocess
 import threading
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from agent.memory_provider import spawn_context_thread
+from hermes_constants import get_default_hermes_root
 
 from .contracts.host_kit import KitReport
 
 logger = logging.getLogger(__name__)
-BINARY = "faker-kit"
+LAUNCHER = "faker-kit"
+SECRET_FILE = "host-secret"
+SECRET_MAX_BYTES = 128
 STATUS_TIMEOUT_SECONDS = 20.0
 JOB_TIMEOUT_SECONDS = 900.0
 MAX_OUTPUT_BYTES = 262144
 TAIL_CHARS = 600
 
-SUBCOMMANDS = {"status": ("host", "status"), "update": ("host", "update"), "reload": ("host", "reload"),
-               "add-project": ("add-project",)}
+SUBCOMMANDS = frozenset({"status", "update", "reload", "rotate"})
 RELOAD_TARGETS = frozenset({"routes", "gateway"})
-REPO = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})/[A-Za-z0-9._-]{1,100}$")
 _TOKEN_VARS = ("GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN")
 _UNSUPPORTED = re.compile(r"unknown (sub)?command|invalid choice|unrecognized (arguments|option)|no such (sub)?command|"
                           r"unknown (option|flag)|unexpected argument|not (yet )?supported|usage:", re.IGNORECASE)
@@ -51,18 +54,55 @@ def host_env() -> dict[str, str]:
     return env
 
 
-def build_argv(subcommand: str, arg: str | None = None) -> list[str]:
+def kit_home() -> Path:
+    configured = os.environ.get("FAKER_KIT_HOME", "").strip()
+    return Path(configured).expanduser() if configured else get_default_hermes_root() / "faker-kit"
+
+
+def launcher_path() -> str:
+    path = kit_home() / "bin" / LAUNCHER
+    if not path.is_file() or not os.access(path, os.X_OK):
+        raise KitFailure("kit_unavailable", "The kit isn't installed on this computer.")
+    return str(path)
+
+
+def check_args(subcommand: str, arg: str | None = None) -> None:
     if subcommand not in SUBCOMMANDS:
         raise ValueError(f"unknown kit subcommand {subcommand!r}")
-    if subcommand == "add-project":
-        if not isinstance(arg, str) or not REPO.fullmatch(arg) or ".." in arg:
-            raise ValueError("repo must be owner/repo")
-    elif subcommand == "reload":
+    if subcommand == "reload":
         if arg not in RELOAD_TARGETS:
             raise ValueError("reload target must be routes or gateway")
     elif arg is not None:
         raise ValueError(f"{subcommand} takes no argument")
-    return [BINARY, *SUBCOMMANDS[subcommand], *([arg] if arg is not None else []), "--json"]
+
+
+def build_argv(subcommand: str, arg: str | None = None, with_secret: bool = True) -> list[str]:
+    check_args(subcommand, arg)
+    return [launcher_path(), "host", subcommand, *([arg] if arg is not None else []), "--json",
+            *(["--secret-stdin"] if with_secret else [])]
+
+
+def read_secret() -> bytes | None:
+    path = kit_home() / SECRET_FILE
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise KitFailure("credential_unreadable", f"The kit credential ({SECRET_FILE}) can't be read.") from None
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_mode & 0o077 or info.st_uid != os.geteuid():
+            raise KitFailure("credential_unreadable", f"The kit credential ({SECRET_FILE}) has the wrong permissions.")
+        data = os.read(fd, SECRET_MAX_BYTES + 2)
+    except OSError:
+        raise KitFailure("credential_unreadable", f"The kit credential ({SECRET_FILE}) can't be read.") from None
+    finally:
+        os.close(fd)
+    line = data.rstrip(b"\r\n")
+    if not line or len(line) > SECRET_MAX_BYTES or b"\n" in line or line != line.strip():
+        raise KitFailure("credential_unreadable", f"The kit credential ({SECRET_FILE}) isn't in the expected form.")
+    return line
 
 
 def _tail(text: str) -> str:
@@ -88,14 +128,25 @@ def _drain(stream, sink: list[bytes], overflow: threading.Event, proc: subproces
             _kill(proc)
 
 
-def _execute(name: str, argv: list[str], timeout: float) -> tuple[int, str, str]:
+def _feed(proc: subprocess.Popen, secret: bytes | None) -> None:
+    if secret is None:
+        return
+    try:
+        proc.stdin.write(secret + b"\n")
+        proc.stdin.close()
+    except OSError:
+        pass
+
+
+def _execute(name: str, argv: list[str], timeout: float, secret: bytes | None = None) -> tuple[int, str, str]:
     try:
         proc = subprocess.Popen(  # health: allow HX006 -- proc.wait(timeout=) below bounds it and kills the group
-            argv, shell=False, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            env=host_env(),
+            argv, shell=False, stdin=subprocess.DEVNULL if secret is None else subprocess.PIPE,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=host_env(),
             start_new_session=True)  # detached-spawn: ok -- awaited with a group-killing timeout (_kill)
     except OSError:
         raise KitFailure("kit_unavailable", "The kit isn't installed on this computer.", name) from None
+    _feed(proc, secret)
     out: list[bytes] = []
     err: list[bytes] = []
     overflow = threading.Event()
@@ -144,23 +195,49 @@ def _report(body: dict) -> dict:
     def pick(key: str) -> str | None:
         return _text(body.get(key) if body.get(key) is not None else data.get(key), 200)
 
-    return {"version": pick("version"), "status": pick("status"), "message": _text(body.get("message")),
-            "next_action": _next_action(body)}
+    kit = data.get("kit") if isinstance(data.get("kit"), dict) else {}
+    commit = _text(kit.get("installed_commit"), 40)
+    return {"version": pick("version") or (commit[:12] if commit else None), "status": pick("status"),
+            "message": _text(body.get("message")), "next_action": _next_action(body), "credential": _credential(data)}
+
+
+def _flag(value: object) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
+def _credential(data: dict) -> dict | None:
+    owner = data.get("owner_credential") if isinstance(data.get("owner_credential"), dict) else {}
+    state = {"present": _flag(owner.get("present")), "created": _flag(owner.get("created")),
+             "rotated": _flag(data.get("rotated")),
+             "created_at": _text(owner.get("created_at") or data.get("created_at"), 40)}
+    return state if any(value is not None for value in state.values()) else None
+
+
+_KIT_CODES = {"request_refused": "request_refused", "update_in_progress": "busy"}
+_NO_TAIL = frozenset(_KIT_CODES.values())
 
 
 def _kit_refusal(name: str, body: dict, tail: str) -> KitFailure | None:
     kit_code = _text(body.get("code"), 64)
-    if body.get("ok") is not False and kit_code is None:
+    if body.get("ok") is not False and kit_code in (None, "ok"):
         return None
     message = _text(body.get("message")) or f"The kit refused `{name}`."
-    code = "request_refused" if kit_code == "request_refused" else "failed"
-    return KitFailure(code, message, name, None if code == "request_refused" else tail, kit_code, _next_action(body))
+    code = _KIT_CODES.get(kit_code, "failed")
+    return KitFailure(code, message, name, None if code in _NO_TAIL else tail, kit_code, _next_action(body))
 
 
 def run(subcommand: str, arg: str | None = None, timeout: float | None = None) -> dict:
     timeout = STATUS_TIMEOUT_SECONDS if timeout is None else timeout
-    argv = build_argv(subcommand, arg)
-    code, stdout, stderr = _execute(subcommand, argv, timeout)
+    check_args(subcommand, arg)
+    secret = read_secret()
+    if secret is None and subcommand != "update":
+        raise KitFailure("credential_missing", "This computer has no kit credential for the app yet. "
+                         "The first \"Update kit\" creates it.", subcommand)
+    argv = build_argv(subcommand, arg, with_secret=secret is not None)
+    code, stdout, stderr = _execute(subcommand, argv, timeout, secret)
+    if secret is not None:
+        text = secret.decode("utf-8", "replace")
+        stdout, stderr = stdout.replace(text, "[redacted]"), stderr.replace(text, "[redacted]")
     tail = _tail(f"{stdout}\n{stderr}")
     body = _body(stdout)
     if body is not None:
@@ -211,7 +288,7 @@ def _finish(job: Job) -> None:
 
 def start(operation: str, subcommand: str, arg: str | None = None) -> dict:
     global _job
-    build_argv(subcommand, arg)
+    check_args(subcommand, arg)
     with _lock:
         if _job is not None and _job.state == "running":
             if (_job.subcommand, _job.arg) == (subcommand, arg):

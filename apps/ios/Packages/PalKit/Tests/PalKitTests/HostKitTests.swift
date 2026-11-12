@@ -22,27 +22,16 @@ private func model(_ bots: ScriptedBots) -> KitModel {
 }
 
 @Suite struct HostKitTests {
-    @Test(arguments: ["octo/hello", "a/b.c_d-e", "A1/repo.name"])
-    func acceptsOwnerRepo(_ value: String) {
-        #expect(KitRepo.isValid(value))
-    }
-
-    @Test(arguments: [
-        "", "owner", "owner/", "/repo", "a/b/c", "../etc/passwd", "a/../b", "owner/repo name", "--foo", "-x/y",
-        "owner/repo\n--json", "o;id/r", "o/r$(id)", "-owner/repo", "o/..", String(repeating: "a", count: 40) + "/r",
-    ])
-    func rejectsEverythingElse(_ value: String) {
-        #expect(!KitRepo.isValid(value))
-    }
-
     @Test func mapsTransportAndKitErrors() {
         #expect(KitFailure.classify(rpcError(-32601)) == .gatewayUnsupported)
         #expect(KitFailure.classify(rpcError(4409)) == .busy)
-        #expect(KitFailure.classify(rpcError(4101)) == .invalidRepo)
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "kit_unavailable"])) == .kitUnavailable)
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "kit_unsupported", "subcommand": "reload"])) == .kitUnsupported(subcommand: "reload"))
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "timeout"])) == .timeout)
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "request_refused", "kit_code": "request_refused"])) == .requestRefused)
+        #expect(KitFailure.classify(rpcError(5321, data: ["code": "credential_missing"])) == .credentialMissing)
+        #expect(KitFailure.classify(rpcError(5321, data: ["code": "credential_unreadable"])) == .credentialUnreadable)
+        #expect(KitFailure.classify(rpcError(4409, data: ["code": "busy", "kit_code": "update_in_progress"])) == .busy)
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "failed", "tail": "boom"])) == .failed(tail: "boom"))
         #expect(KitFailure.classify(rpcError(5321, data: ["code": "invalid_output", "tail": "x"])) == .invalidOutput(tail: "x"))
         #expect(KitFailure.classify(GatewayTransportError.timedOut) == .unreachable)
@@ -88,17 +77,48 @@ private func model(_ bots: ScriptedBots) -> KitModel {
     }
 
     @MainActor
-    @Test func addProjectRefusesBadInputLocallyAndSendsTheTrimmedRepo() async {
+    @Test func rotateRunsAsAJobAndShowsCredentialStateNeverAValue() async {
         let bots = ScriptedBots()
-        bots.script("host.kit.add_project", jobJSON("succeeded", report: .object([:])))
-        bots.script("host.kit.status", .object([:]))
+        let rotated: JSONValue = ["credential": ["rotated": true, "created_at": "2026-01-02T03:04:05Z"]]
+        bots.script("host.kit.rotate", jobJSON("succeeded", report: rotated))
+        bots.script("host.kit.status", ["version": "1", "credential": ["present": true, "created": false, "created_at": "2026-01-02T03:04:05Z"]])
         let kit = model(bots)
-        await kit.addProject("--foo")
-        #expect(kit.outcome == .failed(.addProject, .invalidRepo))
-        #expect(bots.calls(to: "host.kit.add_project").isEmpty)
-        await kit.addProject("  octo/hello \n")
-        #expect(kit.outcome == .succeeded(.addProject, KitReport(.object([:]))))
-        #expect(bots.calls(to: "host.kit.add_project").first?.params == ["repo": "octo/hello"])
+        await kit.refreshStatus()
+        #expect(kit.canRotate)
+        await kit.rotate()
+        #expect(kit.outcome == .succeeded(.rotate, KitReport(rotated)))
+        #expect(kit.credentialText == "Key replaced at 2026-01-02T03:04:05Z")
+        #expect(bots.calls(to: "host.kit.rotate").first?.params == [:])
+    }
+
+    @MainActor
+    @Test func credentialStatesMapToPlainText() async {
+        let created = KitCredential(["present": true, "created": true, "created_at": "T"])
+        #expect(created?.summary == "Credential created at T")
+        #expect(KitCredential(["present": true, "created": false, "created_at": "T"])?.summary == "Credential present, created at T")
+        #expect(KitCredential(["present": false])?.summary == "No credential yet")
+        #expect(KitCredential(.object([:])) == nil)
+
+        let bots = ScriptedBots()
+        bots.script("host.kit.status") { _ in throw rpcError(5321, data: ["code": "credential_missing"]) }
+        let kit = model(bots)
+        await kit.refreshStatus()
+        #expect(kit.credentialText == "Not created yet" && kit.canAct && !kit.canRotate)
+        #expect(KitFailure.credentialMissing.message.contains("first Update kit creates it"))
+    }
+
+    @MainActor
+    @Test func theFirstUpdateShowsTheCreatedCredential() async {
+        let bots = ScriptedBots()
+        bots.script("host.kit.status") { _ in throw rpcError(5321, data: ["code": "credential_missing"]) }
+        let created: JSONValue = ["credential": ["present": true, "created": true, "created_at": "2026-01-02T03:04:05Z"]]
+        bots.script("host.kit.update", jobJSON("succeeded", report: created))
+        bots.script("host.kit.status", ["credential": ["present": true, "created": false, "created_at": "2026-01-02T03:04:05Z"]])
+        let kit = model(bots)
+        await kit.refreshStatus()
+        await kit.update()
+        #expect(kit.credentialText == "Credential created at 2026-01-02T03:04:05Z")
+        #expect(kit.canRotate)
     }
 
     @MainActor
@@ -108,6 +128,12 @@ private func model(_ bots: ScriptedBots) -> KitModel {
         let first = model(busy)
         await first.update()
         #expect(first.outcome == .failed(.update, .busy))
+
+        let status = ScriptedBots()
+        status.script("host.kit.status") { _ in throw rpcError(4409, data: ["code": "busy"]) }
+        let waiting = model(status)
+        await waiting.refreshStatus()
+        #expect(waiting.phase == .failed(.busy) && !waiting.canAct)
 
         let lost = ScriptedBots()
         lost.script("host.kit.update", jobJSON("running"))
@@ -128,7 +154,7 @@ private func model(_ bots: ScriptedBots) -> KitModel {
         await kit.update()
         #expect(kit.outcome == .failed(.update, .requestRefused))
         #expect(kit.isRefused && !kit.canAct)
-        #expect(KitFailure.requestRefused.message.contains("did not come from the owner's own shell"))
+        #expect(KitFailure.requestRefused.message == "The kit on this machine is not set up for the app yet.")
         #expect(bots.calls(to: "host.kit.update").count == 1)
 
         let refused = ScriptedBots()

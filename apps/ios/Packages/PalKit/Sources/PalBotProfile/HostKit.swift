@@ -5,8 +5,8 @@ import PalTransport
 
 public enum KitOperation: String, Sendable, Equatable {
     case update
-    case addProject = "add_project"
     case reload
+    case rotate
 }
 
 public enum KitReloadTarget: String, Sendable, Equatable {
@@ -14,21 +14,28 @@ public enum KitReloadTarget: String, Sendable, Equatable {
     case gateway
 }
 
-public enum KitRepo {
-    public static func isValid(_ value: String) -> Bool {
-        let parts = value.split(separator: "/", omittingEmptySubsequences: false)
-        guard parts.count == 2, !value.contains("..") else { return false }
-        let owner = parts[0], name = parts[1]
-        guard (1...39).contains(owner.count), (1...100).contains(name.count),
-              owner.first.map(isAlphanumeric) == true,
-              owner.allSatisfy({ isAlphanumeric($0) || $0 == "-" }),
-              name.allSatisfy({ isAlphanumeric($0) || $0 == "." || $0 == "-" || $0 == "_" })
-        else { return false }
-        return true
+public struct KitCredential: Sendable, Equatable {
+    public let present: Bool?
+    public let created: Bool?
+    public let rotated: Bool?
+    public let createdAt: String?
+
+    init?(_ value: JSONValue?) {
+        guard let value, value.objectValue != nil else { return nil }
+        present = value["present"]?.boolValue
+        created = value["created"]?.boolValue
+        rotated = value["rotated"]?.boolValue
+        createdAt = value["created_at"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 }
+        if present == nil, created == nil, rotated == nil, createdAt == nil { return nil }
     }
 
-    private static func isAlphanumeric(_ character: Character) -> Bool {
-        character.isASCII && (character.isLetter || character.isNumber)
+    public var summary: String? {
+        let when = createdAt.map { " at \($0)" } ?? ""
+        if rotated == true { return "Key replaced" + when }
+        if created == true { return "Credential created" + when }
+        if present == true { return "Credential present" + (createdAt.map { ", created at \($0)" } ?? "") }
+        if present == false { return "No credential yet" }
+        return nil
     }
 }
 
@@ -37,12 +44,14 @@ public struct KitReport: Sendable, Equatable {
     public let status: String?
     public let message: String?
     public let nextAction: String?
+    public let credential: KitCredential?
 
     init(_ value: JSONValue?) {
         version = Self.text(value?["version"]?.stringValue)
         status = Self.text(value?["status"]?.stringValue)
         message = Self.text(value?["message"]?.stringValue)
         nextAction = Self.text(value?["next_action"]?.stringValue)
+        credential = KitCredential(value?["credential"])
     }
 
     private static func text(_ value: String?) -> String? {
@@ -57,7 +66,8 @@ public enum KitFailure: Error, Sendable, Equatable {
     case kitUnsupported(subcommand: String?)
     case timeout
     case busy
-    case invalidRepo
+    case credentialMissing
+    case credentialUnreadable
     case failed(tail: String?)
     case invalidOutput(tail: String?)
     case requestRefused
@@ -69,7 +79,6 @@ public enum KitFailure: Error, Sendable, Equatable {
         switch rpc.code {
         case -32601: return .gatewayUnsupported
         case 4409: return .busy
-        case 4101: return .invalidRepo
         default: return from(code: rpc.data?["code"]?.stringValue, data: rpc.data)
         }
     }
@@ -83,6 +92,8 @@ public enum KitFailure: Error, Sendable, Equatable {
         case "busy": return .busy
         case "invalid_output": return .invalidOutput(tail: tail)
         case "request_refused": return .requestRefused
+        case "credential_missing": return .credentialMissing
+        case "credential_unreadable": return .credentialUnreadable
         default: return .failed(tail: tail)
         }
     }
@@ -94,11 +105,11 @@ public enum KitFailure: Error, Sendable, Equatable {
         case .kitUnsupported: "This kit version does not support this yet."
         case .timeout: "The kit took too long to answer. Try again."
         case .busy: "The kit is busy with another operation."
-        case .invalidRepo: "Enter the project as owner/repo."
+        case .credentialMissing: "The app has no key to the kit on this machine yet. The first Update kit creates it."
+        case .credentialUnreadable: "The app's key to the kit can't be read on this machine."
         case .failed: "The kit reported a failure."
         case .invalidOutput: "The kit's answer wasn't readable."
-        case .requestRefused:
-            "The kit refused this request because it did not come from the owner's own shell. This needs a gateway identity in the kit; nothing is wrong on your side."
+        case .requestRefused: "The kit on this machine is not set up for the app yet."
         case .unreachable: "Couldn't reach the kit. Try again."
         }
     }
@@ -146,9 +157,8 @@ public struct KitClient: Sendable {
         return KitReport(result)
     }
 
-    public func start(_ operation: KitOperation, repo: String? = nil, target: KitReloadTarget? = nil) async throws -> KitJob {
+    public func start(_ operation: KitOperation, target: KitReloadTarget? = nil) async throws -> KitJob {
         var params: [String: JSONValue] = [:]
-        if let repo { params["repo"] = .string(repo) }
         if let target { params["target"] = .string(target.rawValue) }
         guard let job = KitJob(try await perform("host.kit.\(operation.rawValue)", params)) else { throw KitFailure.unreachable }
         return job
@@ -212,9 +222,19 @@ public final class KitModel {
     public var canAct: Bool {
         guard running == nil, !isRefused else { return false }
         switch phase {
-        case .loading, .failed(.gatewayUnsupported): return false
+        case .loading, .failed(.gatewayUnsupported), .failed(.busy): return false
         default: return true
         }
+    }
+
+    public var canRotate: Bool {
+        canAct && phase != .failed(.credentialMissing)
+    }
+
+    public var credentialText: String? {
+        if case .succeeded(_, let report)? = outcome, let text = report.credential?.summary { return text }
+        if phase == .failed(.credentialMissing) { return "Not created yet" }
+        return report?.credential?.summary
     }
 
     public func refreshStatus() async {
@@ -229,24 +249,16 @@ public final class KitModel {
     }
 
     public func update() async { await run(.update) }
+    public func rotate() async { await run(.rotate) }
     public func reload(_ target: KitReloadTarget) async { await run(.reload, target: target) }
 
-    public func addProject(_ repo: String) async {
-        let trimmed = repo.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard KitRepo.isValid(trimmed) else {
-            outcome = .failed(.addProject, .invalidRepo)
-            return
-        }
-        await run(.addProject, repo: trimmed)
-    }
-
-    private func run(_ operation: KitOperation, repo: String? = nil, target: KitReloadTarget? = nil) async {
+    private func run(_ operation: KitOperation, target: KitReloadTarget? = nil) async {
         guard running == nil else { return }
         running = operation
         outcome = nil
         defer { running = nil }
         do {
-            let started = try await client.start(operation, repo: repo, target: target)
+            let started = try await client.start(operation, target: target)
             outcome = try await finish(operation, started)
             await refreshStatus()
         } catch is CancellationError {
