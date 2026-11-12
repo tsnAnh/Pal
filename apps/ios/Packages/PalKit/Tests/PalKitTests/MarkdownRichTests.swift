@@ -194,3 +194,86 @@ struct MarkdownRichTests {
         #expect(link("two words https://a.example.com") == nil)
     }
 }
+
+@Suite("Markdown tables")
+struct MarkdownTableTests {
+    private static let fixture = """
+    | # | Step | How in the app | Size | Risk |
+    |---|:-----|:--------------:|-----:|------|
+    | 1 | Open `Settings` | Tap "Bots" | S | low |
+    | 2 | Pick a **bot** | Use the `list` | M | low |
+    | 3 | Send "hi" | Type in the `composer` | S | med |
+    | 4 | ~~Retry~~ | See [docs](https://example.com) | L | high |
+    """
+
+    private func tables(_ source: String, streaming: Bool = false) -> [MarkdownTable] {
+        MarkdownDocument(parsing: source, isStreaming: streaming).blocks.compactMap {
+            if case .table(let table) = $0.kind { table } else { nil }
+        }
+    }
+
+    private func texts(_ cells: [AttributedString]) -> [String] { cells.map { String($0.characters) } }
+
+    @Test func fixtureIsOneTable() {
+        let blocks = MarkdownDocument(parsing: Self.fixture).blocks
+        #expect(blocks.count == 1)
+        guard case .table(let table) = blocks[0].kind else {
+            Issue.record("expected table")
+            return
+        }
+        #expect(texts(table.header) == ["#", "Step", "How in the app", "Size", "Risk"])
+        #expect(table.rows.count == 4)
+        #expect(texts(table.rows[0]) == ["1", "Open Settings", "Tap \"Bots\"", "S", "low"])
+        #expect(table.alignments == [.leading, .leading, .center, .trailing, .leading])
+        let code = table.rows[0][1].runs.contains { $0.inlinePresentationIntent?.contains(.code) == true }
+        #expect(code)
+        let link = table.rows[3][2].runs.contains { $0.link != nil }
+        #expect(link)
+    }
+
+    @Test func raggedRowsArePaddedAndTruncated() {
+        let source = "| a | b | c |\n|---|---|---|\n| 1 |\n| 1 | 2 | 3 | 4 |"
+        let table = tables(source)[0]
+        #expect(table.rows.allSatisfy { $0.count == 3 })
+        #expect(texts(table.rows[0]) == ["1", "", ""])
+        #expect(texts(table.rows[1]) == ["1", "2", "3"])
+    }
+
+    @Test func tableInsideQuoteStaysQuoted() {
+        let blocks = MarkdownDocument(parsing: "> | a | b |\n> |---|---|\n> | 1 | 2 |").blocks
+        #expect(blocks.count == 1)
+        #expect(blocks[0].isQuoted)
+        #expect(!tables("> | a | b |\n> |---|---|\n> | 1 | 2 |").isEmpty)
+    }
+
+    @Test func tableThenParagraph() {
+        let blocks = MarkdownDocument(parsing: "| a | b |\n|---|---|\n| 1 | 2 |\n\nafter").blocks
+        #expect(blocks.count == 2)
+        #expect(blocks[1].kind == .paragraph)
+    }
+
+    @Test func streamingPrefixesNeverBecomeCellParagraphs() {
+        let prefixes = [
+            "| a | b |",
+            "| a | b |\n|---|---|",
+            "| a | b |\n|---|---|\n| 1 | tw",
+            "| a | b |\n|---|---|\n| 1 | 2 |\n",
+        ]
+        for prefix in prefixes {
+            let blocks = MarkdownDocument(parsing: prefix, isStreaming: true).blocks
+            #expect(blocks.count == 1, "\(prefix)")
+        }
+        #expect(tables("| a | b |\n|---|---|", streaming: true).count == 1)
+        #expect(tables("| a | b |\n|---|---|\n| 1 | tw", streaming: true)[0].rows.count == 1)
+    }
+
+    @Test func columnWidthsAreClamped() {
+        let table = MarkdownTable(
+            alignments: [.leading, .leading],
+            header: [AttributedString("a"), AttributedString(String(repeating: "x", count: 200))],
+            rows: []
+        )
+        let widths = table.columnWidths(characterWidth: 8, cellPadding: 10, minimum: 50, maximum: 240)
+        #expect(widths == [50, 240])
+    }
+}
