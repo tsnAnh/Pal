@@ -164,7 +164,13 @@ extension ConnectAppsService {
         if adding {
             _ = try await call("mcp.servers.add", ["name": .string(UpworkConnector.presetName), "preset": .string(UpworkConnector.presetName)])
         }
-        let remove: (@Sendable () async -> Void)? = adding ? { _ = try? await self.call("mcp.servers.remove", ["name": .string(UpworkConnector.presetName)]) } : nil
+        let service = self
+        let remove: (@Sendable () async -> Void)?
+        if adding {
+            remove = { @Sendable in _ = try? await service.call("mcp.servers.remove", ["name": .string(UpworkConnector.presetName)]) }
+        } else {
+            remove = nil
+        }
         do {
             return try await nativeSignIn.beginPaste(rollback: remove)
         } catch {
