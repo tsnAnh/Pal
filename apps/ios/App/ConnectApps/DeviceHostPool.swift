@@ -8,63 +8,66 @@ import SwiftUI
 
 @MainActor
 @Observable
-final class DeviceConsentPresenter: ConsentPrompting {
+final class DevicePermissionPresenter: ConsentPrompting {
     struct Pending: Identifiable {
         let id = UUID()
         let ask: ConsentAsk
         let botName: String
+        let status: DeviceOSPermission
     }
 
-    private(set) var pending: Pending?
-    private var queue: [(Pending, CheckedContinuation<Bool, Never>)] = []
-    private var current: CheckedContinuation<Bool, Never>?
-    private let botName: @MainActor (String) -> String
+    private static let representDelay: Duration = .milliseconds(400)
 
-    init(botName: @escaping @MainActor (String) -> String) {
+    private(set) var pending: Pending?
+    private let botName: @MainActor (String) -> String
+    private let permissions: any DevicePermissions
+
+    init(permissions: any DevicePermissions = SystemPermissions(), botName: @escaping @MainActor (String) -> String) {
+        self.permissions = permissions
         self.botName = botName
     }
 
-    func askConsent(_ ask: ConsentAsk) async -> Bool {
-        let entry = Pending(ask: ask, botName: botName(ask.profile))
-        return await withCheckedContinuation { continuation in
-            if pending == nil {
-                pending = entry
-                current = continuation
-            } else {
-                queue.append((entry, continuation))
-            }
+    nonisolated func permissionNeeded(_ ask: ConsentAsk, status: DeviceOSPermission) {
+        Task { @MainActor in self.present(ask, status: status) }
+    }
+
+    private func present(_ ask: ConsentAsk, status: DeviceOSPermission) {
+        guard pending == nil else { return }
+        pending = Pending(ask: ask, botName: botName(ask.profile), status: status)
+    }
+
+    func dismiss() {
+        pending = nil
+    }
+
+    func accept() {
+        guard let current = pending else { return }
+        pending = nil
+        Task { await resolve(current) }
+    }
+
+    private func resolve(_ current: Pending) async {
+        if current.status == .notDetermined {
+            let result = await permissions.request(current.ask.connector)
+            guard result != .granted else { return }
+            try? await Task.sleep(for: Self.representDelay)
+            present(current.ask, status: .denied)
+        } else {
+            openSettings(for: current.ask.connector)
         }
     }
 
-    func answer(_ allowed: Bool) {
-        current?.resume(returning: allowed)
-        current = nil
-        pending = nil
-        guard !queue.isEmpty else { return }
-        let next = queue.removeFirst()
-        pending = next.0
-        current = next.1
+    private func openSettings(for connector: DeviceConnectorID) {
+        let url: URL? = switch connector {
+        case .input: SystemSettings.accessibilitySettingsURL
+        case .screen: SystemSettings.screenRecordingURL
+        default: SystemSettings.appSettingsURL
+        }
+        if let url { SystemSettings.open(url) }
     }
 }
 
 extension ConsentAsk {
-    var connectorTitle: String {
-        switch connector {
-        case .calendar: "Calendar"
-        case .home: "Home"
-        case .reminders: "Reminders"
-        case .contacts: "Contacts"
-        case .location: "Location"
-        case .alarms: "Alarms"
-        case .shell, .files: "This Mac"
-        case .input: "Mouse and keyboard"
-        case .screen: "Screen"
-        case .notifications: "Notifications"
-        case .apps: "Apps"
-        case .clipboard: "Clipboard"
-        }
-    }
-
     var intent: String {
         switch action {
         case .calendarListEvents: "read your calendar"
@@ -84,11 +87,10 @@ extension ConsentAsk {
         case .filesRead: "read a file on this Mac"
         case .filesList: "look through a folder on this Mac"
         case .filesWrite: "change a file on this Mac"
-        case .inputDisplays: "see this Mac's screen sizes"
-        case .inputMove, .inputClick, .inputDrag, .inputScroll: "use this Mac's mouse"
-        case .inputType, .inputKey: "use this Mac's keyboard"
-        case .screenCapture: "take a screenshot of this Mac"
-        case .screenRead: "read the text on this Mac's screen"
+        case .inputDisplays: "see your screen sizes"
+        case .inputMove, .inputClick, .inputDrag, .inputScroll, .inputType, .inputKey: "control your mouse and keyboard"
+        case .screenCapture: "see your screen"
+        case .screenRead: "read the text on your screen"
         case .notifyPost: "show a notification on this Mac"
         case .notifyCancel: "remove a notification it showed on this Mac"
         case .appsList: "see which apps are running on this Mac"
@@ -104,21 +106,17 @@ extension ConsentAsk {
 
 @MainActor
 final class DeviceHostPool {
-    private static let savedKey = "dev.tsnanh.hermes.device-host-profiles"
-
     private let connection: ConnectionModel
-    private let consent: DeviceConsentPresenter
-    private let defaults: UserDefaults
+    private let consent: DevicePermissionPresenter
     private var stacks: [String: DeviceToolStack] = [:]
     #if os(macOS)
     private var inputSafety: InputSafety?
     #endif
     let screenIndicator = ScreenCaptureIndicator()
 
-    init(connection: ConnectionModel, consent: DeviceConsentPresenter, defaults: UserDefaults = .standard) {
+    init(connection: ConnectionModel, consent: DevicePermissionPresenter) {
         self.connection = connection
         self.consent = consent
-        self.defaults = defaults
     }
 
     func stack(for profile: String?) async -> DeviceToolStack? {
@@ -135,7 +133,7 @@ final class DeviceHostPool {
         stacks[key] = stack
         #if os(macOS)
         if inputSafety == nil {
-            let safety = InputSafety { [weak self] in await self?.switchOffInput() }
+            let safety = InputSafety()
             safety.start()
             inputSafety = safety
         }
@@ -144,32 +142,10 @@ final class DeviceHostPool {
         return stack
     }
 
-    func switchOffInput() async {
-        for stack in stacks.values { _ = try? await stack.ledger.set(.input, state: .off) }
-    }
-
-    func stopInput() {
-        #if os(macOS)
-        InputController.shared.stop()
-        #endif
-    }
-
-    func rearmInput() {
-        #if os(macOS)
-        InputController.shared.rearm()
-        #endif
-    }
-
-    func remember(_ profile: String?) {
-        var saved = Set(defaults.stringArray(forKey: Self.savedKey) ?? [])
-        saved.insert(profile ?? "")
-        defaults.set(Array(saved), forKey: Self.savedKey)
-    }
-
-    func resumeSavedHosts() async {
-        for key in defaults.stringArray(forKey: Self.savedKey) ?? [] {
-            _ = await stack(for: key.isEmpty ? nil : key)
-        }
+    func startHosts(botNames: [String]) async {
+        var profiles: [String?] = [nil]
+        profiles += botNames
+        for profile in profiles { _ = await stack(for: profile) }
     }
 
     func reset() async {

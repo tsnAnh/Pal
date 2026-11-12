@@ -11,7 +11,7 @@ final class ParityConnectApps: ConnectAppsTestCase {
 
     private func readyCatalog() -> XCUIApplication {
         let app = launchConnectApps()
-        waitFor(app.descendants(matching: .any)["connectAppsSection-iphone"], timeout: 40, "catalog loaded")
+        waitForCatalog(app)
         return app
     }
 
@@ -31,12 +31,6 @@ final class ParityConnectApps: ConnectAppsTestCase {
         let app = readyCatalog()
         for _ in 0..<5 { app.scrollViews.firstMatch.swipeUp(velocity: .slow) }
         parityShot("05-connect-apps-scroll2")
-    }
-
-    func test06Iphone() throws {
-        let app = readyCatalog()
-        openIphoneSection(app)
-        parityShot("06-connect-apps-iphone")
     }
 
     func test07Communication() throws {

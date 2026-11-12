@@ -36,14 +36,6 @@ enum DeviceWording {
 }
 
 enum PlatformCapabilities {
-    static var deviceConnectors: [DeviceConnectorID] {
-        #if os(iOS)
-        [.calendar, .home, .reminders, .contacts, .location, .alarms]
-        #else
-        [.calendar, .reminders, .contacts, .location, .apps, .clipboard, .notifications, .screen, .input]
-        #endif
-    }
-
     static var hasTouchScreen: Bool {
         #if os(iOS)
         true

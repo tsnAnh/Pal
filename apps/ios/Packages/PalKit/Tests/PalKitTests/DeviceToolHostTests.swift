@@ -85,7 +85,7 @@ private func hostRig(states: [String: String], device: FakeDevice = FakeDevice()
         connect: { try await GatewayConnection.dial(url: url, ticket: "device-test") },
         providers: providers,
         permissions: FakePermissions(),
-        consent: FakeConsent(true),
+        consent: FakeConsent(),
         environment: DeviceToolEnvironment(deadlineMargin: .zero),
         timing: DeviceToolHostTiming(backoff: [.milliseconds(50)], pingInterval: .seconds(60), callTimeout: .seconds(5), connectWait: .seconds(5))
     )
@@ -121,15 +121,13 @@ struct DeviceToolHostTests {
         await rig.stop()
     }
 
-    @Test func aDisabledConnectorIsAnsweredWithTheContractErrorAndNoData() async throws {
+    @Test func aConnectorWithNoStoredStateIsAnsweredAnyway() async throws {
         let rig = try await hostRig(states: ["contacts": "allowed"])
         rig.gateway.push(requestEvent("req-00000003", action: "calendar.list_events", connector: "calendar", args: ["start": "2026-11-08T00:00:00Z", "end": "2026-11-09T00:00:00Z"]))
         #expect(await eventually { rig.script.responses().count == 1 })
         let response = try #require(rig.script.responses().first)
-        #expect(response["ok"]?.boolValue == false)
-        #expect(response["error"]?["code"]?.stringValue == "consent_declined")
-        #expect(response["result"] == nil)
-        #expect(rig.device.callNames.isEmpty)
+        #expect(response["ok"]?.boolValue == true)
+        #expect(!rig.device.callNames.isEmpty)
         await rig.stop()
     }
 
@@ -156,9 +154,9 @@ struct DeviceToolHostTests {
         let rig = try await hostRig(states: [:])
         let snapshot = try await rig.stack.ledger.refresh()
         #expect(snapshot.count == DeviceConnectorID.allCases.count)
-        #expect(await rig.stack.ledger.state(for: .calendar) == .off)
-        try await rig.stack.ledger.set(.calendar, state: .allowed)
         #expect(await rig.stack.ledger.state(for: .calendar) == .allowed)
+        try await rig.stack.ledger.set(.calendar, state: .off)
+        #expect(await rig.stack.ledger.state(for: .calendar) == .off)
         await rig.stop()
     }
 }

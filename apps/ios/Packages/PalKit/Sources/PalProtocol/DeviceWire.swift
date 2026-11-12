@@ -22,8 +22,6 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
         }
     }
 
-    public var isAlwaysOn: Bool { self == .shell || self == .files }
-
     public var asksOSPermissionOnUse: Bool { self != .screen && self != .notifications && self != .input }
 }
 
@@ -159,6 +157,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
 
 public enum DeviceToolErrorCode: String, Codable, Sendable, Hashable {
     case permissionDenied = "permission_denied"
+    case permissionNeeded = "permission_needed"
     case consentDeclined = "consent_declined"
     case unsupported
     case invalidArgs = "invalid_args"

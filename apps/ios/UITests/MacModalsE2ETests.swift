@@ -132,7 +132,8 @@ final class MacModalsE2ETests: BotProfileTestCase {
         app.typeKey("m", modifierFlags: [.command, .shift])
         waitFor(element(app, "connectApps"), timeout: 15, "connect apps modal")
         waitFor(app.buttons["connectAppsChips-all"], timeout: 30, "All chip")
-        waitFor(element(app, "connectAppsSection-iphone"), timeout: 30, "device section in All")
+        waitFor(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "connectApp-")).firstMatch, timeout: 30, "catalog rows in All")
+        XCTAssertFalse(element(app, "connectAppsSection-iphone").exists, "no device section")
         waitFor(app.buttons["connectedCountButton"], timeout: 10, "connected count")
         let category = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND NOT identifier ENDSWITH %@ AND NOT identifier ENDSWITH %@", "connectAppsChips-", "-all", "-iphone")).firstMatch
         waitFor(category, timeout: 30, "a catalog category chip")
@@ -181,7 +182,7 @@ final class MacModalsE2ETests: BotProfileTestCase {
 
             app.typeKey("m", modifierFlags: [.command, .shift])
             waitFor(element(app, "connectApps"), timeout: 15, "connect apps")
-            waitFor(element(app, "connectAppsSection-iphone"), timeout: 30, "sections")
+            waitFor(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "connectApp-")).firstMatch, timeout: 30, "sections")
             Thread.sleep(forTimeInterval: 2)
             shot(app, "mac-connect-apps-\(suffix)")
             closeModal(app, "connectApps-close", gone: "connectApps")

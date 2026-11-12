@@ -70,14 +70,12 @@ final class FakePermissions: DevicePermissions {
 }
 
 final class FakeConsent: ConsentPrompting {
-    let answer: Bool
     let asked = Mutex<[ConsentAsk]>([])
+    let statuses = Mutex<[DeviceOSPermission]>([])
 
-    init(_ answer: Bool) { self.answer = answer }
-
-    func askConsent(_ ask: ConsentAsk) async -> Bool {
+    func permissionNeeded(_ ask: ConsentAsk, status: DeviceOSPermission) {
         asked.withLock { $0.append(ask) }
-        return answer
+        statuses.withLock { $0.append(status) }
     }
 }
 
@@ -176,7 +174,6 @@ private struct Rig {
 private func rig(
     _ states: [DeviceConnectorID: DeviceConnectorState],
     permissions: FakePermissions = FakePermissions(),
-    consent: Bool = true,
     failure: DeviceProviderError? = nil,
     hang: Bool = false
 ) async -> Rig {
@@ -184,7 +181,7 @@ private func rig(
     let api = FakeConnectorsAPI(states)
     let ledger = ConnectorLedger(api: api)
     _ = try? await ledger.refresh()
-    let fakeConsent = FakeConsent(consent)
+    let fakeConsent = FakeConsent()
     let providers = DeviceProviders(calendar: device, reminders: device, contacts: device, location: device, alarms: device, home: device)
     let executor = DeviceToolExecutor(
         providers: providers, permissions: permissions, ledger: ledger, consent: fakeConsent,
@@ -211,16 +208,8 @@ private func result(_ outcome: DeviceToolOutcome) -> JSONValue? {
     return nil
 }
 
-@Suite("Device tool capability gating")
+@Suite("Device tool capabilities with no switch")
 struct DeviceToolGatingTests {
-    @Test func aDisabledConnectorNeverReachesItsProvider() async {
-        let rig = await rig([.contacts: .allowed])
-        let outcome = await rig.executor.execute(request("calendar.list_events", args: ["start": "2026-11-08T00:00:00+07:00", "end": "2026-11-09T00:00:00+07:00"]))
-        #expect(failure(outcome)?.0 == .consentDeclined)
-        #expect(rig.device.callNames.isEmpty)
-        #expect(await rig.permissions.requested.withLock { $0 }.isEmpty)
-    }
-
     @Test(arguments: [
         ("calendar.list_events", ["start": JSONValue.string("2026-11-08T00:00:00Z"), "end": "2026-11-09T00:00:00Z"]),
         ("reminders.list", [:]),
@@ -229,19 +218,18 @@ struct DeviceToolGatingTests {
         ("alarms.list", [:]),
         ("home.list_accessories", [:]),
     ])
-    func everyConnectorIsRefusedWhenOff(action: String, args: [String: JSONValue]) async {
+    func everyConnectorAnswersWithNoSwitchState(action: String, args: [String: JSONValue]) async {
         let rig = await rig([:])
         let outcome = await rig.executor.execute(request(action, args: .object(args)))
-        #expect(failure(outcome)?.0 == .consentDeclined)
-        #expect(rig.device.callNames.isEmpty)
+        #expect(result(outcome) != nil)
+        #expect(!rig.device.callNames.isEmpty)
     }
 
-    @Test func aStaleOffCacheIsRefreshedBeforeRefusing() async {
+    @Test func aStoredOffIsIgnored() async {
         let rig = await rig([.contacts: .off])
-        rig.api.remoteChange(.contacts, to: .allowed)
-        let outcome = await rig.executor.execute(request("contacts.search", args: ["query": "Sam"]))
+        let outcome = await rig.executor.execute(request("contacts.search", args: ["query": "Sam"], needsConsent: true))
         #expect(result(outcome) != nil)
-        #expect(rig.api.listCount >= 2)
+        #expect(rig.consent.asked.withLock { $0.isEmpty })
     }
 
     @Test func aMismatchedConnectorIsInvalidAndTouchesNothing() async {
@@ -258,30 +246,6 @@ struct DeviceToolGatingTests {
         #expect(rig.device.callNames.isEmpty)
     }
 
-    @Test func consentDeclinedStopsBeforeTheOSPromptAndTheProvider() async {
-        let rig = await rig([.contacts: .ask], consent: false)
-        let outcome = await rig.executor.execute(request("contacts.search", args: ["query": "Sam"], needsConsent: true))
-        #expect(failure(outcome)?.0 == .consentDeclined)
-        #expect(rig.consent.asked.withLock { $0.count } == 1)
-        #expect(rig.device.callNames.isEmpty)
-        #expect(rig.permissions.requested.withLock { $0 }.isEmpty)
-        #expect(rig.api.sets.isEmpty)
-    }
-
-    @Test func consentApprovedPersistsAllowedThenRuns() async {
-        let rig = await rig([.contacts: .ask], consent: true)
-        let outcome = await rig.executor.execute(request("contacts.search", args: ["query": "Sam"], needsConsent: true))
-        #expect(result(outcome) != nil)
-        #expect(rig.api.sets.contains { $0.0 == .contacts && $0.1 == .allowed })
-        #expect(rig.consent.asked.withLock { $0.first?.action } == .contactsSearch)
-    }
-
-    @Test func noConsentPromptWhenTheGatewaySaysConsentIsNotNeeded() async {
-        let rig = await rig([.contacts: .allowed])
-        _ = await rig.executor.execute(request("contacts.search", args: ["query": "Sam"], needsConsent: false))
-        #expect(rig.consent.asked.withLock { $0.isEmpty })
-    }
-
     @Test func undeterminedOSPermissionIsRequestedThenRuns() async {
         let permissions = FakePermissions(statuses: [.contacts: .notDetermined], afterRequest: .granted)
         let rig = await rig([.contacts: .allowed], permissions: permissions)
@@ -290,20 +254,22 @@ struct DeviceToolGatingTests {
         #expect(rig.permissions.requested.withLock { $0 } == [.contacts])
     }
 
-    @Test func deniedOSPermissionIsReportedAndNeverReadsData() async {
+    @Test func deniedOSPermissionIsReportedAsNeededAndNeverReadsData() async {
         let permissions = FakePermissions(statuses: [.contacts: .denied])
         let rig = await rig([.contacts: .allowed], permissions: permissions)
         let outcome = await rig.executor.execute(request("contacts.search", args: ["query": "Sam"]))
-        #expect(failure(outcome)?.0 == .permissionDenied)
+        #expect(failure(outcome)?.0 == .permissionNeeded)
+        #expect(rig.consent.asked.withLock { $0.map(\.connector) } == [.contacts])
+        #expect(rig.consent.statuses.withLock { $0 } == [.denied])
         #expect(rig.device.callNames.isEmpty)
         #expect(rig.api.sets.contains { $0.0 == .contacts && $0.2 == .denied })
     }
 
-    @Test func aDeniedPromptAnswersPermissionDenied() async {
+    @Test func aDeniedPromptAnswersPermissionNeeded() async {
         let permissions = FakePermissions(statuses: [.location: .notDetermined], afterRequest: .denied)
         let rig = await rig([.location: .allowed], permissions: permissions)
         let outcome = await rig.executor.execute(request("location.current"))
-        #expect(failure(outcome)?.0 == .permissionDenied)
+        #expect(failure(outcome)?.0 == .permissionNeeded)
         #expect(rig.device.callNames.isEmpty)
     }
 
@@ -316,7 +282,7 @@ struct DeviceToolGatingTests {
     @Test func aMissingProviderIsUnsupported() async {
         let ledger = ConnectorLedger(api: FakeConnectorsAPI([.alarms: .allowed]))
         _ = try? await ledger.refresh()
-        let executor = DeviceToolExecutor(providers: DeviceProviders(), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true))
+        let executor = DeviceToolExecutor(providers: DeviceProviders(), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent())
         let outcome = await executor.execute(request("alarms.list"))
         #expect(failure(outcome)?.0 == .unsupported)
     }

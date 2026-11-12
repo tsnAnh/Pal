@@ -47,6 +47,7 @@ public enum InputActivity: Sendable, Equatable {
     case began
     case ended
     case stopped
+    case resumed
 }
 
 public struct EscapeBurstDetector: Sendable {
@@ -106,7 +107,7 @@ public enum InputKeyMap {
 }
 
 public actor InputController: InputProviding {
-    public static let stoppedMessage = "The owner stopped mouse and keyboard control. It stays off until they turn it on again; tell them instead of retrying."
+    public static let stoppedMessage = "The owner stopped mouse and keyboard control. It stays paused until they resume it from the Pal menu bar item; tell them instead of retrying."
 
     private let source: any InputEventSource
     private let pause: @Sendable (Duration) async throws -> Void
@@ -132,6 +133,7 @@ public actor InputController: InputProviding {
 
     public nonisolated func rearm() {
         stopped.withLock { $0 = false }
+        observer.withLock { $0 }?(.resumed)
     }
 
     public nonisolated var isStopped: Bool { stopped.withLock { $0 } }

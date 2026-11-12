@@ -94,13 +94,12 @@ private struct ComputerRig {
 private func computerRig(
     _ states: [DeviceConnectorID: DeviceConnectorState] = [.shell: .allowed, .files: .allowed],
     computer: FakeComputer = FakeComputer(),
-    providers: Bool = true,
-    consent: Bool = true
+    providers: Bool = true
 ) async -> ComputerRig {
     let api = FakeConnectorsAPI(states)
     let ledger = ConnectorLedger(api: api)
     _ = try? await ledger.refresh()
-    let fakeConsent = FakeConsent(consent)
+    let fakeConsent = FakeConsent()
     let permissions = FakePermissions()
     let executor = DeviceToolExecutor(
         providers: providers ? DeviceProviders(shell: computer, files: computer) : DeviceProviders(),
@@ -185,7 +184,7 @@ struct DeviceComputerExecutorTests {
 
     @Test(arguments: validCalls)
     func shellAndFilesNeverAskConsentOrWriteSwitchState(action: String, args: JSONValue) async {
-        let rig = await computerRig([.shell: .off, .files: .ask], consent: false)
+        let rig = await computerRig([.shell: .off, .files: .ask])
         let outcome = await rig.executor.execute(call(action, args: args, needsConsent: true))
         #expect(succeeded(outcome) != nil)
         #expect(rig.consent.asked.withLock { $0 }.isEmpty)
@@ -198,7 +197,7 @@ struct DeviceComputerExecutorTests {
         _ = try? await ledger.refresh()
         let computer = FakeComputer()
         let executor = DeviceToolExecutor(
-            providers: DeviceProviders(shell: computer, files: computer), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(false)
+            providers: DeviceProviders(shell: computer, files: computer), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent()
         )
         #expect(succeeded(await executor.execute(call(action, args: args))) != nil)
     }
@@ -378,16 +377,6 @@ struct DeviceComputerExecutorTests {
         let refusal = failed(await rig.executor.execute(call("files.read", args: ["path": "/secret/x"])))
         #expect(refusal?.0 == .permissionDenied)
         #expect(refusal?.1.contains("/secret/x") == true)
-    }
-
-    @Test func shellAndFilesCarryNoSwitchWording() {
-        for id in [DeviceConnectorID.shell, .files] {
-            #expect(DeviceConnectorDefaults.warning(for: id) == nil)
-            #expect(id.isAlwaysOn)
-            #expect(!DeviceConnectorDefaults.entry(for: id).title.contains("Run commands"))
-        }
-        #expect(DeviceConnectorDefaults.warning(for: .calendar) == nil)
-        #expect(!DeviceConnectorID.calendar.isAlwaysOn && !DeviceConnectorID.input.isAlwaysOn)
     }
 
     @Test func theActionsBelongToTheirConnectors() {
@@ -573,7 +562,7 @@ struct SystemShellTests {
         let ledger = ConnectorLedger(api: api)
         _ = try? await ledger.refresh()
         let executor = DeviceToolExecutor(
-            providers: DeviceProviders(shell: shell), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true)
+            providers: DeviceProviders(shell: shell), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent()
         )
         let outcome = await executor.execute(call("shell.run", args: ["command": "head -c 100000 /dev/zero | tr '\\0' 'a'"], deadline: 60))
         let value = try #require(succeeded(outcome))
@@ -725,7 +714,7 @@ struct SystemFilesTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: path)
         let ledger = ConnectorLedger(api: FakeConnectorsAPI([.files: .allowed]))
         _ = try? await ledger.refresh()
-        let executor = DeviceToolExecutor(providers: DeviceProviders(files: files), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true))
+        let executor = DeviceToolExecutor(providers: DeviceProviders(files: files), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent())
         let refusal = failed(await executor.execute(call("files.read", args: ["path": .string(path)])))
         let resolved = try DevicePath.resolve(path)
         #expect(refusal?.0 == .permissionDenied)

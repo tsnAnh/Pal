@@ -18,7 +18,7 @@ struct PalApp: App {
     @State private var offers: ReachOfferModel
     @State private var router: AppRouter
     @State private var appearance: AppearanceStore
-    @State private var consent: DeviceConsentPresenter
+    @State private var consent: DevicePermissionPresenter
     @State private var hostPool: DeviceHostPool
     @State private var signIn: ServiceSignInCenter
     @State private var links: BotLinks
@@ -39,7 +39,7 @@ struct PalApp: App {
         let router = AppRouter(capabilities: [.botProfile, .connectApps])
         _router = State(initialValue: router)
         _appearance = State(initialValue: AppearanceStore())
-        let consent = DeviceConsentPresenter { profile in roster.displayName(forProfile: profile) }
+        let consent = DevicePermissionPresenter { profile in roster.displayName(forProfile: profile) }
         _consent = State(initialValue: consent)
         _hostPool = State(initialValue: DeviceHostPool(connection: model, consent: consent))
         let signIn = ServiceSignInCenter(
@@ -65,7 +65,7 @@ struct PalApp: App {
             RootView(model: model, roster: roster, router: router, hostPool: hostPool, links: links)
                 .overlay { ReachOfferOverlay(model: offers) }
                 .overlay(alignment: .topLeading) { ExternalLinkProbe() }
-                .deviceConsentAlert(consent)
+                .devicePermissionAlert(consent)
                 .serviceSignInDialog(signIn) { roster.displayName(forProfile: $0) }
                 .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
                 .environment(appearance)
@@ -246,12 +246,16 @@ struct RootView: View {
                 CreateRoomSheet(rooms: rooms, roster: roster, router: router)
             }
             .onChange(of: roster.bots, initial: true) { _, _ in router.dropUnresolvedChat(in: roster) }
+            .onChange(of: roster.bots.map(\.name)) { _, names in
+                guard model.isConnected else { return }
+                Task { await hostPool.startHosts(botNames: names) }
+            }
             .onAppear {
                 router.registerShareAsTemplate { name in Task { await bots.sharer.share(botName: name) } }
             }
             .task(id: model.isConnected) {
                 guard model.isConnected else { return }
-                await hostPool.resumeSavedHosts()
+                await hostPool.startHosts(botNames: roster.bots.map(\.name))
                 if ProcessInfo.processInfo.arguments.contains(ConnectAppsLaunch.argument) { router.presentConnectApps() }
             }
             #if os(iOS)
@@ -270,7 +274,6 @@ struct RootView: View {
                     ConnectAppsSheet(
                         model: ConnectAppsModel(
                             connection: model,
-                            pool: hostPool,
                             profile: router.connectAppsProfile,
                             botName: roster.displayName(forProfile: router.connectAppsProfile),
                             browser: WebAuthenticationBrowser(),

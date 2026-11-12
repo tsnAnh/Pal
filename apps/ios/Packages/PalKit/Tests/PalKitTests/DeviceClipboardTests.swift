@@ -58,7 +58,7 @@ private func executor(_ board: FakePasteboard, state: DeviceConnectorState = .al
     _ = try? await ledger.refresh()
     return DeviceToolExecutor(
         providers: DeviceProviders(clipboard: SystemClipboard(store: board)),
-        permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true),
+        permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(),
         environment: DeviceToolEnvironment(deadlineMargin: .zero)
     )
 }
@@ -150,21 +150,19 @@ private func failure(_ outcome: DeviceToolOutcome) -> DeviceToolErrorCode? {
         #expect(failure(await executor(board).execute(clipboardRequest("clipboard.write", args: ["text": "y"]))) == .failed)
     }
 
-    @Test func theSwitchGatesBothActionsAndAnAppWithoutAProviderIsUnsupported() async {
+    @Test func aStoredOffIsIgnoredAndAnAppWithoutAProviderIsUnsupported() async {
         let board = FakePasteboard(types: [textType], text: "x")
         let off = await executor(board, state: .off)
-        #expect(failure(await off.execute(clipboardRequest("clipboard.read"))) == .consentDeclined)
-        #expect(failure(await off.execute(clipboardRequest("clipboard.write", args: ["text": "y"]))) == .consentDeclined)
-        #expect(board.replacedTexts.isEmpty)
+        #expect(failure(await off.execute(clipboardRequest("clipboard.read"))) == nil)
+        #expect(failure(await off.execute(clipboardRequest("clipboard.write", args: ["text": "y"]))) == nil)
+        #expect(board.replacedTexts == ["y"])
         let ledger = ConnectorLedger(api: FakeConnectorsAPI([.clipboard: .allowed]))
         _ = try? await ledger.refresh()
-        let bare = DeviceToolExecutor(providers: DeviceProviders(), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true))
+        let bare = DeviceToolExecutor(providers: DeviceProviders(), permissions: FakePermissions(), ledger: ledger, consent: FakeConsent())
         #expect(failure(await bare.execute(clipboardRequest("clipboard.read"))) == .unsupported)
     }
 
-    @Test func theConnectorIsNamedAndWarnsLikeTheOtherMacSwitches() {
-        #expect(DeviceConnectorDefaults.entry(for: .clipboard) == ("Clipboard", "Let bots read and change this Mac's clipboard"))
-        #expect(DeviceConnectorDefaults.warning(for: .clipboard)?.contains("passwords") == true)
+    @Test func theActionsBelongToTheClipboardConnector() {
         #expect([DeviceToolAction.clipboardRead, .clipboardWrite].allSatisfy { $0.connector == .clipboard })
     }
 }

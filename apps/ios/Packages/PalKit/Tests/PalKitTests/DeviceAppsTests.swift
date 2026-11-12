@@ -86,7 +86,7 @@ private func appsRig(_ workspace: FakeWorkspace = FakeWorkspace(), state: Device
     _ = try? await ledger.refresh()
     let executor = DeviceToolExecutor(
         providers: providers ? DeviceProviders(apps: AppsController(workspace: workspace)) : DeviceProviders(),
-        permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(true),
+        permissions: FakePermissions(), ledger: ledger, consent: FakeConsent(),
         environment: DeviceToolEnvironment(deadlineMargin: .zero)
     )
     return AppsRig(executor: executor, workspace: workspace)
@@ -219,16 +219,14 @@ private func windowsList(_ value: JSONValue?) -> [JSONValue] {
         #expect(failure(await rig.executor.execute(request("windows.focus", ["window_id": 999])))?.0 == .notFound)
     }
 
-    @Test func aSwitchedOffConnectorAndAMissingProviderRefuse() async {
+    @Test func aStoredOffIsIgnoredAndAMissingProviderRefuses() async {
         let off = await appsRig(state: .off)
-        #expect(failure(await off.executor.execute(request("apps.list")))?.0 == .consentDeclined)
+        #expect(failure(await off.executor.execute(request("apps.list"))) == nil)
         let none = await appsRig(providers: false)
         #expect(failure(await none.executor.execute(request("apps.list")))?.0 == .unsupported)
     }
 
-    @Test func theConnectorIsNamedForPeopleWarnsAndNeedsNoBlockingPermission() {
-        #expect(DeviceConnectorDefaults.entry(for: .apps) == ("Apps", "Let bots open and switch apps on this Mac"))
-        #expect(DeviceConnectorDefaults.warning(for: .apps)?.contains("window titles") == true)
+    @Test func theConnectorNeedsNoBlockingPermission() {
         #expect(!DeviceConnectorID.apps.needsOSPermission)
         #expect([DeviceToolAction.appsList, .appsOpen, .appsQuit, .windowsList, .windowsFocus].allSatisfy { $0.connector == .apps })
     }
