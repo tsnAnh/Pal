@@ -1,6 +1,6 @@
 {
   "backend": "claude",
-  "max_in_flight": 1,
+  "max_in_flight": 10,
   "forbidden_paths": [
     "infra/",
     "*.lock",
