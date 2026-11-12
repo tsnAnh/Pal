@@ -10,6 +10,12 @@ metadata:
     tags: [osint, investigation, public-records, sec, sanctions, corporate-registry, property, courts, due-diligence, journalism]
     category: research
     related_skills: [domain-intel, arxiv]
+required_environment_variables:
+  - name: OPENCORPORATES_API_TOKEN
+    prompt: OpenCorporates API token
+    help: "Request one from OpenCorporates"
+    required_for: "company registry lookups beyond the free tier"
+    optional: true
 ---
 
 # OSINT Investigation — Public Records Cross-Reference

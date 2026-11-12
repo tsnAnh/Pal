@@ -9,6 +9,11 @@ metadata:
   hermes:
     tags: [actual, actual-inc, provider, local-inference, relay, gguf, setup]
     category: devops
+required_environment_variables:
+  - name: ACTUAL_API_KEY
+    prompt: Actual Computer API key
+    help: "Create one in your Actual Computer account settings; it starts with ac_"
+    required_for: "setting up Actual Computer inference"
 ---
 
 # Actual Computer Setup Skill

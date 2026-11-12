@@ -24,6 +24,12 @@ metadata:
       - generative-ai
       - video-generation
     category: creative
+required_environment_variables:
+  - name: COMFY_CLOUD_API_KEY
+    prompt: Comfy Cloud API key
+    help: "Create one at https://platform.comfy.org"
+    required_for: "Comfy Cloud runs; local ComfyUI needs no key"
+    optional: true
 ---
 
 # ComfyUI
