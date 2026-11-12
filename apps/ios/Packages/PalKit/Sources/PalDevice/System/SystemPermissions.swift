@@ -1,4 +1,7 @@
 import Contacts
+#if os(macOS)
+import CoreGraphics
+#endif
 import CoreLocation
 import EventKit
 import Foundation
@@ -22,6 +25,7 @@ public struct SystemPermissions: DevicePermissions {
         case .alarms: Self.alarmsStatus()
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
+        case .screen: Self.screenStatus()
         }
     }
 
@@ -41,8 +45,28 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestHome()
         case .shell, .files:
             break
+        case .screen:
+            Self.requestScreen()
         }
         return await status(of: connector)
+    }
+
+    private static let screenRequestedKey = "dev.tsnanh.hermes.screen-recording-requested"
+
+    private static func screenStatus() -> DeviceOSPermission {
+        #if os(macOS)
+        if CGPreflightScreenCaptureAccess() { return .granted }
+        return UserDefaults.standard.bool(forKey: screenRequestedKey) ? .denied : .notDetermined
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static func requestScreen() {
+        #if os(macOS)
+        UserDefaults.standard.set(true, forKey: screenRequestedKey)
+        _ = CGRequestScreenCaptureAccess()
+        #endif
     }
 
     private static var localAccessStatus: DeviceOSPermission {
@@ -115,7 +139,7 @@ public struct SystemPermissions: DevicePermissions {
 }
 
 extension DeviceProviders {
-    public static func system() -> DeviceProviders {
+    public static func system(screenActivity: @escaping @Sendable (Bool) -> Void = { _ in }) -> DeviceProviders {
         #if canImport(AlarmKit) && os(iOS)
         let alarms: (any AlarmsProviding)? = SystemAlarms()
         #else
@@ -129,13 +153,15 @@ extension DeviceProviders {
         #if os(macOS)
         let shell: (any ShellProviding)? = SystemShell()
         let files: (any FilesProviding)? = SystemFiles()
+        let screen: (any ScreenProviding)? = GuardedScreen(source: SystemScreenSource(), activity: screenActivity)
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
+        let screen: (any ScreenProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, screen: screen
         )
     }
 }

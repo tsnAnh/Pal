@@ -95,13 +95,13 @@ public actor DeviceToolExecutor {
     private func osPermission(for connector: DeviceConnectorID) async -> DeviceToolOutcome? {
         guard connector.needsOSPermission else { return nil }
         var status = await permissions.status(of: connector)
-        if status == .notDetermined { status = await permissions.request(connector) }
+        if status == .notDetermined, connector.asksOSPermissionOnUse { status = await permissions.request(connector) }
         await ledger.reportOSPermission(status, for: connector)
         switch status {
         case .granted: return nil
         case .unsupported: return .failure(.unsupported, "This device cannot use \(Self.title(connector)).")
         case .denied, .notDetermined:
-            return .failure(.permissionDenied, "Allow \(Self.title(connector)) for Pal in this device's Settings.")
+            return .failure(.permissionDenied, Self.permissionHint(connector))
         }
     }
 
@@ -115,7 +115,13 @@ public actor DeviceToolExecutor {
         case .alarms: "Alarms"
         case .shell: "Run commands"
         case .files: "Files"
+        case .screen: "Screen"
         }
+    }
+
+    static func permissionHint(_ connector: DeviceConnectorID) -> String {
+        if connector == .screen { return "Allow Pal under Screen Recording in System Settings, then turn Screen on again in Pal." }
+        return "Allow \(title(connector)) for Pal in this device's Settings."
     }
 
     static func outcome(for error: DeviceProviderError) -> DeviceToolOutcome {
@@ -166,6 +172,8 @@ extension DeviceToolExecutor {
         case .filesRead: try await readFile(raw)
         case .filesList: try await listFiles(raw)
         case .filesWrite: try await writeFile(raw)
+        case .screenCapture: try await captureScreen(raw)
+        case .screenRead: try await readScreen(raw)
         }
     }
 
@@ -190,6 +198,21 @@ extension DeviceToolExecutor {
         return try DeviceWire.encode(ShellRunWire(
             exitCode: record.exitCode, stdout: out.text, stderr: err.text, timedOut: record.timedOut, truncated: out.truncated || err.truncated
         ))
+    }
+
+    private func captureScreen(_ raw: JSONValue) async throws -> JSONValue {
+        let args: ScreenCaptureArgs = try DeviceWire.decodeArgs(raw)
+        let record = try await provider(\.screen).capture(display: Self.clamp(args.display, 1, 1...16), readText: args.readText ?? false)
+        return try DeviceWire.encode(ScreenCaptureWire(
+            imageBase64: record.jpeg.base64EncodedString(), width: record.width, height: record.height,
+            display: record.display, text: record.text
+        ))
+    }
+
+    private func readScreen(_ raw: JSONValue) async throws -> JSONValue {
+        let args: ScreenReadArgs = try DeviceWire.decodeArgs(raw)
+        let display = Self.clamp(args.display, 1, 1...16)
+        return try DeviceWire.encode(ScreenReadWire(text: try await provider(\.screen).readText(display: display), display: display))
     }
 
     private func readFile(_ raw: JSONValue) async throws -> JSONValue {

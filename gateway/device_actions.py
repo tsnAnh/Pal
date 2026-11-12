@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import re
 from collections.abc import Callable
@@ -20,6 +22,11 @@ MAC_ONLY = frozenset({"mac"})
 MAX_PATH_CHARS = 1000
 SHELL_DEFAULT_TIMEOUT_SECONDS = 30
 SHELL_MAX_TIMEOUT_SECONDS = 300
+SCREEN_MAX_DISPLAY = 16
+SCREEN_MAX_IMAGE_BYTES = 300_000
+SCREEN_MAX_TEXT_CHARS = 24_000
+SCREEN_MAX_RESULT_BYTES = 480_000
+SCREEN_MIN_INTERVAL_SECONDS = 3.0
 TEXT_MARKER = "\n…[truncated, {omitted} characters omitted]"
 
 
@@ -41,6 +48,7 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.ALARMS, "Alarms", "Set alarms and timers"),
     ConnectorInfo(Connector.SHELL, "Run commands", "Let bots run commands on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.FILES, "Files", "Let bots read and change files on this Mac", MAC_ONLY, False),
+    ConnectorInfo(Connector.SCREEN, "Screen", "Let bots see this Mac's screen", MAC_ONLY, False),
 )
 
 
@@ -218,6 +226,15 @@ class FilesWriteArgs(_Args):
     create_dirs: bool = False
 
 
+class ScreenCaptureArgs(_Args):
+    display: int = Field(default=1, ge=1, le=SCREEN_MAX_DISPLAY)
+    read_text: bool = False
+
+
+class ScreenReadArgs(_Args):
+    display: int = Field(default=1, ge=1, le=SCREEN_MAX_DISPLAY)
+
+
 class CalendarEvent(_Data):
     id: Identifier
     title: Short
@@ -384,6 +401,29 @@ class FilesWriteResult(_Data):
     bytes_written: int = Field(ge=0)
 
 
+def _jpeg(value: str) -> str:
+    try:
+        raw = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("image is not base64") from exc
+    if len(raw) > SCREEN_MAX_IMAGE_BYTES or not raw.startswith(b"\xff\xd8\xff"):
+        raise ValueError("image is not a JPEG within the size cap")
+    return value
+
+
+class ScreenCaptureResult(_Data):
+    image_base64: Annotated[str, Field(max_length=SCREEN_MAX_IMAGE_BYTES * 4 // 3 + 4), AfterValidator(_jpeg)]
+    width: int = Field(ge=1, le=16384)
+    height: int = Field(ge=1, le=16384)
+    display: int = Field(ge=1, le=SCREEN_MAX_DISPLAY)
+    text: Annotated[str, BeforeValidator(lambda v: cap_text(v, SCREEN_MAX_TEXT_CHARS)[0] if isinstance(v, str) else v)] | None = None
+
+
+class ScreenReadResult(_Data):
+    text: Annotated[str, BeforeValidator(lambda v: cap_text(v, SCREEN_MAX_TEXT_CHARS)[0] if isinstance(v, str) else v)]
+    display: int = Field(ge=1, le=SCREEN_MAX_DISPLAY)
+
+
 def fit_result(data: dict, limit: int) -> dict:
     fitted = dict(data)
     while len(json.dumps(fitted, ensure_ascii=False)) > limit:
@@ -410,6 +450,7 @@ class ActionSpec:
     result: type[_Data]
     describe: Callable[[Any], str]
     kinds: frozenset[str] = APPLE_KINDS
+    max_result_bytes: int | None = None
 
     @property
     def truncates(self) -> bool:
@@ -417,8 +458,9 @@ class ActionSpec:
 
 
 def _spec(name: str, connector: Connector, write: bool, purpose: str, args: type[_Args], result: type[_Data],
-          describe: Callable[[Any], str], kinds: frozenset[str] = APPLE_KINDS) -> tuple[str, ActionSpec]:
-    return name, ActionSpec(name, connector, write, purpose, args, result, describe, kinds)
+          describe: Callable[[Any], str], kinds: frozenset[str] = APPLE_KINDS,
+          max_result_bytes: int | None = None) -> tuple[str, ActionSpec]:
+    return name, ActionSpec(name, connector, write, purpose, args, result, describe, kinds, max_result_bytes)
 
 
 ACTIONS: dict[str, ActionSpec] = dict([
@@ -463,6 +505,12 @@ ACTIONS: dict[str, ActionSpec] = dict([
           FilesListArgs, FilesListResult, lambda a: f"List the folder {_quoted(a.path)}", MAC_ONLY),
     _spec("files.write", Connector.FILES, True, "write or append text to a file",
           FilesWriteArgs, FilesWriteResult, lambda a: f"Write the file {_quoted(a.path)}", MAC_ONLY),
+    _spec("screen.capture", Connector.SCREEN, False,
+          "screenshot of one display (display 1 is the main one); read_text also returns the text recognized on it",
+          ScreenCaptureArgs, ScreenCaptureResult, lambda a: f"Take a screenshot of display {a.display}", MAC_ONLY,
+          SCREEN_MAX_RESULT_BYTES),
+    _spec("screen.read", Connector.SCREEN, False, "read the text on one display, without an image",
+          ScreenReadArgs, ScreenReadResult, lambda a: f"Read the text on display {a.display}", MAC_ONLY),
 ])
 
 

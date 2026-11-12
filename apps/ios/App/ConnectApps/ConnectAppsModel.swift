@@ -320,8 +320,9 @@ final class ConnectAppsModel {
         rebuildDeviceRows()
     }
 
-    func openSettings() {
-        guard let url = SystemSettings.appSettingsURL else { return }
+    func openSettings(for row: DeviceRow) {
+        let target = row.id == .screen ? SystemSettings.screenRecordingURL : SystemSettings.appSettingsURL
+        guard let url = target else { return }
         SystemSettings.open(url)
     }
 

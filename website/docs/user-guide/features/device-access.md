@@ -21,13 +21,13 @@ Every bot can see the devices you are logged in on (the Mac and iPhone apps) and
 | Where | Actions |
 |---|---|
 | Mac or iPhone | `calendar.*`, `reminders.*`, `contacts.search`, `location.*`, `alarms.*`, `timers.start`, `home.*` |
-| Mac only | `shell.run` (command, cwd, timeout_seconds), `files.read`, `files.list`, `files.write` (path, content) |
+| Mac only | `shell.run` (command, cwd, timeout_seconds), `files.read`, `files.list`, `files.write` (path, content), `screen.capture` (display, read_text), `screen.read` (display) |
 
-Output is capped at 128 KB; longer output is cut with a `[truncated, N characters omitted]` marker and `truncated: true`. An iPhone asked for `shell.*` or `files.*` answers `unsupported`.
+Output is capped at 128 KB; longer output is cut with a `[truncated, N characters omitted]` marker and `truncated: true`. Screen results are capped separately: a JPEG of at most 300 KB (long edge 1568 px) plus at most 24,000 characters of recognized text. An iPhone asked for `shell.*`, `files.*` or `screen.*` answers `unsupported`.
 
 ## Who stays in control
 
-- **Commands and Files are off by default** on every Mac. Only the person using that Mac switches them on, in the Hermes app's connector settings on that Mac (another device cannot switch them on for it). Once on, bots run those actions with no prompt per action; switching them off stops it at once.
+- **Commands, Files and Screen are off by default** on every Mac. Only the person using that Mac switches them on, in the Hermes app's connector settings on that Mac (another device cannot switch them on for it). Once on, bots run those actions with no prompt per action; switching them off stops it at once. Screen ("Let bots see this Mac's screen") also needs the macOS Screen Recording permission, which Pal asks for only when that switch is turned on; a bot can then see everything on screen, including passwords and private messages. Pal shows "A bot is looking at your screen" while a capture runs, allows one capture at a time per device and at most one every 3 seconds, keeps screenshots in memory only (no temp files), and never logs them.
 - Apple connectors keep their existing state: `ask` still shows the device's consent prompt and the approval card for changes, `allowed` runs without prompting.
 - A bot reaches only devices logged in to the profile it runs in. Other profiles and other installs are invisible to it: they are not listed and an action naming them fails as an unknown device.
 - There is no screen capture and no screen control.

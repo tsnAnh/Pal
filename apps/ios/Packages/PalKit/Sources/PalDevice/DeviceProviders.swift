@@ -329,6 +329,27 @@ public protocol FilesProviding: Sendable {
     func write(path: String, content: String, append: Bool, createDirs: Bool) async throws -> FileWriteRecord
 }
 
+public struct ScreenImageRecord: Sendable, Equatable {
+    public var jpeg: Data
+    public var width: Int
+    public var height: Int
+    public var display: Int
+    public var text: String?
+
+    public init(jpeg: Data, width: Int, height: Int, display: Int, text: String? = nil) {
+        self.jpeg = jpeg
+        self.width = width
+        self.height = height
+        self.display = display
+        self.text = text
+    }
+}
+
+public protocol ScreenProviding: Sendable {
+    func capture(display: Int, readText: Bool) async throws -> ScreenImageRecord
+    func readText(display: Int) async throws -> String
+}
+
 public struct DeviceProviders: Sendable {
     public var calendar: (any CalendarProviding)?
     public var reminders: (any RemindersProviding)?
@@ -338,6 +359,7 @@ public struct DeviceProviders: Sendable {
     public var home: (any HomeProviding)?
     public var shell: (any ShellProviding)?
     public var files: (any FilesProviding)?
+    public var screen: (any ScreenProviding)?
 
     public init(
         calendar: (any CalendarProviding)? = nil,
@@ -347,7 +369,8 @@ public struct DeviceProviders: Sendable {
         alarms: (any AlarmsProviding)? = nil,
         home: (any HomeProviding)? = nil,
         shell: (any ShellProviding)? = nil,
-        files: (any FilesProviding)? = nil
+        files: (any FilesProviding)? = nil,
+        screen: (any ScreenProviding)? = nil
     ) {
         self.calendar = calendar
         self.reminders = reminders
@@ -357,6 +380,7 @@ public struct DeviceProviders: Sendable {
         self.home = home
         self.shell = shell
         self.files = files
+        self.screen = screen
     }
 }
 

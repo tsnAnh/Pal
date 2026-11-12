@@ -9,13 +9,16 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
     case alarms
     case shell
     case files
+    case screen
 
     public var needsOSPermission: Bool {
         switch self {
         case .shell, .files: false
-        case .calendar, .home, .reminders, .contacts, .location, .alarms: true
+        case .calendar, .home, .reminders, .contacts, .location, .alarms, .screen: true
         }
     }
+
+    public var asksOSPermissionOnUse: Bool { self != .screen }
 }
 
 public enum DeviceConnectorState: String, Codable, Sendable, Hashable {
@@ -110,6 +113,8 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
     case filesRead = "files.read"
     case filesList = "files.list"
     case filesWrite = "files.write"
+    case screenCapture = "screen.capture"
+    case screenRead = "screen.read"
 
     public var connector: DeviceConnectorID {
         switch self {
@@ -121,6 +126,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
         case .homeListAccessories, .homeSet: .home
         case .shellRun: .shell
         case .filesRead, .filesList, .filesWrite: .files
+        case .screenCapture, .screenRead: .screen
         }
     }
 }
@@ -321,6 +327,15 @@ public struct HomeSetArgs: Decodable, Sendable {
     public var accessoryId: String
     public var characteristic: String
     public var value: JSONValue
+}
+
+public struct ScreenCaptureArgs: Decodable, Sendable {
+    public var display: Int?
+    public var readText: Bool?
+}
+
+public struct ScreenReadArgs: Decodable, Sendable {
+    public var display: Int?
 }
 
 public struct ShellRunArgs: Decodable, Sendable {
@@ -563,5 +578,31 @@ public struct FileWriteWire: Encodable, Sendable, Equatable {
     public init(path: String, bytesWritten: Int) {
         self.path = path
         self.bytesWritten = bytesWritten
+    }
+}
+
+public struct ScreenCaptureWire: Encodable, Sendable, Equatable {
+    public var imageBase64: String
+    public var width: Int
+    public var height: Int
+    public var display: Int
+    public var text: String?
+
+    public init(imageBase64: String, width: Int, height: Int, display: Int, text: String?) {
+        self.imageBase64 = imageBase64
+        self.width = width
+        self.height = height
+        self.display = display
+        self.text = text
+    }
+}
+
+public struct ScreenReadWire: Encodable, Sendable, Equatable {
+    public var text: String
+    public var display: Int
+
+    public init(text: String, display: Int) {
+        self.text = text
+        self.display = display
     }
 }
