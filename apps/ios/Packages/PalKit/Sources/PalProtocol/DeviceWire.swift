@@ -10,12 +10,13 @@ public enum DeviceConnectorID: String, Codable, Sendable, Hashable, CaseIterable
     case shell
     case files
     case apps
+    case notifications
     case clipboard
 
     public var needsOSPermission: Bool {
         switch self {
         case .shell, .files, .apps: false
-        case .calendar, .home, .reminders, .contacts, .location, .alarms, .clipboard: true
+        case .calendar, .home, .reminders, .contacts, .location, .alarms, .notifications, .clipboard: true
         }
     }
 }
@@ -112,6 +113,8 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
     case filesRead = "files.read"
     case filesList = "files.list"
     case filesWrite = "files.write"
+    case notifyPost = "notify.post"
+    case notifyCancel = "notify.cancel"
     case appsList = "apps.list"
     case appsOpen = "apps.open"
     case appsQuit = "apps.quit"
@@ -130,6 +133,7 @@ public enum DeviceToolAction: String, Codable, Sendable, Hashable, CaseIterable 
         case .homeListAccessories, .homeSet: .home
         case .shellRun: .shell
         case .filesRead, .filesList, .filesWrite: .files
+        case .notifyPost, .notifyCancel: .notifications
         case .appsList, .appsOpen, .appsQuit, .windowsList, .windowsFocus: .apps
         case .clipboardRead, .clipboardWrite: .clipboard
         }
@@ -354,6 +358,26 @@ public struct FilesWriteArgs: Decodable, Sendable {
     public var content: String
     public var append: Bool?
     public var createDirs: Bool?
+}
+
+public struct NotifyPostArgs: Decodable, Sendable {
+    public var title: String
+    public var body: String
+    public var subtitle: String?
+    public var sound: Bool?
+    public var identifier: String?
+}
+
+public struct NotifyCancelArgs: Decodable, Sendable {
+    public var identifier: String
+}
+
+public struct NotifyWire: Encodable, Sendable, Equatable {
+    public var identifier: String
+
+    public init(identifier: String) {
+        self.identifier = identifier
+    }
 }
 
 public struct AppsListArgs: Decodable, Sendable {
