@@ -164,7 +164,6 @@ struct ConnectAppsSheet: View {
 
     @ViewBuilder
     private var allSections: some View {
-        GitHubAccountSection(model: model.github)
         ForEach(model.catalog.categories, id: \.self) { category in
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
             ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) }

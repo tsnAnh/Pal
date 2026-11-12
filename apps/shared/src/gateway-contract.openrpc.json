@@ -1411,8 +1411,26 @@
       }
     },
     {
-      "name": "github.git_protocol.fix",
-      "summary": "Set git and gh to HTTPS for github.com (idempotent) and return the fresh status.",
+      "name": "github.oauth.cancel",
+      "summary": "Drop a pending GitHub sign-in.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GithubOauthSessionParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubOauthCancelResult"
+        }
+      }
+    },
+    {
+      "name": "github.oauth.config.get",
+      "summary": "The OAuth App client ID (public, not a secret), or null when it is not set.",
       "params": [
         {
           "name": "params",
@@ -1424,67 +1442,49 @@
       "result": {
         "name": "result",
         "schema": {
-          "$ref": "#/components/schemas/GithubStatus"
+          "$ref": "#/components/schemas/GithubOauthConfig"
         }
       }
     },
     {
-      "name": "github.signin.cancel",
-      "summary": "Stop a pending GitHub sign-in and its gh process.",
+      "name": "github.oauth.config.set",
+      "summary": "Save (client_id set) or clear (null or empty) the OAuth App client ID in the host's config and drop any pending sign-in. 4101 invalid client ID.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/GithubSigninSessionParams"
+            "$ref": "#/components/schemas/GithubOauthConfigSetParams"
           }
         }
       ],
       "result": {
         "name": "result",
         "schema": {
-          "$ref": "#/components/schemas/GithubSigninCancelResult"
+          "$ref": "#/components/schemas/GithubOauthConfig"
         }
       }
     },
     {
-      "name": "github.signin.poll",
-      "summary": "State of the sign-in; on signed_in the git protocol fix is already applied.",
+      "name": "github.oauth.poll",
+      "summary": "State of the sign-in. On signed_in the token is already applied to gh and git is set to HTTPS. A failed state carries code: missing_scopes (with missing_scopes; nothing applied), apply_failed, oauth_app_rejected, unreachable or failed. org_approval_needed: an organization owner must approve Pal.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/GithubSigninSessionParams"
+            "$ref": "#/components/schemas/GithubOauthSessionParams"
           }
         }
       ],
       "result": {
         "name": "result",
         "schema": {
-          "$ref": "#/components/schemas/GithubSigninPollResult"
+          "$ref": "#/components/schemas/GithubOauthPollResult"
         }
       }
     },
     {
-      "name": "github.signin.start",
-      "summary": "Start GitHub's device flow through gh; a pending sign-in is returned again instead of a second one.",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/Params"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/GithubSigninStartResult"
-        }
-      }
-    },
-    {
-      "name": "github.status",
-      "summary": "GitHub sign-in and git/gh health on the host: the host user's single gh login and its problems.",
+      "name": "github.oauth.start",
+      "summary": "Start GitHub's device flow with Pal's own OAuth App; a pending sign-in is returned again instead of a second one. Error 5311 carries data.code: oauth_app_not_configured, oauth_app_rejected or unreachable. 4403 secondary profile.",
       "params": [
         {
           "name": "params",
@@ -1496,7 +1496,25 @@
       "result": {
         "name": "result",
         "schema": {
-          "$ref": "#/components/schemas/GithubStatus"
+          "$ref": "#/components/schemas/GithubOauthStartResult"
+        }
+      }
+    },
+    {
+      "name": "github.token.status",
+      "summary": "The host's single GitHub token, read through gh without reading the token back: state, account, scope names, expiry and the git protocol. Never carries the token. 4403 secondary profile.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/Params"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GithubTokenStatus"
         }
       }
     },
@@ -24274,45 +24292,7 @@
         "title": "GatewayServiceStatus",
         "type": "object"
       },
-      "GithubProblem": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/GithubProblemId"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "fix": {
-            "$ref": "#/components/schemas/GithubProblemFix"
-          }
-        },
-        "required": [
-          "id",
-          "message",
-          "fix"
-        ],
-        "title": "GithubProblem",
-        "type": "object"
-      },
-      "GithubProblemFix": {
-        "enum": [
-          "github.signin",
-          "github.git_protocol.fix"
-        ],
-        "title": "GithubProblemFix",
-        "type": "string"
-      },
-      "GithubProblemId": {
-        "enum": [
-          "gh_signed_out",
-          "git_ssh_unknown_host"
-        ],
-        "title": "GithubProblemId",
-        "type": "string"
-      },
-      "GithubSigninCancelResult": {
+      "GithubOauthCancelResult": {
         "additionalProperties": false,
         "properties": {
           "ok": {
@@ -24323,17 +24303,58 @@
         "required": [
           "ok"
         ],
-        "title": "GithubSigninCancelResult",
+        "title": "GithubOauthCancelResult",
         "type": "object"
       },
-      "GithubSigninPollResult": {
+      "GithubOauthConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
+          }
+        },
+        "title": "GithubOauthConfig",
+        "type": "object"
+      },
+      "GithubOauthConfigSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "client_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Id"
+          }
+        },
+        "title": "GithubOauthConfigSetParams",
+        "type": "object"
+      },
+      "GithubOauthPollResult": {
         "additionalProperties": false,
         "properties": {
           "state": {
             "enum": [
               "pending",
               "signed_in",
+              "denied",
               "expired",
+              "org_approval_needed",
               "failed"
             ],
             "title": "State",
@@ -24362,15 +24383,34 @@
             ],
             "default": null,
             "title": "Message"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Code"
+          },
+          "missing_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Scopes",
+            "type": "array"
           }
         },
         "required": [
           "state"
         ],
-        "title": "GithubSigninPollResult",
+        "title": "GithubOauthPollResult",
         "type": "object"
       },
-      "GithubSigninSessionParams": {
+      "GithubOauthSessionParams": {
         "additionalProperties": false,
         "properties": {
           "session_id": {
@@ -24381,12 +24421,11 @@
         "required": [
           "session_id"
         ],
-        "title": "GithubSigninSessionParams",
+        "title": "GithubOauthSessionParams",
         "type": "object"
       },
-      "GithubSigninStartResult": {
+      "GithubOauthStartResult": {
         "additionalProperties": false,
-        "description": "The one-time device code and where to enter it. ``expires_in`` and ``interval`` are seconds.",
         "properties": {
           "session_id": {
             "title": "Session Id",
@@ -24416,16 +24455,28 @@
           "expires_in",
           "interval"
         ],
-        "title": "GithubSigninStartResult",
+        "title": "GithubOauthStartResult",
         "type": "object"
       },
-      "GithubStatus": {
+      "GithubTokenState": {
+        "enum": [
+          "set",
+          "missing",
+          "invalid",
+          "expired",
+          "missing_scopes",
+          "oauth_app_not_configured",
+          "unknown"
+        ],
+        "title": "GithubTokenState",
+        "type": "string"
+      },
+      "GithubTokenStatus": {
         "additionalProperties": false,
-        "description": "``git_protocol`` is gh's value for github.com (``unset`` when gh cannot say). A field that could not\nbe read degrades to null, ``unset`` or false.",
+        "description": "A field that could not be read degrades to null, an empty list, ``unknown`` or ``unset``. An OAuth App\ntoken has no expiry, so ``expires_at`` is null. ``oauth_app_not_configured``: no token and no client ID.",
         "properties": {
-          "signed_in": {
-            "title": "Signed In",
-            "type": "boolean"
+          "state": {
+            "$ref": "#/components/schemas/GithubTokenState"
           },
           "login": {
             "anyOf": [
@@ -24439,9 +24490,39 @@
             "default": null,
             "title": "Login"
           },
-          "host": {
-            "const": "github.com",
-            "title": "Host",
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Scopes",
+            "type": "array"
+          },
+          "missing_scopes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Scopes",
+            "type": "array"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires At"
+          },
+          "token_kind": {
+            "enum": [
+              "classic",
+              "fine_grained",
+              "unknown"
+            ],
+            "title": "Token Kind",
             "type": "string"
           },
           "git_protocol": {
@@ -24452,27 +24533,16 @@
             ],
             "title": "Git Protocol",
             "type": "string"
-          },
-          "ssh_host_key_known": {
-            "title": "Ssh Host Key Known",
-            "type": "boolean"
-          },
-          "problems": {
-            "items": {
-              "$ref": "#/components/schemas/GithubProblem"
-            },
-            "title": "Problems",
-            "type": "array"
           }
         },
         "required": [
-          "signed_in",
-          "host",
-          "git_protocol",
-          "ssh_host_key_known",
-          "problems"
+          "state",
+          "scopes",
+          "missing_scopes",
+          "token_kind",
+          "git_protocol"
         ],
-        "title": "GithubStatus",
+        "title": "GithubTokenStatus",
         "type": "object"
       },
       "GoalContractSnapshot": {

@@ -239,8 +239,6 @@ struct MacConnectApps: View {
     private var selectedSection: some View {
         switch model.selection {
         case ConnectChip.all:
-            GitHubAccountSection(model: model.github)
-                .padding(.horizontal, -PalMetrics.screenMargin)
             ForEach(model.catalog.categories, id: \.self) { category in
                 section(title: category, identifier: "connectAppsSection-\(category)", viewAll: { model.selection = category }) {
                     appGrid(Array(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)))
