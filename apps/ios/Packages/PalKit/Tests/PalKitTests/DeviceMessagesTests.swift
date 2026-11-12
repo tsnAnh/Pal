@@ -599,8 +599,8 @@ private let base = 700_000_000.0
         _ = await run(reader, "messages.send", ["recipient": "", "text": "hi"])
         _ = await run(reader, "messages.send", ["recipient": "+15551230000", "text": ""])
         #expect(scripts.calls.withLock { $0.isEmpty })
-        let off = await executor(reader, state: .off)
-        _ = await off.execute(messagesRequest("messages.send", args: ["recipient": "+15551230000", "text": "hi"]))
+        let unallowed = await executor(reader, permissions: FakePermissions(statuses: [.messages: .notDetermined]))
+        _ = await unallowed.execute(messagesRequest("messages.send", args: ["recipient": "+15551230000", "text": "hi"]))
         #expect(scripts.calls.withLock { $0.isEmpty })
     }
 

@@ -205,8 +205,6 @@ struct MacConnectApps: View {
     private func chipTitle(_ id: String) -> String {
         switch id {
         case ConnectChip.all: String(localized: "All")
-        case ConnectChip.iphone: String(localized: "iPhone")
-        case ConnectChip.mac: String(localized: "Mac")
         default: id
         }
     }
@@ -251,15 +249,13 @@ struct MacConnectApps: View {
     private var selectedSection: some View {
         switch model.selection {
         case ConnectChip.all:
-            if let section = model.devices.thisDevice { deviceSection(section) }
+            deviceSection(model.devices.thisDevice)
             ForEach(model.catalog.categories, id: \.self) { category in
                 section(title: category, identifier: "connectAppsSection-\(category)", viewAll: { model.selection = category }) {
                     appGrid(Array(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)))
                 }
             }
             capabilitiesSection
-        case ConnectChip.iphone, ConnectChip.mac:
-            deviceSections(of: ConnectChip.deviceKind(model.selection) ?? .mac)
         case let category:
             section(title: category, identifier: "connectAppsSectionTitle", viewAll: nil) {
                 appGrid(model.catalog.apps(in: category))
@@ -369,30 +365,17 @@ struct MacConnectApps: View {
         }
     }
 
-    @ViewBuilder
-    private func deviceSections(of kind: DeviceKind) -> some View {
-        let sections = model.devices.sections(of: kind)
-        ForEach(sections) { deviceSection($0) }
-        if sections.isEmpty {
-            Text("No \(kind.sectionName) connected yet")
-                .font(.system(size: 11))
-                .foregroundStyle(PalTokens.textSecondary)
-                .accessibilityIdentifier("connectAppsNoDevices")
-        }
-    }
-
     private func deviceSection(_ device: DeviceSection) -> some View {
         section(title: device.title, identifier: "connectAppsSection-device-\(device.id)", viewAll: nil) {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
-                ForEach(device.rows) { deviceRow($0, in: device) }
+                ForEach(device.rows) { deviceRow($0) }
             }
         }
     }
 
-    private func deviceRow(_ row: DeviceConnectorRow, in device: DeviceSection) -> some View {
-        let look = DeviceRowPresentation(row: row, isThisDevice: device.isThisDevice)
-        let prefix = device.isThisDevice ? "deviceConnector" : "deviceConnector-\(device.id)"
-        let identifier = "\(prefix)-\(row.id.rawValue)"
+    private func deviceRow(_ row: DeviceConnectorRow) -> some View {
+        let look = DeviceRowPresentation(row: row)
+        let identifier = "deviceConnector-\(row.id.rawValue)"
         return HStack(spacing: 8) {
             DeviceTile(connector: row.id).scaleEffect(0.95).frame(width: 38, height: 38)
             VStack(alignment: .leading, spacing: 2) {
@@ -406,7 +389,7 @@ struct MacConnectApps: View {
                     .lineLimit(2)
             }
             Spacer(minLength: 8)
-            if device.isThisDevice, model.devices.busy.contains(row.id) {
+            if model.devices.busy.contains(row.id) {
                 ProgressView().controlSize(.small)
             } else if let action = deviceAction(look, row.id) {
                 action.view(identifier: "\(identifier)-action")

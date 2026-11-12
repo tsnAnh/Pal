@@ -36,70 +36,27 @@ struct DeviceConnectorCatalogTests {
         #expect(DeviceConnectorRowState(osPermission: nil) == .unknown)
     }
 
-    @Test func offlineDeviceWinsOverAnyReportedPermission() {
-        #expect(DeviceConnectorRowState(osPermission: .granted, online: false) == .offline)
-        #expect(DeviceConnectorRowState(osPermission: nil, online: false) == .offline)
-    }
-
-    @Test func missingFieldsDecodeAsUnknownNotAsAllowed() {
-        let value: JSONValue = .object(["connectors": .array([
-            .object(["id": .string("calendar")]),
-            .object(["id": .string("home"), "os_permission": .string("granted")]),
-            .object(["id": .string("reminders"), "os_permission": .string("something_new")]),
-            .object(["id": .string("telepathy"), "os_permission": .string("granted")]),
-            .object(["os_permission": .string("granted")]),
-        ])])
-        let reports = DeviceConnectorReport.decode(value)
-        #expect(reports[.calendar]?.osPermission == nil)
-        #expect(reports[.home]?.osPermission == .granted)
-        #expect(reports[.reminders]?.osPermission == nil)
-        #expect(reports.count == 3)
+    @Test func rowsWithoutAReportAreUnknownNotAllowed() {
+        let reports = [DeviceConnectorID.home: DeviceConnectorReport(id: .home, osPermission: .granted)]
         let rows = DeviceConnectorCatalog.rows(for: .ios, reports: reports)
         #expect(rows.first { $0.id == .calendar }?.state == .unknown)
-        #expect(rows.first { $0.id == .contacts }?.state == .unknown)
         #expect(rows.first { $0.id == .home }?.state == .allowed)
-    }
-
-    @Test func undecodableResultYieldsNoReports() {
-        #expect(DeviceConnectorReport.decode(.null).isEmpty)
-        #expect(DeviceConnectorReport.decode(.object(["connectors": .string("nope")])).isEmpty)
-    }
-
-    @Test func thisDeviceOffersOnlyPermissionActionsNeverASwitch() {
-        for state in [DeviceConnectorRowState.allowed, .allow, .needsSystemPermission, .unavailable, .offline, .unknown] {
-            let row = DeviceConnectorRow(entry: DeviceConnectorCatalog.entries(for: .mac)[0], state: state)
-            let look = DeviceRowPresentation(row: row, isThisDevice: true)
-            #expect(look.action == nil || look.action == .allow || look.action == .openSettings)
-        }
     }
 
     @Test func allowedAndAllowAndSettingsButtonsOnThisDevice() {
         let entry = DeviceConnectorCatalog.entries(for: .ios)[0]
-        let allowed = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .allowed), isThisDevice: true)
-        let allow = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .allow), isThisDevice: true)
-        let denied = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .needsSystemPermission), isThisDevice: true)
+        let allowed = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .allowed))
+        let allow = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .allow))
+        let denied = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .needsSystemPermission))
         #expect(allowed.buttonTitle == "Allowed" && allowed.action == nil)
         #expect(allow.buttonTitle == "Allow" && allow.action == .allow)
         #expect(denied.buttonTitle == "Open Settings" && denied.action == .openSettings)
         #expect(denied.summary == "Needs a system permission")
     }
 
-    @Test func otherDevicesAreReadOnlyWithTheOpenPalNote() {
+    @Test func unavailableIsLabelled() {
         let entry = DeviceConnectorCatalog.entries(for: .mac)[0]
-        for state in [DeviceConnectorRowState.allowed, .allow, .needsSystemPermission, .unavailable, .offline, .unknown] {
-            let look = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: state), isThisDevice: false)
-            #expect(look.buttonTitle == nil)
-            #expect(look.action == nil)
-        }
-        let needs = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .allow), isThisDevice: false)
-        #expect(needs.summary.contains(DeviceRowPresentation.remoteNote))
-    }
-
-    @Test func unavailableAndOfflineAreLabelled() {
-        let entry = DeviceConnectorCatalog.entries(for: .mac)[0]
-        let unavailable = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .unavailable), isThisDevice: true)
-        let offline = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .offline), isThisDevice: false)
+        let unavailable = DeviceRowPresentation(row: DeviceConnectorRow(entry: entry, state: .unavailable))
         #expect(unavailable.summary == "Not available on this device")
-        #expect(offline.summary == "Offline")
     }
 }

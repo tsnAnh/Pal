@@ -157,8 +157,6 @@ struct ConnectAppsSheet: View {
     private func chipTitle(_ id: String) -> String {
         switch id {
         case ConnectChip.all: "All"
-        case ConnectChip.iphone: "iPhone"
-        case ConnectChip.mac: "Mac"
         default: id
         }
     }
@@ -167,7 +165,6 @@ struct ConnectAppsSheet: View {
     private var selectedSection: some View {
         switch model.selection {
         case ConnectChip.all: allSections
-        case ConnectChip.iphone, ConnectChip.mac: deviceSections(of: ConnectChip.deviceKind(model.selection) ?? .ios)
         case let category:
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSectionTitle")
             ForEach(model.catalog.apps(in: category)) { appRow($0) }
@@ -176,7 +173,7 @@ struct ConnectAppsSheet: View {
 
     @ViewBuilder
     private var allSections: some View {
-        if let section = model.devices.thisDevice { deviceSection(section) }
+        deviceSection(model.devices.thisDevice)
         ForEach(model.catalog.categories, id: \.self) { category in
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
             ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) }
@@ -186,32 +183,16 @@ struct ConnectAppsSheet: View {
     }
 
     @ViewBuilder
-    private func deviceSections(of kind: DeviceKind) -> some View {
-        let sections = model.devices.sections(of: kind)
-        ForEach(sections) { deviceSection($0) }
-        if sections.isEmpty {
-            Text("No \(kind.sectionName) connected yet")
-                .font(.system(size: ConnectRowMetrics.captionSize))
-                .foregroundStyle(Color(theme.palette.textSecondary))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
-                .padding(.vertical, 8)
-                .accessibilityIdentifier("connectAppsNoDevices")
-        }
-    }
-
-    @ViewBuilder
     private func deviceSection(_ section: DeviceSection) -> some View {
         ConnectSectionHeader(section.title, accessibilityIdentifier: "connectAppsSection-device-\(section.id)")
-        ForEach(section.rows) { deviceRow($0, in: section) }
+        ForEach(section.rows) { deviceRow($0) }
     }
 
-    private func deviceRow(_ row: DeviceConnectorRow, in section: DeviceSection) -> some View {
-        let look = DeviceRowPresentation(row: row, isThisDevice: section.isThisDevice)
-        let prefix = section.isThisDevice ? "deviceConnector" : "deviceConnector-\(section.id)"
+    private func deviceRow(_ row: DeviceConnectorRow) -> some View {
+        let look = DeviceRowPresentation(row: row)
         return ConnectAppRow(
-            title: row.entry.title, summary: look.summary, accessibilityIdentifier: "\(prefix)-\(row.id.rawValue)",
-            isBusy: section.isThisDevice && model.devices.busy.contains(row.id), trailing: deviceAction(look, row.id)
+            title: row.entry.title, summary: look.summary, accessibilityIdentifier: "deviceConnector-\(row.id.rawValue)",
+            isBusy: model.devices.busy.contains(row.id), trailing: deviceAction(look, row.id)
         ) { DeviceTile(connector: row.id) }
     }
 
