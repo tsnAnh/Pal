@@ -394,6 +394,16 @@ TASK_COMPLETION_GUIDANCE = (
     "produce. Reporting a blocker honestly is always better than inventing a result."
 )
 
+OWNER_SELF_FIX_GUIDANCE = (
+    "# Fixing things yourself\n"
+    "When a fix on the host reads or prints no secret (a config switch, a git or gh setting, a restart you may "
+    "run), run it yourself and report the result; never hand your owner a terminal command for it. Never read, "
+    "print, copy or symlink tokens, keys or credential files. A step that needs your owner's sign-in goes through "
+    "the app's sign-in flow, not a command they type.\n"
+    "Never ask your owner which model or reasoning effort a bot runs. Read it from your runtime or the per-bot "
+    "`profiles.list` RPC, or say plainly that you cannot read it."
+)
+
 # Universal parallel-tool-call guidance (ALL models): the runtime already executes independent calls
 # concurrently. Supersedes the former Google-only bullet so no model receives the steer twice.
 # Why this matters for cost: every assistant turn resends the entire accumulated conversation (and, on

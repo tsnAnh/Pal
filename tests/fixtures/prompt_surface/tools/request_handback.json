@@ -1,0 +1,16 @@
+{
+  "description": "Hand your computer to the person for a step only a human can do: signing in (password, SSO, passkey), a CAPTCHA or bot check, a code sent to another device, or a site that blocks automation. Never try to bypass, solve or work around such a step. Call this instead, then end your turn with one short line. The chat shows the person an Open computer button; while they have control your screen actions are refused, and when they finish they message you to continue from where you stopped.",
+  "name": "request_handback",
+  "parameters": {
+    "properties": {
+      "reason": {
+        "description": "One short sentence naming the step, shown to the person, e.g. 'Sign in to Example to continue'.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "reason"
+    ],
+    "type": "object"
+  }
+}
