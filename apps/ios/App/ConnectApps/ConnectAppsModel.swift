@@ -107,6 +107,7 @@ final class ConnectAppsModel {
     private(set) var mode: Mode = .list
 
     let botName: String
+    let devices: DeviceConnectorsModel
     private let profile: String?
     private let service: ConnectAppsService
     private let capabilitiesService: CapabilitiesService
@@ -121,6 +122,7 @@ final class ConnectAppsModel {
     ) {
         self.profile = profile
         self.botName = botName
+        devices = DeviceConnectorsModel(connection: connection, pool: pool, profile: profile)
         self.bots = bots
         self.currentBot = currentBot
         service = ConnectAppsService(

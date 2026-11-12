@@ -96,6 +96,11 @@ public struct DeviceConnectorReport: Sendable, Hashable {
     public let id: DeviceConnectorID
     public let osPermission: DeviceOSPermission?
 
+    public init(id: DeviceConnectorID, osPermission: DeviceOSPermission?) {
+        self.id = id
+        self.osPermission = osPermission
+    }
+
     public static func decode(_ result: JSONValue) -> [DeviceConnectorID: DeviceConnectorReport] {
         let rows = result["connectors"]?.arrayValue ?? []
         let reports = rows.compactMap { row -> DeviceConnectorReport? in
