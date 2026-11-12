@@ -9,6 +9,12 @@ metadata:
   hermes:
     tags: [Research, Web, Search, Deep-Research, Enrichment, CLI]
     related_skills: [mcporter]
+required_environment_variables:
+  - name: PARALLEL_API_KEY
+    prompt: Parallel API key
+    help: "Create one at https://platform.parallel.ai"
+    required_for: "Parallel search and research without a device login"
+    optional: true
 ---
 
 # Parallel CLI

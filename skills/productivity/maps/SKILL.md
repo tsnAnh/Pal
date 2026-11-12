@@ -11,6 +11,12 @@ metadata:
     category: productivity
     requires_toolsets: [terminal]
     supersedes: [find-nearby]
+required_environment_variables:
+  - name: GOOGLE_MAPS_API_KEY
+    prompt: Google Places API key
+    help: "Create one in the Google Cloud console with Places API (New) enabled"
+    required_for: "Google Places search; the OpenStreetMap lookups need no key"
+    optional: true
 ---
 
 # Maps Skill

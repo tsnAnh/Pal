@@ -9,6 +9,12 @@ metadata:
   hermes:
     tags: [AI, image-generation, video, LLM, search, inference, FLUX, Veo, Claude]
     related_skills: []
+required_environment_variables:
+  - name: INFSH_API_KEY
+    prompt: inference.sh API key
+    help: "Create one in your inference.sh account settings"
+    required_for: "running inference.sh apps without an interactive login"
+    optional: true
 ---
 
 # inference.sh CLI

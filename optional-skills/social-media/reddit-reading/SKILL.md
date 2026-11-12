@@ -9,6 +9,17 @@ metadata:
   hermes:
     tags: [Reddit, Social Media, Research, Discussions, Community]
     related_skills: [rss-feeds, grounded-citations, blocked-page-recovery, xurl]
+required_environment_variables:
+  - name: REDDIT_CLIENT_ID
+    prompt: Reddit app client ID
+    help: "Create a script app at https://www.reddit.com/prefs/apps"
+    required_for: "authenticated Reddit reads; public reads need no key"
+    optional: true
+  - name: REDDIT_CLIENT_SECRET
+    prompt: Reddit app client secret
+    help: "Shown next to the client ID on the same Reddit apps page"
+    required_for: "authenticated Reddit reads"
+    optional: true
 ---
 
 # Reddit Reading Skill
