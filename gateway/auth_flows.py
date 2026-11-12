@@ -236,6 +236,38 @@ class KeyEntryFlow:
         return None
 
 
+class EmailPasswordFlow:
+    kind = "api_key"
+    user_code = None
+    verification_uri = None
+    expires_in = None
+    ENV_VAR = "HIMALAYA_PASSWORD"
+
+    def __init__(self) -> None:
+        self._stored = asyncio.Event()
+
+    async def store(self, value: str) -> bool:
+        text = credential_text(value)
+        if text is None:
+            return False
+        await save_credential(self.ENV_VAR, text)
+        self._stored.set()
+        return True
+
+    async def begin(self) -> None:
+        return None
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def wait(self) -> bool:
+        await self._stored.wait()
+        return True
+
+    def cancel(self) -> None:
+        return None
+
+
 class HeaderFlow:
     kind = "header"
     user_code = None
@@ -680,3 +712,4 @@ register("github", GithubDeviceFlow)
 register("mcp", McpServerFlow)
 register("connector", HostedConnectorFlow)
 register("provider", provider_flow)
+register("email", lambda home, service: EmailPasswordFlow())

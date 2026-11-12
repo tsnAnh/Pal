@@ -11,6 +11,11 @@ metadata:
     homepage: https://github.com/pimalaya/himalaya
 prerequisites:
   commands: [himalaya]
+required_environment_variables:
+  - name: HIMALAYA_PASSWORD
+    prompt: Mailbox app password
+    help: "Gmail, iCloud and Outlook need an app password created in the account's security settings, not the normal sign-in password"
+    required_for: "reading and sending mail"
 ---
 
 # Himalaya Email CLI
@@ -31,7 +36,7 @@ requires the external `himalaya` CLI.
 
 1. Himalaya CLI installed (`himalaya --version` to verify)
 2. A configuration file at `~/.config/himalaya/config.toml`
-3. IMAP/SMTP credentials configured (password stored securely)
+3. `HIMALAYA_PASSWORD` set; loading this skill asks the owner for it in a masked prompt. Never ask for the password in chat, never write it to a file or a command line.
 
 ### Installation
 
@@ -48,13 +53,10 @@ cargo install himalaya --locked
 
 ## Configuration Setup
 
-Run the interactive wizard to set up an account:
-
-```bash
-himalaya account configure
-```
-
-Or create `~/.config/himalaya/config.toml` manually:
+Ask the owner for the address, IMAP and SMTP hosts and ports (none of these is secret), then write
+`~/.config/himalaya/config.toml` with the file tool. The password is never in the file: `printenv
+HIMALAYA_PASSWORD` reads it from the environment the skill's masked prompt filled. Do not run
+`himalaya account configure`.
 
 ```toml
 [accounts.personal]
@@ -68,7 +70,7 @@ backend.port = 993
 backend.encryption.type = "tls"
 backend.login = "you@example.com"
 backend.auth.type = "password"
-backend.auth.cmd = "pass show email/imap"  # or use keyring
+backend.auth.cmd = "printenv HIMALAYA_PASSWORD"
 
 message.send.backend.type = "smtp"
 message.send.backend.host = "smtp.example.com"
@@ -76,7 +78,7 @@ message.send.backend.port = 587
 message.send.backend.encryption.type = "start-tls"
 message.send.backend.login = "you@example.com"
 message.send.backend.auth.type = "password"
-message.send.backend.auth.cmd = "pass show email/smtp"
+message.send.backend.auth.cmd = "printenv HIMALAYA_PASSWORD"
 
 # Folder aliases (himalaya v1.2.0+ syntax). Required whenever the
 # server's folder names don't match himalaya's canonical names
@@ -104,7 +106,7 @@ folder.aliases.trash = "Trash"
 - **Reading, listing, searching, moving, deleting** all work directly through the terminal tool
 - **Composing/replying/forwarding** — piped input (`cat << EOF | himalaya template send`) is recommended for reliability. Interactive `$EDITOR` mode works with `pty=true` + background + process tool, but requires knowing the editor and its commands
 - Use `--output json` for structured output that's easier to parse programmatically
-- The `himalaya account configure` wizard requires interactive input — use PTY mode: `terminal(command="himalaya account configure", pty=true)`
+- An authentication failure opens the masked password prompt again on its own; do not retry the command or ask for the password in chat
 
 ## Common Operations
 
