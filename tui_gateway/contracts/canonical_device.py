@@ -23,6 +23,7 @@ class DeviceConnectorId(WireEnum):
     NOTIFICATIONS = "notifications"
     CLIPBOARD = "clipboard"
     APPS = "apps"
+    MESSAGES = "messages"
 
 
 class DeviceConnectorState(WireEnum):
@@ -74,6 +75,10 @@ class DeviceToolAction(WireEnum):
     APPS_QUIT = "apps.quit"
     WINDOWS_LIST = "windows.list"
     WINDOWS_FOCUS = "windows.focus"
+    MESSAGES_RECENT = "messages.recent"
+    MESSAGES_SEARCH = "messages.search"
+    MESSAGES_READ = "messages.read"
+    MESSAGES_SEND = "messages.send"
 
 
 class DeviceToolErrorCode(WireEnum):

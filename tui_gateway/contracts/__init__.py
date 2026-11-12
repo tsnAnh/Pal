@@ -18,6 +18,7 @@ from . import (
     host_kit,
     webhook_routes,
     groups_bot_relay,
+    host_update,
     i18n,
     liveness,
     library,

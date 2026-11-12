@@ -501,6 +501,122 @@ public protocol ClipboardProviding: Sendable {
     func write(imageBase64: String, imageLimit: Int) async throws -> ClipboardWriteRecord
 }
 
+public enum MessageService: String, Sendable, Hashable {
+    case imessage, sms
+}
+
+public enum MessagesAccess: Sendable, Equatable {
+    case ready
+    case permissionNeeded
+    case unavailable
+}
+
+public struct MessageParticipantRecord: Sendable, Equatable {
+    public var handle: String
+    public var name: String?
+
+    public init(handle: String, name: String? = nil) {
+        self.handle = handle
+        self.name = name
+    }
+}
+
+public struct MessageRecord: Sendable, Equatable {
+    public var id: Int
+    public var at: Date
+    public var fromMe: Bool
+    public var sender: String?
+    public var senderName: String?
+    public var text: String
+    public var service: String?
+
+    public init(id: Int, at: Date, fromMe: Bool, sender: String? = nil, senderName: String? = nil, text: String, service: String? = nil) {
+        self.id = id
+        self.at = at
+        self.fromMe = fromMe
+        self.sender = sender
+        self.senderName = senderName
+        self.text = text
+        self.service = service
+    }
+}
+
+public struct ConversationRecord: Sendable, Equatable {
+    public var chatID: String
+    public var title: String?
+    public var participants: [MessageParticipantRecord]
+    public var lastAt: Date
+    public var messages: [MessageRecord]
+
+    public init(chatID: String, title: String? = nil, participants: [MessageParticipantRecord] = [], lastAt: Date, messages: [MessageRecord] = []) {
+        self.chatID = chatID
+        self.title = title
+        self.participants = participants
+        self.lastAt = lastAt
+        self.messages = messages
+    }
+}
+
+public struct MessageMatchRecord: Sendable, Equatable {
+    public var chatID: String
+    public var title: String?
+    public var message: MessageRecord
+
+    public init(chatID: String, title: String? = nil, message: MessageRecord) {
+        self.chatID = chatID
+        self.title = title
+        self.message = message
+    }
+}
+
+public struct MessagesRecentRecord: Sendable, Equatable {
+    public var conversations: [ConversationRecord]
+    public var truncated: Bool
+
+    public init(conversations: [ConversationRecord], truncated: Bool = false) {
+        self.conversations = conversations
+        self.truncated = truncated
+    }
+}
+
+public struct MessagesReadRecord: Sendable, Equatable {
+    public var conversation: ConversationRecord
+    public var truncated: Bool
+
+    public init(conversation: ConversationRecord, truncated: Bool = false) {
+        self.conversation = conversation
+        self.truncated = truncated
+    }
+}
+
+public struct MessagesSearchRecord: Sendable, Equatable {
+    public var matches: [MessageMatchRecord]
+    public var truncated: Bool
+
+    public init(matches: [MessageMatchRecord], truncated: Bool = false) {
+        self.matches = matches
+        self.truncated = truncated
+    }
+}
+
+public struct MessageSentRecord: Sendable, Equatable {
+    public var service: MessageService
+    public var recipient: String
+
+    public init(service: MessageService, recipient: String) {
+        self.service = service
+        self.recipient = recipient
+    }
+}
+
+public protocol MessagesProviding: Sendable {
+    func recent(limit: Int, messagesPerChat: Int) async throws -> MessagesRecentRecord
+    func search(query: String, limit: Int) async throws -> MessagesSearchRecord
+    func read(chatID: String, limit: Int) async throws -> MessagesReadRecord
+    func send(recipient: String, text: String, service: MessageService?) async throws -> MessageSentRecord
+    func access() async -> MessagesAccess
+}
+
 public struct InputDisplayRecord: Sendable, Equatable {
     public var id: Int
     public var name: String?
@@ -596,6 +712,7 @@ public struct DeviceProviders: Sendable {
     public var apps: (any AppsProviding)?
     public var clipboard: (any ClipboardProviding)?
     public var input: (any InputProviding)?
+    public var messages: (any MessagesProviding)?
 
     public init(
         calendar: (any CalendarProviding)? = nil,
@@ -610,7 +727,8 @@ public struct DeviceProviders: Sendable {
         apps: (any AppsProviding)? = nil,
         clipboard: (any ClipboardProviding)? = nil,
         screen: (any ScreenProviding)? = nil,
-        input: (any InputProviding)? = nil
+        input: (any InputProviding)? = nil,
+        messages: (any MessagesProviding)? = nil
     ) {
         self.calendar = calendar
         self.reminders = reminders
@@ -625,6 +743,7 @@ public struct DeviceProviders: Sendable {
         self.apps = apps
         self.clipboard = clipboard
         self.input = input
+        self.messages = messages
     }
 }
 
@@ -634,7 +753,7 @@ extension DeviceProviders {
             (.calendar, calendar != nil), (.reminders, reminders != nil), (.contacts, contacts != nil), (.location, location != nil),
             (.alarms, alarms != nil), (.home, home != nil), (.shell, shell != nil), (.files, files != nil),
             (.notifications, notifications != nil), (.screen, screen != nil), (.apps, apps != nil),
-            (.clipboard, clipboard != nil), (.input, input != nil),
+            (.clipboard, clipboard != nil), (.input, input != nil), (.messages, messages != nil),
         ]
         return present.filter(\.1).map(\.0)
     }

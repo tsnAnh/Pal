@@ -75,10 +75,22 @@ def _state(device: dict, info) -> ConnectorState:
     entry = _entry(device, info.connector)
     if info.connector is STOPPABLE:
         return ConnectorState.OFF if entry.get("stopped") is True else ConnectorState.ALLOWED
+    if info.opt_in:
+        stored = _enum_or(ConnectorState, entry.get("state"), ConnectorState.OFF)
+        return ConnectorState.ALLOWED if stored is ConnectorState.ALLOWED else ConnectorState.OFF
     if not info.on_by_default:
         return ConnectorState.ALLOWED
     stored = _enum_or(ConnectorState, entry.get("state"), ConnectorState.ASK)
     return ConnectorState.ASK if stored is ConnectorState.OFF else stored
+
+
+def _settable(connector: Connector, state: ConnectorState) -> bool:
+    if connector is STOPPABLE:
+        return True
+    info = connector_info(connector)
+    if info.opt_in:
+        return state is not ConnectorState.ASK
+    return info.on_by_default and state is not ConnectorState.OFF
 
 
 def kind_of(device: dict) -> str:
@@ -92,7 +104,7 @@ def _status(device: dict) -> list[ConnectorStatus]:
         info.connector, info.title, info.subtitle,
         _state(device, info),
         _enum_or(OsPermission, _entry(device, info.connector).get("os_permission"), OsPermission.NOT_DETERMINED),
-        True)
+        not info.opt_in)
         for info in CONNECTOR_CATALOG if kind in info.kinds]
 
 
@@ -129,7 +141,7 @@ def update(home: Path, device_id: str, connector: Connector, *, state: Connector
         device = devices.get(device_id)
         if not isinstance(device, dict):
             raise UnknownDevice(device_id)
-        if connector is not STOPPABLE and (state is ConnectorState.OFF or not connector_info(connector).on_by_default):
+        if state is not None and not _settable(connector, state):
             state = None
         if state is None and os_permission is None:
             return _status(device)

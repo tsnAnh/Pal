@@ -2113,6 +2113,60 @@
       }
     },
     {
+      "name": "host.update.apply",
+      "summary": "Owner only: start the host update, or return the one already running. Refused while a chat runs unless confirmed.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/HostUpdateApplyParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/HostUpdateApplyResult"
+        }
+      }
+    },
+    {
+      "name": "host.update.check",
+      "summary": "Owner only: compare this install with the latest on its update channel and list what blocks an update.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/HostUpdateCheckParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/HostUpdateCheckResult"
+        }
+      }
+    },
+    {
+      "name": "host.update.status",
+      "summary": "Owner only: the latest update run's phase, output tail and result; survives the gateway restart.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/HostUpdateCheckParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/HostUpdateState"
+        }
+      }
+    },
+    {
       "name": "i18n.catalog",
       "summary": "Pack + overlay messages for one language and surface; the renderer merges them over its bundled catalog.",
       "params": [
@@ -21356,7 +21410,8 @@
           "screen",
           "notifications",
           "clipboard",
-          "apps"
+          "apps",
+          "messages"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -21618,7 +21673,11 @@
           "apps.open",
           "apps.quit",
           "windows.list",
-          "windows.focus"
+          "windows.focus",
+          "messages.recent",
+          "messages.search",
+          "messages.read",
+          "messages.send"
         ],
         "title": "DeviceToolAction",
         "type": "string"
@@ -27161,6 +27220,293 @@
           "fire_count"
         ],
         "title": "HeartbeatSnapshot",
+        "type": "object"
+      },
+      "HostUpdateApplyParams": {
+        "additionalProperties": false,
+        "description": "``confirm_turns`` is set only after the owner taps Update anyway while a chat is running.",
+        "properties": {
+          "confirm_turns": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Confirm Turns"
+          }
+        },
+        "title": "HostUpdateApplyParams",
+        "type": "object"
+      },
+      "HostUpdateApplyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "enum": [
+              "started",
+              "already_running",
+              "refused",
+              "failed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "blockers": {
+            "items": {
+              "enum": [
+                "turn_running",
+                "dirty_install",
+                "update_running",
+                "no_network"
+              ],
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "update": {
+            "$ref": "#/components/schemas/HostUpdateState"
+          }
+        },
+        "required": [
+          "outcome",
+          "blockers",
+          "update"
+        ],
+        "title": "HostUpdateApplyResult",
+        "type": "object"
+      },
+      "HostUpdateCheckParams": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "HostUpdateCheckParams",
+        "type": "object"
+      },
+      "HostUpdateCheckResult": {
+        "additionalProperties": false,
+        "description": "``error`` is set only when ``status`` is ``unknown``. ``commits_behind`` is null when the channel pins a\nrelease or the count is unknown. ``release_notes_url`` is null unless the install tracks a GitHub remote.",
+        "properties": {
+          "version": {
+            "title": "Version",
+            "type": "string"
+          },
+          "commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Commit"
+          },
+          "status": {
+            "enum": [
+              "up_to_date",
+              "update_available",
+              "unknown"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "commits_behind": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Commits Behind"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_network",
+                  "check_failed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          },
+          "release_notes_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release Notes Url"
+          },
+          "active_runs": {
+            "title": "Active Runs",
+            "type": "integer"
+          },
+          "blockers": {
+            "items": {
+              "enum": [
+                "turn_running",
+                "dirty_install",
+                "update_running",
+                "no_network"
+              ],
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "version",
+          "status",
+          "active_runs",
+          "blockers"
+        ],
+        "title": "HostUpdateCheckResult",
+        "type": "object"
+      },
+      "HostUpdateState": {
+        "additionalProperties": false,
+        "description": "``failure`` is a code (``no_network``, ``update_failed``, ``interrupted``, ``not_started``,\n``needs_recovery``); ``left_behind`` says what a failure left on disk (``nothing``, ``old_version_running``,\n``tree_needs_recovery``). ``tail`` is a bounded, redacted slice of the update's output. ``version`` is the\nrunning gateway's own, so a changed value after a reconnect is the proof the new gateway is up.",
+        "properties": {
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Run Id"
+          },
+          "state": {
+            "enum": [
+              "idle",
+              "running",
+              "succeeded",
+              "failed",
+              "needs_recovery"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "phase": {
+            "anyOf": [
+              {
+                "enum": [
+                  "preparing",
+                  "downloading",
+                  "applying",
+                  "installing",
+                  "restarting",
+                  "finished"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Phase"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Finished At"
+          },
+          "from_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "From Commit"
+          },
+          "tail": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tail",
+            "type": "array"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Failure"
+          },
+          "left_behind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Left Behind"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state",
+          "tail",
+          "version"
+        ],
+        "title": "HostUpdateState",
         "type": "object"
       },
       "I18nCatalogParams": {

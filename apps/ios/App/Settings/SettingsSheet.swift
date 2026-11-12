@@ -54,6 +54,7 @@ private struct SettingsDestination: View {
         case .botComputer: BotComputerScreen(hub: hub, back: back)
         case .devices: DevicesScreen(hub: hub, connection: connection, back: back)
         case .hermesService: PalServiceScreen(hub: hub, back: back)
+        case .hostUpdate: HostUpdateScreen(hub: hub, back: back)
         case .modelProviders: ModelProvidersScreen(hub: hub, back: back)
         case .githubToken: GitHubTokenScreen(hub: hub, back: back)
         case .hostKit: HostKitScreen(hub: hub, back: back)
@@ -174,6 +175,7 @@ struct SettingsRootView: View {
                 SettingsRow.navigate("Voice and memory", accessibilityIdentifier: "settingsSpeechMemoryRow", action: { open(.speechMemory) })
                 SettingsRow.navigate("Pal service", accessibilityIdentifier: "settingsHermesServiceRow", action: { open(.hermesService) })
                 SettingsRow.navigate("Kit", subtitle: HostKitCopy.rowSubtitle, accessibilityIdentifier: "settingsHostKitRow", action: { open(.hostKit) })
+                SettingsRow.navigate("Update", accessibilityIdentifier: "settingsHostUpdateRow", action: { open(.hostUpdate) })
                 SettingsRow.navigate("Manage your devices", accessibilityIdentifier: "settingsDevicesRow", action: { open(.devices) })
                 SettingsRow.navigate("Import Memory", accessibilityIdentifier: "settingsImportMemoryRow", action: { open(.importMemory) })
             }

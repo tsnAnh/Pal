@@ -18,7 +18,8 @@ from tui_gateway.contracts.canonical_device import (
 
 
 SELF_SWITCHED = frozenset({DeviceConnectorId.SHELL, DeviceConnectorId.FILES, DeviceConnectorId.CLIPBOARD,
-                           DeviceConnectorId.NOTIFICATIONS, DeviceConnectorId.INPUT})
+                           DeviceConnectorId.NOTIFICATIONS, DeviceConnectorId.INPUT,
+                           DeviceConnectorId.MESSAGES})
 
 
 def _authority_home(authority) -> Path:
@@ -78,7 +79,7 @@ async def set_connector(connection, ref, params):
         raise RuntimeStoreError('invalid_params', field='device_id', detail='declare the device with client.hello first')
     if parsed.id in SELF_SWITCHED and parsed.state is not None and device_id != own:
         raise RuntimeStoreError('permission_denied', field='device_id',
-                                detail='only the device itself switches on commands, files and the clipboard')
+                                detail='only the device itself switches on commands, files, the clipboard and messages')
     if parsed.os_permission is not None and device_id != own:
         raise RuntimeStoreError('permission_denied', field='os_permission',
                                 detail='only the device itself reports its OS permission')

@@ -2513,6 +2513,40 @@ export interface BotRelayReplyParams {
   error?: string | null
   reason?: string | null
 }
+export type HostUpdateCheckParams = Record<string, never>
+/** ``error`` is set only when ``status`` is ``unknown``. ``commits_behind`` is null when the channel pins a release or the count is unknown. ``release_notes_url`` is null unless the install tracks a GitHub remote. */
+export interface HostUpdateCheckResult {
+  version: string
+  commit?: string | null
+  status: 'up_to_date' | 'update_available' | 'unknown'
+  commits_behind?: number | null
+  error?: 'no_network' | 'check_failed' | null
+  release_notes_url?: string | null
+  active_runs: number
+  blockers: ('turn_running' | 'dirty_install' | 'update_running' | 'no_network')[]
+}
+/** ``confirm_turns`` is set only after the owner taps Update anyway while a chat is running. */
+export interface HostUpdateApplyParams {
+  confirm_turns?: boolean | null
+}
+export interface HostUpdateApplyResult {
+  outcome: 'started' | 'already_running' | 'refused' | 'failed'
+  blockers: ('turn_running' | 'dirty_install' | 'update_running' | 'no_network')[]
+  update: HostUpdateState
+}
+/** ``failure`` is a code (``no_network``, ``update_failed``, ``interrupted``, ``not_started``, ``needs_recovery``); ``left_behind`` says what a failure left on disk (``nothing``, ``old_version_running``, ``tree_needs_recovery``). ``tail`` is a bounded, redacted slice of the update's output. ``version`` is the running gateway's own, so a changed value after a reconnect is the proof the new gateway is up. */
+export interface HostUpdateState {
+  run_id?: string | null
+  state: 'idle' | 'running' | 'succeeded' | 'failed' | 'needs_recovery'
+  phase?: 'preparing' | 'downloading' | 'applying' | 'installing' | 'restarting' | 'finished' | null
+  started_at?: number | null
+  finished_at?: number | null
+  from_commit?: string | null
+  tail: string[]
+  failure?: string | null
+  left_behind?: string | null
+  version: string
+}
 export interface I18nLanguagesResult {
   languages: LanguageOption[]
 }
@@ -6709,7 +6743,7 @@ export interface DeviceConnectorStatus {
   os_permission: DeviceOsPermission
   always_on?: boolean
 }
-export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files' | 'input' | 'screen' | 'notifications' | 'clipboard' | 'apps'
+export type DeviceConnectorId = 'calendar' | 'home' | 'reminders' | 'contacts' | 'location' | 'alarms' | 'shell' | 'files' | 'input' | 'screen' | 'notifications' | 'clipboard' | 'apps' | 'messages'
 export type DeviceConnectorState = 'allowed' | 'ask' | 'off'
 export type DeviceOsPermission = 'granted' | 'denied' | 'not_determined' | 'unsupported'
 export interface DeviceConnectorsSetParams {
@@ -7585,7 +7619,7 @@ export interface DeviceToolRequestPayload {
   session_id?: string | null
   deadline_seconds: number
 }
-export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set' | 'shell.run' | 'files.read' | 'files.list' | 'files.write' | 'input.displays' | 'input.move' | 'input.click' | 'input.drag' | 'input.scroll' | 'input.type' | 'input.key' | 'screen.capture' | 'screen.read' | 'notify.post' | 'notify.cancel' | 'clipboard.read' | 'clipboard.write' | 'apps.list' | 'apps.open' | 'apps.quit' | 'windows.list' | 'windows.focus'
+export type DeviceToolAction = 'calendar.list_events' | 'calendar.add_event' | 'reminders.list' | 'reminders.add' | 'reminders.complete' | 'contacts.search' | 'location.current' | 'location.search_nearby' | 'alarms.set' | 'alarms.list' | 'timers.start' | 'home.list_accessories' | 'home.set' | 'shell.run' | 'files.read' | 'files.list' | 'files.write' | 'input.displays' | 'input.move' | 'input.click' | 'input.drag' | 'input.scroll' | 'input.type' | 'input.key' | 'screen.capture' | 'screen.read' | 'notify.post' | 'notify.cancel' | 'clipboard.read' | 'clipboard.write' | 'apps.list' | 'apps.open' | 'apps.quit' | 'windows.list' | 'windows.focus' | 'messages.recent' | 'messages.search' | 'messages.read' | 'messages.send'
 export interface DeviceToolCancelPayload {
   request_id: string
   reason: DeviceToolCancelReason
@@ -7837,6 +7871,12 @@ export interface RpcMethods {
   'host.kit.status': { params: Params; result: KitReport }
   /** Start `faker-kit host update --json` (update to latest) as the one running kit job, or return the identical running job. 4409 busy, 4403 secondary profile. */
   'host.kit.update': { params: Params; result: KitJob }
+  /** Owner only: start the host update, or return the one already running. Refused while a chat runs unless confirmed. */
+  'host.update.apply': { params: HostUpdateApplyParams; result: HostUpdateApplyResult }
+  /** Owner only: compare this install with the latest on its update channel and list what blocks an update. */
+  'host.update.check': { params: HostUpdateCheckParams; result: HostUpdateCheckResult }
+  /** Owner only: the latest update run's phase, output tail and result; survives the gateway restart. */
+  'host.update.status': { params: HostUpdateCheckParams; result: HostUpdateState }
   /** Pack + overlay messages for one language and surface; the renderer merges them over its bundled catalog. */
   'i18n.catalog': { params: I18nCatalogParams; result: I18nCatalogResult }
   /** Every language some layer supplies (bundled ∪ user overlay ∪ plugin packs), en first. */
@@ -8377,6 +8417,9 @@ export const RPC_METHODS = [
   'host.kit.reload',
   'host.kit.status',
   'host.kit.update',
+  'host.update.apply',
+  'host.update.check',
+  'host.update.status',
   'i18n.catalog',
   'i18n.languages',
   'image.attach',
