@@ -1983,6 +1983,15 @@ export interface GithubOauthConfig {
 export interface GithubOauthConfigSetParams {
   client_id?: string | null
 }
+export interface GuardsStatus {
+  guards: GuardValue[]
+}
+export interface GuardValue {
+  key: string
+  value: boolean | number
+  source: 'config' | 'default'
+  clamped: boolean
+}
 export interface WebhookRoutesListResult {
   enabled: boolean
   public_base_url?: string | null
@@ -7689,6 +7698,8 @@ export interface RpcMethods {
   'free_tier.status': { params: ProfileParams; result: FreeTierStatusResult }
   /** What THIS build enforces (a client withholds a feature unless advertised). */
   'gateway.capabilities': { params: PingParams; result: GatewayCapabilitiesResult }
+  /** The bot loop guard limits the gateway enforces now, one entry per gateway.bot_loop_guard key: the effective value, whether it came from config or the default, and whether the hard limit in code clamped it. Read-only; reads the live config, so an edit shows without a restart. 4403 secondary profile. */
+  'gateway.guards.status': { params: Params; result: GuardsStatus }
   /** Install the gateway as a login service where the host supports one. */
   'gateway.service.install': { params: ProfileParams; result: GatewayServiceInstallResult }
   /** Ask the host's service manager to restart the gateway; refused while a chat is running. */
@@ -8259,6 +8270,7 @@ export const RPC_METHODS = [
   'free_tier.provision',
   'free_tier.status',
   'gateway.capabilities',
+  'gateway.guards.status',
   'gateway.service.install',
   'gateway.service.restart',
   'gateway.service.status',

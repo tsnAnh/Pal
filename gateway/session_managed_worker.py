@@ -93,8 +93,8 @@ def _worker_config(authority, policy):
     """The frozen session config the child binds as its only config (``bind_worker_policy``).
     ``command_allowlist`` is approval state rather than launch policy: an ``always`` grant an
     earlier worker of an ordinary session persisted, or one the operator removed by hand, comes
-    from the live profile file, as it did before the child's config was frozen. Bypass sessions
-    never read the profile."""
+    from the live profile file, as it did before the child's config was frozen. The same goes for
+    ``gateway.bot_loop_guard``, so a limit edit reaches the next turn. Bypass sessions never read the profile."""
     config = policy.config(authority)
     home = Path(str(authority.profile_id))
     if policy.ignore_user_config or not home.is_absolute():
@@ -104,6 +104,10 @@ def _worker_config(authority, policy):
     config.pop('command_allowlist', None)
     if live.get('command_allowlist') is not None:
         config['command_allowlist'] = live['command_allowlist']
+    guard = (live.get('gateway') or {}).get('bot_loop_guard') if isinstance(live.get('gateway'), dict) else None
+    if isinstance(guard, dict):
+        gateway = config['gateway'] = dict(config['gateway']) if isinstance(config.get('gateway'), dict) else {}
+        gateway['bot_loop_guard'] = guard
     return config
 
 
