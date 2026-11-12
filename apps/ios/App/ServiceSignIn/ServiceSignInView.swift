@@ -288,7 +288,7 @@ struct ServiceSignInDialogView: View {
     private func awaitsCallback(_ phase: ServiceSignInPhase) -> Bool {
         switch phase {
         case .signingIn, .callbackFailed: true
-        case .prompting, .keySet, .keyFailed, .signedIn, .failed, .expired: false
+        case .prompting, .pasteAddress, .keySet, .keyFailed, .signedIn, .failed, .expired: false
         }
     }
 

@@ -82,7 +82,7 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
         guard requiresAppSignIn, pasteSignInAvailable else { return false }
         switch phase {
         case .failed: return true
-        case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed, .signedIn, .expired: return false
+        case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed, .callbackFailed, .signedIn, .expired: return false
         }
     }
 
@@ -261,7 +261,7 @@ public final class ServiceSignInCenter {
         guard let dialog = current, dialog.flow == .oauthPaste, let pasted = PastedCallback(text) else { return }
         switch dialog.phase {
         case .signingIn, .callbackFailed: break
-        case .prompting, .keySet, .keyFailed, .signedIn, .failed, .expired: return
+        case .prompting, .pasteAddress, .keySet, .keyFailed, .signedIn, .failed, .expired: return
         }
         let requestID = dialog.requestID
         let service = dialog.service
