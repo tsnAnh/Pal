@@ -355,10 +355,10 @@ private func disconnectedUpwork() -> ConnectApp {
 
 @Suite("Upwork connect through the service")
 struct UpworkServiceConnectTests {
-    @Test func withoutTheNativeFlowItAsksForTheMacAndTouchesNothing() async {
+    @Test func withoutTheNativeFlowItIsUnavailableAndTouchesNothing() async {
         let rpc = GatewayRPC()
         let service = ConnectAppsService(rpc: rpc, profile: nil)
-        await #expect(throws: ConnectAppsError.signInOnMac) { try await service.connect(disconnectedUpwork()) }
+        await #expect(throws: ConnectAppsError.unavailable) { try await service.connect(disconnectedUpwork()) }
         #expect(rpc.methods.isEmpty)
     }
 

@@ -12,9 +12,35 @@ public enum ServiceNativeOutcome: Sendable, Hashable {
 
 public typealias ServiceNativeSignIn = @MainActor @Sendable (String) async -> ServiceNativeOutcome
 
+public enum ServicePasteOutcome: Sendable, Hashable {
+    case signedIn
+    case tryAgain(String)
+    case failed(String)
+}
+
+public struct ServicePasteSignIn: Sendable {
+    public var begin: @MainActor @Sendable (String) async -> String?
+    public var submit: @MainActor @Sendable (String, String) async -> ServicePasteOutcome
+    public var cancel: @MainActor @Sendable (String) async -> Void
+    public var reopen: @MainActor @Sendable (String) -> Void
+
+    public init(
+        begin: @escaping @MainActor @Sendable (String) async -> String?,
+        submit: @escaping @MainActor @Sendable (String, String) async -> ServicePasteOutcome,
+        cancel: @escaping @MainActor @Sendable (String) async -> Void,
+        reopen: @escaping @MainActor @Sendable (String) -> Void
+    ) {
+        self.begin = begin
+        self.submit = submit
+        self.cancel = cancel
+        self.reopen = reopen
+    }
+}
+
 public enum ServiceSignInPhase: Sendable, Hashable {
     case prompting
     case signingIn
+    case pasteAddress(String?)
     case keySet
     case keyFailed(String)
     case signedIn
@@ -34,8 +60,9 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var verificationURI: String?
     public var server: String?
     public var phase: ServiceSignInPhase
-    public var requiresMac = false
-    public var nativeSignInAvailable = false
+    public var requiresAppSignIn = false
+    public var automaticSignInAvailable = false
+    public var pasteSignInAvailable = false
 
     public var id: String { service }
 
@@ -44,16 +71,22 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var acceptsKey: Bool {
         switch phase {
         case .prompting, .keyFailed: true
-        case .signingIn, .keySet, .signedIn, .failed, .expired: false
+        case .signingIn, .pasteAddress, .keySet, .signedIn, .failed, .expired: false
         }
     }
 
     public var takesKey: Bool { flow == .apiKey || flow == .header }
 
-    public var mustSignInOnMac: Bool { requiresMac && !nativeSignInAvailable }
+    public var canPasteInstead: Bool {
+        guard requiresAppSignIn, pasteSignInAvailable else { return false }
+        switch phase {
+        case .failed: return true
+        case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed, .signedIn, .expired: return false
+        }
+    }
 
     public var canSignIn: Bool {
-        if requiresMac { return nativeSignInAvailable }
+        if requiresAppSignIn { return automaticSignInAvailable || pasteSignInAvailable }
         switch flow {
         case .deviceCode, .oauth: return true
         case .apiKey, .header, .manual, .unknown: return false
@@ -84,6 +117,7 @@ public final class ServiceSignInCenter {
     @ObservationIgnored private let call: Call
     @ObservationIgnored private let openBrowser: SystemBrowserOpener
     @ObservationIgnored private let nativeSignIn: ServiceNativeSignIn?
+    @ObservationIgnored private let pasteSignIn: ServicePasteSignIn?
     @ObservationIgnored private let dismissDelay: Duration
     @ObservationIgnored private var dismissals: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var nativeSignIns: [String: Task<ServiceNativeOutcome, Never>] = [:]
@@ -92,11 +126,13 @@ public final class ServiceSignInCenter {
         call: @escaping Call,
         openBrowser: @escaping SystemBrowserOpener,
         nativeSignIn: ServiceNativeSignIn? = nil,
+        pasteSignIn: ServicePasteSignIn? = nil,
         dismissDelay: Duration = ServiceSignInCenter.signedInDismissDelay
     ) {
         self.call = call
         self.openBrowser = openBrowser
         self.nativeSignIn = nativeSignIn
+        self.pasteSignIn = pasteSignIn
         self.dismissDelay = dismissDelay
     }
 
@@ -112,8 +148,12 @@ public final class ServiceSignInCenter {
         guard let dialog = current, dialog.phase == .prompting, dialog.canSignIn else { return }
         let requestID = dialog.requestID
         let service = dialog.service
-        if dialog.requiresMac {
-            await signInNatively(service: service, requestID: requestID)
+        if dialog.requiresAppSignIn {
+            if dialog.automaticSignInAvailable {
+                await signInNatively(service: service, requestID: requestID)
+            } else {
+                await startPasting(service: service, requestID: requestID)
+            }
             return
         }
         switch dialog.flow {
@@ -144,6 +184,44 @@ public final class ServiceSignInCenter {
             }
         case .apiKey, .header, .manual, .unknown:
             return
+        }
+    }
+
+    public func signInByPasting() async {
+        guard let dialog = current, dialog.canPasteInstead else { return }
+        await startPasting(service: dialog.service, requestID: dialog.requestID)
+    }
+
+    public func reopenSignInPage() {
+        guard let dialog = current, case .pasteAddress = dialog.phase else { return }
+        pasteSignIn?.reopen(dialog.service)
+    }
+
+    public func submitAddress(_ text: String) async {
+        guard let pasteSignIn, let dialog = current, case .pasteAddress = dialog.phase else { return }
+        let service = dialog.service
+        let requestID = dialog.requestID
+        setPhase(.signingIn, for: service)
+        let outcome = await pasteSignIn.submit(service, text)
+        switch outcome {
+        case .signedIn:
+            guard isWaiting(service, requestID) else { return }
+            setPhase(.signedIn, for: service)
+            scheduleDismissal(of: service)
+        case .tryAgain(let note):
+            setPhase(.pasteAddress(note), for: service, ifRequest: requestID)
+        case .failed(let text):
+            setPhase(.failed(text), for: service, ifRequest: requestID)
+        }
+    }
+
+    private func startPasting(service: String, requestID: String) async {
+        guard let pasteSignIn else { return }
+        setPhase(.signingIn, for: service)
+        if let failure = await pasteSignIn.begin(service) {
+            setPhase(.failed(failure), for: service, ifRequest: requestID)
+        } else {
+            setPhase(.pasteAddress(nil), for: service, ifRequest: requestID)
         }
     }
 
@@ -188,8 +266,9 @@ public final class ServiceSignInCenter {
         guard let dialog = current else { return }
         nativeSignIns.removeValue(forKey: dialog.service)?.cancel()
         remove(service: dialog.service)
+        await pasteSignIn?.cancel(dialog.service)
         switch dialog.phase {
-        case .prompting, .signingIn, .keySet, .keyFailed:
+        case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed:
             _ = try? await call(ServiceSignInWire.declineMethod, ServiceSignInWire.requestParams(dialog.requestID))
         case .signedIn, .failed, .expired:
             return
@@ -203,7 +282,7 @@ public final class ServiceSignInCenter {
             case .signedIn, .failed, .expired:
                 dismissals.removeValue(forKey: event.service)?.cancel()
                 dialogs[index] = makeDialog(from: event)
-            case .prompting, .signingIn, .keySet, .keyFailed:
+            case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed:
                 dialog.requestID = event.requestID
                 dialog.serviceName = event.serviceName
                 dialog.bot = event.bot
@@ -283,8 +362,9 @@ public final class ServiceSignInCenter {
             verificationURI: event.verificationURI,
             server: event.server,
             phase: .prompting,
-            requiresMac: event.requiresMacSignIn,
-            nativeSignInAvailable: nativeSignIn != nil
+            requiresAppSignIn: event.requiresAppSignIn,
+            automaticSignInAvailable: nativeSignIn != nil,
+            pasteSignInAvailable: pasteSignIn != nil
         )
     }
 

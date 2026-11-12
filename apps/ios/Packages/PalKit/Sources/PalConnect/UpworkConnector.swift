@@ -3,6 +3,7 @@ import PalAuth
 import PalDiagnostics
 import PalProtocol
 import PalTransport
+import Synchronization
 
 public enum UpworkConnector {
     public static let presetName = "upwork"
@@ -11,7 +12,7 @@ public enum UpworkConnector {
 }
 
 extension ConnectApp {
-    public var requiresMacSignIn: Bool {
+    public var requiresAppSignIn: Bool {
         if case .mcp(let name, _) = source { return name == UpworkConnector.presetName }
         return false
     }
@@ -63,6 +64,62 @@ public enum McpOAuthSubmission {
     }
 }
 
+public enum McpPasteOutcome: Sendable, Equatable {
+    case signedIn
+    case tryAgain(String)
+    case failed(String)
+}
+
+public final class McpPasteSession: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    private let handshake: McpOAuthHandshake
+    private let flow: McpOAuthFlow
+    private let rpc: any ConnectRPC
+    private let service: String
+    private let rollback: (@Sendable () async -> Void)?
+    private let settled = Mutex<Bool>(false)
+
+    init(handshake: McpOAuthHandshake, flow: McpOAuthFlow, rpc: any ConnectRPC, service: String, rollback: (@Sendable () async -> Void)?) {
+        self.handshake = handshake
+        self.flow = flow
+        self.rpc = rpc
+        self.service = service
+        self.rollback = rollback
+    }
+
+    public var authorizeURL: URL { handshake.authorizeURL }
+    public var description: String { "<paste sign-in>" }
+    public var debugDescription: String { "<paste sign-in>" }
+    public var customMirror: Mirror { Mirror(self, children: []) }
+
+    public func submit(_ pasted: String) async -> McpPasteOutcome {
+        do {
+            let grant = try await flow.complete(handshake, pasted: pasted)
+            try await McpOAuthSubmission.submit(grant, service: service, rpc: rpc)
+            settled.withLock { (value: inout Bool) in value = true }
+            return .signedIn
+        } catch {
+            let failure = McpOAuthError.from(error)
+            if case .pasted(let paste) = failure, paste.keepsAttemptOpen { return .tryAgain(failure.reason) }
+            await abandon()
+            return .failed(failure.reason)
+        }
+    }
+
+    public func cancel() async {
+        await abandon()
+    }
+
+    private func abandon() async {
+        handshake.cancel()
+        let first = settled.withLock { (value: inout Bool) -> Bool in
+            let wasSettled = value
+            value = true
+            return !wasSettled
+        }
+        if first { await rollback?() }
+    }
+}
+
 public struct McpNativeSignIn: Sendable {
     let flow: McpOAuthFlow
     let rpc: any ConnectRPC
@@ -78,11 +135,16 @@ public struct McpNativeSignIn: Sendable {
         let grant = try await flow.authorize()
         try await McpOAuthSubmission.submit(grant, service: service, rpc: rpc)
     }
+
+    public func beginPaste(rollback: (@Sendable () async -> Void)? = nil) async throws -> McpPasteSession {
+        let handshake = try await flow.beginPasted()
+        return McpPasteSession(handshake: handshake, flow: flow, rpc: rpc, service: service, rollback: rollback)
+    }
 }
 
 extension ConnectAppsService {
     func connectUpwork(_ app: ConnectApp) async throws {
-        guard let nativeSignIn else { throw ConnectAppsError.signInOnMac }
+        guard let nativeSignIn else { throw ConnectAppsError.unavailable }
         let alreadyAdded = app.state != .disconnected
         if !alreadyAdded {
             _ = try await call("mcp.servers.add", ["name": .string(UpworkConnector.presetName), "preset": .string(UpworkConnector.presetName)])
@@ -93,6 +155,21 @@ extension ConnectAppsService {
             if !alreadyAdded { _ = try? await call("mcp.servers.remove", ["name": .string(UpworkConnector.presetName)]) }
             let failure = McpOAuthError.from(error)
             throw failure == .cancelled ? ConnectAppsError.cancelled : ConnectAppsError.signInFailed(failure.reason)
+        }
+    }
+
+    public func beginUpworkPaste(_ app: ConnectApp) async throws -> McpPasteSession {
+        guard let nativeSignIn else { throw ConnectAppsError.unavailable }
+        let adding = app.state == .disconnected
+        if adding {
+            _ = try await call("mcp.servers.add", ["name": .string(UpworkConnector.presetName), "preset": .string(UpworkConnector.presetName)])
+        }
+        let remove: (@Sendable () async -> Void)? = adding ? { _ = try? await self.call("mcp.servers.remove", ["name": .string(UpworkConnector.presetName)]) } : nil
+        do {
+            return try await nativeSignIn.beginPaste(rollback: remove)
+        } catch {
+            await remove?()
+            throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)
         }
     }
 }

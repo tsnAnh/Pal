@@ -368,7 +368,7 @@ struct MacConnectApps: View {
 
     private func appRow(_ app: ConnectApp) -> some View {
         let state = model.cardState(app)
-        let action: MacRowAction = if app.requiresMacSignIn {
+        let action: MacRowAction = if app.requiresAppSignIn {
             MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state.isReconnect) { model.upworkApp = app }
         } else if case .custom = app.source {
             MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
@@ -380,7 +380,7 @@ struct MacConnectApps: View {
             }
         }
         return tileRow(
-            title: app.name, summary: app.requiresMacSignIn ? UpworkCardText.summary(state, fallback: app.summary) : app.summary,
+            title: app.name, summary: app.requiresAppSignIn ? UpworkCardText.summary(state, fallback: app.summary) : app.summary,
             identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id)
         ) { icon(for: app) }
     }

@@ -95,6 +95,8 @@ final class ConnectAppsModel {
     var showsSkills = false
     var accountsModel: ConnectorAccountsModel?
     var upworkApp: ConnectApp?
+    private(set) var pasteSession: McpPasteSession?
+    private(set) var pasteState: SecretEntryState = .idle
     private(set) var failures: [String: String] = [:]
     private(set) var mode: Mode = .list
 
@@ -202,8 +204,61 @@ final class ConnectAppsModel {
         }
     }
 
-    func cardState(_ app: ConnectApp, platform: ConnectorPlatform = .current) -> ConnectorCardState {
-        .resolve(ConnectorCardInput(app: app, isBusy: busy.contains(app.id), failureReason: failures[app.id]), platform: platform)
+    func cardState(_ app: ConnectApp) -> ConnectorCardState {
+        return .resolve(ConnectorCardInput(app: app, isBusy: busy.contains(app.id), failureReason: failures[app.id]))
+    }
+
+    var isPastingAddress: Bool { pasteSession != nil }
+
+    func beginPaste(_ app: ConnectApp) async {
+        guard pasteSession == nil else { return }
+        busy.insert(app.id)
+        failures[app.id] = nil
+        defer { busy.remove(app.id) }
+        do {
+            let session = try await service.beginUpworkPaste(app)
+            guard ExternalLink.open(session.authorizeURL) else {
+                await session.cancel()
+                failures[app.id] = McpOAuthError.browserUnavailable.reason
+                return
+            }
+            pasteSession = session
+            pasteState = .idle
+        } catch let error as ConnectAppsError {
+            handle(error, app: app)
+        } catch {
+            report("Couldn't connect \(app.name). Try again.")
+        }
+        await reload()
+    }
+
+    func submitPastedAddress(_ value: String) async {
+        guard let session = pasteSession, pasteState.acceptsInput else { return }
+        pasteState = .submitting
+        switch await session.submit(value) {
+        case .signedIn:
+            pasteSession = nil
+            pasteState = .idle
+        case .tryAgain(let note):
+            pasteState = .failure(note)
+        case .failed(let reason):
+            pasteSession = nil
+            pasteState = .idle
+            failures[UpworkConnector.service] = reason
+        }
+        await reload()
+    }
+
+    func reopenPasteSignIn() {
+        if let url = pasteSession?.authorizeURL { ExternalLink.open(url) }
+    }
+
+    func cancelPaste() async {
+        guard let session = pasteSession else { return }
+        pasteSession = nil
+        pasteState = .idle
+        await session.cancel()
+        await reload()
     }
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
@@ -221,7 +276,7 @@ final class ConnectAppsModel {
     }
 
     func manageAccounts(_ app: ConnectApp) {
-        if app.requiresMacSignIn {
+        if app.requiresAppSignIn {
             upworkApp = app
             return
         }
@@ -267,7 +322,7 @@ final class ConnectAppsModel {
 
     private func handle(_ error: ConnectAppsError, app: ConnectApp) {
         switch error {
-        case .cancelled, .signInOnMac: break
+        case .cancelled: break
         case .signInFailed(let reason): failures[app.id] = reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
         case .signInRequired: report("Connecting \(app.name) needs you to sign in to Nous Portal on your Pal first.")

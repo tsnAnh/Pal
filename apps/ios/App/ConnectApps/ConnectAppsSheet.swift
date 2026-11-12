@@ -270,7 +270,7 @@ struct ConnectAppsSheet: View {
 
     @ViewBuilder
     private func appRow(_ app: ConnectApp) -> some View {
-        if app.requiresMacSignIn { upworkRow(app) } else { plainRow(app) }
+        if app.requiresAppSignIn { upworkRow(app) } else { plainRow(app) }
     }
 
     private func plainRow(_ app: ConnectApp) -> some View {

@@ -5,7 +5,7 @@ import PalProtocol
 import Synchronization
 import Testing
 
-private let rejectedSignIn = "Sign in again on a Mac: Upwork stopped accepting the saved sign-in"
+private let rejectedSignIn = "Sign in again: Upwork stopped accepting the saved sign-in"
 
 private func upwork(_ state: ConnectAppState, reason: String? = nil) -> ConnectApp {
     ConnectApp(
@@ -14,53 +14,52 @@ private func upwork(_ state: ConnectAppState, reason: String? = nil) -> ConnectA
     )
 }
 
-private func resolve(_ state: ConnectAppState, platform: ConnectorPlatform, busy: Bool = false, failure: String? = nil, reason: String? = nil) -> ConnectorCardState {
-    return .resolve(ConnectorCardInput(app: upwork(state, reason: reason), isBusy: busy, failureReason: failure), platform: platform)
+private func resolve(_ state: ConnectAppState, busy: Bool = false, failure: String? = nil, reason: String? = nil) -> ConnectorCardState {
+    return .resolve(ConnectorCardInput(app: upwork(state, reason: reason), isBusy: busy, failureReason: failure))
 }
 
 @Suite("Connector card state")
 struct ConnectorCardStateTests {
-    @Test func macCanSignInFromEveryState() {
-        #expect(resolve(.disconnected, platform: .mac) == .connect)
-        #expect(resolve(.disconnected, platform: .mac, busy: true) == .connecting)
-        #expect(resolve(.connected, platform: .mac) == .connected)
-        #expect(resolve(.needsAuthorization, platform: .mac) == .reconnect(reason: nil))
-        #expect(resolve(.disconnected, platform: .mac, failure: "Upwork refused it.") == .failed("Upwork refused it."))
-        #expect(resolve(.disconnected, platform: .mac, failure: "") == .connect)
+    @Test func everyStateIsReachableOnEveryDevice() {
+        #expect(resolve(.disconnected) == .connect)
+        #expect(resolve(.disconnected, busy: true) == .connecting)
+        #expect(resolve(.connected) == .connected)
+        #expect(resolve(.needsAuthorization) == .reconnect(reason: nil))
+        #expect(resolve(.disconnected, failure: "Upwork refused it.") == .failed("Upwork refused it."))
+        #expect(resolve(.disconnected, failure: "") == .connect)
     }
 
-    @Test func iPhoneNeverOffersAConnectThatWouldFail() {
-        #expect(resolve(.disconnected, platform: .iPhone) == .signInOnMac(reason: nil))
-        #expect(resolve(.needsAuthorization, platform: .iPhone) == .signInOnMac(reason: nil))
-        #expect(resolve(.disconnected, platform: .iPhone, failure: "x") == .signInOnMac(reason: nil))
-        #expect(resolve(.connected, platform: .iPhone) == .connected)
-        #expect(resolve(.disconnected, platform: .iPhone, busy: true) == .connecting)
-    }
-
-    @Test func otherConnectorsKeepTheirOwnFlowOnIPhone() {
+    @Test func otherConnectorsKeepTheirOwnFlow() {
         let hosted = ConnectApp(
             id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil,
             source: .hosted(slug: "slack"), state: .disconnected
         )
-        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: hosted), platform: .iPhone) == .connect)
+        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: hosted)) == .connect)
         let preset = ConnectApp(
             id: "mcp:notion", name: "Notion", summary: "", category: "Other", iconURL: nil,
             source: .mcp(name: "notion", requires: []), state: .needsAuthorization
         )
-        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: preset), platform: .iPhone) == .reconnect(reason: nil))
+        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: preset)) == .reconnect(reason: nil))
     }
 
-    @Test func aRejectedSignInShowsTheGatewaysReasonOnEveryDevice() {
-        #expect(resolve(.needsAuthorization, platform: .iPhone, reason: rejectedSignIn) == .signInOnMac(reason: rejectedSignIn))
-        #expect(resolve(.needsAuthorization, platform: .mac, reason: rejectedSignIn) == .reconnect(reason: rejectedSignIn))
-        #expect(resolve(.needsAuthorization, platform: .iPhone, reason: "  \n") == .signInOnMac(reason: nil))
-        #expect(resolve(.needsAuthorization, platform: .mac, reason: "") == .reconnect(reason: nil))
+    @Test func aRejectedSignInShowsTheGatewaysReasonWithReconnect() {
+        #expect(resolve(.needsAuthorization, reason: rejectedSignIn) == .reconnect(reason: rejectedSignIn))
+        #expect(resolve(.needsAuthorization, reason: "  \n") == .reconnect(reason: nil))
+        #expect(resolve(.needsAuthorization, reason: "") == .reconnect(reason: nil))
+        #expect(resolve(.needsAuthorization, reason: rejectedSignIn).isReconnect)
+        #expect(resolve(.needsAuthorization, reason: rejectedSignIn, busy: true) == .connecting)
     }
 
-    @Test func onlyTheMacCanStartTheSignInAgain() {
-        #expect(resolve(.needsAuthorization, platform: .mac, reason: rejectedSignIn).isReconnect)
-        #expect(!resolve(.needsAuthorization, platform: .iPhone, reason: rejectedSignIn).isReconnect)
-        #expect(resolve(.needsAuthorization, platform: .iPhone, reason: rejectedSignIn, busy: true) == .connecting)
+    @Test func everyDeviceHasARouteToSignInAgain() {
+        for platform in ConnectorPlatform.allCases {
+            #expect(platform.signInRoutes.contains(.pasteAddress))
+        }
+        #expect(ConnectorPlatform.mac.signInRoutes == [.automaticReturn, .pasteAddress])
+        #expect(ConnectorPlatform.iPhone.signInRoutes == [.pasteAddress])
+        #expect(ConnectorPlatform.iPad.signInRoutes == [.pasteAddress])
+        #expect(ConnectorPlatform.mac.returnsAutomatically)
+        #expect(!ConnectorPlatform.iPhone.returnsAutomatically)
+        #expect(!ConnectorPlatform.iPad.returnsAutomatically)
     }
 
     @Test func theCatalogReadsTheReasonFromTheStatusTheGatewayGives() throws {
@@ -72,7 +71,7 @@ struct ConnectorCardStateTests {
         let app = try #require(catalog.apps.first)
         #expect(app.state == .needsAuthorization)
         #expect(app.authReason == rejectedSignIn)
-        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: app), platform: .iPhone) == .signInOnMac(reason: rejectedSignIn))
+        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: app)) == .reconnect(reason: rejectedSignIn))
         #expect(!ConnectedServices(catalog: catalog).isConnected(.upwork))
     }
 
@@ -83,10 +82,10 @@ struct ConnectorCardStateTests {
         #expect(ConnectCatalog.make(hosted: [], states: [], mcp: [blank]).apps.first?.state == .connected)
     }
 
-    @Test func onlyTheUpworkPresetNeedsTheMac() {
-        #expect(upwork(.connected).requiresMacSignIn)
+    @Test func onlyTheUpworkPresetUsesTheAppSignIn() {
+        #expect(upwork(.connected).requiresAppSignIn)
         let other = ConnectApp(id: "mcp:x", name: "X", summary: "", category: "", iconURL: nil, source: .mcp(name: "x", requires: []), state: .connected)
-        #expect(!other.requiresMacSignIn)
+        #expect(!other.requiresAppSignIn)
     }
 }
 
@@ -213,10 +212,16 @@ struct ActionAutoApproveTests {
     }
 }
 
+private final class PasteRecorder: @unchecked Sendable {
+    private let log = Mutex<[String]>([])
+    var begun: [String] { log.withLock { $0 } }
+    func note(_ entry: String) { log.withLock { $0.append(entry) } }
+}
+
 @MainActor
-@Suite("Mac-only sign-in dialog")
-struct MacOnlySignInDialogTests {
-    private func event(service: String = "mcp:upwork", signinOn: String? = "owner_computer") -> GatewayEvent {
+@Suite("App sign-in dialog")
+struct AppSignInDialogTests {
+    private func event(service: String = "mcp:upwork", signinOn: String? = "owner_app") -> GatewayEvent {
         var payload: [String: JSONValue] = [
             "request_id": "r1", "service": .string(service), "service_name": "Upwork", "bot": "atlas", "reason": "missing", "flow": "oauth",
         ]
@@ -224,16 +229,104 @@ struct MacOnlySignInDialogTests {
         return GatewayEvent(type: "auth.required", payload: .object(payload))
     }
 
-    @Test func iPhoneCannotSignInAndOffersNoSignInButton() {
-        let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in })
-        center.receive(event())
-        let dialog = center.current
-        #expect(dialog?.requiresMac == true)
-        #expect(dialog?.mustSignInOnMac == true)
-        #expect(dialog?.canSignIn == false)
+    private func pasteRoute(_ recorder: PasteRecorder, begin: String? = nil, submit: ServicePasteOutcome = .signedIn) -> ServicePasteSignIn {
+        return ServicePasteSignIn(
+            begin: { service in
+                recorder.note("begin:\(service)")
+                return begin
+            },
+            submit: { service, _ in
+                recorder.note("submit:\(service)")
+                return submit
+            },
+            cancel: { service in recorder.note("cancel:\(service)") },
+            reopen: { service in recorder.note("reopen:\(service)") }
+        )
     }
 
-    @Test func macRunsTheNativeFlowAndFinishesSignedIn() async {
+    @Test func theWireHintIsOwnerApp() {
+        #expect(ServiceSignInWire.ownerApp == "owner_app")
+        let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in })
+        center.receive(event())
+        #expect(center.current?.requiresAppSignIn == true)
+        center.receive(event(service: "github", signinOn: "owner_computer"))
+        #expect(center.dialogs.last?.requiresAppSignIn == false)
+    }
+
+    @Test func aDeviceWithNoRouteOffersNoSignInButton() {
+        let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in })
+        center.receive(event())
+        #expect(center.current?.canSignIn == false)
+    }
+
+    @Test func anIPhoneWithOnlyThePasteRouteCanSignIn() async {
+        let recorder = PasteRecorder()
+        let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in }, pasteSignIn: pasteRoute(recorder), dismissDelay: .seconds(60))
+        center.receive(event())
+        #expect(center.current?.canSignIn == true)
+        #expect(center.current?.automaticSignInAvailable == false)
+        await center.signIn()
+        #expect(center.current?.phase == .pasteAddress(nil))
+        center.reopenSignInPage()
+        await center.submitAddress("http://127.0.0.1:50000/callback?code=c&state=s")
+        #expect(center.current?.phase == .signedIn)
+        #expect(recorder.begun == ["begin:mcp:upwork", "reopen:mcp:upwork", "submit:mcp:upwork"])
+    }
+
+    @Test func aPasteTheAppCannotUseAsksAgainWithoutLeavingTheStep() async {
+        let recorder = PasteRecorder()
+        let center = ServiceSignInCenter(
+            call: { _, _ in [:] }, openBrowser: { _ in },
+            pasteSignIn: pasteRoute(recorder, submit: .tryAgain("Copy the whole address.")), dismissDelay: .seconds(60)
+        )
+        center.receive(event())
+        await center.signIn()
+        await center.submitAddress("junk")
+        #expect(center.current?.phase == .pasteAddress("Copy the whole address."))
+    }
+
+    @Test func aFailedPasteShowsItsReason() async {
+        let recorder = PasteRecorder()
+        let center = ServiceSignInCenter(
+            call: { _, _ in [:] }, openBrowser: { _ in },
+            pasteSignIn: pasteRoute(recorder, submit: .failed("Start again.")), dismissDelay: .seconds(60)
+        )
+        center.receive(event())
+        await center.signIn()
+        await center.submitAddress("http://127.0.0.1:50000/callback?code=c&state=wrong")
+        #expect(center.current?.phase == .failed("Start again."))
+    }
+
+    @Test func aBrowserThatCannotOpenFailsTheStep() async {
+        let center = ServiceSignInCenter(
+            call: { _, _ in [:] }, openBrowser: { _ in },
+            pasteSignIn: pasteRoute(PasteRecorder(), begin: "We couldn't open your browser."), dismissDelay: .seconds(60)
+        )
+        center.receive(event())
+        await center.signIn()
+        #expect(center.current?.phase == .failed("We couldn't open your browser."))
+    }
+
+    @Test func submittingOutsideThePasteStepDoesNothing() async {
+        let recorder = PasteRecorder()
+        let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in }, pasteSignIn: pasteRoute(recorder), dismissDelay: .seconds(60))
+        center.receive(event())
+        await center.submitAddress("anything")
+        #expect(recorder.begun.isEmpty)
+        #expect(center.current?.phase == .prompting)
+    }
+
+    @Test func notNowCancelsThePendingPaste() async {
+        let recorder = PasteRecorder()
+        let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in }, pasteSignIn: pasteRoute(recorder), dismissDelay: .seconds(60))
+        center.receive(event())
+        await center.signIn()
+        await center.notNow()
+        #expect(center.current == nil)
+        #expect(recorder.begun.last == "cancel:mcp:upwork")
+    }
+
+    @Test func macRunsTheAutomaticFlowAndFinishesSignedIn() async {
         let ran = Mutex<[String]>([])
         let center = ServiceSignInCenter(
             call: { _, _ in [:] }, openBrowser: { _ in },
@@ -250,6 +343,23 @@ struct MacOnlySignInDialogTests {
         #expect(center.current?.phase == .signedIn)
     }
 
+    @Test func macOffersThePasteRouteAfterTheAutomaticOneFails() async {
+        let recorder = PasteRecorder()
+        let center = ServiceSignInCenter(
+            call: { _, _ in [:] }, openBrowser: { _ in },
+            nativeSignIn: { _ in .failed("Sign-in took too long and was stopped.") },
+            pasteSignIn: pasteRoute(recorder), dismissDelay: .seconds(60)
+        )
+        center.receive(event())
+        #expect(center.current?.canPasteInstead == false)
+        await center.signIn()
+        #expect(center.current?.phase == .failed("Sign-in took too long and was stopped."))
+        #expect(center.current?.canPasteInstead == true)
+        await center.signInByPasting()
+        #expect(center.current?.phase == .pasteAddress(nil))
+        #expect(recorder.begun == ["begin:mcp:upwork"])
+    }
+
     @Test func macShowsTheFailureReason() async {
         let center = ServiceSignInCenter(
             call: { _, _ in [:] }, openBrowser: { _ in },
@@ -259,6 +369,7 @@ struct MacOnlySignInDialogTests {
         center.receive(event())
         await center.signIn()
         #expect(center.current?.phase == .failed("Upwork refused it."))
+        #expect(center.current?.canPasteInstead == false)
     }
 
     @Test func cancellingReturnsToThePromptSoItCanBeRetried() async {
@@ -275,6 +386,6 @@ struct MacOnlySignInDialogTests {
     @Test func otherServicesKeepTheirOwnFlow() {
         let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in })
         center.receive(event(service: "github", signinOn: nil))
-        #expect(center.current?.requiresMac == false)
+        #expect(center.current?.requiresAppSignIn == false)
     }
 }

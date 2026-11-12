@@ -13,7 +13,6 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     case unavailable
     case cancelled
     case credentialsRequired([String])
-    case signInOnMac
     case signInFailed(String)
     case failed
 }
@@ -113,7 +112,7 @@ public struct ConnectAppsService: Sendable {
     public func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async throws {
         switch app.source {
         case .hosted(let slug): try await connectHosted(slug: slug, reconnect: app.state == .needsAuthorization)
-        case .mcp where app.requiresMacSignIn: try await connectUpwork(app)
+        case .mcp where app.requiresAppSignIn: try await connectUpwork(app)
         case .mcp(let name, let requires): try await connectMcp(name: name, requires: requires, credentials: credentials)
         case .custom(let info):
             do { _ = try await testCustomConnector(name: info.name) } catch { throw ConnectAppsError.failed }

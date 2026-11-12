@@ -3,6 +3,7 @@ import PalAuth
 import PalDiagnostics
 import PalProtocol
 import PalREST
+import Synchronization
 
 public enum McpOAuthError: Error, Sendable, Equatable {
     case discoveryFailed
@@ -17,6 +18,8 @@ public enum McpOAuthError: Error, Sendable, Equatable {
     case randomnessUnavailable
     case rejectedByGateway(String?)
     case gatewayUnavailable
+    case handshakeUsed
+    case pasted(PasteError)
 
     public var reason: String {
         switch self {
@@ -25,19 +28,22 @@ public enum McpOAuthError: Error, Sendable, Equatable {
         case .browserUnavailable: "We couldn't open your browser."
         case .cancelled: "Sign-in was cancelled."
         case .timedOut: "Sign-in took too long and was stopped."
-        case .listenerFailed: "We couldn't wait for the sign-in to come back to this Mac."
+        case .listenerFailed: "We couldn't wait for the sign-in to come back to this device."
         case .denied: "Access was not granted."
         case .stateMismatch: "The sign-in answer didn't match this request. Try again."
         case .tokenExchangeFailed: "The sign-in couldn't be completed. Try again."
-        case .randomnessUnavailable: "This Mac couldn't prepare a secure sign-in."
+        case .randomnessUnavailable: "This device couldn't prepare a secure sign-in."
         case .rejectedByGateway(let text): text ?? "Your Pal couldn't save the sign-in."
         case .gatewayUnavailable: "We couldn't reach your Pal to save the sign-in."
+        case .handshakeUsed: "This sign-in was already used. Start again."
+        case .pasted(let failure): failure.userText
         }
     }
 
     public static func from(_ error: any Error) -> McpOAuthError {
         if let known = error as? McpOAuthError { return known }
         if error is CancellationError { return .cancelled }
+        if let paste = error as? PasteError { return .pasted(paste) }
         guard let signIn = error as? SignInError else { return .tokenExchangeFailed }
         switch signIn {
         case .cancelled: return .cancelled
@@ -223,8 +229,64 @@ struct McpOAuthDiscovery: Sendable {
     }
 }
 
+public final class McpOAuthHandshake: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
+    struct Secrets: Sendable {
+        let verifier: SecretString
+        let state: SecretString
+    }
+
+    public let authorizeURL: URL
+    public let redirectURI: String
+    let redirectURL: URL
+    let clientID: String
+    let server: McpOAuthServer
+    private let secrets: Mutex<Secrets?>
+
+    init(authorizeURL: URL, redirectURI: String, redirectURL: URL, clientID: String, server: McpOAuthServer, secrets: Secrets) {
+        self.authorizeURL = authorizeURL
+        self.redirectURI = redirectURI
+        self.redirectURL = redirectURL
+        self.clientID = clientID
+        self.server = server
+        self.secrets = Mutex<Secrets?>(secrets)
+    }
+
+    public var isPending: Bool {
+        return secrets.withLock { (value: inout Secrets?) -> Bool in
+            return value != nil
+        }
+    }
+
+    public var description: String { "<sign-in handshake>" }
+    public var debugDescription: String { "<sign-in handshake>" }
+    public var customMirror: Mirror { Mirror(self, children: []) }
+
+    func peek() throws -> Secrets {
+        let current = secrets.withLock { (value: inout Secrets?) -> Secrets? in
+            return value
+        }
+        guard let current else { throw McpOAuthError.handshakeUsed }
+        return current
+    }
+
+    func take() -> Secrets? {
+        return secrets.withLock { (value: inout Secrets?) -> Secrets? in
+            let taken = value
+            value = nil
+            return taken
+        }
+    }
+
+    public func cancel() {
+        secrets.withLock { (value: inout Secrets?) in
+            value = nil
+        }
+    }
+}
+
 public struct McpOAuthFlow: Sendable {
     public static let clientName = "Pal"
+    static let pasteRedirectPorts: ClosedRange<UInt16> = 49152...65535
 
     let http: McpOAuthHTTP
     let resource: URL
@@ -235,7 +297,7 @@ public struct McpOAuthFlow: Sendable {
     public init(
         resource: URL,
         transport: any HTTPTransport,
-        browser: any AuthorizationBrowser,
+        browser: any AuthorizationBrowser = UnavailableAuthorizationBrowser(),
         callbackTimeout: Duration = .seconds(300),
         diagnostics: Diagnostics = .silent
     ) {
@@ -247,15 +309,7 @@ public struct McpOAuthFlow: Sendable {
     }
 
     public func authorize() async throws -> McpOAuthGrant {
-        let server = try await McpOAuthDiscovery(http: http, diagnostics: diagnostics).discover(resource: resource)
-        let pkce: PKCE
-        let state: String
-        do {
-            pkce = try PKCE.generate()
-            state = try PKCE.randomToken(byteCount: 24)
-        } catch {
-            throw McpOAuthError.randomnessUnavailable
-        }
+        let (pkce, state) = try Self.freshSecrets()
         let listener: LoopbackRedirectListener
         do {
             listener = try await LoopbackRedirectListener.start(timeout: callbackTimeout, expectedState: state, diagnostics: diagnostics)
@@ -263,24 +317,73 @@ public struct McpOAuthFlow: Sendable {
             throw McpOAuthError.from(error)
         }
         defer { listener.cancel() }
-        let redirectURI = listener.redirectURI
-        let clientID = try await register(server: server, redirectURI: redirectURI)
-        let authorizeURL = Self.authorizeURL(server: server, clientID: clientID, redirectURI: redirectURI, challenge: pkce.challenge, state: state)
+        let handshake = try await begin(redirectURI: listener.redirectURI, pkce: pkce, state: state)
         let parameters: [String: String]
         do {
-            parameters = try await Self.awaitCallback(listener: listener, browser: browser, url: authorizeURL)
+            parameters = try await Self.awaitCallback(listener: listener, browser: browser, url: handshake.authorizeURL)
         } catch {
+            handshake.cancel()
             await browser.dismiss()
             throw McpOAuthError.from(error)
         }
         await browser.dismiss()
+        return try await complete(handshake, parameters: parameters)
+    }
+
+    public func beginPasted() async throws -> McpOAuthHandshake {
+        let (pkce, state) = try Self.freshSecrets()
+        let port = UInt16.random(in: Self.pasteRedirectPorts)
+        return try await begin(redirectURI: "http://127.0.0.1:\(port)\(LoopbackRedirectListener.callbackPath)", pkce: pkce, state: state)
+    }
+
+    public func complete(_ handshake: McpOAuthHandshake, parameters: [String: String]) async throws -> McpOAuthGrant {
+        let secrets = try handshake.peek()
         let code: String
         do {
-            code = try AuthorizationCallback.code(from: parameters, expectedState: state)
+            code = try AuthorizationCallback.code(from: parameters, expectedState: secrets.state.reveal())
         } catch {
+            handshake.cancel()
             throw McpOAuthError.from(error)
         }
-        return try await exchange(server: server, clientID: clientID, redirectURI: redirectURI, code: code, verifier: pkce.verifier)
+        return try await exchange(handshake, code: code)
+    }
+
+    public func complete(_ handshake: McpOAuthHandshake, pasted text: String) async throws -> McpOAuthGrant {
+        let secrets = try handshake.peek()
+        switch PastedAuthorization.parse(text, expectedState: secrets.state.reveal(), expectedRedirect: handshake.redirectURL) {
+        case .failure(let failure):
+            if !failure.keepsAttemptOpen { handshake.cancel() }
+            throw McpOAuthError.pasted(failure)
+        case .success(let code):
+            return try await exchange(handshake, code: code)
+        }
+    }
+
+    private static func freshSecrets() throws -> (PKCE, String) {
+        do {
+            return (try PKCE.generate(), try PKCE.randomToken(byteCount: 24))
+        } catch {
+            throw McpOAuthError.randomnessUnavailable
+        }
+    }
+
+    private func begin(redirectURI: String, pkce: PKCE, state: String) async throws -> McpOAuthHandshake {
+        guard let redirectURL = URL(string: redirectURI) else { throw McpOAuthError.listenerFailed }
+        let server = try await McpOAuthDiscovery(http: http, diagnostics: diagnostics).discover(resource: resource)
+        let clientID = try await register(server: server, redirectURI: redirectURI)
+        let authorizeURL = Self.authorizeURL(server: server, clientID: clientID, redirectURI: redirectURI, challenge: pkce.challenge, state: state)
+        return McpOAuthHandshake(
+            authorizeURL: authorizeURL, redirectURI: redirectURI, redirectURL: redirectURL, clientID: clientID, server: server,
+            secrets: McpOAuthHandshake.Secrets(verifier: SecretString(pkce.verifier), state: SecretString(state))
+        )
+    }
+
+    private func exchange(_ handshake: McpOAuthHandshake, code: String) async throws -> McpOAuthGrant {
+        guard let secrets = handshake.take() else { throw McpOAuthError.handshakeUsed }
+        return try await exchange(
+            server: handshake.server, clientID: handshake.clientID, redirectURI: handshake.redirectURI,
+            code: code, verifier: secrets.verifier.reveal()
+        )
     }
 
     private struct Registration: Decodable {

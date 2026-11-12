@@ -32,9 +32,7 @@ enum ServiceSignInWording {
         String(localized: "Sign in to \(dialog.serviceName) on the computer your bot runs on, then it can carry on.")
     }
 
-    static func onMac(_ dialog: ServiceSignInDialog) -> String {
-        String(localized: "Sign in to \(dialog.serviceName) on your Mac, then your bot can carry on. This iPhone can't finish that sign-in.")
-    }
+    static let anyDevice = String(localized: "Sign in works from any of your devices. Your Pal keeps the sign-in, so every device and bot can use it.")
 
     static func keyPrompt(_ dialog: ServiceSignInDialog, botName: (String) -> String) -> String {
         String(localized: "\(botName(dialog.bot)) needs a credential for \(dialog.serviceName) to keep going.")
@@ -56,6 +54,7 @@ enum ServiceSignInWording {
         switch phase {
         case .prompting: .idle
         case .signingIn: .submitting
+        case .pasteAddress(let note): note.map(SecretEntryState.failure) ?? .idle
         case .keySet, .signedIn: .success
         case .keyFailed(let text), .failed(let text): .failure(text)
         case .expired: .expired
@@ -66,6 +65,7 @@ enum ServiceSignInWording {
         switch dialog.phase {
         case .prompting: nil
         case .signingIn: String(localized: "Waiting for you to finish signing in…")
+        case .pasteAddress(let note): note
         case .keySet: String(localized: "Key set")
         case .keyFailed(let text): text
         case .signedIn: String(localized: "Signed in")
@@ -134,7 +134,7 @@ struct ServiceSignInDialogView: View {
         guard dialog.takesKey else { return false }
         return switch dialog.phase {
         case .prompting, .signingIn, .keySet, .keyFailed, .expired: true
-        case .signedIn, .failed: false
+        case .pasteAddress, .signedIn, .failed: false
         }
     }
 
@@ -164,9 +164,25 @@ struct ServiceSignInDialogView: View {
         }
     }
 
+    private func pasteEntry(_ dialog: ServiceSignInDialog) -> some View {
+        PasteAddressEntry(
+            state: ServiceSignInWording.entryState(dialog.phase),
+            identifiers: SecretEntryIdentifiers(
+                field: "service-signin-paste-field", submit: "service-signin-paste-submit",
+                cancel: "service-signin-notnow-button", status: "service-signin-status"
+            ),
+            onSubmit: { value in Task { await center.submitAddress(value) } },
+            onReopen: { center.reopenSignInPage() },
+            onCancel: { Task { await center.notNow() } }
+        )
+        .id(dialog.requestID)
+    }
+
     @ViewBuilder
     private func content(_ dialog: ServiceSignInDialog) -> some View {
-        if usesSecretEntry(dialog) {
+        if case .pasteAddress = dialog.phase {
+            pasteEntry(dialog)
+        } else if usesSecretEntry(dialog) {
             keyEntry(dialog)
         } else {
             standardContent(dialog)
@@ -203,13 +219,19 @@ struct ServiceSignInDialogView: View {
                     .multilineTextAlignment(.center)
                     .accessibilityIdentifier("service-signin-status")
             }
+            if dialog.requiresAppSignIn, dialog.phase == .prompting {
+                Text(ServiceSignInWording.anyDevice)
+                    .hermesText(.footnoteCaption)
+                    .foregroundStyle(PalTokens.textTertiary)
+                    .multilineTextAlignment(.center)
+                    .accessibilityIdentifier("service-signin-anydevice")
+            }
             buttons(dialog)
         }
     }
 
     private func subtitle(_ dialog: ServiceSignInDialog) -> String {
-        if dialog.mustSignInOnMac { return ServiceSignInWording.onMac(dialog) }
-        if dialog.requiresMac { return ServiceSignInWording.subtitle(dialog, botName: botName) }
+        if dialog.requiresAppSignIn { return ServiceSignInWording.subtitle(dialog, botName: botName) }
         switch dialog.flow {
         case .deviceCode, .oauth: return ServiceSignInWording.subtitle(dialog, botName: botName)
         case .apiKey, .header: return ServiceSignInWording.keyPrompt(dialog, botName: botName)
@@ -220,7 +242,7 @@ struct ServiceSignInDialogView: View {
     private func showsCode(_ phase: ServiceSignInPhase) -> Bool {
         switch phase {
         case .prompting, .signingIn: true
-        case .keySet, .keyFailed, .signedIn, .failed, .expired: false
+        case .pasteAddress, .keySet, .keyFailed, .signedIn, .failed, .expired: false
         }
     }
 
@@ -230,11 +252,16 @@ struct ServiceSignInDialogView: View {
         case .signedIn:
             EmptyView()
         case .failed, .expired:
+            if dialog.canPasteInstead {
+                Button("Paste the address instead") { Task { await center.signInByPasting() } }
+                    .buttonStyle(PillButtonStyle(kind: .accent, size: .large))
+                    .accessibilityIdentifier("service-signin-paste-instead-button")
+            }
             Button("Close") { Task { await center.notNow() } }
                 .buttonStyle(PillButtonStyle(kind: .neutral, size: .large))
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier("service-signin-notnow-button")
-        case .prompting, .signingIn, .keySet, .keyFailed:
+        case .prompting, .signingIn, .pasteAddress, .keySet, .keyFailed:
             VStack(spacing: 8) {
                 if dialog.canSignIn {
                     Button(dialog.phase == .signingIn ? "Signing in…" : "Sign in") { Task { await center.signIn() } }

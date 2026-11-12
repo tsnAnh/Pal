@@ -1,16 +1,35 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
-public enum ConnectorPlatform: Sendable, Equatable {
+public enum ConnectorPlatform: Sendable, Equatable, CaseIterable {
     case iPhone
+    case iPad
     case mac
 
+    @MainActor
     public static var current: ConnectorPlatform {
         #if os(macOS)
-        .mac
+        return .mac
         #else
-        .iPhone
+        return UIDevice.current.userInterfaceIdiom == .pad ? .iPad : .iPhone
         #endif
     }
+
+    public var signInRoutes: [OAuthSignInRoute] {
+        switch self {
+        case .mac: return [.automaticReturn, .pasteAddress]
+        case .iPhone, .iPad: return [.pasteAddress]
+        }
+    }
+
+    public var returnsAutomatically: Bool { signInRoutes.contains(.automaticReturn) }
+}
+
+public enum OAuthSignInRoute: Sendable, Equatable {
+    case automaticReturn
+    case pasteAddress
 }
 
 public enum ConnectorCardState: Sendable, Equatable {
@@ -19,7 +38,6 @@ public enum ConnectorCardState: Sendable, Equatable {
     case connected
     case failed(String)
     case reconnect(reason: String?)
-    case signInOnMac(reason: String?)
 
     public var isReconnect: Bool {
         if case .reconnect = self { return true }
@@ -31,34 +49,29 @@ public struct ConnectorCardInput: Sendable, Equatable {
     public var connection: ConnectAppState
     public var isBusy: Bool
     public var failureReason: String?
-    public var requiresMacSignIn: Bool
     public var authReason: String?
 
-    public init(connection: ConnectAppState, isBusy: Bool = false, failureReason: String? = nil, requiresMacSignIn: Bool = false, authReason: String? = nil) {
+    public init(connection: ConnectAppState, isBusy: Bool = false, failureReason: String? = nil, authReason: String? = nil) {
         self.connection = connection
         self.isBusy = isBusy
         self.failureReason = failureReason
-        self.requiresMacSignIn = requiresMacSignIn
         self.authReason = authReason
     }
 
     public init(app: ConnectApp, isBusy: Bool = false, failureReason: String? = nil) {
-        self.init(connection: app.state, isBusy: isBusy, failureReason: failureReason, requiresMacSignIn: app.requiresMacSignIn, authReason: app.authReason)
+        self.init(connection: app.state, isBusy: isBusy, failureReason: failureReason, authReason: app.authReason)
     }
 }
 
 extension ConnectorCardState {
-    public static func resolve(_ input: ConnectorCardInput, platform: ConnectorPlatform) -> ConnectorCardState {
+    public static func resolve(_ input: ConnectorCardInput) -> ConnectorCardState {
         if input.isBusy { return .connecting }
-        let cannotSignInHere = input.requiresMacSignIn && platform == .iPhone
         switch input.connection {
         case .connected:
             return .connected
         case .needsAuthorization:
-            let reason = cleaned(input.authReason)
-            return cannotSignInHere ? .signInOnMac(reason: reason) : .reconnect(reason: reason)
+            return .reconnect(reason: cleaned(input.authReason))
         case .disconnected:
-            if cannotSignInHere { return .signInOnMac(reason: nil) }
             if let reason = input.failureReason, !reason.isEmpty { return .failed(reason) }
             return .connect
         }
