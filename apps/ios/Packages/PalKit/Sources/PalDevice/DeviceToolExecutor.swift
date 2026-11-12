@@ -59,9 +59,6 @@ public actor DeviceToolExecutor {
             return .failure(.invalidArgs, "\(request.action) does not belong to \(request.connector).")
         }
         let connector = action.connector
-        if connector.isOwnerSwitched, await ledger.state(for: connector) != .allowed {
-            return .failure(.failed, MessagesSwitch.offMessage)
-        }
         if let refusal = await osPermission(for: connector, action: action, profile: request.profile) { return refusal }
         do {
             return .success(try await dispatch(action, request.args, budget: budget, profile: request.profile))

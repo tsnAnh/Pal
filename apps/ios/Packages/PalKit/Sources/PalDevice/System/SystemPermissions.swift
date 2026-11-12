@@ -57,8 +57,10 @@ public struct SystemPermissions: DevicePermissions {
             await Self.requestNotifications()
         case .apps:
             Self.requestApps()
-        case .clipboard, .messages:
+        case .clipboard:
             break
+        case .messages:
+            UserDefaults.standard.set(true, forKey: Self.messagesAskedKey)
         case .screen:
             Self.requestScreen()
         }
@@ -122,8 +124,11 @@ public struct SystemPermissions: DevicePermissions {
         #endif
     }
 
+    private static let messagesAskedKey = "dev.tsnanh.pal.messages-access-asked"
+
     private static var messagesStatus: DeviceOSPermission {
         #if os(macOS)
+        guard UserDefaults.standard.bool(forKey: messagesAskedKey) else { return .notDetermined }
         switch MessagesAccessProbe.current() {
         case .ready: .granted
         case .permissionNeeded: .denied

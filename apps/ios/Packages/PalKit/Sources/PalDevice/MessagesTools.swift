@@ -12,10 +12,9 @@ public enum MessagesLimit {
     static let messageOverhead = 200
 }
 
-public enum MessagesSwitch {
+public enum MessagesHint {
     public static let diskHint = "Messages. The owner must allow Pal under Full Disk Access in System Settings > Privacy & Security, then ask again"
     public static let automationHint = "Messages. The owner must allow Pal to control Messages under Automation in System Settings > Privacy & Security, then ask again"
-    public static let offMessage = "The owner has Messages turned off on this Mac. Tell them they can turn it on in Connect Apps instead of retrying."
 }
 
 enum MessagesToolHandler {
@@ -23,7 +22,7 @@ enum MessagesToolHandler {
         do {
             return try await dispatch(action, raw, provider: provider, zone: zone)
         } catch DeviceProviderError.permissionDenied {
-            throw DeviceProviderError.accessDenied(action == .messagesSend ? MessagesSwitch.automationHint : MessagesSwitch.diskHint)
+            throw DeviceProviderError.accessDenied(action == .messagesSend ? MessagesHint.automationHint : MessagesHint.diskHint)
         }
     }
 
@@ -158,55 +157,5 @@ enum MessagesToolHandler {
                 lastAt: ISODate.format(record.lastAt, in: zone), messages: messages
             )
         }
-    }
-}
-
-public enum MessagesHost: Sendable {
-    case mac
-    case phone
-
-    public static var current: MessagesHost {
-        #if os(macOS)
-        .mac
-        #else
-        .phone
-        #endif
-    }
-}
-
-public struct MessagesConnectorRow: Sendable, Equatable {
-    public enum Action: Sendable, Equatable {
-        case openFullDiskAccess
-    }
-
-    public static let title = "Messages"
-    public static let macSubtitle = "Lets your bots read your messages on this Mac. They can see private conversations. Needs Full Disk Access."
-    public static let phoneSubtitle = "Messages can only be read and sent from your Mac. Pal on your iPhone can still show this Mac's Messages status and approve send requests."
-    public static let openSettingsTitle = "Open Full Disk Access settings"
-
-    public var title: String
-    public var subtitle: String
-    public var hasSwitch: Bool
-    public var isOn: Bool
-    public var status: String?
-    public var action: Action?
-
-    public static func make(host: MessagesHost, state: DeviceConnectorState?, access: MessagesAccess?) -> MessagesConnectorRow {
-        guard host == .mac else {
-            return MessagesConnectorRow(title: title, subtitle: phoneSubtitle, hasSwitch: false, isOn: false, status: nil, action: nil)
-        }
-        let isOn = state == .allowed
-        let status: String
-        var action: Action?
-        switch (isOn, access) {
-        case (false, _): status = "Off"
-        case (true, nil): status = "Checking access"
-        case (true, .ready?): status = "On"
-        case (true, .permissionNeeded?):
-            status = "Needs Full Disk Access"
-            action = .openFullDiskAccess
-        case (true, .unavailable?): status = "Messages isn't available on this Mac"
-        }
-        return MessagesConnectorRow(title: title, subtitle: macSubtitle, hasSwitch: true, isOn: isOn, status: status, action: action)
     }
 }

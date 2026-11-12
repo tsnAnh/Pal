@@ -50,7 +50,6 @@ class ConnectorInfo:
     subtitle: str
     kinds: frozenset[str] = APPLE_KINDS
     on_by_default: bool = True
-    opt_in: bool = False
 
 
 CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
@@ -67,9 +66,7 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.NOTIFICATIONS, "Notifications", "Let bots show notifications on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.CLIPBOARD, "Clipboard", "Let bots read and change this Mac's clipboard", MAC_ONLY, False),
     ConnectorInfo(Connector.APPS, "Apps", "Let bots open and switch apps on this Mac", MAC_ONLY, False),
-    ConnectorInfo(Connector.MESSAGES, "Messages",
-                  "Lets your bots read your messages on this Mac. They can see private conversations. "
-                  "Needs Full Disk Access.", MAC_ONLY, False, True),
+    ConnectorInfo(Connector.MESSAGES, "Messages", "Read and send your messages", MAC_ONLY, False),
 )
 MESSAGES_READ_ACTIONS = frozenset({"messages.recent", "messages.search", "messages.read"})
 MESSAGES_TEXT_CHARS = 1000
