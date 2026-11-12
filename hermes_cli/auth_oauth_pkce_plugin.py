@@ -160,19 +160,26 @@ def _pool_provider(args: Any) -> str:
     return profile.name if profile is not None else raw
 
 
-def login(provider: str, cfg: OAuthPKCEConfig, *, open_browser: bool = True) -> dict[str, Any]:
-    """Run the browser Authorization-Code + PKCE flow; returns the pool fields for the new grant."""
-    from hermes_cli.auth_device_flow import (
-        _bind_loopback_callback_server, _can_open_graphical_browser, _make_loopback_callback_handler,
-        _pkce_code_challenge, _pkce_code_verifier, _print_loopback_ssh_hint, _serve_loopback_callback)
+@dataclass(frozen=True)
+class PendingAuthorization:
+    """One in-flight authorization: the URL to open and what the callback must be checked against."""
+
+    authorize_url: str
+    redirect_uri: str
+    state: str
+    verifier: str = field(repr=False)
+
+
+def _redirect_path(cfg: OAuthPKCEConfig) -> str:
+    return cfg.redirect_path if cfg.redirect_path.startswith("/") else f"/{cfg.redirect_path}"
+
+
+def begin_authorization(provider: str, cfg: OAuthPKCEConfig, *, redirect_port: int) -> PendingAuthorization:
+    """Validate *cfg* and build the authorization URL for a redirect on ``127.0.0.1:redirect_port``."""
+    from hermes_cli.auth_device_flow import _pkce_code_challenge, _pkce_code_verifier
 
     validate_config(provider, cfg)
-    path = cfg.redirect_path if cfg.redirect_path.startswith("/") else f"/{cfg.redirect_path}"
-    err = lambda message, code: _err(provider, message, code)
-    handler_cls, result = _make_loopback_callback_handler(path, display_name=cfg.label or provider)
-    server = _bind_loopback_callback_server(
-        "127.0.0.1", int(cfg.redirect_port), handler_cls, err=err, bind_failed_code="oauth_callback_bind_failed")
-    redirect_uri = f"http://127.0.0.1:{server.server_address[1]}{path}"
+    redirect_uri = f"http://127.0.0.1:{redirect_port}{_redirect_path(cfg)}"
     verifier = _pkce_code_verifier()
     state = secrets.token_urlsafe(32)
     params = {
@@ -183,11 +190,44 @@ def login(provider: str, cfg: OAuthPKCEConfig, *, open_browser: bool = True) -> 
         params["scope"] = " ".join(cfg.scopes)
     if cfg.audience:
         params["audience"] = cfg.audience
-    authorize_url = f"{cfg.authorize_url}{'&' if urlparse(cfg.authorize_url).query else '?'}{urlencode(params)}"
+    url = f"{cfg.authorize_url}{'&' if urlparse(cfg.authorize_url).query else '?'}{urlencode(params)}"
+    return PendingAuthorization(url, redirect_uri, state, verifier)
+
+
+def exchange_code(provider: str, cfg: OAuthPKCEConfig, pending: PendingAuthorization, code: str) -> dict[str, Any]:
+    return _post_token(provider, cfg, {
+        "grant_type": "authorization_code", "code": code, "redirect_uri": pending.redirect_uri,
+        "code_verifier": pending.verifier}, code="oauth_token_exchange_failed")
+
+
+def store_grant(provider: str, cfg: OAuthPKCEConfig, tokens: Mapping[str, Any]):
+    """Add the new grant to the provider's credential pool; returns the pool entry."""
+    from agent.credential_pool import AUTH_TYPE_OAUTH, PooledCredential, load_pool
+
+    return load_pool(provider).add_entry(PooledCredential(
+        provider=provider, id=uuid.uuid4().hex[:6], label=cfg.label or provider,
+        auth_type=AUTH_TYPE_OAUTH, priority=0, source=POOL_SOURCE, **tokens,
+        extra={"oauth_pkce": {"client_id": cfg.client_id, "scope": " ".join(cfg.scopes)}}))
+
+
+def login(provider: str, cfg: OAuthPKCEConfig, *, open_browser: bool = True) -> dict[str, Any]:
+    """Run the browser Authorization-Code + PKCE flow; returns the pool fields for the new grant."""
+    from hermes_cli.auth_device_flow import (
+        _bind_loopback_callback_server, _can_open_graphical_browser, _make_loopback_callback_handler,
+        _print_loopback_ssh_hint, _serve_loopback_callback)
+
+    validate_config(provider, cfg)
+    path = _redirect_path(cfg)
+    err = lambda message, code: _err(provider, message, code)
+    handler_cls, result = _make_loopback_callback_handler(path, display_name=cfg.label or provider)
+    server = _bind_loopback_callback_server(
+        "127.0.0.1", int(cfg.redirect_port), handler_cls, err=err, bind_failed_code="oauth_callback_bind_failed")
+    pending = begin_authorization(provider, cfg, redirect_port=server.server_address[1])
+    authorize_url = pending.authorize_url
 
     print(f"\nOpen this URL to authorize Hermes with {cfg.label or provider}:\n  {authorize_url}\n")
-    print(f"Waiting for callback on {redirect_uri} (timeout {int(cfg.timeout_seconds)}s, Ctrl+C to cancel)...")
-    _print_loopback_ssh_hint(redirect_uri)
+    print(f"Waiting for callback on {pending.redirect_uri} (timeout {int(cfg.timeout_seconds)}s, Ctrl+C to cancel)...")
+    _print_loopback_ssh_hint(pending.redirect_uri)
     if open_browser and _can_open_graphical_browser():
         try:
             webbrowser.open(authorize_url)
@@ -203,15 +243,18 @@ def login(provider: str, cfg: OAuthPKCEConfig, *, open_browser: bool = True) -> 
     if callback.get("error"):
         raise err(f"authorization failed: {callback.get('error_description') or callback['error']}",
                   "oauth_authorization_denied")
-    if not hmac.compare_digest(str(callback.get("state") or ""), state):
+    if not hmac.compare_digest(str(callback.get("state") or ""), pending.state):
         raise err("callback state mismatch — the redirect did not come from this login. Aborting.",
                   "oauth_state_mismatch")
     code = str(callback.get("code") or "").strip()
     if not code:
         raise err("callback carried no authorization code.", "oauth_no_code")
-    return _post_token(provider, cfg, {
-        "grant_type": "authorization_code", "code": code, "redirect_uri": redirect_uri, "code_verifier": verifier,
-    }, code="oauth_token_exchange_failed")
+    return exchange_code(provider, cfg, pending, code)
+
+
+def pkce_config_of(profile: Any) -> Optional[OAuthPKCEConfig]:
+    """The declarative config behind a provider profile's ``pkce_auth_handler``, or None."""
+    return getattr(getattr(profile, "auth_handler", None), "pkce_config", None)
 
 
 def _is_usable(access_token: Any, expires_at_ms: Any, now_ms: int) -> bool:
@@ -223,15 +266,12 @@ def pkce_auth_handler(cfg: OAuthPKCEConfig) -> Callable[[str, Any], bool]:
     credential pool's generic refresh (which calls :func:`pkce_refresh_credential`) handles it."""
 
     def handler(action: str, args: Any) -> bool:
-        from agent.credential_pool import AUTH_TYPE_OAUTH, PooledCredential, load_pool
+        from agent.credential_pool import load_pool
 
         provider = _pool_provider(args)
         if action == "add":
             tokens = login(provider, cfg, open_browser=not getattr(args, "no_browser", False))
-            entry = load_pool(provider).add_entry(PooledCredential(
-                provider=provider, id=uuid.uuid4().hex[:6], label=cfg.label or provider,
-                auth_type=AUTH_TYPE_OAUTH, priority=0, source=POOL_SOURCE, **tokens,
-                extra={"oauth_pkce": {"client_id": cfg.client_id, "scope": " ".join(cfg.scopes)}}))
+            entry = store_grant(provider, cfg, tokens)
             print(f"Signed in to {cfg.label or provider}; credential {entry.id} added to the pool.")
             return True
         if action == "status":
@@ -253,6 +293,7 @@ def pkce_auth_handler(cfg: OAuthPKCEConfig) -> Callable[[str, Any], bool]:
             return True
         return False
 
+    handler.pkce_config = cfg
     return handler
 
 

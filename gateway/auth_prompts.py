@@ -37,12 +37,6 @@ class CredentialOutcome(StrEnum):
     REJECTED = "rejected"
 
 
-class RedirectOutcome(StrEnum):
-    ACCEPTED = "accepted"
-    INVALID = "invalid"
-    REJECTED = "rejected"
-
-
 @dataclass(eq=False)
 class _Request:
     request_id: str
@@ -89,8 +83,7 @@ def _required_frame(req: _Request) -> dict:
         request_id=req.request_id, service=req.service, service_name=service_display_name(req.service),
         bot=req.bots[0], bots=list(req.bots), reason=req.reason, flow=req.flow.kind,
         user_code=req.flow.user_code, verification_uri=req.flow.verification_uri, expires_in=req.flow.expires_in,
-        server=getattr(req.flow, 'server', None),
-        redirect_paste=True if getattr(req.flow, 'accepts_redirect', False) else None))
+        server=getattr(req.flow, 'server', None)))
 
 
 async def _broadcast(transports: list, frame: dict) -> list:
@@ -251,17 +244,28 @@ async def submit_credential(authority, request_id: str, value: str) -> Credentia
     return CredentialOutcome.STORED
 
 
-async def submit_redirect(authority, request_id: str, value: str) -> RedirectOutcome:
+async def submit_callback(authority, request_id: str, value: str) -> tuple[CredentialOutcome, str | None]:
     req = _owned(authority, request_id)
-    deliver = getattr(req.flow, "submit_redirect", None) if req is not None else None
-    if req is None or deliver is None or req.future.done() or req.authorize_url is None:
-        return RedirectOutcome.REJECTED
+    deliver = getattr(req.flow, "callback", None) if req is not None else None
+    if req is None or deliver is None or req.future.done() or req.answering:
+        return CredentialOutcome.REJECTED, None
+    req.answering = True
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    scope = set_hermes_home_override(req.home)
     try:
-        accepted = await deliver(value)
-    except (OSError, ValueError, RuntimeError, KeyError) as exc:
-        logger.warning("pasted redirect for %s was not taken (%s)", req.service, type(exc).__name__)
-        return RedirectOutcome.INVALID
-    return RedirectOutcome.ACCEPTED if accepted else RedirectOutcome.INVALID
+        status, reason = await deliver(value)
+    finally:
+        reset_hermes_home_override(scope)
+    req.answering = False
+    if status == "stored":
+        await _conclude(req, Resolution.SIGNED_IN)
+        return CredentialOutcome.STORED, None
+    if status == "retry":
+        return CredentialOutcome.FAILED, reason
+    if status == "failed":
+        await _conclude(req, Resolution.FAILED)
+        return CredentialOutcome.FAILED, reason
+    return CredentialOutcome.REJECTED, None
 
 
 async def decline(authority, request_id: str) -> bool:

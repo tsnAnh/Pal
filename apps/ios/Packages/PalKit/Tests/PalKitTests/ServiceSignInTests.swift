@@ -13,8 +13,7 @@ private func requiredEvent(
     reason: String = "missing",
     code: String? = "WDJB-MJHT",
     uri: String? = "https://github.com/login/device",
-    server: String? = nil,
-    redirectPaste: Bool? = nil
+    server: String? = nil
 ) -> GatewayEvent {
     var payload: [String: JSONValue] = [
         "request_id": .string(requestID), "service": .string(service), "service_name": "GitHub", "bot": .string(bot),
@@ -23,7 +22,6 @@ private func requiredEvent(
     if let code { payload["user_code"] = .string(code) }
     if let uri { payload["verification_uri"] = .string(uri) }
     if let server { payload["server"] = .string(server) }
-    if let redirectPaste { payload["redirect_paste"] = .bool(redirectPaste) }
     return GatewayEvent(type: "auth.required", payload: .object(payload))
 }
 
@@ -116,6 +114,24 @@ struct ServiceSignInWireTests {
         #expect(event.reason == .missing)
         #expect(event.userCode == "WDJB-MJHT")
         #expect(event.expiresIn == 900)
+    }
+
+    @Test func oauthPasteFlowDecodes() throws {
+        let event = try #require(AuthRequiredEvent(event: requiredEvent(flow: "oauth_paste", code: nil)))
+        #expect(event.flow == .oauthPaste)
+        #expect(event.userCode == nil)
+        #expect(AuthCallbackResult(["outcome": "failed", "reason": "Try again."]) == AuthCallbackResult(outcome: .failed, reason: "Try again."))
+        #expect(AuthCallbackResult(["outcome": "stored", "reason": ""]).reason == nil)
+        #expect(AuthCallbackResult(["outcome": "weird"]).outcome == .unknown)
+    }
+
+    @Test func pastedCallbackNormalizes() {
+        #expect(PastedCallback("  http://127.0.0.1:1/cb?code=a \n")?.value == "http://127.0.0.1:1/cb?code=a")
+        #expect(PastedCallback("") == nil)
+        #expect(PastedCallback(" \n\t ") == nil)
+        #expect(PastedCallback(String(repeating: "a", count: 4096)) != nil)
+        #expect(PastedCallback(String(repeating: "a", count: 4097)) == nil)
+        #expect("\(PastedCallback("secret")!)" == "PastedCallback(redacted)")
     }
 
     @Test func unknownEnumsFallBack() throws {
@@ -227,6 +243,87 @@ struct ServiceSignInCenterTests {
         file.receive(requiredEvent(flow: "oauth", code: nil, uri: nil))
         await file.signIn()
         #expect(opened.all.isEmpty)
+    }
+
+    @Test func oauthPasteOpensBrowserOnceAndAcknowledges() async throws {
+        let recorder = Recorder()
+        let opened = Opened()
+        let center = makeCenter(recorder, opened)
+        center.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/authorize?state=s"))
+        #expect(center.current?.flow == .oauthPaste)
+        #expect(center.current?.canSignIn == true)
+        #expect(center.current?.takesKey == false)
+        await center.signIn()
+        await center.signIn()
+        #expect(opened.all.map(\.absoluteString) == ["https://auth.example.com/authorize?state=s"])
+        #expect(recorder.methods() == ["auth.signin"])
+        #expect(center.current?.phase == .signingIn)
+    }
+
+    @Test func oauthPasteRejectsInsecureAuthorizationURL() async {
+        let recorder = Recorder()
+        let opened = Opened()
+        let center = makeCenter(recorder, opened)
+        center.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "http://auth.example.com/authorize"))
+        await center.signIn()
+        #expect(opened.all.isEmpty)
+        #expect(recorder.methods().isEmpty)
+        if case .failed = center.current?.phase {} else { Issue.record("expected failure") }
+    }
+
+    @Test func submitCallbackSendsPastedValueAndWaitsForResolution() async throws {
+        let recorder = Recorder(reply: ["outcome": "stored"])
+        let center = makeCenter(recorder, Opened(), delay: .seconds(30))
+        center.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/a"))
+        await center.submitCallback("http://127.0.0.1:1455/cb?code=c&state=s")
+        #expect(recorder.methods().isEmpty)
+        await center.signIn()
+        await center.submitCallback("  http://127.0.0.1:1455/cb?code=c&state=s \n")
+        let params = try #require(recorder.params("auth.submit_callback").first ?? nil)
+        #expect(params["request_id"]?.stringValue == "r1")
+        #expect(params["value"]?.stringValue == "http://127.0.0.1:1455/cb?code=c&state=s")
+        #expect(center.current?.phase == .signingIn)
+        center.receive(resolvedEvent("r1", "signed_in"))
+        #expect(center.current?.phase == .signedIn)
+        await center.submitCallback("http://127.0.0.1:1455/cb?code=c&state=s")
+        #expect(recorder.params("auth.submit_callback").count == 1)
+    }
+
+    @Test func submitCallbackFailureKeepsPasteOpenAndAllowsRetry() async {
+        let recorder = Recorder(reply: ["outcome": "failed", "reason": "That address is for a different sign-in."])
+        let center = makeCenter(recorder, Opened())
+        center.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/a"))
+        await center.signIn()
+        await center.submitCallback("http://127.0.0.1/cb?code=x")
+        #expect(center.current?.phase == .callbackFailed("That address is for a different sign-in."))
+        await center.submitCallback("http://127.0.0.1/cb?code=y&state=s")
+        #expect(recorder.params("auth.submit_callback").count == 2)
+        #expect(center.current?.phase == .callbackFailed("That address is for a different sign-in."))
+        center.receive(resolvedEvent("r1", "failed"))
+        if case .failed = center.current?.phase {} else { Issue.record("expected ended flow") }
+    }
+
+    @Test func submitCallbackRejectedExpiresAndTransportErrorKeepsPasteOpen() async {
+        let rejected = makeCenter(Recorder(reply: ["outcome": "rejected"]), Opened())
+        rejected.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/a"))
+        await rejected.signIn()
+        await rejected.submitCallback("http://127.0.0.1/cb?code=x")
+        #expect(rejected.current?.phase == .expired)
+
+        let offline = ServiceSignInCenter(
+            call: { method, _ in
+                if method == "auth.submit_callback" { throw DeviceToolHostError.offline }
+                return ["recorded": true]
+            },
+            openBrowser: { _ in },
+            dismissDelay: .seconds(30)
+        )
+        offline.receive(requiredEvent(flow: "oauth_paste", code: nil, uri: "https://auth.example.com/a"))
+        await offline.submitCallback("http://127.0.0.1/cb?code=x")
+        #expect(offline.current?.phase == .prompting)
+        await offline.signIn()
+        await offline.submitCallback("http://127.0.0.1/cb?code=x")
+        #expect(offline.current?.phase == .callbackFailed(ServiceSignInCenter.callbackFailure))
     }
 
     @Test func manualFlowHasNoSignIn() async {
@@ -456,87 +553,5 @@ struct CredentialWireTests {
     @Test func aMissingOutcomeIsUnknown() {
         #expect(AuthCredentialOutcome([:]) == .unknown)
         #expect(AuthCredentialOutcome(wire: nil) == .unknown)
-    }
-}
-
-
-@Suite("Redirect paste")
-@MainActor
-struct RedirectPasteTests {
-    private func signingIn(_ recorder: Recorder, paste: Bool? = true) async -> ServiceSignInCenter {
-        let center = makeCenter(recorder, Opened())
-        center.receive(requiredEvent("r1", service: "mcp:acme", flow: "oauth", code: nil, uri: nil, redirectPaste: paste))
-        await center.signIn()
-        return center
-    }
-
-    @Test func wireDefaultsToNoPasteAndReadsTheFlag() throws {
-        let plain = try #require(AuthRequiredEvent(event: requiredEvent(flow: "oauth", code: nil, uri: nil)))
-        let flagged = try #require(AuthRequiredEvent(event: requiredEvent(flow: "oauth", code: nil, uri: nil, redirectPaste: true)))
-        #expect(plain.redirectPaste == false && flagged.redirectPaste == true)
-    }
-
-    @Test func paramsCarryTheValueOnlyInTheRequest() {
-        let secret = "CANARY-\(UUID().uuidString)"
-        let params = ServiceSignInWire.submitRedirectParams(requestID: "req-12345678", value: SecretString(secret))
-        #expect(ServiceSignInWire.submitRedirectMethod == "auth.submit_redirect")
-        #expect(params["value"]?.stringValue == secret && params.objectValue?.count == 2)
-    }
-
-    @Test func pasteIsOfferedOnlyWhileSigningInAnOAuthFlowThatAcceptsIt() async {
-        let recorder = Recorder(reply: ["recorded": true, "authorization_url": "https://example.com/authorize?state=abc"])
-        let center = await signingIn(recorder)
-        #expect(center.current?.acceptsRedirect == true)
-        let older = await signingIn(Recorder(reply: ["recorded": true, "authorization_url": "https://example.com/a"]), paste: nil)
-        #expect(older.current?.acceptsRedirect == false)
-        let waiting = makeCenter(recorder, Opened())
-        waiting.receive(requiredEvent(flow: "oauth", code: nil, uri: nil, redirectPaste: true))
-        #expect(waiting.current?.acceptsRedirect == false)
-    }
-
-    @Test func submitSendsOneCallAndAnAcceptedPasteWaitsForTheResolution() async {
-        let recorder = Recorder(reply: ["recorded": true, "authorization_url": "https://example.com/authorize?state=abc", "outcome": "accepted"])
-        let center = await signingIn(recorder)
-        await center.submitRedirect(SecretString("code=abc&state=xyz"))
-        #expect(recorder.params("auth.submit_redirect").count == 1)
-        #expect(center.current?.phase == .signingIn && center.current?.redirectNote == nil)
-        center.receive(resolvedEvent("r1", "signed_in"))
-        #expect(center.current?.phase == .signedIn)
-    }
-
-    @Test(arguments: ["invalid", "weird"])
-    func anUnusablePasteKeepsTheDialogOpenWithAPlainNote(outcome: String) async {
-        let recorder = Recorder(reply: ["recorded": true, "authorization_url": "https://example.com/authorize?state=abc", "outcome": .string(outcome)])
-        let center = await signingIn(recorder)
-        await center.submitRedirect(SecretString("nope"))
-        #expect(center.current?.phase == .signingIn)
-        #expect(center.current?.redirectNote == ServiceSignInCenter.redirectInvalid)
-    }
-
-    @Test func aRejectedPasteEndsTheAttempt() async {
-        let recorder = Recorder(reply: ["recorded": true, "authorization_url": "https://example.com/authorize?state=abc", "outcome": "rejected"])
-        let center = await signingIn(recorder)
-        await center.submitRedirect(SecretString("code=abc&state=xyz"))
-        #expect(center.current?.phase == .failed(ServiceSignInCenter.redirectEnded))
-    }
-
-    @Test func aThrownSubmitIsRetryableAndAnEmptyPasteSendsNothing() async {
-        let recorder = Recorder(reply: ["recorded": true, "authorization_url": "https://example.com/authorize?state=abc"])
-        let center = ServiceSignInCenter(
-            call: { method, params in
-                _ = try recorder.handle(method, params)
-                if method == ServiceSignInWire.submitRedirectMethod { throw DeviceToolHostError.offline }
-                return ["recorded": true, "authorization_url": "https://example.com/authorize?state=abc"]
-            },
-            openBrowser: { _ in },
-            dismissDelay: .milliseconds(1)
-        )
-        center.receive(requiredEvent("r1", service: "mcp:acme", flow: "oauth", code: nil, uri: nil, redirectPaste: true))
-        await center.signIn()
-        await center.submitRedirect(SecretString(""))
-        #expect(recorder.params("auth.submit_redirect").isEmpty)
-        await center.submitRedirect(SecretString("code=abc&state=xyz"))
-        #expect(center.current?.phase == .signingIn)
-        #expect(center.current?.redirectNote == ServiceSignInCenter.redirectInvalid)
     }
 }

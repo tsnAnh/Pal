@@ -9,6 +9,7 @@ public enum ServiceSignInPhase: Sendable, Hashable {
     case signingIn
     case keySet
     case keyFailed(String)
+    case callbackFailed(String)
     case signedIn
     case failed(String)
     case expired
@@ -25,8 +26,6 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var userCode: String?
     public var verificationURI: String?
     public var server: String?
-    public var redirectPaste = false
-    public var redirectNote: String?
     public var phase: ServiceSignInPhase
 
     public var id: String { service }
@@ -36,17 +35,15 @@ public struct ServiceSignInDialog: Sendable, Hashable, Identifiable {
     public var acceptsKey: Bool {
         switch phase {
         case .prompting, .keyFailed: true
-        case .signingIn, .keySet, .signedIn, .failed, .expired: false
+        case .signingIn, .keySet, .callbackFailed, .signedIn, .failed, .expired: false
         }
     }
-
-    public var acceptsRedirect: Bool { flow == .oauth && redirectPaste && phase == .signingIn }
 
     public var takesKey: Bool { flow == .apiKey || flow == .header }
 
     public var canSignIn: Bool {
         switch flow {
-        case .deviceCode, .oauth: true
+        case .deviceCode, .oauth, .oauthPaste: true
         case .apiKey, .header, .manual, .unknown: false
         }
     }
@@ -125,8 +122,42 @@ public final class ServiceSignInCenter {
             } catch {
                 setPhase(.failed(Self.startFailure), for: service, ifRequest: requestID)
             }
+        case .oauthPaste:
+            guard let url = Self.secureURL(dialog.verificationURI) else {
+                setPhase(.failed(Self.pageFailure), for: service)
+                return
+            }
+            setPhase(.signingIn, for: service)
+            openBrowser(url)
+            do {
+                _ = try await call(ServiceSignInWire.signInMethod, ServiceSignInWire.requestParams(requestID))
+            } catch {
+                setPhase(.failed(Self.startFailure), for: service, ifRequest: requestID)
+            }
         case .apiKey, .header, .manual, .unknown:
             return
+        }
+    }
+
+    public func submitCallback(_ text: String) async {
+        guard let dialog = current, dialog.flow == .oauthPaste, let pasted = PastedCallback(text) else { return }
+        switch dialog.phase {
+        case .signingIn, .callbackFailed: break
+        case .prompting, .keySet, .keyFailed, .signedIn, .failed, .expired: return
+        }
+        let requestID = dialog.requestID
+        let service = dialog.service
+        setPhase(.signingIn, for: service)
+        do {
+            let params = ServiceSignInWire.submitCallbackParams(requestID: requestID, value: pasted.value)
+            let result = AuthCallbackResult(try await call(ServiceSignInWire.submitCallbackMethod, params))
+            switch result.outcome {
+            case .stored: break
+            case .failed, .unknown: setPhase(.callbackFailed(result.reason ?? Self.callbackFailure), for: service, ifRequest: requestID)
+            case .rejected: setPhase(.expired, for: service, ifRequest: requestID)
+            }
+        } catch {
+            setPhase(.callbackFailed(Self.callbackFailure), for: service, ifRequest: requestID)
         }
     }
 
@@ -148,31 +179,11 @@ public final class ServiceSignInCenter {
         }
     }
 
-    public func submitRedirect(_ secret: SecretString) async {
-        guard let dialog = current, dialog.acceptsRedirect, !secret.isEmpty else { return }
-        let requestID = dialog.requestID
-        let service = dialog.service
-        setRedirectNote(nil, for: service)
-        let outcome: AuthRedirectOutcome
-        do {
-            let params = ServiceSignInWire.submitRedirectParams(requestID: requestID, value: secret)
-            outcome = AuthRedirectOutcome(try await call(ServiceSignInWire.submitRedirectMethod, params))
-        } catch {
-            setRedirectNote(Self.redirectInvalid, for: service, ifRequest: requestID)
-            return
-        }
-        switch outcome {
-        case .accepted: break
-        case .invalid, .unknown: setRedirectNote(Self.redirectInvalid, for: service, ifRequest: requestID)
-        case .rejected: setPhase(.failed(Self.redirectEnded), for: service, ifRequest: requestID)
-        }
-    }
-
     public func notNow() async {
         guard let dialog = current else { return }
         remove(service: dialog.service)
         switch dialog.phase {
-        case .prompting, .signingIn, .keySet, .keyFailed:
+        case .prompting, .signingIn, .keySet, .keyFailed, .callbackFailed:
             _ = try? await call(ServiceSignInWire.declineMethod, ServiceSignInWire.requestParams(dialog.requestID))
         case .signedIn, .failed, .expired:
             return
@@ -186,7 +197,7 @@ public final class ServiceSignInCenter {
             case .signedIn, .failed, .expired:
                 dismissals.removeValue(forKey: event.service)?.cancel()
                 dialogs[index] = Self.dialog(from: event)
-            case .prompting, .signingIn, .keySet, .keyFailed:
+            case .prompting, .signingIn, .keySet, .keyFailed, .callbackFailed:
                 dialog.requestID = event.requestID
                 dialog.serviceName = event.serviceName
                 dialog.bot = event.bot
@@ -195,7 +206,6 @@ public final class ServiceSignInCenter {
                 if event.userCode != nil { dialog.userCode = event.userCode }
                 if event.verificationURI != nil { dialog.verificationURI = event.verificationURI }
                 if event.server != nil { dialog.server = event.server }
-                if event.redirectPaste { dialog.redirectPaste = true }
                 dialogs[index] = dialog
             }
         } else {
@@ -247,12 +257,6 @@ public final class ServiceSignInCenter {
         dialogs.first(where: { $0.service == service })?.phase == .signingIn
     }
 
-    private func setRedirectNote(_ note: String?, for service: String, ifRequest requestID: String? = nil) {
-        guard let index = dialogs.firstIndex(where: { $0.service == service }) else { return }
-        if let requestID, dialogs[index].requestID != requestID { return }
-        dialogs[index].redirectNote = note
-    }
-
     private func setPhase(_ phase: ServiceSignInPhase, for service: String, ifRequest requestID: String? = nil) {
         guard let index = dialogs.firstIndex(where: { $0.service == service }) else { return }
         if let requestID, dialogs[index].requestID != requestID { return }
@@ -272,7 +276,6 @@ public final class ServiceSignInCenter {
             userCode: event.userCode,
             verificationURI: event.verificationURI,
             server: event.server,
-            redirectPaste: event.redirectPaste,
             phase: .prompting
         )
     }
@@ -289,9 +292,8 @@ public final class ServiceSignInCenter {
 
     static let pageFailure = "We couldn't open the sign-in page."
     static let startFailure = "We couldn't start sign-in. Please try again later."
-    public static let redirectInvalid = "That address didn't work. Copy the whole address from the page and try again."
-    public static let redirectEnded = "That sign-in has ended. Start again."
     static let keyFailure = "Couldn't save that. Check it and try again."
+    public static let callbackFailure = "That address didn't work. Copy it again from the browser and try again."
     static let didNotFinish = "Sign-in didn't finish."
     static let timedOut = "Sign-in took too long and was stopped."
 }

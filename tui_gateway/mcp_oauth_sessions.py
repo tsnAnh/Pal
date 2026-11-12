@@ -17,7 +17,6 @@ from tools.connectors.mcp_oauth import (
     choose_callback_receiver,
     run_worker,
 )
-from tools.oauth_redirect_paste import parse_pasted_redirect
 
 # session_id -> record wrapping the shared DashboardOAuthFlow bridge plus bookkeeping.
 _sessions: dict[str, dict[str, Any]] = {}
@@ -175,14 +174,11 @@ def deliver_callback_flow(
     return {"ok": True, "session_id": session_id}
 
 
-def deliver_pasted_redirect(session_id: str, server_name: str, hermes_home: str, raw: object) -> dict[str, Any]:
+def pending_callback(session_id: str, server_name: str, hermes_home: str) -> tuple[str, str] | None:
+    """The registered redirect and the state a pasted address must carry, for the owning profile only."""
     rec, _ = _lookup(session_id, server_name, hermes_home)
     if rec is None:
-        return {"ok": False, "reason": "unknown"}
+        return None
     flow = rec["flow"]
-    try:
-        pasted = parse_pasted_redirect(raw, expected_redirect=flow.redirect_uri)
-        flow.deliver_callback(code=pasted.code, state=pasted.state, error=pasted.error, iss=pasted.iss)
-    except ValueError:
-        return {"ok": False, "reason": "invalid"}
-    return {"ok": True}
+    state = flow.expected_state
+    return (flow.redirect_uri, state) if state and flow.redirect_uri else None

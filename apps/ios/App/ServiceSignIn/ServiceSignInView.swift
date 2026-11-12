@@ -53,7 +53,7 @@ enum ServiceSignInWording {
         case .prompting: .idle
         case .signingIn: .submitting
         case .keySet, .signedIn: .success
-        case .keyFailed(let text), .failed(let text): .failure(text)
+        case .keyFailed(let text), .callbackFailed(let text), .failed(let text): .failure(text)
         case .expired: .expired
         }
     }
@@ -63,45 +63,10 @@ enum ServiceSignInWording {
         case .prompting: nil
         case .signingIn: String(localized: "Waiting for you to finish signing in…")
         case .keySet: String(localized: "Key set")
-        case .keyFailed(let text): text
+        case .keyFailed(let text), .callbackFailed(let text): text
         case .signedIn: String(localized: "Signed in")
         case .failed(let text): text
         case .expired: SecretEntryState.expired.statusText
-        }
-    }
-}
-
-struct ServiceSignInRedirectEntry: View {
-    let note: String?
-    let onSubmit: (String) -> Void
-    @State private var pasted = ""
-
-    var body: some View {
-        VStack(spacing: 10) {
-            Text("After you approve, the page may not load. Copy its address and paste it here.")
-                .hermesText(.footnoteCaption)
-                .foregroundStyle(PalTokens.textSecondary)
-                .multilineTextAlignment(.center)
-            SecureField("Address from the browser", text: $pasted)
-                .textFieldStyle(.plain)
-                .padding(12)
-                .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityIdentifier("service-signin-redirect-field")
-            if let note {
-                Text(note)
-                    .hermesText(.footnoteCaption)
-                    .foregroundStyle(PalTokens.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .accessibilityIdentifier("service-signin-redirect-note")
-            }
-            Button("Finish sign-in") {
-                let value = pasted
-                pasted = ""
-                onSubmit(value)
-            }
-            .buttonStyle(PillButtonStyle(kind: .neutral))
-            .disabled(pasted.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .accessibilityIdentifier("service-signin-redirect-button")
         }
     }
 }
@@ -115,6 +80,58 @@ enum ServiceSignInClipboard {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
         #endif
+    }
+
+    @MainActor
+    static func paste() -> String? {
+        #if os(iOS)
+        UIPasteboard.general.string
+        #elseif os(macOS)
+        NSPasteboard.general.string(forType: .string)
+        #endif
+    }
+}
+
+struct ServiceSignInPasteStep: View {
+    let onSubmit: (String) -> Void
+    @State private var text = ""
+
+    var body: some View {
+        VStack(spacing: 10) {
+            Text("Finish in your browser. When the page says it can't be reached, copy the address from the browser's address bar and paste it here.")
+                .hermesText(.rowSubtitle)
+                .foregroundStyle(PalTokens.textSecondary)
+                .multilineTextAlignment(.center)
+            TextField("Address from the browser", text: $text, axis: .vertical)
+                .lineLimit(2...4)
+                .textFieldStyle(.plain)
+                .hermesText(.rowSubtitle)
+                .foregroundStyle(PalTokens.textPrimary)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .keyboardType(.URL)
+                #endif
+                .padding(12)
+                .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityIdentifier("service-signin-callback-field")
+            HStack(spacing: 8) {
+                Button {
+                    if let pasted = ServiceSignInClipboard.paste() { text = pasted }
+                } label: {
+                    Label("Paste", systemImage: "doc.on.clipboard")
+                }
+                .buttonStyle(PillButtonStyle(kind: .neutral))
+                .accessibilityIdentifier("service-signin-callback-paste-button")
+                Button("Continue") {
+                    onSubmit(text)
+                    text = ""
+                }
+                .buttonStyle(PillButtonStyle(kind: .accent))
+                .disabled(PastedCallback(text) == nil)
+                .accessibilityIdentifier("service-signin-callback-submit-button")
+            }
+        }
     }
 }
 
@@ -165,7 +182,7 @@ struct ServiceSignInDialogView: View {
         guard dialog.takesKey else { return false }
         return switch dialog.phase {
         case .prompting, .signingIn, .keySet, .keyFailed, .expired: true
-        case .signedIn, .failed: false
+        case .callbackFailed, .signedIn, .failed: false
         }
     }
 
@@ -227,12 +244,6 @@ struct ServiceSignInDialogView: View {
             if dialog.flow == .deviceCode, let code = dialog.userCode, showsCode(dialog.phase) {
                 ServiceSignInCodeCard(code: code).id(code)
             }
-            if dialog.acceptsRedirect {
-                ServiceSignInRedirectEntry(note: dialog.redirectNote) { value in
-                    Task { await center.submitRedirect(SecretString(value)) }
-                }
-                .id(dialog.requestID)
-            }
             if let status = ServiceSignInWording.status(dialog) {
                 Text(status)
                     .hermesText(.rowSubtitle)
@@ -240,13 +251,23 @@ struct ServiceSignInDialogView: View {
                     .multilineTextAlignment(.center)
                     .accessibilityIdentifier("service-signin-status")
             }
+            if dialog.flow == .oauthPaste, awaitsCallback(dialog.phase) {
+                ServiceSignInPasteStep { text in Task { await center.submitCallback(text) } }
+            }
             buttons(dialog)
+        }
+    }
+
+    private func awaitsCallback(_ phase: ServiceSignInPhase) -> Bool {
+        switch phase {
+        case .signingIn, .callbackFailed: true
+        case .prompting, .keySet, .keyFailed, .signedIn, .failed, .expired: false
         }
     }
 
     private func subtitle(_ dialog: ServiceSignInDialog) -> String {
         switch dialog.flow {
-        case .deviceCode, .oauth: ServiceSignInWording.subtitle(dialog, botName: botName)
+        case .deviceCode, .oauth, .oauthPaste: ServiceSignInWording.subtitle(dialog, botName: botName)
         case .apiKey, .header: ServiceSignInWording.keyPrompt(dialog, botName: botName)
         case .manual, .unknown: ServiceSignInWording.manual(dialog)
         }
@@ -255,7 +276,7 @@ struct ServiceSignInDialogView: View {
     private func showsCode(_ phase: ServiceSignInPhase) -> Bool {
         switch phase {
         case .prompting, .signingIn: true
-        case .keySet, .keyFailed, .signedIn, .failed, .expired: false
+        case .keySet, .keyFailed, .callbackFailed, .signedIn, .failed, .expired: false
         }
     }
 
@@ -269,12 +290,12 @@ struct ServiceSignInDialogView: View {
                 .buttonStyle(PillButtonStyle(kind: .neutral, size: .large))
                 .keyboardShortcut(.cancelAction)
                 .accessibilityIdentifier("service-signin-notnow-button")
-        case .prompting, .signingIn, .keySet, .keyFailed:
+        case .prompting, .signingIn, .keySet, .keyFailed, .callbackFailed:
             VStack(spacing: 8) {
                 if dialog.canSignIn {
-                    Button(dialog.phase == .signingIn ? "Signing in…" : "Sign in") { Task { await center.signIn() } }
+                    Button(dialog.phase == .prompting ? "Sign in" : "Signing in…") { Task { await center.signIn() } }
                         .buttonStyle(PillButtonStyle(kind: .accent, size: .large))
-                        .disabled(dialog.phase == .signingIn)
+                        .disabled(dialog.phase != .prompting)
                         .keyboardShortcut(.defaultAction)
                         .accessibilityIdentifier("service-signin-signin-button")
                 }

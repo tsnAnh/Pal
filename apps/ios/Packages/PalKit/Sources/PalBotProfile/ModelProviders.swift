@@ -5,6 +5,7 @@ import PalTransport
 public enum ModelProviderKind: Sendable, Equatable {
     case apiKey
     case deviceCode
+    case oauthPaste
     case unsupported
     case unknown
 
@@ -12,6 +13,7 @@ public enum ModelProviderKind: Sendable, Equatable {
         switch wire {
         case "api_key": self = .apiKey
         case "device_code": self = .deviceCode
+        case "oauth_paste": self = .oauthPaste
         case "unsupported": self = .unsupported
         default: self = .unknown
         }
@@ -105,7 +107,7 @@ public struct ModelProvider: Sendable, Equatable, Identifiable, Decodable {
 
     public var canSignIn: Bool {
         switch kind {
-        case .apiKey, .deviceCode: state != .unsupported
+        case .apiKey, .deviceCode, .oauthPaste: state != .unsupported
         case .unsupported, .unknown: false
         }
     }

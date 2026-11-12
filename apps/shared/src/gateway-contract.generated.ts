@@ -1949,6 +1949,60 @@ export interface GithubOauthConfig {
 export interface GithubOauthConfigSetParams {
   client_id?: string | null
 }
+export interface WebhookRoutesListResult {
+  enabled: boolean
+  public_base_url?: string | null
+  public_url_setting: string
+  routes: WebhookRoute[]
+}
+export interface WebhookRoute {
+  name: string
+  profile: string
+  path: string
+  public_url?: string | null
+  events: string[]
+  deliver: string
+  description: string
+  created_at?: string | null
+  enabled: boolean
+}
+export interface WebhookRouteAddParams {
+  name: string
+  profile?: string | null
+  events?: string[]
+  deliver?: string | null
+  secret?: string | null
+  generate_secret?: boolean
+}
+export interface WebhookRouteAddResult {
+  route: WebhookRoute
+  secret?: string | null
+}
+export interface WebhookRouteNameParams {
+  name: string
+}
+export interface WebhookRouteRemoveResult {
+  ok: boolean
+}
+export interface WebhookProbeResult {
+  local: WebhookHop
+  public: WebhookHop
+  diagnosis: WebhookDiagnosis
+  tunnel: WebhookTunnel
+}
+export interface WebhookHop {
+  status?: number | null
+  ms?: number | null
+  error?: string | null
+}
+export interface WebhookDiagnosis {
+  code: string
+  message: string
+}
+export interface WebhookTunnel {
+  resolves?: boolean | null
+  tls_expires_at?: string | null
+}
 export interface GroupsCapabilitiesParams {
   profile?: string | null
 }
@@ -2509,7 +2563,7 @@ export interface ModelProvider {
   reason?: string | null
   can_remove: boolean
 }
-export type ModelProviderKind = 'api_key' | 'device_code' | 'unsupported'
+export type ModelProviderKind = 'api_key' | 'device_code' | 'oauth_paste' | 'unsupported'
 export type ModelProviderState = 'set' | 'not_set' | 'expired' | 'unsupported'
 export type ModelProviderScope = 'profile' | 'account'
 export interface ModelProviderRemoveParams {
@@ -6538,14 +6592,14 @@ export interface AuthSubmitCredentialResult {
   outcome: AuthCredentialOutcome
 }
 export type AuthCredentialOutcome = 'stored' | 'failed' | 'rejected'
-export interface AuthSubmitRedirectParams {
+export interface AuthSubmitCallbackParams {
   request_id: string
   value: string
 }
-export interface AuthSubmitRedirectResult {
-  outcome: AuthRedirectOutcome
+export interface AuthSubmitCallbackResult {
+  outcome: AuthCredentialOutcome
+  reason?: string | null
 }
-export type AuthRedirectOutcome = 'accepted' | 'invalid' | 'rejected'
 export interface AuthBeginParams {
   service: string
 }
@@ -7410,10 +7464,9 @@ export interface AuthRequiredPayload {
   verification_uri?: string | null
   expires_in?: number | null
   server?: string | null
-  redirect_paste?: boolean | null
 }
 export type AuthReason = 'missing' | 'expired' | 'revoked'
-export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual'
+export type AuthFlow = 'device_code' | 'oauth' | 'api_key' | 'header' | 'manual' | 'oauth_paste'
 export interface AuthResolvedPayload {
   request_id: string
   outcome: AuthOutcome
@@ -8078,6 +8131,14 @@ export interface RpcMethods {
   'wake.status': { params: WakeStatusParams; result: WakeStatusResult }
   /** Stop this surface's listener; persist also writes wake_word.enabled: false. */
   'wake.stop': { params: WakeStopParams; result: WakeStopResult }
+  /** Create a route. Give secret or generate_secret, not both; a generated secret is returned once. The gateway loads the route on its next request, no restart. 4101 invalid, 4409 name taken, 5321 data.code webhook_disabled. 4403 secondary profile. */
+  'webhook.routes.add': { params: WebhookRouteAddParams; result: WebhookRouteAddResult }
+  /** Webhook routes of this gateway with their local path and public URL, never a secret. public_base_url is webapp.public_url, or null when unset. 4403 secondary profile. */
+  'webhook.routes.list': { params: Params; result: WebhookRoutesListResult }
+  /** Probe one stored route: an unsigned POST to the gateway's own listener, then to the public URL built from webapp.public_url (no redirects, TLS verified). The client names a route, never a URL. 4404 unknown route. 4403 secondary profile. */
+  'webhook.routes.probe': { params: WebhookRouteNameParams; result: WebhookProbeResult }
+  /** Remove a route created through this API or the CLI. 4404 unknown route. 4403 secondary profile. */
+  'webhook.routes.remove': { params: WebhookRouteNameParams; result: WebhookRouteRemoveResult }
 }
 export type RpcMethod = keyof RpcMethods
 export const RPC_METHODS = [
@@ -8395,7 +8456,11 @@ export const RPC_METHODS = [
   'wake.resume',
   'wake.start',
   'wake.status',
-  'wake.stop'
+  'wake.stop',
+  'webhook.routes.add',
+  'webhook.routes.list',
+  'webhook.routes.probe',
+  'webhook.routes.remove'
 ] as const satisfies readonly RpcMethod[]
 
 // ── Canonical (hermes-gateway-v1) methods only the session authority serves ──
@@ -8413,10 +8478,10 @@ export interface CanonicalRpcMethods {
   'auth.revoke_self': { params: AuthRevokeSelfParams; result: AuthRevokeSelfResult }
   /** The user chose Sign in on an auth.required request. For oauth the gateway starts the flow and returns authorization_url to open in the system browser; for device_code it only acknowledges (the gateway is already polling). recorded is false for an unknown, finished or foreign request. */
   'auth.signin': { params: AuthSigninParams; result: AuthSigninResult }
+  /** The user pasted the address the browser ended on for an oauth_paste auth.required request. The gateway, which holds the PKCE verifier, checks the address, the state and the code, exchanges it and stores the credential in the requesting profile; the pasted text is never echoed, logged or kept. stored: signed in. failed: reason says in plain words what to fix; the same request may be answered again unless auth.resolved already ended it (declined on the provider's page, expired, exchange refused). rejected: unknown, finished, foreign or already used request; nothing stored. */
+  'auth.submit_callback': { params: AuthSubmitCallbackParams; result: AuthSubmitCallbackResult }
   /** The user typed the credential for an api_key or header auth.required request. The gateway saves it in the requesting profile's secret store and resolves the request; the value is never echoed, logged, broadcast or shown to the model. stored: saved and the waiting calls retry. failed: not saved (invalid value or store error), the same request may be answered again. rejected: unknown, finished, foreign, mis-scoped or already answered request; nothing stored. */
   'auth.submit_credential': { params: AuthSubmitCredentialParams; result: AuthSubmitCredentialResult }
-  /** The user pasted the address their browser ended on after an oauth auth.required request whose payload has redirect_paste (the full address, its query, or code=...&state=...). From any device attached to the same profile: the gateway holds the PKCE verifier, checks the state and the redirect address, exchanges the code and stores the tokens; the value is used once and never echoed, logged, kept or shown to the model. accepted: taken, the request then ends with auth.resolved. invalid: not this flow's redirect, a wrong or repeated state, or already used; the same request may be answered again. rejected: unknown, finished, foreign request, or one that was never signed in with auth.signin. */
-  'auth.submit_redirect': { params: AuthSubmitRedirectParams; result: AuthSubmitRedirectResult }
   /** Main-chat entry rows for every bot-to-bot exchange anchored in this Bot Chat's compression lineage, oldest first. Requires session:read on session_id. */
   'bot.thread.links': { params: BotThreadLinksParams; result: BotThreadLinksResult }
   /** This profile's bot-to-bot threads, newest first. Requires session:read on its Bot Chat. */
@@ -8664,8 +8729,8 @@ export const CANONICAL_RPC_METHODS = [
   'auth.decline',
   'auth.revoke_self',
   'auth.signin',
+  'auth.submit_callback',
   'auth.submit_credential',
-  'auth.submit_redirect',
   'bot.thread.links',
   'bot.thread.list',
   'bot.thread.read',
@@ -8866,7 +8931,7 @@ export interface BackendGatewayEventMap {
   'agent.terminal.output': TerminalOutputPayload
   /** Pending gateway approvals were dropped by interrupt/reap/teardown; the wait resolved as deny (not a user refusal). */
   'approval.cancelled': ApprovalCancelledPayload
-  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); manual has no in-app sign-in. redirect_paste: true means any device can finish an oauth sign-in by sending the address the browser ended on to auth.submit_redirect, so no device has to host the redirect. The payload never carries a credential. */
+  /** A bot's tool call failed because a credential for service is missing, expired or revoked. Show one sign-in dialog per service: a repeat with the same request_id lists more waiting bots. device_code carries user_code and verification_uri to open in the system browser; oauth is started with auth.signin; api_key and header ask for one masked credential for the service: answer with auth.submit_credential (the value travels only in that request); oauth_paste carries the authorization URL in verification_uri (open it in the system browser; it ends on an address that cannot load) and is finished by pasting that address with auth.submit_callback from any app; manual has no in-app sign-in. The payload never carries a credential. */
   'auth.required': AuthRequiredPayload
   /** The sign-in request ended: signed_in (the waiting calls retry), failed, declined or timed_out. reason is the provider's failure in plain words when the flow has one; it never carries a credential. */
   'auth.resolved': AuthResolvedPayload

@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
 import threading
+import time
 from pathlib import Path
 from typing import Callable, Optional, Protocol
 
@@ -125,8 +127,6 @@ class McpOAuthFlow:
     user_code = None
     verification_uri = None
     expires_in = None
-    accepts_redirect = True
-    failure: Optional[str] = None
     POLL_SECONDS = 1.5
 
     def __init__(self, home: Path, service: str) -> None:
@@ -159,24 +159,13 @@ class McpOAuthFlow:
         from tui_gateway import mcp_oauth_sessions
         await self._started.wait()
         while not self._cancelled and self._session_id:
-            status_row = mcp_oauth_sessions.poll_flow(self._session_id, self._server)
-            status = status_row.get("status")
+            status = mcp_oauth_sessions.poll_flow(self._session_id, self._server).get("status")
             if status == "approved":
                 return True
             if status == "error":
-                if "access_denied" in str(status_row.get("error_message") or ""):
-                    self.failure = "Sign-in was declined on the provider's page."
                 return False
             await asyncio.sleep(self.POLL_SECONDS)
         return False
-
-    async def submit_redirect(self, value: str) -> bool:
-        from tui_gateway import mcp_oauth_sessions
-        if not self._session_id:
-            return False
-        outcome = await asyncio.to_thread(
-            mcp_oauth_sessions.deliver_pasted_redirect, self._session_id, self._server, self._home_key(), value)
-        return outcome["ok"]
 
     def cancel(self) -> None:
         self._cancelled = True
@@ -280,10 +269,92 @@ class HeaderFlow:
         return None
 
 
+class McpPasteFlow:
+    """MCP OAuth whose registered loopback redirect only the gateway host can serve: the gateway holds the
+    verifier, any attached device opens the authorization URL and pastes the address the browser ended on."""
+
+    kind = "oauth_paste"
+    user_code = None
+    EXCHANGE_SECONDS = 60.0
+    POLL_SECONDS = 0.5
+
+    def __init__(self, home: Path, server: str) -> None:
+        self.server = server
+        self.expires_in = int(PASTE_TTL_SECONDS)
+        self._oauth = McpOAuthFlow(home, f"mcp:{server}")
+        self.verification_uri: Optional[str] = None
+        self.failure: Optional[str] = None
+        self._attempts = 0
+        self._consumed = False
+        self._deadline = 0.0
+        self._done = asyncio.Event()
+        self._succeeded = False
+
+    async def begin(self) -> None:
+        self.verification_uri = await self._oauth.authorize_url()
+        if not self.verification_uri:
+            raise RuntimeError("no authorization url")
+        self._deadline = time.monotonic() + PASTE_TTL_SECONDS
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def callback(self, value: str) -> tuple[str, Optional[str]]:
+        from hermes_cli.oauth_paste import CallbackError, parse_callback
+        from tui_gateway import mcp_oauth_sessions
+        oauth = self._oauth
+        if oauth._session_id is None or self._consumed or self._done.is_set():
+            return "rejected", None
+        if time.monotonic() > self._deadline:
+            return self._end(PASTE_EXPIRED)
+        pending = await asyncio.to_thread(
+            mcp_oauth_sessions.pending_callback, oauth._session_id, oauth._server, oauth._home_key())
+        if pending is None:
+            return "rejected", None
+        try:
+            parsed = parse_callback(value, redirect_uri=pending[0], state=pending[1])
+        except CallbackError as exc:
+            self._attempts += 1
+            if exc.retry and self._attempts < PASTE_MAX_RETRIES:
+                return "retry", exc.message
+            return self._end(exc.message)
+        self._consumed = True
+        delivered = await asyncio.to_thread(
+            mcp_oauth_sessions.deliver_callback_flow, oauth._session_id, oauth._server,
+            code=parsed.code, state=parsed.state)
+        if not delivered["ok"]:
+            return self._end(PASTE_FAILURE)
+        deadline = time.monotonic() + self.EXCHANGE_SECONDS
+        while time.monotonic() < deadline:
+            status = mcp_oauth_sessions.poll_flow(oauth._session_id, oauth._server).get("status")
+            if status == "approved":
+                self._succeeded = True
+                self._done.set()
+                return "stored", None
+            if status == "error":
+                break
+            await asyncio.sleep(self.POLL_SECONDS)
+        return self._end(PASTE_FAILURE)
+
+    def _end(self, reason: str) -> tuple[str, Optional[str]]:
+        self._consumed = True
+        self.failure = reason
+        self._done.set()
+        self._oauth.cancel()
+        return "failed", reason
+
+    async def wait(self) -> bool:
+        await self._done.wait()
+        return self._succeeded
+
+    def cancel(self) -> None:
+        self._consumed = True
+        self._done.set()
+        self._oauth.cancel()
+
+
 class McpServerFlow:
     user_code = None
-    verification_uri = None
-    expires_in = None
 
     def __init__(self, home: Path, service: str) -> None:
         self._home = home
@@ -298,12 +369,27 @@ class McpServerFlow:
     def server(self) -> str:
         return self._server
 
+    def _catalog_declares_api_key(self) -> bool:
+        from hermes_cli.mcp_catalog import get_entry
+        entry = get_entry(self._server)
+        return entry is not None and entry.auth.type == "api_key"
+
     async def begin(self) -> None:
         from hermes_cli.mcp_config import _get_mcp_servers
         cfg = (await asyncio.to_thread(_get_mcp_servers)).get(self._server)
         kind = classify_mcp_server(cfg)
+        if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
+            kind = "api_key"
         if kind == "oauth":
-            self._inner = McpOAuthFlow(self._home, f"mcp:{self._server}")
+            paste = McpPasteFlow(self._home, self._server)
+            try:
+                await paste.begin()
+                self._inner = paste
+            except Exception:
+                paste.cancel()
+                logger.warning("MCP paste sign-in for %s could not start; using the on-host redirect", self._server,
+                               exc_info=True)
+                self._inner = McpOAuthFlow(self._home, f"mcp:{self._server}")
         elif kind == "api_key":
             self._inner = KeyEntryFlow(self._server)
         elif kind == "header":
@@ -320,15 +406,20 @@ class McpServerFlow:
         return getattr(self._inner, "store", None)
 
     @property
-    def accepts_redirect(self) -> bool:
-        return getattr(self._inner, "accepts_redirect", False)
+    def verification_uri(self):
+        return getattr(self._inner, "verification_uri", None)
 
     @property
-    def failure(self) -> Optional[str]:
+    def expires_in(self):
+        return getattr(self._inner, "expires_in", None)
+
+    @property
+    def failure(self):
         return getattr(self._inner, "failure", None)
 
-    async def submit_redirect(self, value: str) -> bool:
-        return await self._inner.submit_redirect(value)
+    @property
+    def callback(self):
+        return getattr(self._inner, "callback", None)
 
     async def confirm(self) -> bool:
         confirm = getattr(self._inner, "confirm", None)
@@ -492,6 +583,85 @@ class ProviderDeviceFlow:
                 session["cancelled"] = True
 
 
+PASTE_TTL_SECONDS = 300.0
+PASTE_MAX_RETRIES = 5
+PASTE_FAILURE = "The provider did not accept the sign-in. Start again."
+PASTE_EXPIRED = "The sign-in expired. Start again."
+
+
+class ProviderPasteFlow:
+    """Authorization-code + PKCE sign-in whose loopback redirect cannot be served: the gateway holds the
+    verifier, the owner pastes the address the browser ended on from any attached device."""
+
+    kind = "oauth_paste"
+    user_code = None
+    expires_in = int(PASTE_TTL_SECONDS)
+
+    def __init__(self, provider: str, cfg) -> None:
+        self.provider = provider
+        self._cfg = cfg
+        self._pending = None
+        self._deadline = 0.0
+        self._attempts = 0
+        self._consumed = False
+        self._done = asyncio.Event()
+        self._succeeded = False
+        self.verification_uri: Optional[str] = None
+        self.failure: Optional[str] = None
+
+    async def begin(self) -> None:
+        from hermes_cli import auth_oauth_pkce_plugin as pkce
+        port = 49152 + secrets.randbelow(16384) if not self._cfg.redirect_port else int(self._cfg.redirect_port)
+        self._pending = await asyncio.to_thread(pkce.begin_authorization, self.provider, self._cfg, redirect_port=port)
+        self.verification_uri = self._pending.authorize_url
+        self._deadline = time.monotonic() + PASTE_TTL_SECONDS
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def callback(self, value: str) -> tuple[str, Optional[str]]:
+        """("stored" | "retry" | "failed" | "rejected", reason). A paste that carries a code for this state is
+        consumed whether or not the exchange succeeds."""
+        from hermes_cli import auth_oauth_pkce_plugin as pkce
+        from hermes_cli.auth_constants import AuthError
+        from hermes_cli.oauth_paste import CallbackError, parse_callback
+        if self._pending is None or self._consumed or self._done.is_set():
+            return "rejected", None
+        if time.monotonic() > self._deadline:
+            return self._end(PASTE_EXPIRED)
+        try:
+            parsed = parse_callback(value, redirect_uri=self._pending.redirect_uri, state=self._pending.state)
+        except CallbackError as exc:
+            self._attempts += 1
+            if exc.retry and self._attempts < PASTE_MAX_RETRIES:
+                return "retry", exc.message
+            return self._end(exc.message)
+        self._consumed = True
+        try:
+            tokens = await asyncio.to_thread(pkce.exchange_code, self.provider, self._cfg, self._pending, parsed.code)
+            await asyncio.to_thread(pkce.store_grant, self.provider, self._cfg, tokens)
+        except (AuthError, OSError, ValueError, KeyError, RuntimeError) as exc:
+            logger.warning("%s sign-in could not be completed (%s)", self.provider, type(exc).__name__)
+            return self._end(PASTE_FAILURE)
+        self._succeeded = True
+        self._done.set()
+        return "stored", None
+
+    def _end(self, reason: str) -> tuple[str, Optional[str]]:
+        self._consumed = True
+        self.failure = reason
+        self._done.set()
+        return "failed", reason
+
+    async def wait(self) -> bool:
+        await self._done.wait()
+        return self._succeeded
+
+    def cancel(self) -> None:
+        self._consumed = True
+        self._done.set()
+
+
 def provider_flow(home: Path, service: str) -> SigninFlow:
     from hermes_cli import model_provider_control as control
     provider = service.partition(":")[2]
@@ -501,6 +671,8 @@ def provider_flow(home: Path, service: str) -> SigninFlow:
         return ProviderKeyFlow(provider)
     if kind == "device_code":
         return ProviderDeviceFlow(home, provider)
+    if kind == "oauth_paste":
+        return ProviderPasteFlow(provider, control.pkce_config(provider))
     return ManualFlow()
 
 

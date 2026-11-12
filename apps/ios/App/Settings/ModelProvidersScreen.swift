@@ -182,8 +182,8 @@ struct ModelProvidersScreen: View {
         switch (provider.kind, provider.state) {
         case (.apiKey, .set), (.apiKey, .expired): return "Replace key"
         case (.apiKey, _): return "Set key"
-        case (.deviceCode, .set), (.deviceCode, .expired): return "Sign in again"
-        case (.deviceCode, _): return "Sign in"
+        case (.deviceCode, .set), (.deviceCode, .expired), (.oauthPaste, .set), (.oauthPaste, .expired): return "Sign in again"
+        case (.deviceCode, _), (.oauthPaste, _): return "Sign in"
         case (.unsupported, _), (.unknown, _): return nil
         }
     }
