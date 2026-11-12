@@ -28,7 +28,8 @@ struct JSONBlockView: View {
                             withAnimation(.easeInOut(duration: 0.2)) { collapsed.toggle() }
                         } label: {
                             Image(systemName: collapsed ? "chevron.down" : "chevron.up")
-                                .font(.footnote.weight(.semibold))
+                                .hermesText(.chip)
+                                .fontWeight(.semibold)
                                 .foregroundStyle(PalTokens.textSecondary)
                                 .frame(minWidth: 28, minHeight: 28)
                                 .contentShape(Rectangle())

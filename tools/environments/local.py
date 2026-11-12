@@ -809,7 +809,9 @@ def _make_run_env(env: dict) -> dict:
     except Exception:
         published = {}
     if published:
-        run_env.update(published)
+        # The screen's XDG_* dirs are for the apps on the display only; the terminal keeps the host user's
+        # config locations (gh, git, ...).
+        run_env.update({k: v for k, v in published.items() if not k.startswith("XDG_")})
         run_env.pop("WAYLAND_DISPLAY", None)  # X11 desktop; a leaked Wayland socket flips GTK/Chromium backends
     from hermes_cli.profile_admin_guard import agent_tool_env
     return agent_tool_env(run_env)

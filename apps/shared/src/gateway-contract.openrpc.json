@@ -20693,7 +20693,8 @@
           "alarms",
           "shell",
           "files",
-          "input"
+          "input",
+          "apps"
         ],
         "title": "DeviceConnectorId",
         "type": "string"
@@ -20939,7 +20940,12 @@
           "input.drag",
           "input.scroll",
           "input.type",
-          "input.key"
+          "input.key",
+          "apps.list",
+          "apps.open",
+          "apps.quit",
+          "windows.list",
+          "windows.focus"
         ],
         "title": "DeviceToolAction",
         "type": "string"

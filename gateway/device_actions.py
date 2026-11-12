@@ -18,6 +18,8 @@ _CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f  ‪-‮⁦-⁩]")
 APPLE_KINDS = frozenset({"ios", "mac"})
 MAC_ONLY = frozenset({"mac"})
 MAX_PATH_CHARS = 1000
+MAX_APPS = 200
+MAX_WINDOWS = 200
 SHELL_DEFAULT_TIMEOUT_SECONDS = 30
 SHELL_MAX_TIMEOUT_SECONDS = 300
 INPUT_MAX_TYPED_CHARS = 500
@@ -46,6 +48,7 @@ CONNECTOR_CATALOG: tuple[ConnectorInfo, ...] = (
     ConnectorInfo(Connector.SHELL, "Run commands", "Let bots run commands on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.FILES, "Files", "Let bots read and change files on this Mac", MAC_ONLY, False),
     ConnectorInfo(Connector.INPUT, "Mouse and keyboard", "Let bots control this Mac's mouse and keyboard", MAC_ONLY, False),
+    ConnectorInfo(Connector.APPS, "Apps", "Let bots open and switch apps on this Mac", MAC_ONLY, False),
 )
 
 
@@ -296,6 +299,36 @@ class InputKeyArgs(_Args):
     key: str = Field(min_length=1, max_length=40, pattern=r"^\S+$")
 
 
+class AppsListArgs(_Args):
+    limit: int = Field(default=MAX_APPS, ge=1, le=MAX_APPS)
+
+
+class AppsOpenArgs(_Args):
+    app: str = Field(min_length=1, max_length=200)
+    target: str | None = Field(default=None, min_length=1, max_length=MAX_PATH_CHARS)
+
+
+class AppsQuitArgs(_Args):
+    app: str = Field(min_length=1, max_length=200)
+
+
+class WindowsListArgs(_Args):
+    app: str | None = Field(default=None, min_length=1, max_length=200)
+    on_screen_only: bool = False
+    limit: int = Field(default=MAX_WINDOWS, ge=1, le=MAX_WINDOWS)
+
+
+class WindowsFocusArgs(_Args):
+    window_id: int | None = Field(default=None, ge=0)
+    app: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def _names_a_target(self):
+        if self.window_id is None and self.app is None:
+            raise ValueError("pass window_id or app")
+        return self
+
+
 class CalendarEvent(_Data):
     id: Identifier
     title: Short
@@ -485,6 +518,58 @@ class FilesWriteResult(_Data):
     bytes_written: int = Field(ge=0)
 
 
+class AppInfo(_Data):
+    name: Short
+    bundle_id: Short | None = None
+    pid: int = Field(ge=0)
+    frontmost: bool = False
+
+
+class AppsResult(_Data):
+    apps: Annotated[list[AppInfo], _first(MAX_APPS)]
+    truncated: bool = False
+
+
+class AppOpenResult(_Data):
+    app: AppInfo
+    launched: bool = False
+
+
+class AppQuitResult(_Data):
+    app: AppInfo
+    quit_requested: bool = True
+
+
+class WindowFrame(_Data):
+    x: float
+    y: float
+    width: float = Field(ge=0)
+    height: float = Field(ge=0)
+
+
+class WindowInfo(_Data):
+    window_id: int = Field(ge=0)
+    app: Short
+    pid: int = Field(ge=0)
+    title: Short | None = None
+    frame: WindowFrame | None = None
+    on_screen: bool = True
+
+
+class WindowsResult(_Data):
+    windows: Annotated[list[WindowInfo], _first(MAX_WINDOWS)]
+    titles_available: bool = False
+    truncated: bool = False
+    note: Short | None = None
+
+
+class WindowsFocusResult(_Data):
+    app: AppInfo
+    window_id: int | None = Field(default=None, ge=0)
+    raised: bool = False
+    note: Short | None = None
+
+
 def fit_result(data: dict, limit: int) -> dict:
     fitted = dict(data)
     while len(json.dumps(fitted, ensure_ascii=False)) > limit:
@@ -586,6 +671,21 @@ ACTIONS: dict[str, ActionSpec] = dict([
           InputTypeArgs, InputResult, lambda a: f"Type {len(a.text)} characters", MAC_ONLY),
     _spec("input.key", Connector.INPUT, True, "press a key or combo such as return, escape, cmd+c, cmd+shift+4",
           InputKeyArgs, InputResult, lambda a: f"Press {_quoted(a.key)}", MAC_ONLY),
+    _spec("apps.list", Connector.APPS, False, "list running apps (name, bundle_id, pid, frontmost; at most 200)",
+          AppsListArgs, AppsResult, lambda a: "List the running apps", MAC_ONLY),
+    _spec("apps.open", Connector.APPS, True,
+          "open an app by bundle id or name, optionally opening a file path or URL (target) with it",
+          AppsOpenArgs, AppOpenResult,
+          lambda a: f"Open {_quoted(a.app)}" + (f" with {_quoted(a.target)}" if a.target else ""), MAC_ONLY),
+    _spec("apps.quit", Connector.APPS, True, "ask a running app to quit normally (no force quit)",
+          AppsQuitArgs, AppQuitResult, lambda a: f"Quit {_quoted(a.app)}", MAC_ONLY),
+    _spec("windows.list", Connector.APPS, False,
+          "list windows (app, window_id, frame, on_screen; at most 200); titles appear only when macOS allows it",
+          WindowsListArgs, WindowsResult, lambda a: "List open windows", MAC_ONLY),
+    _spec("windows.focus", Connector.APPS, True, "bring a window (window_id) or an app to the front",
+          WindowsFocusArgs, WindowsFocusResult,
+          lambda a: "Bring " + (f"window {a.window_id}" if a.window_id is not None else _quoted(a.app)) + " to the front",
+          MAC_ONLY),
 ])
 
 

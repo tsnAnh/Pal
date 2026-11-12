@@ -51,7 +51,7 @@ struct ConnectAppsSheet: View {
                 .macSheetFrame()
         }
         .sheet(item: $model.accountsModel) { accounts in
-            ConnectorAccountsView(model: accounts, style: .phone(theme))
+            ConnectorAccountsView(model: accounts)
                 .macSheetFrame()
         }
         .sheet(item: $model.keyRequest) { request in
@@ -356,6 +356,7 @@ struct DeviceTile: View {
         case .shell: "terminal.fill"
         case .files: "folder.fill"
         case .input: "cursorarrow.click.2"
+        case .apps: "macwindow"
         }
     }
 
@@ -370,6 +371,7 @@ struct DeviceTile: View {
         case .shell: RGB(hex: 0x3a3a3c)
         case .files: RGB(hex: 0x1c8ef0)
         case .input: RGB(hex: 0x6e4ccf)
+        case .apps: RGB(hex: 0x5e5ce6)
         }
     }
 }

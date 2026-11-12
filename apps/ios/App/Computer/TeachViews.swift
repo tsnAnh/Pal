@@ -6,47 +6,60 @@ struct TeachBanner: View {
     let model: TeachModel
     let surface: TeachSurface
 
+    @Environment(\.hermesTheme) private var theme
+
     var body: some View {
         if model.showsBanner {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        indicator
-                        Text(title(at: context.date))
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(2)
-                        Spacer(minLength: 0)
-                    }
-                    if let detail { Text(detail).font(.footnote).foregroundStyle(.secondary) }
-                    if model.offline {
-                        Text("Can't reach \(model.displayName) right now. Still trying.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    actions(at: context.date)
-                }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
+                card(at: context.date)
             }
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("teachBanner")
         }
     }
 
+    private func card(at date: Date) -> some View {
+        let shape = RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
+        return VStack(alignment: .leading, spacing: PalMetrics.rowTextSpacing * 2) {
+            HStack(spacing: 8) {
+                indicator
+                Text(title(at: date))
+                    .hermesText(.rowTitle)
+                    .foregroundStyle(Color(theme.palette.textPrimary))
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+            }
+            if let detail { note(detail) }
+            if model.offline { note(String(localized: "Can't reach \(model.displayName) right now. Still trying.")) }
+            actions(at: date)
+        }
+        .padding(.horizontal, PalMetrics.rowInset)
+        .padding(.vertical, PalMetrics.rowVerticalPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(theme.palette.groupedCard), in: shape)
+        .overlay(shape.strokeBorder(Color(theme.palette.cardStroke), lineWidth: PalMetrics.separatorThickness))
+        .padding(.horizontal, PalMetrics.screenMargin)
+        .padding(.vertical, 6)
+    }
+
+    private func note(_ text: String) -> some View {
+        Text(text)
+            .hermesText(.rowSubtitle)
+            .foregroundStyle(Color(theme.palette.textSecondary))
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
     @ViewBuilder
     private var indicator: some View {
         switch model.phase {
         case .recording:
-            Circle().fill(.red).frame(width: 9, height: 9)
+            Circle().fill(Color(theme.palette.destructive)).frame(width: 9, height: 9)
         case .drafting:
-            ProgressView().controlSize(.small)
+            ProgressView().controlSize(.small).tint(Color(theme.palette.textSecondary))
         case .ready:
-            Image(systemName: "lightbulb.fill").foregroundStyle(.yellow)
+            Image(systemName: "lightbulb.fill").foregroundStyle(Color(theme.palette.accentBlue))
         default:
-            Image(systemName: "pause.circle").foregroundStyle(.secondary)
+            Image(systemName: "pause.circle").foregroundStyle(Color(theme.palette.textSecondary))
         }
     }
 
@@ -88,56 +101,41 @@ struct TeachBanner: View {
         HStack(spacing: 8) {
             switch model.phase {
             case .recording:
-                Button("Stop") { Task { await model.stop(discard: false) } }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("teachStop")
+                pill("Stop", .accent, "teachStop") { Task { await model.stop(discard: false) } }
             case .ended:
-                Button("Create skill") { Task { await model.stop(discard: false) } }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("teachCreateSkill")
-                Button("Discard", role: .destructive) { model.confirmation = .discardRecording }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("teachDiscardRecording")
+                pill("Create skill", .accent, "teachCreateSkill") { Task { await model.stop(discard: false) } }
+                pill("Discard", .neutral, "teachDiscardRecording") { model.confirmation = .discardRecording }
             case .drafting:
-                Button("Ask again") { Task { await model.askAgain() } }
-                    .buttonStyle(.bordered)
-                    .disabled(model.busy || date < model.askAgainAt)
-                    .accessibilityIdentifier("teachAskAgain")
-                Button("Discard", role: .destructive) { model.confirmation = .discardDraft }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("teachDiscardDraft")
+                pill("Ask again", model.busy || date < model.askAgainAt ? .dimmed : .neutral, "teachAskAgain") { Task { await model.askAgain() } }
+                pill("Discard", .neutral, "teachDiscardDraft") { model.confirmation = .discardDraft }
             case .ready:
-                Button("Review") { Task { await model.openReview(from: surface) } }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("teachReview")
-                Button("Discard", role: .destructive) { model.confirmation = .discardDraft }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("teachDiscardDraft")
+                pill("Review", .accent, "teachReview") { Task { await model.openReview(from: surface) } }
+                pill("Discard", .neutral, "teachDiscardDraft") { model.confirmation = .discardDraft }
             case .hidden, .idle:
                 EmptyView()
             }
         }
         .disabled(model.busy && model.phase != .drafting)
     }
+
+    private func pill(_ title: LocalizedStringResource, _ kind: PillKind, _ identifier: String, action: @escaping () -> Void) -> some View {
+        PillButton(String(localized: title), kind: kind, accessibilityIdentifier: identifier, action: action)
+    }
 }
 
 struct TeachReviewSheet: View {
     let model: TeachModel
 
+    @Environment(\.hermesTheme) private var theme
+
     var body: some View {
-        NavigationStack {
+        SheetChrome(
+            title: String(localized: "Review the skill"),
+            accessibilityIdentifier: "teachReviewSheet",
+            leadingAccessibilityIdentifier: "teachReviewClose",
+            onLeading: { if !model.busy { model.showsReview = false } }
+        ) {
             content
-                .navigationTitle(Text("Review the skill"))
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Close") { model.showsReview = false }
-                            .disabled(model.busy)
-                            .accessibilityIdentifier("teachReviewClose")
-                    }
-                }
         }
         .interactiveDismissDisabled(model.busy)
         .macSheetFrame()
@@ -147,80 +145,108 @@ struct TeachReviewSheet: View {
     private var content: some View {
         switch model.review {
         case .loading:
-            ProgressView("Loading the draft")
+            ProgressView()
+                .tint(Color(theme.palette.textSecondary))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text("Loading the draft"))
                 .accessibilityIdentifier("teachReviewLoading")
         case .failed:
-            ContentUnavailableView {
-                Label("Couldn't load the draft", systemImage: "exclamationmark.triangle")
-            } actions: {
-                Button("Try again") { Task { await model.openReview(from: model.surface) } }
-                    .accessibilityIdentifier("teachReviewRetry")
-            }
+            failure
         case .loaded(let draft):
             loaded(draft)
         }
     }
 
-    private func loaded(_ draft: TeachDraft) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("\(model.displayName) learned this from your demonstration. It stays off until you approve it.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            if let body = draft.content, draft.isReady {
-                ScrollView {
-                    Text(body)
-                        .font(.system(.footnote, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(12)
+    private var failure: some View {
+        GroupedCard(accessibilityIdentifier: "teachReviewFailed") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Couldn't load the draft")
+                    .hermesText(.rowTitle)
+                    .foregroundStyle(Color(theme.palette.textSecondary))
+                PillButton(String(localized: "Try again"), accessibilityIdentifier: "teachReviewRetry") {
+                    Task { await model.openReview(from: model.surface) }
                 }
-                .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityIdentifier("teachDraftContent")
-            } else {
-                Text("The skill hasn't been written yet.")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            notes(draft)
-            if let error = model.reviewError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier("teachReviewError")
-            }
-            HStack {
-                Button("Discard", role: .destructive) { model.confirmation = .discardDraft }
-                    .buttonStyle(.bordered)
-                    .accessibilityIdentifier("teachReviewDiscard")
-                Spacer(minLength: 0)
-                Button {
-                    model.confirmation = .approve
-                } label: {
-                    if model.busy { ProgressView().controlSize(.small) } else { Text("Approve") }
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.busy || !draft.canApprove)
-                .accessibilityIdentifier("teachReviewApprove")
-            }
+            .padding(.horizontal, PalMetrics.rowInset)
+            .padding(.vertical, PalMetrics.rowVerticalPadding)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(16)
+    }
+
+    private func loaded(_ draft: TeachDraft) -> some View {
+        VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
+                    CardFootnote(
+                        String(localized: "\(model.displayName) learned this from your demonstration. It stays off until you approve it."),
+                        accessibilityIdentifier: "teachReviewIntro"
+                    )
+                    draftBody(draft)
+                    notes(draft)
+                    if let error = model.reviewError {
+                        Text(error)
+                            .hermesText(.rowSubtitle)
+                            .foregroundStyle(Color(theme.palette.destructive))
+                            .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset - 3)
+                            .accessibilityIdentifier("teachReviewError")
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+            HStack {
+                PillButton(String(localized: "Discard"), size: .large, accessibilityIdentifier: "teachReviewDiscard") {
+                    model.confirmation = .discardDraft
+                }
+                Spacer(minLength: 0)
+                PillButton(
+                    String(localized: "Approve"),
+                    kind: draft.canApprove ? .accent : .dimmed,
+                    size: .large,
+                    isBusy: model.busy,
+                    accessibilityIdentifier: "teachReviewApprove"
+                ) {
+                    model.confirmation = .approve
+                }
+            }
+            .padding(.horizontal, PalMetrics.screenMargin)
+            .padding(.bottom, PalMetrics.screenMargin)
+        }
+    }
+
+    @ViewBuilder
+    private func draftBody(_ draft: TeachDraft) -> some View {
+        if let body = draft.content, draft.isReady {
+            GroupedCard(accessibilityIdentifier: "teachDraftContent") {
+                Text(body)
+                    .font(.system(size: ConnectRowMetrics.subtitleSize, design: .monospaced))
+                    .foregroundStyle(Color(theme.palette.textPrimary))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, PalMetrics.rowInset)
+                    .padding(.vertical, PalMetrics.rowVerticalPadding)
+            }
+        } else {
+            PlaceholderRow(String(localized: "The skill hasn't been written yet."), accessibilityIdentifier: "teachDraftPlaceholder")
+        }
     }
 
     @ViewBuilder
     private func notes(_ draft: TeachDraft) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Passwords, codes and card numbers you typed were never recorded.")
-            if draft.truncated {
-                Text("The recording hit its size limit, so the end of the workflow may be missing.")
-            }
-            if !draft.extraFiles.isEmpty {
-                Text("This draft also contains other files (\(draft.extraFiles.joined(separator: ", "))). Only the skill text can be reviewed here, so it can't be approved. Discard it and teach again.")
-                    .foregroundStyle(.orange)
-            }
+        CardFootnote(String(localized: "Passwords, codes and card numbers you typed were never recorded."), accessibilityIdentifier: "teachNotePrivacy")
+        if draft.truncated {
+            CardFootnote(
+                String(localized: "The recording hit its size limit, so the end of the workflow may be missing."),
+                accessibilityIdentifier: "teachNoteTruncated"
+            )
         }
-        .font(.footnote)
-        .foregroundStyle(.secondary)
+        if !draft.extraFiles.isEmpty {
+            Text("This draft also contains other files (\(draft.extraFiles.joined(separator: ", "))). Only the skill text can be reviewed here, so it can't be approved. Discard it and teach again.")
+                .hermesText(.rowSubtitle)
+                .foregroundStyle(Color(theme.palette.destructive))
+                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset - 3)
+                .accessibilityIdentifier("teachNoteExtraFiles")
+        }
     }
 }
 

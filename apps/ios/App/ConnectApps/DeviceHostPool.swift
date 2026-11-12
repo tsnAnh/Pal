@@ -58,6 +58,7 @@ extension ConsentAsk {
         case .shell: "Run commands"
         case .files: "Files"
         case .input: "Mouse and keyboard"
+        case .apps: "Apps"
         }
     }
 
@@ -83,6 +84,11 @@ extension ConsentAsk {
         case .inputDisplays: "see this Mac's screen sizes"
         case .inputMove, .inputClick, .inputDrag, .inputScroll: "use this Mac's mouse"
         case .inputType, .inputKey: "use this Mac's keyboard"
+        case .appsList: "see which apps are running on this Mac"
+        case .appsOpen: "open an app on this Mac"
+        case .appsQuit: "quit an app on this Mac"
+        case .windowsList: "see which windows are open on this Mac"
+        case .windowsFocus: "bring a window to the front on this Mac"
         }
     }
 }

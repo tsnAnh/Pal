@@ -1,6 +1,26 @@
 import PalBotProfile
 import PalDesign
+import PalRoster
 import SwiftUI
+
+private struct RoomNameField: View {
+    let label: String
+    let prompt: String
+    @Binding var text: String
+    let identifier: String
+
+    @Environment(\.hermesTheme) private var theme
+
+    var body: some View {
+        TextField("", text: $text, prompt: Text(prompt))
+            .padding(.horizontal, PalMetrics.rowInset)
+            .frame(height: PalMetrics.rowMinimumHeight)
+            .background(Color(theme.palette.groupedCard), in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
+            .padding(.horizontal, PalMetrics.screenMargin)
+            .accessibilityLabel(Text(label))
+            .accessibilityIdentifier(identifier)
+    }
+}
 
 struct CreateRoomSheet: View {
     @Bindable var rooms: RoomsModel
@@ -10,57 +30,73 @@ struct CreateRoomSheet: View {
     @State private var model = CreateRoomModel()
     @FocusState private var nameFocused: Bool
 
+    @Environment(\.hermesTheme) private var theme
+
     var body: some View {
-        NavigationStack {
-            List {
-                Section {
-                    TextField("Group chat name", text: $model.name)
+        SheetChrome(
+            title: String(localized: "New Group Chat"),
+            accessibilityIdentifier: "createRoomSheet",
+            onLeading: { rooms.showsCreate = false },
+            trailing: {
+                PillButton(
+                    String(localized: "Create"),
+                    kind: model.canCreate ? .accent : .dimmed,
+                    isBusy: model.isCreating,
+                    accessibilityIdentifier: "roomCreateButton"
+                ) { Task { await create() } }
+            },
+            content: {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        RoomNameField(
+                            label: String(localized: "Group chat name"), prompt: String(localized: "Group chat name"),
+                            text: $model.name, identifier: "roomNameField"
+                        )
                         .focused($nameFocused)
-                        .accessibilityIdentifier("roomNameField")
-                }
-                Section {
-                    ForEach(rooms.seatableBots) { bot in
-                        Button { model.toggle(bot.name) } label: {
-                            HStack(spacing: 12) {
-                                BotAvatarView(spec: bot.spec, size: 30 * 1.15).frame(width: 30, height: 30)
-                                Text(bot.displayName).foregroundStyle(PalTokens.textPrimary)
-                                Spacer()
-                                if model.selected.contains(bot.name) {
-                                    Image(systemName: "checkmark.circle.fill").accessibilityHidden(true)
-                                }
-                            }
-                            .contentShape(Rectangle())
+                        SectionCaption(String(localized: "Bots (2 to 6)"), accessibilityIdentifier: "createRoomBotsCaption")
+                            .padding(.top, PalMetrics.cardGap)
+                            .padding(.bottom, PalMetrics.captionToCardGap)
+                        GroupedCard(accessibilityIdentifier: "createRoomBots") {
+                            ForEach(rooms.seatableBots) { bot in pickRow(bot) }
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(model.selected.contains(bot.name) ? .isSelected : [])
-                        .accessibilityIdentifier("roomPick-\(bot.name)")
+                        if let failure = model.failure {
+                            Text(failure)
+                                .hermesText(.rowSubtitle)
+                                .foregroundStyle(Color(theme.palette.destructive))
+                                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
+                                .padding(.top, 10)
+                                .accessibilityIdentifier("createRoomFailure")
+                        }
                     }
-                } header: {
-                    Text("Bots (2 to 6)")
-                } footer: {
-                    if let failure = model.failure { Text(failure).foregroundStyle(.red) }
+                    .padding(.bottom, 32)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle(Text("New Group Chat"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { rooms.showsCreate = false }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Create") { Task { await create() } }
-                        .disabled(!model.canCreate)
-                        .accessibilityIdentifier("roomCreateButton")
-                }
-            }
-        }
+        )
         .interactiveDismissDisabled(model.isCreating)
         #if os(macOS)
         .frame(minWidth: 380, minHeight: 460)
         #endif
-        .accessibilityIdentifier("createRoomSheet")
+    }
+
+    private func pickRow(_ bot: BotRow) -> some View {
+        let isSelected = model.selected.contains(bot.name)
+        return LeadingSettingsRow(
+            title: bot.displayName,
+            leadingSpacing: 12,
+            accessibilityIdentifier: "roomPick-\(bot.name)",
+            action: { model.toggle(bot.name) },
+            leading: { BotAvatarView(spec: bot.spec, size: 30 * 1.15).frame(width: 30, height: 30) }
+        )
+        .overlay(alignment: .trailing) {
+            if isSelected {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(Color(theme.palette.accentBlue))
+                    .padding(.trailing, PalMetrics.rowInset)
+                    .accessibilityHidden(true)
+            }
+        }
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func create() async {
@@ -84,43 +120,54 @@ struct RoomDetailsSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            List {
-                Section("Name") {
-                    TextField("Group chat name", text: $name)
+        SheetChrome(
+            title: String(localized: "Group Chat"),
+            accessibilityIdentifier: "roomDetailsSheet",
+            onLeading: { dismiss() },
+            trailing: {
+                PillButton(
+                    String(localized: "Save"),
+                    kind: canSaveName ? .accent : .dimmed,
+                    isBusy: isRenaming,
+                    accessibilityIdentifier: "roomRenameSave"
+                ) { save() }
+            },
+            content: {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        SectionCaption(String(localized: "Name"), accessibilityIdentifier: "roomDetailsNameCaption")
+                            .padding(.bottom, PalMetrics.captionToCardGap)
+                        RoomNameField(
+                            label: String(localized: "Group chat name"), prompt: String(localized: "Group chat name"),
+                            text: $name, identifier: "roomRenameField"
+                        )
                         .disabled(!model.canRename)
                         .onSubmit { save() }
-                        .accessibilityIdentifier("roomRenameField")
-                }
-                Section("Bots") {
-                    ForEach(model.room.members) { member in
-                        HStack(spacing: 12) {
-                            RoomMemberAvatar(member: member, roster: roster, size: 30)
-                            Text(member.displayName)
-                            Spacer()
-                            Text("@\(member.handle)").font(.footnote).foregroundStyle(PalTokens.textTertiary)
+                        SectionCaption(String(localized: "Bots"), accessibilityIdentifier: "roomDetailsBotsCaption")
+                            .padding(.top, PalMetrics.cardGap)
+                            .padding(.bottom, PalMetrics.captionToCardGap)
+                        GroupedCard(accessibilityIdentifier: "roomDetailsBots") {
+                            ForEach(model.room.members) { member in
+                                LeadingSettingsRow(
+                                    title: member.displayName,
+                                    value: "@\(member.handle)",
+                                    leadingSpacing: 12,
+                                    accessibilityIdentifier: "roomDetailsMember-\(member.memberID)",
+                                    leading: { RoomMemberAvatar(member: member, roster: roster, size: 30) }
+                                )
+                            }
                         }
                     }
+                    .padding(.top, 8)
+                    .padding(.bottom, 32)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle(Text("Group Chat"))
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Done") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
-                        .disabled(!canSaveName)
-                        .accessibilityIdentifier("roomRenameSave")
-                }
-            }
-        }
+        )
         .onAppear { name = model.room.name }
         #if os(macOS)
         .frame(minWidth: 380, minHeight: 360)
         #endif
-        .accessibilityIdentifier("roomDetailsSheet")
     }
 
     private func save() {

@@ -69,6 +69,11 @@ public struct EscapeBurstDetector: Sendable {
 public struct InputKeyChord: Sendable, Equatable {
     public var code: UInt16
     public var modifiers: InputModifiers
+
+    public init(code: UInt16, modifiers: InputModifiers) {
+        self.code = code
+        self.modifiers = modifiers
+    }
 }
 
 public enum InputKeyMap {
@@ -101,7 +106,7 @@ public enum InputKeyMap {
 }
 
 public actor InputController: InputProviding {
-    static let stoppedMessage = "The owner stopped mouse and keyboard control. It stays off until they turn it on again; tell them instead of retrying."
+    public static let stoppedMessage = "The owner stopped mouse and keyboard control. It stays off until they turn it on again; tell them instead of retrying."
 
     private let source: any InputEventSource
     private let pause: @Sendable (Duration) async throws -> Void

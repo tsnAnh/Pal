@@ -110,7 +110,7 @@ private struct HomeBotLink: View {
     }
 }
 
-private struct HomeRowButtonStyle: ButtonStyle {
+struct HomeRowButtonStyle: ButtonStyle {
     let radius: CGFloat
 
     func makeBody(configuration: Configuration) -> some View {

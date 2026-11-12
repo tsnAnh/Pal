@@ -23,6 +23,7 @@ public struct SystemPermissions: DevicePermissions {
         case .home: await Self.homeStatus()
         case .shell, .files: Self.localAccessStatus
         case .input: AccessibilityAccess.status
+        case .apps: Self.appsStatus
         }
     }
 
@@ -44,8 +45,29 @@ public struct SystemPermissions: DevicePermissions {
             break
         case .input:
             AccessibilityAccess.request()
+        case .apps:
+            Self.requestApps()
         }
         return await status(of: connector)
+    }
+
+    private static let appsAskedKey = "dev.tsnanh.pal.apps-permissions-asked"
+
+    private static var appsStatus: DeviceOSPermission {
+        #if os(macOS)
+        if AppsSystemAccess.screenRecordingGranted, AppsSystemAccess.accessibilityGranted { return .granted }
+        return UserDefaults.standard.bool(forKey: appsAskedKey) ? .denied : .notDetermined
+        #else
+        .unsupported
+        #endif
+    }
+
+    private static func requestApps() {
+        #if os(macOS)
+        UserDefaults.standard.set(true, forKey: appsAskedKey)
+        AppsSystemAccess.requestScreenRecording()
+        AppsSystemAccess.requestAccessibility()
+        #endif
     }
 
     private static var localAccessStatus: DeviceOSPermission {
@@ -132,15 +154,17 @@ extension DeviceProviders {
         #if os(macOS)
         let shell: (any ShellProviding)? = SystemShell()
         let files: (any FilesProviding)? = SystemFiles()
+        let apps: (any AppsProviding)? = AppsController(workspace: SystemAppsWorkspace())
         let input: (any InputProviding)? = InputController.shared
         #else
         let shell: (any ShellProviding)? = nil
         let files: (any FilesProviding)? = nil
+        let apps: (any AppsProviding)? = nil
         let input: (any InputProviding)? = nil
         #endif
         return DeviceProviders(
             calendar: EventKitCalendar(), reminders: EventKitReminders(), contacts: SystemContacts(),
-            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, input: input
+            location: SystemLocation(), alarms: alarms, home: home, shell: shell, files: files, apps: apps, input: input
         )
     }
 }

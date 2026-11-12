@@ -50,10 +50,10 @@ def _device_overrides() -> dict:
     return {
         "description": (
             "Run one action on a device the user named, through the Hermes app on that device: shell commands, "
-            "files and the mouse and keyboard on a Mac; Calendar, Reminders, Contacts, Location, Alarms and Home on a Mac or iPhone. "
+            "files, apps, windows and the mouse and keyboard on a Mac; Calendar, Reminders, Contacts, Location, Alarms and Home on a Mac or iPhone. "
             + CHOOSING_RULES + " `device` is the device's name or its device_id from `devices_list`; an unknown "
             "or ambiguous name fails and lists the devices, an offline device fails at once with when it was last "
-            "seen (nothing is queued, try again when the user says it is back). shell.*, files.* and input.* work only on a "
+            "seen (nothing is queued, try again when the user says it is back). shell.*, files.*, apps.*, windows.* and input.* work only on a "
             "Mac whose user switched on that connector in the Hermes app; they run with no per-action prompt, so "
             "act only on what the user asked for. input.* moves the real pointer and types real keys anywhere on "
             "that Mac: call input.displays first, never type secrets or passwords, never use it to change "
@@ -185,8 +185,8 @@ def _checked(view, spec, now: float) -> str | None:
     from gateway.device_tools import Failure
     from tui_gateway.contracts.canonical_device import DeviceConnectorState
     if view.kind not in spec.kinds:
-        return tool_error(f"{view.label} is a {view.type} and cannot do {spec.name}: shell commands, files and mouse and "
-                          "keyboard control work only on a Mac.", code=Failure.UNSUPPORTED.value, action=spec.name)
+        return tool_error(f"{view.label} is a {view.type} and cannot do {spec.name}: shell commands, files, apps, windows and "
+                          "mouse and keyboard control work only on a Mac.", code=Failure.UNSUPPORTED.value, action=spec.name)
     if view.connectors.get(spec.connector.value, DeviceConnectorState.OFF) is DeviceConnectorState.OFF:
         return tool_error(_failure_message(Failure.CONNECTOR_OFF, spec, view, "", now),
                           code=Failure.CONNECTOR_OFF.value, action=spec.name)

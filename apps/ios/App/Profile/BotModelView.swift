@@ -54,10 +54,8 @@ struct BotModelView: View {
         .task { await model.load() }
         .refreshable { await model.load() }
         .sheet(item: $picking) { mode in
-            NavigationStack {
-                BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback) { picking = nil }
-            }
-            .macSheetFrame()
+            BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback) { picking = nil }
+                .macSheetFrame()
         }
         .confirmationDialog(
             "Use this model?",
@@ -84,6 +82,7 @@ struct BotModelView: View {
             ) { picking = .primary }
             .disabled(model.isSaving)
         }
+        effortSection
         SectionCaption(String(localized: "Backup models"), accessibilityIdentifier: "botFallbackCaption")
             .padding(.top, PalMetrics.cardGap)
             .padding(.bottom, PalMetrics.captionToCardGap)
@@ -101,6 +100,50 @@ struct BotModelView: View {
             String(localized: "If \(displayName)'s model fails, these are tried in order."),
             accessibilityIdentifier: "botFallbackFootnote")
         statusLine
+    }
+
+    @ViewBuilder
+    private var effortSection: some View {
+        SectionCaption(String(localized: "Reasoning effort"), accessibilityIdentifier: "botEffortCaption")
+            .padding(.top, PalMetrics.cardGap)
+            .padding(.bottom, PalMetrics.captionToCardGap)
+        GroupedCard(accessibilityIdentifier: "botEffortCard") {
+            switch model.effortOptions {
+            case .levels(let levels):
+                effortMenu(levels)
+            case .unsupported:
+                SettingsRow.value(
+                    String(localized: "Effort"), value: String(localized: "Not supported"),
+                    subtitle: String(localized: "This model doesn't use reasoning effort."),
+                    accessibilityIdentifier: "botEffortRow")
+            case .unknown:
+                SettingsRow.value(
+                    String(localized: "Effort"), value: ReasoningEffort.title(model.effort),
+                    subtitle: String(localized: "Pal can't tell which levels this model supports."),
+                    accessibilityIdentifier: "botEffortRow")
+            }
+        }
+        CardFootnote(
+            String(localized: "Applies to new conversations. Ones already open keep their effort."),
+            accessibilityIdentifier: "botEffortFootnote")
+    }
+
+    private func effortMenu(_ levels: [String]) -> some View {
+        let selection = Binding<String>(
+            get: { model.effort ?? "" },
+            set: { level in Task { await model.chooseEffort(level) } })
+        return Menu {
+            Picker(String(localized: "Reasoning effort"), selection: selection) {
+                ForEach(levels, id: \.self) { level in
+                    Text(ReasoningEffort.title(level)).tag(level)
+                }
+            }
+        } label: {
+            SettingsRow.value(
+                String(localized: "Effort"), value: ReasoningEffort.title(model.effort),
+                accessibilityIdentifier: "botEffortRow")
+        }
+        .disabled(model.isSaving)
     }
 
     private func fallbackRow(_ choice: ModelChoice) -> some View {
@@ -176,6 +219,23 @@ private struct BotModelPicker: View {
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
+        SheetChrome(
+            title: mode == .primary ? String(localized: "Choose a model") : String(localized: "Add a backup model"),
+            accessibilityIdentifier: "botModelPicker",
+            leadingAccessibilityIdentifier: "botModelPickerCancel",
+            onLeading: finish
+        ) {
+            list
+        }
+        .sheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }) {
+            NavigationStack {
+                ModelProvidersScreen(hub: hub) { showsKeys = false }
+            }
+            .macSheetFrame()
+        }
+    }
+
+    private var list: some View {
         ScrollView {
             VStack(spacing: 0) {
                 TextField("Search models", text: $query)
@@ -226,28 +286,6 @@ private struct BotModelPicker: View {
             }
             .padding(.top, 16)
             .padding(.bottom, 32)
-        }
-        .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
-        .accessibilityIdentifier("botModelPicker")
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text(mode == .primary ? "Choose a model" : "Add a backup model")
-                    .hermesText(.sheetTitle)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .accessibilityAddTraits(.isHeader)
-            }
-            .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { finish() }
-                    .accessibilityIdentifier("botModelPickerCancel")
-            }
-        }
-        .toolbarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }) {
-            NavigationStack {
-                ModelProvidersScreen(hub: hub) { showsKeys = false }
-            }
-            .macSheetFrame()
         }
     }
 

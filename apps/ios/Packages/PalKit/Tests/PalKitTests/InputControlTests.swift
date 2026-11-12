@@ -38,7 +38,7 @@ private final class FakeSource: InputEventSource {
     }
 
     var posted: [InputEvent] { state.withLock { $0.posted } }
-    func set(_ change: (inout State) -> Void) { state.withLock(change) }
+    func set(_ change: (inout State) -> Void) { state.withLock { change(&$0) } }
 }
 
 private final class ControllerHolder: @unchecked Sendable {
