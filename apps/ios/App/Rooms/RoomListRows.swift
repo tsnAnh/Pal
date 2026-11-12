@@ -56,7 +56,7 @@ struct RoomsHomeSection: View {
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(Text("\(room.name), group chat with \(memberLine(room))"))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HomeRowButtonStyle(radius: 10))
                 .accessibilityIdentifier("roomRow-\(room.roomID)")
             }
         }
