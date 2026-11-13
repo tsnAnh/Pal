@@ -376,11 +376,22 @@ def local_history(authority, ref, prepared=None):
         # Rows appended since the prepare count against the archive budget too (no lineage re-read).
         display, cut = _fit_archive(live, display)
         truncated = truncated or cut
-    rows = [{**{k: v for k, v in row.items() if k != '_row_id'}, 'row_id': row['_row_id']}
+    rows = [_with_authored_text({**{k: v for k, v in row.items() if k != '_row_id'}, 'row_id': row['_row_id']})
             for row in _merge_live_in_stored_order(display, live)]
     if truncated and rows:
         rows[0]['archived_truncated'] = True  # earlier archived history was left out (the byte budget)
     return rows
+
+
+def _with_authored_text(row):
+    """A user row carrying model-only context beside the user's words also names those words as ``text``
+    (what a client renders); ``content`` stays the stored row the controls address."""
+    if row.get('role') != 'user':
+        return row
+    from agent.message_content import flatten_message_text
+    from agent.message_metadata import authored_user_text
+    authored = authored_user_text(row, flatten_message_text(row.get('content')))
+    return row if authored is None else {**row, 'text': authored}
 
 
 def reopen_local_session(authority, ref):

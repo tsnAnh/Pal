@@ -3027,6 +3027,7 @@ def _fold_todo_snapshot(agent: Any, compressed: list) -> None:
         # "real user" evidence and break zero-user provenance (#69292), so those keep the flagged standalone
         # append and the real-user preservation pass continues to see todo scaffolding, not human intent.
         from agent.context_compressor import _append_text_to_content
+        from agent.message_metadata import stamp_typed_ask, typed_ask_text
         merged = False
         _tail = compressed[-1] if compressed and isinstance(compressed[-1], dict) else None
         if _tail is not None and _tail.get("role") == "user":
@@ -3035,6 +3036,8 @@ def _fold_todo_snapshot(agent: Any, compressed: list) -> None:
             _probe["content"] = _stripped
             if _is_real_user_message(_probe):
                 _snapshot_text = f"\n\n{todo_snapshot}" if isinstance(_stripped, str) and _stripped else todo_snapshot
+                if typed_ask_text(_tail) is None and isinstance(_stripped, str) and _stripped:
+                    stamp_typed_ask(_tail, _stripped)
                 _replace_message_content(_tail, _append_text_to_content(_stripped, _snapshot_text))
                 merged = True
             elif (
@@ -3044,9 +3047,11 @@ def _fold_todo_snapshot(agent: Any, compressed: list) -> None:
                 # refresh it in place instead of stacking a duplicate.
                 _replace_message_content(_tail, todo_snapshot)
                 _tail["_todo_snapshot_synthetic"] = True
+                _tail["display_kind"] = "hidden"
                 merged = True
         if not merged:
-            compressed.append({"role": "user", "content": todo_snapshot, "_todo_snapshot_synthetic": True})
+            compressed.append({"role": "user", "content": todo_snapshot, "_todo_snapshot_synthetic": True,
+                               "display_kind": "hidden"})
 
 
 def _rebuild_system_prompt_at_boundary(agent: Any, system_message: str) -> str:

@@ -1,5 +1,6 @@
 import Foundation
 import PalProtocol
+import PalTransport
 
 public struct ImageLoadFailure: Error, Sendable, Equatable {
     public let reason: String
@@ -13,6 +14,8 @@ public struct ImageLoadFailure: Error, Sendable, Equatable {
         case let failure as ImageLoadFailure:
             self = failure
         case let rpc as RPCError:
+            self.init(reason: Self.reason(forRPC: rpc))
+        case GatewayTransportError.rpc(let rpc):
             self.init(reason: Self.reason(forRPC: rpc))
         case ChatError.notConnected:
             self.init(reason: "You are not connected right now.")

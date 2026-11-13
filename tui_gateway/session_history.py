@@ -326,8 +326,11 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
             content_text = _DISCORD_TRIGGERING_NOTE_RE.sub(r"\1", content_text)
             # A pre_llm_call veto stores a placeholder; the transcript shows what the user typed.
             content_text = withheld_prompt_text(m) or content_text
-        if role == "user" and m.get("display_kind") == STEER_DISPLAY_KIND:
-            # Mid-turn /steer: show the user's own words, not the model-facing marker wrapper.
+        if role == "user" and isinstance(m.get("content"), str):
+            # A steer row's marker wrapper and a multimodal turn's injected notes are model-only.
+            from agent.message_metadata import authored_user_text
+            content_text = authored_user_text(m, m["content"]) or content_text
+        elif role == "user" and m.get("display_kind") == STEER_DISPLAY_KIND:
             from agent.conversation_compression import _extract_steer_text_from_message
             content_text = _extract_steer_text_from_message(m) or content_text
         if role == "tool":

@@ -1,5 +1,6 @@
 @testable import PalChat
 import PalProtocol
+import PalTransport
 import Foundation
 import Testing
 
@@ -78,6 +79,8 @@ struct ImageLoadFailureTests {
     func describing() {
         #expect(ImageLoadFailure(describing: RPCError(code: 4151, message: "x")).reason == "It is no longer available.")
         #expect(ImageLoadFailure(describing: RPCError(code: 4152, message: "x")).reason == "It is too large to download.")
+        #expect(ImageLoadFailure(describing: GatewayTransportError.rpc(RPCError(code: 4151, message: "x"))).reason == "It is no longer available.")
+        #expect(ImageLoadFailure(describing: GatewayTransportError.rpc(RPCError(code: 5151, message: "x"))).reason == "The bot could not provide it right now.")
         #expect(ImageLoadFailure(describing: ChatError.notConnected).reason == "You are not connected right now.")
         #expect(ImageLoadFailure(describing: URLError(.notConnectedToInternet)).reason == "You are offline.")
         #expect(!ImageLoadFailure(describing: ChatError.attachmentRefused).reason.isEmpty)
