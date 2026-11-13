@@ -11,7 +11,10 @@ import hashlib
 
 import pytest
 
-from tests.tui_gateway.test_library_rpc import BASE_TS, _call, _error, _ok, _png, _seed, bots  # noqa: F401
+from tests.tui_gateway import test_library_rpc as library
+
+_error, _ok, _png, _seed = library._error, library._ok, library._png, library._seed
+bots = library.bots
 
 
 def _client_ref(host_path) -> str:

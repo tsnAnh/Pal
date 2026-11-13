@@ -36,3 +36,35 @@ def has_scaffolding_flag(message: dict) -> bool:
 def is_user_role_scaffolding(message: dict) -> bool:
     """A runtime row in the user role, by flag or opening text (nudges, task-list snapshots, single background-process completion and watch-match notices)."""
     return has_scaffolding_flag(message) or _message_text(message).strip().startswith(_SYNTHETIC_USER_PREFIXES)
+
+
+# Compaction re-injects the todo list verbatim but prunes skills to markers, so
+# couple them: tell the model to reload pruned skills BEFORE acting on tasks.
+# Lives after TODO_INJECTION_HEADER so it strips with the snapshot next time.
+PRUNED_SKILL_RELOAD_NOTICE_HEADER = "[Skills pruned during compression — reload before acting on these tasks]"
+
+
+def pruned_skill_reload_notice(compressed: list) -> str:
+    """Reload notice for skills whose bodies were pruned, or ``""``.
+    Scans ``[SKILL_PRUNED: ...]`` markers in the post-compression transcript; first-seen order, deduplicated,
+    capped at ``_MAX_PRUNED_SKILL_MARKERS``."""
+    from agent.context_compressor import _MAX_PRUNED_SKILL_MARKERS, _extract_pruned_skill_names
+    names: list = []
+    for message in compressed:
+        if not isinstance(message, dict):
+            continue
+        for name in _extract_pruned_skill_names(_message_text(message)):
+            if name not in names:
+                names.append(name)
+    del names[_MAX_PRUNED_SKILL_MARKERS:]
+    if not names:
+        return ""
+    calls = "; ".join(f"skill_view(name='{name}')" for name in names)
+    return (
+        f"{PRUNED_SKILL_RELOAD_NOTICE_HEADER}\n"
+        "The task list above crossed the compression boundary verbatim, but "
+        "the skill instructions that governed it were pruned. Before "
+        f"executing any preserved task that depends on these skills, reload "
+        f"them first: {calls}. After reloading, re-check that each pending "
+        "task is still justified — findings recorded before the boundary may have invalidated it."
+    )

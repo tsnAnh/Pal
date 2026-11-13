@@ -5,7 +5,8 @@ the user's words and never the scaffolding."""
 from tests.agent.test_skill_todo_retention_parity import _build_agent_with_db, _msgs
 
 from agent.context_compressor import _skill_pruned_marker
-from agent.conversation_compression import _PRUNED_SKILL_RELOAD_NOTICE_HEADER, _fold_todo_snapshot
+from agent.conversation_compression import _fold_todo_snapshot
+from agent.conversation_compression_scaffolding import PRUNED_SKILL_RELOAD_NOTICE_HEADER
 from agent.message_metadata import authored_user_text
 from hermes_state import SessionDB
 from tools.todo_tool import TODO_INJECTION_HEADER
@@ -30,7 +31,7 @@ def test_standalone_snapshot_row_is_stored_hidden(tmp_path):
 
     stored = [row for row in db.get_messages_as_conversation(agent.session_id)
               if row["role"] == "user" and TODO_INJECTION_HEADER in row["content"]]
-    assert len(stored) == 1 and _PRUNED_SKILL_RELOAD_NOTICE_HEADER in stored[0]["content"]
+    assert len(stored) == 1 and PRUNED_SKILL_RELOAD_NOTICE_HEADER in stored[0]["content"]
     assert stored[0]["display_kind"] == "hidden"
 
 
