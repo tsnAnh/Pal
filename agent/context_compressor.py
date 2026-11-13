@@ -549,13 +549,13 @@ def _looks_like_compaction_summary(msg: dict[str, Any], content: str) -> bool:
 
 def _salvage_reduce_todo_snapshot(out: list[dict[str, Any]]) -> None:
     """Last-resort shrink: drop the synthetic todo snapshot, keeping only a pruned-skill reload notice if present."""
-    from agent.conversation_compression import _PRUNED_SKILL_RELOAD_NOTICE_HEADER
+    from agent.conversation_compression_scaffolding import PRUNED_SKILL_RELOAD_NOTICE_HEADER
     for i in range(len(out) - 1, -1, -1):
         msg = out[i]
         if not isinstance(msg, dict) or not (msg.get("_todo_snapshot_synthetic") and msg.get("role") == "user"):
             continue
         content = msg.get("content")
-        notice_idx = content.find(_PRUNED_SKILL_RELOAD_NOTICE_HEADER) if isinstance(content, str) else -1
+        notice_idx = content.find(PRUNED_SKILL_RELOAD_NOTICE_HEADER) if isinstance(content, str) else -1
         if notice_idx >= 0:
             msg["content"] = content[notice_idx:]
         else:

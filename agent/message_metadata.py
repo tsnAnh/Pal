@@ -117,6 +117,29 @@ def typed_ask_text(message: Any) -> Optional[str]:
     return _display_metadata_str(message, TYPED_ASK)
 
 
+_SCREENSHOT_PLACEHOLDER_LINE = "[screenshot]"
+
+
+def authored_user_text(message: Any, text: str) -> Optional[str]:
+    """What the user wrote on a user row whose stored *text* also carries model-only runtime context, else None.
+
+    Only producer-stamped provenance decides: a mid-turn steer row (``display_kind``) unwraps to the steered
+    words, and a multimodal turn's ``typed_ask`` stamp names the ask its injected notes were appended to (the
+    store flattens the parts, so nothing else can tell them apart). A row without either keeps *text*, so a
+    user quoting a marker verbatim is never rewritten."""
+    if not isinstance(message, dict) or not isinstance(text, str):
+        return None
+    from agent.prompt_builder import STEER_DISPLAY_KIND
+    if message.get("display_kind") == STEER_DISPLAY_KIND:
+        from agent.conversation_compression import _extract_steer_text_from_message
+        return _extract_steer_text_from_message({"content": text})
+    ask = typed_ask_text(message)
+    if not ask or ask == text:
+        return None
+    stored = "\n".join(line for line in text.split("\n") if line != _SCREENSHOT_PLACEHOLDER_LINE)
+    return ask if stored.startswith(ask) else None
+
+
 def withheld_prompt_text(message: Any) -> Optional[str]:
     """The typed text a transcript view shows for a vetoed user row, else None."""
     return _display_metadata_str(message, WITHHELD_PROMPT)

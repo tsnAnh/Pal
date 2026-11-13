@@ -66,10 +66,10 @@ def test_salvage_drops_todo_only_as_last_resort():
 
 def test_salvage_last_resort_preserves_pruned_skill_reload_notice():
     """7a16840add couples the reload notice into the snapshot — it survives."""
-    from agent.conversation_compression import _PRUNED_SKILL_RELOAD_NOTICE_HEADER
+    from agent.conversation_compression_scaffolding import PRUNED_SKILL_RELOAD_NOTICE_HEADER
 
     notice = (
-        f"{_PRUNED_SKILL_RELOAD_NOTICE_HEADER}\n"
+        f"{PRUNED_SKILL_RELOAD_NOTICE_HEADER}\n"
         "Reload with skill_view(name='example-skill') before acting."
     )
     original = [
@@ -93,7 +93,7 @@ def test_salvage_last_resort_preserves_pruned_skill_reload_notice():
     assert estimate_messages_tokens_rough(out) < estimate_messages_tokens_rough(original)
     snapshot_rows = [m for m in out if m.get("_todo_snapshot_synthetic")]
     assert len(snapshot_rows) == 1
-    assert snapshot_rows[0]["content"].startswith(_PRUNED_SKILL_RELOAD_NOTICE_HEADER)
+    assert snapshot_rows[0]["content"].startswith(PRUNED_SKILL_RELOAD_NOTICE_HEADER)
     assert "Current todos" not in snapshot_rows[0]["content"]
 
 

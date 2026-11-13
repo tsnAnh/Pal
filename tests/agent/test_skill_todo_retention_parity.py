@@ -30,10 +30,10 @@ from agent.context_compressor import (
     _MAX_PRUNED_SKILL_MARKERS,
     _skill_pruned_marker,
 )
-from agent.conversation_compression import (
-    _PRUNED_SKILL_RELOAD_NOTICE_HEADER,
-    _pruned_skill_reload_notice,
-    _strip_stale_todo_snapshot,
+from agent.conversation_compression import _strip_stale_todo_snapshot
+from agent.conversation_compression_scaffolding import (
+    PRUNED_SKILL_RELOAD_NOTICE_HEADER,
+    pruned_skill_reload_notice,
 )
 from hermes_state import SessionDB
 from tools.todo_tool import TODO_INJECTION_HEADER
@@ -92,10 +92,10 @@ class TestPrunedSkillReloadNotice:
             + "\n"
             + _skill_pruned_marker("frontend-design")
         )
-        notice = _pruned_skill_reload_notice(
+        notice = pruned_skill_reload_notice(
             [{"role": "user", "content": summary}]
         )
-        assert notice.startswith(_PRUNED_SKILL_RELOAD_NOTICE_HEADER)
+        assert notice.startswith(PRUNED_SKILL_RELOAD_NOTICE_HEADER)
         assert "skill_view(name='hodle-design-system')" in notice
         assert "skill_view(name='frontend-design')" in notice
 
@@ -112,7 +112,7 @@ class TestPrunedSkillReloadNotice:
                 + _skill_pruned_marker("big-skill"),
             },
         ]
-        notice = _pruned_skill_reload_notice(rows)
+        notice = pruned_skill_reload_notice(rows)
         assert "skill_view(name='big-skill')" in notice
 
     def test_deduplicates_and_preserves_first_seen_order(self):
@@ -122,7 +122,7 @@ class TestPrunedSkillReloadNotice:
             {"role": "user", "content": f"{marker_a}\n{marker_b}\n{marker_a}"},
             {"role": "tool", "content": marker_a},
         ]
-        notice = _pruned_skill_reload_notice(rows)
+        notice = pruned_skill_reload_notice(rows)
         assert notice.count("skill_view(name='alpha')") == 1
         assert notice.index("alpha") < notice.index("beta")
 
@@ -131,14 +131,14 @@ class TestPrunedSkillReloadNotice:
             {"role": "user", "content": "[CONTEXT COMPACTION] summary"},
             {"role": "user", "content": "tail"},
         ]
-        assert _pruned_skill_reload_notice(rows) == ""
+        assert pruned_skill_reload_notice(rows) == ""
 
     def test_bounded_by_shared_marker_cap(self):
         text = "\n".join(
             _skill_pruned_marker(f"skill-{i}")
             for i in range(_MAX_PRUNED_SKILL_MARKERS + 15)
         )
-        notice = _pruned_skill_reload_notice([{"role": "user", "content": text}])
+        notice = pruned_skill_reload_notice([{"role": "user", "content": text}])
         assert notice.count("skill_view(name=") == _MAX_PRUNED_SKILL_MARKERS
 
 
@@ -147,7 +147,7 @@ class TestPrunedSkillReloadNotice:
         boundary — it references skills WITHOUT the canonical prefix."""
         from agent.context_compressor import _extract_pruned_skill_names
 
-        notice = _pruned_skill_reload_notice(
+        notice = pruned_skill_reload_notice(
             [{"role": "user", "content": _skill_pruned_marker("once")}]
         )
         assert _extract_pruned_skill_names(notice) == []
@@ -191,12 +191,12 @@ class TestSkillGuidanceSurvivesWithTodos:
         assert "Remove the Lightning screen" in tail_text
         # Parity: the same message that preserved the imperative carries the
         # policy-recovery instruction.
-        assert _PRUNED_SKILL_RELOAD_NOTICE_HEADER in tail_text
+        assert PRUNED_SKILL_RELOAD_NOTICE_HEADER in tail_text
         assert "skill_view(name='hodle-design-system')" in tail_text
         # Ordering: header first (the synthetic-row classifier keys on it),
         # notice after, inside the same strip window.
         assert tail_text.index(TODO_INJECTION_HEADER) < tail_text.index(
-            _PRUNED_SKILL_RELOAD_NOTICE_HEADER
+            PRUNED_SKILL_RELOAD_NOTICE_HEADER
         )
 
 
@@ -234,7 +234,7 @@ class TestSkillGuidanceSurvivesWithTodos:
         ]
         assert len(snapshot_rows) == 1
         row = snapshot_rows[0]
-        assert _PRUNED_SKILL_RELOAD_NOTICE_HEADER in str(row["content"])
+        assert PRUNED_SKILL_RELOAD_NOTICE_HEADER in str(row["content"])
         assert row.get("_todo_snapshot_synthetic") is True
         assert not _is_real_user_message(row)
         assert ContextCompressor._is_synthetic_compression_user_turn(row)
@@ -248,12 +248,12 @@ class TestNoticeStripLifecycle:
             "real user words\n\n"
             + TODO_INJECTION_HEADER
             + "\n- [ ] t1. old task (pending)\n\n"
-            + _PRUNED_SKILL_RELOAD_NOTICE_HEADER
+            + PRUNED_SKILL_RELOAD_NOTICE_HEADER
             + "\nreload skill_view(name='old-skill') first."
         )
         stripped = _strip_stale_todo_snapshot(content)
         assert stripped == "real user words"
-        assert _PRUNED_SKILL_RELOAD_NOTICE_HEADER not in stripped
+        assert PRUNED_SKILL_RELOAD_NOTICE_HEADER not in stripped
 
     def test_strip_removes_snapshot_from_list_content(self):
         content = [
@@ -263,7 +263,7 @@ class TestNoticeStripLifecycle:
                     "real user words\n\n"
                     + TODO_INJECTION_HEADER
                     + "\n- [ ] t1. old task (pending)\n\n"
-                    + _PRUNED_SKILL_RELOAD_NOTICE_HEADER
+                    + PRUNED_SKILL_RELOAD_NOTICE_HEADER
                     + "\nreload skill_view(name='old-skill') first."
                 ),
             },
@@ -285,7 +285,7 @@ class TestNoticeStripLifecycle:
             "keep this human text\n\n"
             + TODO_INJECTION_HEADER
             + "\n- [ ] t0. stale task (pending)\n\n"
-            + _PRUNED_SKILL_RELOAD_NOTICE_HEADER
+            + PRUNED_SKILL_RELOAD_NOTICE_HEADER
             + "\nstale notice body skill_view(name='stale-skill')."
         )
         db = SessionDB(db_path=tmp_path / "state.db")
@@ -310,7 +310,7 @@ class TestNoticeStripLifecycle:
         db.close()
         tail_text = str(compressed[-1]["content"])
         assert tail_text.count(TODO_INJECTION_HEADER) == 1
-        assert tail_text.count(_PRUNED_SKILL_RELOAD_NOTICE_HEADER) == 1
+        assert tail_text.count(PRUNED_SKILL_RELOAD_NOTICE_HEADER) == 1
         assert "stale task" not in tail_text
         assert "stale-skill" not in tail_text
         assert "fresh task" in tail_text

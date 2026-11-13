@@ -107,13 +107,17 @@ def _(rid, params: dict) -> dict:
     cap = max(1, min(parsed.max_bytes or _LIBRARY_ASSET_DEFAULT_BYTES, _LIBRARY_ASSET_HARD_BYTES))
     home = _library_home(params)
     try:
-        item = LibraryIndex(home).lookup(ref)
-        if item is None or item.kind == "link":
-            return unknown
+        index = LibraryIndex(home)
         db, owns, available = _library_open_db(home)
         if not available or db is None:
             return unknown
         try:
+            item = index.lookup(ref)
+            if item is None:
+                index.refresh(db)
+                item = index.lookup(ref)
+            if item is None or item.kind == "link":
+                return unknown
             if item.message_id not in LibraryIndex.live_message_ids(db, [item.message_id]):
                 return unknown
         finally:

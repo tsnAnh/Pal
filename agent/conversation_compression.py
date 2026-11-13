@@ -33,7 +33,9 @@ from agent.context_compressor_summary import _accepts_keyword_argument
 from agent.context_engine import automatic_compaction_status_message, sanitize_memory_context
 from agent.conversation_compression_codex import _compress_context_via_codex_app_server
 from agent.conversation_compression_deadline import resolve_context_compression_timeouts
-from agent.conversation_compression_scaffolding import _SYNTHETIC_USER_FLAGS, _message_text, is_user_role_scaffolding
+from agent.conversation_compression_scaffolding import (
+    _SYNTHETIC_USER_FLAGS, _message_text, is_user_role_scaffolding, pruned_skill_reload_notice,
+)
 from agent.conversation_compression_telemetry import (
     _emit_aborted_attempt_telemetry, _emit_blocked_attempt_telemetry, _emit_bypassed_attempt_telemetry,
     _emit_compression_attempt_telemetry, _record_committed_attempt_effect, _snapshot_compression_effect_input,
@@ -2256,38 +2258,6 @@ def _replace_message_content(message: dict, content: Any) -> None:
     drop_stale_api_content(message)
 
 
-# Compaction re-injects the todo list verbatim but prunes skills to markers, so
-# couple them: tell the model to reload pruned skills BEFORE acting on tasks.
-# Lives after TODO_INJECTION_HEADER so it strips with the snapshot next time.
-_PRUNED_SKILL_RELOAD_NOTICE_HEADER = "[Skills pruned during compression — reload before acting on these tasks]"
-
-
-def _pruned_skill_reload_notice(compressed: list) -> str:
-    """Reload notice for skills whose bodies were pruned, or ``""``.
-    Scans ``[SKILL_PRUNED: ...]`` markers in the post-compression transcript; first-seen order, deduplicated,
-    capped at ``_MAX_PRUNED_SKILL_MARKERS``."""
-    from agent.context_compressor import _MAX_PRUNED_SKILL_MARKERS, _extract_pruned_skill_names
-    names: list = []
-    for message in compressed:
-        if not isinstance(message, dict):
-            continue
-        for name in _extract_pruned_skill_names(_message_text(message)):
-            if name not in names:
-                names.append(name)
-    del names[_MAX_PRUNED_SKILL_MARKERS:]
-    if not names:
-        return ""
-    calls = "; ".join(f"skill_view(name='{name}')" for name in names)
-    return (
-        f"{_PRUNED_SKILL_RELOAD_NOTICE_HEADER}\n"
-        "The task list above crossed the compression boundary verbatim, but "
-        "the skill instructions that governed it were pruned. Before "
-        f"executing any preserved task that depends on these skills, reload "
-        f"them first: {calls}. After reloading, re-check that each pending "
-        "task is still justified — findings recorded before the boundary may have invalidated it."
-    )
-
-
 def _merge_anchor_into_user_message(target: dict, anchor: dict) -> None:
     """Fold the human anchor into an existing user-role scaffolding turn.
     Used only when any insertion would create consecutive user turns. Anchor text leads, scaffolding follows,
@@ -3016,7 +2986,7 @@ def _fold_todo_snapshot(agent: Any, compressed: list) -> None:
         # boundary pruned skill bodies to [SKILL_PRUNED: ...] markers, the policy that governed those tasks
         # is gone — couple a reload instruction to the snapshot so the imperative never crosses the boundary
         # alone.
-        _reload_notice = _pruned_skill_reload_notice(compressed)
+        _reload_notice = pruned_skill_reload_notice(compressed)
         if _reload_notice:
             todo_snapshot = f"{todo_snapshot}\n\n{_reload_notice}"
         # Fold the snapshot into a trailing REAL user msg (no synthetic user/user pair);
@@ -3027,6 +2997,7 @@ def _fold_todo_snapshot(agent: Any, compressed: list) -> None:
         # "real user" evidence and break zero-user provenance (#69292), so those keep the flagged standalone
         # append and the real-user preservation pass continues to see todo scaffolding, not human intent.
         from agent.context_compressor import _append_text_to_content
+        from agent.message_metadata import stamp_typed_ask, typed_ask_text
         merged = False
         _tail = compressed[-1] if compressed and isinstance(compressed[-1], dict) else None
         if _tail is not None and _tail.get("role") == "user":
@@ -3035,6 +3006,8 @@ def _fold_todo_snapshot(agent: Any, compressed: list) -> None:
             _probe["content"] = _stripped
             if _is_real_user_message(_probe):
                 _snapshot_text = f"\n\n{todo_snapshot}" if isinstance(_stripped, str) and _stripped else todo_snapshot
+                if typed_ask_text(_tail) is None and isinstance(_stripped, str) and _stripped:
+                    stamp_typed_ask(_tail, _stripped)
                 _replace_message_content(_tail, _append_text_to_content(_stripped, _snapshot_text))
                 merged = True
             elif (
@@ -3044,9 +3017,11 @@ def _fold_todo_snapshot(agent: Any, compressed: list) -> None:
                 # refresh it in place instead of stacking a duplicate.
                 _replace_message_content(_tail, todo_snapshot)
                 _tail["_todo_snapshot_synthetic"] = True
+                _tail["display_kind"] = "hidden"
                 merged = True
         if not merged:
-            compressed.append({"role": "user", "content": todo_snapshot, "_todo_snapshot_synthetic": True})
+            compressed.append({"role": "user", "content": todo_snapshot, "_todo_snapshot_synthetic": True,
+                               "display_kind": "hidden"})
 
 
 def _rebuild_system_prompt_at_boundary(agent: Any, system_message: str) -> str:
