@@ -83,17 +83,39 @@ class CanonicalResumeParams(ProfileParams):
     # A renderer (the Ink TUI) asks for main's display projection of the same rows
     # (``tui_gateway.session_history._history_to_messages``) as ``display_messages``.
     display_projection: bool = False
-    message_limit: int | None = Field(default=None, ge=1, le=500)
+    timeline_limit: int | None = Field(default=None, ge=1, le=100)
 
 
-class CanonicalHistoryPageParams(CanonicalSessionParams):
-    before_row_id: int
-    limit: int = Field(ge=1, le=200)
+class CanonicalTimelineParams(CanonicalSessionParams):
+    before: str | None = None
+    limit: int = Field(default=40, ge=1, le=100)
 
 
-class CanonicalHistoryPage(Result):
-    messages: list[TranscriptMessage]
-    older_messages: int
+class CanonicalTimelineTool(Result):
+    call_id: str
+    name: str
+    context: str | None = None
+    args: dict[str, JsonValue] | None = None
+    result: JsonValue = None
+
+
+class CanonicalTimelineEntry(Result):
+    id: str
+    role: Literal['user', 'assistant']
+    text: str
+    timestamp: float | None = None
+    row_id: int | None = None
+    archived: bool | None = None
+    display_kind: str | None = None
+    display_metadata: JsonValue = None
+    reasoning: str | None = None
+    tools: list[CanonicalTimelineTool] | None = None
+
+
+class CanonicalTimelinePage(Result):
+    entries: list[CanonicalTimelineEntry]
+    older: str | None
+    revision: str
 
 
 class CanonicalSessionHandle(Result):
@@ -169,7 +191,7 @@ class CanonicalSnapshot(Result):
     # Present only when ``display_projection`` was asked: the rows as main's TUI rendered them.
     display_messages: list[TranscriptMessage] | None = None
     message_count: int
-    older_messages: int | None = None
+    timeline: CanonicalTimelinePage | None = None
     running: bool
     authority_epoch: int
     replay_epoch: str
@@ -379,7 +401,7 @@ for _name, _params, _result in (
     ('session.steer', CanonicalCorrectionParams, CanonicalCorrectionResult),
     ('session.redirect', CanonicalCorrectionParams, CanonicalCorrectionResult),
     ('session.events.since', CanonicalEventsParams, CanonicalEventsResult),
-    ('session.history.page', CanonicalHistoryPageParams, CanonicalHistoryPage),
+    ('session.timeline', CanonicalTimelineParams, CanonicalTimelinePage),
     ('prompt.submit', CanonicalSubmitParams, CanonicalSubmitResult),
     ('approval.respond', CanonicalApprovalParams, PromptResponseResult),
 ):

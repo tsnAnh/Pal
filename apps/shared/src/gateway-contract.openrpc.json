@@ -12922,66 +12922,6 @@
         "title": "CanonicalGroupsPeerRevokeParams",
         "type": "object"
       },
-      "CanonicalHistoryPage": {
-        "additionalProperties": false,
-        "properties": {
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/TranscriptMessage"
-            },
-            "title": "Messages",
-            "type": "array"
-          },
-          "older_messages": {
-            "title": "Older Messages",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "messages",
-          "older_messages"
-        ],
-        "title": "CanonicalHistoryPage",
-        "type": "object"
-      },
-      "CanonicalHistoryPageParams": {
-        "additionalProperties": false,
-        "properties": {
-          "profile": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Profile"
-          },
-          "session_id": {
-            "title": "Session Id",
-            "type": "string"
-          },
-          "before_row_id": {
-            "title": "Before Row Id",
-            "type": "integer"
-          },
-          "limit": {
-            "maximum": 200,
-            "minimum": 1,
-            "title": "Limit",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "session_id",
-          "before_row_id",
-          "limit"
-        ],
-        "title": "CanonicalHistoryPageParams",
-        "type": "object"
-      },
       "CanonicalListParams": {
         "additionalProperties": false,
         "properties": {
@@ -13824,10 +13764,10 @@
             "title": "Display Projection",
             "type": "boolean"
           },
-          "message_limit": {
+          "timeline_limit": {
             "anyOf": [
               {
-                "maximum": 500,
+                "maximum": 100,
                 "minimum": 1,
                 "type": "integer"
               },
@@ -13836,7 +13776,7 @@
               }
             ],
             "default": null,
-            "title": "Message Limit"
+            "title": "Timeline Limit"
           }
         },
         "title": "CanonicalResumeParams",
@@ -14794,17 +14734,16 @@
             "title": "Message Count",
             "type": "integer"
           },
-          "older_messages": {
+          "timeline": {
             "anyOf": [
               {
-                "type": "integer"
+                "$ref": "#/components/schemas/CanonicalTimelinePage"
               },
               {
                 "type": "null"
               }
             ],
-            "default": null,
-            "title": "Older Messages"
+            "default": null
           },
           "running": {
             "title": "Running",
@@ -15719,6 +15658,240 @@
         ],
         "description": "``prompt.submit``: the admission receipt, or ``{voice_stopped: true}``.",
         "title": "CanonicalSubmitResult"
+      },
+      "CanonicalTimelineEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Timestamp"
+          },
+          "row_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Row Id"
+          },
+          "archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Archived"
+          },
+          "display_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Kind"
+          },
+          "display_metadata": {
+            "default": null,
+            "title": "Display Metadata"
+          },
+          "reasoning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reasoning"
+          },
+          "tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CanonicalTimelineTool"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Tools"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "text"
+        ],
+        "title": "CanonicalTimelineEntry",
+        "type": "object"
+      },
+      "CanonicalTimelinePage": {
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/CanonicalTimelineEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "older": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Older"
+          },
+          "revision": {
+            "title": "Revision",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entries",
+          "older",
+          "revision"
+        ],
+        "title": "CanonicalTimelinePage",
+        "type": "object"
+      },
+      "CanonicalTimelineParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Before"
+          },
+          "limit": {
+            "default": 40,
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "CanonicalTimelineParams",
+        "type": "object"
+      },
+      "CanonicalTimelineTool": {
+        "additionalProperties": false,
+        "properties": {
+          "call_id": {
+            "title": "Call Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Context"
+          },
+          "args": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Args"
+          },
+          "result": {
+            "default": null,
+            "title": "Result"
+          }
+        },
+        "required": [
+          "call_id",
+          "name"
+        ],
+        "title": "CanonicalTimelineTool",
+        "type": "object"
       },
       "CanonicalTurnAuthor": {
         "additionalProperties": false,
@@ -36060,6 +36233,30 @@
             ],
             "default": null,
             "title": "Final Assistant Row Id"
+          },
+          "user_message_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "User Message Uid"
+          },
+          "final_assistant_message_uid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Final Assistant Message Uid"
           },
           "user_row_ids": {
             "anyOf": [
@@ -63369,24 +63566,6 @@
       }
     },
     {
-      "name": "session.history.page",
-      "summary": "",
-      "params": [
-        {
-          "name": "params",
-          "schema": {
-            "$ref": "#/components/schemas/CanonicalHistoryPageParams"
-          }
-        }
-      ],
-      "result": {
-        "name": "result",
-        "schema": {
-          "$ref": "#/components/schemas/CanonicalHistoryPage"
-        }
-      }
-    },
-    {
       "name": "session.info",
       "summary": "Frozen launch policy projection of one local session.",
       "params": [
@@ -63563,6 +63742,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/CanonicalCorrectionResult"
+        }
+      }
+    },
+    {
+      "name": "session.timeline",
+      "summary": "",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/CanonicalTimelineParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CanonicalTimelinePage"
         }
       }
     },
