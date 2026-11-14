@@ -211,6 +211,17 @@ def _user_image_display_text(content: Any) -> str | None:
     return projected
 
 
+def _vision_noted_display_text(text: str) -> str | None:
+    """A pre-analyzed photo turn as the native projection shows it: the authored text, then one image ref per photo."""
+    from agent.context_references import format_reference_value
+    from agent.image_routing import split_image_notes
+    rest, paths = split_image_notes(text)
+    if not paths:
+        return None
+    refs = "\n".join(f"@image:{format_reference_value(p)}" for p in paths)
+    return f"{rest.strip()}\n\n{refs}" if rest.strip() else refs
+
+
 def _history_text_only_part(part: dict) -> bool:
     kind = part.get("type")
     return kind in _HISTORY_TEXT_KINDS or (kind is None and isinstance(part.get("text"), str))
@@ -330,6 +341,9 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
             # A steer row's marker wrapper and a multimodal turn's injected notes are model-only.
             from agent.message_metadata import authored_user_text
             content_text = authored_user_text(m, m["content"]) or content_text
+            from agent.message_metadata import has_vision_notes
+            if has_vision_notes(m):
+                content_text = _vision_noted_display_text(content_text) or content_text
         elif role == "user" and m.get("display_kind") == STEER_DISPLAY_KIND:
             from agent.conversation_compression import _extract_steer_text_from_message
             content_text = _extract_steer_text_from_message(m) or content_text

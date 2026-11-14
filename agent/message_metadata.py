@@ -119,6 +119,15 @@ def typed_ask_text(message: Any) -> Optional[str]:
 
 _SCREENSHOT_PLACEHOLDER_LINE = "[screenshot]"
 
+# Set on a user row whose content the gateway prefixed with vision-analysis notes for a text-only model:
+# the notes are model-facing, the photos they name are what the user sent.
+VISION_NOTES = "vision_notes"
+
+
+def has_vision_notes(message: Any) -> bool:
+    metadata = message.get("display_metadata") if isinstance(message, dict) else None
+    return isinstance(metadata, dict) and metadata.get(VISION_NOTES) is True
+
 
 def authored_user_text(message: Any, text: str) -> Optional[str]:
     """What the user wrote on a user row whose stored *text* also carries model-only runtime context, else None.

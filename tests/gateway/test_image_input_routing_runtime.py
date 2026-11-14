@@ -165,3 +165,26 @@ async def test_prepare_route_identity_check_keeps_event_loop_responsive(monkeypa
     assert result == "inspect @AGENTS.md"
     assert seen["event_loop_progressed"] is True
     assert seen["thread"] is not main_thread
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode, stamped", [("text", True), ("native", False)])
+async def test_a_pre_analyzed_photo_turn_stamps_its_user_row_for_display(monkeypatch, mode, stamped):
+    """Failure case: the stored row of a text-mode photo turn is indistinguishable from typed text, so
+    every transcript view shows the gateway's vision notes as the user's words and drops the photo."""
+    import json
+    from gateway.response_filters import persisted_user_metadata_for_event
+
+    runner = _make_runner()
+    event = _image_event("what is this?")
+    monkeypatch.setattr(runner, "_decide_image_input_mode", lambda **_kwargs: mode)
+    monkeypatch.setattr(runner, "_resolve_session_agent_runtime", lambda **_kwargs: ("m", {}))
+
+    async def analyze(**_kwargs):
+        return json.dumps({"success": True, "analysis": "a receipt"})
+
+    monkeypatch.setattr("tools.vision_tools.vision_analyze_tool", analyze)
+    text = await runner._prepare_inbound_message_text(event=event, source=event.source, history=[])
+
+    assert text.endswith("what is this?")
+    assert ("vision_notes" in persisted_user_metadata_for_event(event)) is stamped

@@ -10,7 +10,10 @@ Failure cases this file pins:
 - a repeat page read re-reads the whole lineage, or a new turn serves a stale cached page;
 - two profiles with the same session id share a cached projection;
 - ``session.resume`` cannot open a chat with the newest page in the same reply;
-- a user turn with an inline image loses the image to an ``[image]`` placeholder in its text.
+- a user turn with an inline image loses the image to an ``[image]`` placeholder in its text;
+- a photo turn the gateway pre-analyzed for a text-only model shows the model-facing vision notes instead
+  of the authored text, and loses the photo;
+- a user who types the vision-note wording verbatim has it rewritten.
 """
 import json
 
@@ -149,6 +152,26 @@ def test_a_user_turn_with_an_inline_image_keeps_its_text_and_image(db):
                                      {'type': 'image_url', 'image_url': {'url': uri}}])
     entries = list(_timeline(db, 's1').entries)
     assert [entry['text'] for entry in entries] == [f'What do you make of this screenshot?\n{uri}']
+
+
+_VISION_NOTE = ("[The user sent an image~ Here's what I can see:\nA field of pink flowers.]\n"
+                "[If you need a closer look, use vision_analyze with image_url: /srv/media/photo one.jpg ~]")
+
+
+@pytest.mark.parametrize('caption, shown', [
+    ('What flowers are these?', 'What flowers are these?\n\n@image:`/srv/media/photo one.jpg`'),
+    ('', '@image:`/srv/media/photo one.jpg`'),
+])
+def test_a_pre_analyzed_photo_turn_shows_the_authored_text_and_the_photo(db, caption, shown):
+    stored = f'{_VISION_NOTE}\n\n{caption}' if caption else _VISION_NOTE
+    db.append_message('s1', 'user', stored, display_metadata={'vision_notes': True})
+    db.append_message('s1', 'assistant', 'Peonies.')
+    assert _shape(_timeline(db, 's1', profile=f'vision-{bool(caption)}').entries) == [('user', shown), ('assistant', 'Peonies.')]
+
+
+def test_typed_vision_note_wording_without_the_gateway_stamp_stays_verbatim(db):
+    db.append_message('s1', 'user', _VISION_NOTE)
+    assert _shape(_timeline(db, 's1', profile='typed-note').entries) == [('user', _VISION_NOTE)]
 
 
 def test_pages_heavy_with_inline_images_stay_under_the_page_byte_budget(db):
