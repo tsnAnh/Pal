@@ -1,18 +1,12 @@
 import Foundation
 import PalProtocol
 
-/// One row of the composer's `/` picker: a gateway command or a skill.
+/// One row of the composer's `/` picker: a skill.
 public struct SlashItem: Sendable, Hashable, Identifiable {
     public enum Group: Int, Sendable, Hashable {
-        case commands
         case skills
 
-        public var title: String {
-            switch self {
-            case .commands: "Commands"
-            case .skills: "Skills"
-            }
-        }
+        public var title: String { "Skills" }
     }
 
     /// `/name`, always with the leading slash.
@@ -39,9 +33,6 @@ public struct SlashItem: Sendable, Hashable, Identifiable {
 /// (tiered scoring), `slash-input.ts` (a `/` at position 0 is a command), and
 /// `desktop-slash-commands.ts` `rankSkillCommands` / `slashCompletionGroup`.
 public enum SlashCatalog {
-    /// Categories the gateway files under the terminal UI, which a chat client cannot run.
-    static let hiddenCategories: Set<String> = ["TUI"]
-
     // MARK: Trigger
 
     /// The name typed after a leading `/`, or nil when the picker is closed. Open only while `/` is the
@@ -61,16 +52,14 @@ public enum SlashCatalog {
 
     // MARK: Parsing
 
-    /// Reads a `commands.catalog` result. Categorised registry commands become Commands; commands that
-    /// only appear in the flat `pairs` list are skills, ranked by usage as `rankSkillCommands` does.
+    /// Reads a `commands.catalog` result. Every categorised registry command, hidden categories
+    /// included, is excluded; commands that only appear in the flat `pairs` list are skills, ranked by
+    /// usage as `rankSkillCommands` does.
     public static func parse(_ result: JSONValue) -> [SlashItem] {
-        var commands: [SlashItem] = []
         var seen: Set<String> = []
         for category in result["categories"]?.arrayValue ?? [] {
-            if hiddenCategories.contains(category["name"]?.stringValue ?? "") { continue }
             for pair in category["pairs"]?.arrayValue ?? [] {
-                guard let entry = commandPair(pair), seen.insert(entry.command.lowercased()).inserted else { continue }
-                commands.append(SlashItem(command: entry.command, description: entry.description, group: .commands))
+                if let entry = commandPair(pair) { seen.insert(entry.command.lowercased()) }
             }
         }
         let skillInfo = result["skills"]?.objectValue ?? [:]
@@ -89,7 +78,7 @@ public enum SlashCatalog {
             ))
         }
         skills.sort { $0.usage != $1.usage ? $0.usage > $1.usage : $0.command < $1.command }
-        return commands + skills
+        return skills
     }
 
     private static func commandPair(_ pair: JSONValue) -> (command: String, description: String)? {
@@ -99,8 +88,8 @@ public enum SlashCatalog {
 
     // MARK: Filtering
 
-    /// Items to show for `query`. Empty: Commands then Skills in catalog order, never-used bundled
-    /// skills dropped. Otherwise every match, best score first, then grouped Commands before Skills.
+    /// Items to show for `query`. Empty: skills in catalog order, never-used bundled skills dropped.
+    /// Otherwise every match, best score first.
     public static func filter(_ items: [SlashItem], query: String) -> [SlashItem] {
         let normalized = normalize(query)
         guard !normalized.isEmpty else { return items.filter { !$0.isUnusedBundled } }
@@ -112,10 +101,7 @@ public enum SlashCatalog {
         scored.sort { lhs, rhs in
             lhs.score != rhs.score ? lhs.score < rhs.score : lhs.index < rhs.index
         }
-        let ranked: [SlashItem] = scored.map(\.item)
-        let commands: [SlashItem] = ranked.filter { $0.group == .commands }
-        let skills: [SlashItem] = ranked.filter { $0.group == .skills }
-        return commands + skills
+        return scored.map(\.item)
     }
 
     static func normalize(_ query: String) -> String {
