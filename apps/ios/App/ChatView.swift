@@ -56,13 +56,16 @@ struct ChatView: View {
                         )))
                     }
                     .newestFirst()
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: { scroll.rowMoved(row.id, minY: $0) }
+                    .onGeometryChange(for: CGFloat.self) {
+                        $0.frame(in: .named(ChatScrollController.contentSpace)).minY
+                    } action: { scroll.rowMoved(row.id, contentMinY: $0) }
                 }
                 OlderHistoryRow(state: model.olderHistory) { model.wantOlder() }
                     .newestFirst()
                     .padding(.bottom, 8)
             }
             .scrollTargetLayout()
+            .coordinateSpace(.named(ChatScrollController.contentSpace))
             .padding(.horizontal, ChatMetrics.edgeMargin)
             .chatColumn()
         }
