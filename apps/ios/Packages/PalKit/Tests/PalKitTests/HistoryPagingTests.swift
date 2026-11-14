@@ -35,6 +35,19 @@ struct HistoryPagingTests {
         #expect(transcript.oldestRowID == 1)
     }
 
+    @Test func windowedReconcilePastTheLoadedRowsLeavesNoGap() throws {
+        var transcript = Transcript()
+        transcript.load(try snapshot(rows(41...100), older: 40, sequence: 1))
+        transcript.prependOlder(HistoryPage(messages: rows(1...40), olderMessages: 0))
+
+        transcript.requestResync()
+        _ = transcript.reconcile(with: try snapshot(rows(201...260), older: 200, sequence: 2))
+
+        #expect(transcript.items.map(\.id) == (201...260).map { "row:\($0)" })
+        #expect(transcript.hasOlder)
+        #expect(transcript.oldestRowID == 201)
+    }
+
     @Test func prependOlderSkipsRowsAlreadyShown() throws {
         var transcript = Transcript()
         transcript.load(try snapshot(rows(11...20), older: 10, sequence: 1))

@@ -291,7 +291,8 @@ public struct Transcript: Sendable, Equatable {
 
     private func retainedOlderItems(before snapshot: SessionSnapshot) -> [TranscriptItem] {
         guard sessionID == snapshot.sessionID, snapshot.olderMessages > 0,
-              let windowStart = snapshot.messages.first?.rowID
+              let windowStart = snapshot.messages.first?.rowID,
+              itemRows.values.contains(where: { $0 >= windowStart })
         else { return [] }
         return items.filter { item in itemRows[item.id].map { $0 < windowStart } ?? false }
     }
