@@ -11,10 +11,8 @@ private struct BotManagementDialogs: ViewModifier {
     let roster: RosterModel
     @Bindable var router: AppRouter
 
-    #if os(iOS)
     @State private var proposedName = ""
     @State private var renamingTarget: BotRow?
-    #endif
 
     private var deletingBot: BotRow? { router.deletingBot.flatMap { roster.bot(named: $0) } }
 
@@ -40,23 +38,23 @@ private struct BotManagementDialogs: ViewModifier {
             } message: {
                 Text(AdminErrorCopy.message(roster.adminError))
             }
-            #if os(iOS)
-            .alert(
-                Text("Rename Bot"),
-                isPresented: Binding(get: { router.renamingBot != nil }, set: { if !$0 { router.renamingBot = nil } })
-            ) {
-                TextField("Name", text: $proposedName)
-                Button("Cancel", role: .cancel) {}
-                Button("Save") { renameCurrent() }
+            .iOSOnly { view in
+                view
+                    .alert(
+                        Text("Rename Bot"),
+                        isPresented: Binding(get: { router.renamingBot != nil }, set: { if !$0 { router.renamingBot = nil } })
+                    ) {
+                        TextField("Name", text: $proposedName)
+                        Button("Cancel", role: .cancel) {}
+                        Button("Save") { renameCurrent() }
+                    }
+                    .onChange(of: router.renamingBot) { _, name in
+                        renamingTarget = name.flatMap { roster.bot(named: $0) }
+                        proposedName = renamingTarget?.displayName ?? ""
+                    }
             }
-            .onChange(of: router.renamingBot) { _, name in
-                renamingTarget = name.flatMap { roster.bot(named: $0) }
-                proposedName = renamingTarget?.displayName ?? ""
-            }
-            #endif
     }
 
-    #if os(iOS)
     private func renameCurrent() {
         guard let bot = renamingTarget else { return }
         let name = proposedName
@@ -64,5 +62,5 @@ private struct BotManagementDialogs: ViewModifier {
             do { try await roster.rename(bot, to: name) } catch is CancellationError {} catch { roster.report(error) }
         }
     }
-    #endif
 }
+
