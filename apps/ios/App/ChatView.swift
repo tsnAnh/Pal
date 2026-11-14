@@ -218,7 +218,7 @@ struct ChatView: View {
 
     private static let rowWindow = 60
     private static let reconnectingNoticeDelay = Duration.seconds(1)
-    private static let catchUpNoticeDelay = Duration.seconds(5)
+    private static let catchUpNoticeDelay = LoadingPolicy.silentWindow
 
     private struct ShownRow: Identifiable {
         let row: ChatRow
