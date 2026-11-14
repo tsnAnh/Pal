@@ -178,4 +178,21 @@ final class BotChatE2ETests: E2ETestCase {
         XCTAssertTrue(reply.isHittable, "the new reply is on screen")
         XCTAssertLessThanOrEqual(reply.frame.maxY, composer.frame.minY, "the end of the new reply sits above the composer")
     }
+
+    func test9SlowReplyStreamsIntoTheBubble() throws {
+        let app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-beta")
+        let marker = "SLOW stream " + UUID().uuidString.prefix(6)
+        send(app, marker)
+        let partial = bubbles(app, "assistantBubble", containing: "slow-0").firstMatch
+        waitFor(partial, timeout: 30, "the first streamed words")
+        let seen = partial.label
+        shot(app, "chat-streaming-partial")
+        XCTAssertFalse(seen.contains("slow-39"), "text shows before the reply completes: \(seen)")
+        XCTAssertFalse(app.descendants(matching: .any)["assistantBubble-streaming"].exists, "the working row hides once text shows")
+        waitFor(bubbles(app, "assistantBubble", containing: "slow-39").firstMatch, timeout: 30, "completed reply")
+        XCTAssertEqual(app.descendants(matching: .any).matching(identifier: "assistantBubble").matching(NSPredicate(format: "label CONTAINS %@", "slow-00")).count, 1)
+        shot(app, "chat-streaming-complete")
+    }
 }

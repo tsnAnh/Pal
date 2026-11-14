@@ -117,6 +117,27 @@ struct TimelinePagingTests {
         await session.close()
     }
 
+    @Test func streamedTextShowsAsARowBeforeTheReplyCompletes() async throws {
+        let script = TimelineScript(entries: entries(1...4))
+        let (gateway, session) = try await open(script)
+        defer { gateway.stop() }
+
+        gateway.push(script.event("message.start", seq: 2, payload: ["turn_id": "t1"]))
+        gateway.push(script.event("message.delta", seq: 3, payload: ["text": "hel", "turn_id": "t1", "segment": 0, "offset": 0]))
+        gateway.push(script.event("message.delta", seq: 4, payload: ["text": "lo", "turn_id": "t1", "segment": 0, "offset": 3]))
+        let streaming = try #require(await waitForTimeline(session) { snapshot in
+            snapshot.rows.contains { if case .assistant("hello", _, true) = $0.item.content { true } else { false } }
+        })
+        #expect(streaming.isRunning)
+        let key = streaming.rows.last?.id
+        gateway.push(script.event("message.complete", seq: 5, payload: ["text": "hello", "turn_id": "t1"]))
+        let done = try #require(await waitForTimeline(session) { snapshot in
+            snapshot.rows.contains { if case .assistant("hello", _, false) = $0.item.content { true } else { false } }
+        })
+        #expect(done.rows.last?.id == key)
+        await session.close()
+    }
+
     @Test func theCacheSeedKeepsRowsAndKeysWhenTheLivePageArrives() async throws {
         let script = TimelineScript(entries: entries(1...100))
         let (gateway, first) = try await open(script)

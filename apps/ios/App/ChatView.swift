@@ -184,7 +184,7 @@ struct ChatView: View {
 
     @ViewBuilder
     private var footer: some View {
-        if model.isRunning, !model.hasPendingPrompt {
+        if model.isRunning, !model.hasPendingPrompt, !model.isStreamingReply {
             ChatWorkingRow(status: model.workingStatus, accent: model.chatAccent)
                 .padding(.top, ChatMetrics.senderSwitchGap)
         }
