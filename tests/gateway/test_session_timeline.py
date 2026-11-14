@@ -9,7 +9,8 @@ Failure cases this file pins:
 - a cursor skips or repeats entries after a new turn or a compaction, or silently restarts after a rewind;
 - a repeat page read re-reads the whole lineage, or a new turn serves a stale cached page;
 - two profiles with the same session id share a cached projection;
-- ``session.resume`` cannot open a chat with the newest page in the same reply.
+- ``session.resume`` cannot open a chat with the newest page in the same reply;
+- a user turn with an inline image loses the image to an ``[image]`` placeholder in its text.
 """
 import json
 
@@ -140,6 +141,14 @@ def test_a_tool_only_unit_paints_only_when_it_holds_a_rendered_tool(db):
     assert _shape(entries) == [('user', 'make two'), ('assistant', '')]
     assert [tool['name'] for tool in entries[1]['tools']] == ['terminal', 'image_generate']
     assert 'result' not in entries[1]['tools'][0] and entries[1]['tools'][1]['result'] == '{"success": true}'
+
+
+def test_a_user_turn_with_an_inline_image_keeps_its_text_and_image(db):
+    uri = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+    db.append_message('s1', 'user', [{'type': 'text', 'text': 'What do you make of this screenshot?'},
+                                     {'type': 'image_url', 'image_url': {'url': uri}}])
+    entries = list(_timeline(db, 's1').entries)
+    assert [entry['text'] for entry in entries] == [f'What do you make of this screenshot?\n{uri}']
 
 
 def test_entry_ids_are_the_stored_message_uids(db):
