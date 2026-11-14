@@ -89,9 +89,11 @@ public struct MessageComplete: Codable, Sendable, Hashable {
     public var text: String
     public var status: String?
     public var error: String?
+    public var identity = LiveMessageIdentity()
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        identity = (try? LiveMessageIdentity(from: decoder)) ?? LiveMessageIdentity()
         text = (try? container.decodeIfPresent(String.self, forKey: .text)) ?? ""
         status = try? container.decodeIfPresent(String.self, forKey: .status)
         error = try? container.decodeIfPresent(String.self, forKey: .error)

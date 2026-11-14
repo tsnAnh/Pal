@@ -31,6 +31,13 @@ public struct RuntimeDescription: Sendable, Equatable, Decodable {
         return description.capabilities.contains(historyPageCapability)
     }
 
+    public static func supports(_ capability: String, advertised: JSONValue?) -> Bool {
+        guard let advertised, let description = try? advertised.decoded(as: RuntimeDescription.self) else {
+            return false
+        }
+        return description.capabilities.contains(capability)
+    }
+
     public static let iosSource = "ios"
     public static let fallbackSource = "gui"
 
