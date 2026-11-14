@@ -2,6 +2,7 @@ import PalBotProfile
 import PalChat
 import PalConnect
 import PalDiagnostics
+import PalProtocol
 import PalRFB
 
 struct BotsServices: Sendable {
@@ -20,6 +21,7 @@ struct BotsServices: Sendable {
     let models: @Sendable (String) -> BotModelClient
     let persona: @Sendable (String) -> BotPersonaClient
     let keys: BotKeysService
+    let surfaces: SurfaceCache
 
     @MainActor
     init(connection: ConnectionModel) {
@@ -37,6 +39,7 @@ struct BotsServices: Sendable {
         computer = ComputerService(gateway: gateway)
         models = { profile in BotModelClient(gateway: gateway, profile: profile) }
         keys = BotKeysService(gateway: gateway)
+        surfaces = connection.surfaces
         persona = { profile in BotPersonaClient(gateway: gateway, profile: profile) }
         teach = TeachService(gateway: gateway)
         rooms = { RoomsService(gateway: gateway, profile: $0) }

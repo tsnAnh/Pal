@@ -34,21 +34,31 @@ public final class CacheStore: Sendable {
     }
 
     public func load<Value: Codable & Sendable>(_ type: Value.Type, name: String, account: String) -> Value? {
-        queue.sync {
-            let url = fileURL(name: name, account: account)
-            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
-            guard let size = attributes[.size] as? Int, size <= maxFileBytes else {
-                discard(url, reason: "oversized")
-                return nil
+        queue.sync { read(type, name: name, account: account) }
+    }
+
+    private func read<Value: Codable & Sendable>(_ type: Value.Type, name: String, account: String) -> Value? {
+        let url = fileURL(name: name, account: account)
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+        guard let size = attributes[.size] as? Int, size <= maxFileBytes else {
+            discard(url, reason: "oversized")
+            return nil
+        }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        guard let envelope = try? JSONDecoder().decode(Envelope<Value>.self, from: data),
+              envelope.version == Self.formatVersion
+        else {
+            discard(url, reason: "unreadable")
+            return nil
+        }
+        return envelope.payload
+    }
+
+    public func loadDetached<Value: Codable & Sendable>(_ type: Value.Type, name: String, account: String) async -> Value? {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                continuation.resume(returning: read(type, name: name, account: account))
             }
-            guard let data = try? Data(contentsOf: url) else { return nil }
-            guard let envelope = try? JSONDecoder().decode(Envelope<Value>.self, from: data),
-                  envelope.version == Self.formatVersion
-            else {
-                discard(url, reason: "unreadable")
-                return nil
-            }
-            return envelope.payload
         }
     }
 
