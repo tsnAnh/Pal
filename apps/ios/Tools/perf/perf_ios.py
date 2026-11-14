@@ -201,7 +201,7 @@ class RssSampler:
     def loop(self):
         while not self.stop_flag.is_set():
             now = time.time()
-            output = subprocess.run(["ps", "-axo", "pid=,rss=,command="], capture_output=True, text=True, check=False).stdout
+            output = subprocess.run(["ps", "-axo", "pid=,rss=,command="], capture_output=True, text=True, check=False, timeout=10).stdout
             for line in output.splitlines():
                 if self.marker in line and "/Pal.app/Pal" in line and "xctrunner" not in line.lower():
                     pid, rss = line.split(None, 2)[:2]

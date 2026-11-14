@@ -20,20 +20,25 @@ import perf_report
 from perf_common import IOS_DIR, PROFILE_SIZES, REPO
 
 SCRIPTS = REPO / ".claude" / "skills" / "verify-ios" / "scripts"
-OWNER = os.environ.get("VERIFY_IOS_OWNER", "pal-perf-baseline")
 PHASES = ("seed", "backend", "server", "host", "ios")
 LAUNCH_TIMEOUT_SECONDS = 2400
 CLEANUP_TIMEOUT_SECONDS = 600
 IOS_TIMEOUT_SECONDS = 1800
 
 
+def owner():
+    return os.environ.get("VERIFY_IOS_OWNER", "pal-perf-baseline")
+
+
 def state_root():
+    if configured := os.environ.get("VERIFY_IOS_STATE_ROOT"):
+        return Path(configured)
     digest = hashlib.sha1(str(REPO).encode()).hexdigest()[:12]
-    return Path(f"/tmp/verify-ios-state-{os.getuid()}/{digest}")
+    return Path(f"/tmp/verify-ios-state-{os.getuid()}/{digest}")  # no-tmp: ok — verify-ios keeps its state here
 
 
 def verify_ios(script, *args, timeout):
-    env = {**os.environ, "VERIFY_IOS_OWNER": OWNER}
+    env = {**os.environ, "VERIFY_IOS_OWNER": owner()}
     return subprocess.run([str(SCRIPTS / script), *args], env=env, capture_output=True, text=True, timeout=timeout, check=False)
 
 
@@ -47,13 +52,13 @@ def read_exports(path):
 
 
 def git(*args):
-    return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, check=False).stdout.strip()
+    return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True, check=False, timeout=30).stdout.strip()
 
 
 def machine_load():
     return {
-        "uptime": subprocess.run(["uptime"], capture_output=True, text=True, check=False).stdout.strip(),
-        "booted_simulators": subprocess.run(["xcrun", "simctl", "list", "devices", "booted"], capture_output=True, text=True, check=False).stdout.count("(Booted)"),
+        "uptime": subprocess.run(["uptime"], capture_output=True, text=True, check=False, timeout=10).stdout.strip(),
+        "booted_simulators": subprocess.run(["xcrun", "simctl", "list", "devices", "booted"], capture_output=True, text=True, check=False, timeout=60).stdout.count("(Booted)"),
     }
 
 
@@ -79,7 +84,7 @@ class Run:
         started = time.time()
         try:
             value = body()
-        except Exception as error:
+        except Exception as error:  # health: allow BLE001 -- a failed phase is recorded and the run continues to the next phase
             self.results["errors"][name] = f"{type(error).__name__}: {error}"
             (self.out / f"{name}-error.txt").write_text(traceback.format_exc())
             return None
@@ -110,7 +115,7 @@ class Run:
         sizes = ",".join(f"{profile}={rows}" for profile, rows in PROFILE_SIZES.items())
         completed = subprocess.run(
             [sys.executable, "-I", str(perf_common.PERF_DIR / "perf_seed.py"), "--home", self.target["HERMES_IOS_E2E_HOME"], "--sizes", sizes],
-            capture_output=True, text=True, check=False, cwd=REPO)
+            capture_output=True, text=True, check=False, cwd=REPO, timeout=LAUNCH_TIMEOUT_SECONDS)
         (self.out / "seed.log").write_text(completed.stdout + completed.stderr)
         if completed.returncode != 0:
             raise RuntimeError(f"seed failed: {completed.stderr[-400:]}")
@@ -131,7 +136,7 @@ class Run:
             completed = subprocess.run(
                 [sys.executable, "-I", str(perf_common.PERF_DIR / "perf_server_cli.py"), str(REPO),
                  str(perf_common.profile_directory(Path(self.target["HERMES_IOS_E2E_HOME"]), profile)), row["session_id"], "9"],
-                capture_output=True, text=True, check=False, cwd=REPO)
+                capture_output=True, text=True, check=False, cwd=REPO, timeout=LAUNCH_TIMEOUT_SECONDS)
             if completed.returncode != 0:
                 raise RuntimeError(f"server profile failed: {completed.stderr[-400:]}")
             profiles[f"{profile}({row['rows']} rows)"] = json.loads(completed.stdout)
@@ -148,7 +153,7 @@ class Run:
         udid = next(line.split("=", 1)[1] for line in (state_root() / "run.env").read_text().splitlines() if line.startswith("UDID="))
         stream_path = self.out / "os-log-stream.txt"
         with perf_ios.LogStream(udid, stream_path), perf_ios.RssSampler(udid) as sampler:
-            evidence, output = perf_ios.drive(self.args.ios_iterations, OWNER, dict(os.environ), IOS_TIMEOUT_SECONDS, "perf-baseline")
+            evidence, output = perf_ios.drive(self.args.ios_iterations, owner(), dict(os.environ), IOS_TIMEOUT_SECONDS, "perf-baseline")
         (self.out / "drive.log").write_text(output)
         if evidence is None:
             raise RuntimeError("drive produced no evidence")
