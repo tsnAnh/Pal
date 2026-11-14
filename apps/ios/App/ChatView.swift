@@ -50,9 +50,9 @@ struct ChatView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(shownRowIndices, id: \.self) { index in
-                        let row = model.rows[index]
-                        ChatRowView(row: row, previous: index > 0 ? model.rows[index - 1] : nil, model: model) { link in
+                    ForEach(shownRows) { shown in
+                        let row = shown.row
+                        ChatRowView(row: row, previous: shown.previous, model: model) { link in
                             router.push(.botThread(BotThreadRoute(
                                 botName: model.bot.name,
                                 threadID: link.threadID,
@@ -153,7 +153,7 @@ struct ChatView: View {
         .task(id: model.connection) {
             connectionIsSlow = false
             guard model.connection != .live else { return }
-            try? await Task.sleep(for: .seconds(1))
+            try? await Task.sleep(for: model.connection == .reconnecting ? Self.reconnectingNoticeDelay : Self.catchUpNoticeDelay)
             guard !Task.isCancelled else { return }
             connectionIsSlow = model.connection != .live
         }
@@ -217,14 +217,34 @@ struct ChatView: View {
     }
 
     private static let rowWindow = 60
+    private static let reconnectingNoticeDelay = Duration.seconds(1)
+    private static let catchUpNoticeDelay = Duration.seconds(5)
 
-    private var shownRowIndices: Range<Int> {
-        max(0, model.rows.count - shownRowLimit)..<model.rows.count
+    private struct ShownRow: Identifiable {
+        let row: ChatRow
+        let previous: ChatRow?
+        var id: String { row.id }
+    }
+
+    private var shownRows: [ShownRow] {
+        let rows = model.rows
+        return (max(0, rows.count - shownRowLimit)..<rows.count).map { index in
+            ShownRow(row: rows[index], previous: index > 0 ? rows[index - 1] : nil)
+        }
     }
 
     private func revealOlderRows() {
-        guard shownRowLimit < model.rows.count else { return }
-        shownRowLimit += Self.rowWindow
+        if shownRowLimit < model.rows.count {
+            shownRowLimit += Self.rowWindow
+            return
+        }
+        guard model.hasOlderHistory, !model.isLoadingOlder, let anchor = model.rows.first?.id else { return }
+        Task {
+            let before = model.rows.count
+            guard await model.loadOlder() else { return }
+            shownRowLimit += model.rows.count - before
+            scrollPosition.scrollTo(id: anchor, anchor: .top)
+        }
     }
 
     private var dotColor: Color {

@@ -55,6 +55,9 @@ public actor ChatSession: OutboxSubmitter {
     public private(set) var botThreadLinks: [BotThreadLink] = []
     public nonisolated let terminalFailures: AsyncStream<ChatTerminalFailure>
 
+    static let historyWindow = 60
+    static let olderPageSize = 60
+
     private static let botThreadsChangedEvent = "bot_threads.changed"
     private static let messageCompleteEvent = "message.complete"
 
@@ -73,6 +76,7 @@ public actor ChatSession: OutboxSubmitter {
     private var linksRefresh: Task<Void, Never>?
     private var linksStale = false
     private var waiters: [UUID: StateWaiter] = [:]
+    private var loadingOlder = false
 
     private struct StateWaiter {
         let isSatisfied: @Sendable (ChatState) -> Bool
@@ -117,7 +121,7 @@ public actor ChatSession: OutboxSubmitter {
         let api = SessionAPI(connection: connection, profile: profile)
         attaching = connection
         do {
-            resolution = try await resolver.open(api)
+            resolution = try await resolver.open(api, messageLimit: Self.historyWindow)
         } catch {
             attaching = nil
             await connection.close()
@@ -237,6 +241,20 @@ public actor ChatSession: OutboxSubmitter {
     }
 
     public var state: ChatState { ChatState(phase: phase, transcript: transcript) }
+
+    @discardableResult
+    public func loadOlder() async throws -> Bool {
+        guard !loadingOlder, !closing, transcript.hasOlder, let api, let sessionID = transcript.sessionID,
+              let before = transcript.oldestRowID
+        else { return false }
+        loadingOlder = true
+        defer { loadingOlder = false }
+        let page = try await api.historyPage(sessionID: sessionID, beforeRowID: before, limit: Self.olderPageSize)
+        guard !closing, transcript.sessionID == sessionID, transcript.oldestRowID == before else { return false }
+        transcript.prependOlder(page)
+        continuation.yield(.transcript(transcript))
+        return true
+    }
 
     public func awaitState(where isSatisfied: @escaping @Sendable (ChatState) -> Bool) async -> ChatState? {
         if isSatisfied(state) { return state }
@@ -397,7 +415,7 @@ public actor ChatSession: OutboxSubmitter {
         guard let api, let sessionID = transcript.sessionID else { return false }
         setPhase(.resyncing)
         do {
-            let snapshot = try await api.resume(sessionID: sessionID)
+            let snapshot = try await api.resume(sessionID: sessionID, messageLimit: Self.historyWindow)
             transcript.requestResync()
             _ = transcript.reconcile(with: snapshot)
             publishLive()
@@ -471,14 +489,14 @@ public actor ChatSession: OutboxSubmitter {
 
     private func reattach(_ api: SessionAPI) async throws {
         guard let row = try await resolver.lookup(api) else {
-            let resolution = try await resolver.open(api)
+            let resolution = try await resolver.open(api, messageLimit: Self.historyWindow)
             transcript.requestResync()
             _ = transcript.reconcile(with: resolution.snapshot)
             return
         }
         let target = BotChatResolver.target(of: row)
         guard target == transcript.sessionID, let cursor = transcript.cursor, !transcript.resyncRequested else {
-            let snapshot = try await api.resume(sessionID: target)
+            let snapshot = try await api.resume(sessionID: target, messageLimit: Self.historyWindow)
             transcript.requestResync()
             _ = transcript.reconcile(with: snapshot)
             return
@@ -486,7 +504,7 @@ public actor ChatSession: OutboxSubmitter {
         let since = try await api.eventsSince(sessionID: target, lastSequence: cursor.lastSequence, replayEpoch: cursor.replayEpoch)
         if since.snapshotRequired {
             setPhase(.resyncing)
-            let snapshot = try await api.resume(sessionID: target)
+            let snapshot = try await api.resume(sessionID: target, messageLimit: Self.historyWindow)
             transcript.requestResync()
             _ = transcript.reconcile(with: snapshot)
             return
@@ -495,7 +513,7 @@ public actor ChatSession: OutboxSubmitter {
             guard let event = GatewayEvent(params: raw) else { continue }
             if case .resyncRequired = transcript.apply(SessionEventFrame(event)) { break }
         }
-        _ = transcript.reconcile(with: try await api.resume(sessionID: target))
+        _ = transcript.reconcile(with: try await api.resume(sessionID: target, messageLimit: Self.historyWindow))
     }
 
     private func setPhase(_ next: ChatPhase) {

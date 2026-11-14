@@ -118,6 +118,8 @@ final class ChatModel {
     private var cachedItems: [TranscriptItem] = []
     private var lastCached: CachedTranscript?
     private var pendingCacheSave: Task<Void, Never>?
+    private(set) var isLoadingOlder = false
+    private var findBackfill: Task<Void, Never>?
 
     private struct ActivitySignature: Equatable {
         let running: Bool
@@ -177,14 +179,36 @@ final class ChatModel {
         lastSeenAtOpen = lastSeenStore.lastSeen(for: bot.name)
     }
 
+    var hasOlderHistory: Bool { transcript.hasOlder }
+
     private func hydrateFromCache() {
         guard !hasHydrated else { return }
         hasHydrated = true
-        guard transcript.sessionID == nil, let cached = roster.conversationCache.load(bot: openedBot.name) else { return }
-        lastCached = cached
-        cachedItems = cached.transcriptItems
-        rebuild()
-        LaunchClock.mark("chat \(openedBot.name) shown from cache (\(cachedItems.count) items)", on: .osLog())
+        let cache = roster.conversationCache
+        let name = openedBot.name
+        Task {
+            let cached = await Task.detached(priority: .userInitiated) { cache.load(bot: name) }.value
+            guard let cached, transcript.sessionID == nil else { return }
+            lastCached = cached
+            cachedItems = cached.transcriptItems
+            rebuild()
+            LaunchClock.mark("chat \(name) shown from cache (\(cachedItems.count) items)", on: .osLog())
+        }
+    }
+
+    @discardableResult
+    func loadOlder() async -> Bool {
+        guard !isLoadingOlder, transcript.hasOlder, let session else { return false }
+        isLoadingOlder = true
+        defer { isLoadingOlder = false }
+        do {
+            guard try await session.loadOlder() else { return false }
+            transcript = await session.transcript
+            rebuild()
+            return true
+        } catch {
+            return false
+        }
     }
 
     func start() {
@@ -391,11 +415,20 @@ final class ChatModel {
 
     func beginFinding() {
         isFinding = true
+        guard findBackfill == nil else { return }
+        findBackfill = Task { [weak self] in
+            while let self, self.isFinding, self.transcript.hasOlder, !Task.isCancelled {
+                guard await self.loadOlder() else { break }
+            }
+            if !Task.isCancelled { self?.findBackfill = nil }
+        }
     }
 
     func endFinding() {
         isFinding = false
         findQuery = ""
+        findBackfill?.cancel()
+        findBackfill = nil
     }
 
     func findNext() {
