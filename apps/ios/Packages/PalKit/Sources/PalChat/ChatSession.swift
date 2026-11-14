@@ -477,12 +477,6 @@ public actor ChatSession: OutboxSubmitter {
         case SignInError.notSignedIn, PalClientError.notSignedIn: .notSignedIn
         case SignInError.sessionExpired, RESTError.unauthorized: .sessionExpired
         case GatewayTransportError.closed(.forbidden): .accessForbidden
-        case GatewayTransportError.handshakeRejected(let status):
-            switch status {
-            case 401: .sessionExpired
-            case 403: .accessForbidden
-            default: nil
-            }
         default: nil
         }
     }

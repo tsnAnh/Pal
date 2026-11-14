@@ -2,6 +2,7 @@ import Foundation
 import PalChat
 import PalDiagnostics
 import PalProtocol
+import PalREST
 import PalTransport
 import Synchronization
 import Testing
@@ -139,7 +140,7 @@ struct BotErrandTests {
     }
 
     @Test func anExpiredSessionAsksForSignIn() async throws {
-        let rig = try await rig(failConnects: { _ in GatewayTransportError.handshakeRejected(status: 401) })
+        let rig = try await rig(failConnects: { _ in RESTError.unauthorized })
         await #expect(throws: ErrandError.signInRequired) { try await rig.errand.tell("hello") }
         await rig.finish()
     }
