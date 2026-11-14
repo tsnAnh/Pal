@@ -54,7 +54,6 @@ struct ConnectionForm: View {
 
     @ViewBuilder
     private var credentialFields: some View {
-        #if os(macOS)
         TextField("Username", text: $model.username, prompt: Text(verbatim: "Username"))
             .labelsHidden()
             .textContentType(.username)
@@ -69,7 +68,6 @@ struct ConnectionForm: View {
             .onSubmit { Task { await model.signIn() } }
             .accessibilityIdentifier("passwordField")
             .listRowBackground(cardFill)
-        #endif
     }
 
     @ViewBuilder
