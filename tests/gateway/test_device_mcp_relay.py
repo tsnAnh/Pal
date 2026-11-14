@@ -167,6 +167,39 @@ async def test_a_mac_that_disconnects_mid_call_fails_the_call_and_serves_again_w
 
 
 @pytest.mark.asyncio
+async def test_t3_stopping_mid_call_is_reported_with_the_reason_the_mac_gave(authorities):
+    authority = await authorities('home')
+    mac = await connect_mac(authority)
+    await registered(mac, authority)
+    await wait_for_tools(authority)
+    mac.muted = True
+    stuck = asyncio.ensure_future(call_echo(authority, 'cut off'))
+    await async_wait_until(lambda: 'tools/call' in mac.methods(), what='the call reached the Mac')
+    assert (await mac.fail(mac.relays()[-1], 'unreachable', "T3 Code isn't running on this Mac"))['result'] == {
+        'recorded': True}
+    result = await asyncio.wait_for(stuck, 60)
+    assert "T3 Code isn't running on this Mac" in result['error']
+    assert 'stdio' not in result['error'] and 'subprocess' not in result['error']
+
+
+@pytest.mark.asyncio
+async def test_the_server_serves_again_when_t3_returns_even_after_calls_kept_failing_meanwhile(authorities):
+    authority = await authorities('home')
+    mac = await connect_mac(authority)
+    await registered(mac, authority)
+    await wait_for_tools(authority)
+    mac.down = True
+    for attempt in range(4):
+        result = await call_echo(authority, f'while down {attempt}')
+        assert 'error' in result
+    closed_while_down = len(mac.closed)
+    mac.down = False
+    await registered(mac, authority)
+    await wait_until_serving(authority, 'the server answering after T3 returned')
+    assert len(mac.closed) == closed_while_down
+
+
+@pytest.mark.asyncio
 async def test_a_lost_t3_sign_in_surfaces_as_an_auth_required_result_for_mcp_t3code(authorities):
     authority = await authorities('home')
     mac = await connect_mac(authority)
@@ -178,7 +211,8 @@ async def test_a_lost_t3_sign_in_surfaces_as_an_auth_required_result_for_mcp_t3c
     assert (await mac.fail(mac.relays()[-1], 'auth_required', 'T3 returned 401'))['result'] == {'recorded': True}
     [offer] = await async_wait_until(lambda: mac.phone.events('auth.required'), what='the sign-in prompt')
     assert offer['service'] == 'mcp:t3code' and offer['flow'] == 'oauth' and offer['signin_on'] == 'owner_app'
-    await asyncio.wait_for(stuck, 60)
+    in_flight = await asyncio.wait_for(stuck, 60)
+    assert 'T3 returned 401' in in_flight['error']
     blocked = asyncio.ensure_future(call_echo(authority, 'again'))
     await asyncio.sleep(0)
     await mac.phone.call('auth.decline', {'request_id': offer['request_id']})

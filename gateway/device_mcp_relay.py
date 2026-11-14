@@ -104,7 +104,9 @@ async def _open_on_owner(authority, home: Path, name: str, device_id: str, serve
     routes = sorted(live_slots(authority, time.time(), SERVER_KINDS[server], device_id),
                     key=lambda route: route_rank(route[1], route[2]), reverse=True)
     if not routes:
-        raise device_mcp.DeviceUnreachableError("That Mac is offline.")
+        offline = device_mcp.DeviceUnreachableError("That Mac is offline.")
+        device_mcp.note_failure(home, name, offline)
+        raise offline
     relay = Relay(uuid.uuid4().hex, server, name, _home_key(home), device_id, authority, routes[0][0], channel)
     with _lock:
         _relays[relay.relay_id] = relay
@@ -115,7 +117,9 @@ async def send(relay: Relay, message: dict) -> None:
     frame = mcp_frame(DeviceMcpFramePayload(relay_id=relay.relay_id, server=relay.server, message=message))
     if not await _write(relay.transport, frame):
         _take(relay.relay_id)
-        raise device_mcp.DeviceUnreachableError("The Mac stopped answering.")
+        stopped = device_mcp.DeviceUnreachableError("The Mac stopped answering.")
+        device_mcp.note_failure(relay.home, relay.name, stopped)
+        raise stopped
 
 
 async def close_relay(relay: Relay, reason: DeviceMcpCloseReason) -> None:
@@ -136,6 +140,7 @@ async def deliver(authority, transport, relay_id: str, message: dict) -> bool:
         await _write(transport, mcp_close_frame(
             DeviceMcpClosePayload(relay_id=relay_id, reason=DeviceMcpCloseReason.CLIENT_CLOSED)))
         return False
+    device_mcp.clear_failure(relay.home, relay.name)
     return relay.channel.post_message(message)
 
 
@@ -147,7 +152,9 @@ async def fail(authority, transport, relay_id: str, code: DeviceMcpFailCode, mes
     if code is DeviceMcpFailCode.AUTH_REQUIRED:
         device_mcp.mark_auth_required(relay.home, relay.name, AUTH_REASON)
         _offer_signin(relay)
-    relay.channel.post_failure(_FAILURES[code](text))
+    error = _FAILURES[code](text)
+    device_mcp.note_failure(relay.home, relay.name, error)
+    relay.channel.post_failure(error)
     return True
 
 
@@ -169,7 +176,9 @@ def _offer_signin(relay: Relay) -> None:
 def forget_transport(transport) -> int:
     dropped = _take_where(lambda relay: relay.transport is transport)
     for relay in dropped:
-        relay.channel.post_failure(device_mcp.DeviceDisconnectedError("The Mac disconnected."))
+        gone = device_mcp.DeviceDisconnectedError("The Mac disconnected.")
+        device_mcp.note_failure(relay.home, relay.name, gone)
+        relay.channel.post_failure(gone)
     return len(dropped)
 
 

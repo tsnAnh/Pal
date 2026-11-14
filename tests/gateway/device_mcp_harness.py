@@ -42,6 +42,7 @@ class Mac:
         self.served = []
         self.closed = []
         self.muted = False
+        self.down = False
         phone.write = types.MethodType(self._write, phone)
 
     def _write(self, phone, frame):
@@ -49,7 +50,10 @@ class Mac:
         kind, payload = frame['params']['type'], frame['params']['payload']
         if accepted and kind == 'device.mcp.frame':
             self.served.append(payload)
-            if not self.muted:
+            if self.down:
+                asyncio.run_coroutine_threadsafe(
+                    self.fail(payload['relay_id'], 'unreachable', "T3 Code isn't running on this Mac"), phone.loop)
+            elif not self.muted:
                 asyncio.run_coroutine_threadsafe(self._serve(payload), phone.loop)
         if accepted and kind == 'device.mcp.close':
             self.closed.append(payload)
@@ -123,3 +127,4 @@ def clean_device_mcp():
     device_mcp_relay._relays.clear()
     device_mcp_registration._background.clear()
     mcp_tool_device._auth.clear()
+    mcp_tool_device._failures.clear()

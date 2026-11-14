@@ -5,6 +5,7 @@ import json
 import logging
 import re
 import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,7 @@ logger = logging.getLogger("tools.mcp_tool")
 
 MAX_MESSAGE_BYTES = 4 * 1024 * 1024
 INBOX_DEPTH = 256
+RECENT_FAILURE_SECONDS = 60.0
 CLOSE_FRAME_SECONDS = 5.0
 DEVICE_TRANSPORT = "device"
 DEVICE_ID = re.compile(r"^[A-Za-z0-9-]{8,64}$")
@@ -122,6 +124,29 @@ def auth_required_error(server_name: str) -> str | None:
     if reason is None:
         return None
     return auth_required_result(f"mcp:{server_name}", reason, flow="oauth")
+
+
+_failure_lock = threading.Lock()
+_failures: dict[tuple[str, str], tuple[str, float]] = {}
+
+
+def note_failure(home: Path | str, name: str, error: BaseException | str) -> None:
+    with _failure_lock:
+        _failures[_auth_key(home, name)] = (str(error), time.monotonic())
+
+
+def clear_failure(home: Path | str, name: str) -> None:
+    with _failure_lock:
+        _failures.pop(_auth_key(home, name), None)
+
+
+def recent_failure_note(server_name: str) -> str:
+    from hermes_constants import get_hermes_home
+    with _failure_lock:
+        entry = _failures.get(_auth_key(get_hermes_home(), server_name))
+    if entry is None or time.monotonic() - entry[1] > RECENT_FAILURE_SECONDS:
+        return ""
+    return f" ({entry[0]})"
 
 
 class DeviceChannel:
