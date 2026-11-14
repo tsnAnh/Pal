@@ -23,10 +23,11 @@ struct LibraryView: View {
                 content
             }
             .padding(.bottom, 32)
-            #if os(macOS)
-            .padding(.leading, showsChrome ? 0 : 12)
-            .padding(.trailing, showsChrome ? 0 : 15)
-            #endif
+            .macOnly { view in
+                view
+                    .padding(.leading, showsChrome ? 0 : 12)
+                    .padding(.trailing, showsChrome ? 0 : 15)
+            }
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .background {

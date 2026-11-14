@@ -100,13 +100,7 @@ struct CodeBlockView: View {
 
     @Environment(\.hermesTheme) private var theme
 
-    private var codeFont: Font {
-        #if os(macOS)
-        .system(size: 12, design: .monospaced)
-        #else
-        .system(.footnote, design: .monospaced)
-        #endif
-    }
+    private var codeFont: Font { RichCode.font }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {

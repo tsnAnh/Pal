@@ -74,9 +74,7 @@ struct CreateRoomSheet: View {
             }
         )
         .interactiveDismissDisabled(model.isCreating)
-        #if os(macOS)
-        .frame(minWidth: 380, minHeight: 460)
-        #endif
+        .macOnly { $0.frame(minWidth: 380, minHeight: 460) }
     }
 
     private func pickRow(_ bot: BotRow) -> some View {
@@ -165,9 +163,7 @@ struct RoomDetailsSheet: View {
             }
         )
         .onAppear { name = model.room.name }
-        #if os(macOS)
-        .frame(minWidth: 380, minHeight: 360)
-        #endif
+        .macOnly { $0.frame(minWidth: 380, minHeight: 360) }
     }
 
     private func save() {

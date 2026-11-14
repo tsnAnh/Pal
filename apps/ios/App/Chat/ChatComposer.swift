@@ -3,9 +3,6 @@ import PalDesign
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
-#if os(macOS)
-import AppKit
-#endif
 
 struct ChatComposer: View {
     let botName: String
@@ -31,8 +28,8 @@ struct ChatComposer: View {
 
     #if os(macOS)
     @Environment(MacShell.self) private var shell
-    @State private var surfaceFrame = CGRect.zero
     #endif
+    @State private var surfaceFrame = CGRect.zero
     @State private var isPhotoPickerPresented = false
     @State private var isCameraPresented = false
     @State private var isFileImporterPresented = false
@@ -96,27 +93,15 @@ struct ChatComposer: View {
     }
 
     private var buttonDiameter: CGFloat {
-        #if os(macOS)
-        27
-        #else
-        ChatMetrics.composerButtonDiameter
-        #endif
+        PlatformVariant.pick(mac: 27, iOS: ChatMetrics.composerButtonDiameter)
     }
 
     private var surfaceHeight: CGFloat {
-        #if os(macOS)
-        42
-        #else
-        ChatMetrics.composerHeight
-        #endif
+        PlatformVariant.pick(mac: 42, iOS: ChatMetrics.composerHeight)
     }
 
     private var bottomMargin: CGFloat {
-        #if os(macOS)
-        14
-        #else
-        8
-        #endif
+        PlatformVariant.pick(mac: 14, iOS: 8)
     }
 
     private var promptText: Text { Text("Message \(botName)") }
@@ -213,13 +198,11 @@ struct ChatComposer: View {
 
     private var isComposingText: Bool { ComposerInput.isComposing }
 
-    #if os(macOS)
     private func moveFileRefSelection(by step: Int) -> KeyPress.Result {
         guard !fileRefMatches.isEmpty, !isComposingText else { return .ignored }
         fileRefIndex = (fileRefIndex + step + fileRefMatches.count) % fileRefMatches.count
         return .handled
     }
-    #endif
 
     private var composerRow: some View {
         HStack(alignment: .bottom, spacing: 6) {
@@ -228,23 +211,15 @@ struct ChatComposer: View {
             micButton
             trailingButton
         }
-        .padding(.leading, macOnly(6, else: ChatMetrics.composerInset))
-        .padding(.trailing, macOnly(7, else: ChatMetrics.composerInset))
-        .padding(.vertical, macOnly(7, else: ChatMetrics.composerInset))
+        .padding(.leading, PlatformVariant.pick(mac: 6, iOS: ChatMetrics.composerInset))
+        .padding(.trailing, PlatformVariant.pick(mac: 7, iOS: ChatMetrics.composerInset))
+        .padding(.vertical, PlatformVariant.pick(mac: 7, iOS: ChatMetrics.composerInset))
         .frame(minHeight: surfaceHeight)
         .modifier(ComposerSurface(cornerRadius: surfaceHeight / 2, isFocused: focused.wrappedValue))
-        #if os(macOS)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { surfaceFrame = $0 }
-        #endif
+        .macOnly { $0.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { surfaceFrame = $0 } }
+
     }
 
-    private func macOnly(_ mac: CGFloat, else other: CGFloat) -> CGFloat {
-        #if os(macOS)
-        mac
-        #else
-        other
-        #endif
-    }
 
     @ViewBuilder
     private var attachMenu: some View {
@@ -292,22 +267,24 @@ struct ChatComposer: View {
             .focused(focused)
             .submitLabel(.send)
             .onSubmit { if hasContent, canSend { send() } }
-            #if os(macOS)
-            .textFieldStyle(.plain)
-            .focusEffectDisabled()
-            .onKeyPress(.escape, phases: .down) { _ in
-                guard !slashMatches.isEmpty || isFileRefOpen, !isComposingText else { return .ignored }
-                dismissedDraft = draft
-                return .handled
+            .macOnly { field in
+                field
+                    .textFieldStyle(.plain)
+                    .focusEffectDisabled()
+                    .onKeyPress(.escape, phases: .down) { _ in
+                        guard !slashMatches.isEmpty || isFileRefOpen, !isComposingText else { return .ignored }
+                        dismissedDraft = draft
+                        return .handled
+                    }
+                    .onKeyPress(.upArrow, phases: .down) { _ in moveFileRefSelection(by: -1) }
+                    .onKeyPress(.downArrow, phases: .down) { _ in moveFileRefSelection(by: 1) }
+                    .onKeyPress(.tab, phases: .down) { press in
+                        guard let item = selectedFileRef, press.modifiers.isEmpty, !isComposingText else { return .ignored }
+                        pickFileRef(item, descend: true)
+                        return .handled
+                    }
             }
-            .onKeyPress(.upArrow, phases: .down) { _ in moveFileRefSelection(by: -1) }
-            .onKeyPress(.downArrow, phases: .down) { _ in moveFileRefSelection(by: 1) }
-            .onKeyPress(.tab, phases: .down) { press in
-                guard let item = selectedFileRef, press.modifiers.isEmpty, !isComposingText else { return .ignored }
-                pickFileRef(item, descend: true)
-                return .handled
-            }
-            #endif
+
             .onKeyPress(.return, phases: .down, action: handleReturn)
             .padding(.horizontal, 6)
             .frame(minHeight: buttonDiameter)
@@ -354,15 +331,15 @@ struct ChatComposer: View {
 
     private func plainIcon(_ systemName: String) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: macOnly(14, else: 17), weight: .regular))
+            .font(.system(size: PlatformVariant.pick(mac: 14, iOS: 17), weight: .regular))
             .foregroundStyle(PalTokens.textSecondary)
-            .frame(width: macOnly(28, else: buttonDiameter), height: buttonDiameter)
+            .frame(width: PlatformVariant.pick(mac: 28, iOS: buttonDiameter), height: buttonDiameter)
             .contentShape(Rectangle())
     }
 
     private func actionCircle(systemName: String, weight: Font.Weight) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: buttonDiameter * macOnly(0.48, else: 0.5), weight: weight))
+            .font(.system(size: buttonDiameter * PlatformVariant.pick(mac: 0.48, iOS: 0.5), weight: weight))
             .foregroundStyle(actionInk)
             .frame(width: buttonDiameter, height: buttonDiameter)
             .background(actionFill, in: Circle())

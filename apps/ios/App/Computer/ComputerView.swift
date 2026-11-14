@@ -33,9 +33,7 @@ struct ComputerView: View {
                     recenterToken: model.recenterToken,
                     model: model
                 )
-                #if os(iOS)
-                .ignoresSafeArea(.container)
-                #endif
+                .iOSOnly { $0.ignoresSafeArea(.container) }
                 .accessibilityLabel(Text("Computer screen"))
             } else {
                 overlayState
@@ -44,11 +42,8 @@ struct ComputerView: View {
                 .frame(width: 1, height: 1)
                 .accessibilityElement()
                 .accessibilityIdentifier("computerStatus")
-                #if os(macOS)
-                .accessibilityLabel(Text(model.statusLabel))
-                #else
-                .accessibilityValue(Text(model.statusLabel))
-                #endif
+                .macOnly { $0.accessibilityLabel(Text(model.statusLabel)) }
+                .iOSOnly { $0.accessibilityValue(Text(model.statusLabel)) }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .allowsHitTesting(false)
         }

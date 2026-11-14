@@ -391,12 +391,7 @@ private extension View {
         accessibilityElement(children: .ignore).accessibilityLabel(Text(text)).accessibilityIdentifier(identifier)
     }
 
-    @ViewBuilder
     func bubbleTextSelection() -> some View {
-        #if os(macOS)
-        textSelection(.enabled)
-        #else
-        self
-        #endif
+        macOnly { $0.textSelection(.enabled) }
     }
 }

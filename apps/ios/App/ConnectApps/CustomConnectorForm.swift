@@ -27,14 +27,12 @@ struct CustomConnectorStyle {
         )
     }
 
-    #if os(macOS)
     static let mac = CustomConnectorStyle(
         primary: PalTokens.textPrimary, secondary: PalTokens.textSecondary, field: PalTokens.control, divider: PalTokens.divider,
         fieldRadius: 10, fieldHeight: 32, margin: 29, spacing: 16, maxWidth: 440,
         titleFont: .system(size: 15, weight: .medium), labelFont: .system(size: 11, weight: .medium),
         bodyFont: .system(size: 12), captionFont: .system(size: 11)
     )
-    #endif
 }
 
 struct CustomConnectorForm: View {
@@ -90,11 +88,8 @@ struct CustomConnectorForm: View {
 
     private func footerButton(_ title: String, kind: PillKind, identifier: String, action: @escaping () -> Void) -> some View {
         Button(title, action: action)
-            #if os(macOS)
-            .buttonStyle(.palPill(height: 28, fontSize: 12, fill: kind == .accent ? PalTokens.toggleOn.opacity(0.7) : nil))
-            #else
-            .buttonStyle(.pill(kind, size: .regular))
-            #endif
+            .macOnly { $0.buttonStyle(.palPill(height: 28, fontSize: 12, fill: kind == .accent ? PalTokens.toggleOn.opacity(0.7) : nil)) }
+            .iOSOnly { $0.buttonStyle(.pill(kind, size: .regular)) }
             .accessibilityIdentifier(identifier)
     }
 }
@@ -154,9 +149,7 @@ struct CustomConnectorBody: View {
             VStack(alignment: .leading, spacing: 6) {
                 TextField("example.com/mcp", text: $model.url)
                     .modifier(FieldStyle(style: style))
-                    #if os(iOS)
-                    .keyboardType(.URL)
-                    #endif
+                    .urlKeyboard()
                     .disabled(model.isBusy)
                     .accessibilityIdentifier("customConnectorURLField")
                 if let preview = model.addressPreview {

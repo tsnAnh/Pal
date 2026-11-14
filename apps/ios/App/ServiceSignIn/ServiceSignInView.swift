@@ -3,11 +3,6 @@ import PalDesign
 import PalDevice
 import PalProtocol
 import SwiftUI
-#if os(iOS)
-import UIKit
-#elseif os(macOS)
-import AppKit
-#endif
 
 enum ServiceSignInWording {
     static func title(_ dialog: ServiceSignInDialog) -> String {
@@ -56,11 +51,10 @@ enum ServiceSignInWording {
 
     static func setupTokenHelp(_ dialog: ServiceSignInDialog) -> String? {
         guard ModelProviderCredential.acceptsSetupToken(service: dialog.service) else { return nil }
-        #if os(macOS)
-        return String(localized: "To use your Claude plan, run claude setup-token in Terminal, then paste the token it prints.")
-        #else
-        return String(localized: "To use your Claude plan, run claude setup-token in Terminal on a computer with Claude Code, then paste the token it prints.")
-        #endif
+        return PlatformVariant.pick(
+            mac: String(localized: "To use your Claude plan, run claude setup-token in Terminal, then paste the token it prints."),
+            iOS: String(localized: "To use your Claude plan, run claude setup-token in Terminal on a computer with Claude Code, then paste the token it prints.")
+        )
     }
 
     static func entryState(_ phase: ServiceSignInPhase) -> SecretEntryState {
@@ -91,22 +85,14 @@ enum ServiceSignInWording {
 enum ServiceSignInClipboard {
     @MainActor
     static func copy(_ text: String) {
-        #if os(iOS)
-        UIPasteboard.general.string = text
-        #elseif os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        #endif
+        Pasteboard.string = text
     }
 
     @MainActor
     static func paste() -> String? {
-        #if os(iOS)
-        UIPasteboard.general.string
-        #elseif os(macOS)
-        NSPasteboard.general.string(forType: .string)
-        #endif
+        Pasteboard.string
     }
+
 }
 
 struct ServiceSignInPasteStep: View {
@@ -125,10 +111,9 @@ struct ServiceSignInPasteStep: View {
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textPrimary)
                 .autocorrectionDisabled()
-                #if os(iOS)
-                .textInputAutocapitalization(.never)
-                .keyboardType(.URL)
-                #endif
+                .neverAutocapitalized()
+                .urlKeyboard()
+
                 .padding(12)
                 .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .accessibilityIdentifier("service-signin-callback-field")
@@ -211,9 +196,7 @@ struct ServiceSignInDialogView: View {
             content(dialog)
                 .frame(maxWidth: .infinity)
                 .padding(24)
-                #if os(macOS)
-                .frame(width: 400)
-                #endif
+                .macOnly { $0.frame(width: 400) }
                 .background(PalTokens.elevated)
                 .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("service-signin-dialog")
@@ -445,9 +428,7 @@ private struct ServiceSignInPresentation: ViewModifier {
             .sheet(isPresented: Binding(get: { context.center.current != nil && context.hosts.presents(id) }, set: { _ in })) {
                 ServiceSignInDialogView(center: context.center, botName: context.botName)
                     .interactiveDismissDisabled()
-                    #if os(iOS)
-                    .presentationDetents([.medium, .large])
-                    #endif
+                    .iOSOnly { $0.presentationDetents([.medium, .large]) }
             }
     }
 }

@@ -54,10 +54,6 @@ struct ExpandableBlock<Content: View>: View {
     }
 
     private static var hitHeight: CGFloat {
-        #if os(iOS)
-        44
-        #else
-        28
-        #endif
+        PlatformVariant.pick(mac: 28, iOS: 44)
     }
 }

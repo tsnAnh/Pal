@@ -206,13 +206,9 @@ struct ChatImageViewer: View {
                         .accessibilityIdentifier("imageViewerClose")
                 }
             }
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .iOSOnly { $0.toolbarTitleDisplayMode(.inline) }
         }
-        #if os(macOS)
-        .frame(minWidth: 480, idealWidth: 900, minHeight: 360, idealHeight: 700)
-        #endif
+        .macOnly { $0.frame(minWidth: 480, idealWidth: 900, minHeight: 360, idealHeight: 700) }
         .accessibilityIdentifier("imageViewer")
     }
 

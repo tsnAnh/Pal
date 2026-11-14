@@ -115,9 +115,7 @@ private struct GitHubSignInCodeSheet: View {
         .background(PalTokens.elevated)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("githubSignInSheet")
-        #if os(iOS)
-        .presentationDetents([.medium, .large])
-        #endif
+        .iOSOnly { $0.presentationDetents([.medium, .large]) }
     }
 
     @ViewBuilder
