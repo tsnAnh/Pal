@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import time
 from pathlib import Path
 
 import pytest
@@ -188,12 +189,64 @@ async def test_events_for_one_service_collapse_into_one_request(authorities):
 @pytest.mark.asyncio
 async def test_unanswered_signin_times_out(authorities, monkeypatch):
     monkeypatch.setattr(auth_prompts, 'SIGNIN_TIMEOUT_SECONDS', 0.3)
+    monkeypatch.setattr(FakeFlow, 'expires_in', None)
     authority, phone = await _phone(authorities)
     result, retried = await _call(home_of(authority))
     body = json.loads(result)
     assert body['error_type'] == 'auth_timeout' and 'timed out' in body['error'] and retried == []
     assert phone.events('auth.resolved')[-1]['outcome'] == 'timed_out'
     assert FakeFlow.instances[0].cancelled
+
+
+class _FlowWithLifetime(FakeFlow):
+    def __init__(self, lifetime):
+        super().__init__()
+        self.expires_in = lifetime
+
+
+async def _timed_out_after(authority, phone, lifetime, monkeypatch, *, floor=0.3, cap=0.6):
+    monkeypatch.setattr(auth_prompts, 'SIGNIN_TIMEOUT_SECONDS', floor)
+    monkeypatch.setattr(auth_prompts, 'MAX_SIGNIN_SECONDS', cap)
+    auth_flows.register('lifetimesvc', lambda home, service: _FlowWithLifetime(lifetime))
+    try:
+        started = time.monotonic()
+        result, _ = await _call(home_of(authority), service='lifetimesvc')
+        elapsed = time.monotonic() - started
+    finally:
+        auth_flows.unregister('lifetimesvc')
+    assert json.loads(result)['error_type'] == 'auth_timeout'
+    assert phone.events('auth.resolved')[-1]['outcome'] == 'timed_out'
+    return elapsed
+
+
+@pytest.mark.asyncio
+async def test_a_flow_that_reports_no_lifetime_ends_at_the_floor(authorities, monkeypatch):
+    authority, phone = await _phone(authorities)
+    elapsed = await _timed_out_after(authority, phone, None, monkeypatch, floor=0.3, cap=3.0)
+    assert 0.25 <= elapsed < 2.5
+
+
+@pytest.mark.asyncio
+async def test_a_flow_that_reports_a_lifetime_past_the_floor_stays_open_until_it_ends(authorities, monkeypatch):
+    authority, phone = await _phone(authorities)
+    elapsed = await _timed_out_after(authority, phone, 2, monkeypatch, floor=0.3, cap=30.0)
+    assert 1.8 <= elapsed < 10
+
+
+@pytest.mark.asyncio
+async def test_a_flow_that_reports_an_absurd_lifetime_is_capped(authorities, monkeypatch):
+    authority, phone = await _phone(authorities)
+    elapsed = await _timed_out_after(authority, phone, 10 ** 6, monkeypatch, floor=0.3, cap=0.6)
+    assert 0.5 <= elapsed < 5
+
+
+@pytest.mark.parametrize('lifetime,expected', [
+    (None, 300.0), (0, 300.0), (-5, 300.0), (True, 300.0), ('900', 300.0), (900.5, 300.0),
+    (60, 300.0), (300, 300.0), (900, 900.0), (1800, 1800.0), (10 ** 6, 1800.0)])
+def test_the_signin_deadline_follows_the_flow_inside_the_floor_and_the_cap(lifetime, expected):
+    flow = FakeFlow()
+    flow.expires_in = lifetime
+    assert auth_prompts.signin_deadline(flow) == expected
 
 
 @pytest.mark.asyncio

@@ -18,7 +18,7 @@ def home(monkeypatch, tmp_path):
     root.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(root))
     for var in ("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "DASHSCOPE_API_KEY", "ALIBABA_CODING_PLAN_API_KEY",
-                "GOOGLE_API_KEY", "GEMINI_API_KEY"):
+                "GOOGLE_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_TOKEN", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(server, "_hermes_home", root)
     create_profile("scout", no_alias=True, no_skills=True)
@@ -67,7 +67,7 @@ def test_list_covers_every_registry_provider_with_a_kind_and_state(home):
 
 def test_status_per_credential_kind_is_set_not_set_or_expired(home, monkeypatch, canary):
     assert _row("deepseek")["state"] == "not_set"
-    control.store_api_key("deepseek", canary)
+    control.store_pasted_credential("deepseek", canary)
     assert _row("deepseek")["state"] == "set"
     monkeypatch.setattr("hermes_cli.auth.get_auth_status", lambda pid=None: {"logged_in": False, "relogin_required": True})
     assert _row("nous")["state"] == "expired"
@@ -79,16 +79,16 @@ def test_status_per_credential_kind_is_set_not_set_or_expired(home, monkeypatch,
 
 
 def test_responses_never_carry_the_stored_value(home, canary):
-    control.store_api_key("deepseek", canary)
+    control.store_pasted_credential("deepseek", canary)
     text = json.dumps([_ok("model.providers.list"), _ok("model.providers.remove", {"provider": "deepseek"})])
     assert canary not in text
 
 
 def test_set_replace_then_remove_an_api_key(home, canary):
-    control.store_api_key("deepseek", canary)
+    control.store_pasted_credential("deepseek", canary)
     assert f"DEEPSEEK_API_KEY={canary}" in _env(home)
     fresh = f"CANARY-{uuid.uuid4()}"
-    control.store_api_key("deepseek", fresh)
+    control.store_pasted_credential("deepseek", fresh)
     assert canary not in _env(home) and fresh in _env(home)
     result = _ok("model.providers.remove", {"provider": "deepseek"})
     assert result["outcome"] == "removed" and result["provider"]["state"] == "not_set"
@@ -97,7 +97,7 @@ def test_set_replace_then_remove_an_api_key(home, canary):
 
 
 def test_removing_a_shared_key_keeps_it_for_the_other_provider(home, canary):
-    control.store_api_key("alibaba", canary)
+    control.store_pasted_credential("alibaba", canary)
     result = _ok("model.providers.remove", {"provider": "alibaba-coding-plan"})
     assert result["outcome"] in {"nothing_to_remove", "still_set"}
     assert canary in _env(home)
@@ -112,7 +112,7 @@ def test_a_key_supplied_by_the_host_environment_reports_still_set(home, monkeypa
 
 
 def test_a_failed_remove_keeps_the_stored_value_and_hides_the_error(home, monkeypatch, canary):
-    control.store_api_key("deepseek", canary)
+    control.store_pasted_credential("deepseek", canary)
 
     def boom(provider_id):
         raise OSError(f"cannot write {canary}")
@@ -139,7 +139,7 @@ def test_account_wide_logins_are_refused_for_a_secondary_profile(home):
 
 
 def test_a_secondary_profile_never_touches_the_main_profiles_key(home, canary):
-    control.store_api_key("deepseek", canary)
+    control.store_pasted_credential("deepseek", canary)
     token = _connection_profile_home.set(str(server._profile_home("scout")))
     try:
         assert _row("deepseek")["state"] == "not_set"
@@ -171,3 +171,38 @@ def test_base_url_set_reset_and_validation(home):
 def test_base_url_is_unsupported_for_providers_without_one(home):
     assert _ok("model.providers.set_base_url", {"provider": "nous", "base_url": "https://x.test"})["outcome"] == "unsupported"
     assert _ok("model.providers.set_base_url", {"provider": "ghost", "base_url": "https://x.test"})["outcome"] == "unsupported"
+
+
+def test_removing_anthropic_after_a_setup_token_leaves_both_slots_empty(home, canary):
+    token = f"sk-ant-oat01-{canary}"
+    assert control.store_pasted_credential("anthropic", token)
+    assert _row("anthropic")["state"] == "set"
+    assert f"ANTHROPIC_TOKEN={token}" in _env(home)
+    result = _ok("model.providers.remove", {"provider": "anthropic"})
+    assert result["outcome"] == "removed" and result["provider"]["state"] == "not_set"
+    assert "ANTHROPIC_TOKEN" not in _env(home) and "ANTHROPIC_API_KEY" not in _env(home)
+    assert _row("anthropic")["state"] == "not_set"
+    assert canary not in json.dumps(result)
+
+
+def test_only_api_key_providers_accept_a_pasted_credential(home):
+    with pytest.raises(ValueError):
+        control.store_pasted_credential("nous", "anything")
+    assert control.store_pasted_credential("deepseek", "") is False
+
+
+def _pool_sources(home):
+    path = home / "auth.json"
+    pool = json.loads(path.read_text()).get("credential_pool", {}).get("anthropic", []) if path.exists() else []
+    return {entry.get("source") for entry in pool}
+
+
+def test_pasting_an_api_key_over_a_setup_token_clears_the_token_from_env_and_pool(home, canary):
+    token = f"sk-ant-oat01-{canary}"
+    key = f"sk-ant-api03-{canary}"
+    assert control.store_pasted_credential("anthropic", token)
+    assert "env:ANTHROPIC_TOKEN" in _pool_sources(home)
+    assert control.store_pasted_credential("anthropic", key)
+    assert f"ANTHROPIC_API_KEY={key}" in _env(home) and "ANTHROPIC_TOKEN" not in _env(home)
+    assert "env:ANTHROPIC_TOKEN" not in _pool_sources(home)
+    assert _row("anthropic")["state"] == "set"

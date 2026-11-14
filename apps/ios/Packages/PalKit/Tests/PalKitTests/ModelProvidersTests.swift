@@ -244,9 +244,9 @@ struct ModelProvidersModelTests {
     func load() async {
         let bots = ScriptedBots()
         bots.script("model.providers.list", listing(providerRow()))
+        bots.script("model.providers.list") { _ in throw GatewayTransportError.closed(.normal) }
         let model = await loaded(bots)
         #expect(model.providers.count == 1 && model.hasLoaded && !model.loadFailed)
-        bots.script("model.providers.list") { _ in throw GatewayTransportError.closed(.normal) }
         await model.load()
         #expect(model.providers.count == 1 && model.loadFailed)
     }
@@ -389,5 +389,128 @@ struct ModelProvidersModelTests {
         await model.saveAddress(model.providers[0])
         #expect(model.status(of: "openrouter") == .failed("Enter an address, or use the default."))
         #expect(bots.calls(to: "model.providers.set_base_url").isEmpty)
+    }
+}
+
+@MainActor
+@Suite("Model provider sections")
+struct ModelProviderSectionsTests {
+    private func rows() throws -> [ModelProvider] {
+        try [
+            ("zeta", "Zeta", "api_key", "set", "profile"),
+            ("openai-codex", "OpenAI Codex", "device_code", "expired", "account"),
+            ("alpha", "Alpha", "api_key", "set", "profile"),
+            ("deepseek", "DeepSeek", "api_key", "not_set", "profile"),
+            ("anthropic", "Anthropic", "api_key", "not_set", "profile"),
+            ("bedrock", "AWS Bedrock", "unsupported", "unsupported", "profile"),
+            ("vertex", "Vertex", "unsupported", "unsupported", "profile"),
+            ("mystery", "Mystery", "from_the_future", "from_the_future", "profile"),
+        ].map { id, name, kind, state, scope in
+            let wire = providerRow(id, name: name, kind: kind, state: state, scope: scope, reason: kind == "unsupported" ? "Uses the host's credentials." : nil)
+            return try JSONDecoder().decode(ModelProvider.self, from: JSONEncoder().encode(wire))
+        }
+    }
+
+    @Test("S1 groups: expired first in Connected, then Add a provider, then On host with one row shown")
+    func groups() throws {
+        let sections = ModelProviderSorting.sections(try rows(), query: "", showsAllOnHost: false)
+        #expect(sections.map(\.group) == [.connected, .available, .onHost])
+        #expect(sections[0].providers.map(\.id) == ["openai-codex", "alpha", "zeta"])
+        #expect(sections[1].providers.map(\.id) == ["anthropic", "deepseek"])
+        #expect(sections[2].providers.count == 1 && sections[2].hiddenCount == 2)
+        #expect(sections.map(\.group.title) == ["Connected", "Add a provider", "Set up on the computer that runs Pal"])
+        let all = ModelProviderSorting.sections(try rows(), query: "", showsAllOnHost: true)
+        #expect(all[2].providers.map(\.id) == ["bedrock", "mystery", "vertex"] && all[2].hiddenCount == 0)
+    }
+
+    @Test("S2 search matches name and id, drops empty groups, and ignores the collapse")
+    func search() throws {
+        let byName = ModelProviderSorting.sections(try rows(), query: "codex", showsAllOnHost: false)
+        #expect(byName.map(\.group) == [.connected] && byName[0].providers.map(\.id) == ["openai-codex"])
+        let byID = ModelProviderSorting.sections(try rows(), query: "openai-co", showsAllOnHost: false)
+        #expect(byID.flatMap(\.providers).map(\.id) == ["openai-codex"])
+        let byIDExact = ModelProviderSorting.sections(try rows(), query: "deepseek", showsAllOnHost: false)
+        #expect(byIDExact.map(\.group) == [.available])
+        let onHost = ModelProviderSorting.sections(try rows(), query: "e", showsAllOnHost: false)
+        #expect(onHost.last?.hiddenCount == 0)
+        #expect(ModelProviderSorting.sections(try rows(), query: "zzzz", showsAllOnHost: false).isEmpty)
+    }
+
+    @Test("an empty Connected group stays visible without a query")
+    func emptyConnected() throws {
+        let sections = ModelProviderSorting.sections([], query: "", showsAllOnHost: false)
+        #expect(sections.map(\.group) == [.connected] && sections[0].providers.isEmpty)
+    }
+
+    @Test("S3 faces: Anthropic wording, expired attention, working and failed rows")
+    func faces() throws {
+        let providers = try rows()
+        let anthropic = try #require(providers.first { $0.id == "anthropic" })
+        let fresh = ModelProviderSorting.face(anthropic, status: .idle)
+        #expect(fresh.primaryAction == "Add key or token")
+        #expect(fresh.detail == "API key, or your Claude Pro or Max plan with a setup token")
+
+        let saved = try JSONDecoder().decode(
+            ModelProvider.self, from: JSONEncoder().encode(providerRow("anthropic", name: "Anthropic", state: "set", canRemove: true)))
+        let replace = ModelProviderSorting.face(saved, status: .idle)
+        #expect(replace.primaryAction == "Replace" && replace.detail == "API key or Claude plan token saved")
+        #expect(replace.canRemove && !replace.isAttention)
+
+        let codex = try #require(providers.first { $0.id == "openai-codex" })
+        let expired = ModelProviderSorting.face(codex, status: .idle)
+        #expect(expired.primaryAction == "Sign in again" && expired.isAttention && expired.stateLabel == "Expired")
+        #expect(expired.detail == "Expired. Sign in again to keep using it. · Shared by all your bots")
+
+        let working = ModelProviderSorting.face(codex, status: .working(.signingIn))
+        #expect(working.primaryAction == "Waiting…" && working.detail == "Waiting for you to finish signing in…")
+        let failed = ModelProviderSorting.face(codex, status: .failed("Nope."))
+        #expect(failed.detail == "Nope." && failed.isAttention)
+
+        let deepseek = try #require(providers.first { $0.id == "deepseek" })
+        #expect(ModelProviderSorting.face(deepseek, status: .idle).primaryAction == "Add key")
+        let zeta = try #require(providers.first { $0.id == "zeta" })
+        let zetaFace = ModelProviderSorting.face(zeta, status: .idle)
+        #expect(zetaFace.primaryAction == "Replace key" && zetaFace.detail == "API key saved")
+        let bedrock = try #require(providers.first { $0.id == "bedrock" })
+        let host = ModelProviderSorting.face(bedrock, status: .idle)
+        #expect(host.primaryAction == nil && host.detail == "Uses the host's credentials.")
+    }
+
+    @Test("S4 a finished sign-in moves the row to Connected and says Signed in.")
+    func signInMovesRow() async {
+        let bots = ScriptedBots()
+        bots.script("model.providers.list", listing(providerRow("nous", name: "Nous Portal", kind: "device_code", state: "not_set")))
+        bots.script("model.providers.list", listing(providerRow("nous", name: "Nous Portal", kind: "device_code", state: "set")))
+        bots.script("auth.begin", outcome("started", requestID: "r1"))
+        let model = ModelProvidersModel(client: ModelProvidersClient(gateway: bots.gateway, profile: "atlas"))
+        await model.load()
+        #expect(model.sections.map(\.group) == [.connected, .available])
+        #expect(model.sections[0].providers.isEmpty)
+        await model.signIn(model.providers[0])
+        await model.signInResolved(requestID: "r1", service: "provider:nous", outcome: .signedIn, reason: nil)
+        #expect(model.sections.map(\.group) == [.connected])
+        #expect(model.sections[0].providers.map(\.id) == ["nous"])
+        #expect(model.presentation(of: model.providers[0]).detail == "Signed in.")
+    }
+
+    @Test("a setup-token provider says Saved. because the pasted kind is unknown")
+    func setupTokenSuccessText() async {
+        let bots = ScriptedBots()
+        bots.script("model.providers.list", listing(providerRow("anthropic", name: "Anthropic", state: "not_set")))
+        bots.script("model.providers.list", listing(providerRow("anthropic", name: "Anthropic", state: "set", canRemove: true)))
+        bots.script("auth.begin", outcome("started", requestID: "r1"))
+        let model = ModelProvidersModel(client: ModelProvidersClient(gateway: bots.gateway, profile: "atlas"))
+        await model.load()
+        await model.signIn(model.providers[0])
+        await model.signInResolved(requestID: "r1", service: "provider:anthropic", outcome: .signedIn, reason: nil)
+        #expect(model.status(of: "anthropic") == .succeeded("Saved."))
+    }
+
+    @Test("S5 only provider services that accept a setup token say so")
+    func setupTokenService() {
+        #expect(ModelProviderCredential.acceptsSetupToken(service: "provider:anthropic"))
+        #expect(!ModelProviderCredential.acceptsSetupToken(service: "provider:openai"))
+        #expect(!ModelProviderCredential.acceptsSetupToken(service: "mcp:anthropic"))
+        #expect(!ModelProviderCredential.acceptsSetupToken(service: "anthropic"))
     }
 }

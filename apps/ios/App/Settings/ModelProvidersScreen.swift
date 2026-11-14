@@ -7,17 +7,13 @@ struct ModelProvidersScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @Environment(ServiceSignInCenter.self) private var signIn
     @Environment(\.hermesTheme) private var theme
     @State private var model: ModelProvidersModel
 
     init(hub: SettingsHub, back: @escaping () -> Void) {
         self.hub = hub
         self.back = back
-        let connection = hub.connection
-        let profile = hub.roster.bots.first(where: \.isDefault)?.name
-        let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: ModelProvidersModel(client: ModelProvidersClient(gateway: gateway, profile: profile)))
+        _model = State(initialValue: hub.modelProvidersModel())
     }
 
     var body: some View {
@@ -26,31 +22,14 @@ struct ModelProvidersScreen: View {
         }
         .task { await model.load() }
         .refreshable { await model.load() }
-        .onChange(of: signIn.lastResolution) { _, resolution in
-            guard let resolution else { return }
-            Task {
-                await model.signInResolved(
-                    requestID: resolution.requestID, service: resolution.service, outcome: resolution.outcome, reason: resolution.reason)
-            }
-        }
-        .confirmationDialog(
-            "Remove this provider?",
-            isPresented: Binding(get: { model.pendingRemoval != nil }, set: { if !$0 { model.pendingRemoval = nil } }),
-            titleVisibility: .visible,
-            presenting: model.pendingRemoval
-        ) { provider in
-            Button("Remove", role: .destructive) { Task { await model.remove(provider) } }
-                .accessibilityIdentifier("modelProviderRemoveConfirm")
-            Button("Cancel", role: .cancel) { model.pendingRemoval = nil }
-        } message: { provider in
-            Text("\(provider.name) stops working until you set it up again.")
-        }
+        .tracksProviderSignIns(model)
+        .providerRemovalConfirmation(model)
     }
 
     @ViewBuilder
     private var content: some View {
         if !model.hasLoaded && model.loadFailed {
-            FailureCard(message: "Couldn't load your model providers.", identifier: "modelProvidersFailure") {
+            FailureCard(message: ModelProvidersModel.loadFailureText, identifier: "modelProvidersFailure") {
                 Task { await model.load() }
             }
         } else if !model.hasLoaded {
@@ -60,37 +39,89 @@ struct ModelProvidersScreen: View {
         } else if model.providers.isEmpty {
             CardFootnote("No model providers are available.", accessibilityIdentifier: "modelProvidersEmpty")
         } else {
-            ForEach(model.providers) { provider in
-                providerSection(provider)
+            searchField
+            let sections = model.sections
+            ForEach(sections) { section in
+                providerSection(section)
+            }
+            if sections.isEmpty {
+                CardFootnote(ModelProvidersModel.noMatchText, accessibilityIdentifier: "modelProvidersNoMatch")
             }
             CardFootnote(
-                model.loadFailed ? "Couldn't refresh. Pull to try again." : "Keys are never shown after you save them.",
+                model.loadFailed ? ModelProvidersModel.refreshFailureText : ModelProvidersModel.footnoteText,
                 accessibilityIdentifier: "modelProvidersFootnote")
         }
     }
 
-    private func providerSection(_ provider: ModelProvider) -> some View {
-        let key = "modelProvider-\(provider.id)"
+    private var searchField: some View {
+        TextField("Search providers", text: $model.query)
+            .textFieldStyle(.plain)
+            .padding(.horizontal, PalMetrics.rowInset)
+            .frame(minHeight: PalMetrics.rowMinimumHeight)
+            .background(Color(theme.palette.groupedCard), in: Capsule())
+            .padding(.horizontal, PalMetrics.screenMargin)
+            .accessibilityIdentifier("modelProvidersSearch")
+    }
+
+    private func providerSection(_ section: ModelProviderSection) -> some View {
+        let group = section.group.rawValue
         return VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
-            GroupedCard(accessibilityIdentifier: key) {
-                SettingsRow.value(
-                    provider.name, value: stateText(provider), subtitle: subtitle(provider), accessibilityIdentifier: "\(key)-state")
-                if let title = actionTitle(provider) {
+            SectionCaption(section.group.title, accessibilityIdentifier: "modelProviders-\(group)")
+            GroupedCard(accessibilityIdentifier: "modelProvidersCard-\(group)") {
+                if section.providers.isEmpty {
+                    Text(ModelProvidersModel.emptyConnectedText)
+                        .hermesText(.rowSubtitle)
+                        .foregroundStyle(Color(theme.palette.textSecondary))
+                        .padding(.horizontal, PalMetrics.rowInset)
+                        .frame(maxWidth: .infinity, minHeight: PalMetrics.rowMinimumHeight, alignment: .leading)
+                        .accessibilityIdentifier("modelProvidersEmptyConnected")
+                }
+                ForEach(section.providers) { provider in
+                    providerRows(provider)
+                }
+                if section.hiddenCount > 0 {
                     SettingsRow(
-                        title: title, trailing: .none, accessibilityIdentifier: "\(key)-action",
-                        action: { Task { await model.signIn(provider) } }
-                    )
-                    .disabled(model.isWorking(provider.id))
-                }
-                if provider.canRemove {
-                    SettingsRow.destructive("Remove", accessibilityIdentifier: "\(key)-remove") { model.pendingRemoval = provider }
-                        .disabled(model.isWorking(provider.id))
-                }
-                if provider.baseURLEditable {
-                    addressRows(provider, key: key)
+                        title: "Show \(section.hiddenCount) more", trailing: .none,
+                        accessibilityIdentifier: "modelProviders-showMore", action: { model.showsAllOnHost = true })
+                } else if section.group == .onHost, model.showsAllOnHost, section.providers.count > 1, model.query.isEmpty {
+                    SettingsRow(
+                        title: "Show less", trailing: .none,
+                        accessibilityIdentifier: "modelProviders-showLess", action: { model.showsAllOnHost = false })
                 }
             }
-            statusLine(provider, key: key)
+        }
+    }
+
+    @ViewBuilder
+    private func providerRows(_ provider: ModelProvider) -> some View {
+        let key = "modelProvider-\(provider.id)"
+        let face = model.presentation(of: provider)
+        let failure: String? = if case .failed(let text) = face.status { text } else { nil }
+        SettingsRow(
+            title: provider.name, subtitle: failure == nil ? face.detail : nil, value: face.stateLabel,
+            accessibilityIdentifier: "\(key)-state")
+        if let failure {
+            Text(failure)
+                .hermesText(.rowSubtitle)
+                .foregroundStyle(Color(theme.palette.destructive))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, PalMetrics.rowInset)
+                .padding(.bottom, PalMetrics.rowVerticalPadding)
+                .accessibilityIdentifier("\(key)-status")
+        }
+        if let title = face.primaryAction {
+            SettingsRow(
+                title: title, trailing: .none, accessibilityIdentifier: "\(key)-action",
+                action: { Task { await model.signIn(provider) } }
+            )
+            .disabled(model.isWorking(provider.id))
+        }
+        if face.canRemove {
+            SettingsRow.destructive("Remove", accessibilityIdentifier: "\(key)-remove") { model.pendingRemoval = provider }
+                .disabled(model.isWorking(provider.id))
+        }
+        if face.canEditAddress {
+            addressRows(provider, key: key)
         }
     }
 
@@ -125,66 +156,62 @@ struct ModelProvidersScreen: View {
             .disabled(model.isWorking(provider.id))
         }
     }
+}
 
-    @ViewBuilder
-    private func statusLine(_ provider: ModelProvider, key: String) -> some View {
-        switch model.status(of: provider.id) {
-        case .idle:
-            EmptyView()
-        case .working(let work):
-            CardFootnote(workText(work), accessibilityIdentifier: "\(key)-status")
-        case .succeeded(let text):
-            CardFootnote(text, accessibilityIdentifier: "\(key)-status")
-        case .cancelled:
-            CardFootnote("Cancelled. Nothing changed.", accessibilityIdentifier: "\(key)-status")
-        case .failed(let text):
-            Text(text)
-                .hermesText(.rowSubtitle)
-                .foregroundStyle(Color(theme.palette.destructive))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset - 3)
-                .accessibilityIdentifier("\(key)-status")
+extension SettingsHub {
+    @MainActor
+    func modelProvidersModel() -> ModelProvidersModel {
+        let connection = connection
+        let profile = roster.bots.first(where: \.isDefault)?.name
+        let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
+        return ModelProvidersModel(client: ModelProvidersClient(gateway: gateway, profile: profile))
+    }
+}
+
+private struct ProviderSignInTracking: ViewModifier {
+    let model: ModelProvidersModel
+
+    @Environment(ServiceSignInCenter.self) private var signIn
+
+    func body(content: Content) -> some View {
+        content.onChange(of: signIn.lastResolution) { _, resolution in
+            guard let resolution else { return }
+            Task {
+                await model.signInResolved(
+                    requestID: resolution.requestID, service: resolution.service, outcome: resolution.outcome, reason: resolution.reason)
+            }
         }
     }
+}
 
-    private func workText(_ work: ModelProvidersModel.Work) -> String {
-        switch work {
-        case .signingIn: "Waiting for you to finish in the sign-in window…"
-        case .removing: "Removing…"
-        case .savingAddress: "Saving…"
+private struct ProviderRemovalConfirmation: ViewModifier {
+    let model: ModelProvidersModel
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            model.pendingRemoval.map { "Remove \($0.name)?" } ?? "Remove this provider?",
+            isPresented: Binding(get: { model.pendingRemoval != nil }, set: { if !$0 { model.pendingRemoval = nil } }),
+            titleVisibility: .visible,
+            presenting: model.pendingRemoval
+        ) { provider in
+            Button("Remove", role: .destructive) { Task { await model.remove(provider) } }
+                .accessibilityIdentifier("modelProviderRemoveConfirm")
+            Button("Cancel", role: .cancel) { model.pendingRemoval = nil }
+        } message: { provider in
+            Text(
+                provider.scope == .account
+                    ? "This sign-in is shared by all your bots. Bots that use \(provider.name) stop working until you connect it again."
+                    : "Bots that use \(provider.name) stop working until you connect it again.")
         }
     }
+}
 
-    private func stateText(_ provider: ModelProvider) -> String {
-        switch provider.state {
-        case .set: "Set"
-        case .notSet: "Not set"
-        case .expired: "Expired"
-        case .unsupported: "Not supported here"
-        case .unknown: "Unknown"
-        }
+extension View {
+    func tracksProviderSignIns(_ model: ModelProvidersModel) -> some View {
+        modifier(ProviderSignInTracking(model: model))
     }
 
-    private func subtitle(_ provider: ModelProvider) -> String? {
-        let primary: String? = switch provider.state {
-        case .unsupported: provider.reason
-        case .expired: provider.reason ?? "It stopped working. Set it up again."
-        case .set, .notSet, .unknown: nil
-        }
-        let shared: String? = provider.scope == .account ? "Shared by all your bots" : nil
-        let lines = [primary, shared].compactMap { $0 }
-        return lines.isEmpty ? nil : lines.joined(separator: "\n")
-    }
-
-    private func actionTitle(_ provider: ModelProvider) -> String? {
-        guard provider.canSignIn else { return nil }
-        if model.status(of: provider.id) == .working(.signingIn) { return "Waiting for sign-in…" }
-        switch (provider.kind, provider.state) {
-        case (.apiKey, .set), (.apiKey, .expired): return "Replace key"
-        case (.apiKey, _): return "Set key"
-        case (.deviceCode, .set), (.deviceCode, .expired), (.oauthPaste, .set), (.oauthPaste, .expired): return "Sign in again"
-        case (.deviceCode, _), (.oauthPaste, _): return "Sign in"
-        case (.unsupported, _), (.unknown, _): return nil
-        }
+    func providerRemovalConfirmation(_ model: ModelProvidersModel) -> some View {
+        modifier(ProviderRemovalConfirmation(model: model))
     }
 }

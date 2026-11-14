@@ -275,24 +275,27 @@ struct RootView: View {
             .onChange(of: sizeClass) { _, _ in settleOpenConversation() }
             .onChange(of: router.currentBotName) { _, name in rememberOpenConversation(name) }
             .sheet(item: $router.sheet, onDismiss: { createBot = CreateBotModel() }) { sheet in
-                switch sheet {
-                case .settings:
-                    SettingsSheet(model: model, hub: hub, initialRoute: router.settingsRoute, openConnectApps: { router.presentConnectApps() }) { router.dismissSheet() }
-                case .createBot:
-                    CreateBotSheet(model: createBot, roster: roster, router: router)
-                case .connectApps:
-                    ConnectAppsSheet(
-                        model: ConnectAppsModel(
-                            connection: model,
-                            pool: hostPool,
-                            profile: router.connectAppsProfile,
-                            botName: roster.displayName(forProfile: router.connectAppsProfile),
-                            browser: WebAuthenticationBrowser(),
-                            bots: roster.customConnectorBots,
-                            currentBot: roster.currentBotName(forProfile: router.connectAppsProfile)
-                        )
-                    ) { router.dismissSheet() }
+                Group {
+                    switch sheet {
+                    case .settings:
+                        SettingsSheet(model: model, hub: hub, initialRoute: router.settingsRoute, openConnectApps: { router.presentConnectApps() }) { router.dismissSheet() }
+                    case .createBot:
+                        CreateBotSheet(model: createBot, roster: roster, router: router)
+                    case .connectApps:
+                        ConnectAppsSheet(
+                            model: ConnectAppsModel(
+                                connection: model,
+                                pool: hostPool,
+                                profile: router.connectAppsProfile,
+                                botName: roster.displayName(forProfile: router.connectAppsProfile),
+                                browser: WebAuthenticationBrowser(),
+                                bots: roster.customConnectorBots,
+                                currentBot: roster.currentBotName(forProfile: router.connectAppsProfile)
+                            )
+                        ) { router.dismissSheet() }
+                    }
                 }
+                .serviceSignInDialogHost()
             }
             .fullCover(isPresented: $router.isSearching) {
                 SearchHost(roster: roster, router: router)

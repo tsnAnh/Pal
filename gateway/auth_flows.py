@@ -567,10 +567,8 @@ class ProviderKeyFlow:
 
     async def store(self, value: str) -> bool:
         from hermes_cli import model_provider_control as control
-        text = credential_text(value)
-        if text is None:
+        if not await asyncio.to_thread(control.store_pasted_credential, self.provider, value):
             return False
-        await asyncio.to_thread(control.store_api_key, self.provider, text)
         self._stored.set()
         return True
 

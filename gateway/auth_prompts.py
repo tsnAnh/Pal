@@ -18,6 +18,7 @@ from tui_gateway.contracts.canonical_auth import AuthRequiredPayload, AuthResolv
 logger = logging.getLogger(__name__)
 
 SIGNIN_TIMEOUT_SECONDS = 300.0
+MAX_SIGNIN_SECONDS = 1800.0
 DECLINE_COOLDOWN_SECONDS = 60.0
 THREAD_WAIT_MARGIN_SECONDS = 10.0
 
@@ -107,9 +108,16 @@ def _finish(req: _Request, resolution: Resolution) -> None:
         req.future.set_result(resolution)
 
 
+def signin_deadline(flow) -> float:
+    lifetime = getattr(flow, "expires_in", None)
+    if isinstance(lifetime, bool) or not isinstance(lifetime, int) or lifetime <= 0:
+        return SIGNIN_TIMEOUT_SECONDS
+    return max(SIGNIN_TIMEOUT_SECONDS, min(float(lifetime), MAX_SIGNIN_SECONDS))
+
+
 async def _drive(req: _Request) -> None:
     try:
-        signed_in = await asyncio.wait_for(req.flow.wait(), SIGNIN_TIMEOUT_SECONDS)
+        signed_in = await asyncio.wait_for(req.flow.wait(), signin_deadline(req.flow))
         resolution = Resolution.SIGNED_IN if signed_in else Resolution.FAILED
     except TimeoutError:
         resolution = Resolution.TIMED_OUT
@@ -341,7 +349,7 @@ def call_from_thread(home: Path, need: AuthNeed, bot: str) -> Resolution:
         return Resolution.UNAVAILABLE
     future = asyncio.run_coroutine_threadsafe(request_signin(authority, home, need, bot), loop)
     try:
-        return future.result(SIGNIN_TIMEOUT_SECONDS + THREAD_WAIT_MARGIN_SECONDS)
+        return future.result(MAX_SIGNIN_SECONDS + THREAD_WAIT_MARGIN_SECONDS)
     except concurrent.futures.TimeoutError:
         future.cancel()
         return Resolution.TIMED_OUT

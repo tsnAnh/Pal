@@ -205,3 +205,11 @@ def test_every_connect_app_source_in_swift_has_a_declared_sign_in_flow():
     block = re.search(r'enum ConnectAppSource\b[^{]*\{(.*?)\n\}', catalog.read_text(), re.DOTALL).group(1)
     sources = set(re.findall(r'^\s*case (\w+)', block, re.MULTILINE))
     assert sources == set(auth_flows.CONNECT_APP_SOURCES), 'declare the new Connected apps source in auth_flows'
+
+
+def test_swift_setup_token_providers_match_the_gateway_routes():
+    from hermes_cli.model_provider_control import SETUP_TOKEN_ROUTES
+    swift = REPO / 'apps/ios/Packages/PalKit/Sources/PalBotProfile/ModelProviders.swift'
+    literal = re.search(r'static let setupTokenProviders: Set<String> = \[([^\]]*)\]', swift.read_text())
+    assert literal, 'ModelProviderCredential.setupTokenProviders is missing in Swift'
+    assert set(re.findall(r'"([^"]+)"', literal.group(1))) == set(SETUP_TOKEN_ROUTES)

@@ -10,6 +10,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
     case permissions
     case vault
     case publicAccess
+    case providers
     case shortcuts
     case usage
     case updates
@@ -23,6 +24,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .permissions: String(localized: "Permissions")
         case .vault: String(localized: "Vault")
         case .publicAccess: String(localized: "Public access")
+        case .providers: String(localized: "Model providers")
         case .shortcuts: String(localized: "Keyboard Shortcuts")
         case .usage: String(localized: "Usage & Billing")
         case .updates: String(localized: "Updates")
@@ -36,6 +38,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .permissions: "shield"
         case .vault: "circle.square"
         case .publicAccess: "network"
+        case .providers: "cpu"
         case .shortcuts: "keyboard"
         case .usage: "chart.bar"
         case .updates: "icloud.and.arrow.down"
@@ -59,6 +62,7 @@ struct MacSettingsModal: View {
                 case .permissions: MacPermissionsSection(hub: hub)
                 case .vault: MacVaultSection(hub: hub)
                 case .publicAccess: MacPublicAccessSection(hub: hub)
+                case .providers: MacModelProvidersSection(hub: hub)
                 case .shortcuts: MacShortcutSettingsSection()
                 case .usage: MacUsageSection(hub: hub)
                 case .updates: MacUpdatesSection()
@@ -150,41 +154,6 @@ private struct MacGroup<Content: View>: View {
             if let title { MacCaption(title) }
             content
         }
-    }
-}
-
-private struct MacLoading: View {
-    var body: some View {
-        ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 24)
-    }
-}
-
-private struct MacFailure: View {
-    let message: String
-    let retry: () -> Void
-
-    var body: some View {
-        MacCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(message).font(.system(size: 12)).foregroundStyle(PalTokens.textSecondary)
-                Button("Try Again", action: retry).buttonStyle(.palPill(height: 24, fontSize: 11))
-            }
-            .padding(13)
-        }
-    }
-}
-
-private struct MacEmptyRow: View {
-    let text: LocalizedStringKey
-    let identifier: String
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 12))
-            .foregroundStyle(PalTokens.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(13)
-            .accessibilityIdentifier(identifier)
     }
 }
 

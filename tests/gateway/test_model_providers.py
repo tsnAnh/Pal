@@ -14,7 +14,7 @@ pytest_plugins = ('tests.gateway.device_tools_harness',)
 
 @pytest.fixture(autouse=True)
 def clean_registry(monkeypatch):
-    for var in ('DEEPSEEK_API_KEY', 'XAI_API_KEY'):
+    for var in ('DEEPSEEK_API_KEY', 'XAI_API_KEY', 'ANTHROPIC_TOKEN', 'ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN'):
         monkeypatch.delenv(var, raising=False)
     yield
     auth_prompts._active.clear()
@@ -92,10 +92,89 @@ async def test_a_value_that_cannot_be_a_key_fails_and_keeps_the_old_one(authorit
     assert await _submit(phone, first['request_id'], canary) == 'stored'
     await _wait_for(lambda: not auth_prompts._active)
     second = await _begin(phone, 'deepseek')
-    for bad in ('   ', 'café-key', 'two\nlines'):
+    for bad in ('   ', 'café-key', 'bad\x00key'):
         assert await _submit(phone, second['request_id'], bad) == 'failed'
     assert f'DEEPSEEK_API_KEY={canary}' in _env_text(home_of(authority))
     await phone.call('auth.decline', {'request_id': second['request_id']})
+
+
+def _slots(home):
+    pairs = (line.partition('=') for line in _env_text(home).splitlines())
+    return {name: value for name, _, value in pairs if name.startswith('ANTHROPIC_')}
+
+
+async def _paste(phone, provider, value):
+    started = await _begin(phone, provider)
+    outcome = await _submit(phone, started['request_id'], value)
+    await _wait_for(lambda: not auth_prompts._active)
+    return outcome
+
+
+@pytest.mark.asyncio
+async def test_a_pasted_setup_token_goes_to_the_token_slot_and_the_row_is_set(authorities, caplog, capsys, canary):
+    caplog.set_level(logging.DEBUG)
+    authority = await authorities('home')
+    phone = await connect_phone(authority)
+    token = f'sk-ant-oat01-{canary}'
+    assert await _paste(phone, 'anthropic', token) == 'stored'
+    home = home_of(authority)
+    assert _slots(home).get('ANTHROPIC_TOKEN') == token and not _slots(home).get('ANTHROPIC_API_KEY')
+    from hermes_cli import model_provider_control as control
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    scope = set_hermes_home_override(home)
+    try:
+        assert control.row_for(control.lookup('anthropic')).state == 'set'
+    finally:
+        reset_hermes_home_override(scope)
+    out = capsys.readouterr()
+    assert canary not in _blob(phone.frames, caplog.text, out.out, out.err)
+    assert canary.encode() not in _files_without_env(home)
+
+
+@pytest.mark.asyncio
+async def test_pasting_an_api_key_after_a_token_replaces_the_token(authorities, canary):
+    authority = await authorities('home')
+    phone = await connect_phone(authority)
+    token = f'sk-ant-oat01-{canary}'
+    key = f'sk-ant-api03-{canary}'
+    assert await _paste(phone, 'anthropic', token) == 'stored'
+    assert await _paste(phone, 'anthropic', key) == 'stored'
+    home = home_of(authority)
+    assert _slots(home).get('ANTHROPIC_API_KEY') == key and not _slots(home).get('ANTHROPIC_TOKEN')
+    assert token not in _env_text(home)
+
+
+@pytest.mark.asyncio
+async def test_a_setup_token_wrapped_by_the_terminal_is_stored_joined_and_resolves(
+        authorities, monkeypatch, tmp_path, canary):
+    monkeypatch.setattr('pathlib.Path.home', lambda: tmp_path)
+    authority = await authorities('home')
+    phone = await connect_phone(authority)
+    token = f'sk-ant-oat01-{canary}'
+    wrapped = f'  Bearer {token[:20]}\n{token[20:40]} \r\n{token[40:]}\n'
+    assert await _paste(phone, 'anthropic', wrapped) == 'stored'
+    assert _slots(home_of(authority)).get('ANTHROPIC_TOKEN') == token
+    from agent.anthropic_credentials import resolve_anthropic_token
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    scope = set_hermes_home_override(home_of(authority))
+    try:
+        assert resolve_anthropic_token() == token
+    finally:
+        reset_hermes_home_override(scope)
+
+
+@pytest.mark.asyncio
+async def test_a_paste_that_cannot_be_a_credential_leaves_the_env_untouched(authorities, canary):
+    authority = await authorities('home')
+    phone = await connect_phone(authority)
+    assert await _paste(phone, 'anthropic', f'sk-ant-oat01-{canary}') == 'stored'
+    before = (home_of(authority) / '.env').read_bytes()
+    started = await _begin(phone, 'anthropic')
+    assert await _submit(phone, started['request_id'], f'sk-ant-api03-caf\u00e9-{canary}') == 'failed'
+    too_long = await auth_prompts.submit_credential(authority, started['request_id'], 'k' * 5000)
+    assert too_long is auth_prompts.CredentialOutcome.FAILED
+    assert (home_of(authority) / '.env').read_bytes() == before
+    await phone.call('auth.decline', {'request_id': started['request_id']})
 
 
 @pytest.mark.asyncio
@@ -112,7 +191,7 @@ async def test_a_store_error_fails_without_echoing_the_secret_and_keeps_the_old_
 
     def boom(provider_id, text):
         raise OSError(f'disk full while writing {text}')
-    monkeypatch.setattr(control, 'store_api_key', boom)
+    monkeypatch.setattr(control, 'store_pasted_credential', boom)
     second = await _begin(phone, 'deepseek')
     assert await _submit(phone, second['request_id'], fresh) == 'failed'
     assert f'DEEPSEEK_API_KEY={canary}' in _env_text(home_of(authority))
@@ -227,6 +306,20 @@ async def test_a_failed_device_code_sign_in_explains_why(authorities, monkeypatc
     await _wait_for(lambda: phone.events('auth.resolved'))
     resolved = phone.events('auth.resolved')[-1]
     assert resolved['outcome'] == 'failed' and words in resolved['reason']
+
+
+@pytest.mark.asyncio
+async def test_the_codex_device_flow_gets_the_lifetime_its_provider_reports(monkeypatch, tmp_path):
+    from gateway import auth_flows
+
+    async def start(provider_id, profile):
+        return {'session_id': 's1', 'flow': 'device_code', 'user_code': 'ABCD-1234',
+                'verification_url': 'https://login.example.test/device', 'expires_in': 900, 'poll_interval': 1}
+    monkeypatch.setattr(oauth, '_start_device_code_flow', start)
+    flow = auth_flows.ProviderDeviceFlow(tmp_path, 'openai-codex')
+    assert auth_prompts.signin_deadline(flow) == auth_prompts.SIGNIN_TIMEOUT_SECONDS
+    await flow.begin()
+    assert auth_prompts.signin_deadline(flow) == 900.0
 
 
 @pytest.mark.asyncio
