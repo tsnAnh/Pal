@@ -40,6 +40,7 @@ public actor DeviceToolHost {
     private let timing: DeviceToolHostTiming
     private let diagnostics: Diagnostics
     private let alwaysOn: [DeviceConnectorID]
+    private let mcpRelay: (any DeviceMcpRelay)?
     private var runTask: Task<Void, Never>?
     private var connection: GatewayConnection?
     private var inFlight: [String: Task<Void, Never>] = [:]
@@ -51,9 +52,11 @@ public actor DeviceToolHost {
         ledger: ConnectorLedger,
         timing: DeviceToolHostTiming = .standard,
         diagnostics: Diagnostics = .silent,
-        alwaysOn: [DeviceConnectorID] = []
+        alwaysOn: [DeviceConnectorID] = [],
+        mcpRelay: (any DeviceMcpRelay)? = nil
     ) {
         self.alwaysOn = alwaysOn
+        self.mcpRelay = mcpRelay
         self.connect = connect
         self.executor = executor
         self.ledger = ledger
@@ -89,6 +92,18 @@ public actor DeviceToolHost {
 
     public nonisolated var connectors: any DeviceConnectorsAPI { HostConnectorsAPI(host: self) }
 
+    public var hasConnection: Bool { connection != nil }
+
+    @discardableResult
+    public func registerMcp(_ server: DeviceMcpServer) async throws -> Bool {
+        let result = try await call(DeviceMcpWire.registerMethod, DeviceMcpWire.serverParams(server))
+        return result["registered"]?.boolValue == true
+    }
+
+    public func unregisterMcp(_ server: DeviceMcpServer) async throws {
+        _ = try await call(DeviceMcpWire.unregisterMethod, DeviceMcpWire.serverParams(server))
+    }
+
     private func run() async {
         var attempt = 0
         while !Task.isCancelled {
@@ -96,9 +111,11 @@ public actor DeviceToolHost {
                 let fresh = try await connect()
                 connection = fresh
                 attempt = 0
-                await serve(fresh)
+                let channel = mcpChannel(over: fresh)
+                await serve(fresh, channel: channel)
                 connection = nil
                 cancelAll()
+                await mcpRelay?.channelEnded(channel.id)
                 await fresh.close()
             } catch is CancellationError {
                 break
@@ -113,12 +130,37 @@ public actor DeviceToolHost {
         connection = nil
     }
 
-    private func serve(_ live: GatewayConnection) async {
+    private func mcpChannel(over live: GatewayConnection) -> DeviceMcpChannel {
+        let timeout = timing.callTimeout
+        return DeviceMcpChannel(
+            deliver: { relayID, message in
+                let result = try? await live.call(DeviceMcpWire.deliverMethod, params: DeviceMcpWire.deliverParams(relayID: relayID, message: message), timeout: timeout)
+                return result?["accepted"]?.boolValue == true
+            },
+            fail: { relayID, code, text in
+                _ = try? await live.call(DeviceMcpWire.failMethod, params: DeviceMcpWire.failParams(relayID: relayID, code: code, message: text), timeout: timeout)
+            }
+        )
+    }
+
+    private func registerMcpServers(on live: GatewayConnection) async {
+        guard let mcpRelay else { return }
+        for server in await mcpRelay.activeServers() {
+            do {
+                _ = try await live.call(DeviceMcpWire.registerMethod, params: DeviceMcpWire.serverParams(server), timeout: timing.callTimeout)
+            } catch {
+                diagnostics.info("device", "mcp register failed: \(Diagnostics.describe(error))")
+            }
+        }
+    }
+
+    private func serve(_ live: GatewayConnection, channel: DeviceMcpChannel) async {
         _ = try? await ledger.refresh()
         for id in alwaysOn where await ledger.state(for: id) != .allowed { _ = try? await ledger.set(id, state: .allowed) }
+        await registerMcpServers(on: live)
         await withTaskGroup(of: Void.self) { group in
             group.addTask { [weak self] in
-                for await event in live.events { await self?.handle(event, on: live) }
+                for await event in live.events { await self?.handle(event, on: live, channel: channel) }
             }
             group.addTask { [timing, diagnostics] in
                 while !Task.isCancelled {
@@ -136,8 +178,12 @@ public actor DeviceToolHost {
         }
     }
 
-    private func handle(_ event: GatewayEvent, on live: GatewayConnection) {
-        if let request = DeviceToolRequest(event: event) {
+    private func handle(_ event: GatewayEvent, on live: GatewayConnection, channel: DeviceMcpChannel) async {
+        if let frame = DeviceMcpFrame(event: event) {
+            await mcpRelay?.relay(frame, over: channel)
+        } else if let close = DeviceMcpClose(event: event) {
+            await mcpRelay?.close(close)
+        } else if let request = DeviceToolRequest(event: event) {
             accept(request, on: live)
         } else if let cancel = DeviceToolCancel(event: event) {
             inFlight.removeValue(forKey: cancel.requestID)?.cancel()

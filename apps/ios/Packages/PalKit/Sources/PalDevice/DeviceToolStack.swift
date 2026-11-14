@@ -33,12 +33,13 @@ public struct DeviceToolStack: Sendable {
         consent: any ConsentPrompting,
         environment: DeviceToolEnvironment = DeviceToolEnvironment(),
         timing: DeviceToolHostTiming = .standard,
-        diagnostics: Diagnostics = .silent
+        diagnostics: Diagnostics = .silent,
+        mcpRelay: (any DeviceMcpRelay)? = nil
     ) -> DeviceToolStack {
         let deferred = DeferredConnectorsAPI()
         let ledger = ConnectorLedger(api: deferred)
         let executor = DeviceToolExecutor(providers: providers, permissions: permissions, ledger: ledger, consent: consent, environment: environment)
-        let host = DeviceToolHost(connect: connect, executor: executor, ledger: ledger, timing: timing, diagnostics: diagnostics, alwaysOn: providers.availableConnectors)
+        let host = DeviceToolHost(connect: connect, executor: executor, ledger: ledger, timing: timing, diagnostics: diagnostics, alwaysOn: providers.availableConnectors, mcpRelay: mcpRelay)
         deferred.bind(host.connectors)
         return DeviceToolStack(host: host, ledger: ledger, executor: executor)
     }

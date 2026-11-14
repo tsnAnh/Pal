@@ -260,6 +260,103 @@ public enum DeviceToolOutcome: Sendable, Hashable {
     }
 }
 
+public enum DeviceMcpServer: String, Codable, Sendable, Hashable, CaseIterable {
+    case t3code
+}
+
+public enum DeviceMcpCloseReason: String, Codable, Sendable, Hashable {
+    case clientClosed = "client_closed"
+    case unregistered
+    case timeout
+
+    public init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: raw) ?? .clientClosed
+    }
+}
+
+public enum DeviceMcpFailCode: String, Codable, Sendable, Hashable {
+    case unreachable
+    case authRequired = "auth_required"
+    case closed
+}
+
+public enum DeviceMcpLimits {
+    public static let maximumMessageBytes = 4 * 1024 * 1024
+    public static let maximumFailMessage = 200
+}
+
+public struct DeviceMcpFrame: Sendable, Hashable {
+    public static let eventType = "device.mcp.frame"
+
+    public var relayID: String
+    public var server: DeviceMcpServer
+    public var message: JSONValue
+
+    public init(relayID: String, server: DeviceMcpServer, message: JSONValue) {
+        self.relayID = relayID
+        self.server = server
+        self.message = message
+    }
+
+    public init?(event: GatewayEvent) {
+        guard event.type == Self.eventType, let payload = event.payload,
+              let relayID = payload["relay_id"]?.stringValue, !relayID.isEmpty,
+              let server = payload["server"]?.stringValue.flatMap(DeviceMcpServer.init(rawValue:)),
+              let message = payload["message"]
+        else { return nil }
+        self.init(relayID: relayID, server: server, message: message)
+    }
+}
+
+public struct DeviceMcpClose: Sendable, Hashable {
+    public static let eventType = "device.mcp.close"
+
+    public var relayID: String
+    public var reason: DeviceMcpCloseReason
+
+    public init(relayID: String, reason: DeviceMcpCloseReason) {
+        self.relayID = relayID
+        self.reason = reason
+    }
+
+    public init?(event: GatewayEvent) {
+        guard event.type == Self.eventType, let payload = event.payload,
+              let relayID = payload["relay_id"]?.stringValue, !relayID.isEmpty
+        else { return nil }
+        self.init(
+            relayID: relayID,
+            reason: payload["reason"]?.stringValue.flatMap(DeviceMcpCloseReason.init(rawValue:)) ?? .clientClosed
+        )
+    }
+}
+
+public enum DeviceMcpWire {
+    public static let deliverMethod = "device.mcp.deliver"
+    public static let failMethod = "device.mcp.fail"
+    public static let registerMethod = "device.mcp.register"
+    public static let unregisterMethod = "device.mcp.unregister"
+
+    public static func deliverParams(relayID: String, message: JSONValue) -> JSONValue {
+        ["relay_id": .string(relayID), "message": message]
+    }
+
+    public static func failParams(relayID: String, code: DeviceMcpFailCode, message: String) -> JSONValue {
+        [
+            "relay_id": .string(relayID), "code": .string(code.rawValue),
+            "message": .string(String(message.prefix(DeviceMcpLimits.maximumFailMessage))),
+        ]
+    }
+
+    public static func serverParams(_ server: DeviceMcpServer) -> JSONValue {
+        ["server": .string(server.rawValue)]
+    }
+
+    public static func encodedSize(of message: JSONValue) -> Int? {
+        try? JSONEncoder().encode(message).count
+    }
+}
+
 public enum DeviceWire {
     public static let helloCapability = "device_tools"
 

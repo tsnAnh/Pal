@@ -140,7 +140,7 @@ struct McpOAuthDiscovery: Sendable {
     }
 
     func discover(resource: URL) async throws -> McpOAuthServer {
-        guard Self.isSecure(resource), let host = resource.host(), !host.isEmpty else { throw McpOAuthError.discoveryFailed }
+        guard Self.isSecure(resource, within: resource), let host = resource.host(), !host.isEmpty else { throw McpOAuthError.discoveryFailed }
         let hint = await metadataHint(from: resource)
         var resourceMetadata: ResourceMetadata?
         for candidate in Self.resourceMetadataCandidates(for: resource, hint: hint) {
@@ -148,12 +148,12 @@ struct McpOAuthDiscovery: Sendable {
             resourceMetadata = found
             break
         }
-        let issuerText = resourceMetadata?.authorizationServers?.first { Self.url($0).map(Self.isSecure) ?? false }
+        let issuerText = resourceMetadata?.authorizationServers?.first { Self.url($0).map { Self.isSecure($0, within: resource) } ?? false }
             ?? Self.origin(of: resource)
         guard let issuerURL = Self.url(issuerText) else { throw McpOAuthError.discoveryFailed }
         for candidate in Self.serverMetadataCandidates(for: issuerURL) {
             guard let result = try? await http.get(candidate), let metadata = http.json(ServerMetadata.self, result),
-                  let server = Self.server(from: metadata, issuer: issuerText, resource: resourceMetadata?.resource ?? resource.absoluteString, resourceScopes: resourceMetadata?.scopesSupported)
+                  let server = Self.server(from: metadata, issuer: issuerText, resource: resourceMetadata?.resource ?? resource.absoluteString, trust: resource, resourceScopes: resourceMetadata?.scopesSupported)
             else { continue }
             return server
         }
@@ -164,16 +164,16 @@ struct McpOAuthDiscovery: Sendable {
     private func metadataHint(from resource: URL) async -> URL? {
         guard let result = try? await http.get(resource), result.response.statusCode == 401,
               let header = result.response.value(forHTTPHeaderField: "WWW-Authenticate"),
-              let hint = Self.resourceMetadataURL(inChallenge: header), Self.isSecure(hint), hint.host() == resource.host()
+              let hint = Self.resourceMetadataURL(inChallenge: header), Self.isSecure(hint, within: resource), hint.host() == resource.host()
         else { return nil }
         return hint
     }
 
-    private static func server(from metadata: ServerMetadata, issuer: String, resource: String, resourceScopes: [String]?) -> McpOAuthServer? {
+    private static func server(from metadata: ServerMetadata, issuer: String, resource: String, trust: URL, resourceScopes: [String]?) -> McpOAuthServer? {
         guard let metadataIssuer = metadata.issuer, normalized(metadataIssuer) == normalized(issuer),
-              let authorization = metadata.authorizationEndpoint.flatMap(Self.url), isSecure(authorization),
-              let token = metadata.tokenEndpoint.flatMap(Self.url), isSecure(token),
-              let registration = metadata.registrationEndpoint.flatMap(Self.url), isSecure(registration)
+              let authorization = metadata.authorizationEndpoint.flatMap(Self.url), isSecure(authorization, within: trust),
+              let token = metadata.tokenEndpoint.flatMap(Self.url), isSecure(token, within: trust),
+              let registration = metadata.registrationEndpoint.flatMap(Self.url), isSecure(registration, within: trust)
         else { return nil }
         if let methods = metadata.codeChallengeMethodsSupported, !methods.contains("S256") { return nil }
         return McpOAuthServer(
@@ -226,8 +226,13 @@ struct McpOAuthDiscovery: Sendable {
         issuer.hasSuffix("/") ? String(issuer.dropLast()) : issuer
     }
 
-    private static func isSecure(_ url: URL) -> Bool {
-        url.scheme?.lowercased() == "https" && url.host()?.isEmpty == false
+    private static func isSecure(_ url: URL, within resource: URL) -> Bool {
+        guard let host = url.host(), !host.isEmpty else { return false }
+        switch url.scheme?.lowercased() {
+        case "https": return true
+        case "http": return LoopbackHost.isLoopback(host) && LoopbackHost.isLoopback(resource)
+        default: return false
+        }
     }
 }
 
