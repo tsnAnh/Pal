@@ -133,6 +133,7 @@ struct ChatComposer: View {
                     selection: nil,
                     listIdentifier: "slashPicker",
                     rowIdentifierPrefix: "slashItem-",
+                    showsContainer: false,
                     pick: { id in if let item = slashMatches.first(where: { $0.id == id }) { pickSlash(item) } }
                 )
             } else if isFileRefOpen {
@@ -382,6 +383,7 @@ private struct CompletionList: View {
     let selection: String?
     let listIdentifier: String
     let rowIdentifierPrefix: String
+    var showsContainer = true
     let pick: (String) -> Void
 
     var body: some View {
@@ -419,8 +421,8 @@ private struct CompletionList: View {
             }
         }
         .frame(maxHeight: 240)
-        .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(PalTokens.panelBorder, lineWidth: 1))
+        .background(showsContainer ? PalTokens.elevated : Color.clear, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(showsContainer ? PalTokens.panelBorder : Color.clear, lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(listIdentifier)
     }
