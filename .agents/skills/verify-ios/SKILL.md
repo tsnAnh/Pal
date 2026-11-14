@@ -135,7 +135,7 @@ Run it after every drive session, pass or fail, and after any failed attempt. It
 | `logs` | `$S/logs [window]` | app os_log extract |
 | `cleanup` | `$S/cleanup` | teardown, never evidence |
 
-Env knobs: `VERIFY_IOS_OWNER`, `VERIFY_IOS_UDID`, `VERIFY_IOS_SEED` (`parity`), `VERIFY_IOS_SLOT_WAIT_SECONDS`, `VERIFY_IOS_BACKEND_READY_SECONDS`, `HERMES_IOS_PYTHON` (default `<repo>/.venv/bin/python`).
+Env knobs: `VERIFY_IOS_OWNER`, `VERIFY_IOS_UDID`, `VERIFY_IOS_SEED` (`parity` or `perf`; `perf` seeds long marked Bot Chats for `ChatHistoryPagingE2ETests`, and `drive-control` forwards it too), `VERIFY_IOS_SLOT_WAIT_SECONDS`, `VERIFY_IOS_BACKEND_READY_SECONDS`, `HERMES_IOS_PYTHON` (default `<repo>/.venv/bin/python`).
 
 ## Rules and what enforces them
 

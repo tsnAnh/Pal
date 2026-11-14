@@ -45,6 +45,11 @@ GAPS = (20, 45, 90, 300, 1500)
 
 TOOL_NAMES = ("terminal", "read_file", "search_files", "web_extract", "patch", "write_file", "web_search")
 
+TALL_EVERY = 15
+TALL_BLOCKS = 64
+HEAVY_TOOL_EVERY = 7
+HIDDEN_PAIR_EVERY = 12
+
 
 @dataclass
 class Row:
@@ -55,6 +60,8 @@ class Row:
     tool_call_id: str | None = None
     tool_name: str | None = None
     kind: str = "text"
+    display_kind: str | None = None
+    marker: str | None = None
 
 
 @dataclass
@@ -64,6 +71,18 @@ class Corpus:
     images: int = 0
     inline_images: int = 0
     image_bytes: int = 0
+    visible: list = field(default_factory=list)
+    hidden: list = field(default_factory=list)
+
+
+@dataclass
+class Shape:
+    rng: random.Random
+    replies: int = 0
+
+    def tall_due(self):
+        self.replies += 1
+        return self.replies % TALL_EVERY == 0
 
 
 def sentence(rng, low=6, high=16):
@@ -99,6 +118,21 @@ def assistant_markdown(rng, long_form=False):
     if rng.random() < 0.3:
         parts.insert(0, f"## {rng.choice(WORDS).capitalize()} {rng.choice(WORDS)}")
     return "\n\n".join(parts)
+
+
+def tall_markdown(rng):
+    blocks = []
+    for index in range(TALL_BLOCKS):
+        if index % 8 == 0:
+            blocks.append(f"## {rng.choice(WORDS).capitalize()} {rng.choice(WORDS)}")
+        blocks.append(rng.choice((paragraph, bullet_list, code_block, table, paragraph, bullet_list))(rng))
+    return "\n\n".join(blocks)
+
+
+def final_reply(rng, shape, long_form):
+    if shape is not None and shape.tall_due():
+        return tall_markdown(shape.rng)
+    return assistant_markdown(rng, long_form=long_form)
 
 
 def tool_result(rng, name, large):
@@ -145,30 +179,47 @@ def photo_jpeg(index):
     return buffer.getvalue()
 
 
-def tool_turn(rng, user_text, rows, ids):
+def tool_round(rng, calls, rows, ids):
+    batch = []
+    for name in calls:
+        ids[0] += 1
+        batch.append({"id": f"call_{ids[0]:06d}", "type": "function", "function": {"name": name, "arguments": json.dumps(tool_arguments(rng, name))}})
+    lead = "" if rng.random() < 0.5 else sentence(rng, 5, 12)
+    rows.append(Row("assistant", lead, tool_calls=batch, kind="tool_calls"))
+    for call in batch:
+        name = call["function"]["name"]
+        large = name in ("read_file", "web_extract", "search_files", "terminal") and rng.random() < 0.4
+        rows.append(Row("tool", tool_result(rng, name, large), tool_call_id=call["id"], tool_name=name, kind="tool_large" if large else "tool"))
+
+
+def tool_turn(rng, user_text, rows, ids, shape=None):
     rows.append(Row("user", user_text))
     for _round in range(rng.choice((1, 1, 1, 2))):
-        calls = [rng.choice(TOOL_NAMES) for _ in range(rng.choice((1, 1, 2, 3)))]
-        batch = []
-        for name in calls:
-            ids[0] += 1
-            batch.append({"id": f"call_{ids[0]:06d}", "type": "function", "function": {"name": name, "arguments": json.dumps(tool_arguments(rng, name))}})
-        lead = "" if rng.random() < 0.5 else sentence(rng, 5, 12)
-        rows.append(Row("assistant", lead, tool_calls=batch, kind="tool_calls"))
-        for call in batch:
-            name = call["function"]["name"]
-            large = name in ("read_file", "web_extract", "search_files", "terminal") and rng.random() < 0.4
-            rows.append(Row("tool", tool_result(rng, name, large), tool_call_id=call["id"], tool_name=name, kind="tool_large" if large else "tool"))
-    rows.append(Row("assistant", assistant_markdown(rng, long_form=True)))
+        tool_round(rng, [rng.choice(TOOL_NAMES) for _ in range(rng.choice((1, 1, 2, 3)))], rows, ids)
+    rows.append(Row("assistant", final_reply(rng, shape, True)))
 
 
-def plain_turn(rng, user_text, rows):
+def heavy_tool_turn(shape, user_text, rows, ids):
+    rng = shape.rng
     rows.append(Row("user", user_text))
-    rows.append(Row("assistant", assistant_markdown(rng, long_form=rng.random() < 0.3)))
+    for _round in range(rng.randint(3, 4)):
+        tool_round(rng, [rng.choice(TOOL_NAMES) for _ in range(rng.randint(2, 3))], rows, ids)
+    rows.append(Row("assistant", final_reply(rng, shape, True)))
 
 
-def build_corpus(total_rows, seed, now, images_dir):
+def plain_turn(rng, user_text, rows, shape=None):
+    rows.append(Row("user", user_text))
+    rows.append(Row("assistant", final_reply(rng, shape, rng.random() < 0.3)))
+
+
+def hidden_pair(shape, rows):
+    for role in ("user", "assistant"):
+        rows.append(Row(role, "internal scaffold the chat never shows", kind="hidden", display_kind="hidden"))
+
+
+def build_corpus(total_rows, seed, now, images_dir, marked=False):
     rng = random.Random(seed)
+    shape = Shape(random.Random(seed + 1)) if marked else None
     corpus = Corpus()
     rows = corpus.rows
     ids = [0]
@@ -182,7 +233,7 @@ def build_corpus(total_rows, seed, now, images_dir):
         remaining = total_rows - len(rows)
         user_text = rng.choice(USER_OPENERS).format(topic=rng.choice(TOPICS)) if rng.random() < 0.6 else rng.choice(USER_FOLLOWUPS)
         if remaining == 1:
-            rows.append(Row("assistant", assistant_markdown(rng)))
+            rows.append(Row("assistant", final_reply(rng, shape, False)))
         elif turn_index in image_turns or turn_index in inline_turns:
             jpeg = photo_jpeg(corpus.images + corpus.inline_images)
             corpus.image_bytes += len(jpeg)
@@ -196,20 +247,63 @@ def build_corpus(total_rows, seed, now, images_dir):
                 corpus.files[path] = jpeg
                 corpus.images += 1
                 rows.append(Row("user", f"What do you make of this screenshot?\n\n[Image attached at: {path}]", kind="image"))
-            rows.append(Row("assistant", assistant_markdown(rng)))
+            rows.append(Row("assistant", final_reply(rng, shape, False)))
         else:
             before = len(rows)
-            if remaining >= 10 and rng.random() < 0.55:
-                tool_turn(rng, user_text, rows, ids)
+            if shape is not None and turn_index % HEAVY_TOOL_EVERY == 3 and remaining >= 30:
+                heavy_tool_turn(shape, user_text, rows, ids)
+            elif remaining >= 10 and rng.random() < 0.55:
+                tool_turn(rng, user_text, rows, ids, shape)
             if len(rows) == before or len(rows) > total_rows:
                 del rows[before:]
-                plain_turn(rng, user_text, rows)
+                plain_turn(rng, user_text, rows, shape)
+        if shape is not None and turn_index % HIDDEN_PAIR_EVERY == HIDDEN_PAIR_EVERY - 1 and total_rows - len(rows) >= 4:
+            hidden_pair(shape, rows)
         turn_index += 1
     clock = now - 90 - sum(rng.choice(GAPS) for _ in rows)
     for row in rows:
         clock += rng.choice(GAPS)
         row.timestamp = clock
+    if marked:
+        apply_markers(corpus)
     return corpus
+
+
+def user_text_with_marker(content, marker):
+    if isinstance(content, str):
+        head, separator, attached = content.partition("\n\n[Image attached at:")
+        return f"{head} {marker}{separator}{attached}"
+    parts = [dict(part) for part in content]
+    first_text = next(part for part in parts if part.get("type") == "text")
+    first_text["text"] = f"{first_text['text']} {marker}"
+    return parts
+
+
+def is_visible(row):
+    if row.display_kind == "hidden":
+        return False
+    if row.role == "user":
+        return True
+    return row.role == "assistant" and bool(row.content.strip())
+
+
+def apply_markers(corpus):
+    for row in corpus.rows:
+        if row.display_kind == "hidden":
+            row.marker = f"H{len(corpus.hidden) + 1:05d}"
+            row.content = f"{row.content} {row.marker}"
+            corpus.hidden.append(row.marker)
+        elif is_visible(row):
+            row.marker = f"M{len(corpus.visible) + 1:05d}"
+            row.content = user_text_with_marker(row.content, row.marker) if row.role == "user" else f"{row.content}\n\nref {row.marker}"
+            corpus.visible.append(row.marker)
+
+
+def manifest(corpus):
+    return {
+        "visible": corpus.visible, "hidden": corpus.hidden, "visible_count": len(corpus.visible),
+        "first_visible_marker": corpus.visible[0], "newest_visible_marker": corpus.visible[-1], "rows": len(corpus.rows),
+    }
 
 
 def describe(corpus):

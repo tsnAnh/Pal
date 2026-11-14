@@ -10,7 +10,7 @@ SEED=""
 
 usage() {
   cat <<USAGE
-usage: e2e-gateway [--seed parity] [-- command...]
+usage: e2e-gateway [--seed parity|perf] [-- command...]
 Starts a stub LLM and an isolated, auth-gated gateway in a temp HERMES_HOME with two bot
 profiles, then runs the command with HERMES_IOS_E2E_* exported (or prints them and waits
 for SIGINT when no command is given). Everything is torn down on exit.
@@ -19,6 +19,10 @@ for SIGINT when no command is given). Everything is torn down on exit.
                   plus 7 bots, Vietnamese bot chats, avatar looks and recency spread) through
                   the real profile and session stores; HERMES_IOS_E2E_PROFILES lists its slugs,
                   default first. See Tools/seed-parity/seed_parity.py.
+  --seed perf     keep bot-alpha and bot-beta and seed their Bot Chats with long marked transcripts
+                  (600 and 2000 rows: unique visible markers, hidden rows, tall replies, tool-heavy turns);
+                  HERMES_IOS_E2E_PERF_MANIFEST names the JSON listing each profile's ordered markers.
+                  See Tools/perf/perf_seed.py.
 USAGE
 }
 
@@ -26,7 +30,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
     --seed)
-      [ "$#" -ge 2 ] || { echo "--seed needs a value (parity)" >&2; exit 2; }
+      [ "$#" -ge 2 ] || { echo "--seed needs a value (parity or perf)" >&2; exit 2; }
       SEED="$2"; shift 2 ;;
     --) shift; break ;;
     *) break ;;
@@ -39,7 +43,8 @@ case "$SEED" in
     SEED_TOOL="$IOS_DIR/Tools/seed-parity/seed_parity.py"
     SEED_SLUGS="$("$PYTHON" -I "$SEED_TOOL" slugs)"
     IFS=, read -r -a PROFILES <<<"$SEED_SLUGS" ;;
-  *) echo "unknown seed: $SEED (supported: parity)" >&2; exit 2 ;;
+  perf) ;;
+  *) echo "unknown seed: $SEED (supported: parity, perf)" >&2; exit 2 ;;
 esac
 
 WORK_DIR="$(mktemp -d /tmp/hermes-ios-e2e.XXXXXX)"
@@ -153,6 +158,14 @@ export HERMES_IOS_E2E_GATEWAY_LOG="$GATEWAY_LOG"
 if [ "$SEED" = "parity" ]; then
   "$PYTHON" -I "$SEED_TOOL" seed --home "$HOME_DIR" --repo "$GATEWAY_REPO" --dm-replies "$DM_REPLIES" >"$WORK_DIR/seed.log" 2>&1 \
     || { echo "seed parity failed" >&2; cat "$WORK_DIR/seed.log" >&2; exit 1; }
+fi
+
+if [ "$SEED" = "perf" ]; then
+  PERF_MANIFEST="$WORK_DIR/perf-manifest.json"
+  "$PYTHON" -I "$IOS_DIR/Tools/perf/perf_seed.py" --home "$HOME_DIR" --repo "$GATEWAY_REPO" \
+    --sizes bot-alpha=600,bot-beta=2000 --marked --manifest "$PERF_MANIFEST" >"$WORK_DIR/seed.log" 2>&1 \
+    || { echo "seed perf failed" >&2; cat "$WORK_DIR/seed.log" >&2; exit 1; }
+  export HERMES_IOS_E2E_PERF_MANIFEST="$PERF_MANIFEST"
 fi
 
 if [ "$#" -eq 0 ]; then

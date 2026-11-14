@@ -11,7 +11,8 @@ Records a baseline, starts an isolated sandbox gateway + fake LLM, builds the ap
 boots one simulator (waits for a free slot), claims it in the device ledger, then runs doctor.
 Env: VERIFY_IOS_OWNER (ledger owner, default verify-ios), VERIFY_IOS_UDID (pin a simulator),
 VERIFY_IOS_SLOT_WAIT_SECONDS (default 900), HERMES_IOS_PYTHON,
-VERIFY_IOS_SEED (parity: seed the 8-bot parity roster via e2e-gateway --seed; default off).
+VERIFY_IOS_SEED (parity: seed the 8-bot parity roster via e2e-gateway --seed; perf: seed bot-alpha and
+bot-beta with long marked Bot Chats for ChatHistoryPagingE2ETests; default off).
 On any failure launch runs cleanup before exiting non-zero. Evidence is never removed.
 USAGE
     exit 0 ;;
