@@ -191,7 +191,7 @@ final class PagingDriver {
     let app: XCUIApplication
     private(set) var region: CGRect = .null
 
-    private static let slowDragFraction: CGFloat = 0.65
+    private static let slowDragFraction: CGFloat = 0.75
     private static let dragStartFraction: CGFloat = 0.12
 
     init(app: XCUIApplication) {
@@ -259,11 +259,11 @@ final class PagingDriver {
     }
 
     func flingOlder() {
-        app.descendants(matching: .any)["chatScreen"].swipeDown(velocity: .fast)
+        app.descendants(matching: .any)["chatScreen"].firstMatch.swipeDown(velocity: .fast)
     }
 
     func flingNewer() {
-        app.descendants(matching: .any)["chatScreen"].swipeUp(velocity: .fast)
+        app.descendants(matching: .any)["chatScreen"].firstMatch.swipeUp(velocity: .fast)
     }
 
     func anchor(in reading: ChatReading) -> PagingAnchor? {
@@ -326,7 +326,7 @@ final class PagingDriver {
         guard !region.isNull else { return }
         let start = coordinate(atY: region.minY + region.height * startFraction)
         let end = coordinate(atY: region.minY + region.height * endFraction)
-        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .slow, thenHoldForDuration: 0.25)
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: .fast, thenHoldForDuration: 0.3)
     }
 
     private func coordinate(atY y: CGFloat) -> XCUICoordinate {

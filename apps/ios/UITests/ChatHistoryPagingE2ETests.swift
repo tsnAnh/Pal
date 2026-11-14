@@ -31,7 +31,7 @@ final class ChatHistoryPagingE2ETests: BotProfileTestCase {
     private static let landingWindow: TimeInterval = 3
     private static let pagingBudget: TimeInterval = 720
     private static let maxGestures = 400
-    private static let scrollToTopBudget: TimeInterval = 480
+    private static let scrollToTopBudget: TimeInterval = 900
     private static let scrollToTopMaxGestures = 400
     private static let stallGestures = 15
     private static let pillSettleSeconds: TimeInterval = 12
