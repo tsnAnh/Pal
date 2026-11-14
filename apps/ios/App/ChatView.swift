@@ -25,8 +25,6 @@ struct ChatView: View {
     @Environment(ActionAutoApprove.self) private var autoApprove
     #if os(macOS)
     @Environment(MacShell.self) private var shell
-    #else
-    @State private var messageMenu: MessageMenuRequest?
     #endif
 
     init(model: ChatModel, teach: TeachModel, router: AppRouter) {
@@ -105,28 +103,28 @@ struct ChatView: View {
         }
         .animation(.snappy(duration: 0.2), value: scroll.showsJumpButton)
         .safeAreaBar(edge: .bottom) { bottomBar().chatColumn() }
-        #if os(macOS)
-        .safeAreaBar(edge: .top) {
-            MacChatHeader(bot: model.bot, activity: model.activity, mood: model.avatarMood, router: router)
-        }
-        #endif
         .onChange(of: model.currentFindRowID) { _, id in
             guard let id else { return }
             scroll.reveal(id)
         }
-        #if os(iOS)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                BotCapsule(bot: model.bot, activity: model.activity, mood: model.avatarMood)
-            }
-            .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .trailingBar) {
-                menu
-            }
+        .iOSOnly { chat in
+            chat
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        BotCapsule(bot: model.bot, activity: model.activity, mood: model.avatarMood)
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+                    ToolbarItem(placement: .trailingBar) {
+                        menu
+                    }
+                }
+                .toolbarTitleDisplayMode(.inline)
         }
-        .toolbarTitleDisplayMode(.inline)
-        #else
-        .macChatActions(
+        .macChatChrome(
+            bot: model.bot,
+            activity: model.activity,
+            mood: model.avatarMood,
+            router: router,
             find: {
                 composerFocused = false
                 model.beginFinding()
@@ -136,14 +134,8 @@ struct ChatView: View {
                 Task { composerFocused = true }
             }
         )
-        #endif
-        #if os(macOS)
-        .background(PalTokens.content)
-        #else
-        .background(Color(theme.palette.canvas))
-        .environment(\.presentMessageMenu) { messageMenu = $0 }
-        .overlay { MessageMenuHost(request: $messageMenu) }
-        #endif
+        .background(PlatformVariant.pick(mac: PalTokens.content, iOS: Color(theme.palette.canvas)))
+        .messageMenuPresenter()
         .task { model.start() }
         .task(id: model.bot.conversationID) { await autoApprove.load(sessionID: model.bot.conversationID) }
         .task(id: model.connection) {

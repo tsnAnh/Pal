@@ -40,10 +40,6 @@ private struct MessageActionsModifier: ViewModifier {
     let side: MessageSide
 
     @Environment(\.messageActions) private var actions
-    #if os(iOS)
-    @Environment(\.presentMessageMenu) private var presentMenu
-    @State private var frame = BubbleFrame()
-    #endif
 
     func body(content: Content) -> some View {
         content
@@ -56,15 +52,9 @@ private struct MessageActionsModifier: ViewModifier {
             #if os(macOS)
             .modifier(MacMessageActionsModifier(side: side, actions: actions))
             #else
-            .modifier(touchActions)
+            .modifier(TouchMessageActions(side: side, actions: actions))
             #endif
     }
-
-    #if os(iOS)
-    private var touchActions: some ViewModifier {
-        TouchMessageActions(side: side, actions: actions, presentMenu: presentMenu, frame: frame)
-    }
-    #endif
 }
 
 #if os(iOS)
@@ -76,8 +66,9 @@ final class BubbleFrame {
 private struct TouchMessageActions: ViewModifier {
     let side: MessageSide
     let actions: MessageActions?
-    let presentMenu: (@MainActor (MessageMenuRequest) -> Void)?
-    let frame: BubbleFrame
+
+    @Environment(\.presentMessageMenu) private var presentMenu
+    @State private var frame = BubbleFrame()
 
     @MainActor
     private func open() {

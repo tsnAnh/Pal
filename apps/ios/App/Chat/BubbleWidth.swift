@@ -1,7 +1,6 @@
 import PalDesign
 import SwiftUI
 
-#if os(iOS)
 private struct FractionalWidthLayout: Layout {
     let fraction: CGFloat
     let alignment: HorizontalAlignment
@@ -20,7 +19,6 @@ private struct FractionalWidthLayout: Layout {
         subview.place(at: CGPoint(x: x, y: bounds.minY), anchor: .topLeading, proposal: ProposedViewSize(size))
     }
 }
-#endif
 
 extension View {
     @ViewBuilder

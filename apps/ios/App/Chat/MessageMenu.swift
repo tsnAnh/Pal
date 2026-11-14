@@ -160,7 +160,18 @@ extension EnvironmentValues {
     }
 }
 
-struct MessageMenuHost: View {
+private struct MessageMenuPresenter: ViewModifier {
+    @State private var request: MessageMenuRequest?
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.presentMessageMenu) { request = $0 }
+            .overlay { MessageMenuHost(request: $request) }
+    }
+}
+
+private struct MessageMenuHost: View {
+
     @Binding var request: MessageMenuRequest?
 
     var body: some View {
@@ -209,3 +220,13 @@ private struct MessageMenuPlacement: ViewModifier {
     }
 }
 #endif
+
+extension View {
+    func messageMenuPresenter() -> some View {
+        #if os(iOS)
+        modifier(MessageMenuPresenter())
+        #else
+        self
+        #endif
+    }
+}
