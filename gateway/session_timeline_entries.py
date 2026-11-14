@@ -93,6 +93,6 @@ def _unique(entries):
 def timeline_entries(rows, live_ids, profile_home):
     from gateway.session_controls import visible_projection
     units = _Units(rows, live_ids)
-    for message in visible_projection(rows, profile_home, image_urls=False):
+    for message in visible_projection(rows, profile_home):
         getattr(units, message['role'])(message)
     return _unique([_finished(entry) for entry in units.units if _paints(entry)])

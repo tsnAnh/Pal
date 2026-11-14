@@ -9,7 +9,8 @@ Failure cases this file pins:
 - a cursor skips or repeats entries after a new turn or a compaction, or silently restarts after a rewind;
 - a repeat page read re-reads the whole lineage, or a new turn serves a stale cached page;
 - two profiles with the same session id share a cached projection;
-- ``session.resume`` cannot open a chat with the newest page in the same reply.
+- ``session.resume`` cannot open a chat with the newest page in the same reply;
+- a user turn with an inline image loses the image to an ``[image]`` placeholder in its text.
 """
 import json
 
@@ -140,6 +141,41 @@ def test_a_tool_only_unit_paints_only_when_it_holds_a_rendered_tool(db):
     assert _shape(entries) == [('user', 'make two'), ('assistant', '')]
     assert [tool['name'] for tool in entries[1]['tools']] == ['terminal', 'image_generate']
     assert 'result' not in entries[1]['tools'][0] and entries[1]['tools'][1]['result'] == '{"success": true}'
+
+
+def test_a_user_turn_with_an_inline_image_keeps_its_text_and_image(db):
+    uri = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
+    db.append_message('s1', 'user', [{'type': 'text', 'text': 'What do you make of this screenshot?'},
+                                     {'type': 'image_url', 'image_url': {'url': uri}}])
+    entries = list(_timeline(db, 's1').entries)
+    assert [entry['text'] for entry in entries] == [f'What do you make of this screenshot?\n{uri}']
+
+
+def test_pages_heavy_with_inline_images_stay_under_the_page_byte_budget(db):
+    from gateway.session_timeline import PAGE_BYTES
+    shot = 'data:image/png;base64,' + 'A' * (PAGE_BYTES // 3)
+    expected = []
+    for n in range(8):
+        db.append_message('s1', 'user', [{'type': 'text', 'text': f'shot {n}'},
+                                         {'type': 'image_url', 'image_url': {'url': shot}}])
+        db.append_message('s1', 'assistant', f'seen {n}')
+        expected += [f'shot {n}\n{shot}', f'seen {n}']
+    pages = _walk(db, 's1', 40)
+    assert len(pages) > 1
+    assert all(pages_entries and len(json.dumps(pages_entries)) <= PAGE_BYTES
+               for pages_entries in (result['entries'] for result in pages))
+    assert [entry['text'] for entry in _flat(pages)] == expected
+
+
+def test_one_entry_larger_than_the_budget_still_pages_alone(db):
+    from gateway.session_timeline import PAGE_BYTES
+    huge = 'data:image/png;base64,' + 'B' * (PAGE_BYTES + 10)
+    db.append_message('s1', 'user', [{'type': 'text', 'text': 'big'},
+                                     {'type': 'image_url', 'image_url': {'url': huge}}])
+    db.append_message('s1', 'assistant', 'ok')
+    pages = _walk(db, 's1', 40)
+    assert [len(result['entries']) for result in pages] == [1, 1]
+    assert [entry['text'] for entry in _flat(pages)] == [f'big\n{huge}', 'ok']
 
 
 def test_entry_ids_are_the_stored_message_uids(db):

@@ -10,7 +10,7 @@ struct ChatRowView: View {
 
     @Environment(\.hermesTheme) private var theme
 
-    private var findQuery: String { model.isFinding ? model.findQuery : "" }
+    private var findQuery: String { model.isFinding && model.findMatchIDs.contains(row.id) ? model.findQuery : "" }
     private var isCurrentMatch: Bool { model.currentFindRowID == row.id }
 
     private var leadingGap: CGFloat {
