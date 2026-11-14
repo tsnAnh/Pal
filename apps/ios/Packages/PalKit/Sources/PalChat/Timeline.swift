@@ -154,6 +154,8 @@ struct Timeline: Sendable {
         if start == 0, let first = tail.first {
             older = OlderEdge(cursor: page.older)
             boundaries[first.id] = page.older
+        } else if older == .unknown {
+            older = OlderEdge(cursor: page.older)
         }
         let fresh = Set(tail.map(\.id)).subtracting(positions.keys)
         rebuild(kept + tail, fresh: fresh, textMatch: true)

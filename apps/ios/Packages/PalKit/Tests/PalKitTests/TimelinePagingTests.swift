@@ -138,6 +138,25 @@ struct TimelinePagingTests {
         await second.close()
     }
 
+    @Test func aCacheSavedAfterALongCatchUpStillPagesOlderOnReopen() async throws {
+        let script = TimelineScript(entries: entries(1...100))
+        let (gateway, first) = try await open(script)
+        defer { gateway.stop() }
+        _ = try #require(await wantOlderUntil(first) { $0.older == .start })
+        script.append(entries(101...400))
+        gateway.dropAll()
+        _ = try #require(await waitForTimeline(first, timeout: .seconds(10)) { rowTexts($0).last == "m400" })
+        let cache = try #require(await first.cachedTimeline())
+        await first.close()
+
+        let second = ChatSession(profile: "bot", connector: script.connector(gateway.url), paging: fastPaging)
+        await second.seed(cache)
+        try await second.start()
+        let full = try #require(await wantOlderUntil(second, timeout: .seconds(10)) { $0.older == .start })
+        #expect(rowTexts(full) == (1...400).map { "m\($0)" })
+        await second.close()
+    }
+
     @Test func reconnectAfterManyNewEntriesKeepsPagedInHistory() async throws {
         let script = TimelineScript(entries: entries(1...100))
         let (gateway, session) = try await open(script)
