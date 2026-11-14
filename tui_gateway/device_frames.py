@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from tui_gateway.contracts.canonical_device import DeviceToolCancelPayload, DeviceToolRequestPayload
+from tui_gateway.contracts.canonical_device import (
+    DeviceMcpClosePayload,
+    DeviceMcpFramePayload,
+    DeviceToolCancelPayload,
+    DeviceToolRequestPayload,
+)
 
 
 def request_frame(payload: DeviceToolRequestPayload) -> dict:
@@ -11,3 +16,13 @@ def request_frame(payload: DeviceToolRequestPayload) -> dict:
 def cancel_frame(payload: DeviceToolCancelPayload) -> dict:
     return {"jsonrpc": "2.0", "method": "event",
             "params": {"type": "device.tool.cancel", "payload": payload.model_dump(mode="json")}}
+
+
+def mcp_frame(payload: DeviceMcpFramePayload) -> dict:
+    return {"jsonrpc": "2.0", "method": "event",
+            "params": {"type": "device.mcp.frame", "payload": payload.model_dump(mode="json")}}
+
+
+def mcp_close_frame(payload: DeviceMcpClosePayload) -> dict:
+    return {"jsonrpc": "2.0", "method": "event",
+            "params": {"type": "device.mcp.close", "payload": payload.model_dump(mode="json")}}

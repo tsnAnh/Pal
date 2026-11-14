@@ -98,6 +98,8 @@ targets:
         product: PalConnect
       - package: PalKit
         product: PalSettings
+      - package: PalKit
+        product: PalT3Code
       - package: PalDesign
         product: PalDesign
       - package: SwiftMath

@@ -118,19 +118,8 @@ def settings(home: Path) -> Timeouts:
                     _bounded(section.get("consent_timeout_seconds"), DEFAULT_CONSENT_TIMEOUT_SECONDS))
 
 
-def live_device_ids(authority, now: float, kinds: frozenset = DEVICE_KINDS) -> set[str]:
-    found = set()
-    for transport in list(authority.events.values()):
-        slot = slot_of(transport)
-        if slot is None or not slot.device_tools or slot.device.kind not in kinds:
-            continue
-        if attention_of(slot, last_frame=last_frame_at(transport), now=now) is not Attention.PARKED:
-            found.add(slot.device.device_id)
-    return found
-
-
-def _routes(authority, states: dict[str, ConnectorState], now: float, *, kinds: frozenset = PHONE_KINDS,
-            device_id: str | None = None) -> list[_Route]:
+def live_slots(authority, now: float, kinds: frozenset = DEVICE_KINDS,
+               device_id: str | None = None) -> list[tuple[Any, Any, Attention]]:
     found = []
     for transport in list(authority.events.values()):
         slot = slot_of(transport)
@@ -138,14 +127,28 @@ def _routes(authority, states: dict[str, ConnectorState], now: float, *, kinds: 
             continue
         if device_id is not None and slot.device.device_id != device_id:
             continue
-        state = states.get(slot.device.device_id)
-        if state is None:
-            continue
         attention = attention_of(slot, last_frame=last_frame_at(transport), now=now)
-        if attention is Attention.PARKED:
-            continue
-        found.append(_Route(transport, slot.device.device_id, state,
-                            (int(attention), slot.last_input_at or 0.0, slot.attention_at), slot.device.label))
+        if attention is not Attention.PARKED:
+            found.append((transport, slot, attention))
+    return found
+
+
+def route_rank(slot, attention: Attention) -> tuple:
+    return (int(attention), slot.last_input_at or 0.0, slot.attention_at)
+
+
+def live_device_ids(authority, now: float, kinds: frozenset = DEVICE_KINDS) -> set[str]:
+    return {slot.device.device_id for _, slot, _ in live_slots(authority, now, kinds)}
+
+
+def _routes(authority, states: dict[str, ConnectorState], now: float, *, kinds: frozenset = PHONE_KINDS,
+            device_id: str | None = None) -> list[_Route]:
+    found = []
+    for transport, slot, attention in live_slots(authority, now, kinds, device_id):
+        state = states.get(slot.device.device_id)
+        if state is not None:
+            found.append(_Route(transport, slot.device.device_id, state, route_rank(slot, attention),
+                                slot.device.label))
     return sorted(found, key=lambda route: route.rank, reverse=True)
 
 
@@ -245,10 +248,11 @@ async def respond(authority, transport, request_id: str, *, ok: bool, result: An
 
 
 def forget_transport(transport) -> int:
+    from gateway import device_mcp_relay
     dropped = [pending for pending in _pending.values() if pending.transport is transport]
     for pending in dropped:
         _settle(pending, Outcome(failure=Failure.DISCONNECTED, device=pending.label))
-    return len(dropped)
+    return len(dropped) + device_mcp_relay.forget_transport(transport)
 
 
 def preflight(home: Path, spec: ActionSpec) -> Outcome | None:

@@ -91,46 +91,19 @@ public struct KeychainCredentialStore: CredentialStore {
         self.account = account
     }
 
-    private var identity: [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecAttrSynchronizable as String: kCFBooleanFalse as Any,
-        ]
-    }
+    private var item: KeychainItem { KeychainItem(service: service, account: account) }
 
     public func load() throws -> StoredCredentials? {
-        var query = identity
-        query[kSecReturnData as String] = true
-        query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        if status == errSecItemNotFound { return nil }
-        guard status == errSecSuccess else { throw KeychainError.status(status) }
-        guard let data = item as? Data, let credentials = try? JSONDecoder().decode(StoredCredentials.self, from: data) else {
-            throw KeychainError.corruptItem
-        }
+        guard let data = try item.read() else { return nil }
+        guard let credentials = try? JSONDecoder().decode(StoredCredentials.self, from: data) else { throw KeychainError.corruptItem }
         return credentials
     }
 
     public func save(_ credentials: StoredCredentials) throws {
-        let data = try JSONEncoder().encode(credentials)
-        let updateStatus = SecItemUpdate(
-            identity as CFDictionary,
-            [kSecValueData as String: data, kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly] as CFDictionary
-        )
-        if updateStatus == errSecSuccess { return }
-        guard updateStatus == errSecItemNotFound else { throw KeychainError.status(updateStatus) }
-        var attributes = identity
-        attributes[kSecValueData as String] = data
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let addStatus = SecItemAdd(attributes as CFDictionary, nil)
-        guard addStatus == errSecSuccess else { throw KeychainError.status(addStatus) }
+        try item.write(try JSONEncoder().encode(credentials))
     }
 
     public func clear() throws {
-        let status = SecItemDelete(identity as CFDictionary)
-        guard status == errSecSuccess || status == errSecItemNotFound else { throw KeychainError.status(status) }
+        try item.delete()
     }
 }

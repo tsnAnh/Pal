@@ -5,7 +5,14 @@ from hermes_state_runtime import RuntimeStoreError
 _URL_SERVER_KEYS = frozenset({'url', 'transport'})
 
 
+def _refuse_device_transport(config, *, field='config'):
+    if isinstance(config, dict) and config.get('transport') == 'device':
+        raise RuntimeStoreError('invalid_params', field=field,
+                                detail='a device server is created only by the device that offers it')
+
+
 def _url_server_config(config, *, field='config'):
+    _refuse_device_transport(config, field=field)
     if not isinstance(config, dict) or not isinstance(config.get('url'), str) or not config['url'].strip():
         raise RuntimeStoreError('invalid_params', field=field, detail='a url server needs a url')
     if set(config) - _URL_SERVER_KEYS:
@@ -25,6 +32,7 @@ def catalog_preset_only(params):
 
 def url_endpoint_edit(params):
     config = params.get('config')
+    _refuse_device_transport(config)
     if config is not None and (not isinstance(config, dict) or set(config) - _URL_SERVER_KEYS):
         raise RuntimeStoreError('invalid_params', field='config',
                                 detail='only a url and transport can be changed over the socket')

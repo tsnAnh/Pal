@@ -4,11 +4,13 @@ import PalConnect
 import PalDesign
 import PalDevice
 import PalProtocol
+import PalT3Code
 import SwiftUI
 
 struct MacConnectApps: View {
     @State private var model: ConnectAppsModel
 
+    @State private var confirmsT3Disconnect = false
     @Environment(\.scenePhase) private var scenePhase
 
     private static let rowsPerSectionInAll = 6
@@ -34,6 +36,12 @@ struct MacConnectApps: View {
         .onDisappear { Task { await model.stop() } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.devices.refresh() } }
+        }
+        .alert(String(localized: "Disconnect T3 Code?"), isPresented: $confirmsT3Disconnect) {
+            Button(String(localized: "Disconnect"), role: .destructive) { Task { await model.devices.t3.controller.disconnect() } }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(model.botName) can no longer send coding work to T3 Code on this Mac.")
         }
         .alert(item: $model.notice) { notice in
             Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
@@ -369,6 +377,7 @@ struct MacConnectApps: View {
         section(title: device.title, identifier: "connectAppsSection-device-\(device.id)", viewAll: nil) {
             LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
                 ForEach(device.rows) { deviceRow($0) }
+                MacT3CodeRow(host: model.devices.t3) { confirmsT3Disconnect = true }
             }
         }
     }
@@ -563,7 +572,7 @@ private struct MacAppTile: View {
     }
 }
 
-private struct MacRowAction {
+struct MacRowAction {
     let title: String
     var prominent = false
     var checked = false

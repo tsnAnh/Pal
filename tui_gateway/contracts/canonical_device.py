@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from .base import JsonValue, Params, Payload, Result, WireEnum
 from .registry import canonical_method, event
@@ -180,3 +180,104 @@ class DeviceToolCancelPayload(Payload):
 
 event("device.tool.cancel", DeviceToolCancelPayload,
       doc="A device.tool.request is no longer wanted; dismiss any prompt for it. A late respond is ignored.")
+
+
+RELAY_ID_PATTERN = r"^[A-Za-z0-9-]{8,64}$"
+MCP_MESSAGE_MAX_BYTES = 4 * 1024 * 1024
+
+
+class DeviceMcpServer(WireEnum):
+    T3CODE = "t3code"
+
+
+class DeviceMcpCloseReason(WireEnum):
+    CLIENT_CLOSED = "client_closed"
+    UNREGISTERED = "unregistered"
+    TIMEOUT = "timeout"
+
+
+class DeviceMcpFailCode(WireEnum):
+    UNREACHABLE = "unreachable"
+    AUTH_REQUIRED = "auth_required"
+    CLOSED = "closed"
+
+
+class DeviceMcpFramePayload(Payload):
+    relay_id: str
+    server: DeviceMcpServer
+    message: JsonValue
+
+
+event("device.mcp.frame", DeviceMcpFramePayload,
+      doc="One client to server JSON-RPC message of an MCP session the bot holds with a server on this Mac "
+          "(relay_id names the session). Forward message to that server and answer each server to client "
+          "message with device.mcp.deliver; report a server that cannot be reached with device.mcp.fail.")
+
+
+class DeviceMcpClosePayload(Payload):
+    relay_id: str
+    reason: DeviceMcpCloseReason
+
+
+event("device.mcp.close", DeviceMcpClosePayload,
+      doc="The MCP session relay_id is over (the bot closed it, the server was unregistered, or the bot gave up "
+          "waiting). Drop its state; later deliver and fail calls for it are ignored.")
+
+
+class DeviceMcpDeliverParams(Params):
+    relay_id: str = Field(pattern=RELAY_ID_PATTERN)
+    message: JsonValue
+
+    @field_validator("message")
+    @classmethod
+    def _one_json_rpc_object(cls, value: object) -> object:
+        if not isinstance(value, dict):
+            raise ValueError("message must be one JSON-RPC object")
+        return value
+
+
+class DeviceMcpDeliverResult(Result):
+    accepted: bool
+
+
+canonical_method("device.mcp.deliver", params=DeviceMcpDeliverParams, result=DeviceMcpDeliverResult,
+                 doc="One server to client JSON-RPC message of the relay, from the connection that received its "
+                     "device.mcp.frame events. accepted is false for an unknown, closed or foreign relay. A "
+                     "message over 4 MiB fails the relay and is never truncated.")
+
+
+class DeviceMcpFailParams(Params):
+    relay_id: str = Field(pattern=RELAY_ID_PATTERN)
+    code: DeviceMcpFailCode
+    message: str = ""
+
+
+class DeviceMcpFailResult(Result):
+    recorded: bool
+
+
+canonical_method("device.mcp.fail", params=DeviceMcpFailParams, result=DeviceMcpFailResult,
+                 doc="The relay cannot continue: unreachable (the server is not running), auth_required (the "
+                     "server rejected the saved sign-in or none is stored) or closed. The bot ends the relay and "
+                     "reconnects; auth_required also raises the sign-in prompt. recorded is false for an "
+                     "unknown or foreign relay.")
+
+
+class DeviceMcpRegisterParams(Params):
+    server: DeviceMcpServer
+
+
+class DeviceMcpRegisterResult(Result):
+    registered: bool
+    name: str
+
+
+canonical_method("device.mcp.register", params=DeviceMcpRegisterParams, result=DeviceMcpRegisterResult,
+                 doc="Offer a server on the calling Mac to the bot as ordinary MCP tools. Only a Mac that "
+                     "declared device tools with client.hello may register, and only a name of the closed server "
+                     "set. Repeating it is idempotent; registering from another Mac moves the server there.")
+
+
+canonical_method("device.mcp.unregister", params=DeviceMcpRegisterParams, result=DeviceMcpRegisterResult,
+                 doc="Withdraw a server this Mac registered: its tools leave the bot and its open relays end "
+                     "with reason unregistered. registered is false in the result.")

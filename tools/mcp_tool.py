@@ -27,6 +27,7 @@ from tools.mcp_tool_config import _npx_cached_bin, _packaged_npx_entry
 from tools.mcp_tool_sampling import ElicitationHandler, SamplingHandler
 from tools.mcp_tool_transport import MCPServerTransportMixin
 from tools.mcp_tool_server_run import MCPServerRunMixin
+from tools.mcp_tool_device import MCPServerDeviceMixin
 from tools.mcp_tool_health import MCPServerHealthMixin
 
 
@@ -308,7 +309,7 @@ async def _paginate_full_list(list_method, items_attr: str, server_name: str,
 
 # ---- Server task -- each MCP server lives in one long-lived asyncio Task ----
 
-class MCPServerTask(MCPServerRunMixin, MCPServerTransportMixin, MCPServerHealthMixin):
+class MCPServerTask(MCPServerRunMixin, MCPServerTransportMixin, MCPServerDeviceMixin, MCPServerHealthMixin):
     """One MCP server connection in one long-lived asyncio Task (the transport's anyio cancel
     scopes must enter/exit in the same Task). Run state machine, transport bring-up and
     keepalive/liveness live in the three mixins."""

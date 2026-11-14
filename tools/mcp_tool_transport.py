@@ -262,6 +262,7 @@ class MCPServerTransportMixin:
         if mark_lifecycle:
             self._mark_lifecycle_started()
         await self._discover_tools()
+        self._reconnect_event.clear()
         self._ready.set()
         self._ever_connected = True
         _core._reset_server_error(self.name)

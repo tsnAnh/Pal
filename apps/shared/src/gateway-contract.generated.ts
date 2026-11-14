@@ -6855,6 +6855,30 @@ export type DeviceToolErrorCode = 'permission_denied' | 'consent_declined' | 'un
 export interface DeviceToolRespondResult {
   recorded: boolean
 }
+export interface DeviceMcpDeliverParams {
+  relay_id: string
+  message: unknown
+}
+export interface DeviceMcpDeliverResult {
+  accepted: boolean
+}
+export interface DeviceMcpFailParams {
+  relay_id: string
+  code: DeviceMcpFailCode
+  message?: string
+}
+export type DeviceMcpFailCode = 'unreachable' | 'auth_required' | 'closed'
+export interface DeviceMcpFailResult {
+  recorded: boolean
+}
+export interface DeviceMcpRegisterParams {
+  server: DeviceMcpServer
+}
+export type DeviceMcpServer = 't3code'
+export interface DeviceMcpRegisterResult {
+  registered: boolean
+  name: string
+}
 export interface ClientHelloParams {
   kind: 'desktop' | 'ios' | 'mac' | 'tui' | 'cli' | 'web'
   device_id: string
@@ -7714,6 +7738,16 @@ export interface DeviceToolCancelPayload {
   reason: DeviceToolCancelReason
 }
 export type DeviceToolCancelReason = 'timeout' | 'interrupted' | 'disconnected'
+export interface DeviceMcpFramePayload {
+  relay_id: string
+  server: DeviceMcpServer
+  message: unknown
+}
+export interface DeviceMcpClosePayload {
+  relay_id: string
+  reason: DeviceMcpCloseReason
+}
+export type DeviceMcpCloseReason = 'client_closed' | 'unregistered' | 'timeout'
 export interface ReachOfferPayload {
   offer_id: string
   kind: 'notify' | 'suggest'
@@ -8824,6 +8858,14 @@ export interface CanonicalRpcMethods {
   'cron.status': { params: CronAdmissionParams; result: CronStatusResult }
   /** Admit one cron firing into the owning profile's durable FIFO. */
   'cron.submit': { params: CronRunParams; result: CronSubmitResult }
+  /** One server to client JSON-RPC message of the relay, from the connection that received its device.mcp.frame events. accepted is false for an unknown, closed or foreign relay. A message over 4 MiB fails the relay and is never truncated. */
+  'device.mcp.deliver': { params: DeviceMcpDeliverParams; result: DeviceMcpDeliverResult }
+  /** The relay cannot continue: unreachable (the server is not running), auth_required (the server rejected the saved sign-in or none is stored) or closed. The bot ends the relay and reconnects; auth_required also raises the sign-in prompt. recorded is false for an unknown or foreign relay. */
+  'device.mcp.fail': { params: DeviceMcpFailParams; result: DeviceMcpFailResult }
+  /** Offer a server on the calling Mac to the bot as ordinary MCP tools. Only a Mac that declared device tools with client.hello may register, and only a name of the closed server set. Repeating it is idempotent; registering from another Mac moves the server there. */
+  'device.mcp.register': { params: DeviceMcpRegisterParams; result: DeviceMcpRegisterResult }
+  /** Withdraw a server this Mac registered: its tools leave the bot and its open relays end with reason unregistered. registered is false in the result. */
+  'device.mcp.unregister': { params: DeviceMcpRegisterParams; result: DeviceMcpRegisterResult }
   /** Answer a device.tool.request from the connection that received it: ok true carries result (an object shaped for the action), ok false carries error. recorded is false for an unknown, expired, already answered or foreign request. */
   'device.tool.respond': { params: DeviceToolRespondParams; result: DeviceToolRespondResult }
   /** The device connectors of one declared device (default: the calling connection's own, set by client.hello). state is the user's choice and defaults to ask; os_permission is what the phone last reported. */
@@ -9055,6 +9097,10 @@ export const CANONICAL_RPC_METHODS = [
   'cron.recover',
   'cron.status',
   'cron.submit',
+  'device.mcp.deliver',
+  'device.mcp.fail',
+  'device.mcp.register',
+  'device.mcp.unregister',
   'device.tool.respond',
   'device_connectors.list',
   'device_connectors.set',
@@ -9250,6 +9296,10 @@ export interface BackendGatewayEventMap {
   'connection.update': ConnectionUpdatePayload
   /** cron/jobs.json moved; refetch the cron list. */
   'cron.changed': ChangeSignalPayload
+  /** The MCP session relay_id is over (the bot closed it, the server was unregistered, or the bot gave up waiting). Drop its state; later deliver and fail calls for it are ignored. */
+  'device.mcp.close': DeviceMcpClosePayload
+  /** One client to server JSON-RPC message of an MCP session the bot holds with a server on this Mac (relay_id names the session). Forward message to that server and answer each server to client message with device.mcp.deliver; report a server that cannot be reached with device.mcp.fail. */
+  'device.mcp.frame': DeviceMcpFramePayload
   /** A device.tool.request is no longer wanted; dismiss any prompt for it. A late respond is ignored. */
   'device.tool.cancel': DeviceToolCancelPayload
   /** The bot asks this iPhone to run one action on the device (EventKit, HomeKit, Contacts, CoreLocation, AlarmKit). Answer device.tool.respond before deadline_seconds. needs_consent means the connector's state is ask: show a consent prompt first, persist the choice with device_connectors.set, and answer consent_declined if the user refuses. */
@@ -9409,6 +9459,8 @@ export const GATEWAY_EVENT_TYPES = [
   'connection.request',
   'connection.update',
   'cron.changed',
+  'device.mcp.close',
+  'device.mcp.frame',
   'device.tool.cancel',
   'device.tool.request',
   'display.install.done',

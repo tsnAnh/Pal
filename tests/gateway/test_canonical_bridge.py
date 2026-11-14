@@ -121,6 +121,8 @@ async def test_a_control_grant_adds_and_removes_a_catalog_mcp_server_in_its_own_
     {'name': 'evil', 'config': {'url': 'https://example.invalid/mcp', 'env': {'A': 'b'}}},
     {'name': 'evil', 'config': {'url': 'https://example.invalid/mcp', 'headers': {'X-Key': 'literal'}}},
     {'name': 'evil', 'config': {'transport': 'http'}},
+    {'name': 'evil', 'config': {'url': 'https://example.invalid/mcp', 'transport': 'device'}},
+    {'name': 't3code', 'config': {'transport': 'device', 'device_id': 'device-Mac-0000', 'server': 't3code'}},
     {'name': 'evil', 'preset': '  '},
 ])
 async def test_the_socket_never_adds_a_command_or_an_unvetted_custom_config(bots, params):

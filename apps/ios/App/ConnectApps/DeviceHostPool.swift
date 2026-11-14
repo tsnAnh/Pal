@@ -116,12 +116,17 @@ final class DeviceHostPool {
     private var stacks: [String: DeviceToolStack] = [:]
     #if os(macOS)
     private var inputSafety: InputSafety?
+    let t3Code = T3CodeHost()
+    private var t3Watch: Task<Void, Never>?
     #endif
     let screenIndicator = ScreenCaptureIndicator()
 
     init(connection: ConnectionModel, consent: DevicePermissionPresenter) {
         self.connection = connection
         self.consent = consent
+        #if os(macOS)
+        t3Code.bind { [weak self] in self?.stacks.values.map(\.host) ?? [] }
+        #endif
     }
 
     func stack(for profile: String?) async -> DeviceToolStack? {
@@ -133,7 +138,8 @@ final class DeviceHostPool {
             providers: .system(screenActivity: { [screenIndicator] active in screenIndicator.report(active) }),
             permissions: SystemPermissions(),
             consent: consent,
-            diagnostics: .osLog()
+            diagnostics: .osLog(),
+            mcpRelay: mcpRelay
         )
         stacks[key] = stack
         #if os(macOS)
@@ -151,12 +157,31 @@ final class DeviceHostPool {
         var profiles: [String?] = [nil]
         profiles += botNames
         for profile in profiles { _ = await stack(for: profile) }
+        #if os(macOS)
+        if t3Watch == nil {
+            let controller = t3Code.controller
+            t3Watch = Task { await controller.watch() }
+        }
+        #endif
     }
 
     func reset() async {
         let running = Array(stacks.values)
         stacks.removeAll()
         for stack in running { await stack.host.stop() }
+        #if os(macOS)
+        t3Watch?.cancel()
+        t3Watch = nil
+        await t3Code.bridge.closeAll()
+        #endif
+    }
+
+    private var mcpRelay: (any DeviceMcpRelay)? {
+        #if os(macOS)
+        t3Code.bridge
+        #else
+        nil
+        #endif
     }
 }
 
