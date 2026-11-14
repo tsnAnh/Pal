@@ -121,7 +121,7 @@ def model_only(row):
     return isinstance(metadata, dict) and bool(metadata.get(MODEL_ONLY_DISPLAY_METADATA_KEY))
 
 
-async def _resume_transcript(authority, ref, snapshot, history, omit):
+async def _resume_transcript(authority, ref, snapshot, history, omit, limit=None):
     """A resume reply's transcript fields. *omit* (``omit_messages``): no rows and ``messages_omitted``, the
     stored count and the todo plan of the physical target the attach resolved, as the stdio resume answers
     it; the display-row lineage read is skipped (the todo lookup still walks the lineage's todo rows)."""
@@ -130,7 +130,11 @@ async def _resume_transcript(authority, ref, snapshot, history, omit):
     if not omit:
         # The newest todo result in the transcript, the snapshot the session's agent hydrates
         # from and its ``todo.updated`` frames carried: a viewer attaching shows the plan now.
-        return {'messages': history, 'message_count': len(history), 'todo_state': _todo_state_from_history(history)}
+        fields = {'messages': history, 'message_count': len(history), 'todo_state': _todo_state_from_history(history)}
+        if limit is not None:
+            from gateway.session_history_page import window
+            fields['messages'], fields['older_messages'] = window(history, limit)
+        return fields
     from gateway.session_local_recovery import omitted_history_state
     # A delete committed since the attach is ``not_found``, as one during the attach is.
     todo_state, count = await asyncio.to_thread(authority.unless_deleted, ref, partial(
@@ -257,6 +261,8 @@ class AuthorityConnection:
         handlers.update(ancillary_handlers(self))
         from gateway.session_shell import handlers as shell_handlers
         handlers.update(shell_handlers(self))
+        from gateway.session_history_page import handlers as history_page_handlers
+        handlers.update(history_page_handlers(self))
         from gateway.session_tui_ops import handlers as tui_ops_handlers
         handlers.update(tui_ops_handlers(self))
         from gateway.session_tui_side import handlers as side_handlers
@@ -584,7 +590,7 @@ class AuthorityConnection:
         return {'instance_id': self.authority.instance_id, 'profile_id': self.authority.profile_id,
                 'authority_epoch': self.authority.epoch,
                 'capabilities': ['durable-admission-v1', 'event-replay-v1', 'local-cli-create-v1', 'acp-editor-policy-v1',
-                                 'acp-session-mcp-v1', 'clarify-batch-v1', 'plugin-rpc-v1', 'session-client-v1', 'session-transcript-v1', 'session-list-picker-v1', 'reach-v1'],
+                                 'acp-session-mcp-v1', 'clarify-batch-v1', 'plugin-rpc-v1', 'session-client-v1', 'session-transcript-v1', 'session-history-page-v1', 'session-list-picker-v1', 'reach-v1'],
                 'session_create': {'sources': sorted(SURFACES),
                                    'parameters': sorted(CREATE_FIELDS | {'title'})},
                 # Main's ``gateway.ready.skin``: the canonical client's own ready carries it.
@@ -751,7 +757,8 @@ class AuthorityConnection:
             display['display_messages'] = display_projection(
                 [row for row in history if not model_only(row)], self.authority.profile_id)
         return {'session_id': ref.session_id, 'stored_session_id': ref.session_id,
-                **await _resume_transcript(self.authority, ref, snapshot, history, omit), **display,
+                **await _resume_transcript(self.authority, ref, snapshot, history, omit,
+                                           params.get('message_limit')), **display,
                 'running': snapshot.handle.execution_state == 'running',
                 'authority_epoch': snapshot.handle.authority_epoch,
                 'replay_epoch': snapshot.replay_epoch, 'last_sequence': snapshot.last_sequence,

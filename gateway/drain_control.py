@@ -79,7 +79,7 @@ def restart_wait_socket_ticket(runner, method, path, query) -> bool:
 # process.kill, reload.*, ...) would run on an owner that is shutting down, so it is refused with
 # ``runtime_draining`` exactly like the REST writes above.
 RESTART_WAIT_WS_METHODS = frozenset({
-    "ping", "runtime.describe", "session.resume", "session.detach", "session.events.since",
+    "ping", "runtime.describe", "session.resume", "session.detach", "session.events.since", "session.history.page",
     "session.info", "session.list", "prompt.submit", "prompt.receipt", "session.interrupt",
     "approval.pending", "approval.received", "approval.respond", "clarify.respond", "clarify.lock",
 })
