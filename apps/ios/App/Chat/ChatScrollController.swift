@@ -4,20 +4,22 @@ nonisolated struct ChatViewport: Equatable {
     static let prefetchViewports: CGFloat = 2
     static let shortContentViewports: CGFloat = 1.5
 
-    var distanceFromTop: CGFloat
-    var distanceFromBottom: CGFloat
+    var offset: CGFloat
+    var distanceFromNewest: CGFloat
+    var distanceFromOldest: CGFloat
     var viewportHeight: CGFloat
     var contentHeight: CGFloat
 
     init(_ geometry: ScrollGeometry) {
-        distanceFromTop = geometry.contentOffset.y + geometry.contentInsets.top
-        distanceFromBottom = geometry.contentSize.height + geometry.contentInsets.bottom - geometry.visibleRect.maxY
+        offset = geometry.contentOffset.y
+        distanceFromNewest = geometry.contentOffset.y + geometry.contentInsets.top
+        distanceFromOldest = geometry.contentSize.height + geometry.contentInsets.bottom - geometry.visibleRect.maxY
         viewportHeight = geometry.containerSize.height
         contentHeight = geometry.contentSize.height
     }
 
     var wantsOlder: Bool {
-        distanceFromTop < viewportHeight * Self.prefetchViewports
+        distanceFromOldest < viewportHeight * Self.prefetchViewports
             || contentHeight < viewportHeight * Self.shortContentViewports
     }
 }
@@ -33,27 +35,53 @@ final class ChatScrollController {
     static let enterFollowing: CGFloat = 24
     static let leaveFollowing: CGFloat = 80
 
-    var position = ScrollPosition(idType: String.self)
+    var position = ScrollPosition(idType: String.self, edge: .top)
     private(set) var mode = Mode.following
     private(set) var unseen = 0
     private(set) var wantsOlder = false
-    private var userScrolling = false
-    private var lastRowID: String?
-    private var knownIDs: Set<String> = []
+    @ObservationIgnored private var phase = ScrollPhase.idle
+    @ObservationIgnored private var offset: CGFloat = 0
+    @ObservationIgnored private var lastRowID: String?
+    @ObservationIgnored private var knownIDs: Set<String> = []
+    @ObservationIgnored private var pin: Pin?
+
+    private struct Pin {
+        let id: String
+        var minY: CGFloat?
+        var offset: CGFloat
+    }
 
     var showsJumpButton: Bool { mode == .reading }
 
     func observe(_ viewport: ChatViewport) {
-        wantsOlder = viewport.wantsOlder
-        if viewport.distanceFromBottom <= Self.enterFollowing {
+        offset = viewport.offset
+        if wantsOlder != viewport.wantsOlder { wantsOlder = viewport.wantsOlder }
+        if viewport.distanceFromNewest <= Self.enterFollowing {
             follow()
-        } else if userScrolling, viewport.distanceFromBottom > Self.leaveFollowing {
+        } else if phase.isMoving, viewport.distanceFromNewest > Self.leaveFollowing, mode != .reading {
             mode = .reading
         }
     }
 
     func observe(_ phase: ScrollPhase) {
-        userScrolling = phase == .interacting || phase == .decelerating || phase == .tracking
+        self.phase = phase
+    }
+
+    func visibleRowsChanged(_ ids: [String]) {
+        guard let first = ids.first else { return }
+        if pin?.id != first { pin = Pin(id: first, minY: nil, offset: offset) }
+    }
+
+    func rowMoved(_ id: String, minY: CGFloat) {
+        guard var current = pin, current.id == id else { return }
+        defer {
+            current.minY = minY
+            current.offset = offset
+            pin = current
+        }
+        guard mode == .reading, phase == .idle, let previous = current.minY,
+              abs(offset - current.offset) < 0.5, abs(minY - previous) > 0.5 else { return }
+        position.scrollTo(y: offset + (minY - previous))
     }
 
     func rowsChanged(_ ids: [String]) {
@@ -61,29 +89,25 @@ final class ChatScrollController {
             lastRowID = ids.last
             knownIDs = Set(ids)
         }
-        guard let last = lastRowID else {
-            if !ids.isEmpty { position.scrollTo(edge: .bottom) }
-            return
-        }
-        guard ids.last != last, let anchor = ids.lastIndex(of: last) else {
-            if mode == .following { position.scrollTo(edge: .bottom) }
+        guard let last = lastRowID, ids.last != last, let anchor = ids.lastIndex(of: last) else {
+            if mode == .following { position.scrollTo(edge: .top) }
             return
         }
         switch mode {
         case .following:
-            position.scrollTo(edge: .bottom)
+            position.scrollTo(edge: .top)
         case .reading:
             unseen += ids[(anchor + 1)...].count { !knownIDs.contains($0) }
         }
     }
 
     func contentGrew() {
-        if mode == .following { position.scrollTo(edge: .bottom) }
+        if mode == .following { position.scrollTo(edge: .top) }
     }
 
     func jumpToBottom() {
         follow()
-        withAnimation(.easeOut(duration: 0.2)) { position.scrollTo(edge: .bottom) }
+        withAnimation(.easeOut(duration: 0.2)) { position.scrollTo(edge: .top) }
     }
 
     func reveal(_ id: String) {
@@ -95,7 +119,11 @@ final class ChatScrollController {
     }
 
     private func follow() {
-        mode = .following
-        unseen = 0
+        if mode != .following { mode = .following }
+        if unseen != 0 { unseen = 0 }
     }
+}
+
+private extension ScrollPhase {
+    var isMoving: Bool { self == .interacting || self == .decelerating || self == .tracking }
 }

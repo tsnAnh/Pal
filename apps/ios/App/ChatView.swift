@@ -13,6 +13,7 @@ struct ChatView: View {
     @State private var isVoiceModePresented = false
     @State private var scroll = ChatScrollController()
     @State private var connectionIsSlow = false
+    @State private var chrome = EdgeInsets()
     @FocusState private var composerFocused: Bool
 
     let teach: TeachModel
@@ -46,8 +47,9 @@ struct ChatView: View {
     private var chat: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
-                OlderHistoryRow(state: model.olderHistory) { model.wantOlder() }
-                ForEach(model.rows) { row in
+                footer
+                    .newestFirst()
+                ForEach(model.rows.reversed()) { row in
                     ChatRowView(row: row, model: model) { link in
                         router.push(.botThread(BotThreadRoute(
                             botName: model.bot.name,
@@ -55,19 +57,24 @@ struct ChatView: View {
                             focusExchangeID: link.exchangeID
                         )))
                     }
+                    .newestFirst()
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .scrollView).minY } action: { scroll.rowMoved(row.id, minY: $0) }
                 }
-                footer
+                OlderHistoryRow(state: model.olderHistory) { model.wantOlder() }
+                    .newestFirst()
+                    .padding(.bottom, 8)
             }
             .scrollTargetLayout()
             .padding(.horizontal, ChatMetrics.edgeMargin)
-            .padding(.top, 8)
             .chatColumn()
         }
         .scrollPosition($scroll.position)
-        .defaultScrollAnchor(.bottom, for: .initialOffset)
-        .defaultScrollAnchor(scroll.mode == .following ? .bottom : .top, for: .sizeChanges)
+        .contentMargins(.top, max(0, chrome.bottom - chrome.top), for: .automatic)
+        .contentMargins(.bottom, max(0, chrome.top - chrome.bottom), for: .automatic)
+        .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { chrome = $0 }
+        .newestFirst()
         .scrollDismissesKeyboard(.interactively)
-        .scrollEdgeEffectHidden(true, for: .top)
+        .scrollEdgeEffectHidden(true, for: .all)
         .overlay(alignment: .top) { topFade }
         .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
         .safeAreaInset(edge: .top, spacing: 0) { AutoApproveBanner(sessionID: model.bot.conversationID) }
@@ -77,6 +84,8 @@ struct ChatView: View {
             if new.contentHeight > old.contentHeight { scroll.contentGrew() }
         }
         .onScrollPhaseChange { _, phase in scroll.observe(phase) }
+        .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.01) { scroll.visibleRowsChanged($0) }
+        .onChange(of: chrome) { scroll.contentGrew() }
         .onChange(of: model.rows.map(\.id), initial: true) { _, ids in scroll.rowsChanged(ids) }
         .task(id: OlderDemand(wants: scroll.wantsOlder, state: model.olderHistory)) {
             guard scroll.wantsOlder, model.olderHistory.canLoad else { return }
@@ -86,6 +95,7 @@ struct ChatView: View {
             }
         }
         .accessibilityIdentifier("chatScreen")
+        .accessibilityValue(Text(historySummary))
         .overlay(alignment: .bottom) {
             if scroll.showsJumpButton {
                 ScrollToBottomButton(newCount: scroll.unseen) { scroll.jumpToBottom() }
@@ -213,6 +223,11 @@ struct ChatView: View {
     private struct OlderDemand: Hashable {
         let wants: Bool
         let state: OlderHistory
+    }
+
+    private var historySummary: String {
+        let count = String(localized: "\(model.rows.count) messages")
+        return model.olderHistory == .loading ? count + ", " + String(localized: "loading earlier messages") : count
     }
 
     private var dotColor: Color {
@@ -372,6 +387,12 @@ struct ChatView: View {
                 model.reportAttachmentFailure(String(localized: "That file couldn't be read."))
             }
         }
+    }
+}
+
+private extension View {
+    func newestFirst() -> some View {
+        scaleEffect(x: 1, y: -1, anchor: .center)
     }
 }
 
