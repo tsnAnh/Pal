@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PalAuth
 import PalConnect
+import PalDevice
 import PalDiagnostics
 import PalProtocol
 import PalREST
@@ -75,6 +76,8 @@ public final class T3CodeController {
     }
 
     public var connection: T3CodeConnection { status.connection }
+
+    public func installedApplicationURL() -> URL? { locator.installedApplication() }
 
     public func apply(_ event: T3CodeEvent) {
         status.apply(event)
@@ -184,6 +187,35 @@ public final class T3CodeController {
         } catch {
             diagnostics.warning("t3code", "token read failed: \(Diagnostics.describe(error))")
             apply(.tokenMissing)
+        }
+    }
+}
+
+public struct T3HostRegistrar: T3Registering {
+    public typealias Hosts = @Sendable () async -> [DeviceToolHost]
+
+    private let hosts: Hosts
+
+    public init(hosts: @escaping Hosts) {
+        self.hosts = hosts
+    }
+
+    public func register() async throws {
+        var failure: (any Error)?
+        var registered = false
+        for host in await hosts() where await host.hasConnection {
+            do {
+                if try await host.registerMcp(.t3code) { registered = true }
+            } catch {
+                failure = error
+            }
+        }
+        if !registered, let failure { throw failure }
+    }
+
+    public func unregister() async {
+        for host in await hosts() where await host.hasConnection {
+            try? await host.unregisterMcp(.t3code)
         }
     }
 }

@@ -121,6 +121,7 @@ targets:
           - MacChatDetailsE2ETests.swift
           - MacPinnedHeroE2ETests.swift
           - MacBotManagementE2ETests.swift
+          - MacT3CodeE2ETests.swift
       - path: UITests
         excludes:
           - E2ESupport.swift
@@ -134,6 +135,7 @@ targets:
           - MacChatDetailsE2ETests.swift
           - MacPinnedHeroE2ETests.swift
           - MacBotManagementE2ETests.swift
+          - MacT3CodeE2ETests.swift
         destinationFilters: [iOS]
     settings:
       base:

@@ -48,7 +48,7 @@ public actor T3McpBridge: DeviceMcpRelay {
     private let locator: T3Locator
     private let tokens: any T3TokenStore
     private let http: T3McpHTTP
-    private let onUnauthorized: Unauthorized
+    private var onUnauthorized: Unauthorized
     private let diagnostics: Diagnostics
     private var relays: [String: Relay] = [:]
 
@@ -71,6 +71,10 @@ public actor T3McpBridge: DeviceMcpRelay {
     }
 
     public var openRelayCount: Int { relays.count }
+
+    public func observeUnauthorized(_ handler: @escaping Unauthorized) {
+        onUnauthorized = handler
+    }
 
     public func relay(_ frame: DeviceMcpFrame, over channel: DeviceMcpChannel) async {
         guard frame.server == .t3code else {

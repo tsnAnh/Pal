@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+T3_BIN="${T3_BIN:-$HOME/.t3/bin/t3}"
+ART="$IOS_DIR/Artifacts/t3code-e2e/$(date +%Y%m%d-%H%M%S)"
+BASE="$(mktemp -d /tmp/pal-t3-e2e.XXXXXX)"
+PORT="$(python3 -I -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
+RUNTIME="$BASE/userdata/server-runtime.json"
+SERVER_PID=""
+
+cleanup() {
+  set +e
+  if [ -f "$RUNTIME" ]; then
+    SERVER_PID="$(python3 -I -c 'import json,sys;print(json.load(open(sys.argv[1]))["pid"])' "$RUNTIME" 2>/dev/null)"
+  fi
+  if [ -n "$SERVER_PID" ]; then
+    kill "$SERVER_PID" 2>/dev/null
+    for _ in $(seq 20); do kill -0 "$SERVER_PID" 2>/dev/null || break; sleep 0.5; done
+    kill -9 "$SERVER_PID" 2>/dev/null
+  fi
+  rm -rf "$BASE"
+}
+trap cleanup EXIT
+
+[ -x "$T3_BIN" ] || { echo "t3 binary not found at $T3_BIN" >&2; exit 2; }
+mkdir -p "$ART"
+
+( "$T3_BIN" serve --base-dir "$BASE" --no-browser --port "$PORT" >"$BASE/serve.log" 2>&1; echo $? >"$BASE/serve.done" ) &
+
+for _ in $(seq 60); do
+  [ -f "$RUNTIME" ] && break
+  [ -f "$BASE/serve.done" ] && { echo "t3 exited early with $(cat "$BASE/serve.done")" >&2; exit 3; }
+  sleep 0.5
+done
+[ -f "$RUNTIME" ] || { echo "t3 never wrote its runtime file" >&2; exit 3; }
+for _ in $(seq 40); do
+  curl -fsS "http://127.0.0.1:$PORT/.well-known/oauth-authorization-server" >/dev/null 2>&1 && break
+  sleep 0.5
+done
+
+CODE="$("$T3_BIN" auth pairing create --base-dir "$BASE" --json | python3 -I -c 'import json,sys;print(json.load(sys.stdin)["credential"])')"
+
+set +e
+( cd "$IOS_DIR/Packages/PalKit" && PAL_T3_E2E_BASE_DIR="$BASE" PAL_T3_E2E_PAIRING_CODE="$CODE" swift test --filter T3RealServerTests ) 2>&1 | tee "$ART/swift-test.log"
+STATUS=${PIPESTATUS[0]}
+set -e
+
+echo "$STATUS" >"$ART/exit-code"
+echo "artifacts: $ART (exit $STATUS)"
+exit "$STATUS"

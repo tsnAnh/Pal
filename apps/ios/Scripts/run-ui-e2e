@@ -9,7 +9,7 @@ usage() {
 usage: run-ui-e2e [--platform ios|macos]
 Runs the UI tests against a sandbox gateway (stub LLM, temp HERMES_HOME).
   ios    (default) the iOS Simulator; artifacts in Artifacts/ui-e2e
-  macos  the native Mac app on this Mac: SignInFlowTests, BotChatE2ETests, ComputerE2ETests, MacShellE2ETests, MacModalsE2ETests, MacChatDetailsE2ETests, MacPinnedHeroE2ETests, MacBotManagementE2ETests against the
+  macos  the native Mac app on this Mac: SignInFlowTests, BotChatE2ETests, ComputerE2ETests, MacShellE2ETests, MacModalsE2ETests, MacChatDetailsE2ETests, MacPinnedHeroE2ETests, MacBotManagementE2ETests, MacT3CodeE2ETests against the
          sandbox gateway and an rfb-test-server on bot-alpha; artifacts in Artifacts/mac-e2e/<timestamp>
 HERMES_UI_E2E_ONLY narrows the run to one -only-testing selector. The artifact path is printed last.
 USAGE
@@ -59,7 +59,7 @@ BOOTED_BY_US=0
 MAC_DERIVED="$IOS_DIR/build/DerivedDataMac"
 MAC_APP_BINARY="$MAC_DERIVED/Build/Products/Debug/Pal.app/Contents/MacOS/Pal"
 RFB_STATE="$CTL_DIR/rfb"
-MAC_TESTS=(SignInFlowTests BotChatE2ETests ComputerE2ETests MacShellE2ETests MacModalsE2ETests MacChatDetailsE2ETests MacPinnedHeroE2ETests MacBotManagementE2ETests)
+MAC_TESTS=(SignInFlowTests BotChatE2ETests ComputerE2ETests MacShellE2ETests MacModalsE2ETests MacChatDetailsE2ETests MacPinnedHeroE2ETests MacBotManagementE2ETests MacT3CodeE2ETests)
 
 disk_report() {
   du -sh "$HOME/.android/avd" "$HOME/Library/Developer/CoreSimulator/Devices" "$HOME/Library/Developer/XCTestDevices" 2>&1
