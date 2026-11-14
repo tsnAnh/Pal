@@ -11,7 +11,10 @@ extension SessionAPI {
     public func resumeTimeline(sessionID: String, messageLimit: Int?, timelineLimit: Int) async throws -> TimelineResume {
         var params: [String: JSONValue] = ["session_id": .string(sessionID)]
         if let messageLimit, supportsHistoryPaging { params["message_limit"] = .int(messageLimit) }
-        if supportsTimeline { params[TimelineWire.resumeLimitParam] = .int(timelineLimit) }
+        if supportsTimeline {
+            params[TimelineWire.resumeLimitParam] = .int(timelineLimit)
+            params["omit_messages"] = .bool(true)
+        }
         let result = try await call("session.resume", params)
         return try decode(TimelineResume.self, result, "session.resume")
     }

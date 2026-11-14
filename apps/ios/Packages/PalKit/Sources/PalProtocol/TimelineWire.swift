@@ -173,7 +173,9 @@ public struct LiveMessageIdentity: Decodable, Sendable, Hashable {
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        messageUID = try? container.decodeIfPresent(String.self, forKey: .messageUID)
+        let persisted = try? container.nestedContainer(keyedBy: PersistedTurnKeys.self, forKey: .persistedTurn)
+        messageUID = (try? persisted?.decodeIfPresent(String.self, forKey: .finalAssistantMessageUID))
+            ?? (try? container.decodeIfPresent(String.self, forKey: .messageUID))
         turnID = try? container.decodeIfPresent(String.self, forKey: .turnID)
         segment = try? container.decodeIfPresent(Int.self, forKey: .segment)
     }
@@ -182,5 +184,10 @@ public struct LiveMessageIdentity: Decodable, Sendable, Hashable {
         case messageUID = "message_uid"
         case turnID = "turn_id"
         case segment
+        case persistedTurn = "persisted_turn"
+    }
+
+    enum PersistedTurnKeys: String, CodingKey {
+        case finalAssistantMessageUID = "final_assistant_message_uid"
     }
 }

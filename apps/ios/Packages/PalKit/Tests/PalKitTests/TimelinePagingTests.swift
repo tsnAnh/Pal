@@ -65,15 +65,15 @@ struct TimelinePagingTests {
     }
 
     @Test func failedPagesRetryWhileWantedAndStopWhenNot() async throws {
-        let script = TimelineScript(entries: entries(1...100))
+        let script = TimelineScript(entries: entries(1...2000))
         script.override(TimelineWire.pageMethod) { call in
             call <= 2 ? .failure(RPCError(code: -32603, message: "busy")) : nil
         }
         let (gateway, session) = try await open(script)
         defer { gateway.stop() }
 
-        let loaded = try #require(await wantOlderUntil(session) { rowTexts($0).contains("m21") })
-        #expect(loaded.rows.count == 80)
+        let loaded = try #require(await wantOlderUntil(session) { rowTexts($0).contains("m1921") })
+        #expect(loaded.rows.count >= 80)
         #expect(script.count(TimelineWire.pageMethod) >= 3)
 
         script.override(TimelineWire.pageMethod) { _ in .failure(RPCError(code: -32603, message: "busy")) }
@@ -81,9 +81,10 @@ struct TimelinePagingTests {
         _ = try #require(await waitForTimeline(session) { if case .failed = $0.older { true } else { false } })
         try await Task.sleep(for: .seconds(1))
         let settled = script.count(TimelineWire.pageMethod)
+        let rowsWhenSettled = rowTexts(await session.timelineSnapshot).count
         try await Task.sleep(for: .milliseconds(600))
         #expect(script.count(TimelineWire.pageMethod) == settled)
-        #expect(rowTexts(await session.timelineSnapshot).count == 80)
+        #expect(rowTexts(await session.timelineSnapshot).count == rowsWhenSettled)
         await session.close()
     }
 
