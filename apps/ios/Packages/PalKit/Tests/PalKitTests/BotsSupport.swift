@@ -66,3 +66,11 @@ func profileRow(
 func profilesList(_ rows: JSONValue...) -> JSONValue {
     ["profiles": .array(rows)]
 }
+
+@MainActor
+func scratchSurfaces(account: String = "test|me") -> SurfaceCache {
+    SurfaceCache(
+        store: CacheStore(root: FileManager.default.temporaryDirectory.appending(path: "surfaces-\(UUID().uuidString)", directoryHint: .isDirectory)),
+        account: { account }
+    )
+}

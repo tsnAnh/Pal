@@ -62,7 +62,9 @@ struct EditBotPersonaSection: View {
             }
             switch model.personaState {
             case .loading:
-                note(String(localized: "Loading…"), identifier: "editBotPersonaLoading", destructive: false)
+                DelayedReveal {
+                    note(String(localized: "Loading…"), identifier: "editBotPersonaLoading", destructive: false)
+                }
             case .failed:
                 HStack(spacing: 8) {
                     note(String(localized: "Couldn't load the description and personality."), identifier: "editBotPersonaFailed")

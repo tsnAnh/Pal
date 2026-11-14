@@ -24,15 +24,19 @@ final class DeviceConnectorsModel {
     private let permissions: any DevicePermissions
     private let diagnostics = Diagnostics.osLog()
     private let localKind = DeviceKind.current
+    private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("device-connectors")
 
-    init(pool: DeviceHostPool, profile: String?, permissions: any DevicePermissions = SystemPermissions()) {
+    init(pool: DeviceHostPool, profile: String?, surfaces: SurfaceCache, permissions: any DevicePermissions = SystemPermissions()) {
         self.pool = pool
         self.profile = profile
         self.permissions = permissions
+        self.surfaces = surfaces
         #if os(macOS)
         t3 = pool.t3Code
         #endif
-        thisDevice = Self.localSection(kind: DeviceKind.current, reports: [:])
+        thisDevice = surfaces.remembered(DeviceSection.self, Self.surfaceKey)
+            ?? Self.localSection(kind: DeviceKind.current, reports: [:])
     }
 
     func start() async {
@@ -44,6 +48,7 @@ final class DeviceConnectorsModel {
         await t3.controller.refresh()
         #endif
         thisDevice = Self.localSection(kind: localKind, reports: await localReports())
+        surfaces.remember(thisDevice, Self.surfaceKey)
     }
 
     func allow(_ id: DeviceConnectorID) async {

@@ -231,7 +231,7 @@ struct AuthResolvedReasonTests {
 @Suite("Model providers model")
 struct ModelProvidersModelTests {
     private func model(_ bots: ScriptedBots) -> ModelProvidersModel {
-        ModelProvidersModel(client: ModelProvidersClient(gateway: bots.gateway, profile: "atlas"))
+        ModelProvidersModel(client: ModelProvidersClient(gateway: bots.gateway, profile: "atlas"), surfaces: scratchSurfaces())
     }
 
     private func loaded(_ bots: ScriptedBots) async -> ModelProvidersModel {
@@ -482,7 +482,7 @@ struct ModelProviderSectionsTests {
         bots.script("model.providers.list", listing(providerRow("nous", name: "Nous Portal", kind: "device_code", state: "not_set")))
         bots.script("model.providers.list", listing(providerRow("nous", name: "Nous Portal", kind: "device_code", state: "set")))
         bots.script("auth.begin", outcome("started", requestID: "r1"))
-        let model = ModelProvidersModel(client: ModelProvidersClient(gateway: bots.gateway, profile: "atlas"))
+        let model = ModelProvidersModel(client: ModelProvidersClient(gateway: bots.gateway, profile: "atlas"), surfaces: scratchSurfaces())
         await model.load()
         #expect(model.sections.map(\.group) == [.connected, .available])
         #expect(model.sections[0].providers.isEmpty)
@@ -499,7 +499,7 @@ struct ModelProviderSectionsTests {
         bots.script("model.providers.list", listing(providerRow("anthropic", name: "Anthropic", state: "not_set")))
         bots.script("model.providers.list", listing(providerRow("anthropic", name: "Anthropic", state: "set", canRemove: true)))
         bots.script("auth.begin", outcome("started", requestID: "r1"))
-        let model = ModelProvidersModel(client: ModelProvidersClient(gateway: bots.gateway, profile: "atlas"))
+        let model = ModelProvidersModel(client: ModelProvidersClient(gateway: bots.gateway, profile: "atlas"), surfaces: scratchSurfaces())
         await model.load()
         await model.signIn(model.providers[0])
         await model.signInResolved(requestID: "r1", service: "provider:anthropic", outcome: .signedIn, reason: nil)

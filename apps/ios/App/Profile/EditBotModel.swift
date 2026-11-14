@@ -1,6 +1,7 @@
 import Foundation
 import PalBotProfile
 import PalDesign
+import PalProtocol
 import Observation
 
 @MainActor
@@ -118,14 +119,27 @@ final class EditBotModel: Identifiable {
     func loadPersona() async {
         guard let profile, personaState != .ready else { return }
         personaState = .loading
-        do {
-            loadedPersona = try await services.persona(profile.name).load()
-            bio = loadedPersona.description
-            soul = loadedPersona.soul
-            personaState = .ready
-        } catch {
-            personaState = .failed
+        let key = SurfaceKey.screen("persona", bot: profile.name)
+        if let cached = await services.surfaces.value(BotPersona.self, key), personaState == .loading {
+            adoptPersona(cached)
         }
+        do {
+            let fresh = try await services.persona(profile.name).load()
+            adoptPersona(fresh)
+            services.surfaces.persist(fresh, key)
+        } catch {
+            if personaState != .ready { personaState = .failed }
+        }
+    }
+
+    private func adoptPersona(_ persona: BotPersona) {
+        let untouched = bio == loadedPersona.description && soul == loadedPersona.soul
+        loadedPersona = persona
+        if untouched {
+            bio = persona.description
+            soul = persona.soul
+        }
+        personaState = .ready
     }
 
     func writeDescription(overwrite: Bool = false) async {
@@ -138,6 +152,7 @@ final class EditBotModel: Identifiable {
         case .written(let text):
             loadedPersona.description = text
             bio = text
+            services.surfaces.persist(loadedPersona, .screen("persona", bot: profile.name))
         case .alreadyDescribed:
             describeFailure = String(localized: "This bot already has a description you wrote.")
             offersReplaceDescription = true
@@ -197,6 +212,7 @@ final class EditBotModel: Identifiable {
             messages.append(String(localized: "Couldn't save the personality. It is unchanged."))
         }
         failure = messages.isEmpty ? nil : messages.joined(separator: " ")
+        services.surfaces.persist(loadedPersona, .screen("persona", bot: profileName))
         return messages.isEmpty
     }
 

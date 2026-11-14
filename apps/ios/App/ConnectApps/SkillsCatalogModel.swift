@@ -54,11 +54,36 @@ final class SkillsCatalogModel {
     private var totalPages = 1
     private var detailSeed: SkillRow?
 
+    private var refreshed = false
+
+    private struct Snapshot: Sendable {
+        let hub: [SkillHubItem]
+        let state: SkillsInstallState
+        let page: Int
+        let totalPages: Int
+    }
+
     private let service: SkillsCatalogService
     private let diagnostics = Diagnostics.osLog()
+    private let surfaces: SurfaceCache
+    private let surfaceKey: SurfaceKey
 
-    init(service: SkillsCatalogService) {
+    init(service: SkillsCatalogService, profile: String?, surfaces: SurfaceCache) {
         self.service = service
+        self.surfaces = surfaces
+        surfaceKey = .screen("skills-catalog", bot: profile ?? "")
+        if let held = surfaces.remembered(Snapshot.self, surfaceKey) {
+            hub = held.hub
+            state = held.state
+            page = held.page
+            totalPages = held.totalPages
+            rebuild()
+            phase = .ready
+        }
+    }
+
+    private func remember() {
+        surfaces.remember(Snapshot(hub: hub, state: state, page: page, totalPages: totalPages), surfaceKey)
     }
 
     var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -83,7 +108,7 @@ final class SkillsCatalogModel {
     }
 
     func start() async {
-        guard phase != .ready else { return }
+        guard !refreshed else { return }
         await load()
     }
 
@@ -99,6 +124,8 @@ final class SkillsCatalogModel {
             state = installState
             rebuild()
             phase = .ready
+            refreshed = true
+            remember()
         } catch is CancellationError {
             return
         } catch {
@@ -235,6 +262,7 @@ final class SkillsCatalogModel {
         do {
             state = try await service.installState()
             rebuild()
+            remember()
             outcome = Outcome(message: success, isSuccess: true)
         } catch {
             outcome = Outcome(

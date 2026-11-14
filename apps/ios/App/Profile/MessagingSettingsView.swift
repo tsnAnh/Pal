@@ -41,7 +41,7 @@ struct MessagingSettingsView: View {
     private var content: some View {
         switch model.phase {
         case .loading:
-            ProgressView().accessibilityIdentifier("messagingSettingsLoading")
+            DelayedProgressView().accessibilityIdentifier("messagingSettingsLoading")
         case .unavailable:
             PillButton(String(localized: "Try again"), kind: .accent, size: .large, accessibilityIdentifier: "messagingSettingsRetry") {
                 Task { await model.load() }

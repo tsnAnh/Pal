@@ -169,7 +169,7 @@ struct MacValueLabel: View {
 
 struct MacLoading: View {
     var body: some View {
-        ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 24)
+        DelayedProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 24)
     }
 }
 

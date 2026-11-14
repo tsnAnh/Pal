@@ -150,7 +150,7 @@ struct ConnectAppsSheet: View {
         }
         switch model.phase {
         case .loading where model.catalog.apps.isEmpty:
-            ProgressView().padding(.top, 60).accessibilityIdentifier("connectAppsLoading")
+            DelayedProgressView().padding(.top, 60).accessibilityIdentifier("connectAppsLoading")
         case .unavailable:
             unavailable
         default:
@@ -216,7 +216,7 @@ struct ConnectAppsSheet: View {
             EmptyView()
         case .loading:
             ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
-            ProgressView().frame(maxWidth: .infinity).padding(.vertical, 12).accessibilityIdentifier("capabilitiesLoading")
+            DelayedProgressView().frame(maxWidth: .infinity).padding(.vertical, 12).accessibilityIdentifier("capabilitiesLoading")
         case .failed:
             ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
             Text("Couldn't load capabilities")

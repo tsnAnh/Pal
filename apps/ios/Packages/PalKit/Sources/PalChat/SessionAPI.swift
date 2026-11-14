@@ -106,9 +106,24 @@ public struct SessionAPI: Sendable {
         return try decode(SessionSnapshot.self, result, "session.create")
     }
 
-    public func resume(sessionID: String) async throws -> SessionSnapshot {
-        let result = try await call("session.resume", ["session_id": .string(sessionID)])
+    public var supportsHistoryPaging: Bool {
+        RuntimeDescription.supportsHistoryPaging(advertised: connection.negotiatedRuntime)
+    }
+
+    public func resume(sessionID: String, messageLimit: Int? = nil) async throws -> SessionSnapshot {
+        var params: [String: JSONValue] = ["session_id": .string(sessionID)]
+        if let messageLimit, supportsHistoryPaging { params["message_limit"] = .int(messageLimit) }
+        let result = try await call("session.resume", params)
         return try decode(SessionSnapshot.self, result, "session.resume")
+    }
+
+    public func historyPage(sessionID: String, beforeRowID: Int, limit: Int) async throws -> HistoryPage {
+        let result = try await call("session.history.page", [
+            "session_id": .string(sessionID),
+            "before_row_id": .int(beforeRowID),
+            "limit": .int(limit),
+        ])
+        return try decode(HistoryPage.self, result, "session.history.page")
     }
 
     public func eventsSince(sessionID: String, lastSequence: Int, replayEpoch: String) async throws -> EventsSinceResult {

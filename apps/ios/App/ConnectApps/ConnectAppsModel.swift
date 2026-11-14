@@ -111,6 +111,9 @@ final class ConnectAppsModel {
     private let bots: [CustomConnectorBot]
     private let currentBot: String?
     private let diagnostics = Diagnostics.osLog()
+    private let surfaces: SurfaceCache
+    private var catalogKey: SurfaceKey { .screen("connect-catalog", bot: profile ?? "") }
+    private var capabilitiesKey: SurfaceKey { .screen("connect-capabilities", bot: profile ?? "") }
 
     init(
         connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser,
@@ -118,7 +121,7 @@ final class ConnectAppsModel {
     ) {
         self.profile = profile
         self.botName = botName
-        devices = DeviceConnectorsModel(pool: pool, profile: profile)
+        devices = DeviceConnectorsModel(pool: pool, profile: profile, surfaces: connection.surfaces)
         self.bots = bots
         self.currentBot = currentBot
         service = ConnectAppsService(
@@ -127,6 +130,14 @@ final class ConnectAppsModel {
         )
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
         capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
+        surfaces = connection.surfaces
+        if let held = surfaces.remembered(ConnectCatalog.self, catalogKey) {
+            catalog = held
+            phase = .ready
+        }
+        if profile != nil, let rows = surfaces.remembered([CapabilityRow].self, capabilitiesKey) {
+            capabilitiesPhase = .ready(rows)
+        }
     }
 
     var customConnector: CustomConnectorModel? {
@@ -155,7 +166,9 @@ final class ConnectAppsModel {
         guard let profile else { return }
         if case .ready = capabilitiesPhase {} else { capabilitiesPhase = .loading }
         do {
-            capabilitiesPhase = .ready(try await capabilitiesService.status(profile: profile))
+            let rows = try await capabilitiesService.status(profile: profile)
+            capabilitiesPhase = .ready(rows)
+            surfaces.remember(rows, capabilitiesKey)
         } catch is CancellationError {
             return
         } catch {
@@ -164,7 +177,7 @@ final class ConnectAppsModel {
         }
     }
 
-    func makeSkillsModel() -> SkillsCatalogModel { SkillsCatalogModel(service: skillsService) }
+    func makeSkillsModel() -> SkillsCatalogModel { SkillsCatalogModel(service: skillsService, profile: profile, surfaces: surfaces) }
 
     var canSetKeys: Bool { profile != nil }
 
@@ -183,7 +196,9 @@ final class ConnectAppsModel {
         guard let request = keyRequest, let profile, keyState.acceptsInput else { return }
         keyState = .submitting
         do {
-            capabilitiesPhase = .ready(try await capabilitiesService.setKey(request.keyName, to: SecretString(value), profile: profile))
+            let rows = try await capabilitiesService.setKey(request.keyName, to: SecretString(value), profile: profile)
+            capabilitiesPhase = .ready(rows)
+            surfaces.remember(rows, capabilitiesKey)
             cancelKeyEntry()
         } catch is CancellationError {
             keyState = .idle
@@ -201,6 +216,7 @@ final class ConnectAppsModel {
         do {
             catalog = try await service.load()
             phase = .ready
+            surfaces.remember(catalog, catalogKey)
         } catch {
             if catalog.apps.isEmpty { phase = .unavailable }
         }
@@ -317,7 +333,7 @@ final class ConnectAppsModel {
         }
         guard case .hosted(let slug) = app.source else { return }
         accountsModel = ConnectorAccountsModel(
-            app: app, slug: slug, botName: botName, service: service,
+            app: app, slug: slug, botName: botName, service: service, surfaces: surfaces,
             changed: { [weak self] in await self?.reload() }
         )
     }

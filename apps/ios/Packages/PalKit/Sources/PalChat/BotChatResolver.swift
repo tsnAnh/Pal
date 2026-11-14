@@ -41,13 +41,13 @@ public struct BotChatResolver: Sendable {
         try await api.list(title: Self.title).first { $0.title == Self.title }
     }
 
-    public func open(_ api: SessionAPI) async throws -> BotChatResolution {
+    public func open(_ api: SessionAPI, messageLimit: Int? = nil) async throws -> BotChatResolution {
         if let row = try await lookup(api) {
-            return BotChatResolution(snapshot: try await api.resume(sessionID: Self.target(of: row)), created: false)
+            return BotChatResolution(snapshot: try await api.resume(sessionID: Self.target(of: row), messageLimit: messageLimit), created: false)
         }
         if let adopted = try await lookup(api) {
             diagnostics.info("chat", "adopted a chat that appeared before create")
-            return BotChatResolution(snapshot: try await api.resume(sessionID: Self.target(of: adopted)), created: false)
+            return BotChatResolution(snapshot: try await api.resume(sessionID: Self.target(of: adopted), messageLimit: messageLimit), created: false)
         }
         let minted = try await api.create(title: Self.title, requestID: UUID().uuidString, hidden: true)
         guard let registered = try await lookup(api) else { throw ChatError.titleNotApplied }
@@ -56,7 +56,7 @@ public struct BotChatResolver: Sendable {
             return BotChatResolution(snapshot: minted, created: true)
         }
         diagnostics.warning("chat", "created chat lost the title race; adopting the registered one")
-        return BotChatResolution(snapshot: try await api.resume(sessionID: target), created: false)
+        return BotChatResolution(snapshot: try await api.resume(sessionID: target, messageLimit: messageLimit), created: false)
     }
 
     static func target(of row: SessionListRow) -> String {

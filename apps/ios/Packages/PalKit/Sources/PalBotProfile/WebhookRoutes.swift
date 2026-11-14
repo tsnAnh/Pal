@@ -262,10 +262,14 @@ public final class WebhookRoutesModel {
     public private(set) var issuedRouteName: String?
     public var notice: String?
     @ObservationIgnored private let client: WebhookRoutesClient
+    @ObservationIgnored private let surfaces: SurfaceCache
     @ObservationIgnored private var isRefreshing = false
+    private static let surfaceKey = SurfaceKey.screen("webhook-routes")
 
-    public init(client: WebhookRoutesClient) {
+    public init(client: WebhookRoutesClient, surfaces: SurfaceCache) {
         self.client = client
+        self.surfaces = surfaces
+        if let held = surfaces.remembered(WebhookRouteList.self, Self.surfaceKey) { phase = .ready(held) }
     }
 
     public var list: WebhookRouteList? {
@@ -292,7 +296,9 @@ public final class WebhookRoutesModel {
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            phase = .ready(try await client.list())
+            let fresh = try await client.list()
+            phase = .ready(fresh)
+            surfaces.remember(fresh, Self.surfaceKey)
         } catch is CancellationError {
         } catch {
             apply(WebhookRoutesFailure.classify(error), keepingReady: true)

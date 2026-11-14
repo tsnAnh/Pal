@@ -203,10 +203,17 @@ public final class KitModel {
     public private(set) var outcome: Outcome?
     @ObservationIgnored private let client: KitClient
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
+    @ObservationIgnored private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("host-kit")
 
-    public init(client: KitClient, sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+    public init(
+        client: KitClient, surfaces: SurfaceCache,
+        sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+    ) {
         self.client = client
+        self.surfaces = surfaces
         self.sleep = sleep
+        if let held = surfaces.remembered(KitReport.self, Self.surfaceKey) { phase = .ready(held) }
     }
 
     public var report: KitReport? {
@@ -239,12 +246,16 @@ public final class KitModel {
 
     public func refreshStatus() async {
         do {
-            phase = .ready(try await client.status())
+            let fresh = try await client.status()
+            phase = .ready(fresh)
+            surfaces.remember(fresh, Self.surfaceKey)
             if case .failed(_, .requestRefused)? = outcome { outcome = nil }
         } catch is CancellationError {
             return
         } catch {
-            phase = .failed(KitFailure.classify(error))
+            let failure = KitFailure.classify(error)
+            if report != nil, failure == .unreachable || failure == .timeout { return }
+            phase = .failed(failure)
         }
     }
 

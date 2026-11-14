@@ -219,12 +219,12 @@ struct RootView: View {
             ))
         case .botModel(let name):
             BotModelView(
-                model: BotModelsModel(client: bots.services.models(name)),
+                model: BotModelsModel(client: bots.services.models(name), profile: name, surfaces: bots.services.surfaces),
                 displayName: roster.bot(named: name)?.displayName ?? name
             )
         case .botKeys(let name):
             let displayName = roster.bot(named: name)?.displayName ?? name
-            BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name), displayName: displayName)
+            BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name, surfaces: bots.services.surfaces), displayName: displayName)
         case .messagingSettings(let name):
             MessagingSettingsView(model: MessagingSettingsModel(
                 botName: name,
@@ -238,7 +238,7 @@ struct RootView: View {
         if showsWorkspace {
             workspace
         } else if model.phase == .connecting {
-            ProgressView("Connecting")
+            DelayedReveal { ProgressView("Connecting") }
                 .accessibilityIdentifier("connectingIndicator")
         } else {
             ConnectionView(model: model)

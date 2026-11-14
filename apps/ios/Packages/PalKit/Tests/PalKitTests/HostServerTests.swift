@@ -13,7 +13,7 @@ private func logsJSON(_ lines: [String], hasMore: Bool = false, truncated: Bool 
 
 @MainActor
 private func model(_ bots: ScriptedBots) -> HostServerModel {
-    HostServerModel(client: HostServerClient(gateway: bots.gateway))
+    HostServerModel(client: HostServerClient(gateway: bots.gateway), surfaces: scratchSurfaces())
 }
 
 @Suite("Host server")

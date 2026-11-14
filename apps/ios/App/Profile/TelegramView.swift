@@ -127,7 +127,9 @@ struct TelegramView: View {
         Group {
             switch model.phase {
             case .loading:
-                PillButton(String(localized: "Loading"), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "telegramLoading") {}
+                DelayedReveal {
+                    PillButton(String(localized: "Loading"), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "telegramLoading") {}
+                }
             case .busy(let activity):
                 PillButton(busyTitle(activity), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "telegramBusy") {}
             case .unavailable:

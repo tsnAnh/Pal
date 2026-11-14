@@ -1,5 +1,6 @@
 import Foundation
 import PalBotProfile
+import PalProtocol
 import Observation
 
 @MainActor
@@ -74,15 +75,21 @@ final class LibraryModel {
     }
 
     private func loadFirstPage(generation current: Int) async {
+        let key = SurfaceKey.screen("library-\(filter.rawValue)", bot: botName)
+        if let cached = await services.surfaces.value(LibraryPage.self, key), current == generation, phase == .loading {
+            apply(cached, replacing: true)
+            phase = .ready
+        }
         do {
             let page = try await services.library.page(profile: botName, filter: filter)
             guard current == generation else { return }
             apply(page, replacing: true)
             phase = .ready
+            services.surfaces.persist(page, key)
             if !page.indexComplete { startPolling(generation: current) }
         } catch is CancellationError {
         } catch {
-            guard current == generation else { return }
+            guard current == generation, phase != .ready else { return }
             phase = .failed
         }
     }

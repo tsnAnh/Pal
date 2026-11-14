@@ -85,17 +85,19 @@ struct LoadingRow: View {
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
-        HStack {
-            Text(title)
-                .hermesText(.rowTitle)
-                .foregroundStyle(Color(theme.palette.textPrimary))
-            Spacer(minLength: 0)
-            ProgressView().tint(Color(theme.palette.textSecondary))
-            Spacer(minLength: 0)
+        DelayedReveal {
+            HStack {
+                Text(title)
+                    .hermesText(.rowTitle)
+                    .foregroundStyle(Color(theme.palette.textPrimary))
+                Spacer(minLength: 0)
+                ProgressView().tint(Color(theme.palette.textSecondary))
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, PalMetrics.rowInset)
         }
-        .padding(.horizontal, PalMetrics.rowInset)
-        .frame(minHeight: PalMetrics.rowMinimumHeight)
-        .accessibilityElement(children: .combine)
+        .frame(maxWidth: .infinity, minHeight: PalMetrics.rowMinimumHeight)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
     }
 }

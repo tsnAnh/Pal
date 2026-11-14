@@ -80,19 +80,34 @@ final class DataSharingModel {
     private(set) var state: Loadable<SettingsWire.SharedMetrics> = .loading
     var failure: String?
 
+    private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("data-sharing")
+
+    init(surfaces: SurfaceCache) {
+        self.surfaces = surfaces
+    }
+
     func load(api: SettingsAPI) async {
+        if state.value == nil, let cached = await surfaces.value(SettingsWire.SharedMetrics.self, Self.surfaceKey), state.value == nil {
+            state = .loaded(cached)
+        }
         do {
-            state = .loaded(try await api.sharedMetrics())
+            adopt(try await api.sharedMetrics())
         } catch is CancellationError {
             return
         } catch {
-            state = .failed(SettingsFailure(error).message)
+            if state.value == nil { state = .failed(SettingsFailure(error).message) }
         }
+    }
+
+    private func adopt(_ metrics: SettingsWire.SharedMetrics) {
+        state = .loaded(metrics)
+        surfaces.persist(metrics, Self.surfaceKey)
     }
 
     func set(enabled: Bool, send: Bool, api: SettingsAPI) async {
         do {
-            state = .loaded(try await api.setSharedMetrics(enabled: enabled, send: send))
+            adopt(try await api.setSharedMetrics(enabled: enabled, send: send))
         } catch {
             failure = SettingsFailure(error).message
             await load(api: api)
@@ -104,7 +119,13 @@ struct DataSharingScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model = DataSharingModel()
+    @State private var model: DataSharingModel
+
+    init(hub: SettingsHub, back: @escaping () -> Void) {
+        self.hub = hub
+        self.back = back
+        _model = State(initialValue: DataSharingModel(surfaces: hub.connection.surfaces))
+    }
 
     var body: some View {
         SettingsPage(title: "Data sharing", identifier: "dataSharingScreen", back: back) {
@@ -292,7 +313,18 @@ final class BotNotificationsModel {
     private(set) var isLoaded = false
     var failure: String?
 
+    private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("bot-notifications")
+
+    init(surfaces: SurfaceCache) {
+        self.surfaces = surfaces
+    }
+
     func load(bots: [BotRow], api: SettingsAPI) async {
+        if !isLoaded, let cached = await surfaces.value([String: Bool].self, Self.surfaceKey), !isLoaded {
+            flags = cached
+            isLoaded = true
+        }
         var loaded: [String: Bool] = [:]
         await withTaskGroup(of: (String, Bool?).self) { group in
             for bot in bots {
@@ -302,6 +334,7 @@ final class BotNotificationsModel {
         }
         flags = loaded.compactMapValues { $0 }
         isLoaded = true
+        surfaces.persist(flags, Self.surfaceKey)
     }
 
     func set(_ enabled: Bool, bot: BotRow, api: SettingsAPI) async {
@@ -309,6 +342,7 @@ final class BotNotificationsModel {
         flags[bot.name] = enabled
         do {
             try await api.setNotifications(enabled, bot: bot.name)
+            surfaces.persist(flags, Self.surfaceKey)
         } catch {
             flags[bot.name] = previous
             failure = SettingsFailure(error).message
@@ -320,7 +354,13 @@ struct BotNotificationsScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model = BotNotificationsModel()
+    @State private var model: BotNotificationsModel
+
+    init(hub: SettingsHub, back: @escaping () -> Void) {
+        self.hub = hub
+        self.back = back
+        _model = State(initialValue: BotNotificationsModel(surfaces: hub.connection.surfaces))
+    }
 
     var body: some View {
         SettingsPage(title: "Notifications by Bot", identifier: "botNotificationsScreen", back: back) {

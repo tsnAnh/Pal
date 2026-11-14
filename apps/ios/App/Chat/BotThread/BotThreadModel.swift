@@ -38,7 +38,12 @@ final class BotThreadModel {
         connectionModel = connection
         self.roster = roster
         timeline = BotThreadTimeline(threadID: route.threadID)
+        if route.focusExchangeID == nil, let held = connection.surfaces.remembered(BotThreadTimeline.self, surfaceKey) {
+            timeline = held
+        }
     }
+
+    private var surfaceKey: SurfaceKey { .screen("bot-thread-\(route.threadID)", bot: route.botName) }
 
     var avatars: ParticipantAvatars { ParticipantAvatars(roster: roster) }
 
@@ -111,11 +116,13 @@ final class BotThreadModel {
         if state == .ready {
             let page = try await api.botThreadRead(threadID: route.threadID, mode: .sinceRevision(timeline.revision))
             timeline.apply(delta: page)
+            if route.focusExchangeID == nil { connectionModel.surfaces.remember(timeline, surfaceKey) }
         } else {
             let mode: BotThreadReadMode = route.focusExchangeID.map { .focus(exchangeID: $0) } ?? .newest
             let page = try await api.botThreadRead(threadID: route.threadID, mode: mode)
             timeline.apply(initial: page)
             state = .ready
+            if route.focusExchangeID == nil { connectionModel.surfaces.remember(timeline, surfaceKey) }
             if !openedWithFocus {
                 openedWithFocus = true
                 focusRequest = timeline.focusMessageID ?? timeline.messages.last?.id

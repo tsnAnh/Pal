@@ -30,7 +30,7 @@ private func probeJSON(code: String, message: String = "msg", local: Int? = 401,
 
 @MainActor
 private func model(_ bots: ScriptedBots) -> WebhookRoutesModel {
-    WebhookRoutesModel(client: WebhookRoutesClient(gateway: bots.gateway))
+    WebhookRoutesModel(client: WebhookRoutesClient(gateway: bots.gateway), surfaces: scratchSurfaces())
 }
 
 private let methodNotFound = GatewayTransportError.rpc(RPCError(code: -32601, message: "method not found"))

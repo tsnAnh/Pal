@@ -7,7 +7,7 @@ public enum SpeechMemoryArea: String, Sendable, Equatable, CaseIterable {
     case memory
 }
 
-public struct SpeechMemoryProvider: Sendable, Equatable, Identifiable, Decodable {
+public struct SpeechMemoryProvider: Sendable, Equatable, Identifiable, Codable {
     public let id: String
     public let name: String
     public let description: String?
@@ -62,7 +62,7 @@ public struct SpeechMemoryProvider: Sendable, Equatable, Identifiable, Decodable
     public var statusWord: String { keySet ? "Set" : "Not set" }
 }
 
-public struct SpeechVoiceOption: Sendable, Equatable, Identifiable, Decodable {
+public struct SpeechVoiceOption: Sendable, Equatable, Identifiable, Codable {
     public let id: String
     public let label: String
 
@@ -72,7 +72,7 @@ public struct SpeechVoiceOption: Sendable, Equatable, Identifiable, Decodable {
     }
 }
 
-public struct SpeechVoice: Sendable, Equatable, Decodable {
+public struct SpeechVoice: Sendable, Equatable, Codable {
     public let current: String
     public let options: [SpeechVoiceOption]
 
@@ -82,7 +82,7 @@ public struct SpeechVoice: Sendable, Equatable, Decodable {
     }
 }
 
-public struct SpeechProviderGroup: Sendable, Equatable, Decodable {
+public struct SpeechProviderGroup: Sendable, Equatable, Codable {
     public let selected: String
     public let providers: [SpeechMemoryProvider]
     public let voice: SpeechVoice?
@@ -94,7 +94,7 @@ public struct SpeechProviderGroup: Sendable, Equatable, Decodable {
     }
 }
 
-public struct SpeechMemorySettings: Sendable, Equatable, Decodable {
+public struct SpeechMemorySettings: Sendable, Equatable, Codable {
     public let tts: SpeechProviderGroup
     public let memory: SpeechProviderGroup
 

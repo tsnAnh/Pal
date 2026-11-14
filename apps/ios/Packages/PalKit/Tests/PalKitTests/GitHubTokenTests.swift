@@ -34,7 +34,7 @@ private final class Sleeps: Sendable {
 
 @MainActor
 private func model(_ bots: ScriptedBots, sleeps: Sleeps = Sleeps()) -> GitHubTokenModel {
-    GitHubTokenModel(client: GitHubTokenClient(gateway: bots.gateway), sleep: sleeps.sleep)
+    GitHubTokenModel(client: GitHubTokenClient(gateway: bots.gateway), surfaces: scratchSurfaces(), sleep: sleeps.sleep)
 }
 
 private let methodNotFound = GatewayTransportError.rpc(RPCError(code: -32601, message: "method not found"))
@@ -225,7 +225,7 @@ struct GitHubTokenTests {
         bots.script("github.oauth.start", startJSON(session: "s9"))
         bots.script("github.oauth.poll", pollJSON("pending"))
         bots.script("github.oauth.cancel", ["ok": true])
-        let github = GitHubTokenModel(client: GitHubTokenClient(gateway: bots.gateway)) { _ in
+        let github = GitHubTokenModel(client: GitHubTokenClient(gateway: bots.gateway), surfaces: scratchSurfaces()) { _ in
             try await Task.sleep(for: .seconds(60))
         }
         await github.refresh()

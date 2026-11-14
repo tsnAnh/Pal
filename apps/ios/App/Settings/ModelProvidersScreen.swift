@@ -164,7 +164,7 @@ extension SettingsHub {
         let connection = connection
         let profile = roster.bots.first(where: \.isDefault)?.name
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        return ModelProvidersModel(client: ModelProvidersClient(gateway: gateway, profile: profile))
+        return ModelProvidersModel(client: ModelProvidersClient(gateway: gateway, profile: profile), surfaces: connection.surfaces)
     }
 }
 

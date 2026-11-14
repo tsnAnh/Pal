@@ -318,7 +318,7 @@ struct MacInspector: View {
     private var routinesList: some View {
         switch routines.phase {
         case .loading:
-            ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 14)
+            DelayedProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 14)
         case .failed:
             InspectorRow(identifier: "routinesFailed", action: { Task { await routines.load() } }) {
                 Text("Couldn't load routines. Try again.").font(.system(size: 12)).foregroundStyle(PalTokens.textSecondary)

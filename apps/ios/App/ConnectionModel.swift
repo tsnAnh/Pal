@@ -30,6 +30,7 @@ final class ConnectionModel {
     private(set) var userName = ""
     let localDeviceID: String?
     let cache: CacheStore
+    @ObservationIgnored private(set) lazy var surfaces = SurfaceCache(store: cache) { [unowned self] in accountKey }
 
     private var auth: AuthSession
     private var keychainUnavailable: Bool
@@ -278,6 +279,7 @@ final class ConnectionModel {
         client = nil
         try? await auth.signOut()
         cache.removeAll()
+        surfaces.forgetAll()
         userName = ""
         userInitial = "H"
         phase = .signedOut
@@ -306,6 +308,7 @@ final class ConnectionModel {
                 phase = .failed(Self.message(for: error))
             } else {
                 cache.removeAll()
+                surfaces.forgetAll()
                 phase = .signedOut
             }
         }

@@ -1,6 +1,7 @@
 import Foundation
 import PalConnect
 import PalDiagnostics
+import PalProtocol
 import Observation
 
 @MainActor
@@ -24,9 +25,15 @@ final class ConnectorAccountsModel: Identifiable {
     let app: ConnectApp
     let botName: String
     private(set) var phase: Phase = .loading
-    private(set) var accounts: [ConnectorAccount] = []
-    private(set) var policy = ConnectorPolicy.empty
-    private(set) var tools: [HostedConnectorTool] = []
+    private(set) var accounts: [ConnectorAccount] = [] {
+        didSet { remember() }
+    }
+    private(set) var policy = ConnectorPolicy.empty {
+        didSet { remember() }
+    }
+    private(set) var tools: [HostedConnectorTool] = [] {
+        didSet { remember() }
+    }
     private(set) var toolsFailed = false
     private(set) var save: SaveState = .idle
     private(set) var busyAccount: String?
@@ -38,13 +45,36 @@ final class ConnectorAccountsModel: Identifiable {
     private let service: ConnectAppsService
     private let changed: () async -> Void
     private let diagnostics = Diagnostics.osLog()
+    private let surfaces: SurfaceCache
 
-    init(app: ConnectApp, slug: String, botName: String, service: ConnectAppsService, changed: @escaping () async -> Void) {
+    private struct Snapshot: Sendable {
+        let accounts: [ConnectorAccount]
+        let policy: ConnectorPolicy
+        let tools: [HostedConnectorTool]
+    }
+
+    private var surfaceKey: SurfaceKey { .screen("connector-accounts-\(slug)", bot: botName) }
+
+    init(
+        app: ConnectApp, slug: String, botName: String, service: ConnectAppsService, surfaces: SurfaceCache,
+        changed: @escaping () async -> Void
+    ) {
         self.app = app
         self.slug = slug
         self.botName = botName
         self.service = service
+        self.surfaces = surfaces
         self.changed = changed
+        if let held = surfaces.remembered(Snapshot.self, .screen("connector-accounts-\(slug)", bot: botName)) {
+            accounts = held.accounts
+            policy = held.policy
+            tools = held.tools
+            phase = .ready
+        }
+    }
+
+    private func remember() {
+        surfaces.remember(Snapshot(accounts: accounts, policy: policy, tools: tools), surfaceKey)
     }
 
     var active: [ConnectorAccount] { accounts.filter { !$0.isRetired } }
@@ -59,8 +89,10 @@ final class ConnectorAccountsModel: Identifiable {
         do {
             accounts = try await service.accounts(for: slug)
             phase = .ready
+        } catch is CancellationError {
+            return
         } catch {
-            phase = .failed(Self.message(error, fallback: String(localized: "Couldn't load the accounts. Try again.")))
+            if phase != .ready { phase = .failed(Self.message(error, fallback: String(localized: "Couldn't load the accounts. Try again."))) }
             return
         }
         await loadPolicy()

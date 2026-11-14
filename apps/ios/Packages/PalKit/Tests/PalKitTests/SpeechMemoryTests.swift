@@ -99,7 +99,7 @@ struct SpeechMemoryClientTests {
 @Suite("Speech and memory model")
 struct SpeechMemoryModelTests {
     private func model(_ bots: ScriptedBots) -> SpeechMemoryModel {
-        SpeechMemoryModel(client: SpeechMemoryClient(gateway: bots.gateway, profile: "atlas"))
+        SpeechMemoryModel(client: SpeechMemoryClient(gateway: bots.gateway, profile: "atlas"), profile: "atlas", surfaces: scratchSurfaces())
     }
 
     private func target(_ model: SpeechMemoryModel, _ area: SpeechMemoryArea, _ id: String) throws -> SpeechMemoryModel.Target {

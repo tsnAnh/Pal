@@ -237,7 +237,7 @@ struct MacConnectApps: View {
     private var catalogContent: some View {
         switch model.phase {
         case .loading where model.catalog.apps.isEmpty:
-            ProgressView().frame(maxWidth: .infinity).padding(.top, 60).accessibilityIdentifier("connectAppsLoading")
+            DelayedProgressView().frame(maxWidth: .infinity).padding(.top, 60).accessibilityIdentifier("connectAppsLoading")
         case .unavailable:
             VStack(spacing: 14) {
                 Text("Couldn't load apps").foregroundStyle(PalTokens.textSecondary)
@@ -351,7 +351,7 @@ struct MacConnectApps: View {
             EmptyView()
         case .loading:
             section(title: String(localized: "Capabilities"), identifier: "capabilitiesTitle", viewAll: nil) {
-                ProgressView().controlSize(.small).accessibilityIdentifier("capabilitiesLoading")
+                DelayedProgressView().controlSize(.small).accessibilityIdentifier("capabilitiesLoading")
             }
         case .failed:
             section(title: String(localized: "Capabilities"), identifier: "capabilitiesTitle", viewAll: nil) {

@@ -96,7 +96,10 @@ public struct Transcript: Sendable, Equatable {
     public private(set) var executionGeneration = 0
     public private(set) var resyncRequested = false
     public private(set) var lastError: String?
+    public private(set) var olderMessages = 0
+    public private(set) var oldestRowID: Int?
 
+    private var itemRows: [String: Int] = [:]
     private var segmentLengths: [Int: Int] = [:]
     private var currentSegment: Int?
     private var streamingID: String?
@@ -106,6 +109,8 @@ public struct Transcript: Sendable, Equatable {
     private(set) var absorbedItemIDs: Set<String> = []
 
     public init() {}
+
+    public var hasOlder: Bool { olderMessages > 0 && oldestRowID != nil }
 
     static let absorbedPrefix = "absorbed:"
 
@@ -162,9 +167,26 @@ public struct Transcript: Sendable, Equatable {
         return true
     }
 
+    public mutating func prependOlder(_ page: HistoryPage) {
+        let (older, rows) = Self.historyItems(page.messages)
+        let present = Set(items.map(\.id))
+        items = older.filter { !present.contains($0.id) } + items
+        itemRows.merge(rows) { current, _ in current }
+        oldestRowID = page.messages.first?.rowID ?? oldestRowID
+        olderMessages = page.messages.isEmpty ? 0 : page.olderMessages
+    }
+
     public mutating func load(_ snapshot: SessionSnapshot) {
+        let (window, rows) = Self.historyItems(snapshot.messages)
+        let retained = retainedOlderItems(before: snapshot)
+        let windowIDs = Set(window.map(\.id))
         sessionID = snapshot.sessionID
-        items = snapshot.messages.flatMap(Self.items(from:))
+        items = retained.filter { !windowIDs.contains($0.id) } + window
+        itemRows = rows.merging(retained.reduce(into: [:]) { $0[$1.id] = itemRows[$1.id] }) { current, _ in current }
+        if retained.isEmpty {
+            olderMessages = snapshot.olderMessages
+            oldestRowID = snapshot.messages.first?.rowID
+        }
         admissionInputs = [:]
         absorbedAdmissions = []
         absorbedItemIDs = []
@@ -265,6 +287,24 @@ public struct Transcript: Sendable, Equatable {
 
     private static func serverDate(_ timestamp: Double?) -> Date? {
         timestamp.flatMap { $0.isFinite && $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
+    }
+
+    private func retainedOlderItems(before snapshot: SessionSnapshot) -> [TranscriptItem] {
+        guard sessionID == snapshot.sessionID, snapshot.olderMessages > 0,
+              let windowStart = snapshot.messages.first?.rowID,
+              itemRows.values.contains(where: { $0 >= windowStart })
+        else { return [] }
+        return items.filter { item in itemRows[item.id].map { $0 < windowStart } ?? false }
+    }
+
+    private static func historyItems(_ messages: [WireMessage]) -> ([TranscriptItem], [String: Int]) {
+        var rows: [String: Int] = [:]
+        let built = messages.flatMap { message in
+            let made = items(from: message)
+            if let rowID = message.rowID { for item in made { rows[item.id] = rowID } }
+            return made
+        }
+        return (built, rows)
     }
 
     private static func items(from message: WireMessage) -> [TranscriptItem] {

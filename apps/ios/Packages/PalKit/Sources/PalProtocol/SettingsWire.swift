@@ -201,7 +201,7 @@ public enum SettingsWire {
         }
     }
 
-    public struct SharedMetrics: Decodable, Sendable, Equatable {
+    public struct SharedMetrics: Codable, Sendable, Equatable {
         public var enabled: Bool
         public var send: Bool
         public var decided: Bool

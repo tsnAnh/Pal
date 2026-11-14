@@ -22,6 +22,15 @@ public struct RuntimeDescription: Sendable, Equatable, Decodable {
 
     public var supportsReach: Bool { capabilities.contains(ReachWire.capability) }
 
+    public static let historyPageCapability = "session-history-page-v1"
+
+    public static func supportsHistoryPaging(advertised: JSONValue?) -> Bool {
+        guard let advertised, let description = try? advertised.decoded(as: RuntimeDescription.self) else {
+            return false
+        }
+        return description.capabilities.contains(historyPageCapability)
+    }
+
     public static let iosSource = "ios"
     public static let fallbackSource = "gui"
 

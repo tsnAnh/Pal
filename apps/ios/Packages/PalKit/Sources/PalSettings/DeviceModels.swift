@@ -1,7 +1,7 @@
 import Foundation
 import PalProtocol
 
-public struct DeviceEntry: Identifiable, Sendable, Equatable {
+public struct DeviceEntry: Identifiable, Sendable, Equatable, Codable {
     public let id: String
     public let name: String
     public let kindLabel: String

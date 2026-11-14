@@ -1,6 +1,7 @@
 import Foundation
 import PalBotProfile
 import PalChat
+import PalProtocol
 import Observation
 
 struct RoomUpload: Identifiable, Equatable {
@@ -60,6 +61,7 @@ final class RoomModel {
         self.service = service
         self.rooms = rooms
         capabilities = rooms.capabilities
+        log = rooms.surfaces.remembered(RoomLog.self, .screen("room-log-\(room.roomID)")) ?? RoomLog()
     }
 
     var events: [RoomEvent] { log.events }
@@ -93,6 +95,7 @@ final class RoomModel {
         do {
             let result = try await service.refresh(roomID: roomID, log: log)
             log.apply(room: result.snapshot.room, since: result.since, events: result.events)
+            rooms.surfaces.remember(log, .screen("room-log-\(roomID)"))
             room = result.snapshot.room
             driver = result.snapshot.driver
             rooms.apply(result.snapshot.room)

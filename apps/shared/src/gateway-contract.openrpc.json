@@ -12922,6 +12922,66 @@
         "title": "CanonicalGroupsPeerRevokeParams",
         "type": "object"
       },
+      "CanonicalHistoryPage": {
+        "additionalProperties": false,
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "older_messages": {
+            "title": "Older Messages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "messages",
+          "older_messages"
+        ],
+        "title": "CanonicalHistoryPage",
+        "type": "object"
+      },
+      "CanonicalHistoryPageParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "before_row_id": {
+            "title": "Before Row Id",
+            "type": "integer"
+          },
+          "limit": {
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Limit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "session_id",
+          "before_row_id",
+          "limit"
+        ],
+        "title": "CanonicalHistoryPageParams",
+        "type": "object"
+      },
       "CanonicalListParams": {
         "additionalProperties": false,
         "properties": {
@@ -13763,6 +13823,20 @@
             "default": false,
             "title": "Display Projection",
             "type": "boolean"
+          },
+          "message_limit": {
+            "anyOf": [
+              {
+                "maximum": 500,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message Limit"
           }
         },
         "title": "CanonicalResumeParams",
@@ -14719,6 +14793,18 @@
           "message_count": {
             "title": "Message Count",
             "type": "integer"
+          },
+          "older_messages": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Older Messages"
           },
           "running": {
             "title": "Running",
@@ -63279,6 +63365,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/SessionExportResult"
+        }
+      }
+    },
+    {
+      "name": "session.history.page",
+      "summary": "",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/CanonicalHistoryPageParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/CanonicalHistoryPage"
         }
       }
     },

@@ -1,4 +1,5 @@
 import PalDesign
+import PalProtocol
 import PalSettings
 import Observation
 import SwiftUI
@@ -10,8 +11,19 @@ final class UsageModel {
     private(set) var refreshFailure: String?
     private(set) var isRefreshing = false
 
+    private let surfaces: SurfaceCache
+
+    init(surfaces: SurfaceCache) {
+        self.surfaces = surfaces
+    }
+
+    static let surfaceKey = SurfaceKey.screen("usage")
+
     func load(api: SettingsAPI) async {
-        if case .loaded = state {} else { await read(api: api, refresh: false) }
+        if state.value == nil, let cached = await surfaces.value(UsageOverview.self, Self.surfaceKey), state.value == nil {
+            state = .loaded(cached)
+        }
+        if state.value == nil { await read(api: api, refresh: false) }
         await refresh(api: api)
     }
 
@@ -24,8 +36,10 @@ final class UsageModel {
     private func read(api: SettingsAPI, refresh: Bool) async {
         do {
             let subscriptions = try await api.subscriptions(refresh: refresh)
-            state = .loaded(UsageOverview(subscriptions))
+            let overview = UsageOverview(subscriptions)
+            state = .loaded(overview)
             refreshFailure = nil
+            surfaces.persist(overview, Self.surfaceKey)
         } catch is CancellationError {
             return
         } catch {
@@ -39,8 +53,14 @@ struct UsageScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model = UsageModel()
+    @State private var model: UsageModel
     @Environment(\.hermesTheme) private var theme
+
+    init(hub: SettingsHub, back: @escaping () -> Void) {
+        self.hub = hub
+        self.back = back
+        _model = State(initialValue: UsageModel(surfaces: hub.connection.surfaces))
+    }
 
     var body: some View {
         SettingsPage(title: "Usage", identifier: "usageScreen", back: back) {

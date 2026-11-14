@@ -6239,6 +6239,7 @@ export interface CanonicalSnapshot {
   messages_omitted?: boolean | null
   display_messages?: TranscriptMessage[] | null
   message_count: number
+  older_messages?: number | null
   running: boolean
   authority_epoch: number
   replay_epoch: string
@@ -6333,6 +6334,7 @@ export interface CanonicalResumeParams {
   omit_messages?: boolean
   cols?: number | null
   display_projection?: boolean
+  message_limit?: number | null
 }
 export interface CanonicalListParams {
   profile?: string | null
@@ -6425,6 +6427,16 @@ export interface CanonicalReplayEvent {
   authority_epoch?: number | null
   execution_generation?: number | null
   admission_id?: string | null
+}
+export interface CanonicalHistoryPageParams {
+  profile?: string | null
+  session_id: string
+  before_row_id: number
+  limit: number
+}
+export interface CanonicalHistoryPage {
+  messages: TranscriptMessage[]
+  older_messages: number
 }
 export interface CanonicalSubmitParams {
   profile?: string | null
@@ -9012,6 +9024,7 @@ export interface CanonicalRpcMethods {
   'session.events.since': { params: CanonicalEventsParams; result: CanonicalEventsResult }
   /** The /save transcript rendered for the client to write (the gateway writes nothing). */
   'session.export': { params: SessionExportParams; result: SessionExportResult }
+  'session.history.page': { params: CanonicalHistoryPageParams; result: CanonicalHistoryPage }
   /** Frozen launch policy projection of one local session. */
   'session.info': { params: CanonicalSessionInfoParams; result: CanonicalSessionInfo }
   'session.interrupt': { params: CanonicalControlParams; result: CanonicalSessionHandle }
@@ -9178,6 +9191,7 @@ export const CANONICAL_RPC_METHODS = [
   'session.detach',
   'session.events.since',
   'session.export',
+  'session.history.page',
   'session.info',
   'session.interrupt',
   'session.list',

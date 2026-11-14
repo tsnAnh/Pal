@@ -145,7 +145,7 @@ struct TeachReviewSheet: View {
     private var content: some View {
         switch model.review {
         case .loading:
-            ProgressView()
+            DelayedProgressView()
                 .tint(Color(theme.palette.textSecondary))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .accessibilityElement(children: .combine)

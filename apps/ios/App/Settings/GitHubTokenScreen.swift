@@ -23,7 +23,7 @@ struct GitHubTokenScreen: View {
         self.back = back
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: GitHubTokenModel(client: GitHubTokenClient(gateway: gateway)))
+        _model = State(initialValue: GitHubTokenModel(client: GitHubTokenClient(gateway: gateway), surfaces: connection.surfaces))
     }
 
     var body: some View {

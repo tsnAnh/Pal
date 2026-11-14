@@ -59,8 +59,19 @@ private struct ChatImageSource: View {
     let content: (ChatImagePhase, _ retry: @escaping () -> Void) -> AnyView
 
     @Environment(\.chatImageLoader) private var loader
-    @State private var phase = ChatImagePhase.loading
+    @State private var phase: ChatImagePhase
     @State private var attempt = 0
+
+    init(
+        reference: ImageReference, thumbnail: Bool, maxPixel: Int,
+        content: @escaping (ChatImagePhase, _ retry: @escaping () -> Void) -> AnyView
+    ) {
+        self.reference = reference
+        self.thumbnail = thumbnail
+        self.maxPixel = maxPixel
+        self.content = content
+        _phase = State(initialValue: ChatImageDecoder.cached(id: reference.id, maxPixel: maxPixel).map(ChatImagePhase.loaded) ?? .loading)
+    }
 
     var body: some View {
         content(phase) { attempt += 1 }
@@ -145,7 +156,7 @@ private struct ChatImageTile: View {
         case .loading:
             ZStack {
                 Color(theme.palette.groupedCard)
-                ProgressView().controlSize(.small)
+                DelayedProgressView().controlSize(.small)
             }
             .accessibilityIdentifier("chatImageLoading")
         case .loaded(let image):
@@ -224,7 +235,7 @@ struct ChatImageViewer: View {
     private func content(_ phase: ChatImagePhase, retry: @escaping () -> Void) -> some View {
         switch phase {
         case .loading:
-            ProgressView()
+            DelayedProgressView()
         case .loaded(let image):
             Image(platformImage: PlatformImage(cgImage: image))
                 .resizable()

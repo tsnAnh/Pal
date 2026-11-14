@@ -1,7 +1,7 @@
 import Foundation
 import PalProtocol
 
-public struct BotMeta: Sendable, Equatable {
+public struct BotMeta: Sendable, Equatable, Codable {
     public static let namespace = "hermes-bots"
     public static let pinnedKey = "pinned"
     public static let hiddenKey = "hidden"
