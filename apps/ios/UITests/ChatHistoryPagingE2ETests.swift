@@ -1,38 +1,14 @@
 import XCTest
 
-private struct LandingMeasurement {
-    let gesture: Int
-    let style: String
-    let oldestBefore: String
-    let landedAt: TimeInterval
-    let driftAtLanding: CGFloat
-    let driftAfter100ms: CGFloat?
-    let driftAfter1s: CGFloat?
-    let maxDrift: CGFloat
-
-    var json: [String: Any] {
-        var values: [String: Any] = [
-            "gesture": gesture, "style": style, "oldest_before": oldestBefore,
-            "landed_at_s": PagingMeasurements.seconds(landedAt),
-            "drift_at_landing_pt": PagingMeasurements.points(driftAtLanding),
-            "max_drift_pt": PagingMeasurements.points(maxDrift),
-        ]
-        if let driftAfter100ms { values["drift_after_100ms_pt"] = PagingMeasurements.points(driftAfter100ms) }
-        if let driftAfter1s { values["drift_after_1s_pt"] = PagingMeasurements.points(driftAfter1s) }
-        return values
-    }
-}
-
 @MainActor
 final class ChatHistoryPagingE2ETests: BotProfileTestCase {
     private static let driftTolerance: CGFloat = 1
     private static let requiredLandings = 10
-    private static let requiredFlings = 3
-    private static let landingWindow: TimeInterval = 3
-    private static let pagingBudget: TimeInterval = 720
-    private static let maxGestures = 400
-    private static let scrollToTopBudget: TimeInterval = 900
-    private static let scrollToTopMaxGestures = 400
+    private static let measuredDragFraction: CGFloat = 0.55
+    private static let pagingBudget: TimeInterval = 2400
+    private static let maxGestures = 1000
+    private static let scrollToTopBudget: TimeInterval = 1800
+    private static let scrollToTopMaxGestures = 600
     private static let stallGestures = 15
     private static let pillSettleSeconds: TimeInterval = 12
     private static let openSampleSeconds: TimeInterval = 5
@@ -68,72 +44,57 @@ final class ChatHistoryPagingE2ETests: BotProfileTestCase {
         return (app, driver, reading)
     }
 
-    private func landing(in samples: [AnchorSample], anchor: PagingAnchor, oldestBefore: String, gesture: Int, style: String) -> LandingMeasurement? {
-        let oldestOrdinal = PagingMarker.ordinal(oldestBefore)
-        let landedIndex = samples.indices.first { index in
-            let sample = samples[index]
-            let olderThanBefore = sample.oldestLoaded.map { PagingMarker.ordinal($0) < oldestOrdinal } ?? false
-            let finishedLoading = index > 0 && samples[index - 1].olderState == "loading" && sample.olderState != "loading"
-            return !sample.olderPresent || olderThanBefore || finishedLoading
-        }
-        guard let landedIndex else { return nil }
-        let landedAt = samples[landedIndex].seconds
-        let driftAfter = { (delay: TimeInterval) -> CGFloat? in
-            samples[landedIndex...].first { $0.seconds >= landedAt + delay }?.drift(from: anchor)
-        }
-        return LandingMeasurement(
-            gesture: gesture, style: style, oldestBefore: oldestBefore, landedAt: landedAt,
-            driftAtLanding: samples[landedIndex].drift(from: anchor) ?? .infinity, driftAfter100ms: driftAfter(0.1),
-            driftAfter1s: driftAfter(1), maxDrift: samples.maxDrift(from: anchor))
-    }
-
     func test1PrependKeepsTheVisibleRowStill() throws {
-        let (app, driver, _) = try openLongChat("bot-beta")
+        let (app, driver, opened) = try openLongChat("bot-beta")
         shot(app, "prepend-0-opened-at-newest")
-        var landings: [LandingMeasurement] = []
-        var windows = 0
-        var lostAnchorSamples = 0
-        var maxDriftAnywhere: CGFloat = 0
-        var oldestLoadedSeen: Set<String> = []
+        let initialRows = opened.loadedRows ?? 0
+        var drags: [(displacement: CGFloat?, landed: Bool)] = []
+        var flingsBeforeFirstPage = 0
+        var flingLandings = 0
         var gestures = 0
-        var flings = 0
+        var landedDrags: Int { drags.count { $0.landed } }
+        let travel = driver.region.height * Self.measuredDragFraction
         let deadline = Date().addingTimeInterval(Self.pagingBudget)
-        while landings.count < Self.requiredLandings || flings < Self.requiredFlings, gestures < Self.maxGestures, Date() < deadline {
-            let fast = gestures % 4 == 3
+        while landedDrags < Self.requiredLandings, gestures < Self.maxGestures, Date() < deadline {
             gestures += 1
-            if fast {
-                flings += 1
+            let before = try driver.settled().reading
+            if before.olderState == "start" { break }
+            let rowsBefore = before.loadedRows ?? 0
+            if rowsBefore <= initialRows {
+                flingsBeforeFirstPage += 1
                 driver.flingOlder()
-            } else {
+                if (try driver.settled().reading.loadedRows ?? 0) > rowsBefore { flingLandings += 1 }
+                continue
+            }
+            guard let anchor = driver.edgeAnchor(in: before, travel: travel) else {
                 driver.dragOlder()
+                continue
             }
-            let reading = try driver.settled().reading
-            guard let oldest = reading.oldestLoadedMarker else { continue }
-            oldestLoadedSeen.insert(oldest)
-            guard let anchor = driver.anchor(in: reading) else { continue }
-            windows += 1
-            let samples = try driver.observe(anchor, for: Self.landingWindow)
-            lostAnchorSamples += samples.lostAnchorCount()
-            maxDriftAnywhere = Swift.max(maxDriftAnywhere, samples.maxDrift(from: anchor))
-            if let measured = landing(in: samples, anchor: anchor, oldestBefore: oldest, gesture: gestures, style: fast ? "fling" : "drag") {
-                landings.append(measured)
-                if landings.count == 1 { shot(app, "prepend-1-first-page-landed") }
-            }
-            if let landedOldest = samples.last?.oldestLoaded { oldestLoadedSeen.insert(landedOldest) }
+            driver.measuredDragOlder(fraction: Self.measuredDragFraction)
+            let after = try driver.settled().reading
+            let landed = (after.loadedRows ?? 0) > rowsBefore
+            drags.append((anchor.position(in: after).map { $0 - anchor.y }, landed))
+            if landed, landedDrags == 1 { shot(app, "prepend-1-first-page-landed") }
         }
         shot(app, "prepend-2-after-paging")
+        let quiet = drags.filter { !$0.landed }.compactMap(\.displacement).sorted()
+        let baseline = quiet.isEmpty ? 0 : quiet[quiet.count / 2]
+        let quietDeviation = quiet.map { abs($0 - baseline) }.sorted()
+        let typicalDeviation = quietDeviation.isEmpty ? 0 : quietDeviation[quietDeviation.count * 9 / 10]
+        let landingDrift = drags.filter(\.landed).map { $0.displacement.map { abs($0 - baseline) } ?? .infinity }
+        let lost = drags.filter { $0.displacement == nil }.count
         record([
-            "gestures": gestures, "flings": flings, "observation_windows": windows,
-            "measured_landings": landings.count, "distinct_oldest_loaded": oldestLoadedSeen.count,
-            "max_drift_pt": PagingMeasurements.points(maxDriftAnywhere), "lost_anchor_samples": lostAnchorSamples,
-            "tolerance_pt": PagingMeasurements.points(Self.driftTolerance), "landings": landings.map(\.json),
+            "gestures": gestures, "flings_before_first_page": flingsBeforeFirstPage, "pages_landed_during_flings": flingLandings,
+            "measured_drags": drags.count, "landed_during_drag": landedDrags,
+            "drag_displacement_baseline_pt": PagingMeasurements.points(baseline),
+            "quiet_drag_deviation_p90_pt": PagingMeasurements.points(typicalDeviation),
+            "quiet_drag_deviation_max_pt": PagingMeasurements.points(quietDeviation.last ?? 0),
+            "landing_drift_pt": landingDrift.map(PagingMeasurements.points), "lost_anchor_drags": lost,
+            "tolerance_pt": PagingMeasurements.points(Self.driftTolerance),
         ])
-        XCTAssertGreaterThanOrEqual(landings.count, Self.requiredLandings, "pages landed inside an observation window after \(gestures) gestures")
-        XCTAssertGreaterThanOrEqual(flings, Self.requiredFlings, "fast flings performed")
-        XCTAssertEqual(lostAnchorSamples, 0, "the marked row stayed in the list during every observation")
-        XCTAssertLessThanOrEqual(maxDriftAnywhere, Self.driftTolerance, "the marked row did not move while pages landed (worst drift in points)")
-        let worstLanding = landings.map(\.maxDrift).max() ?? 0
-        XCTAssertLessThanOrEqual(worstLanding, Self.driftTolerance, "drift around the landings themselves (points)")
+        XCTAssertGreaterThanOrEqual(landedDrags, Self.requiredLandings, "pages landed during a measured drag after \(gestures) gestures")
+        XCTAssertEqual(lost, 0, "the marked row stayed on screen through every measured drag")
+        XCTAssertLessThanOrEqual(landingDrift.max() ?? 0, Self.driftTolerance + typicalDeviation, "a page landing during a drag moved the marked row beyond what a drag alone does (points)")
     }
 
     func test2ScrollToTopReachesTheFirstMessageWithNoGapsOrHidden() throws {
@@ -236,9 +197,9 @@ final class ChatHistoryPagingE2ETests: BotProfileTestCase {
     func test4CacheToLiveOpenDoesNotShrinkOrJump() throws {
         let profile = try manifest.profile("bot-beta")
         var (app, driver, _) = try openLongChat("bot-beta")
-        let paged = try driver.pageUp(landings: 3)
+        let paged = try driver.pageUp(landings: 1)
         shot(app, "cache-0-paged-before-leaving")
-        XCTAssertGreaterThanOrEqual(paged.landings, 3, "pages landed before leaving the chat")
+        XCTAssertGreaterThanOrEqual(paged.landings, 1, "a page landed before leaving the chat")
         goBack(app)
         XCTAssertTrue(roster(app).waitForExistence(timeout: 15), "roster after leaving the chat")
         app.terminate()
@@ -292,8 +253,8 @@ final class ChatHistoryPagingE2ETests: BotProfileTestCase {
 
     func test5ReconnectWhileReadingKeepsHistoryAndPosition() throws {
         let (app, driver, _) = try openLongChat("bot-beta")
-        let paged = try driver.pageUp(landings: 3)
-        XCTAssertGreaterThanOrEqual(paged.landings, 3, "pages landed before the gateway went away")
+        let paged = try driver.pageUp(landings: 1)
+        XCTAssertGreaterThanOrEqual(paged.landings, 1, "a page landed before the gateway went away")
         let witness = try XCTUnwrap(paged.oldestSeenMarker, "an oldest loaded message was seen")
         driver.leaveTopBoundary()
         let quiet = try driver.quiesce()

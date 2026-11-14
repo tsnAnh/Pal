@@ -68,6 +68,7 @@ struct ChatReading {
     let pillLabel: String?
     let thinkingVisible: Bool
     let region: CGRect
+    let loadedRows: Int?
 
     var onScreen: [BubbleReading] {
         bubbles.filter { $0.marker != nil && $0.frame.intersects(region) }
@@ -103,6 +104,16 @@ struct ChatReading {
     }
 }
 
+struct EdgeAnchor {
+    let marker: String
+    let top: Bool
+    let y: CGFloat
+
+    func position(in reading: ChatReading) -> CGFloat? {
+        reading.bubbles.first { $0.markers.contains(marker) }.map { top ? $0.frame.minY : $0.frame.maxY }
+    }
+}
+
 struct PagingAnchor {
     let marker: String
     let y: CGFloat
@@ -115,6 +126,7 @@ struct AnchorSample {
     let olderPresent: Bool
     let oldestLoaded: String?
     let pillLabel: String?
+    var loadedRows: Int? = nil
 }
 
 struct PageUpOutcome {
@@ -143,6 +155,7 @@ private struct SnapshotScan {
     var thinkingVisible = false
     var chatFrame: CGRect?
     var composerFrame: CGRect?
+    var loadedRows: Int?
 
     private static let bubbleIdentifiers: Set<String> = ["userBubble", "assistantBubble"]
     private static let navigationInset: CGFloat = 110
@@ -166,7 +179,9 @@ private struct SnapshotScan {
             olderFrame = node.frame
         case "scrollToBottomButton": pillLabel = node.label
         case "thinkingLine": thinkingVisible = true
-        case "chatScreen": chatFrame = node.frame
+        case "chatScreen":
+            chatFrame = node.frame
+            if let value = node.value as? String, let count = Int(value.prefix { $0.isNumber }) { loadedRows = count }
         case "composerField": composerFrame = node.frame
         default: break
         }
@@ -175,7 +190,7 @@ private struct SnapshotScan {
     func reading() -> ChatReading {
         ChatReading(
             bubbles: bubbles, hiddenMarkers: hiddenMarkers, olderState: olderState, olderFrame: olderFrame,
-            pillLabel: pillLabel, thinkingVisible: thinkingVisible, region: region)
+            pillLabel: pillLabel, thinkingVisible: thinkingVisible, region: region, loadedRows: loadedRows)
     }
 
     private var region: CGRect {
@@ -259,11 +274,18 @@ final class PagingDriver {
     }
 
     func flingOlder() {
-        app.descendants(matching: .any)["chatScreen"].firstMatch.swipeDown(velocity: .fast)
+        fling(from: Self.dragStartFraction, to: Self.dragStartFraction + Self.slowDragFraction)
     }
 
     func flingNewer() {
-        app.descendants(matching: .any)["chatScreen"].firstMatch.swipeUp(velocity: .fast)
+        fling(from: Self.dragStartFraction + Self.slowDragFraction, to: Self.dragStartFraction)
+    }
+
+    private func fling(from startFraction: CGFloat, to endFraction: CGFloat) {
+        guard !region.isNull else { return }
+        let start = coordinate(atY: region.minY + region.height * startFraction)
+        let end = coordinate(atY: region.minY + region.height * endFraction)
+        start.press(forDuration: 0.01, thenDragTo: end, withVelocity: 2500, thenHoldForDuration: 0)
     }
 
     func anchor(in reading: ChatReading) -> PagingAnchor? {
@@ -279,7 +301,8 @@ final class PagingDriver {
         let reading = try read()
         return AnchorSample(
             seconds: Date().timeIntervalSince(start), anchorY: reading.minY(of: anchor.marker), olderState: reading.olderState,
-            olderPresent: reading.olderFrame != nil, oldestLoaded: reading.oldestLoadedMarker, pillLabel: reading.pillLabel)
+            olderPresent: reading.olderFrame != nil, oldestLoaded: reading.oldestLoadedMarker, pillLabel: reading.pillLabel,
+            loadedRows: reading.loadedRows)
     }
 
     func observe(_ anchor: PagingAnchor, for duration: TimeInterval, interval: TimeInterval = 0.1) throws -> [AnchorSample] {
@@ -293,18 +316,37 @@ final class PagingDriver {
     }
 
     func pageUp(landings wanted: Int, budget: TimeInterval = 600, maxGestures: Int = 300) throws -> PageUpOutcome {
-        var oldestLoaded: Set<String> = []
+        var loaded: Set<Int> = []
         var seen: Set<String> = []
         var gestures = 0
         let deadline = Date().addingTimeInterval(budget)
-        while oldestLoaded.count < wanted + 1, gestures < maxGestures, Date() < deadline {
+        if let rows = try read().loadedRows { loaded.insert(rows) }
+        while loaded.count < wanted + 1, gestures < maxGestures, Date() < deadline {
             gestures += 1
-            if gestures.isMultiple(of: 3) { flingOlder() } else { dragOlder() }
+            flingOlder()
             let reading = try settled().reading
             seen.formUnion(reading.allMarkers)
-            if let marker = reading.oldestLoadedMarker { oldestLoaded.insert(marker) }
+            if let rows = reading.loadedRows { loaded.insert(rows) }
         }
-        return PageUpOutcome(landings: max(0, oldestLoaded.count - 1), gestures: gestures, seen: seen)
+        return PageUpOutcome(landings: max(0, loaded.count - 1), gestures: gestures, seen: seen)
+    }
+
+    func measuredDragOlder(fraction: CGFloat) {
+        guard !region.isNull else { return }
+        let start = coordinate(atY: region.minY + region.height * Self.dragStartFraction)
+        let end = coordinate(atY: region.minY + region.height * (Self.dragStartFraction + fraction))
+        start.press(forDuration: 0.05, thenDragTo: end, withVelocity: 500, thenHoldForDuration: 0.6)
+    }
+
+    func edgeAnchor(in reading: ChatReading, travel: CGFloat) -> EdgeAnchor? {
+        let region = reading.region
+        let limit = region.maxY - travel - 4
+        for bubble in reading.onScreen {
+            guard let marker = bubble.marker else { continue }
+            if bubble.frame.minY >= region.minY, bubble.frame.minY <= limit { return EdgeAnchor(marker: marker, top: true, y: bubble.frame.minY) }
+            if bubble.frame.maxY >= region.minY, bubble.frame.maxY <= limit { return EdgeAnchor(marker: marker, top: false, y: bubble.frame.maxY) }
+        }
+        return nil
     }
 
     func leaveTopBoundary() {
