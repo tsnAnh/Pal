@@ -21,6 +21,14 @@ struct InlineTextComposerTests {
         #expect(render(text) != nil)
     }
 
+    @Test("highlights cover exactly the matches after emoji and accents")
+    func highlightRanges() {
+        let body = AttributedString("👨‍👩‍👧 Café cafe CAFÉ x")
+        let highlighted = InlineTextComposer.highlight(body, query: "cafe", fill: .yellow, ink: nil)
+        let marked = highlighted.runs.filter { $0.backgroundColor != nil }.map { String(highlighted[$0.range].characters) }
+        #expect(marked == ["Café", "cafe", "CAFÉ"])
+    }
+
     @Test("long markdown with many styled runs and links renders")
     func manyMarkdownRuns() throws {
         let line = "**bold** _it_ `code` [link](https://example.com/a) plain "

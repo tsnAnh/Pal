@@ -90,7 +90,10 @@ final class ChatModel {
     var findQuery = "" {
         didSet { recomputeFind(resetPosition: true) }
     }
-    private(set) var findMatches: [String] = []
+    private(set) var findMatches: [String] = [] {
+        didSet { findMatchIDs = Set(findMatches) }
+    }
+    private(set) var findMatchIDs: Set<String> = []
     private(set) var findPosition = 0
 
     private let openedBot: BotRow
