@@ -138,6 +138,22 @@ struct TimelinePagingTests {
         await session.close()
     }
 
+    @Test func anImageAskedForBeforeTheSessionConnectsLoadsOnceItDoes() async throws {
+        let script = TimelineScript(entries: entries(1...4))
+        let bytes = Data([0x89, 0x50, 0x4E, 0x47])
+        script.override("library.asset") { _ in
+            .result(["mime": "image/png", "data_base64": .string(bytes.base64EncodedString()), "size": 4])
+        }
+        let gateway = try await FakeGateway.start(script.handle)
+        defer { gateway.stop() }
+        let session = ChatSession(profile: "bot", connector: script.connector(gateway.url), paging: fastPaging)
+        let early = Task { try await session.imageAsset(ref: "0123456789abcdef0123456789abcdef", thumbnail: true) }
+        try await Task.sleep(for: .milliseconds(100))
+        try await session.start()
+        #expect(try await early.value == bytes)
+        await session.close()
+    }
+
     @Test func theCacheSeedKeepsRowsAndKeysWhenTheLivePageArrives() async throws {
         let script = TimelineScript(entries: entries(1...100))
         let (gateway, first) = try await open(script)

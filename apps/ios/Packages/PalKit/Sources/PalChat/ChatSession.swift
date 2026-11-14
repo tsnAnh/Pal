@@ -246,6 +246,8 @@ public actor ChatSession: OutboxSubmitter {
     }
 
     public func imageAsset(ref: String, thumbnail: Bool) async throws -> Data {
+        if api == nil { _ = await awaitState { if case .live = $0.phase { true } else { false } } }
+        try Task.checkCancellation()
         guard let api else { throw ChatError.notConnected }
         return try await api.libraryAsset(ref: ref, thumbnail: thumbnail)
     }
