@@ -58,6 +58,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
     public var deliveryFailure: String?
     public var timestamp: Date?
     public var inbound: InboundKind = .person
+    var liveSegment: LiveSegment?
 
     public init(
         id: String,
@@ -74,6 +75,11 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         self.timestamp = timestamp
         self.inbound = inbound
     }
+}
+
+struct LiveSegment: Sendable, Hashable {
+    var turnID: String
+    var segment: Int
 }
 
 public enum ApplyOutcome: Sendable, Hashable {
@@ -165,6 +171,12 @@ public struct Transcript: Sendable, Equatable {
         }
         load(snapshot)
         return true
+    }
+
+    mutating func dropLiveItems(_ ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        if let streamingID, ids.contains(streamingID) { self.streamingID = nil }
+        items.removeAll { ids.contains($0.id) }
     }
 
     public mutating func prependOlder(_ page: HistoryPage) {
@@ -364,10 +376,14 @@ public struct Transcript: Sendable, Equatable {
         case .messageInterim(let interim):
             sealStreaming()
             if !interim.text.isEmpty, !hasAssistantText(interim.text) {
-                items.append(TranscriptItem(
+                var item = TranscriptItem(
                     id: "interim:\(interim.turnID ?? "turn"):\(interim.segment ?? items.count)",
                     content: .assistant(text: interim.text, reasoning: "", isStreaming: false)
-                ))
+                )
+                if let turnID = interim.turnID, let segment = interim.segment {
+                    item.liveSegment = LiveSegment(turnID: turnID, segment: segment)
+                }
+                items.append(item)
             }
             segmentLengths = [:]
             currentSegment = nil
@@ -552,7 +568,9 @@ public struct Transcript: Sendable, Equatable {
             items[index].content = .assistant(text: existing + text, reasoning: reasoning, isStreaming: true)
         } else {
             let id = uniqueStreamID("stream:\(delta.turnID ?? "turn"):\(segment)")
-            items.append(TranscriptItem(id: id, content: .assistant(text: text, reasoning: "", isStreaming: true)))
+            var item = TranscriptItem(id: id, content: .assistant(text: text, reasoning: "", isStreaming: true))
+            if let turnID = delta.turnID { item.liveSegment = LiveSegment(turnID: turnID, segment: segment) }
+            items.append(item)
             streamingID = id
         }
     }
@@ -577,12 +595,18 @@ public struct Transcript: Sendable, Equatable {
                 items.remove(at: index)
             } else {
                 items[index].content = .assistant(text: final, reasoning: reasoning, isStreaming: false)
+                items[index].uid = complete.identity.messageUID ?? items[index].uid
             }
         } else if !complete.text.isEmpty, !hasAssistantInCurrentTurn(text: complete.text) {
-            items.append(TranscriptItem(
-                id: "complete:\(items.count)",
-                content: .assistant(text: complete.text, reasoning: "", isStreaming: false)
-            ))
+            var item = TranscriptItem(
+                id: "complete:\(complete.identity.messageUID ?? String(items.count))",
+                content: .assistant(text: complete.text, reasoning: "", isStreaming: false),
+                uid: complete.identity.messageUID
+            )
+            if let turnID = complete.identity.turnID, let segment = complete.identity.segment {
+                item.liveSegment = LiveSegment(turnID: turnID, segment: segment)
+            }
+            items.append(item)
         }
         for index in items.indices {
             if case .tool(var call) = items[index].content, call.status == .running {

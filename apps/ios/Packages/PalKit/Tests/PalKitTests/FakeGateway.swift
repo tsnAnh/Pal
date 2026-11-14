@@ -268,9 +268,16 @@ final class ScriptedConnector: ChatConnector {
     private let failure: Mutex<@Sendable (Int) -> (any Error)?>
     private let delay: Mutex<Duration>
     private let dialedConnections = Mutex<[GatewayConnection]>([])
+    private let runtime: JSONValue?
 
-    init(url: URL, delay: Duration = .zero, failure: @escaping @Sendable (Int) -> (any Error)? = { _ in nil }) {
+    init(
+        url: URL,
+        delay: Duration = .zero,
+        runtime: JSONValue? = nil,
+        failure: @escaping @Sendable (Int) -> (any Error)? = { _ in nil }
+    ) {
         self.url = url
+        self.runtime = runtime
         self.delay = Mutex(delay)
         self.failure = Mutex(failure)
     }
@@ -295,6 +302,7 @@ final class ScriptedConnector: ChatConnector {
             ticket: "test-ticket",
             options: GatewayDialOptions(readyTimeout: .seconds(5), requestTimeout: .seconds(5))
         )
+        if let runtime { connection.recordNegotiatedRuntime(runtime) }
         dialedConnections.withLock { $0.append(connection) }
         return connection
     }
