@@ -60,9 +60,12 @@ def test_turn_runner_result_carries_the_committed_turn_receipt(tmp_path):
     agent, history, messages, row_ids = _tool_turn(db, 's')
     result = {'final_response': 'finished while away', 'messages': messages}
 
+    from gateway.session_timeline import load_timeline
+    ids = {entry['text']: entry['id'] for entry in load_timeline('owned', db, 's', None).entries}
     assert _persisted_turn(agent, history, result, 0) == {
         'row_ids': row_ids, 'complete': True, 'user_row_id': row_ids[0], 'final_assistant_row_id': row_ids[-1],
-        'user_row_ids': [row_ids[0]]}
+        'user_row_ids': [row_ids[0]], 'user_message_uid': ids['b'],
+        'final_assistant_message_uid': ids['finished while away']}
     # A compaction during the turn can drop streamed rows: the receipt no longer vouches for all of it.
     assert _persisted_turn(agent, history, result, 1)['complete'] is False
 

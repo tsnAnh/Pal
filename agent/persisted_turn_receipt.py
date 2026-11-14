@@ -17,6 +17,12 @@ def committed_row_id(message: Any) -> int | None:
     return row_id if message.get(_DB_PERSISTED_MARKER) and type(row_id) is int and row_id > 0 else None
 
 
+def _add_uid(receipt: dict, key: str, message: dict) -> None:
+    uid = message.get("message_uid")
+    if isinstance(uid, str) and uid:
+        receipt[key] = uid
+
+
 def persisted_turn_receipt(
     messages: Any, start: Any, history: list, raw: Any, status: str, *,
     compression_unchanged: bool, prefix_row_matches: Callable[[Any, Any], bool],
@@ -43,6 +49,7 @@ def persisted_turn_receipt(
     receipt: dict = {"row_ids": row_ids, "complete": False}
     if (user_row_id := committed_row_id(tail[0])) is not None:
         receipt["user_row_id"] = user_row_id
+        _add_uid(receipt, "user_message_uid", tail[0])
     # Every rendered user row of the turn in order (the prompt, then each steer/redirect row), so a
     # client binds its optimistic bubbles even when the turn holds more than one prompt row. Only a
     # fully committed list is published: a gap would shift every later pairing.
@@ -55,6 +62,7 @@ def persisted_turn_receipt(
     if (status == "complete" and last.get("role") == "assistant" and not last.get("tool_calls")
             and last.get("content") == raw and (final_id := committed_row_id(last)) is not None):
         receipt["final_assistant_row_id"] = final_id
+        _add_uid(receipt, "final_assistant_message_uid", last)
     prefix_unchanged = start == len(history) and all(
         prefix_row_matches(before, after) for before, after in zip(history, messages[:start]))
     receipt["complete"] = bool(
