@@ -26,8 +26,6 @@ struct Report: Encodable {
     var transcriptItems: Int
     var timelineRows: Int
     var inlineImages: Int
-    var cachedItems: Int
-    var cacheBytes: Int
     var peakResidentMB: Double
     var stages: [String: StageStats]
     var stageOrder: [String]
@@ -51,12 +49,11 @@ struct Rebuilt {
 }
 
 func rebuild(_ source: [TranscriptItem]) -> Rebuilt {
-    let folded = BotThreadFolding.fold(source, links: [])
-    let items = folded.filter { item in
+    let items = source.filter { item in
         if case .tool(let call) = item.content { return call.imageGeneration != nil }
         return true
     }
-    _ = Set(folded.map(\.id))
+    _ = Set(source.map(\.id))
     let entries = ChatTimeline.entries(items: items, date: { $0.timestamp }, lastSeen: nil)
     var rows = 0
     var images = 0
@@ -99,18 +96,13 @@ let label = arguments[1]
 guard let text = try? String(contentsOfFile: arguments[2], encoding: .utf8) else { fail("cannot read \(arguments[2])") }
 let frameBytes = text.utf8.count
 
-let cacheRoot = FileManager.default.temporaryDirectory.appending(path: "palperf-cache-\(UUID().uuidString)", directoryHint: .isDirectory)
-defer { try? FileManager.default.removeItem(at: cacheRoot) }
-
-let order = ["utf8Data", "rpcFrameDecode", "snapshotDecode", "transcriptLoad", "rebuildLive", "cacheBuild", "cacheEncode", "cacheDecode", "rebuildFromCache", "cacheSaveToDisk", "cacheLoadFromDisk"]
+let order = ["utf8Data", "rpcFrameDecode", "snapshotDecode", "transcriptLoad", "rebuildLive"]
 var samples: [String: [Double]] = [:]
 var openPath: [Double] = []
 var wireMessages = 0
 var transcriptItems = 0
 var timelineRows = 0
 var inlineImages = 0
-var cachedItems = 0
-var cacheBytes = 0
 
 for _ in 0..<(iterations + 1) {
     var record: [String: Double] = [:]
@@ -126,35 +118,11 @@ for _ in 0..<(iterations + 1) {
     record["transcriptLoad"] = loadMs
     let (built, rebuildMs) = timed { rebuild(transcript.items) }
     record["rebuildLive"] = rebuildMs
-    let (cached, buildMs) = timed { CachedTranscript(sessionID: transcript.sessionID, items: transcript.items, date: { $0.timestamp }) }
-    record["cacheBuild"] = buildMs
-    guard let cached else { fail("transcript produced no cache") }
-    let (encoded, encodeMs) = try timed { try JSONEncoder().encode(cached) }
-    record["cacheEncode"] = encodeMs
-    let (restored, decodeMs) = try timed { () throws -> [TranscriptItem] in
-        try JSONDecoder().decode(CachedTranscript.self, from: encoded).transcriptItems
-    }
-    record["cacheDecode"] = decodeMs
-    let (fromCache, cacheRebuildMs) = timed { rebuild(restored) }
-    record["rebuildFromCache"] = cacheRebuildMs
-
-    let store = CacheStore(root: cacheRoot)
-    let (_, saveMs) = timed {
-        store.save(cached, name: CachedTranscript.cacheName(forBot: "perf"), account: "perf")
-        store.drain()
-    }
-    record["cacheSaveToDisk"] = saveMs
-    let (loaded, loadDiskMs) = timed { store.load(CachedTranscript.self, name: CachedTranscript.cacheName(forBot: "perf"), account: "perf") }
-    record["cacheLoadFromDisk"] = loadDiskMs
-    guard loaded == cached else { fail("cache round trip changed the transcript") }
 
     wireMessages = snapshot.messages.count
     transcriptItems = transcript.items.count
     timelineRows = built.rows
     inlineImages = built.images
-    cachedItems = restored.count
-    cacheBytes = encoded.count
-    _ = fromCache
 
     let isWarmup = samples["utf8Data"] == nil
     if isWarmup {
@@ -173,8 +141,6 @@ let report = Report(
     transcriptItems: transcriptItems,
     timelineRows: timelineRows,
     inlineImages: inlineImages,
-    cachedItems: cachedItems,
-    cacheBytes: cacheBytes,
     peakResidentMB: peakResidentMB(),
     stages: samples.mapValues { StageStats($0) },
     stageOrder: order,
