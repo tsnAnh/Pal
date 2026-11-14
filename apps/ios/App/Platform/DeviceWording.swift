@@ -3,44 +3,24 @@ import PalProtocol
 
 enum DeviceWording {
     static var copyToDevice: String {
-        #if os(iOS)
-        String(localized: "Copy to Phone")
-        #else
-        String(localized: "Copy to Mac")
-        #endif
+        PlatformVariant.pick(mac: String(localized: "Copy to Mac"), iOS: String(localized: "Copy to Phone"))
     }
 
     static var pasteFromDevice: String {
-        #if os(iOS)
-        String(localized: "Paste from Phone")
-        #else
-        String(localized: "Paste from Mac")
-        #endif
+        PlatformVariant.pick(mac: String(localized: "Paste from Mac"), iOS: String(localized: "Paste from Phone"))
     }
 
     static var copiedToDevice: String {
-        #if os(iOS)
-        String(localized: "Copied to phone")
-        #else
-        String(localized: "Copied to Mac")
-        #endif
+        PlatformVariant.pick(mac: String(localized: "Copied to Mac"), iOS: String(localized: "Copied to phone"))
     }
 
     static var deviceSystemImage: String {
-        #if os(iOS)
-        "iphone"
-        #else
-        "laptopcomputer"
-        #endif
+        PlatformVariant.pick(mac: "laptopcomputer", iOS: "iphone")
     }
 }
 
 enum PlatformCapabilities {
     static var hasTouchScreen: Bool {
-        #if os(iOS)
-        true
-        #else
-        false
-        #endif
+        PlatformVariant.pick(mac: false, iOS: true)
     }
 }
