@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$IOS_DIR/../.." && pwd)"
+PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
+T3_BIN="${T3_BIN:-$HOME/.t3/bin/t3}"
+ART="$IOS_DIR/Artifacts/t3code-relay-e2e/$(date +%Y%m%d-%H%M%S)"
+
+[ -x "$T3_BIN" ] || { echo "t3 binary not found at $T3_BIN" >&2; exit 2; }
+[ -x "$PYTHON" ] || { echo "python not found at $PYTHON (set HERMES_IOS_PYTHON)" >&2; exit 2; }
+
+"$PYTHON" -c 'import mcp' 2>/dev/null || { echo "$PYTHON has no mcp SDK; set HERMES_IOS_PYTHON to the checkout test environment interpreter (scripts/run-in-hermes-env python -c 'import sys;print(sys.executable)')" >&2; exit 2; }
+
+export HERMES_IOS_PYTHON="$PYTHON"
+( cd "$IOS_DIR/Packages/PalKit" && swift build --build-tests >/dev/null )
+
+exec "$IOS_DIR/Scripts/e2e-gateway" -- \
+  "$PYTHON" -I "$IOS_DIR/Tools/t3code-relay-e2e/orchestrate.py" \
+  --artifacts "$ART" --package "$IOS_DIR/Packages/PalKit" --t3-bin "$T3_BIN"

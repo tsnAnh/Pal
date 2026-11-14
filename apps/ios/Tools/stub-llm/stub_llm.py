@@ -25,6 +25,10 @@ DM_DEFAULT_REPLY = "Đã nhận, em xử lý ngay."
 DM_SENT_REPLY = "Đã nhắn."
 dm_replies_path = None
 IPHONE_TRIGGER = "IPHONE"
+CALL_TOOL_TRIGGER = re.compile(r"CALL-TOOL (\S+)(?: (\{.*\}))?", re.DOTALL)
+CALL_TOOL_RESULT_PREFIX = "call-tool-result "
+CALL_TOOL_MISSING_PREFIX = "call-tool-missing "
+CALL_TOOL_RESULT_LIMIT = 6000
 IPHONE_RESULT_LIMIT = 600
 TOOL_FINAL_PREFIX = "stub-tool-final "
 TOOL_COMMANDS = {
@@ -154,6 +158,44 @@ def iphone_answer(tool_content):
     return "iPhone refused: " + str(payload.get("code") or "unknown")
 
 
+def search_matches(content):
+    try:
+        results = json.loads(content).get("results") or []
+    except (ValueError, AttributeError):
+        return []
+    return [name for result in results if isinstance(result, dict) for name in result.get("matches") or []]
+
+
+def call_tool_plan(last_role, last, last_user, names, messages):
+    found = CALL_TOOL_TRIGGER.search(last_user)
+    if not found:
+        return None
+    target = found.group(1)
+    try:
+        arguments = json.loads(found.group(2) or "{}")
+    except ValueError:
+        return None
+    content = text_of(last.get("content")) if last_role == "tool" else ""
+    if target in names:
+        if last_role == "tool":
+            return "text", [CALL_TOOL_RESULT_PREFIX + content[:CALL_TOOL_RESULT_LIMIT]], NORMAL_DELAY
+        return ("tool", {"name": target, "arguments": arguments}, 0) if last_role == "user" else None
+    if not {"tool_search", "tool_call"} <= set(names):
+        return None
+    if last_role == "user":
+        return "tool", {"name": "tool_search", "arguments": {"queries": [target]}}, 0
+    if last_role != "tool":
+        return None
+    previous = last_tool_name(messages)
+    if previous == "tool_search":
+        if target not in search_matches(content):
+            return "text", [CALL_TOOL_MISSING_PREFIX + content[:CALL_TOOL_RESULT_LIMIT]], NORMAL_DELAY
+        return "tool", {"name": "tool_call", "arguments": {"calls": [{"name": target, "arguments": arguments}]}}, 0
+    if previous == "tool_call":
+        return "text", [CALL_TOOL_RESULT_PREFIX + content[:CALL_TOOL_RESULT_LIMIT]], NORMAL_DELAY
+    return None
+
+
 def plan(body):
     messages = body.get("messages") or []
     names = tool_names(body)
@@ -163,6 +205,8 @@ def plan(body):
     scripted = dm_plan(last_role, last, last_user, names)
     if scripted:
         return scripted
+    if called := call_tool_plan(last_role, last, last_user, names, messages):
+        return called
     if "iphone" in names and last_role == "tool" and last_tool_name(messages) == "iphone":
         return "final", iphone_answer(text_of(last.get("content"))), NORMAL_DELAY
     if "iphone" in names and last_role == "user" and IPHONE_TRIGGER in last_user and (call := iphone_arguments(last_user)):
