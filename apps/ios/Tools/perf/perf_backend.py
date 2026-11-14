@@ -9,7 +9,20 @@ from perf_common import BOT_CHAT_TITLE, PROFILE_SIZES
 REAP_SETTLE_SECONDS = 25
 NO_DEFLATE_REPEATS = 8
 OPEN_RPCS = ("runtime.describe", "session.list", "session.resume", "bot.thread.links")
+HISTORY_PAGE_CAPABILITY = "session-history-page-v1"
+APP_HISTORY_WINDOW = 60
 IMAGE_URI = re.compile(r"data:image/[a-z]+;base64,[A-Za-z0-9+/=]+")
+
+
+def resume_params(profile, stored, capabilities):
+    params = {"profile": profile, "session_id": stored}
+    if HISTORY_PAGE_CAPABILITY in capabilities:
+        params["message_limit"] = APP_HISTORY_WINDOW
+    return params
+
+
+def capabilities_of(described):
+    return described.get("result", {}).get("capabilities", [])
 
 
 def image_bytes_in(text):
@@ -30,13 +43,14 @@ async def timed_connect(client, gateway, compression="deflate"):
 async def open_chat_rpcs(rpc, profile, label, resumes):
     rows = {}
     rows["runtime.describe"] = await rpc.call("runtime.describe", {})
+    capabilities = capabilities_of(rows["runtime.describe"])
     listed = await rpc.call("session.list", {"profile": profile, "title": BOT_CHAT_TITLE, "include_hidden": True})
     row = listed["result"]["sessions"][0]
     stored = row.get("resolved_id") or row["session_id"]
     rows["session.list"] = listed
     resumed = []
     for _ in range(resumes):
-        resumed.append(await rpc.call("session.resume", {"profile": profile, "session_id": stored}))
+        resumed.append(await rpc.call("session.resume", resume_params(profile, stored, capabilities)))
     rows["session.resume"] = resumed[0]
     rows["session.resume.repeat"] = resumed[1:]
     runtime_id = resumed[0]["result"]["session_id"]
@@ -55,16 +69,17 @@ def record_open(store, profile, rows):
 async def measure_without_compression(client, gateway, store, repeats):
     socket, rpc, _ = await timed_connect(client, gateway, compression=None)
     try:
+        capabilities = capabilities_of(await rpc.call("runtime.describe", {}))
         stored = {}
         for profile in PROFILE_SIZES:
             listed = await rpc.call("session.list", {"profile": profile, "title": BOT_CHAT_TITLE, "include_hidden": True})
             row = listed["result"]["sessions"][0]
             stored[profile] = row.get("resolved_id") or row["session_id"]
-            await rpc.call("session.resume", {"profile": profile, "session_id": stored[profile]})
+            await rpc.call("session.resume", resume_params(profile, stored[profile], capabilities))
         for repeat in range(repeats):
             order = list(PROFILE_SIZES) if repeat % 2 == 0 else list(PROFILE_SIZES)[::-1]
             for profile in order:
-                sample = await rpc.call("session.resume", {"profile": profile, "session_id": stored[profile]})
+                sample = await rpc.call("session.resume", resume_params(profile, stored[profile], capabilities))
                 store.setdefault((profile, "session.resume", "warm_no_deflate"), []).append(sample)
     finally:
         await socket.close()
@@ -104,6 +119,7 @@ def summarize_store(store):
         if method == "session.resume":
             payload = samples[0]["result"]
             entry["messages"] = len(payload.get("messages", []))
+            entry["older_messages"] = payload.get("older_messages")
             entry["inline_image_bytes"] = image_bytes_in(samples[0]["text"])
         result[f"{profile}:{method}:{state}"] = entry
     return result
@@ -112,7 +128,9 @@ def summarize_store(store):
 def run(runs, resumes_per_open, fixture_dir):
     fixture_dir.mkdir(parents=True, exist_ok=True)
     store, connects = asyncio.run(measure(runs, resumes_per_open, fixture_dir))
+    describe = store.get((next(iter(PROFILE_SIZES)), "runtime.describe", "cold"), [{}])[0]
     return {
+        "capabilities": capabilities_of(describe),
         "runs": runs,
         "reap_settle_seconds": REAP_SETTLE_SECONDS,
         "rpcs": summarize_store(store),

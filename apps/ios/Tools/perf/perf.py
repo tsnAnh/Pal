@@ -20,7 +20,7 @@ import perf_report
 from perf_common import IOS_DIR, PROFILE_SIZES, REPO
 
 SCRIPTS = REPO / ".claude" / "skills" / "verify-ios" / "scripts"
-OWNER = "pal-perf-baseline"
+OWNER = os.environ.get("VERIFY_IOS_OWNER", "pal-perf-baseline")
 PHASES = ("seed", "backend", "server", "host", "ios")
 LAUNCH_TIMEOUT_SECONDS = 2400
 CLEANUP_TIMEOUT_SECONDS = 600

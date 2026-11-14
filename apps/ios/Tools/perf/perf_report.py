@@ -10,7 +10,7 @@ def backend_lines(backend):
     lines = [f"Backend RPCs (one websocket per round, profiles alternate order each round, gateway idle >= {backend['reap_settle_seconds']}s before each round)"]
     lines.append(f"  connect: login+ticket {cell(backend['connect_login_and_ticket_ms'])} ms, dial {cell(backend['connect_dial_ms'])} ms")
     for entry in backend["rpcs"].values():
-        extra = f", messages={entry['messages']}, inline_image_bytes={entry['inline_image_bytes']}" if "messages" in entry else ""
+        extra = f", messages={entry['messages']}, inline_image_bytes={entry['inline_image_bytes']}, older_messages={entry.get('older_messages')}" if "messages" in entry else ""
         lines.append(
             f"  {entry['profile']}({entry['rows']} rows) {entry['method']} {entry['state']}: {cell(entry['wall_ms'], 1)} ms; "
             f"bytes median {entry['bytes']['median']:.0f} (deflate {entry['deflated_bytes']['median']:.0f}){extra}")
