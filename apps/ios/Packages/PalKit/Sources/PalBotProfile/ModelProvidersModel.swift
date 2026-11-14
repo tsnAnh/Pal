@@ -23,7 +23,9 @@ public final class ModelProvidersModel {
         let requestID: String?
     }
 
-    public private(set) var providers: [ModelProvider] = []
+    public private(set) var providers: [ModelProvider] = [] {
+        didSet { surfaces.remember(providers, Self.surfaceKey) }
+    }
     public private(set) var isLoading = false
     public private(set) var hasLoaded = false
     public private(set) var loadFailed = false
@@ -35,9 +37,16 @@ public final class ModelProvidersModel {
     private var drafts: [String: String] = [:]
     private var signIns: [String: PendingSignIn] = [:]
     @ObservationIgnored private let client: ModelProvidersClient
+    @ObservationIgnored private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("model-providers")
 
-    public init(client: ModelProvidersClient) {
+    public init(client: ModelProvidersClient, surfaces: SurfaceCache) {
         self.client = client
+        self.surfaces = surfaces
+        if let held = surfaces.remembered([ModelProvider].self, Self.surfaceKey) {
+            providers = held
+            hasLoaded = true
+        }
     }
 
     public func status(of id: String) -> RowStatus { rows[id] ?? .idle }

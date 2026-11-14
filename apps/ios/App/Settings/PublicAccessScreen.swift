@@ -14,7 +14,7 @@ extension WebhookRoutesModel {
     static func make(hub: SettingsHub) -> WebhookRoutesModel {
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        return WebhookRoutesModel(client: WebhookRoutesClient(gateway: gateway))
+        return WebhookRoutesModel(client: WebhookRoutesClient(gateway: gateway), surfaces: connection.surfaces)
     }
 }
 

@@ -1,6 +1,7 @@
 import Foundation
 import PalBotProfile
 import PalDesign
+import PalProtocol
 import Observation
 
 @MainActor
@@ -21,6 +22,14 @@ final class BotProfileModel {
     private let roster: RosterModel
     private let sharer: TemplateSharer
     private var notificationsWrite: Task<Void, Never>?
+
+    private struct Snapshot: Codable, Sendable {
+        let profile: BotProfile
+        let notificationsOn: Bool
+    }
+
+    private var snapshotKey: SurfaceKey { .screen("bot-profile", bot: botName) }
+    private var computerKey: SurfaceKey { .screen("bot-profile-computer", bot: botName) }
 
     init(botName: String, services: BotsServices, roster: RosterModel, sharer: TemplateSharer) {
         self.botName = botName
@@ -45,17 +54,37 @@ final class BotProfileModel {
     }
 
     func load() async {
+        await showCached()
         async let loadedProfile = try? services.profiles.profile(named: botName)
         async let loadedNotifications = try? services.profiles.notificationsEnabled(for: botName)
         async let loadedComputer = try? services.profiles.computerStatus(for: botName)
         let (profile, notifications, computer) = await (loadedProfile, loadedNotifications, loadedComputer)
         if let profile { self.profile = profile }
         if let notifications, notificationsWrite == nil { notificationsOn = notifications }
-        if let computer { self.computer = computer }
+        if let computer {
+            self.computer = computer
+            services.surfaces.remember(computer, computerKey)
+        }
+        persistSnapshot()
+    }
+
+    private func showCached() async {
+        if computer == nil { computer = services.surfaces.remembered(ComputerStatus.self, computerKey) }
+        guard profile == nil, let cached = await services.surfaces.value(Snapshot.self, snapshotKey), profile == nil else { return }
+        profile = cached.profile
+        if notificationsWrite == nil { notificationsOn = cached.notificationsOn }
     }
 
     func reloadProfile() async {
-        if let profile = try? await services.profiles.profile(named: botName) { self.profile = profile }
+        if let profile = try? await services.profiles.profile(named: botName) {
+            self.profile = profile
+            persistSnapshot()
+        }
+    }
+
+    private func persistSnapshot() {
+        guard let profile else { return }
+        services.surfaces.persist(Snapshot(profile: profile, notificationsOn: notificationsOn), snapshotKey)
     }
 
     func setNotifications(_ enabled: Bool) {
@@ -68,6 +97,7 @@ final class BotProfileModel {
             guard let self else { return }
             do {
                 try await services.profiles.setNotifications(enabled, for: botName)
+                persistSnapshot()
             } catch is CancellationError {
             } catch {
                 notificationsOn = previous

@@ -8,7 +8,7 @@ extension BotMeta {
     }
 }
 
-public struct BotProfile: Sendable, Equatable {
+public struct BotProfile: Sendable, Equatable, Codable {
     public var name: String
     public var displayName: String
     public var isPrimary: Bool
@@ -54,7 +54,7 @@ public struct TemplateFile: Sendable, Equatable {
     public var data: Data
 }
 
-public enum ComputerStatus: Sendable, Equatable {
+public enum ComputerStatus: Sendable, Equatable, Codable {
     case idle
     case running
     case inUse

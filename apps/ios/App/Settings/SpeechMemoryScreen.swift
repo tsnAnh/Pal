@@ -18,7 +18,7 @@ struct SpeechMemoryScreen: View {
         let profile = hub.roster.bots.first(where: \.isDefault)?.name ?? ""
         botName = profile
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: SpeechMemoryModel(client: SpeechMemoryClient(gateway: gateway, profile: profile)))
+        _model = State(initialValue: SpeechMemoryModel(client: SpeechMemoryClient(gateway: gateway, profile: profile), profile: profile, surfaces: connection.surfaces))
     }
 
     var body: some View {

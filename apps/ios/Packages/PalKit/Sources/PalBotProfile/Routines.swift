@@ -1,7 +1,7 @@
 import Foundation
 import PalProtocol
 
-public struct Routine: Identifiable, Sendable, Equatable {
+public struct Routine: Identifiable, Sendable, Equatable, Codable {
     public let id: String
     public let title: String
     public let scheduleText: String?

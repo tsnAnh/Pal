@@ -144,10 +144,25 @@ public final class HostServerModel {
     public private(set) var hasOlderLines = false
     public private(set) var isLoadingOlder = false
     @ObservationIgnored private let client: HostServerClient
+    @ObservationIgnored private let surfaces: SurfaceCache
     @ObservationIgnored private var generation = 0
 
-    public init(client: HostServerClient) {
+    public init(client: HostServerClient, surfaces: SurfaceCache) {
         self.client = client
+        self.surfaces = surfaces
+        if let held = surfaces.remembered(HostHealth.self, Self.healthKey) { health = .loaded(held) }
+        showRememberedLogs()
+    }
+
+    private static let healthKey = SurfaceKey.screen("host-health")
+
+    private static func logsKey(_ name: HostLogName) -> SurfaceKey { .screen("host-logs-\(name.rawValue)") }
+
+    private func showRememberedLogs() {
+        guard let page = surfaces.remembered(HostLogPage.self, Self.logsKey(logName)) else { return }
+        logLines = page.lines
+        hasOlderLines = page.hasMore
+        logState = .loaded(page)
     }
 
     public var logText: String { logLines.joined(separator: "\n") }
@@ -160,7 +175,9 @@ public final class HostServerModel {
 
     public func loadHealth() async {
         do {
-            health = .loaded(try await client.health())
+            let fresh = try await client.health()
+            health = .loaded(fresh)
+            surfaces.remember(fresh, Self.healthKey)
         } catch is CancellationError {
         } catch HostFailure.unsupported {
             health = .unsupported
@@ -175,6 +192,7 @@ public final class HostServerModel {
         logLines = []
         logState = .loading
         hasOlderLines = false
+        showRememberedLogs()
         await loadLogs()
     }
 
@@ -188,6 +206,7 @@ public final class HostServerModel {
             logLines = page.lines
             hasOlderLines = page.hasMore
             logState = .loaded(page)
+            surfaces.remember(page, Self.logsKey(name))
         } catch is CancellationError {
         } catch HostFailure.unsupported {
             guard mine == generation else { return }

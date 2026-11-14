@@ -57,7 +57,7 @@ struct BotKeysScreen: View {
     private var content: some View {
         switch model.phase {
         case .loading:
-            ProgressView().frame(maxWidth: .infinity).padding(.top, 24).accessibilityIdentifier("botKeysLoading")
+            DelayedProgressView().frame(maxWidth: .infinity).padding(.top, 24).accessibilityIdentifier("botKeysLoading")
         case .failed:
             FailureCard(message: "Couldn't load this bot's keys.", identifier: "botKeysFailure") {
                 Task { await model.load() }

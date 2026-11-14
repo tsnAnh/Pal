@@ -1,5 +1,6 @@
 import Foundation
 import PalBotProfile
+import PalProtocol
 import Observation
 
 @MainActor
@@ -32,7 +33,14 @@ final class MessagingSettingsModel {
         self.botName = botName
         self.displayName = displayName
         self.services = services
+        if let held = services.surfaces.remembered([MessagingPlatform].self, surfaceKey) {
+            platforms = held
+            drafts = Self.drafts(for: held)
+            phase = .ready
+        }
     }
+
+    private var surfaceKey: SurfaceKey { .screen("messaging-settings", bot: botName) }
 
     func load() async {
         do {
@@ -40,9 +48,10 @@ final class MessagingSettingsModel {
             platforms = snapshot.platforms
             drafts = Self.drafts(for: snapshot.platforms)
             phase = .ready
+            services.surfaces.remember(platforms, surfaceKey)
         } catch is CancellationError {
         } catch {
-            phase = .unavailable
+            if phase != .ready { phase = .unavailable }
         }
     }
 
@@ -102,6 +111,7 @@ final class MessagingSettingsModel {
     private func replace(_ platform: MessagingPlatform) {
         if let index = platforms.firstIndex(where: { $0.id == platform.id }) {
             platforms[index] = platform
+            services.surfaces.remember(platforms, surfaceKey)
         }
         for setting in platform.settings { drafts[setting.key] = setting.text }
     }

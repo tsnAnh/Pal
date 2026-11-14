@@ -13,7 +13,7 @@ struct BotModelsScreen: View {
         self.back = back
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: BotModelsOverviewModel(client: BotModelsOverviewClient(gateway: gateway)))
+        _model = State(initialValue: BotModelsOverviewModel(client: BotModelsOverviewClient(gateway: gateway), surfaces: connection.surfaces))
     }
 
     var body: some View {

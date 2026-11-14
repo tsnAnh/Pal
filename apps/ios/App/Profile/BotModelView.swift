@@ -26,7 +26,7 @@ struct BotModelView: View {
             VStack(spacing: 0) {
                 switch model.phase {
                 case .loading:
-                    ProgressView().padding(.top, 40).accessibilityIdentifier("botModelLoading")
+                    DelayedProgressView().padding(.top, 40).accessibilityIdentifier("botModelLoading")
                 case .failed:
                     FailureCard(message: "Couldn't load this bot's models.", identifier: "botModelFailure") {
                         Task { await model.load() }

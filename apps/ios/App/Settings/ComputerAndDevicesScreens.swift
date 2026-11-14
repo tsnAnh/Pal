@@ -1,4 +1,5 @@
 import PalDesign
+import PalProtocol
 import PalSettings
 import Observation
 import SwiftUI
@@ -11,13 +12,23 @@ final class BotComputerSettingsModel {
     private(set) var notice: String?
     var failure: String?
 
+    private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("bot-computer-disk")
+
+    init(surfaces: SurfaceCache) {
+        self.surfaces = surfaces
+        if let held = surfaces.remembered(ComputerSummary.self, Self.surfaceKey) { state = .loaded(held) }
+    }
+
     func load(api: SettingsAPI) async {
         do {
-            state = .loaded(ComputerSummary(try await api.displayStatus()))
+            let summary = ComputerSummary(try await api.displayStatus())
+            state = .loaded(summary)
+            surfaces.remember(summary, Self.surfaceKey)
         } catch is CancellationError {
             return
         } catch {
-            state = .failed(SettingsFailure(error).message)
+            if state.value == nil { state = .failed(SettingsFailure(error).message) }
         }
     }
 
@@ -26,7 +37,9 @@ final class BotComputerSettingsModel {
         notice = nil
         defer { isResetting = false }
         do {
-            state = .loaded(ComputerSummary(try await api.resetDisplay()))
+            let summary = ComputerSummary(try await api.resetDisplay())
+            state = .loaded(summary)
+            surfaces.remember(summary, Self.surfaceKey)
             notice = "Computer reset. It will rebuild the next time a Bot needs it."
         } catch {
             failure = SettingsFailure(error).message
@@ -38,8 +51,14 @@ struct BotComputerScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model = BotComputerSettingsModel()
+    @State private var model: BotComputerSettingsModel
     @State private var confirming = false
+
+    init(hub: SettingsHub, back: @escaping () -> Void) {
+        self.hub = hub
+        self.back = back
+        _model = State(initialValue: BotComputerSettingsModel(surfaces: hub.connection.surfaces))
+    }
 
     var body: some View {
         SettingsPage(title: "Bot Computer", identifier: "botComputerScreen", back: back) {
@@ -87,13 +106,25 @@ final class DevicesModel {
     private(set) var state: Loadable<[DeviceEntry]> = .loading
     var failure: String?
 
+    private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("devices")
+
+    init(surfaces: SurfaceCache) {
+        self.surfaces = surfaces
+    }
+
     func load(api: SettingsAPI, localDeviceID: String?) async {
+        if state.value == nil, let cached = await surfaces.value([DeviceEntry].self, Self.surfaceKey), state.value == nil {
+            state = .loaded(cached)
+        }
         do {
-            state = .loaded(DeviceEntry.ordered(try await api.devices(), localDeviceID: localDeviceID))
+            let devices = DeviceEntry.ordered(try await api.devices(), localDeviceID: localDeviceID)
+            state = .loaded(devices)
+            surfaces.persist(devices, Self.surfaceKey)
         } catch is CancellationError {
             return
         } catch {
-            state = .failed(SettingsFailure(error).message)
+            if state.value == nil { state = .failed(SettingsFailure(error).message) }
         }
     }
 
@@ -114,8 +145,15 @@ struct DevicesScreen: View {
     let connection: ConnectionModel
     let back: () -> Void
 
-    @State private var model = DevicesModel()
+    @State private var model: DevicesModel
     @State private var selected: DeviceEntry?
+
+    init(hub: SettingsHub, connection: ConnectionModel, back: @escaping () -> Void) {
+        self.hub = hub
+        self.connection = connection
+        self.back = back
+        _model = State(initialValue: DevicesModel(surfaces: connection.surfaces))
+    }
 
     var body: some View {
         Group {

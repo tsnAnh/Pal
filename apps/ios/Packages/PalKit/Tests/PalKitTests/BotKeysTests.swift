@@ -61,7 +61,7 @@ struct BotKeysServiceTests {
 @Suite("Bot keys model")
 struct BotKeysModelTests {
     private func model(_ bots: ScriptedBots) -> BotKeysModel {
-        BotKeysModel(service: BotKeysService(gateway: bots.gateway), profile: "atlas")
+        BotKeysModel(service: BotKeysService(gateway: bots.gateway), profile: "atlas", surfaces: scratchSurfaces())
     }
 
     private func row(_ model: BotKeysModel, _ name: String) throws -> BotKeyRow {

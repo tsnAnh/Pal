@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import PalProtocol
 
-public struct BotModelReading: Sendable, Equatable {
+public struct BotModelReading: Sendable, Equatable, Codable {
     public let model: String?
     public let effort: String?
 
@@ -16,7 +16,7 @@ public struct BotModelReading: Sendable, Equatable {
     public var cloudEffortText: String { ReasoningEffort.cloudTitle(effort) }
 }
 
-public struct BotModelsRow: Sendable, Equatable, Identifiable {
+public struct BotModelsRow: Sendable, Equatable, Identifiable, Codable {
     public let name: String
     public let displayName: String
     public let chat: BotModelReading
@@ -104,15 +104,25 @@ public final class BotModelsOverviewModel {
     public private(set) var phase = Phase.loading
     public private(set) var rows: [BotModelsRow] = []
     @ObservationIgnored private let client: BotModelsOverviewClient
+    @ObservationIgnored private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("bot-models-overview")
 
-    public init(client: BotModelsOverviewClient) {
+    public init(client: BotModelsOverviewClient, surfaces: SurfaceCache) {
         self.client = client
+        self.surfaces = surfaces
     }
 
     public func load() async {
-        do {
-            rows = try await client.rows()
+        if phase != .ready, let cached = await surfaces.value([BotModelsRow].self, Self.surfaceKey), phase != .ready {
+            rows = cached
             phase = .ready
+        }
+        do {
+            let fresh = try await client.rows()
+            rows = fresh
+            phase = .ready
+            surfaces.persist(fresh, Self.surfaceKey)
+        } catch is CancellationError {
         } catch {
             if phase != .ready { phase = .failed }
         }

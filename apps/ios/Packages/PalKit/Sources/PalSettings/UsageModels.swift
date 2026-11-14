@@ -1,7 +1,7 @@
 import Foundation
 import PalProtocol
 
-public struct UsageMeter: Identifiable, Sendable, Equatable {
+public struct UsageMeter: Identifiable, Sendable, Equatable, Codable {
     public let id: String
     public let title: String
     public let usedPercent: Double
@@ -57,7 +57,7 @@ public enum UsageClock {
     }
 }
 
-public struct UsageSpend: Sendable, Equatable {
+public struct UsageSpend: Sendable, Equatable, Codable {
     public let periodDays: Int
     public let usd: Double?
     public let tokens: Int
@@ -90,13 +90,13 @@ public struct UsageSpend: Sendable, Equatable {
     }
 }
 
-public struct UsageAccount: Identifiable, Sendable, Equatable {
-    public enum Kind: String, Sendable, Equatable {
+public struct UsageAccount: Identifiable, Sendable, Equatable, Codable {
+    public enum Kind: String, Sendable, Equatable, Codable {
         case subscription
         case apiKey = "api_key"
     }
 
-    public enum Standing: Sendable, Equatable {
+    public enum Standing: Sendable, Equatable, Codable {
         case ready
         case limited
         case unknown
@@ -150,7 +150,7 @@ public struct UsageAccount: Identifiable, Sendable, Equatable {
     }
 }
 
-public struct UsageOverview: Sendable, Equatable {
+public struct UsageOverview: Sendable, Equatable, Codable {
     public let accounts: [UsageAccount]
 
     public init(_ subscriptions: [SettingsWire.Subscription]) {

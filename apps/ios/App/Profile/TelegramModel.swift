@@ -1,5 +1,6 @@
 import Foundation
 import PalBotProfile
+import PalProtocol
 import Observation
 
 @MainActor
@@ -63,8 +64,15 @@ final class TelegramModel {
         return connection == .connected || connection == .starting || connection == .restartNeeded
     }
 
+    private var surfaceKey: SurfaceKey { .screen("telegram", bot: botName) }
+
     func load() async {
         guard case .loading = phase else { return }
+        if let cached = await services.surfaces.value(TelegramStatus.self, surfaceKey), case .loading = phase {
+            failure = cached.failure
+            allowedUsersSet = cached.allowedUsersSet
+            phase = .ready(cached.connection)
+        }
         await refresh()
     }
 
@@ -75,6 +83,7 @@ final class TelegramModel {
             if !status.connection.isSettled { startPolling() }
         } catch is CancellationError {
         } catch {
+            if case .ready = phase { return }
             phase = .unavailable
         }
     }
@@ -160,6 +169,7 @@ final class TelegramModel {
         failure = status.failure
         allowedUsersSet = status.allowedUsersSet
         phase = .ready(status.connection)
+        if status.connection.isSettled { services.surfaces.persist(status, surfaceKey) }
     }
 
     private func apply(_ status: TelegramStatus) {

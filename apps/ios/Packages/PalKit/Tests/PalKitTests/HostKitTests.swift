@@ -18,7 +18,7 @@ private func jobJSON(_ state: String, id: String = "j1", report: JSONValue? = ni
 
 @MainActor
 private func model(_ bots: ScriptedBots) -> KitModel {
-    KitModel(client: KitClient(gateway: bots.gateway), sleep: { _ in })
+    KitModel(client: KitClient(gateway: bots.gateway), surfaces: scratchSurfaces(), sleep: { _ in })
 }
 
 @Suite struct HostKitTests {

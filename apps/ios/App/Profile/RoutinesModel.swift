@@ -1,5 +1,6 @@
 import Foundation
 import PalBotProfile
+import PalProtocol
 import Observation
 
 @MainActor
@@ -26,13 +27,20 @@ final class RoutinesModel {
         self.services = services
     }
 
+    private var surfaceKey: SurfaceKey { .screen("routines", bot: botName) }
+
     func load() async {
+        if phase == .loading, let cached = await services.surfaces.value([Routine].self, surfaceKey), phase == .loading {
+            routines = cached
+            phase = .ready
+        }
         do {
             routines = try await services.routines.list(profile: botName)
             phase = .ready
+            services.surfaces.persist(routines, surfaceKey)
         } catch is CancellationError {
         } catch {
-            if routines.isEmpty { phase = .failed }
+            if phase != .ready { phase = .failed }
         }
     }
 
@@ -43,6 +51,7 @@ final class RoutinesModel {
         defer { pending.remove(routine.id) }
         do {
             try await services.routines.setEnabled(enabled, routine: routine.id, profile: botName)
+            services.surfaces.persist(routines, surfaceKey)
         } catch is CancellationError {
         } catch {
             if let current = routines.firstIndex(where: { $0.id == routine.id }) { routines[current].isEnabled = !enabled }
@@ -55,6 +64,7 @@ final class RoutinesModel {
         do {
             try await services.routines.remove(routine: routine.id, profile: botName)
             routines.removeAll { $0.id == routine.id }
+            services.surfaces.persist(routines, surfaceKey)
         } catch is CancellationError {
         } catch {
             toast = String(localized: "Couldn't delete the routine")

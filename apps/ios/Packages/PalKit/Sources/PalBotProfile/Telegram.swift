@@ -2,7 +2,7 @@ import Foundation
 import PalProtocol
 import PalTransport
 
-public enum TelegramConnection: Sendable, Equatable {
+public enum TelegramConnection: Sendable, Equatable, Codable {
     case notConnected
     case starting
     case connected
@@ -49,7 +49,7 @@ public enum TelegramConnection: Sendable, Equatable {
     }
 }
 
-public struct TelegramFailureReason: Sendable, Equatable {
+public struct TelegramFailureReason: Sendable, Equatable, Codable {
     public static let invalidToken = "Telegram doesn't accept this token. It may be wrong or revoked. Create a new one with @BotFather and update it."
     public static let network = "Pal can't reach Telegram right now. Check the connection; it keeps trying."
     public static let conflict = "Another copy of this bot is using the same token. Stop it, or create a new token with @BotFather and update it."
@@ -70,7 +70,7 @@ public struct TelegramFailureReason: Sendable, Equatable {
     }
 }
 
-public struct TelegramStatus: Sendable, Equatable {
+public struct TelegramStatus: Sendable, Equatable, Codable {
     public let connection: TelegramConnection
     public let failure: TelegramFailureReason?
     public let allowedUsersSet: Bool

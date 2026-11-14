@@ -206,13 +206,18 @@ public final class GitHubTokenModel {
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private(set) var pollTask: Task<Void, Never>?
     @ObservationIgnored private var isRefreshing = false
+    @ObservationIgnored private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("github-token")
 
     public init(
         client: GitHubTokenClient,
+        surfaces: SurfaceCache,
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
         self.client = client
+        self.surfaces = surfaces
         self.sleep = sleep
+        if let held = surfaces.remembered(GitHubTokenStatus.self, Self.surfaceKey) { phase = .ready(held) }
     }
 
     public var status: GitHubTokenStatus? {
@@ -261,7 +266,9 @@ public final class GitHubTokenModel {
         isRefreshing = true
         defer { isRefreshing = false }
         do {
-            phase = .ready(try await client.status())
+            let fresh = try await client.status()
+            phase = .ready(fresh)
+            surfaces.remember(fresh, Self.surfaceKey)
             switch signIn {
             case .denied?, .expired?, .organizationApproval?: signIn = nil
             default: break

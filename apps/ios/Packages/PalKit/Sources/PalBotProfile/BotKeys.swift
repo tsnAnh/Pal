@@ -115,7 +115,9 @@ public final class BotKeysModel {
     }
 
     public private(set) var phase = Phase.loading
-    public private(set) var groups: [BotKeyGroup] = []
+    public private(set) var groups: [BotKeyGroup] = [] {
+        didSet { surfaces.remember(groups, surfaceKey) }
+    }
     public private(set) var entryState = EntryState.idle
     public private(set) var notices: [String: Notice] = [:]
     public var entry: BotKeyRow?
@@ -123,10 +125,18 @@ public final class BotKeysModel {
 
     @ObservationIgnored private let service: BotKeysService
     @ObservationIgnored private let profile: String
+    @ObservationIgnored private let surfaces: SurfaceCache
+    @ObservationIgnored private let surfaceKey: SurfaceKey
 
-    public init(service: BotKeysService, profile: String) {
+    public init(service: BotKeysService, profile: String, surfaces: SurfaceCache) {
         self.service = service
         self.profile = profile
+        self.surfaces = surfaces
+        surfaceKey = .screen("bot-keys", bot: profile)
+        if let held = surfaces.remembered([BotKeyGroup].self, surfaceKey) {
+            groups = held
+            phase = .ready
+        }
     }
 
     public func notice(_ row: BotKeyRow) -> Notice? { notices[row.name] }

@@ -103,6 +103,7 @@ final class SettingsHub {
         lastUsageRefresh = Date()
         usageOverview = subscriptions.map(UsageOverview.init)
         usageHeadline = usageOverview?.headlineText
+        if let usageOverview { connection.surfaces.persist(usageOverview, UsageModel.surfaceKey) }
     }
 
     private func refreshAccountState() async {

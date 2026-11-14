@@ -24,7 +24,7 @@ private func applied(_ key: String, _ ok: Bool = true) -> JSONValue { ["ok": .bo
 @Suite("Bot model picker")
 struct BotModelsTests {
     private func make(_ bots: ScriptedBots) -> BotModelsModel {
-        BotModelsModel(client: BotModelClient(gateway: bots.gateway, profile: "atlas"))
+        BotModelsModel(client: BotModelClient(gateway: bots.gateway, profile: "atlas"), profile: "atlas", surfaces: scratchSurfaces())
     }
 
     private func loaded(_ bots: ScriptedBots) async -> BotModelsModel {

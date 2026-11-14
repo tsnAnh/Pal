@@ -1,5 +1,6 @@
 import Foundation
 import PalBotProfile
+import PalProtocol
 import Observation
 
 @MainActor
@@ -21,7 +22,9 @@ final class GatewayServiceModel {
         case installing
     }
 
-    private(set) var info: GatewayServiceInfo?
+    private(set) var info: GatewayServiceInfo? {
+        didSet { if let info { surfaces.remember(info, Self.surfaceKey) } }
+    }
     private(set) var activity: Activity?
     private(set) var notice: Notice?
     private(set) var loadFailed = false
@@ -29,9 +32,13 @@ final class GatewayServiceModel {
     private(set) var isUnreachable = false
 
     private let client: GatewayServiceClient
+    private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("gateway-service")
 
-    init(client: GatewayServiceClient) {
+    init(client: GatewayServiceClient, surfaces: SurfaceCache) {
         self.client = client
+        self.surfaces = surfaces
+        info = surfaces.remembered(GatewayServiceInfo.self, Self.surfaceKey)
     }
 
     var isBusy: Bool { activity != nil }
@@ -46,7 +53,7 @@ final class GatewayServiceModel {
             isUnreachable = false
         } catch is CancellationError {
         } catch {
-            loadFailed = true
+            loadFailed = info == nil
         }
     }
 

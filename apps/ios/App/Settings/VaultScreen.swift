@@ -1,4 +1,5 @@
 import PalDesign
+import PalProtocol
 import PalSettings
 import Observation
 import SwiftUI
@@ -10,13 +11,23 @@ final class VaultModel {
     private(set) var isBusy = false
     var actionFailure: String?
 
+    private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("vault")
+
+    init(surfaces: SurfaceCache) {
+        self.surfaces = surfaces
+        if let held = surfaces.remembered([VaultEntry].self, Self.surfaceKey) { state = .loaded(held) }
+    }
+
     func load(api: SettingsAPI) async {
         do {
-            state = .loaded(try await api.vaultItems().map(VaultEntry.init))
+            let entries = try await api.vaultItems().map(VaultEntry.init)
+            state = .loaded(entries)
+            surfaces.remember(entries, Self.surfaceKey)
         } catch is CancellationError {
             return
         } catch {
-            state = .failed(SettingsFailure(error).message)
+            if state.value == nil { state = .failed(SettingsFailure(error).message) }
         }
     }
 
@@ -49,10 +60,16 @@ struct VaultScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model = VaultModel()
+    @State private var model: VaultModel
     @State private var adding = false
     @State private var removing: VaultEntry?
     @State private var confirmingRemoval = false
+
+    init(hub: SettingsHub, back: @escaping () -> Void) {
+        self.hub = hub
+        self.back = back
+        _model = State(initialValue: VaultModel(surfaces: hub.connection.surfaces))
+    }
 
     var body: some View {
         SettingsPage(

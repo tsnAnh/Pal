@@ -99,7 +99,7 @@ struct SkillsCatalogSheet: View {
     private var listBody: some View {
         switch model.phase {
         case .loading:
-            ProgressView().tint(Color(theme.palette.textSecondary)).padding(.top, 60).accessibilityIdentifier("skillsLoading")
+            DelayedProgressView().tint(Color(theme.palette.textSecondary)).padding(.top, 60).accessibilityIdentifier("skillsLoading")
         case .unavailable:
             VStack(spacing: 14) {
                 Text("Couldn't load skills")
@@ -225,7 +225,7 @@ struct SkillsCatalogSheet: View {
     private func detailContent(_ row: SkillRow) -> some View {
         switch model.detailPhase {
         case .loading:
-            ProgressView().tint(Color(theme.palette.textSecondary)).frame(maxWidth: .infinity).padding(.top, 20).accessibilityIdentifier("skillDetailLoading")
+            DelayedProgressView().tint(Color(theme.palette.textSecondary)).frame(maxWidth: .infinity).padding(.top, 20).accessibilityIdentifier("skillDetailLoading")
         case .failed(let message):
             VStack(alignment: .leading, spacing: 12) {
                 Text(message).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textSecondary))

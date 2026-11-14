@@ -1,5 +1,6 @@
 import Foundation
 import PalBotProfile
+import PalProtocol
 import Observation
 
 @MainActor
@@ -47,7 +48,7 @@ final class SlackModel {
         self.botName = botName
         self.displayName = displayName
         self.services = services
-        hermesService = GatewayServiceModel(client: services.gatewayService)
+        hermesService = GatewayServiceModel(client: services.gatewayService, surfaces: services.surfaces)
     }
 
     var connection: SlackConnection? {
@@ -66,8 +67,14 @@ final class SlackModel {
         connection?.allowsTokenUpdate == true
     }
 
+    private var surfaceKey: SurfaceKey { .screen("slack", bot: botName) }
+
     func load() async {
         guard case .loading = phase else { return }
+        if let cached = await services.surfaces.value(SlackStatus.self, surfaceKey), case .loading = phase {
+            failure = cached.failure
+            phase = .ready(cached.connection)
+        }
         await refresh()
     }
 
@@ -78,6 +85,7 @@ final class SlackModel {
             if !status.connection.isSettled { startPolling() }
         } catch is CancellationError {
         } catch {
+            if case .ready = phase { return }
             phase = .unavailable
         }
     }
@@ -191,6 +199,7 @@ final class SlackModel {
     private func show(_ status: SlackStatus) {
         failure = status.failure
         phase = .ready(status.connection)
+        if status.connection.isSettled { services.surfaces.persist(status, surfaceKey) }
     }
 
     private func apply(_ status: SlackStatus) {

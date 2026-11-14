@@ -14,8 +14,8 @@ struct PalServiceScreen: View {
         self.back = back
         let connection = hub.connection
         let gateway = BotsGateway { method, params in try await connection.rpc(method, params) }
-        _model = State(initialValue: GatewayServiceModel(client: GatewayServiceClient(gateway: gateway)))
-        _host = State(initialValue: HostServerModel(client: HostServerClient(gateway: gateway)))
+        _model = State(initialValue: GatewayServiceModel(client: GatewayServiceClient(gateway: gateway), surfaces: connection.surfaces))
+        _host = State(initialValue: HostServerModel(client: HostServerClient(gateway: gateway), surfaces: connection.surfaces))
     }
 
     var body: some View {

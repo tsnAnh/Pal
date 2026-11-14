@@ -43,9 +43,13 @@ public final class SpeechMemoryModel {
     public var pendingRemoval: Target?
 
     @ObservationIgnored private let client: SpeechMemoryClient
+    @ObservationIgnored private let surfaces: SurfaceCache
+    @ObservationIgnored private let surfaceKey: SurfaceKey
 
-    public init(client: SpeechMemoryClient) {
+    public init(client: SpeechMemoryClient, profile: String, surfaces: SurfaceCache) {
         self.client = client
+        self.surfaces = surfaces
+        surfaceKey = .screen("speech-memory", bot: profile)
     }
 
     public nonisolated static func rowID(_ area: SpeechMemoryArea, _ provider: String) -> String { "\(area.rawValue):\(provider)" }
@@ -62,8 +66,11 @@ public final class SpeechMemoryModel {
         guard !isLoading else { return }
         isLoading = true
         defer { isLoading = false }
+        if settings == nil, let cached = await surfaces.value(SpeechMemorySettings.self, surfaceKey), settings == nil {
+            settings = cached
+        }
         do {
-            settings = try await client.settings()
+            adopt(try await client.settings())
             loadFailed = false
         } catch is CancellationError {
         } catch {
@@ -78,7 +85,7 @@ public final class SpeechMemoryModel {
         choices[area] = .working(.choosing)
         switch await client.choose(area, provider: provider, voice: voice) {
         case .saved(let updated):
-            if let updated { settings = updated } else { await refresh() }
+            if let updated { adopt(updated) } else { await refresh() }
             choices[area] = .succeeded("Saved. Applies to new chats.")
         case .needsKey(let reason), .unsupported(let reason), .invalid(let reason), .failed(let reason):
             choices[area] = .failed(reason)
@@ -142,7 +149,12 @@ public final class SpeechMemoryModel {
 
     private func refresh() async {
         guard let fresh = try? await client.settings() else { return }
-        settings = fresh
+        adopt(fresh)
         loadFailed = false
+    }
+
+    private func adopt(_ fresh: SpeechMemorySettings) {
+        settings = fresh
+        surfaces.persist(fresh, surfaceKey)
     }
 }

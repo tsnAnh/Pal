@@ -164,9 +164,15 @@ private struct MacGeneralSection: View {
     @Environment(AppearanceStore.self) private var appearance
     @Environment(\.openURL) private var openURL
     @State private var notifications = SystemNotifications()
-    @State private var sharing = DataSharingModel()
+    @State private var sharing: DataSharingModel
     @State private var confirmingSignOut = false
     @State private var confirmingAdd = false
+
+    init(hub: SettingsHub, connection: ConnectionModel) {
+        self.hub = hub
+        self.connection = connection
+        _sharing = State(initialValue: DataSharingModel(surfaces: connection.surfaces))
+    }
 
     private static let themes: [AppearanceMode] = [.followSystem, .light, .dark, .black]
     private static let zones = TimeZone.knownTimeZoneIdentifiers.sorted()
@@ -387,10 +393,17 @@ private struct MacComputerSection: View {
     let hub: SettingsHub
     let connection: ConnectionModel
 
-    @State private var computer = BotComputerSettingsModel()
-    @State private var devices = DevicesModel()
+    @State private var computer: BotComputerSettingsModel
+    @State private var devices: DevicesModel
     @State private var confirmingReset = false
     @State private var removing: DeviceEntry?
+
+    init(hub: SettingsHub, connection: ConnectionModel) {
+        self.hub = hub
+        self.connection = connection
+        _computer = State(initialValue: BotComputerSettingsModel(surfaces: connection.surfaces))
+        _devices = State(initialValue: DevicesModel(surfaces: connection.surfaces))
+    }
 
     var body: some View {
         MacSectionPage(section: .computer) {
@@ -505,9 +518,14 @@ private struct MacComputerSection: View {
 private struct MacPermissionsSection: View {
     let hub: SettingsHub
 
-    @State private var model = PermissionsModel()
+    @State private var model: PermissionsModel
     @State private var addingTo: PermissionList?
     @State private var removing: PermissionRuleEntry?
+
+    init(hub: SettingsHub) {
+        self.hub = hub
+        _model = State(initialValue: PermissionsModel(surfaces: hub.connection.surfaces))
+    }
 
     var body: some View {
         MacSectionPage(section: .permissions) {
@@ -651,11 +669,16 @@ private struct MacPublicAccessSection: View {
 private struct MacVaultSection: View {
     let hub: SettingsHub
 
-    @State private var model = VaultModel()
+    @State private var model: VaultModel
     @State private var filter = MacVaultFilter.all
     @State private var query = ""
     @State private var adding = false
     @State private var removing: VaultEntry?
+
+    init(hub: SettingsHub) {
+        self.hub = hub
+        _model = State(initialValue: VaultModel(surfaces: hub.connection.surfaces))
+    }
 
     var body: some View {
         MacSectionPage(
@@ -787,7 +810,12 @@ private struct MacVaultSection: View {
 private struct MacUsageSection: View {
     let hub: SettingsHub
 
-    @State private var model = UsageModel()
+    @State private var model: UsageModel
+
+    init(hub: SettingsHub) {
+        self.hub = hub
+        _model = State(initialValue: UsageModel(surfaces: hub.connection.surfaces))
+    }
 
     var body: some View {
         MacSectionPage(

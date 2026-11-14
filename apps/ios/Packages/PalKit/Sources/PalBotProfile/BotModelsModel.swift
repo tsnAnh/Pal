@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import PalProtocol
 
 @MainActor
 @Observable
@@ -29,10 +30,30 @@ public final class BotModelsModel {
     public private(set) var save = Save.idle
     public var confirmation: Confirmation?
 
-    @ObservationIgnored private let client: BotModelClient
+    private struct Snapshot: Sendable {
+        let settings: BotModelSettings
+        let providers: [ModelCatalogProvider]
+        let effort: String?
+    }
 
-    public init(client: BotModelClient) {
+    @ObservationIgnored private let client: BotModelClient
+    @ObservationIgnored private let surfaces: SurfaceCache
+    @ObservationIgnored private let surfaceKey: SurfaceKey
+
+    public init(client: BotModelClient, profile: String, surfaces: SurfaceCache) {
         self.client = client
+        self.surfaces = surfaces
+        surfaceKey = .screen("bot-models", bot: profile)
+        if let held = surfaces.remembered(Snapshot.self, surfaceKey) {
+            settings = held.settings
+            providers = held.providers
+            effort = held.effort
+            phase = .ready
+        }
+    }
+
+    private func remember() {
+        surfaces.remember(Snapshot(settings: settings, providers: providers, effort: effort), surfaceKey)
     }
 
     public var isSaving: Bool { save == .saving }
@@ -83,6 +104,7 @@ public final class BotModelsModel {
         }
         if !isSaving { settings = fresh }
         phase = .ready
+        remember()
     }
 
     public func choose(_ choice: ModelChoice) async {
@@ -102,6 +124,7 @@ public final class BotModelsModel {
         switch await client.setModel(choice, confirmed: confirmed) {
         case .saved:
             settings.current = choice
+            remember()
             save = .saved("Saved. New turns use this model; a turn already running finishes on its current one.")
         case .needsConfirmation(let message):
             confirmation = Confirmation(choice: choice, message: message)
@@ -117,6 +140,7 @@ public final class BotModelsModel {
         switch await client.setEffort(level) {
         case .saved:
             effort = level
+            remember()
             save = .saved("Saved. New conversations use this effort; ones already open keep theirs.")
         case .failed(let reason):
             save = .failed(reason)
@@ -149,6 +173,7 @@ public final class BotModelsModel {
         switch await client.setFallbacks(next) {
         case .saved:
             settings.fallbacks = next
+            remember()
             save = .saved("Saved. Backups apply from the next turn.")
         case .failed(let reason):
             save = .failed(reason)

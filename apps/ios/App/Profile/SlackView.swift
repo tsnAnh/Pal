@@ -117,7 +117,9 @@ struct SlackView: View {
         Group {
             switch model.phase {
             case .loading:
-                PillButton(String(localized: "Loading"), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "slackLoading") {}
+                DelayedReveal {
+                    PillButton(String(localized: "Loading"), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "slackLoading") {}
+                }
             case .busy(let activity):
                 PillButton(busyTitle(activity), kind: .accent, size: .large, isBusy: true, accessibilityIdentifier: "slackBusy") {}
             case .unavailable:

@@ -1,7 +1,7 @@
 import Foundation
 import PalProtocol
 
-public struct RoomMember: Sendable, Equatable, Identifiable {
+public struct RoomMember: Sendable, Equatable, Identifiable, Codable {
     public let memberID: String
     public let profile: String
     public let handle: String
@@ -21,7 +21,7 @@ public struct RoomMember: Sendable, Equatable, Identifiable {
     }
 }
 
-public struct Room: Sendable, Equatable, Identifiable {
+public struct Room: Sendable, Equatable, Identifiable, Codable {
     public let roomID: String
     public let name: String
     public let members: [RoomMember]
@@ -225,7 +225,7 @@ public struct RoomSnapshot: Sendable, Equatable {
     public let driver: RoomDriver?
 }
 
-public struct RoomCapabilities: Sendable, Equatable {
+public struct RoomCapabilities: Sendable, Equatable, Codable {
     public let methods: Set<String>?
     public let seatableProfiles: Set<String>?
     public let driver: Bool

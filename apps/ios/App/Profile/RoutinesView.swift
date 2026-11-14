@@ -67,7 +67,7 @@ struct RoutinesView: View {
     private var content: some View {
         switch model.phase {
         case .loading:
-            ProgressView()
+            DelayedProgressView()
                 .padding(.top, 80)
                 .accessibilityIdentifier("routinesLoading")
         case .failed:

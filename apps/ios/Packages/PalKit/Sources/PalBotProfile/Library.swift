@@ -17,13 +17,13 @@ public enum LibraryFilter: String, CaseIterable, Sendable, Hashable {
     }
 }
 
-public enum LibraryEntryKind: String, Sendable, Hashable {
+public enum LibraryEntryKind: String, Sendable, Hashable, Codable {
     case link
     case media
     case file
 }
 
-public struct LibraryEntry: Identifiable, Sendable, Hashable {
+public struct LibraryEntry: Identifiable, Sendable, Hashable, Codable {
     public let id: String
     public let kind: LibraryEntryKind
     public let title: String
@@ -96,7 +96,7 @@ public struct LibraryEntry: Identifiable, Sendable, Hashable {
     }
 }
 
-public struct LibraryPage: Sendable, Equatable {
+public struct LibraryPage: Sendable, Equatable, Codable {
     public var entries: [LibraryEntry]
     public var nextBefore: String?
     public var indexComplete: Bool

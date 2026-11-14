@@ -113,15 +113,17 @@ struct ComputerView: View {
     private var stateContent: some View {
         switch model.phase {
         case .connecting, .live:
-            VStack(spacing: ComputerMetrics.spinnerToText) {
-                ProgressView()
-                    .controlSize(.regular)
-                    .tint(Color(white: 0.45))
-                Text("Connecting…")
-                    .font(.system(size: ComputerMetrics.statusSize))
-                    .foregroundStyle(.white)
+            DelayedReveal {
+                VStack(spacing: ComputerMetrics.spinnerToText) {
+                    ProgressView()
+                        .controlSize(.regular)
+                        .tint(Color(white: 0.45))
+                    Text("Connecting…")
+                        .font(.system(size: ComputerMetrics.statusSize))
+                        .foregroundStyle(.white)
+                }
+                .accessibilityElement(children: .combine)
             }
-            .accessibilityElement(children: .combine)
             .accessibilityIdentifier("computerConnecting")
         case .unavailable(let failure):
             failureState(message: Self.message(for: failure), retry: failure != .unavailable && failure != .notSetUp)

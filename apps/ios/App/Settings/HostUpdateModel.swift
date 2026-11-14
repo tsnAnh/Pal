@@ -1,11 +1,14 @@
 import Foundation
 import Observation
 import PalBotProfile
+import PalProtocol
 
 @MainActor
 @Observable
 final class HostUpdateModel {
-    private(set) var check: HostUpdateCheck?
+    private(set) var check: HostUpdateCheck? {
+        didSet { if let check { surfaces.remember(check, Self.surfaceKey) } }
+    }
     private(set) var checking = false
     private(set) var checkFailed = false
     private(set) var progress: HostUpdateProgress?
@@ -14,10 +17,14 @@ final class HostUpdateModel {
     var confirmingTurns = false
 
     private let client: HostUpdateClient
+    private let surfaces: SurfaceCache
     private var following = false
+    private static let surfaceKey = SurfaceKey.screen("host-update")
 
-    init(client: HostUpdateClient) {
+    init(client: HostUpdateClient, surfaces: SurfaceCache) {
         self.client = client
+        self.surfaces = surfaces
+        check = surfaces.remembered(HostUpdateCheck.self, Self.surfaceKey)
     }
 
     var isUpdating: Bool { following }
@@ -42,7 +49,7 @@ final class HostUpdateModel {
             checkFailed = false
         } catch is CancellationError {
         } catch {
-            checkFailed = true
+            checkFailed = check == nil
         }
     }
 

@@ -91,7 +91,7 @@ struct LibraryView: View {
     private var content: some View {
         switch model.phase {
         case .loading:
-            ProgressView()
+            DelayedProgressView()
                 .padding(.top, 80)
                 .accessibilityIdentifier("libraryLoading")
         case .failed:
@@ -111,7 +111,7 @@ struct LibraryView: View {
         case .ready:
             readySections
             if model.isIndexing || model.isLoadingMore {
-                ProgressView()
+                DelayedProgressView()
                     .padding(.top, 24)
                     .accessibilityIdentifier("libraryIndexing")
             }

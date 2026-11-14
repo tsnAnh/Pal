@@ -2,7 +2,7 @@ import Foundation
 import PalProtocol
 import PalTransport
 
-public enum SlackConnection: Sendable, Equatable {
+public enum SlackConnection: Sendable, Equatable, Codable {
     case notConnected
     case starting
     case connected
@@ -49,7 +49,7 @@ public enum SlackConnection: Sendable, Equatable {
     }
 }
 
-public struct SlackFailureReason: Sendable, Equatable {
+public struct SlackFailureReason: Sendable, Equatable, Codable {
     public let code: String
     public let message: String
 
@@ -88,7 +88,7 @@ public struct SlackFailureReason: Sendable, Equatable {
     }
 }
 
-public struct SlackStatus: Sendable, Equatable {
+public struct SlackStatus: Sendable, Equatable, Codable {
     public let connection: SlackConnection
     public let failure: SlackFailureReason?
 

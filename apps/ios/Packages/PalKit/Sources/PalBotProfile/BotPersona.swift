@@ -2,7 +2,7 @@ import Foundation
 import PalProtocol
 import PalTransport
 
-public struct BotPersona: Sendable, Equatable {
+public struct BotPersona: Sendable, Equatable, Codable {
     public static let maximumDescriptionLength = 280
     public static let maximumSoulLength = 20_000
 

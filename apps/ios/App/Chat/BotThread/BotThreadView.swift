@@ -23,7 +23,7 @@ struct BotThreadView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: ChatMetrics.rowSpacing) {
                     if model.timeline.hasOlder {
-                        ProgressView()
+                        DelayedProgressView()
                             .frame(maxWidth: .infinity)
                             .onAppear { model.loadOlder() }
                             .accessibilityIdentifier("threadLoadingOlder")
@@ -102,8 +102,10 @@ struct BotThreadView: View {
     @ViewBuilder
     private var stateOverlay: some View {
         switch model.state {
+        case .loading where model.timeline.messages.isEmpty:
+            DelayedProgressView().accessibilityIdentifier("threadLoading")
         case .loading:
-            ProgressView().accessibilityIdentifier("threadLoading")
+            EmptyView()
         case .failed:
             Text("This conversation isn't available.")
                 .hermesText(.chatStatus)

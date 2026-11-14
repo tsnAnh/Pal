@@ -20,7 +20,7 @@ struct BotEffortTests {
         bots.script("profiles.describe", described)
         bots.script("model.options", catalog(capability))
         bots.script("config.get", effort)
-        let model = BotModelsModel(client: BotModelClient(gateway: bots.gateway, profile: "atlas"))
+        let model = BotModelsModel(client: BotModelClient(gateway: bots.gateway, profile: "atlas"), profile: "atlas", surfaces: scratchSurfaces())
         await model.load()
         return model
     }
@@ -110,7 +110,7 @@ struct BotModelsOverviewTests {
             if params["profile"] == "nova" { throw GatewayTransportError.rpc(RPCError(code: 5000, message: "boom")) }
             return ["value": "high"]
         }
-        let model = BotModelsOverviewModel(client: BotModelsOverviewClient(gateway: bots.gateway))
+        let model = BotModelsOverviewModel(client: BotModelsOverviewClient(gateway: bots.gateway), surfaces: scratchSurfaces())
         await model.load()
         #expect(model.phase == .ready)
         let rows = Dictionary(uniqueKeysWithValues: model.rows.map { ($0.name, $0) })
@@ -129,7 +129,7 @@ struct BotModelsOverviewTests {
         bots.script("profiles.list") { _ in throw GatewayTransportError.rpc(RPCError(code: 5000, message: "down")) }
         bots.script("profiles.list", ["profiles": [["name": "atlas"]]])
         bots.script("config.get", ["value": "low"])
-        let model = BotModelsOverviewModel(client: BotModelsOverviewClient(gateway: bots.gateway))
+        let model = BotModelsOverviewModel(client: BotModelsOverviewClient(gateway: bots.gateway), surfaces: scratchSurfaces())
         await model.load()
         #expect(model.phase == .failed)
         await model.load()

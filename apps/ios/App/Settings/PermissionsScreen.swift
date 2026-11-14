@@ -1,4 +1,5 @@
 import PalDesign
+import PalProtocol
 import PalSettings
 import Observation
 import SwiftUI
@@ -10,15 +11,24 @@ final class PermissionsModel {
     private(set) var isBusy = false
     var actionFailure: String?
 
+    private let surfaces: SurfaceCache
+    private static let surfaceKey = SurfaceKey.screen("permissions")
+
+    init(surfaces: SurfaceCache) {
+        self.surfaces = surfaces
+        if let held = surfaces.remembered(PermissionsSummary.self, Self.surfaceKey) { state = .loaded(held) }
+    }
+
     func load(hub: SettingsHub) async {
         do {
             let summary = PermissionsSummary(try await hub.api.permissions())
             state = .loaded(summary)
+            surfaces.remember(summary, Self.surfaceKey)
             hub.updatePermissions(summary)
         } catch is CancellationError {
             return
         } catch {
-            state = .failed(SettingsFailure(error).message)
+            if state.value == nil { state = .failed(SettingsFailure(error).message) }
         }
     }
 
@@ -54,9 +64,15 @@ struct PermissionsScreen: View {
     let hub: SettingsHub
     let back: () -> Void
 
-    @State private var model = PermissionsModel()
+    @State private var model: PermissionsModel
     @State private var addingTo: PermissionList?
     @State private var removing: PermissionRuleEntry?
+
+    init(hub: SettingsHub, back: @escaping () -> Void) {
+        self.hub = hub
+        self.back = back
+        _model = State(initialValue: PermissionsModel(surfaces: hub.connection.surfaces))
+    }
 
     var body: some View {
         SettingsPage(title: "Permissions", identifier: "permissionsScreen", back: back) {
