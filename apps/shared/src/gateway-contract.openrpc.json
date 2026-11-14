@@ -21731,6 +21731,174 @@
         "title": "DeviceConnectorsSetParams",
         "type": "object"
       },
+      "DeviceMcpClosePayload": {
+        "additionalProperties": false,
+        "properties": {
+          "relay_id": {
+            "title": "Relay Id",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/DeviceMcpCloseReason"
+          }
+        },
+        "required": [
+          "relay_id",
+          "reason"
+        ],
+        "title": "DeviceMcpClosePayload",
+        "type": "object"
+      },
+      "DeviceMcpCloseReason": {
+        "enum": [
+          "client_closed",
+          "unregistered",
+          "timeout"
+        ],
+        "title": "DeviceMcpCloseReason",
+        "type": "string"
+      },
+      "DeviceMcpDeliverParams": {
+        "additionalProperties": false,
+        "properties": {
+          "relay_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Relay Id",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message"
+          }
+        },
+        "required": [
+          "relay_id",
+          "message"
+        ],
+        "title": "DeviceMcpDeliverParams",
+        "type": "object"
+      },
+      "DeviceMcpDeliverResult": {
+        "additionalProperties": false,
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "accepted"
+        ],
+        "title": "DeviceMcpDeliverResult",
+        "type": "object"
+      },
+      "DeviceMcpFailCode": {
+        "enum": [
+          "unreachable",
+          "auth_required",
+          "closed"
+        ],
+        "title": "DeviceMcpFailCode",
+        "type": "string"
+      },
+      "DeviceMcpFailParams": {
+        "additionalProperties": false,
+        "properties": {
+          "relay_id": {
+            "pattern": "^[A-Za-z0-9-]{8,64}$",
+            "title": "Relay Id",
+            "type": "string"
+          },
+          "code": {
+            "$ref": "#/components/schemas/DeviceMcpFailCode"
+          },
+          "message": {
+            "default": "",
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "relay_id",
+          "code"
+        ],
+        "title": "DeviceMcpFailParams",
+        "type": "object"
+      },
+      "DeviceMcpFailResult": {
+        "additionalProperties": false,
+        "properties": {
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recorded"
+        ],
+        "title": "DeviceMcpFailResult",
+        "type": "object"
+      },
+      "DeviceMcpFramePayload": {
+        "additionalProperties": false,
+        "properties": {
+          "relay_id": {
+            "title": "Relay Id",
+            "type": "string"
+          },
+          "server": {
+            "$ref": "#/components/schemas/DeviceMcpServer"
+          },
+          "message": {
+            "title": "Message"
+          }
+        },
+        "required": [
+          "relay_id",
+          "server",
+          "message"
+        ],
+        "title": "DeviceMcpFramePayload",
+        "type": "object"
+      },
+      "DeviceMcpRegisterParams": {
+        "additionalProperties": false,
+        "properties": {
+          "server": {
+            "$ref": "#/components/schemas/DeviceMcpServer"
+          }
+        },
+        "required": [
+          "server"
+        ],
+        "title": "DeviceMcpRegisterParams",
+        "type": "object"
+      },
+      "DeviceMcpRegisterResult": {
+        "additionalProperties": false,
+        "properties": {
+          "registered": {
+            "title": "Registered",
+            "type": "boolean"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "registered",
+          "name"
+        ],
+        "title": "DeviceMcpRegisterResult",
+        "type": "object"
+      },
+      "DeviceMcpServer": {
+        "enum": [
+          "t3code"
+        ],
+        "title": "DeviceMcpServer",
+        "type": "string"
+      },
       "DeviceOsPermission": {
         "enum": [
           "granted",
@@ -61657,6 +61825,78 @@
       }
     },
     {
+      "name": "device.mcp.deliver",
+      "summary": "One server to client JSON-RPC message of the relay, from the connection that received its device.mcp.frame events. accepted is false for an unknown, closed or foreign relay. A message over 4 MiB fails the relay and is never truncated.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DeviceMcpDeliverParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DeviceMcpDeliverResult"
+        }
+      }
+    },
+    {
+      "name": "device.mcp.fail",
+      "summary": "The relay cannot continue: unreachable (the server is not running), auth_required (the server rejected the saved sign-in or none is stored) or closed. The bot ends the relay and reconnects; auth_required also raises the sign-in prompt. recorded is false for an unknown or foreign relay.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DeviceMcpFailParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DeviceMcpFailResult"
+        }
+      }
+    },
+    {
+      "name": "device.mcp.register",
+      "summary": "Offer a server on the calling Mac to the bot as ordinary MCP tools. Only a Mac that declared device tools with client.hello may register, and only a name of the closed server set. Repeating it is idempotent; registering from another Mac moves the server there.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DeviceMcpRegisterParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DeviceMcpRegisterResult"
+        }
+      }
+    },
+    {
+      "name": "device.mcp.unregister",
+      "summary": "Withdraw a server this Mac registered: its tools leave the bot and its open relays end with reason unregistered. registered is false in the result.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DeviceMcpRegisterParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DeviceMcpRegisterResult"
+        }
+      }
+    },
+    {
       "name": "device.tool.respond",
       "summary": "Answer a device.tool.request from the connection that received it: ok true carries result (an object shaped for the action), ok false carries error. recorded is false for an unknown, expired, already answered or foreign request.",
       "params": [
@@ -63951,6 +64191,30 @@
           "name": "payload",
           "schema": {
             "$ref": "#/components/schemas/ChangeSignalPayload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "device.mcp.close",
+      "summary": "The MCP session relay_id is over (the bot closed it, the server was unregistered, or the bot gave up waiting). Drop its state; later deliver and fail calls for it are ignored.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "$ref": "#/components/schemas/DeviceMcpClosePayload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "device.mcp.frame",
+      "summary": "One client to server JSON-RPC message of an MCP session the bot holds with a server on this Mac (relay_id names the session). Forward message to that server and answer each server to client message with device.mcp.deliver; report a server that cannot be reached with device.mcp.fail.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "$ref": "#/components/schemas/DeviceMcpFramePayload"
           }
         }
       ]

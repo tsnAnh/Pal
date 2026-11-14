@@ -64,10 +64,10 @@ class MCPServerRunMixin:
         below the server's session TTL) so idle TCP/session state never goes stale (#17003);
         stdio does so only when explicitly configured. A keepalive failure triggers a reconnect.
         """
-        is_http = self._is_http()
+        is_remote = self._transport_kind() != "stdio"
         configured = self._config.get("keepalive_interval")
         keepalive_interval = None
-        if is_http or configured is not None:
+        if is_remote or configured is not None:
             keepalive_interval = max(
                 _core._MIN_KEEPALIVE_INTERVAL,
                 float(_core._DEFAULT_KEEPALIVE_INTERVAL if configured is None else configured))
@@ -91,7 +91,7 @@ class MCPServerRunMixin:
                 if recycle_deadline is not None:
                     recycle_timeout = max(0.0, recycle_deadline - time.monotonic())
                     timeout = recycle_timeout if timeout is None else min(timeout, recycle_timeout)
-                elif not is_http and self._rpc_lock.locked():
+                elif not is_remote and self._rpc_lock.locked():
                     # Recycle deadlines are intentionally hidden while an RPC is active. Without
                     # a default stdio keepalive timeout, lock release must wake this loop so the
                     # now-visible deadline is evaluated instead of waiting forever. (For a stdio
@@ -356,7 +356,7 @@ class MCPServerRunMixin:
                             reset_secret_scope(scope_token)
                 rebuild = True
                 self._auth_park = None
-                run_transport = self._run_http if self._is_http() else self._run_stdio
+                run_transport = self._transport_runner()
                 self._resolved_identity = None  # the transport publishes the inputs it connects with
                 if not await self._on_clean_return(await run_transport(config), budget):
                     break
@@ -533,11 +533,18 @@ class MCPServerRunMixin:
         rewrites them, a discovery pass has nothing new to try: every nudge replayed the same rejected
         refresh token, so a backend building agents (each one re-runs discovery while no server is
         connected) hit the authorization server once per session, enough for a rate-limit ban."""
-        if self._auth_type == "oauth" and _errors._is_auth_error(root):
-            from hermes_constants import get_hermes_home
+        if not _errors._is_auth_error(root):
+            return
+        from hermes_constants import get_hermes_home
+        if self._is_device():
+            from tools.mcp_tool_device import DeviceAuth
+            storage = DeviceAuth(get_hermes_home(), self.name)
+        elif self._auth_type == "oauth":
             from tools.mcp_oauth import HermesTokenStorage
             storage = HermesTokenStorage(self.name, hermes_home=get_hermes_home())
-            self._auth_park = (storage, storage.credential_stamp())
+        else:
+            return
+        self._auth_park = (storage, storage.credential_stamp())
 
     async def start(self, config: dict):
         """Create the background Task and wait until ready (or failed)."""

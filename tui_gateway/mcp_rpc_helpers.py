@@ -39,6 +39,8 @@ def summarize_server(name: str, cfg: dict, plugin: str | None = None) -> dict[st
     cfg = cfg if isinstance(cfg, dict) else {}
     if cfg.get("url"):
         transport = "sse" if cfg.get("transport") == "sse" else "http"
+    elif cfg.get("transport") == "device":
+        transport = "device"
     else:
         transport = "stdio" if cfg.get("command") else "unknown"
     auth = cfg.get("auth")

@@ -335,6 +335,9 @@ def _retry_once(server_name: str, retry_call, op_description: str, what: str):
 def _reauth_pending_error(server_name: str) -> Optional[str]:
     """The typed sign-in-again error when this server's saved sign-in was rejected and nothing new has been
     handed over since; None otherwise. A stat of one marker file, so every call can afford it."""
+    from tools.mcp_tool_device import auth_required_error
+    if (device_error := auth_required_error(server_name)) is not None:
+        return device_error
     from tools.mcp_oauth import pending_reauth_reason
     if pending_reauth_reason(server_name) is None:
         return None

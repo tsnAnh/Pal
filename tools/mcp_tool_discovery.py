@@ -353,7 +353,8 @@ async def _discover_and_register_server(name: str, config: dict) -> list[str]:
     registered_names = _registration._register_server_tools(name, server, config)
     server._registered_tool_names = list(registered_names)
     logger.info("MCP server '%s' (%s): registered %d tool(s): %s", name,
-                "HTTP" if "url" in config else "stdio", len(registered_names), ", ".join(registered_names))
+                "HTTP" if "url" in config else _transport_label(config), len(registered_names),
+                ", ".join(registered_names))
     return registered_names
 
 
@@ -821,6 +822,13 @@ def is_mcp_tool_parallel_safe(tool_name: str) -> bool:
         return bool(server_name and _server_key(server_name) in _core._parallel_safe_servers)
 
 
+def _transport_label(cfg: dict) -> str:
+    from tools.mcp_tool_device import DEVICE_TRANSPORT, is_device_config
+    if "url" in cfg:
+        return cfg.get("transport", "http")
+    return DEVICE_TRANSPORT if is_device_config(cfg) else "stdio"
+
+
 def get_mcp_status(configured: Optional[dict[str, dict]] = None, *, include_runtime: bool = True) -> list[dict]:
     """Per-server status dicts for banner/TUI: name, transport, tools, connected, disabled,
     status (connected / disabled / connecting / failed / lazy / configured) and error for failed.
@@ -867,7 +875,7 @@ def get_mcp_status(configured: Optional[dict[str, dict]] = None, *, include_runt
         status = ("connected" if live else "disabled" if not enabled else "connecting" if name in connecting
                   else "failed" if name in connect_errors or parked else "lazy" if name in lazy_tools
                   else "configured")
-        entry = {"name": name, "transport": cfg.get("transport", "http") if "url" in cfg else "stdio",
+        entry = {"name": name, "transport": _transport_label(cfg),
                  "tools": 0, "connected": False, "disabled": status == "disabled", "status": status}
         if live:
             entry["connected"] = True

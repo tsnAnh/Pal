@@ -5,7 +5,7 @@
    "undecided": 343
   },
   "rpc": {
-   "authority": 191,
+   "authority": 195,
    "keep-host-wide": 1,
    "undecided": 201
   },
@@ -455,6 +455,10 @@
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "cron.submit", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: legacy server.dispatch", "decision": "authority", "handler": "delegation.pause", "kind": "rpc", "ref": ""},
   {"current_path": "legacy fallback; standalone: legacy server.dispatch", "decision": "undecided", "handler": "delegation.status", "kind": "rpc", "ref": "D3"},
+  {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "device.mcp.deliver", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "device.mcp.fail", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "device.mcp.register", "kind": "rpc", "ref": ""},
+  {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "device.mcp.unregister", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "device.tool.respond", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "device_connectors.list", "kind": "rpc", "ref": ""},
   {"current_path": "authority; standalone: unknown method", "decision": "authority", "handler": "device_connectors.set", "kind": "rpc", "ref": ""},
