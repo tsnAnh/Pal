@@ -15,7 +15,6 @@ public enum ChatPhase: Sendable, Equatable {
 
 public enum ChatUpdate: Sendable {
     case phase(ChatPhase)
-    case transcript(Transcript)
     case botThreadLinks([BotThreadLink])
 }
 
@@ -72,9 +71,9 @@ public struct ChatStartOutcome: Sendable, Equatable {
     public var introAdmission: AdmissionStatus?
 }
 
-public struct ChatState: Sendable {
-    public let phase: ChatPhase
-    public let transcript: Transcript
+struct ChatState: Sendable {
+    let phase: ChatPhase
+    let transcript: Transcript
 }
 
 public actor ChatSession: OutboxSubmitter {
@@ -82,14 +81,11 @@ public actor ChatSession: OutboxSubmitter {
     public nonisolated let updates: AsyncStream<ChatUpdate>
 
     public private(set) var phase: ChatPhase = .detached
-    public private(set) var transcript = Transcript()
+    private(set) var transcript = Transcript()
     public private(set) var terminalFailure: ChatTerminalFailure?
     public private(set) var botThreadLinks: [BotThreadLink] = []
     public nonisolated let terminalFailures: AsyncStream<ChatTerminalFailure>
     public nonisolated let timelineSnapshots: AsyncStream<TimelineSnapshot>
-
-    static let historyWindow = 60
-    static let olderPageSize = 60
 
     private static let botThreadsChangedEvent = "bot_threads.changed"
     private static let messageCompleteEvent = "message.complete"
@@ -109,7 +105,6 @@ public actor ChatSession: OutboxSubmitter {
     private var linksRefresh: Task<Void, Never>?
     private var linksStale = false
     private var waiters: [UUID: StateWaiter] = [:]
-    private var loadingOlder = false
     private let paging: PagingPolicy
     private let timelineContinuation: AsyncStream<TimelineSnapshot>.Continuation
     private var timeline = Timeline()
@@ -174,11 +169,7 @@ public actor ChatSession: OutboxSubmitter {
         attaching = connection
         do {
             let capable = api.supportsTimeline
-            resolution = try await resolver.open(
-                api,
-                messageLimit: capable ? Self.historyWindow : nil,
-                timelineLimit: capable ? paging.firstPage : nil
-            )
+            resolution = try await resolver.open(api, timelineLimit: capable ? paging.firstPage : nil)
             timelineCapable = capable
             try await adoptTimeline(resolution.snapshot, page: resolution.timeline, api: api, forced: false)
         } catch {
@@ -200,7 +191,7 @@ public actor ChatSession: OutboxSubmitter {
         _ = transcript.reconcile(with: resolution.snapshot)
         diagnostics.info("chat", "attached; \(transcript.items.count) items")
         goLive(connection)
-        guard let intro, resolution.created || resolution.snapshot.messages.isEmpty else {
+        guard let intro, resolution.created || (resolution.timeline?.entries ?? []).isEmpty && resolution.snapshot.messages.isEmpty else {
             return ChatStartOutcome(created: resolution.created, introAdmission: nil)
         }
         do {
@@ -299,23 +290,13 @@ public actor ChatSession: OutboxSubmitter {
         return try await api.steer(sessionID: sessionID, text: text, executionGeneration: transcript.executionGeneration)
     }
 
-    public var state: ChatState { ChatState(phase: phase, transcript: transcript) }
+    var state: ChatState { ChatState(phase: phase, transcript: transcript) }
 
-    @discardableResult
-    public func loadOlder() async throws -> Bool {
-        guard !loadingOlder, !closing, transcript.hasOlder, let api, let sessionID = transcript.sessionID,
-              let before = transcript.oldestRowID
-        else { return false }
-        loadingOlder = true
-        defer { loadingOlder = false }
-        let page = try await api.historyPage(sessionID: sessionID, beforeRowID: before, limit: Self.olderPageSize)
-        guard !closing, transcript.sessionID == sessionID, transcript.oldestRowID == before else { return false }
-        transcript.prependOlder(page)
-        continuation.yield(.transcript(transcript))
-        return true
+    public func settledPhase() async -> ChatPhase? {
+        await awaitState { $0.phase != .attaching }?.phase
     }
 
-    public func awaitState(where isSatisfied: @escaping @Sendable (ChatState) -> Bool) async -> ChatState? {
+    func awaitState(where isSatisfied: @escaping @Sendable (ChatState) -> Bool) async -> ChatState? {
         if isSatisfied(state) { return state }
         if closing { return nil }
         let id = UUID()
@@ -380,7 +361,6 @@ public actor ChatSession: OutboxSubmitter {
             let echoed = text.isEmpty ? files.map(\.name).joined(separator: ", ") : text
             transcript.echoUser(submissionID: submissionID, text: echoed)
             timeline.echoUser(submissionID: submissionID, text: echoed)
-            continuation.yield(.transcript(transcript))
             publishTimeline()
             notifyWaiters()
         }
@@ -398,7 +378,6 @@ public actor ChatSession: OutboxSubmitter {
             if echo, let refusal = RefusalReason(error), refusal.isPermanent {
                 transcript.markFailed(submissionID: submissionID, reason: refusal.reason)
                 timeline.markFailed(submissionID: submissionID, reason: refusal.reason)
-                continuation.yield(.transcript(transcript))
                 publishTimeline()
                 notifyWaiters()
             }
@@ -560,11 +539,7 @@ public actor ChatSession: OutboxSubmitter {
     private func reattach(_ api: SessionAPI) async throws {
         timelineCapable = api.supportsTimeline
         guard let row = try await resolver.lookup(api) else {
-            let resolution = try await resolver.open(
-                api,
-                messageLimit: timelineCapable ? Self.historyWindow : nil,
-                timelineLimit: timelineCapable ? paging.firstPage : nil
-            )
+            let resolution = try await resolver.open(api, timelineLimit: timelineCapable ? paging.firstPage : nil)
             transcript.requestResync()
             _ = transcript.reconcile(with: resolution.snapshot)
             try await adoptTimeline(resolution.snapshot, page: resolution.timeline, api: api, forced: true)
@@ -599,11 +574,7 @@ public actor ChatSession: OutboxSubmitter {
     }
 
     private func resumeForTimeline(_ api: SessionAPI, _ sessionID: String) async throws -> TimelineResume {
-        try await api.resumeTimeline(
-            sessionID: sessionID,
-            messageLimit: timelineCapable ? Self.historyWindow : nil,
-            timelineLimit: paging.firstPage
-        )
+        try await api.resumeTimeline(sessionID: sessionID, timelineLimit: paging.firstPage)
     }
 
     private func adoptTimeline(_ snapshot: SessionSnapshot, page: TimelinePageWire?, api: SessionAPI, forced: Bool) async throws {
@@ -759,7 +730,9 @@ public actor ChatSession: OutboxSubmitter {
             isRunning: timeline.live.isRunning,
             pendingPrompts: timeline.live.pendingPrompts,
             lastError: timeline.live.lastError,
-            executionGeneration: timeline.live.executionGeneration
+            executionGeneration: timeline.live.executionGeneration,
+            runningToolName: timeline.live.runningToolName,
+            streamingText: timeline.live.streamingText
         )
     }
 
@@ -779,7 +752,6 @@ public actor ChatSession: OutboxSubmitter {
             phase = .live(lastSequence: cursor.lastSequence, replayEpoch: cursor.replayEpoch)
             continuation.yield(.phase(phase))
         }
-        continuation.yield(.transcript(transcript))
         publishTimeline()
         notifyWaiters()
     }

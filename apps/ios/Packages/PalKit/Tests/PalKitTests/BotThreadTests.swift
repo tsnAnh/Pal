@@ -87,38 +87,6 @@ struct BotThreadTests {
         #expect(plain.messageUID == nil)
     }
 
-    @Test func foldingReplacesCoveredRowsWithOneRowAtTheAnchor() {
-        let items = [
-            item("a", uid: "u0"), item("call", uid: "b790"), item("ack", uid: "ff9a"), item("b", uid: "u9"),
-        ]
-        let folded = BotThreadFolding.fold(items, links: [link(anchor: "ff9a", covered: ["b790", "ff9a"], count: 2)])
-        #expect(folded.map(\.id) == ["a", "bot-thread:ff9a", "b"])
-        guard case .botThread(let placed) = folded[1].content else { Issue.record("not a link row"); return }
-        #expect(placed.count == 2)
-        #expect(folded[1].timestamp == items[2].timestamp)
-    }
-
-    @Test func foldingKeepsRowsWithoutUidsAndWithoutLinks() {
-        let items = [item("a", uid: nil), item("b", uid: "u1")]
-        #expect(BotThreadFolding.fold(items, links: []) == items)
-        #expect(BotThreadFolding.fold(items, links: [link(anchor: "zzz", covered: ["zzz"])]) == items)
-    }
-
-    @Test func foldingFallsBackToTheFirstCoveredRowWhenTheAnchorIsAbsent() {
-        let items = [item("a", uid: "x1"), item("b", uid: "x2"), item("c", uid: "u9")]
-        let folded = BotThreadFolding.fold(items, links: [link(anchor: "gone", covered: ["x1", "x2"], count: 2)])
-        #expect(folded.map(\.id) == ["bot-thread:gone", "c"])
-    }
-
-    @Test func foldingHandlesSeveralLinksAndNeverDuplicatesARow() {
-        let items = [item("a", uid: "a1"), item("h", uid: "h1"), item("b", uid: "b1"), item("b2", uid: "b2")]
-        let folded = BotThreadFolding.fold(items, links: [
-            link(anchor: "a1", covered: ["a1"]),
-            link(anchor: "b1", covered: ["b1", "b2"], kind: .messageFrom),
-        ])
-        #expect(folded.map(\.id) == ["bot-thread:a1", "h", "bot-thread:b1"])
-    }
-
     @Test func messageFromLinksCountAsIncomingForTheUnreadDivider() {
         let items = [
             item("old", uid: "o", offset: 0),

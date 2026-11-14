@@ -26,7 +26,7 @@ final class TimelineScript: Sendable {
         guard capable else { return nil }
         return [
             "instance_id": "i", "profile_id": "bot", "authority_epoch": 1,
-            "capabilities": [.string(RuntimeDescription.historyPageCapability), .string(TimelineWire.capability)],
+            "capabilities": [.string(TimelineWire.capability)],
         ]
     }
 

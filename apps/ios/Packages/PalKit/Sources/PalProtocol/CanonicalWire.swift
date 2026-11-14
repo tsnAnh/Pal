@@ -203,7 +203,6 @@ public struct SessionSnapshot: Codable, Sendable, Hashable {
     public var sessionID: String
     public var storedSessionID: String?
     public var messages: [WireMessage]
-    public var olderMessages: Int
     public var running: Bool
     public var authorityEpoch: Int?
     public var replayEpoch: String
@@ -218,7 +217,6 @@ public struct SessionSnapshot: Codable, Sendable, Hashable {
         sessionID = try container.decode(String.self, forKey: .sessionID)
         storedSessionID = try container.decodeIfPresent(String.self, forKey: .storedSessionID)
         messages = try container.decodeIfPresent([WireMessage].self, forKey: .messages) ?? []
-        olderMessages = try container.decodeIfPresent(Int.self, forKey: .olderMessages) ?? 0
         running = try container.decodeIfPresent(Bool.self, forKey: .running) ?? false
         authorityEpoch = try container.decodeIfPresent(Int.self, forKey: .authorityEpoch)
         replayEpoch = try container.decode(String.self, forKey: .replayEpoch)
@@ -233,7 +231,6 @@ public struct SessionSnapshot: Codable, Sendable, Hashable {
         case sessionID = "session_id"
         case storedSessionID = "stored_session_id"
         case messages
-        case olderMessages = "older_messages"
         case running
         case authorityEpoch = "authority_epoch"
         case replayEpoch = "replay_epoch"
@@ -245,20 +242,6 @@ public struct SessionSnapshot: Codable, Sendable, Hashable {
     }
 }
 
-public struct HistoryPage: Codable, Sendable, Hashable {
-    public var messages: [WireMessage]
-    public var olderMessages: Int
-
-    public init(messages: [WireMessage], olderMessages: Int) {
-        self.messages = messages
-        self.olderMessages = olderMessages
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case messages
-        case olderMessages = "older_messages"
-    }
-}
 
 public struct SessionListRow: Codable, Sendable, Hashable {
     public var sessionID: String

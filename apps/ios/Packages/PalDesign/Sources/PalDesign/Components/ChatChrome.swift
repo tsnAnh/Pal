@@ -156,25 +156,42 @@ public struct GlassCircleLabel: View {
 }
 
 public struct ScrollToBottomButton: View {
+    public let newCount: Int
     public let action: () -> Void
 
     @Environment(\.hermesTheme) private var theme
 
-    public init(action: @escaping () -> Void) {
+    public init(newCount: Int = 0, action: @escaping () -> Void) {
+        self.newCount = newCount
         self.action = action
     }
 
     public var body: some View {
         Button(action: action) {
-            Image(systemName: "chevron.down")
-                .font(.system(size: 14, weight: .semibold))
+            if newCount > 0 {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text("\(newCount) new")
+                        .font(.system(size: 14, weight: .semibold))
+                        .monospacedDigit()
+                }
                 .foregroundStyle(Color(theme.palette.textPrimary))
-                .frame(width: ChatMetrics.scrollButtonDiameter, height: ChatMetrics.scrollButtonDiameter)
-                .palGlass(Circle())
-                .contentShape(Circle())
+                .padding(.horizontal, 14)
+                .frame(height: ChatMetrics.scrollButtonDiameter)
+                .palGlass(Capsule())
+                .contentShape(Capsule())
+            } else {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color(theme.palette.textPrimary))
+                    .frame(width: ChatMetrics.scrollButtonDiameter, height: ChatMetrics.scrollButtonDiameter)
+                    .palGlass(Circle())
+                    .contentShape(Circle())
+            }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text("Scroll to latest"))
+        .accessibilityLabel(newCount > 0 ? Text("\(newCount) new messages. Scroll to latest") : Text("Scroll to latest"))
         .accessibilityIdentifier("scrollToBottomButton")
     }
 }

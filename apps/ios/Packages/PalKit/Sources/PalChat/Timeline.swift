@@ -33,6 +33,8 @@ public struct TimelineSnapshot: Sendable, Equatable {
     public var pendingPrompts: [PendingPrompt]
     public var lastError: String?
     public var executionGeneration: Int
+    public var runningToolName: String?
+    public var streamingText: String
 }
 
 enum OlderEdge: Sendable, Equatable {
@@ -107,7 +109,6 @@ struct Timeline: Sendable {
     mutating func adoptLive(_ snapshot: SessionSnapshot) {
         var stripped = snapshot
         stripped.messages = []
-        stripped.olderMessages = 0
         _ = live.reconcile(with: stripped)
         settleOverlay()
     }

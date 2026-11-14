@@ -8,9 +8,8 @@ extension SessionAPI {
         RuntimeDescription.supports(TimelineWire.capability, advertised: connection.negotiatedRuntime)
     }
 
-    public func resumeTimeline(sessionID: String, messageLimit: Int?, timelineLimit: Int) async throws -> TimelineResume {
+    public func resumeTimeline(sessionID: String, timelineLimit: Int) async throws -> TimelineResume {
         var params: [String: JSONValue] = ["session_id": .string(sessionID)]
-        if let messageLimit, supportsHistoryPaging { params["message_limit"] = .int(messageLimit) }
         if supportsTimeline {
             params[TimelineWire.resumeLimitParam] = .int(timelineLimit)
             params["omit_messages"] = .bool(true)

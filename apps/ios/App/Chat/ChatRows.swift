@@ -5,7 +5,6 @@ import SwiftUI
 
 struct ChatRowView: View {
     let row: ChatRow
-    var previous: ChatRow?
     let model: ChatModel
     let openThread: (BotThreadLink) -> Void
 
@@ -15,9 +14,11 @@ struct ChatRowView: View {
     private var isCurrentMatch: Bool { model.currentFindRowID == row.id }
 
     private var leadingGap: CGFloat {
-        guard let previous, row.separator == nil, !row.showsUnreadDivider else { return 0 }
-        guard let sender = row.sender, sender == previous.sender else { return ChatMetrics.senderSwitchGap }
-        return ChatMetrics.sameSenderGap
+        switch row.gap {
+        case .none: 0
+        case .sameSender: ChatMetrics.sameSenderGap
+        case .senderSwitch: ChatMetrics.senderSwitchGap
+        }
     }
 
     var body: some View {
@@ -66,12 +67,10 @@ struct ChatRowView: View {
             }
             .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
             .environment(\.chatImageLoader, imageLoader)
-        case .assistant(let text):
-            AssistantBubble(text: text, images: row.images, highlight: findQuery, isCurrentMatch: isCurrentMatch)
-                .environment(\.messageActions, messageActions(for: text))
+        case .assistant(let parsed):
+            AssistantBubble(text: parsed.source, document: parsed.document, images: row.images, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+                .environment(\.messageActions, messageActions(for: parsed.source))
                 .environment(\.chatImageLoader, imageLoader)
-        case .working(let status):
-            ChatWorkingRow(status: status, accent: model.chatAccent)
         case .clarifyAnswered(let question, let answer):
             ClarifyAnsweredCard(question: question, answer: answer)
         case .clarify(let prompt):
@@ -91,6 +90,7 @@ struct ChatRowView: View {
 
 struct AssistantBubble: View {
     let text: String
+    var document: MarkdownDocument?
     var images: [ImageReference] = []
     let highlight: String
     let isCurrentMatch: Bool
@@ -101,7 +101,7 @@ struct AssistantBubble: View {
             if !images.isEmpty { ChatImageGrid(images: images) }
             if !text.isEmpty {
                 ChatBubble(style: BubblePalette.agentBubble) {
-                    MarkdownView(document: MarkdownDocument(parsing: text, isStreaming: isStreaming), highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+                    MarkdownView(document: document ?? MarkdownDocument(parsing: text, isStreaming: isStreaming), highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
                         .bubbleTextSelection()
                 }
                 .bubbleAccessibility(text: text, identifier: "assistantBubble")

@@ -1,6 +1,6 @@
 import Foundation
 import PalAuth
-import PalChat
+@testable import PalChat
 import PalClient
 import PalDiagnostics
 import PalProtocol

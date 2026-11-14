@@ -14,7 +14,7 @@ public struct BotChatHiddenTurn: Sendable {
         let api = SessionAPI(connection: connection, profile: profile)
         do {
             guard let row = try await resolver.lookup(api) else { throw ChatError.noBotChat }
-            let snapshot = try await api.resume(sessionID: BotChatResolver.target(of: row), messageLimit: 1)
+            let snapshot = try await api.resume(sessionID: BotChatResolver.target(of: row), omitMessages: true)
             _ = try await api.submit(
                 sessionID: snapshot.sessionID,
                 text: text,
