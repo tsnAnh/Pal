@@ -342,8 +342,6 @@ struct ScriptedChatTests {
         (PalClientError.notSignedIn as any Error, ChatTerminalFailure.notSignedIn),
         (RESTError.unauthorized as any Error, ChatTerminalFailure.sessionExpired),
         (GatewayTransportError.closed(.forbidden) as any Error, ChatTerminalFailure.accessForbidden),
-        (GatewayTransportError.handshakeRejected(status: 401) as any Error, ChatTerminalFailure.sessionExpired),
-        (GatewayTransportError.handshakeRejected(status: 403) as any Error, ChatTerminalFailure.accessForbidden),
     ])
     func nonRecoverableErrorsStopReconnecting(error: any Error, expected: ChatTerminalFailure) async throws {
         let script = BotScript()
@@ -379,6 +377,25 @@ struct ScriptedChatTests {
         try await waitUntil("live again", timeout: .seconds(10)) {
             guard case .live = await chat.phase else { return false }
             return connector.attempts == 5
+        }
+        #expect(await chat.terminalFailure == nil)
+        await chat.close()
+    }
+
+    @Test(arguments: [401, 403])
+    func aHandshakeRefusedWhileTheGatewayRestartsKeepsReconnecting(status: Int) async throws {
+        let script = BotScript()
+        let gateway = try await FakeGateway.start(script.handle)
+        defer { gateway.stop() }
+        let connector = ScriptedConnector(url: gateway.url) { index in
+            (1...2).contains(index) ? GatewayTransportError.handshakeRejected(status: status) : nil
+        }
+        let chat = session(connector)
+        try await chat.start()
+        gateway.dropAll()
+        try await waitUntil("live again after the refused handshakes", timeout: .seconds(10)) {
+            guard case .live = await chat.phase else { return false }
+            return connector.attempts == 4
         }
         #expect(await chat.terminalFailure == nil)
         await chat.close()
