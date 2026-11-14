@@ -55,6 +55,8 @@ class Row:
     tool_call_id: str | None = None
     tool_name: str | None = None
     kind: str = "text"
+    display_kind: str | None = None
+    reasoning: str | None = None
 
 
 @dataclass
