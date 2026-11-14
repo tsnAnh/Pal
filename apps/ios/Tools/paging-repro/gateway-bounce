@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  echo "usage: gateway-bounce <ctl-dir> <verify-ios-state-dir> [down-seconds]" >&2
+  echo "  waits for <ctl-dir>/bounce-request, stops the sandbox gateway, waits down-seconds (default 8), restarts it on the same home and port," >&2
+  echo "  writes <ctl-dir>/bounce-ack, then waits for <ctl-dir>/bounce-finish and hands the sandbox back to its e2e-gateway wrapper" >&2
+  echo "  the wrapper is frozen while the gateway is down because it deletes the sandbox home the moment its gateway exits" >&2
+  exit 2
+}
+
+[ "$#" -ge 2 ] || usage
+CTL="$1"
+STATE="$2"
+DOWN="${3:-8}"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
+PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
+
+set -a
+. "$STATE/backend.env"
+. "$STATE/run.env"
+set +a
+case "$HERMES_IOS_E2E_HOME" in /tmp/hermes-ios-e2e.*) ;; *) echo "refusing: not an e2e sandbox home" >&2; exit 1 ;; esac
+PORT="${HERMES_IOS_TEST_BASE_URL##*:}"
+WRAPPER="$BACKEND_PID"
+mkdir -p "$CTL"
+rm -f "$CTL/bounce-request" "$CTL/bounce-ack" "$CTL/bounce-finish"
+
+listener() { lsof -ti "tcp:$PORT" -sTCP:LISTEN 2>/dev/null | head -1 || true; }
+stamp() { echo "$(date +%s.%N) $*" | tee -a "$CTL/bounce.log"; }
+
+bounce() {
+  local pid
+  pid="$(listener)"
+  [ -n "$pid" ] || { echo "no gateway listening on $PORT" >&2; return 1; }
+  kill -STOP "$WRAPPER"
+  stamp "stopping gateway pid $pid (wrapper $WRAPPER frozen)"
+  kill "$pid"
+  for _ in $(seq 80); do [ -z "$(listener)" ] && break; sleep 0.25; done
+  sleep "$DOWN"
+  stamp "restarting gateway"
+  ( cd "$REPO" && HERMES_HOME="$HERMES_IOS_E2E_HOME" exec "$PYTHON" -m hermes_cli.main gateway run >>"$CTL/gateway-restart.log" 2>&1 ) &
+  local result=timeout
+  for _ in $(seq 240); do
+    if curl -fs "$HERMES_IOS_TEST_BASE_URL/api/auth/providers" >/dev/null 2>&1; then result=ok; break; fi
+    sleep 1
+  done
+  stamp "gateway answering: $result"
+  echo "$result" >"$CTL/bounce-ack"
+}
+
+while [ ! -f "$CTL/bounce-finish" ]; do
+  if [ -f "$CTL/bounce-request" ]; then
+    rm -f "$CTL/bounce-request" "$CTL/bounce-ack"
+    bounce
+  fi
+  sleep 0.2
+done
+pid="$(listener)"
+[ -z "$pid" ] || kill "$pid" 2>/dev/null || true
+for _ in $(seq 40); do [ -z "$(listener)" ] && break; sleep 0.5; done
+kill -CONT "$WRAPPER" 2>/dev/null || true
+stamp "finished"
