@@ -267,13 +267,18 @@ struct MarkdownTableTests {
         #expect(tables("| a | b |\n|---|---|\n| 1 | tw", streaming: true)[0].rows.count == 1)
     }
 
-    @Test func columnWidthsAreClamped() {
+    @Test func columnWidthsFitTheMeasuredTextAndAreClamped() {
         let table = MarkdownTable(
-            alignments: [.leading, .leading],
-            header: [AttributedString("a"), AttributedString(String(repeating: "x", count: 200))],
+            alignments: [.leading, .leading, .leading],
+            header: [AttributedString("a"), AttributedString("Share"), AttributedString(String(repeating: "x", count: 200))],
             rows: []
         )
-        let widths = table.columnWidths(characterWidth: 8, cellPadding: 10, minimum: 50, maximum: 240)
-        #expect(widths == [50, 240])
+        let widths = table.columnWidths(measured: [12, 47.3, 1800], cellPadding: 10, minimum: 50, maximum: 240)
+        #expect(widths == [50, 68, 240])
+    }
+
+    @Test func anUnmeasuredColumnTakesTheMinimum() {
+        let table = MarkdownTable(alignments: [.leading, .leading], header: [AttributedString("a"), AttributedString("b")], rows: [])
+        #expect(table.columnWidths(measured: [80], cellPadding: 10, minimum: 50, maximum: 240) == [100, 50])
     }
 }

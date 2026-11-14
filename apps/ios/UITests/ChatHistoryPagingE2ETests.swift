@@ -288,4 +288,58 @@ final class ChatHistoryPagingE2ETests: BotProfileTestCase {
         XCTAssertLessThanOrEqual(drift, Self.driftTolerance, "the marked row did not move through the outage and the reconnect (worst drift in points)")
         XCTAssertEqual(reach, .found, "the oldest message loaded before the outage is still in the list without paging again")
     }
+
+    func test6FindRevealsAnOlderMatchAndTheAppGoesIdle() throws {
+        let profile = try manifest.profile("bot-beta")
+        let (app, _, _) = try openLongChat("bot-beta")
+        let target = profile.visible[profile.visible.count - 60]
+        app.buttons["chatMenuButton"].tap()
+        waitFor(app.buttons["chatMenuFind"], timeout: 10, "overflow menu")
+        app.buttons["chatMenuFind"].tap()
+        let field = app.textFields["findField"]
+        waitFor(field, timeout: 10, "find field")
+        field.typeText(target)
+        let match = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", target)).firstMatch
+        waitFor(match, timeout: 60, "the match is loaded")
+        let revealDeadline = Date().addingTimeInterval(10)
+        while !(match.exists && match.isHittable), Date() < revealDeadline { Thread.sleep(forTimeInterval: 0.25) }
+        XCTAssertTrue(match.isHittable, "the current match is scrolled into view")
+        shot(app, "find-revealed")
+        let idleStart = Date()
+        let done = app.buttons["findDone"]
+        done.tap()
+        let doneSeconds = Date().timeIntervalSince(idleStart)
+        waitFor(app.descendants(matching: .any)["composerField"], timeout: 10, "composer after Done")
+        let composerStart = Date()
+        app.descendants(matching: .any)["composerField"].tap()
+        let composerSeconds = Date().timeIntervalSince(composerStart)
+        record(["target": target, "done_tap_seconds": PagingMeasurements.seconds(doneSeconds), "composer_tap_seconds": PagingMeasurements.seconds(composerSeconds)])
+        XCTAssertLessThan(doneSeconds, 3, "the app is idle soon after the reveal")
+        XCTAssertLessThan(composerSeconds, 3, "the app stays idle after Done")
+        shot(app, "find-done")
+    }
+
+    func test7TableCellsKeepShortWordsWhole() throws {
+        let (app, _, _) = try openLongChat("bot-beta")
+        app.buttons["chatMenuButton"].tap()
+        waitFor(app.buttons["chatMenuFind"], timeout: 10, "overflow menu")
+        app.buttons["chatMenuFind"].tap()
+        let field = app.textFields["findField"]
+        waitFor(field, timeout: 10, "find field")
+        field.typeText("Share")
+        let table = app.descendants(matching: .any).matching(identifier: "markdownTable").firstMatch
+        waitFor(table, timeout: 60, "a table reply")
+        let deadline = Date().addingTimeInterval(10)
+        while !table.isHittable, Date() < deadline { Thread.sleep(forTimeInterval: 0.25) }
+        app.buttons["findDone"].tap()
+        shot(app, "table-cells")
+        let cells = table.staticTexts.allElementsBoundByIndex.filter { !$0.label.isEmpty && $0.label.count <= 12 }
+        let heights = cells.map(\.frame.height)
+        record(["cells": cells.map(\.label), "heights": heights.map(PagingMeasurements.points)])
+        XCTAssertGreaterThanOrEqual(cells.count, 6, "header and body cells are readable")
+        let lineHeight = heights.min() ?? 0
+        let wrapped = cells.filter { $0.frame.height > lineHeight * 1.5 }.map(\.label)
+        XCTAssertTrue(wrapped.isEmpty, "short cells wrap mid-word: \(wrapped)")
+    }
 }
+

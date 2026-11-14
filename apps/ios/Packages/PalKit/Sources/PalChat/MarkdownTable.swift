@@ -27,19 +27,14 @@ public struct MarkdownTable: Sendable, Hashable {
             .joined(separator: "\n")
     }
 
-    public func columnWidths(characterWidth: CGFloat, cellPadding: CGFloat, minimum: CGFloat, maximum: CGFloat) -> [CGFloat] {
+    public func columnWidths(measured: [CGFloat], cellPadding: CGFloat, minimum: CGFloat, maximum: CGFloat) -> [CGFloat] {
         (0..<columnCount).map { column in
-            let longest = ([header] + rows).map { Self.longestLine(String($0[column].characters)) }.max() ?? 0
-            let natural = CGFloat(longest) * characterWidth + cellPadding * 2
-            return min(max(natural, minimum), maximum)
+            let text = column < measured.count ? measured[column] : 0
+            return min(max((text + cellPadding * 2).rounded(.up), minimum), maximum)
         }
     }
 
     private static func fitted(_ cells: [AttributedString], to count: Int) -> [AttributedString] {
         cells.count >= count ? Array(cells.prefix(count)) : cells + Array(repeating: AttributedString(), count: count - cells.count)
-    }
-
-    private static func longestLine(_ text: String) -> Int {
-        text.split(separator: "\n", omittingEmptySubsequences: false).map(\.count).max() ?? 0
     }
 }
