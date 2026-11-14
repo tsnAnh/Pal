@@ -228,10 +228,28 @@ private struct BotModelPicker: View {
             list
         }
         .sheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }) {
+            #if os(macOS)
+            VStack(spacing: 0) {
+                HStack {
+                    Button("Done") { showsKeys = false }
+                        .buttonStyle(.palPill(height: 28))
+                        .keyboardShortcut(.cancelAction)
+                        .accessibilityIdentifier("modelProvidersDone")
+                    Spacer()
+                }
+                .padding(.leading, 20)
+                .padding(.top, 16)
+                MacModelProvidersSection(hub: hub)
+            }
+            .background(PalTokens.content)
+            .macSheetFrame()
+            .serviceSignInDialogHost()
+            #else
             NavigationStack {
                 ModelProvidersScreen(hub: hub) { showsKeys = false }
             }
-            .macSheetFrame()
+            .serviceSignInDialogHost()
+            #endif
         }
     }
 

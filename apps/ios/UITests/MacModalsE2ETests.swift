@@ -6,8 +6,13 @@ import XCTest
 final class MacModalsE2ETests: BotProfileTestCase {
     private static let sections: [(id: String, title: String)] = [
         ("general", "General"), ("computer", "Computer"), ("permissions", "Permissions"),
-        ("vault", "Vault"), ("usage", "Usage & Billing"), ("updates", "Updates"),
+        ("vault", "Vault"), ("providers", "Model providers"), ("usage", "Usage & Billing"), ("updates", "Updates"),
     ]
+
+    private static func section(_ id: String) -> (id: String, title: String) {
+        guard let match = sections.first(where: { $0.id == id }) else { preconditionFailure("unknown settings section \(id)") }
+        return match
+    }
 
     private func openSettings(_ app: XCUIApplication) {
         app.typeKey(",", modifierFlags: .command)
@@ -33,18 +38,32 @@ final class MacModalsE2ETests: BotProfileTestCase {
         let app = signedInApp()
         openSettings(app)
         for section in Self.sections { select(app, section: section) }
-        select(app, section: Self.sections[0])
+        select(app, section: Self.section("general"))
         waitFor(element(app, "settingsAccountRow"), timeout: 10, "account row")
         waitFor(app.buttons["settingsSignOutRow"], timeout: 10, "sign out button")
-        select(app, section: Self.sections[5])
+        select(app, section: Self.section("updates"))
         XCTAssertFalse(app.buttons["updatesCheckButton"].isEnabled, "no update flow exists yet")
+        closeModal(app, "settingsClose", gone: "settingsSheet")
+    }
+
+    func test1bModelProvidersPaneListsGroupsAndSearchNarrows() throws {
+        let app = signedInApp()
+        openSettings(app)
+        select(app, section: Self.section("providers"))
+        waitFor(element(app, "modelProviders-connected"), timeout: 30, "Connected caption")
+        waitFor(element(app, "modelProviders-available"), timeout: 10, "Add a provider caption")
+        let search = element(app, "providersSearchField")
+        waitFor(search, timeout: 10, "search field")
+        search.hit()
+        search.typeText("zzzz-no-such-provider")
+        waitFor(element(app, "providersNoMatchRow"), timeout: 10, "no match row")
         closeModal(app, "settingsClose", gone: "settingsSheet")
     }
 
     func test2VaultTabsFilterTheList() throws {
         let app = signedInApp()
         openSettings(app)
-        select(app, section: Self.sections[3])
+        select(app, section: Self.section("vault"))
         waitFor(app.buttons["vaultAddButton"], timeout: 10, "new item button")
         app.buttons["vaultAddButton"].hit()
         waitFor(element(app, "vaultAddSheet"), timeout: 10, "add sheet")

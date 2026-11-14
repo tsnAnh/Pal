@@ -1,3 +1,4 @@
+import PalBotProfile
 import PalDesign
 import PalDevice
 import PalProtocol
@@ -47,7 +48,19 @@ enum ServiceSignInWording {
     }
 
     static func fieldLabel(_ dialog: ServiceSignInDialog) -> String {
-        dialog.flow == .apiKey ? String(localized: "API key") : String(localized: "Credential")
+        if ModelProviderCredential.acceptsSetupToken(service: dialog.service) { return String(localized: "API key or setup token") }
+        return dialog.flow == .apiKey ? String(localized: "API key") : String(localized: "Credential")
+    }
+
+    static let setupTokenCommand = "claude setup-token"
+
+    static func setupTokenHelp(_ dialog: ServiceSignInDialog) -> String? {
+        guard ModelProviderCredential.acceptsSetupToken(service: dialog.service) else { return nil }
+        #if os(macOS)
+        return String(localized: "To use your Claude plan, run claude setup-token in Terminal, then paste the token it prints.")
+        #else
+        return String(localized: "To use your Claude plan, run claude setup-token in Terminal on a computer with Claude Code, then paste the token it prints.")
+        #endif
     }
 
     static func entryState(_ phase: ServiceSignInPhase) -> SecretEntryState {
@@ -165,6 +178,31 @@ struct ServiceSignInCodeCard: View {
     }
 }
 
+struct ServiceSignInSetupTokenHelp: View {
+    let text: String
+    @State private var copied = false
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(text)
+                .hermesText(.footnoteCaption)
+                .foregroundStyle(PalTokens.textSecondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("service-signin-setup-token-help")
+            Button {
+                ServiceSignInClipboard.copy(ServiceSignInWording.setupTokenCommand)
+                copied = true
+            } label: {
+                Label(copied ? String(localized: "Copied") : String(localized: "Copy Command"), systemImage: copied ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(PillButtonStyle(kind: .neutral))
+            .accessibilityIdentifier("service-signin-copy-command-button")
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
 struct ServiceSignInDialogView: View {
     let center: ServiceSignInCenter
     let botName: (String) -> String
@@ -208,6 +246,9 @@ struct ServiceSignInDialogView: View {
                 onCancel: { Task { await center.notNow() } }
             )
             .id(dialog.requestID)
+            if let help = ServiceSignInWording.setupTokenHelp(dialog) {
+                ServiceSignInSetupTokenHelp(text: help)
+            }
             if let others = ServiceSignInWording.others(dialog) {
                 Text(others)
                     .hermesText(.footnoteCaption)
@@ -341,23 +382,82 @@ struct ServiceSignInDialogView: View {
     }
 }
 
-private struct ServiceSignInPresentation: ViewModifier {
+@MainActor
+@Observable
+final class ServiceSignInHosts {
+    private var stack: [UUID] = []
+
+    func enter(_ id: UUID) {
+        stack.removeAll { $0 == id }
+        stack.append(id)
+    }
+
+    func leave(_ id: UUID) {
+        stack.removeAll { $0 == id }
+    }
+
+    func presents(_ id: UUID) -> Bool { stack.last == id }
+}
+
+struct ServiceSignInHostContext {
+    let center: ServiceSignInCenter
+    let hosts: ServiceSignInHosts
+    let botName: (String) -> String
+}
+
+extension EnvironmentValues {
+    @Entry var serviceSignInHost: ServiceSignInHostContext?
+}
+
+private struct ServiceSignInRoot: ViewModifier {
     let center: ServiceSignInCenter
     let botName: (String) -> String
+    @State private var hosts = ServiceSignInHosts()
 
     func body(content: Content) -> some View {
-        content.sheet(isPresented: Binding(get: { center.current != nil }, set: { _ in })) {
-            ServiceSignInDialogView(center: center, botName: botName)
-                .interactiveDismissDisabled()
-                #if os(iOS)
-                .presentationDetents([.medium, .large])
-                #endif
+        let context = ServiceSignInHostContext(center: center, hosts: hosts, botName: botName)
+        content
+            .modifier(ServiceSignInPresentation(context: context))
+            .environment(\.serviceSignInHost, context)
+    }
+}
+
+private struct ServiceSignInNestedHost: ViewModifier {
+    @Environment(\.serviceSignInHost) private var context
+
+    func body(content: Content) -> some View {
+        if let context {
+            content.modifier(ServiceSignInPresentation(context: context))
+        } else {
+            content
         }
+    }
+}
+
+private struct ServiceSignInPresentation: ViewModifier {
+    let context: ServiceSignInHostContext
+    @State private var id = UUID()
+
+    func body(content: Content) -> some View {
+        content
+            .onAppear { context.hosts.enter(id) }
+            .onDisappear { context.hosts.leave(id) }
+            .sheet(isPresented: Binding(get: { context.center.current != nil && context.hosts.presents(id) }, set: { _ in })) {
+                ServiceSignInDialogView(center: context.center, botName: context.botName)
+                    .interactiveDismissDisabled()
+                    #if os(iOS)
+                    .presentationDetents([.medium, .large])
+                    #endif
+            }
     }
 }
 
 extension View {
     func serviceSignInDialog(_ center: ServiceSignInCenter, botName: @escaping (String) -> String) -> some View {
-        modifier(ServiceSignInPresentation(center: center, botName: botName))
+        modifier(ServiceSignInRoot(center: center, botName: botName))
+    }
+
+    func serviceSignInDialogHost() -> some View {
+        modifier(ServiceSignInNestedHost())
     }
 }

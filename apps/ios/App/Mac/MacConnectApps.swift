@@ -571,38 +571,4 @@ private struct MacAppTile: View {
             .background(PalTokens.control)
     }
 }
-
-struct MacRowAction {
-    let title: String
-    var prominent = false
-    var checked = false
-    let action: () -> Void
-
-
-    @MainActor
-    @ViewBuilder
-    func view(identifier: String) -> some View {
-        if checked {
-            Button(action: action) {
-                HStack(spacing: 4) {
-                    Image(systemName: "checkmark").font(.system(size: 8, weight: .semibold))
-                    Text(title).font(.system(size: 11))
-                }
-                .foregroundStyle(PalTokens.textTertiary)
-                .frame(height: 22)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(title))
-            .accessibilityIdentifier(identifier)
-        } else {
-            Button(action: action) {
-                Text(title).frame(minWidth: 65)
-            }
-            .buttonStyle(.palPill(height: 22, fontSize: 11, fill: prominent ? PalTokens.toggleOn.opacity(0.7) : nil))
-            .accessibilityLabel(Text(title))
-            .accessibilityIdentifier(identifier)
-        }
-    }
-}
 #endif

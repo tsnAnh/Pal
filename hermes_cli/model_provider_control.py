@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -17,6 +17,10 @@ UNSUPPORTED_REASONS = {
 }
 DEFAULT_UNSUPPORTED_REASON = "This provider needs setup on the computer running Hermes."
 MAX_BASE_URL_CHARS = 2048
+MAX_PASTED_CHARS = 4096
+BEARER_PREFIX = "bearer"
+
+PasteRoute = Callable[[str], None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,12 +125,51 @@ def primary_env_var(pconfig) -> str:
     return pconfig.api_key_env_vars[0]
 
 
-def store_api_key(provider_id: str, text: str) -> None:
+def pasted_credential(value: object) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    text = "".join(value.split())
+    if text[:len(BEARER_PREFIX)].lower() == BEARER_PREFIX and len(text) > len(BEARER_PREFIX):
+        text = text[len(BEARER_PREFIX):]
+    if not text or len(text) > MAX_PASTED_CHARS or not text.isascii() or not text.isprintable():
+        return None
+    return text
+
+
+def _secure_slot_write(env_var: str, value: str) -> None:
+    from hermes_cli import credential_lifecycle
+    if value:
+        credential_lifecycle.save_provider_env_credential(env_var, value)
+    else:
+        credential_lifecycle.remove_provider_env_credential(env_var)
+
+
+def _store_anthropic(text: str) -> None:
+    from agent.anthropic_credentials import _is_oauth_token
+    from hermes_cli.config import save_anthropic_api_key, save_anthropic_oauth_token
+    save = save_anthropic_oauth_token if _is_oauth_token(text) else save_anthropic_api_key
+    save(text, save_fn=_secure_slot_write)
+
+
+def _store_primary(pconfig) -> PasteRoute:
     from hermes_cli.config import save_env_value_secure
+    env_var = primary_env_var(pconfig)
+    return lambda text: save_env_value_secure(env_var, text)
+
+
+SETUP_TOKEN_ROUTES: dict[str, PasteRoute] = {"anthropic": _store_anthropic}
+
+
+def store_pasted_credential(provider_id: str, value: object) -> bool:
     pconfig = lookup(provider_id)
     if pconfig is None or kind_of(pconfig)[0] != "api_key":
         raise ValueError("not an API-key provider")
-    save_env_value_secure(primary_env_var(pconfig), text)
+    text = pasted_credential(value)
+    if text is None:
+        return False
+    route = SETUP_TOKEN_ROUTES.get(provider_id) or _store_primary(pconfig)
+    route(text)
+    return True
 
 
 def _exclusive_env_vars(pconfig) -> list[str]:

@@ -98,6 +98,7 @@ struct MacCard<Content: View>: View {
 struct MacRow<Trailing: View>: View {
     let title: String
     var subtitle: String?
+    var subtitleColor = PalTokens.textSecondary
     var identifier: String
     @ViewBuilder let trailing: Trailing
 
@@ -111,7 +112,7 @@ struct MacRow<Trailing: View>: View {
                 if let subtitle {
                     Text(subtitle)
                         .font(.system(size: 11))
-                        .foregroundStyle(PalTokens.textSecondary)
+                        .foregroundStyle(subtitleColor)
                         .lineLimit(3)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -163,6 +164,74 @@ struct MacValueLabel: View {
         .frame(height: 27)
         .overlay(Capsule().strokeBorder(PalTokens.hairline, lineWidth: 1))
         .contentShape(Capsule())
+    }
+}
+
+struct MacLoading: View {
+    var body: some View {
+        ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 24)
+    }
+}
+
+struct MacFailure: View {
+    let message: String
+    let retry: () -> Void
+
+    var body: some View {
+        MacCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(message).font(.system(size: 12)).foregroundStyle(PalTokens.textSecondary)
+                Button("Try Again", action: retry).buttonStyle(.palPill(height: 24, fontSize: 11))
+            }
+            .padding(13)
+        }
+    }
+}
+
+struct MacEmptyRow: View {
+    let text: LocalizedStringKey
+    let identifier: String
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(PalTokens.textSecondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(13)
+            .accessibilityIdentifier(identifier)
+    }
+}
+
+struct MacRowAction {
+    let title: String
+    var prominent = false
+    var checked = false
+    let action: () -> Void
+
+    @MainActor
+    @ViewBuilder
+    func view(identifier: String) -> some View {
+        if checked {
+            Button(action: action) {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark").font(.system(size: 8, weight: .semibold))
+                    Text(title).font(.system(size: 11))
+                }
+                .foregroundStyle(PalTokens.textTertiary)
+                .frame(height: 22)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(title))
+            .accessibilityIdentifier(identifier)
+        } else {
+            Button(action: action) {
+                Text(title).frame(minWidth: 65)
+            }
+            .buttonStyle(.palPill(height: 22, fontSize: 11, fill: prominent ? PalTokens.toggleOn.opacity(0.7) : nil))
+            .accessibilityLabel(Text(title))
+            .accessibilityIdentifier(identifier)
+        }
     }
 }
 #endif

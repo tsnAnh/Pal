@@ -113,6 +113,19 @@ public struct ModelProvider: Sendable, Equatable, Identifiable, Decodable {
     }
 }
 
+public enum ModelProviderCredential {
+    public static let setupTokenProviders: Set<String> = ["anthropic"]
+
+    public static func acceptsSetupToken(service: String) -> Bool {
+        guard service.hasPrefix(ModelProvidersClient.serviceKey) else { return false }
+        return setupTokenProviders.contains(String(service.dropFirst(ModelProvidersClient.serviceKey.count)))
+    }
+}
+
+extension ModelProvider {
+    public var acceptsSetupToken: Bool { ModelProviderCredential.setupTokenProviders.contains(id) }
+}
+
 public enum ModelProviderRemoval: Sendable, Equatable {
     case removed(ModelProvider?)
     case nothingToRemove(ModelProvider?)
