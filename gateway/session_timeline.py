@@ -14,6 +14,7 @@ from hermes_state_runtime import RuntimeStoreError
 TIMELINE_FIELDS = frozenset({'session_id', 'profile', 'before', 'limit'})
 DEFAULT_LIMIT = 40
 MAX_LIMIT = 100
+PAGE_BYTES = 2 * 1024 * 1024
 _CURSOR_TAG = 'tl1.'
 _CURSOR_MAX_CHARS = 512
 _CACHE_SESSIONS = 16
@@ -25,6 +26,7 @@ class Timeline:
     revision: str
     entries: tuple
     index: dict
+    sizes: tuple
     size: int
 
 
@@ -84,8 +86,8 @@ def load_timeline(profile_id, db, target, profile_home):
         return cached
     from gateway.session_timeline_entries import timeline_entries
     entries = tuple(timeline_entries(*_display_rows(db, target), profile_home))
-    built = Timeline(revision, entries, {entry['id']: n for n, entry in enumerate(entries)},
-                     len(json.dumps(entries, default=str)))
+    sizes = tuple(len(json.dumps(entry, default=str)) + 2 for entry in entries)
+    built = Timeline(revision, entries, {entry['id']: n for n, entry in enumerate(entries)}, sizes, sum(sizes))
     _CACHE.put(key, built)
     return built
 
@@ -109,7 +111,10 @@ def page(built, before, limit):
     if end is None:
         raise RuntimeStoreError('cursor_stale', field='before',
                                 detail='the cursor entry left the transcript (rewind or undo); reload the latest page')
-    start = max(0, end - limit)
+    start, floor, total = end, max(0, end - limit), 0
+    while start > floor and (total == 0 or total + built.sizes[start - 1] <= PAGE_BYTES):
+        total += built.sizes[start - 1]
+        start -= 1
     return {'entries': list(built.entries[start:end]),
             'older': encode_cursor(built.entries[start]['id']) if start else None,
             'revision': built.revision}
