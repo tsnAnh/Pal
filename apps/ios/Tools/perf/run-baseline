@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PERF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$PERF_DIR/../../../.." && pwd)"
+PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
+export HERMES_DISABLE_LAZY_INSTALLS=1
+exec "$PYTHON" -I "$PERF_DIR/perf.py" "$@"
