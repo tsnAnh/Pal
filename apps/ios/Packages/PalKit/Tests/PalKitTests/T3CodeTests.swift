@@ -137,7 +137,7 @@ struct T3CodeStatusTests {
 
     @Test func registrationFailureClearsOnlyWhenRegistrationSucceeds() {
         var status = T3CodeStatus(installed: true, running: true, credential: .saved)
-        status.apply(.registrationFailed)
+        status.apply(.registrationFailed(.registration))
         #expect(status.connection == .failed(.registration))
         status.apply(.registrationSucceeded)
         #expect(status.connection == .connected)
@@ -210,9 +210,9 @@ private final class FakeRegistrar: T3Registering {
     let unregisterCalls = Mutex(0)
     let failing = Mutex(false)
 
-    func register() async throws {
+    func register() async -> T3Registration {
         registerCalls.withLock { $0 += 1 }
-        if failing.withLock({ $0 }) { throw McpOAuthError.gatewayUnavailable }
+        return failing.withLock({ $0 }) ? .refused(failed: 1) : .registered(count: 1)
     }
 
     func unregister() async {
@@ -435,25 +435,25 @@ private struct HostRig {
 @MainActor
 @Suite("T3 registration across bots")
 struct T3RegistrationOutcomeTests {
-    @Test func noConnectedBotIsNotReportedAsConnected() async throws {
+    @Test func noConnectedBotShowsThatNoBotIsOnline() async throws {
         let rig = try HostRig([])
         defer { rig.sandbox.remove() }
         await rig.controller.refresh()
-        #expect(rig.controller.connection != .connected)
+        #expect(rig.controller.connection == .failed(.noBots))
     }
 
-    @Test func botsThatAreAllOfflineAreNotReportedAsConnected() async throws {
+    @Test func botsThatAreAllOfflineShowThatNoBotIsOnline() async throws {
         let rig = try HostRig([FakeHost(.offline), FakeHost(.offline)])
         defer { rig.sandbox.remove() }
         await rig.controller.refresh()
-        #expect(rig.controller.connection != .connected)
+        #expect(rig.controller.connection == .failed(.noBots))
     }
 
-    @Test func everyBotRefusingIsNotReportedAsConnected() async throws {
+    @Test func everyBotRefusingShowsTheRegistrationFailure() async throws {
         let rig = try HostRig([FakeHost(.refuse), FakeHost(.refuse)])
         defer { rig.sandbox.remove() }
         await rig.controller.refresh()
-        #expect(rig.controller.connection != .connected)
+        #expect(rig.controller.connection == .failed(.registration))
     }
 
     @Test func everyBotFailingShowsTheRegistrationFailure() async throws {
@@ -463,10 +463,88 @@ struct T3RegistrationOutcomeTests {
         #expect(rig.controller.connection == .failed(.registration))
     }
 
-    @Test func oneBotToldAndAnotherFailingIsNotReportedAsConnected() async throws {
+    @Test func oneBotToldAndAnotherFailingShowsThePartialFailure() async throws {
         let rig = try HostRig([FakeHost(.accept), FakeHost(.fail)])
         defer { rig.sandbox.remove() }
         await rig.controller.refresh()
-        #expect(rig.controller.connection != .connected)
+        #expect(rig.controller.connection == .failed(.partialRegistration))
+    }
+
+    @Test func oneBotToldAndAnotherRefusingShowsThePartialFailure() async throws {
+        let rig = try HostRig([FakeHost(.accept), FakeHost(.refuse)])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection == .failed(.partialRegistration))
+    }
+
+    @Test func everyConnectedBotToldIsConnectedAndAnOfflineBotDoesNotCount() async throws {
+        let rig = try HostRig([FakeHost(.accept), FakeHost(.accept), FakeHost(.offline)])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection == .connected)
+    }
+
+    @Test func aPartialFailureIsNotRetriedOnEveryPollButTryAgainRegistersAllAndClearsIt() async throws {
+        let healthy = FakeHost(.accept)
+        let flaky = FakeHost(.fail)
+        let rig = try HostRig([healthy, flaky])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        await rig.controller.refresh()
+        #expect(healthy.registerCalls.withLock { $0 } == 1)
+        #expect(rig.controller.connection == .failed(.partialRegistration))
+        flaky.behavior.withLock { $0 = .accept }
+        await rig.controller.connect()
+        #expect(rig.controller.connection == .connected)
+        #expect(flaky.registerCalls.withLock { $0 } == 2)
+    }
+
+    @Test func aRefusedRegistrationRetriesOnTheNextPoll() async throws {
+        let host = FakeHost(.refuse)
+        let rig = try HostRig([host])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection == .failed(.registration))
+        host.behavior.withLock { $0 = .accept }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection == .connected)
+    }
+
+    @Test func aBotThatComesOnlineAfterNoBotWasOnlineIsRegisteredOnTheNextPoll() async throws {
+        let rig = try HostRig([])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection == .failed(.noBots))
+        let host = FakeHost(.accept)
+        rig.pool.set([host])
+        await rig.controller.refresh()
+        #expect(rig.controller.connection == .connected)
+        #expect(host.registerCalls.withLock { $0 } == 1)
+    }
+
+    @Test func theRegistrationFailuresAreProductCopyAndAllowTryingAgain() {
+        for failure in [T3Failure.registration, .partialRegistration, .noBots] {
+            #expect(failure.isRegistration)
+            #expect(T3CodeRowPresentation(.failed(failure)).buttonTitle == "Try again")
+        }
+        #expect(T3Failure.partialRegistration.text == "Some of your bots couldn't be told about T3 Code. Try again")
+        #expect(T3Failure.noBots.text == "None of your bots are online yet. Pal keeps trying")
+        #expect(!T3Failure.storage.isRegistration)
+    }
+
+    @Test func connectedDoesNotPromiseThatABotMayUseIt() {
+        #expect(T3CodeRowPresentation(.connected).summary == "Connected. Each bot asks you before using it")
+    }
+
+    @Test func registrationSuccessClearsEveryRegistrationFailureButNotOthers() {
+        for failure in [T3Failure.registration, .partialRegistration, .noBots] {
+            var status = T3CodeStatus(installed: true, running: true, credential: .saved)
+            status.apply(.registrationFailed(failure))
+            status.apply(.registrationSucceeded)
+            #expect(status.connection == .connected)
+        }
+        var status = T3CodeStatus(installed: true, running: true, credential: .saved, attempt: .failed(.signIn(.denied)))
+        status.apply(.registrationSucceeded)
+        #expect(status.connection == .failed(.signIn(.denied)))
     }
 }

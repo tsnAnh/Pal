@@ -11,7 +11,10 @@ import Testing
 private final class AcceptingRegistrar: T3Registering {
     let registered = Mutex(0)
 
-    func register() async throws { registered.withLock { $0 += 1 } }
+    func register() async -> T3Registration {
+        registered.withLock { $0 += 1 }
+        return .registered(count: 1)
+    }
     func unregister() async {}
 }
 
