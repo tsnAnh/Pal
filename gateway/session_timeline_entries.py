@@ -1,6 +1,6 @@
 from collections import Counter
 
-RENDERED_TOOLS = frozenset({'image_generate', 'clarify'})
+RENDERED_TOOLS = frozenset({'image_generate', 'clarify', 'manage_connections'})
 _COPIED_KEYS = ('timestamp', 'row_id', 'display_kind', 'display_metadata')
 
 
