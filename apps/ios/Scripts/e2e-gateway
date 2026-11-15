@@ -13,7 +13,8 @@ usage() {
 usage: e2e-gateway [--seed parity] [-- command...]
 Starts a stub LLM and an isolated, auth-gated gateway in a temp HERMES_HOME with two bot
 profiles, then runs the command with HERMES_IOS_E2E_* exported (or prints them and waits
-for SIGINT when no command is given). Everything is torn down on exit.
+for SIGINT when no command is given). Everything is torn down on exit. bot-alpha also carries
+the disabled stdio MCP server fixture-tools (default seed only).
 
   --seed parity   instead of bot-alpha and bot-beta, create the 8-bot parity roster (default
                   plus 7 bots, Vietnamese bot chats, avatar looks and recency spread) through
@@ -125,6 +126,15 @@ model:
   api_key: stub-key
   default: stub-model
 YAML
+  if [ "$name" = "bot-alpha" ] && [ -z "$SEED" ]; then
+    cat >>"$HOME_DIR/profiles/$name/config.yaml" <<YAML
+mcp_servers:
+  fixture-tools:
+    command: "$PYTHON"
+    args: ["$IOS_DIR/Tools/activation-fixture/fixture_mcp_server.py"]
+    enabled: false
+YAML
+  fi
 done
 
 GATEWAY_ENV=(HERMES_HOME="$HOME_DIR")
