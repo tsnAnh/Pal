@@ -117,7 +117,7 @@ struct EyeSurfaceTests {
         let rig = try rig(shape)
         for clip in LoadingClips.all {
             for t in stride(from: 0.0, through: clip.duration, by: 1.0 / 120) {
-                let pose = clip.track.pose(at: t)
+                let pose = clip.pose(at: t)
                 if abs(pose.eyeX) >= 0.75 || abs(pose.eyeY) >= 0.75 {
                     let gone = rig.eyePaths(pose).allSatisfy { $0.isEmpty }
                     #expect(gone, "\(clip.name) t \(t)")

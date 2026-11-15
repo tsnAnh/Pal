@@ -42,27 +42,27 @@ struct LoadingClipTests {
     @Test("every clip starts and ends facing the viewer", arguments: clips.map(\.name))
     func facingAtBothEnds(name: String) throws {
         let clip = try #require(clips.first { $0.name == name })
-        #expect(sameAsFacing(clip.track.pose(at: 0)))
-        #expect(sameAsFacing(clip.track.pose(at: clip.duration)))
-        #expect(clip.track.keys.first?.time == 0)
+        #expect(sameAsFacing(clip.pose(at: 0)))
+        #expect(sameAsFacing(clip.pose(at: clip.duration)))
+        #expect(clip.keys.first?.time == 0)
     }
 
     @Test("eyes only teleport while hidden and nothing else visibly jumps", arguments: clips.map(\.name))
     func noVisibleJumps(name: String) throws {
         let clip = try #require(clips.first { $0.name == name })
-        for (a, b) in zip(clip.track.keys, clip.track.keys.dropFirst()) where a.time == b.time {
+        for (a, b) in zip(clip.keys, clip.keys.dropFirst()) where a.time == b.time {
             #expect(eyesHidden(a.pose) && eyesHidden(b.pose), "\(name) teleports visible eyes at t=\(a.time)")
         }
         let times = samples(0...clip.duration)
         for (a, b) in zip(times, times.dropFirst()) {
-            #expect(!visibleJump(clip.track.pose(at: a), clip.track.pose(at: b)), "\(name) jumps between t=\(a) and t=\(b)")
+            #expect(!visibleJump(clip.pose(at: a), clip.pose(at: b)), "\(name) jumps between t=\(a) and t=\(b)")
         }
     }
 
     @Test("poses stay inside the ranges the avatars were tuned for", arguments: clips.map(\.name))
     func ranges(name: String) throws {
         let clip = try #require(clips.first { $0.name == name })
-        for key in clip.track.keys where !eyesHidden(key.pose) {
+        for key in clip.keys where !eyesHidden(key.pose) {
             let pose = key.pose
             #expect(abs(pose.eyeX) <= 0.42 && abs(pose.eyeY) <= 0.42, "\(name) looks too far at t=\(key.time)")
             #expect(abs(pose.bodyX) <= 0.06 && abs(pose.bodyY) <= 0.14)
@@ -77,9 +77,9 @@ struct LoadingClipTests {
     }
 }
 
-@Suite("Loading sequence")
+@Suite("Loading sequence of the shared 2D clips")
 struct LoadingSequenceTests {
-    private let sequence = LoadingSequence(key: "alpha")
+    private let sequence = LoadingSequence(key: "alpha", interleavesSolid: false)
 
     @Test("hashing and shuffling follow the published algorithms")
     func primitives() {
@@ -131,11 +131,11 @@ struct LoadingSequenceTests {
         for index in sequence.bag(0) {
             let clip = clips[index]
             let inside = start + clip.duration / 2
-            #expect(close(sequence.pose(at: inside), clip.track.pose(at: clip.duration / 2)), "\(clip.name)")
+            #expect(close(sequence.pose(at: inside), clip.pose(at: clip.duration / 2)), "\(clip.name)")
             start += clip.duration
         }
         let second = clips[sequence.bag(1)[0]]
-        #expect(close(sequence.pose(at: cycle + second.duration / 2), second.track.pose(at: second.duration / 2)))
+        #expect(close(sequence.pose(at: cycle + second.duration / 2), second.pose(at: second.duration / 2)))
     }
 
     @Test("every clip and bag boundary joins seamlessly")

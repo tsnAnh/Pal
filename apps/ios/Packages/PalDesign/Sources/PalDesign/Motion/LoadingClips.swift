@@ -1,10 +1,37 @@
 import Foundation
 
 struct LoadingClip: Sendable {
-    let name: String
-    let track: KeyframeTrack
+    enum Motion: Sendable {
+        case keyframes(KeyframeTrack)
+        case procedural(@Sendable (Double) -> AvatarPose)
+    }
 
-    var duration: Double { track.duration }
+    let name: String
+    let duration: Double
+    let motion: Motion
+
+    init(name: String, track: KeyframeTrack) {
+        self.name = name
+        duration = track.duration
+        motion = .keyframes(track)
+    }
+
+    init(name: String, duration: Double, pose: @escaping @Sendable (Double) -> AvatarPose) {
+        self.name = name
+        self.duration = duration
+        motion = .procedural(pose)
+    }
+
+    var keys: [Keyframe] {
+        if case .keyframes(let track) = motion { track.keys } else { [] }
+    }
+
+    func pose(at t: Double) -> AvatarPose {
+        switch motion {
+        case .keyframes(let track): track.pose(at: t)
+        case .procedural(let pose): pose(min(max(t, 0), duration))
+        }
+    }
 }
 
 enum LoadingClips {

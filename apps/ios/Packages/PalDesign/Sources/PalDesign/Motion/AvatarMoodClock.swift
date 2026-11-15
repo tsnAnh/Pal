@@ -8,27 +8,31 @@ struct AvatarMoodClock: Equatable, Sendable {
     var blinkDelay: Double
     var loadingSeed: UInt64
     var reduceMotion: Bool
+    var solidClips: Bool
 
     init(
-        mood: AvatarMood, since: Date, blinkDelay: Double, loadingSeed: UInt64, reduceMotion: Bool, from: AvatarPose? = nil
+        mood: AvatarMood, since: Date, blinkDelay: Double, loadingSeed: UInt64, reduceMotion: Bool,
+        solidClips: Bool = true, from: AvatarPose? = nil
     ) {
         self.mood = mood
         self.since = since
         self.blinkDelay = blinkDelay
         self.loadingSeed = loadingSeed
         self.reduceMotion = reduceMotion
+        self.solidClips = solidClips
         self.from = from
     }
 
     func changing(to mood: AvatarMood, at date: Date) -> AvatarMoodClock {
         AvatarMoodClock(
-            mood: mood, since: date, blinkDelay: blinkDelay, loadingSeed: loadingSeed, reduceMotion: reduceMotion, from: pose(at: date)
+            mood: mood, since: date, blinkDelay: blinkDelay, loadingSeed: loadingSeed, reduceMotion: reduceMotion,
+            solidClips: solidClips, from: pose(at: date)
         )
     }
 
     func pose(at date: Date) -> AvatarPose {
         let t = date.timeIntervalSince(since)
-        var pose = AvatarMotion.pose(mood, at: t, reduceMotion: reduceMotion, seed: sessionSeed)
+        var pose = AvatarMotion.pose(mood, at: t, reduceMotion: reduceMotion, seed: sessionSeed, solidClips: solidClips)
         if let from, !reduceMotion, t < AvatarMotion.settleDuration {
             pose = from.blended(to: pose, Ease.easeOut(max(0, t) / AvatarMotion.settleDuration))
         }

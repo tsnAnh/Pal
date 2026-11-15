@@ -43,10 +43,11 @@ public struct BotAvatarView: View {
     }
 
     public var body: some View {
+        let content = cache.resolve(spec, colorScheme, eyeInk: eyeInk)
         AvatarStage(
-            content: cache.resolve(spec, colorScheme, eyeInk: eyeInk),
+            content: content,
             size: size,
-            clock: animated ? resolvedClock : nil,
+            clock: animated ? resolvedClock(solid: content.isSolid) : nil,
             staticPose: AvatarMotion.staticPose(mood),
             frameInterval: reduceMotion ? 1.0 / 20 : 1.0 / 60,
             outline: outline,
@@ -58,12 +59,13 @@ public struct BotAvatarView: View {
         .modifier(PointerLook(look: $look, size: size, reach: pointerReach))
         .accessibilityHidden(true)
         .onChange(of: mood) { _, next in
-            clock = resolvedClock.changing(to: next, at: Date())
+            clock = resolvedClock(solid: cache.isSolid).changing(to: next, at: Date())
         }
     }
 
-    private var resolvedClock: AvatarMoodClock {
+    private func resolvedClock(solid: Bool) -> AvatarMoodClock {
         var resolved = clock
+        resolved.solidClips = solid
         resolved.blinkDelay = AvatarBlink.delaySeconds(for: spec.blinkKey)
         resolved.loadingSeed = LoadingSequence.seed(for: spec.blinkKey)
         resolved.reduceMotion = reduceMotion
@@ -76,6 +78,8 @@ private final class AvatarContentCache {
     private var scheme: ColorScheme?
     private var eyeInk: AvatarColor?
     private var content: AvatarContent?
+
+    var isSolid: Bool { content?.isSolid ?? false }
 
     func resolve(_ spec: BotAvatarSpec, _ scheme: ColorScheme, eyeInk: AvatarColor?) -> AvatarContent {
         if let content, self.spec == spec, self.scheme == scheme, self.eyeInk == eyeInk { return content }

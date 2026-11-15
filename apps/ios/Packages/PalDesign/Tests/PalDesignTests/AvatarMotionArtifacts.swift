@@ -63,7 +63,7 @@ struct AvatarMotionArtifacts {
 
     private static func clipPose(_ name: String, atFraction fraction: Double) -> AvatarPose {
         let clip = LoadingClips.all.first { $0.name == name }!
-        return clip.track.pose(at: clip.duration * fraction)
+        return clip.pose(at: clip.duration * fraction)
     }
 
     private static func doneMotion(for spec: BotAvatarSpec) -> Motion {
@@ -81,7 +81,7 @@ struct AvatarMotionArtifacts {
         let clock = idle.changing(to: .work, at: start)
         let sequence = Motion(name: "sequence", duration: sequenceSeconds) { clock.pose(at: start.addingTimeInterval($0)) }
         let clips = LoadingClips.all.map { clip in
-            Motion(name: "clip-\(clip.name)", duration: clip.duration) { clip.track.pose(at: $0) }
+            Motion(name: "clip-\(clip.name)", duration: clip.duration) { clip.pose(at: $0) }
         }
         return clips + [sequence]
     }
