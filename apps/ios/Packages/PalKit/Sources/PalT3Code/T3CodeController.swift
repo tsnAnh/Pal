@@ -11,8 +11,24 @@ public protocol T3Authorizing: Sendable {
     func authorize(resource: URL) async throws -> McpOAuthGrant
 }
 
+public enum T3Registration: Sendable, Equatable {
+    case registered(count: Int)
+    case partial(registered: Int, failed: Int)
+    case noBots
+    case refused(failed: Int)
+
+    public init(registered: Int, failed: Int) {
+        switch (registered, failed) {
+        case (0, 0): self = .noBots
+        case (_, 0): self = .registered(count: registered)
+        case (0, _): self = .refused(failed: failed)
+        default: self = .partial(registered: registered, failed: failed)
+        }
+    }
+}
+
 public protocol T3Registering: Sendable {
-    func register() async throws
+    func register() async -> T3Registration
     func unregister() async
 }
 
@@ -163,13 +179,19 @@ public final class T3CodeController {
     }
 
     private func register(for runtime: T3Runtime) async {
-        do {
-            try await registrar.register()
+        switch await registrar.register() {
+        case .registered:
             registeredPID = runtime.pid
             apply(.registrationSucceeded)
-        } catch {
-            diagnostics.info("t3code", "register failed: \(Diagnostics.describe(error))")
-            apply(.registrationFailed)
+        case .partial(let registered, let failed):
+            diagnostics.info("t3code", "registered with \(registered) bots, \(failed) failed")
+            registeredPID = runtime.pid
+            apply(.registrationFailed(.partialRegistration))
+        case .refused(let failed):
+            diagnostics.info("t3code", "no bot accepted the registration, \(failed) failed")
+            apply(.registrationFailed(.registration))
+        case .noBots:
+            apply(.registrationFailed(.noBots))
         }
     }
 
@@ -191,26 +213,42 @@ public final class T3CodeController {
     }
 }
 
+public protocol T3RegistrationHost: Sendable {
+    var hasConnection: Bool { get async }
+    func registerMcp(_ server: DeviceMcpServer) async throws -> Bool
+    func unregisterMcp(_ server: DeviceMcpServer) async throws
+}
+
+extension DeviceToolHost: T3RegistrationHost {}
+
 public struct T3HostRegistrar: T3Registering {
-    public typealias Hosts = @Sendable () async -> [DeviceToolHost]
+    public typealias Hosts = @Sendable () async -> [any T3RegistrationHost]
 
     private let hosts: Hosts
+    private let diagnostics: Diagnostics
 
-    public init(hosts: @escaping Hosts) {
+    public init(diagnostics: Diagnostics = .silent, hosts: @escaping Hosts) {
         self.hosts = hosts
+        self.diagnostics = diagnostics
     }
 
-    public func register() async throws {
-        var failure: (any Error)?
-        var registered = false
+    public func register() async -> T3Registration {
+        var registered = 0
+        var failed = 0
         for host in await hosts() where await host.hasConnection {
             do {
-                if try await host.registerMcp(.t3code) { registered = true }
+                if try await host.registerMcp(.t3code) {
+                    registered += 1
+                } else {
+                    failed += 1
+                    diagnostics.info("t3code", "a bot declined the registration")
+                }
             } catch {
-                failure = error
+                failed += 1
+                diagnostics.info("t3code", "register failed: \(Diagnostics.describe(error))")
             }
         }
-        if !registered, let failure { throw failure }
+        return T3Registration(registered: registered, failed: failed)
     }
 
     public func unregister() async {

@@ -31,6 +31,12 @@ CALL_TOOL_MISSING_PREFIX = "call-tool-missing "
 CALL_TOOL_RESULT_LIMIT = 6000
 IPHONE_RESULT_LIMIT = 600
 TOOL_FINAL_PREFIX = "stub-tool-final "
+FIXTURE_MCP_TRIGGER = "ENABLE_FIXTURE_MCP"
+FIXTURE_MCP_CALL = {
+    "name": "manage_connections",
+    "arguments": {"action": "enable", "connectors": [{"name": "fixture-tools", "mcp": True}]},
+}
+CONNECTIONS_FINAL_PREFIX = "connections-result "
 TOOL_COMMANDS = {
     "TOOLCALL": "sleep 6",
     "APPROVE": 'cd "$(mktemp -d)" && git reset --hard',
@@ -196,6 +202,14 @@ def call_tool_plan(last_role, last, last_user, names, messages):
     return None
 
 
+def connections_answer(tool_result):
+    try:
+        targets = json.loads(tool_result)["targets"]
+        return CONNECTIONS_FINAL_PREFIX + ", ".join(f"{target['name']}={target['state']}" for target in targets)
+    except (ValueError, KeyError, TypeError):
+        return CONNECTIONS_FINAL_PREFIX + "unreadable"
+
+
 def plan(body):
     messages = body.get("messages") or []
     names = tool_names(body)
@@ -207,6 +221,11 @@ def plan(body):
         return scripted
     if called := call_tool_plan(last_role, last, last_user, names, messages):
         return called
+    if "manage_connections" in names and FIXTURE_MCP_TRIGGER in last_user:
+        if last_role == "tool" and last_tool_name(messages) == "manage_connections":
+            return "final", connections_answer(text_of(last.get("content"))), NORMAL_DELAY
+        if last_role == "user":
+            return "tool", FIXTURE_MCP_CALL, 0
     if "iphone" in names and last_role == "tool" and last_tool_name(messages) == "iphone":
         return "final", iphone_answer(text_of(last.get("content"))), NORMAL_DELAY
     if "iphone" in names and last_role == "user" and IPHONE_TRIGGER in last_user and (call := iphone_arguments(last_user)):

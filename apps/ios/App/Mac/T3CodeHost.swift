@@ -24,7 +24,7 @@ final class T3CodeHost {
             locator: locator,
             tokens: tokens,
             authorizer: T3OAuthAuthorizer(browser: SystemBrowserAuthorization(), diagnostics: .osLog()),
-            registrar: T3HostRegistrar { await hosts.current() },
+            registrar: T3HostRegistrar(diagnostics: .osLog()) { await hosts.current() },
             bridge: bridge,
             diagnostics: .osLog()
         )
