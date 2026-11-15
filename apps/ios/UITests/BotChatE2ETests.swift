@@ -56,6 +56,7 @@ final class BotChatE2ETests: E2ETestCase {
         waitFor(card, timeout: 60, "clarify card")
         XCTAssertTrue(app.staticTexts["Which flavor do you want?"].exists)
         XCTAssertEqual(app.descendants(matching: .any)["composerField"].placeholderValue, "Or type your own answer", "the composer invites a typed answer")
+        XCTAssertTrue(app.buttons["clarifyChoice-0"].label.hasPrefix("A, vanilla"), app.buttons["clarifyChoice-0"].label)
         shot(app, "chat-clarify")
         app.buttons["clarifyChoice-0"].hit()
         waitFor(bubbles(app, "assistantBubble", containing: "Got it, vanilla").firstMatch, timeout: 60, "card answer completes the turn")
@@ -64,7 +65,10 @@ final class BotChatE2ETests: E2ETestCase {
 
         send(app, "CLARIFY again")
         waitFor(app.descendants(matching: .any)["clarifyCard"], timeout: 60, "second clarify card")
-        send(app, "chocolate")
+        app.buttons["clarifyOther"].hit()
+        waitFor(app.keyboards.firstMatch, timeout: 5, "Something else focuses the composer")
+        app.typeText("chocolate")
+        app.buttons["sendButton"].hit()
         waitFor(bubbles(app, "assistantBubble", containing: "Got it, chocolate").firstMatch, timeout: 60, "composer answer completes the turn")
         waitFor(bubbles(app, "clarifyAnswered", containing: "chocolate").firstMatch, timeout: 10, "composer answer is shown on the answered card")
         XCTAssertEqual(bubbles(app, "userBubble", containing: "chocolate").count, 0, "answer is not a new chat message")
@@ -114,8 +118,8 @@ final class BotChatE2ETests: E2ETestCase {
         send(app, "CLARIFY large text")
         waitFor(app.descendants(matching: .any)["clarifyCard"], timeout: 60, "clarify card")
         shot(app, "chat-clarify-dynamic-type-xl")
-        app.buttons["clarifySkip"].hit()
-        waitGone(app.descendants(matching: .any)["clarifyCard"], timeout: 15, "card skipped so the chat is left clean")
+        app.buttons["clarifyChoice-0"].hit()
+        waitGone(app.descendants(matching: .any)["clarifyCard"], timeout: 15, "card answered so the chat is left clean")
     }
 
     func test7ReopenLongChatStartsAtBottom() throws {

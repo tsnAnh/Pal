@@ -150,6 +150,10 @@ struct ChatView: View {
         .background(PlatformVariant.pick(mac: PalTokens.content, iOS: Color(theme.palette.canvas)))
         .messageMenuPresenter()
         .environment(\.chatInk, ink)
+        .environment(\.focusComposer) {
+            model.endFinding()
+            composerFocused = true
+        }
         .task { model.start() }
         .task(id: model.bot.conversationID) { await autoApprove.load(sessionID: model.bot.conversationID) }
         .task(id: model.connection) {

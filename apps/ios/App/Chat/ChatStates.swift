@@ -75,6 +75,7 @@ struct ComposerNotice: View {
 
 extension EnvironmentValues {
     @Entry var chatInk: Color = PalTokens.inverseFill
+    @Entry var focusComposer: (() -> Void)?
 }
 
 struct FindMark {
