@@ -31,6 +31,7 @@ public struct TimelineSnapshot: Sendable, Equatable {
     public var older: OlderState
     public var isRunning: Bool
     public var pendingPrompts: [PendingPrompt]
+    public var hasPendingConnection: Bool
     public var lastError: String?
     public var executionGeneration: Int
     public var runningToolName: String?
@@ -120,6 +121,14 @@ struct Timeline: Sendable {
 
     mutating func noteApprovalChoice(_ choice: String?, promptID: String) {
         live.noteApprovalChoice(choice, promptID: promptID)
+    }
+
+    mutating func noteConnection(_ operation: ConnectionOperation) {
+        live.noteConnection(operation)
+    }
+
+    mutating func lapseConnection(opID: String) {
+        live.lapseConnection(opID: opID)
     }
 
     mutating func apply(_ frame: SessionEventFrame) -> ApplyOutcome {

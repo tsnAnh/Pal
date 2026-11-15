@@ -51,6 +51,7 @@ struct ChatRow: Identifiable, Equatable {
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
         case approvalAnswered(ApprovalRecord)
+        case connection(ConnectionCard)
         case notice(ChatNotice)
         case botThread(BotThreadLink)
         case imageGeneration(ImageGeneration)
@@ -116,6 +117,7 @@ final class ChatModel {
     private(set) var olderHistory = OlderHistory.idle
     private(set) var isOpening = true
     private(set) var sendError: String?
+    private(set) var answeringConnections: Set<String> = []
     private var pending = PendingAttachments()
     var attachments: [PendingAttachment] { pending.items }
     private var localImages: [String: Data] = [:]
@@ -364,6 +366,20 @@ final class ChatModel {
         Task {
             do {
                 try await session.answerApproval(prompt, choice: choice)
+            } catch {
+                sendError = String(localized: "Your answer could not be sent. Try again.")
+            }
+        }
+    }
+
+    func answerConnection(opID: String, target: String, decision: ConnectionDecision) {
+        guard let session else { return }
+        let key = ConnectionRequestCard.answerKey(opID: opID, target: target)
+        guard answeringConnections.insert(key).inserted else { return }
+        Task {
+            defer { answeringConnections.remove(key) }
+            do {
+                try await session.answerConnection(opID: opID, target: target, decision: decision)
             } catch {
                 sendError = String(localized: "Your answer could not be sent. Try again.")
             }
@@ -757,7 +773,7 @@ final class ChatModel {
         isRunning = snapshot?.isRunning ?? false
         workingStatus = snapshot?.runningToolName.map(ToolActivity.label(for:))
         hasPendingClarify = pendingClarify != nil
-        hasPendingPrompt = !(snapshot?.pendingPrompts.isEmpty ?? true)
+        hasPendingPrompt = !(snapshot?.pendingPrompts.isEmpty ?? true) || snapshot?.hasPendingConnection == true
         if !hasBaseline, snapshot?.sessionID != nil { hasBaseline = true }
         if isOpening, !next.isEmpty || snapshot?.sessionID != nil { isOpening = false }
         recomputeFind(resetPosition: false)
@@ -835,6 +851,8 @@ final class ChatModel {
             return (.approval(card.prompt), [])
         case .approvalAnswered(let record):
             return (.approvalAnswered(record), [])
+        case .connection(let card):
+            return (.connection(card), [])
         case .botThread(let link):
             return (.botThread(link), [])
         }

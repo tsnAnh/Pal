@@ -283,6 +283,9 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
     untooled = await rpc(ws, 'connectors.connect', owner={'type': 'session', 'session_id': toolless},
                          connectors=['linear'], reconnect=True)
     assert untooled['error']['code'] == 4031 and seen == {}, untooled
+    crossed = await rpc(ws, 'connection.respond', owner=owner, op_id=foreign.op_id,
+                        result={'targets': [{'name': 'linear', 'status': 'approved'}]})
+    assert crossed['error']['code'] == 4004 and foreign.target('linear').state.value == 'failed', crossed
     # A well-formed envelope with a bad answer is an invalid answer, not invalid parameters.
     for result in ({'targets': [{'name': 'linear', 'status': 'connected'}]}, None):
         bad = await rpc(ws, 'connection.respond', owner=owner, op_id=operation.op_id,

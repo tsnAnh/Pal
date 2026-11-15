@@ -86,6 +86,7 @@ public actor ChatSession: OutboxSubmitter {
     public private(set) var botThreadLinks: [BotThreadLink] = []
     public nonisolated let terminalFailures: AsyncStream<ChatTerminalFailure>
     public nonisolated let timelineSnapshots: AsyncStream<TimelineSnapshot>
+    static let unknownOperationCode = 4004
 
     private static let botThreadsChangedEvent = "bot_threads.changed"
     private static let messageCompleteEvent = "message.complete"
@@ -288,6 +289,44 @@ public actor ChatSession: OutboxSubmitter {
             timeline.noteApprovalChoice(nil, promptID: prompt.promptID)
             throw error
         }
+    }
+
+    public func answerConnection(
+        opID: String,
+        target: String,
+        decision: ConnectionDecision,
+        now: Date = Date()
+    ) async throws {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        guard let card = transcript.connectionCard(opID: opID),
+              let row = card.operation.targets.first(where: { $0.name == target }),
+              card.decisions(for: row, now: now).contains(decision)
+        else { throw ChatError.connectionNotActionable }
+        do {
+            try await api.respondToConnection(
+                sessionID: sessionID,
+                opID: opID,
+                targets: [ConnectionAnswer(name: target, decision: decision)]
+            )
+        } catch {
+            await settleRefusedConnection(api: api, sessionID: sessionID, opID: opID, error: error)
+            throw error
+        }
+    }
+
+    private func settleRefusedConnection(api: SessionAPI, sessionID: String, opID: String, error: any Error) async {
+        if case GatewayTransportError.rpc(let rpc) = error, rpc.code == Self.unknownOperationCode || rpc.reasonCode == "unknown_operation" {
+            transcript.lapseConnection(opID: opID)
+            timeline.lapseConnection(opID: opID)
+        } else if let status = try? await api.connectionStatus(sessionID: sessionID, opID: opID),
+                  transcript.sessionID == sessionID
+        {
+            transcript.noteConnection(status)
+            timeline.noteConnection(status)
+        } else {
+            return
+        }
+        publishLive()
     }
 
     public func interrupt() async throws {
@@ -739,6 +778,7 @@ public actor ChatSession: OutboxSubmitter {
             older: timeline.older.state,
             isRunning: timeline.live.isRunning,
             pendingPrompts: timeline.live.pendingPrompts,
+            hasPendingConnection: !timeline.live.pendingConnections().isEmpty,
             lastError: timeline.live.lastError,
             executionGeneration: timeline.live.executionGeneration,
             runningToolName: timeline.live.runningToolName,

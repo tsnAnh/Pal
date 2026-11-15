@@ -314,6 +314,7 @@ set +e
   TEST_RUNNER_HERMES_UITEST_SHOTS="$ART" \
   TEST_RUNNER_HERMES_UITEST_SEED="${HERMES_UI_E2E_SEED:-}" \
   TEST_RUNNER_HERMES_UITEST_PERF_MANIFEST="${HERMES_IOS_E2E_PERF_MANIFEST:-}" \
+  TEST_RUNNER_HERMES_UITEST_HOME="$HERMES_IOS_E2E_HOME" \
   xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
     -destination "platform=iOS Simulator,id=$UDID" -derivedDataPath "$IOS_DIR/build/DerivedData" \
     ${HERMES_UI_E2E_ONLY:+-only-testing:"$HERMES_UI_E2E_ONLY"} \
@@ -324,5 +325,10 @@ set -e
 kill -INT "$RECORD_PID" 2>/dev/null || true
 wait "$RECORD_PID" 2>/dev/null || true
 RECORD_PID=""
+cp "$HERMES_IOS_E2E_GATEWAY_LOG" "$ART/gateway.log" 2>/dev/null || true
+cp "$HERMES_IOS_E2E_STUB_LOG" "$ART/fake-llm-requests.jsonl" 2>/dev/null || true
+for log in "$HERMES_IOS_E2E_HOME"/profiles/*/logs/agent.log; do
+  [ -f "$log" ] && cp "$log" "$ART/profile-$(basename "$(dirname "$(dirname "$log")")")-agent.log"
+done
 grep -E "Test Case .*(passed|failed)|Executed|TEST (EXECUTE|BUILD)" "$ART/xcodebuild-test.log" | tail -12
 exit "$STATUS"

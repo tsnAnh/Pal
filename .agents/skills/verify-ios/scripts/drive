@@ -73,6 +73,7 @@ while IFS= read -r name; do ARGS+=(-u "$name"); done < <(strip_env_names)
   TEST_RUNNER_HERMES_UITEST_USERNAME="$HERMES_IOS_TEST_USERNAME" \
   TEST_RUNNER_HERMES_UITEST_PASSWORD="$HERMES_IOS_TEST_PASSWORD" \
   TEST_RUNNER_HERMES_UITEST_SHOTS="$DIR/shots" \
+  TEST_RUNNER_HERMES_UITEST_HOME="$HERMES_IOS_E2E_HOME" \
   TEST_RUNNER_HERMES_UITEST_SEED="${VERIFY_IOS_SEED:-}" \
   TEST_RUNNER_HERMES_UITEST_PERF_MANIFEST="${HERMES_IOS_E2E_PERF_MANIFEST:-}" \
   xcodebuild -project HermesBots.xcodeproj -scheme HermesBots \
@@ -91,6 +92,9 @@ perl -e 'alarm 120; exec @ARGV' xcrun simctl spawn "$UDID" log show --info --las
   --predicate "subsystem == \"$LOG_SUBSYSTEM\"" >"$DIR/app-os-log.txt" 2>/dev/null
 cp "$HERMES_IOS_E2E_GATEWAY_LOG" "$DIR/gateway.log" 2>/dev/null
 cp "$HERMES_IOS_E2E_STUB_LOG" "$DIR/fake-llm-requests.jsonl" 2>/dev/null
+for log in "$HERMES_IOS_E2E_HOME"/profiles/*/logs/agent.log; do
+  [ -f "$log" ] && cp "$log" "$DIR/profile-$(basename "$(dirname "$(dirname "$log")")")-agent.log"
+done
 for db in "$HERMES_IOS_E2E_HOME"/profiles/*/state.db; do
   [ -f "$db" ] || continue
   profile="$(basename "$(dirname "$db")")"

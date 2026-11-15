@@ -81,6 +81,10 @@ struct ChatRowView: View {
             }
         case .approvalAnswered(let record):
             ApprovalAnsweredCard(record: record)
+        case .connection(let card):
+            ConnectionRequestCard(card: card, answering: model.answeringConnections) { target, decision in
+                model.answerConnection(opID: card.operation.opID, target: target.name, decision: decision)
+            }
         case .notice(let notice):
             NoticeRow(notice: notice, highlight: findQuery, isCurrentMatch: isCurrentMatch)
         case .botThread(let link):

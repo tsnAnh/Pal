@@ -16,12 +16,23 @@ public enum T3SignInReason: Sendable, Equatable {
 public enum T3Failure: Sendable, Equatable {
     case signIn(McpOAuthError)
     case registration
+    case partialRegistration
+    case noBots
     case storage
+
+    public var isRegistration: Bool {
+        switch self {
+        case .registration, .partialRegistration, .noBots: true
+        case .signIn, .storage: false
+        }
+    }
 
     public var text: String {
         switch self {
         case .signIn(let error): error.reason
         case .registration: "Your Pal couldn't be told about T3 Code. Try again"
+        case .partialRegistration: "Some of your bots couldn't be told about T3 Code. Try again"
+        case .noBots: "None of your bots are online yet. Pal keeps trying"
         case .storage: "Pal couldn't keep the T3 Code sign-in on this Mac"
         }
     }
@@ -47,7 +58,7 @@ public enum T3CodeEvent: Sendable, Equatable {
     case signInSucceeded
     case signInCancelled
     case signInFailed(T3Failure)
-    case registrationFailed
+    case registrationFailed(T3Failure)
     case registrationSucceeded
     case unauthorized
     case disconnectTapped
@@ -115,10 +126,10 @@ public struct T3CodeStatus: Sendable, Equatable {
             attempt = .idle
         case .signInFailed(let failure):
             attempt = .failed(failure)
-        case .registrationFailed:
-            attempt = .failed(.registration)
+        case .registrationFailed(let failure):
+            attempt = .failed(failure)
         case .registrationSucceeded:
-            if attempt == .failed(.registration) { attempt = .idle }
+            if case .failed(let failure) = attempt, failure.isRegistration { attempt = .idle }
         case .unauthorized:
             credential = .unusable(.rejected)
             attempt = .idle
@@ -156,7 +167,7 @@ public struct T3CodeRowPresentation: Sendable, Equatable {
         case .notRunning: self.init(summary: "Open T3 Code to connect", buttonTitle: "Open T3 Code", action: .openApp)
         case .signedOut: self.init(summary: Self.subtitle, buttonTitle: "Connect", action: .connect)
         case .connecting: self.init(summary: "Waiting for you to approve in your browser", buttonTitle: nil, action: nil, isBusy: true)
-        case .connected: self.init(summary: "Connected", buttonTitle: "Disconnect", action: .disconnect)
+        case .connected: self.init(summary: "Connected. Each bot asks you before using it", buttonTitle: "Disconnect", action: .disconnect)
         case .needsSignIn(let reason): self.init(summary: reason.text, buttonTitle: "Sign in again", action: .connect)
         case .failed(let failure): self.init(summary: failure.text, buttonTitle: "Try again", action: .connect)
         }
