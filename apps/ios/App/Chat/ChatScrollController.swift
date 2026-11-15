@@ -48,8 +48,8 @@ final class ChatScrollController {
     @ObservationIgnored private var revealing = false
     @ObservationIgnored private var visibleIDs: Set<String> = []
     @ObservationIgnored private var revealTask: Task<Void, Never>?
-    static let revealSettle = Duration.milliseconds(300)
-    static let revealAttempts = 4
+    static let revealSettle = Duration.milliseconds(250)
+    static let revealAttempts = 12
 
     private struct Pin {
         let id: String
@@ -98,19 +98,24 @@ final class ChatScrollController {
             knownIDs = Set(ids)
         }
         guard let last = lastRowID, ids.last != last, let anchor = ids.lastIndex(of: last) else {
-            if mode == .following { position.scrollTo(edge: .top) }
+            keepNewestInView()
             return
         }
         switch mode {
         case .following:
-            position.scrollTo(edge: .top)
+            keepNewestInView()
         case .reading:
             unseen += ids[(anchor + 1)...].count { !knownIDs.contains($0) }
         }
     }
 
     func contentGrew() {
-        if mode == .following { position.scrollTo(edge: .top) }
+        keepNewestInView()
+    }
+
+    private func keepNewestInView() {
+        guard mode == .following, !phase.isMoving else { return }
+        position.scrollTo(edge: .top)
     }
 
     func jumpToBottom() {

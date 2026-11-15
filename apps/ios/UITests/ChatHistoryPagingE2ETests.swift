@@ -149,7 +149,7 @@ final class ChatHistoryPagingE2ETests: BotProfileTestCase {
 
     func test3NewReplyWhileReadingDoesNotMoveAndShowsPill() throws {
         let (app, driver, _) = try openLongChat("bot-alpha")
-        let prompt = "SLOW paging probe " + UUID().uuidString.prefix(6)
+        let prompt = "HOLD paging probe " + UUID().uuidString.prefix(6)
         send(app, prompt)
         waitFor(bubbles(app, "userBubble", containing: prompt).firstMatch, timeout: 15, "the sent prompt appears")
         for _ in 0..<4 { driver.dragOlder() }
@@ -184,7 +184,7 @@ final class ChatHistoryPagingE2ETests: BotProfileTestCase {
         let pill = element(app, "scrollToBottomButton")
         waitFor(pill, timeout: 5, "jump pill is still there")
         pill.tap()
-        let reply = bubbles(app, "assistantBubble", containing: "slow-39").firstMatch
+        let reply = bubbles(app, "assistantBubble", containing: "hold-05").firstMatch
         waitFor(reply, timeout: 30, "the finished reply is on screen after the jump")
         waitGone(element(app, "thinkingLine"), timeout: 60, "thinking row ends with the reply")
         waitGone(pill, timeout: 10, "the pill goes away at the bottom")
