@@ -6239,7 +6239,7 @@ export interface CanonicalSnapshot {
   messages_omitted?: boolean | null
   display_messages?: TranscriptMessage[] | null
   message_count: number
-  older_messages?: number | null
+  timeline?: CanonicalTimelinePage | null
   running: boolean
   authority_epoch: number
   replay_epoch: string
@@ -6253,6 +6253,30 @@ export interface CanonicalSnapshot {
   pending_connection?: ConnectionRequestPayload | null
   todo_state?: TodoState | null
   open_requests?: OpenRequestEntry[] | null
+}
+export interface CanonicalTimelinePage {
+  entries: CanonicalTimelineEntry[]
+  older: string | null
+  revision: string
+}
+export interface CanonicalTimelineEntry {
+  id: string
+  role: 'user' | 'assistant'
+  text: string
+  timestamp?: number | null
+  row_id?: number | null
+  archived?: boolean | null
+  display_kind?: string | null
+  display_metadata?: unknown
+  reasoning?: string | null
+  tools?: CanonicalTimelineTool[] | null
+}
+export interface CanonicalTimelineTool {
+  call_id: string
+  name: string
+  context?: string | null
+  args?: Record<string, unknown> | null
+  result?: unknown
 }
 export interface CanonicalPendingAdmission {
   admission_id: string
@@ -6334,7 +6358,7 @@ export interface CanonicalResumeParams {
   omit_messages?: boolean
   cols?: number | null
   display_projection?: boolean
-  message_limit?: number | null
+  timeline_limit?: number | null
 }
 export interface CanonicalListParams {
   profile?: string | null
@@ -6428,15 +6452,11 @@ export interface CanonicalReplayEvent {
   execution_generation?: number | null
   admission_id?: string | null
 }
-export interface CanonicalHistoryPageParams {
+export interface CanonicalTimelineParams {
   profile?: string | null
   session_id: string
-  before_row_id: number
-  limit: number
-}
-export interface CanonicalHistoryPage {
-  messages: TranscriptMessage[]
-  older_messages: number
+  before?: string | null
+  limit?: number
 }
 export interface CanonicalSubmitParams {
   profile?: string | null
@@ -7410,6 +7430,8 @@ export interface PersistedTurn {
   complete: boolean
   user_row_id?: number | null
   final_assistant_row_id?: number | null
+  user_message_uid?: string | null
+  final_assistant_message_uid?: string | null
   user_row_ids?: number[] | null
   submission_id?: string | null
 }
@@ -9024,7 +9046,6 @@ export interface CanonicalRpcMethods {
   'session.events.since': { params: CanonicalEventsParams; result: CanonicalEventsResult }
   /** The /save transcript rendered for the client to write (the gateway writes nothing). */
   'session.export': { params: SessionExportParams; result: SessionExportResult }
-  'session.history.page': { params: CanonicalHistoryPageParams; result: CanonicalHistoryPage }
   /** Frozen launch policy projection of one local session. */
   'session.info': { params: CanonicalSessionInfoParams; result: CanonicalSessionInfo }
   'session.interrupt': { params: CanonicalControlParams; result: CanonicalSessionHandle }
@@ -9040,6 +9061,7 @@ export interface CanonicalRpcMethods {
   /** The session.usage dict on demand: what main's classic CLI read off its agent. */
   'session.stats': { params: SessionStatsParams; result: SessionStats }
   'session.steer': { params: CanonicalCorrectionParams; result: CanonicalCorrectionResult }
+  'session.timeline': { params: CanonicalTimelineParams; result: CanonicalTimelinePage }
   /** One page of a stored conversation's display rows across its compression lineage (live rows and rows a compaction archived, each logical message once, and each compaction handoff as a `row_kind: 'compaction'` row at its position), from the oldest or the newest. Never attaches the caller. A page holds at most `limit` (1-500) rows, compaction rows included, plus up to 64 tool results of the call at its edge, and at most 2 MiB of JSON, cut between tool groups (a single larger row keeps only its role, kind, time, ids and the head of its text, and carries `truncated`). Oldest order: read on until a page is empty, then poll with the same `next_cursor` for the rows written since; `reset: true` means the rows the cursor covered changed shape, so the reply starts again from the first page. Latest order: read on until `next_cursor` is null; its cursor stays valid across later compactions and turns. A rotated lineage past `sessions.max_resume_messages` pages only its current segment (a cursor from before it crossed, or a latest-order cursor from before a compaction rotated that segment, answers `reset: true`). With `subagent_id`: a delegated child of the session (running: through the parent's roster; finished: through its stored row, when its ancestry reaches this conversation); a foreign or unknown child is `available: false`. Refusals: invalid_params (a cursor issued for another session, child or order, or not by this read), not_found, permission_denied, profile_mismatch. */
   'session.transcript': { params: StoredTranscriptParams; result: StoredTranscriptResult }
   /** Write both shared-metrics opt-ins at once (send requires collection) and reconcile consent windows. */
@@ -9191,7 +9213,6 @@ export const CANONICAL_RPC_METHODS = [
   'session.detach',
   'session.events.since',
   'session.export',
-  'session.history.page',
   'session.info',
   'session.interrupt',
   'session.list',
@@ -9202,6 +9223,7 @@ export const CANONICAL_RPC_METHODS = [
   'session.search',
   'session.stats',
   'session.steer',
+  'session.timeline',
   'session.transcript',
   'shared_metrics.set',
   'shared_metrics.status',

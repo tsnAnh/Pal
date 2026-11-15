@@ -3,13 +3,11 @@ import PalDesign
 import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
-#if os(macOS)
-import AppKit
-#endif
 
 struct ChatComposer: View {
     let botName: String
     let accent: BotAccent?
+    let answersQuestion: Bool
     let attachments: [PendingAttachment]
     let slashItems: [SlashItem]
     let loadSlashItems: () -> Void
@@ -31,8 +29,8 @@ struct ChatComposer: View {
 
     #if os(macOS)
     @Environment(MacShell.self) private var shell
-    @State private var surfaceFrame = CGRect.zero
     #endif
+    @State private var surfaceFrame = CGRect.zero
     @State private var isPhotoPickerPresented = false
     @State private var isCameraPresented = false
     @State private var isFileImporterPresented = false
@@ -96,33 +94,21 @@ struct ChatComposer: View {
     }
 
     private var buttonDiameter: CGFloat {
-        #if os(macOS)
-        27
-        #else
-        ChatMetrics.composerButtonDiameter
-        #endif
+        PlatformVariant.pick(mac: 27, iOS: ChatMetrics.composerButtonDiameter)
     }
 
     private var surfaceHeight: CGFloat {
-        #if os(macOS)
-        42
-        #else
-        ChatMetrics.composerHeight
-        #endif
+        PlatformVariant.pick(mac: 42, iOS: ChatMetrics.composerHeight)
     }
 
     private var bottomMargin: CGFloat {
-        #if os(macOS)
-        14
-        #else
-        8
-        #endif
+        PlatformVariant.pick(mac: 14, iOS: 8)
     }
 
-    private var promptText: Text { Text("Message \(botName)") }
+    private var promptText: Text { answersQuestion ? Text("Or type your own answer") : Text("Message \(botName)") }
 
-    private var actionFill: Color { accent?.accent ?? Color(rgb: 0xD7D7D7) }
-    private var actionInk: Color { accent?.foreground ?? Color(rgb: 0x161616) }
+    private var actionFill: Color { BubblePalette.ink(accent: accent) }
+    private var actionInk: Color { BubblePalette.inkText(accent: accent) }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -213,13 +199,11 @@ struct ChatComposer: View {
 
     private var isComposingText: Bool { ComposerInput.isComposing }
 
-    #if os(macOS)
     private func moveFileRefSelection(by step: Int) -> KeyPress.Result {
         guard !fileRefMatches.isEmpty, !isComposingText else { return .ignored }
         fileRefIndex = (fileRefIndex + step + fileRefMatches.count) % fileRefMatches.count
         return .handled
     }
-    #endif
 
     private var composerRow: some View {
         HStack(alignment: .bottom, spacing: 6) {
@@ -228,23 +212,15 @@ struct ChatComposer: View {
             micButton
             trailingButton
         }
-        .padding(.leading, macOnly(6, else: ChatMetrics.composerInset))
-        .padding(.trailing, macOnly(7, else: ChatMetrics.composerInset))
-        .padding(.vertical, macOnly(7, else: ChatMetrics.composerInset))
+        .padding(.leading, PlatformVariant.pick(mac: 6, iOS: ChatMetrics.composerInset))
+        .padding(.trailing, PlatformVariant.pick(mac: 7, iOS: ChatMetrics.composerInset))
+        .padding(.vertical, PlatformVariant.pick(mac: 7, iOS: ChatMetrics.composerInset))
         .frame(minHeight: surfaceHeight)
-        .modifier(ComposerSurface(cornerRadius: surfaceHeight / 2, isFocused: focused.wrappedValue))
-        #if os(macOS)
-        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { surfaceFrame = $0 }
-        #endif
+        .modifier(ComposerSurface(cornerRadius: surfaceHeight / 2))
+        .macOnly { $0.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { surfaceFrame = $0 } }
+
     }
 
-    private func macOnly(_ mac: CGFloat, else other: CGFloat) -> CGFloat {
-        #if os(macOS)
-        mac
-        #else
-        other
-        #endif
-    }
 
     @ViewBuilder
     private var attachMenu: some View {
@@ -292,22 +268,24 @@ struct ChatComposer: View {
             .focused(focused)
             .submitLabel(.send)
             .onSubmit { if hasContent, canSend { send() } }
-            #if os(macOS)
-            .textFieldStyle(.plain)
-            .focusEffectDisabled()
-            .onKeyPress(.escape, phases: .down) { _ in
-                guard !slashMatches.isEmpty || isFileRefOpen, !isComposingText else { return .ignored }
-                dismissedDraft = draft
-                return .handled
+            .macOnly { field in
+                field
+                    .textFieldStyle(.plain)
+                    .focusEffectDisabled()
+                    .onKeyPress(.escape, phases: .down) { _ in
+                        guard !slashMatches.isEmpty || isFileRefOpen, !isComposingText else { return .ignored }
+                        dismissedDraft = draft
+                        return .handled
+                    }
+                    .onKeyPress(.upArrow, phases: .down) { _ in moveFileRefSelection(by: -1) }
+                    .onKeyPress(.downArrow, phases: .down) { _ in moveFileRefSelection(by: 1) }
+                    .onKeyPress(.tab, phases: .down) { press in
+                        guard let item = selectedFileRef, press.modifiers.isEmpty, !isComposingText else { return .ignored }
+                        pickFileRef(item, descend: true)
+                        return .handled
+                    }
             }
-            .onKeyPress(.upArrow, phases: .down) { _ in moveFileRefSelection(by: -1) }
-            .onKeyPress(.downArrow, phases: .down) { _ in moveFileRefSelection(by: 1) }
-            .onKeyPress(.tab, phases: .down) { press in
-                guard let item = selectedFileRef, press.modifiers.isEmpty, !isComposingText else { return .ignored }
-                pickFileRef(item, descend: true)
-                return .handled
-            }
-            #endif
+
             .onKeyPress(.return, phases: .down, action: handleReturn)
             .padding(.horizontal, 6)
             .frame(minHeight: buttonDiameter)
@@ -354,19 +332,19 @@ struct ChatComposer: View {
 
     private func plainIcon(_ systemName: String) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: macOnly(14, else: 17), weight: .regular))
+            .font(.system(size: PlatformVariant.pick(mac: 14, iOS: 17), weight: .regular))
             .foregroundStyle(PalTokens.textSecondary)
-            .frame(width: macOnly(28, else: buttonDiameter), height: buttonDiameter)
-            .contentShape(Rectangle())
+            .frame(width: PlatformVariant.pick(mac: 28, iOS: buttonDiameter), height: buttonDiameter)
+            .minimumHitTarget(visual: buttonDiameter)
     }
 
     private func actionCircle(systemName: String, weight: Font.Weight) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: buttonDiameter * macOnly(0.48, else: 0.5), weight: weight))
+            .font(.system(size: buttonDiameter * PlatformVariant.pick(mac: 0.48, iOS: 0.5), weight: weight))
             .foregroundStyle(actionInk)
             .frame(width: buttonDiameter, height: buttonDiameter)
             .background(actionFill, in: Circle())
-            .contentShape(Circle())
+            .minimumHitTarget(visual: buttonDiameter)
     }
 }
 
@@ -483,7 +461,7 @@ private struct ReplyBar: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: 32, height: 32)
-                    .contentShape(Circle())
+                    .minimumHitTarget(visual: 32)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Cancel reply"))
@@ -500,13 +478,12 @@ private struct ReplyBar: View {
 
 private struct ComposerSurface: ViewModifier {
     let cornerRadius: CGFloat
-    let isFocused: Bool
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        content
-            .background(PalTokens.elevated, in: shape)
-            .overlay(shape.strokeBorder(isFocused ? PalTokens.borderStrong : PalTokens.panelBorder, lineWidth: 1))
+        GlassEffectContainer {
+            content.palGlass(shape, interactive: false)
+        }
     }
 }
 
@@ -570,14 +547,16 @@ private struct AttachmentTray: View {
         switch attachment.state {
         case .uploading:
             ZStack {
-                Color.black.opacity(0.35)
-                ProgressView().controlSize(.small)
+                PalTokens.content.opacity(0.55)
+                ProgressView().controlSize(.small).tint(PalTokens.textSecondary)
             }
             .accessibilityIdentifier("attachmentUploading")
         case .failed(let reason):
             ZStack {
-                Color.black.opacity(0.5)
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color(theme.palette.destructive))
+                PalTokens.content.opacity(0.75)
+                Image(systemName: "exclamationmark.circle")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(PalTokens.textPrimary)
             }
             .accessibilityLabel(Text(reason))
             .accessibilityIdentifier("attachmentFailed")

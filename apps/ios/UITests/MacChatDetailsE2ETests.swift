@@ -153,7 +153,7 @@ final class MacChatDetailsE2ETests: BotProfileTestCase {
             send(app, slow)
             let thinking = element(app, "thinkingLine")
             waitFor(thinking, timeout: 60, "thinking line during a slow reply")
-            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", "Putting it together", "Putting it together")).count > 0, app.debugDescription)
+            XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", "Thinking", "Thinking")).count > 0, app.debugDescription)
             Thread.sleep(forTimeInterval: 1.2)
             shot(app, "mac-chat-thinking-\(suffix)")
             waitForReply(app, below: slow, timeout: 90)

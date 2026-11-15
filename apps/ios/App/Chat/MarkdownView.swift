@@ -100,13 +100,7 @@ struct CodeBlockView: View {
 
     @Environment(\.hermesTheme) private var theme
 
-    private var codeFont: Font {
-        #if os(macOS)
-        .system(size: 12, design: .monospaced)
-        #else
-        .system(.footnote, design: .monospaced)
-        #endif
-    }
+    private var codeFont: Font { RichCode.font }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -132,6 +126,7 @@ struct InlineText: View {
     var foreground: Color?
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.chatInk) private var chatInk
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 17
 
     var body: some View {
@@ -147,35 +142,13 @@ struct InlineText: View {
     private var defaultInk: Color { PalTokens.textPrimary }
 
     private var composed: Text {
-        let highlighted = Self.applyHighlight(to: text, query: highlight, current: isCurrentMatch, theme: theme)
-        var result = Text("")
-        for run in highlighted.runs {
-            let slice = AttributedString(highlighted[run.range])
-            if let link = run.link {
-                let icon = FaviconCache.shared.image(for: link, pointSize: iconSize)
-                let iconText = icon.map { Text(Image(platformImage: $0)) } ?? Text(Image(systemName: "globe")).foregroundStyle(Color(theme.palette.textSecondary))
-                result = Text("\(result)\(iconText)\(Text(" "))\(Text(slice).underline())")
-            } else {
-                result = Text("\(result)\(Text(slice))")
+        let mark = FindMark(ink: chatInk, surfaceText: foreground, isCurrent: isCurrentMatch)
+        let highlighted = InlineTextComposer.highlight(text, query: highlight, fill: mark.fill, ink: mark.text)
+        return InlineTextComposer.compose(highlighted) { link in
+            if let icon = FaviconCache.shared.image(for: link, pointSize: iconSize) {
+                return Text(Image(platformImage: icon))
             }
+            return Text(Image(systemName: "globe")).foregroundStyle(Color(theme.palette.textSecondary))
         }
-        return result
-    }
-
-    static func applyHighlight(to text: AttributedString, query: String, current: Bool, theme: PalTheme) -> AttributedString {
-        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !needle.isEmpty else { return text }
-        var result = text
-        let plain = String(text.characters)
-        var searchRange = plain.startIndex..<plain.endIndex
-        let fill = current ? Color(theme.palette.primaryBadge) : Color.yellow.opacity(0.35)
-        while let found = plain.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: searchRange) {
-            let lower = result.index(result.startIndex, offsetByCharacters: plain.distance(from: plain.startIndex, to: found.lowerBound))
-            let upper = result.index(result.startIndex, offsetByCharacters: plain.distance(from: plain.startIndex, to: found.upperBound))
-            result[lower..<upper].backgroundColor = fill
-            if current { result[lower..<upper].foregroundColor = .black }
-            searchRange = found.upperBound..<plain.endIndex
-        }
-        return result
     }
 }

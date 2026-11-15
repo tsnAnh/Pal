@@ -11,12 +11,11 @@ struct ChatView: View {
     @State private var draft = ""
     @State private var dictation = DictationController()
     @State private var isVoiceModePresented = false
-    @State private var isNearBottom = true
-    @State private var scrollPosition = ScrollPosition(edge: .bottom)
-    @State private var shownRowLimit = ChatView.rowWindow
-    @State private var pinnedToBottom = true
+    @State private var scroll = ChatScrollController()
     @State private var connectionIsSlow = false
+    @State private var chrome = EdgeInsets()
     @FocusState private var composerFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let teach: TeachModel
     let router: AppRouter
@@ -27,8 +26,6 @@ struct ChatView: View {
     @Environment(ActionAutoApprove.self) private var autoApprove
     #if os(macOS)
     @Environment(MacShell.self) private var shell
-    #else
-    @State private var messageMenu: MessageMenuRequest?
     #endif
 
     init(model: ChatModel, teach: TeachModel, router: AppRouter) {
@@ -47,90 +44,100 @@ struct ChatView: View {
     }
 
     private var chat: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(shownRows) { shown in
-                        let row = shown.row
-                        ChatRowView(row: row, previous: shown.previous, model: model) { link in
-                            router.push(.botThread(BotThreadRoute(
-                                botName: model.bot.name,
-                                threadID: link.threadID,
-                                focusExchangeID: link.exchangeID
-                            )))
-                        }
-                        .id(row.id)
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                footer
+                    .newestFirst()
+                ForEach(model.rows.reversed()) { row in
+                    ChatRowView(row: row, model: model) { link in
+                        router.push(.botThread(BotThreadRoute(
+                            botName: model.bot.name,
+                            threadID: link.threadID,
+                            focusExchangeID: link.exchangeID
+                        )))
                     }
-                    statusLine
+                    .newestFirst()
+                    .onGeometryChange(for: CGFloat.self) {
+                        $0.frame(in: .named(ChatScrollController.contentSpace)).minY
+                    } action: { scroll.rowMoved(row.id, contentMinY: $0) }
                 }
-                .padding(.horizontal, ChatMetrics.edgeMargin)
-                .padding(.top, 8)
-                .chatColumn()
-            }
-            .scrollPosition($scrollPosition)
-            .defaultScrollAnchor(.bottom)
-            .defaultScrollAnchor(.bottom, for: .sizeChanges)
-            .scrollDismissesKeyboard(.interactively)
-            .scrollEdgeEffectHidden(true, for: .top)
-            .overlay(alignment: .top) { topFade }
-            .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
-            .safeAreaInset(edge: .top, spacing: 0) { AutoApproveBanner(sessionID: model.bot.conversationID) }
-            .teachPresentations(teach, surface: .chat)
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.visibleRect.maxY >= geometry.contentSize.height - 120
-            } action: { _, nearBottom in
-                isNearBottom = nearBottom
-            }
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y + geometry.contentInsets.top < 600
-            } action: { _, nearTop in
-                if nearTop, !pinnedToBottom { revealOlderRows() }
-            }
-            .onScrollGeometryChange(for: CGFloat.self) { $0.contentSize.height } action: { _, _ in
-                if pinnedToBottom { scrollPosition.scrollTo(edge: .bottom) }
-            }
-            .onScrollPhaseChange { oldPhase, newPhase, context in
-                guard newPhase == .idle, oldPhase == .interacting || oldPhase == .decelerating else { return }
-                let geometry = context.geometry
-                pinnedToBottom = geometry.contentSize.height + geometry.contentInsets.bottom - geometry.visibleRect.maxY < 40
-            }
-            .accessibilityIdentifier("chatScreen")
-            .overlay(alignment: .bottom) {
-                if !isNearBottom {
-                    ScrollToBottomButton { scrollToBottom() }
-                        .padding(.bottom, 10)
-                        .transition(.scale.combined(with: .opacity))
+                if !model.rows.isEmpty {
+                    OlderHistoryRow(state: model.olderHistory, ink: ink) { model.wantOlder() }
+                        .newestFirst()
+                        .padding(.bottom, 8)
                 }
             }
-            .animation(.snappy(duration: 0.2), value: isNearBottom)
-            .safeAreaBar(edge: .bottom) { bottomBar().chatColumn() }
-            #if os(macOS)
-            .safeAreaBar(edge: .top) {
-                MacChatHeader(bot: model.bot, activity: model.activity, mood: model.avatarMood, router: router)
-            }
-            #endif
-            .onChange(of: model.currentFindRowID) { _, id in
-                guard let id else { return }
-                pinnedToBottom = false
-                if let index = model.rows.firstIndex(where: { $0.id == id }) {
-                    shownRowLimit = max(shownRowLimit, model.rows.count - index)
-                }
-                withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(id, anchor: .center) }
+            .scrollTargetLayout()
+            .coordinateSpace(.named(ChatScrollController.contentSpace))
+            .padding(.horizontal, ChatMetrics.edgeMargin)
+            .chatColumn()
+        }
+        .scrollPosition($scroll.position)
+        .contentMargins(.top, max(0, chrome.bottom - chrome.top), for: .automatic)
+        .contentMargins(.bottom, max(0, chrome.top - chrome.bottom), for: .automatic)
+        .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { chrome = $0 }
+        .newestFirst()
+        .mask { edgeFade }
+        .overlay { openingState }
+        .scrollDismissesKeyboard(.interactively)
+        .scrollEdgeEffectHidden(true, for: .all)
+        .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
+        .safeAreaInset(edge: .top, spacing: 0) { AutoApproveBanner(sessionID: model.bot.conversationID) }
+        .teachPresentations(teach, surface: .chat)
+        .onScrollGeometryChange(for: ChatViewport.self, of: ChatViewport.init) { old, new in
+            scroll.observe(new)
+            if new.contentHeight > old.contentHeight { scroll.contentGrew() }
+        }
+        .onScrollPhaseChange { _, phase in scroll.observe(phase) }
+        .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.01) { scroll.visibleRowsChanged($0) }
+        .onChange(of: chrome) { scroll.contentGrew() }
+        .onChange(of: model.rows.map(\.id), initial: true) { _, ids in scroll.rowsChanged(ids) }
+        .task(id: OlderDemand(wants: scroll.wantsOlder, state: model.olderHistory)) {
+            guard scroll.wantsOlder, model.olderHistory.canLoad else { return }
+            while !Task.isCancelled {
+                model.wantOlder()
+                try? await Task.sleep(for: Self.olderDemandInterval)
             }
         }
-        #if os(iOS)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                BotCapsule(bot: model.bot, activity: model.activity, mood: model.avatarMood)
-            }
-            .sharedBackgroundVisibility(.hidden)
-            ToolbarItem(placement: .trailingBar) {
-                menu
+        .accessibilityIdentifier("chatScreen")
+        .accessibilityValue(Text(historySummary))
+        .overlay(alignment: .bottom) {
+            if scroll.showsJumpButton, !model.isFinding {
+                ScrollToBottomButton(newCount: scroll.unseen) { scroll.jumpToBottom(animated: !reduceMotion) }
+                    .padding(.bottom, 4)
+                    .transition(jumpButtonTransition)
             }
         }
-        .toolbarTitleDisplayMode(.inline)
-        #else
-        .macChatActions(
+        .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0), value: scroll.showsJumpButton)
+        .safeAreaBar(edge: .bottom) { bottomBar().chatColumn() }
+        .onChange(of: model.currentFindRowID) { _, id in
+            guard let id else { return }
+            scroll.reveal(id)
+        }
+        .iOSOnly { chat in
+            chat
+                .toolbar {
+                    ToolbarItem(placement: .principal) {
+                        Button { router.perform(.viewProfile, botName: model.bot.name) } label: {
+                            BotCapsule(bot: model.bot, activity: model.activity, mood: model.avatarMood)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!router.supports(.viewProfile))
+                        .accessibilityHint(Text("Shows this bot's profile"))
+                        .accessibilityIdentifier("chatTitle")
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+                    ToolbarItem(placement: .trailingBar) {
+                        menu
+                    }
+                }
+                .toolbarTitleDisplayMode(.inline)
+        }
+        .macChatChrome(
+            bot: model.bot,
+            activity: model.activity,
+            mood: model.avatarMood,
+            router: router,
             find: {
                 composerFocused = false
                 model.beginFinding()
@@ -140,14 +147,9 @@ struct ChatView: View {
                 Task { composerFocused = true }
             }
         )
-        #endif
-        #if os(macOS)
-        .background(PalTokens.content)
-        #else
-        .background(Color(theme.palette.canvas))
-        .environment(\.presentMessageMenu) { messageMenu = $0 }
-        .overlay { MessageMenuHost(request: $messageMenu) }
-        #endif
+        .background(PlatformVariant.pick(mac: PalTokens.content, iOS: Color(theme.palette.canvas)))
+        .messageMenuPresenter()
+        .environment(\.chatInk, ink)
         .task { model.start() }
         .task(id: model.bot.conversationID) { await autoApprove.load(sessionID: model.bot.conversationID) }
         .task(id: model.connection) {
@@ -176,26 +178,14 @@ struct ChatView: View {
         .fullCover(isPresented: $isVoiceModePresented) {
             VoiceModeView(model: model) { isVoiceModePresented = false }
         }
-        .alert(
-            Text("Something went wrong"),
-            isPresented: Binding(get: { model.sendError != nil }, set: { if !$0 { model.dismissError() } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.sendError ?? "")
-        }
-        .alert(
-            Text("Dictation unavailable"),
-            isPresented: Binding(get: { dictation.failure != nil }, set: { if !$0 { dictation.dismissFailure() } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(dictation.failure ?? "")
-        }
     }
 
     @ViewBuilder
-    private var statusLine: some View {
+    private var footer: some View {
+        if model.isRunning, !model.hasPendingPrompt {
+            ChatWorkingRow(status: model.workingStatus, ink: ink, avatar: model.bot.spec)
+                .padding(.top, ChatMetrics.senderSwitchGap)
+        }
         if connectionIsSlow {
             connectionStatus
                 .padding(.top, 12)
@@ -206,50 +196,77 @@ struct ChatView: View {
     private var connectionStatus: some View {
         switch model.connection {
         case .reconnecting:
-            ChatStatusLine(text: String(localized: "Reconnecting…"), dotColor: dotColor)
+            ChatStatusLine(text: String(localized: "Reconnecting…"), systemImage: "clock")
                 .accessibilityIdentifier("reconnectingIndicator")
         case .connecting, .live:
             if model.isCatchingUp {
-                ChatStatusLine(text: String(localized: "Checking for new messages…"), dotColor: dotColor)
+                ChatStatusLine(text: String(localized: "Checking for new messages…"), systemImage: "clock")
                     .accessibilityIdentifier("chatStatusLine")
             }
         }
     }
 
-    private static let rowWindow = 60
     private static let reconnectingNoticeDelay = Duration.seconds(1)
     private static let catchUpNoticeDelay = LoadingPolicy.silentWindow
+    private static let olderDemandInterval = Duration.milliseconds(250)
 
-    private struct ShownRow: Identifiable {
-        let row: ChatRow
-        let previous: ChatRow?
-        var id: String { row.id }
+    private struct OlderDemand: Hashable {
+        let wants: Bool
+        let state: OlderHistory
     }
 
-    private var shownRows: [ShownRow] {
-        let rows = model.rows
-        return (max(0, rows.count - shownRowLimit)..<rows.count).map { index in
-            ShownRow(row: rows[index], previous: index > 0 ? rows[index - 1] : nil)
+    private var historySummary: String {
+        let count = String(localized: "\(model.rows.count) messages")
+        return model.olderHistory == .loading ? count + ", " + String(localized: "loading earlier messages") : count
+    }
+
+    private var ink: Color { BubblePalette.ink(accent: model.chatAccent) }
+
+    private var jumpButtonTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .asymmetric(
+            insertion: .scale(scale: 0.9).combined(with: .opacity),
+            removal: .scale(scale: 0.9).combined(with: .opacity).animation(.easeIn(duration: 0.17))
+        )
+    }
+
+    private var edgeFade: some View {
+        GeometryReader { proxy in
+            let insets = proxy.safeAreaInsets
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: max(0, max(insets.top, ChatEdgeFade.topFloor) - ChatEdgeFade.feather / 2))
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: ChatEdgeFade.feather * 1.5)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: ChatEdgeFade.feather)
+                Color.clear
+                    .frame(height: max(0, insets.bottom - ChatEdgeFade.feather))
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height + insets.top + insets.bottom)
+            .offset(y: -insets.top)
         }
     }
 
-    private func revealOlderRows() {
-        if shownRowLimit < model.rows.count {
-            shownRowLimit += Self.rowWindow
-            return
-        }
-        guard model.hasOlderHistory, !model.isLoadingOlder, let anchor = model.rows.first?.id else { return }
-        Task {
-            let before = model.rows.count
-            guard await model.loadOlder() else { return }
-            shownRowLimit += model.rows.count - before
-            scrollPosition.scrollTo(id: anchor, anchor: .top)
+    @ViewBuilder
+    private var openingState: some View {
+        if model.isOpening {
+            DelayedReveal(after: ChatEdgeFade.loadingDelay) {
+                Text("Loading…")
+                    .hermesText(.chatStatus)
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .accessibilityIdentifier("chatLoading")
+            }
+        } else if model.rows.isEmpty, !model.isRunning {
+            NewChatIntro(bot: model.bot, mood: model.avatarMood, suggestion: Self.firstSuggestion) {
+                model.send(Self.firstSuggestion)
+            }
+            .padding(.horizontal, ChatMetrics.edgeMargin)
         }
     }
 
-    private var dotColor: Color {
-        model.chatAccent?.accent ?? Color(theme.palette.chipSelectedFill)
-    }
+    private static let firstSuggestion = String(localized: "Tell me about yourself")
 
     @ViewBuilder
     private func bottomBar() -> some View {
@@ -257,6 +274,14 @@ struct ChatView: View {
             FindBar(model: model)
         } else {
             VStack(spacing: 0) {
+                if let notice = dictation.failure ?? model.sendError {
+                    ComposerNotice(text: notice) {
+                        dictation.dismissFailure()
+                        model.dismissError()
+                    }
+                    .padding(.horizontal, ChatMetrics.edgeMargin)
+                    .transition(.opacity)
+                }
                 if let notice = hub.usageNotice {
                     UsageBanner(notice: notice) {
                         reviewUsage()
@@ -269,6 +294,7 @@ struct ChatView: View {
                 composer
             }
             .animation(.snappy(duration: 0.2), value: hub.usageNotice)
+            .animation(.easeOut(duration: 0.2), value: dictation.failure ?? model.sendError)
             .task { await hub.refreshUsageIfStale() }
         }
     }
@@ -282,23 +308,11 @@ struct ChatView: View {
         #endif
     }
 
-    private var topFade: some View {
-        #if os(macOS)
-        ChatTopFade(color: PalTokens.content, height: MacMetrics.topBarHeight + 10)
-            .ignoresSafeArea(.container, edges: .top)
-        #else
-        GeometryReader { proxy in
-            ChatTopFade(color: Color(theme.palette.canvas), height: proxy.safeAreaInsets.top + 14)
-                .ignoresSafeArea(.container, edges: .top)
-        }
-        .allowsHitTesting(false)
-        #endif
-    }
-
     private var composer: some View {
         ChatComposer(
             botName: model.bot.displayName,
             accent: model.chatAccent,
+            answersQuestion: model.hasPendingClarify,
             attachments: model.attachments,
             slashItems: model.slashItems,
             loadSlashItems: { model.loadSlashItems() },
@@ -312,9 +326,10 @@ struct ChatView: View {
             focused: $composerFocused,
             send: {
                 dictation.stop()
+                model.dismissError()
                 model.send(draft)
                 draft = ""
-                scrollToBottom()
+                scroll.jumpToBottom(animated: !reduceMotion)
             },
             openVoiceMode: {
                 dictation.stop()
@@ -356,11 +371,6 @@ struct ChatView: View {
         }
         .tint(Color(theme.palette.textPrimary))
         .accessibilityIdentifier("chatMenuButton")
-    }
-
-    private func scrollToBottom() {
-        pinnedToBottom = true
-        withAnimation(.easeOut(duration: 0.2)) { scrollPosition.scrollTo(edge: .bottom) }
     }
 
     private func loadPhotos(_ items: [PhotosPickerItem]) async {
@@ -412,6 +422,12 @@ struct ChatView: View {
     }
 }
 
+private extension View {
+    func newestFirst() -> some View {
+        scaleEffect(x: 1, y: -1, anchor: .center)
+    }
+}
+
 private struct BotCapsule: View {
     @Environment(\.hermesTheme) private var theme
 
@@ -430,10 +446,10 @@ private struct BotCapsule: View {
         }
         .padding(.horizontal, 13)
         .frame(height: ChatMetrics.headerButtonDiameter)
-        .palGlass(Capsule(), interactive: false)
+        .palGlass(Capsule(), interactive: true)
+        .contentShape(Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(bot.displayName))
         .accessibilityValue(Text(activity.accessibilityValue))
-        .accessibilityIdentifier("chatTitle")
     }
 }

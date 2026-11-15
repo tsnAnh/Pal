@@ -94,6 +94,21 @@ private enum Fixture {
     }
 }
 
+private func shownCards(_ chat: ChatSession) async -> [ConnectionCard] {
+    await chat.timelineSnapshot.rows.compactMap { row in
+        if case .connection(let card) = row.item.content { return card }
+        return nil
+    }
+}
+
+private func shownCard(_ chat: ChatSession, opID: String) async -> ConnectionCard? {
+    await shownCards(chat).first { $0.operation.opID == opID }
+}
+
+private func shownPending(_ chat: ChatSession) async -> [ConnectionCard] {
+    await shownCards(chat).filter { $0.isActionable(now: Date()) }
+}
+
 private func cards(_ transcript: Transcript) -> [ConnectionCard] {
     transcript.items.compactMap { item in
         if case .connection(let card) = item.content { return card }
@@ -322,7 +337,7 @@ struct ConnectionChatSessionTests {
     private func openCard(_ chat: ChatSession, _ gateway: FakeGateway, _ script: BotScript, seq: Int = 2) async throws {
         gateway.push(script.event("connection.request", seq: seq, payload: Fixture.request()), to: 0)
         try await waitUntil("the connection card", timeout: .seconds(5)) {
-            await chat.transcript.summary().items.contains { $0.kind == "connection" }
+            await !shownCards(chat).isEmpty
         }
     }
 
@@ -333,7 +348,7 @@ struct ConnectionChatSessionTests {
         let chat = session(ScriptedConnector(url: gateway.url))
         try await chat.start()
         try await openCard(chat, gateway, script)
-        let pending = await chat.transcript.pendingConnections()
+        let pending = await shownPending(chat)
         #expect(pending.map(\.operation.opID) == ["op-1"])
         await chat.close()
     }
@@ -348,7 +363,7 @@ struct ConnectionChatSessionTests {
         gateway.push(script.event("connection.request", seq: 2, payload: Fixture.request(targets: [
             Fixture.target("fixture-server"), Fixture.target("second-server"),
         ])), to: 0)
-        try await waitUntil("the connection card", timeout: .seconds(5)) { await chat.transcript.pendingConnections().count == 1 }
+        try await waitUntil("the connection card", timeout: .seconds(5)) { await shownPending(chat).count == 1 }
         try await chat.answerConnection(opID: "op-1", target: "fixture-server", decision: .allow)
         let expected: JSONValue = [
             "owner": ["type": "session", "session_id": "s1"],
@@ -370,7 +385,7 @@ struct ConnectionChatSessionTests {
         gateway.push(script.event("connection.request", seq: 2, payload: Fixture.request(targets: [
             Fixture.target("fixture-server"), Fixture.target("broken-server", state: "failed"),
         ])), to: 0)
-        try await waitUntil("the connection card", timeout: .seconds(5)) { await chat.transcript.pendingConnections().count == 1 }
+        try await waitUntil("the connection card", timeout: .seconds(5)) { await shownPending(chat).count == 1 }
         try await chat.answerConnection(opID: "op-1", target: "fixture-server", decision: .deny)
         try await chat.answerConnection(opID: "op-1", target: "broken-server", decision: .tryAgain)
         let statuses = script.calls("connection.respond").compactMap { $0["result"]?["targets"]?[0]?["status"]?.stringValue }
@@ -402,7 +417,7 @@ struct ConnectionChatSessionTests {
         gateway.push(script.event("connection.update", seq: 3, payload: Fixture.update(
             seq: 5, targets: [Fixture.target(state: "skipped")], settledBy: "all_resolved"
         )), to: 0)
-        try await waitUntil("the settled card", timeout: .seconds(5)) { await chat.transcript.pendingConnections().isEmpty }
+        try await waitUntil("the settled card", timeout: .seconds(5)) { await shownPending(chat).isEmpty }
         await #expect(throws: ChatError.connectionNotActionable) {
             try await chat.answerConnection(opID: "op-1", target: "fixture-server", decision: .allow)
         }
@@ -420,7 +435,7 @@ struct ConnectionChatSessionTests {
         script.lastSequence.withLock { $0 = 2 }
         gateway.dropAll()
         try await waitUntil("the lapsed card", timeout: .seconds(10)) {
-            await chat.transcript.connectionCard(opID: "op-1")?.lapsed == true
+            await shownCard(chat, opID: "op-1")?.lapsed == true
         }
         await #expect(throws: ChatError.connectionNotActionable) {
             try await chat.answerConnection(opID: "op-1", target: "fixture-server", decision: .allow)
@@ -442,9 +457,9 @@ struct ConnectionChatSessionTests {
         await #expect(throws: GatewayTransportError.self) {
             try await chat.answerConnection(opID: "op-1", target: "fixture-server", decision: .allow)
         }
-        let card = try #require(await chat.transcript.connectionCard(opID: "op-1"))
+        let card = try #require(await shownCard(chat, opID: "op-1"))
         #expect(card.lapsed)
-        #expect(await chat.transcript.pendingConnections().isEmpty)
+        #expect(await shownPending(chat).isEmpty)
         #expect(script.count("connectors.operation.status") == 0)
         await chat.close()
     }
@@ -465,7 +480,7 @@ struct ConnectionChatSessionTests {
         await #expect(throws: GatewayTransportError.self) {
             try await chat.answerConnection(opID: "op-1", target: "fixture-server", decision: .allow)
         }
-        let card = try #require(await chat.transcript.connectionCard(opID: "op-1"))
+        let card = try #require(await shownCard(chat, opID: "op-1"))
         #expect(card.operation.settled)
         #expect(fixtureState(card) == .connected)
         let status = try #require(script.calls("connectors.operation.status").first)
@@ -491,9 +506,9 @@ struct ConnectionChatSessionTests {
         try await waitUntil("a live phase", timeout: .seconds(10)) {
             if case .live = await chat.phase { true } else { false }
         }
-        let all = await chat.transcript.items.filter { $0.id == "connection:op-1" }
+        let all = await chat.timelineSnapshot.rows.filter { $0.item.id == "connection:op-1" }
         #expect(all.count == 1)
-        #expect(await chat.transcript.pendingConnections().count == 1)
+        #expect(await shownPending(chat).count == 1)
         await chat.close()
     }
 }

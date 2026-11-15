@@ -23,10 +23,8 @@ struct LibraryView: View {
                 content
             }
             .padding(.bottom, 32)
-            #if os(macOS)
             .padding(.leading, showsChrome ? 0 : 12)
             .padding(.trailing, showsChrome ? 0 : 15)
-            #endif
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .background {
@@ -58,11 +56,7 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var chips: some View {
-        #if os(macOS)
         if showsChrome { standardChips } else { MacLibraryChips(filters: filters, selection: $model.filter) }
-        #else
-        standardChips
-        #endif
     }
 
     private var standardChips: some View {
@@ -76,15 +70,11 @@ struct LibraryView: View {
 
     @ViewBuilder
     private var readySections: some View {
-        #if os(macOS)
         if showsChrome {
             ForEach(model.sections) { section in standardSection(section) }
         } else {
             ForEach(MacLibraryGroup.groups(model.entries)) { group in macSection(group) }
         }
-        #else
-        ForEach(model.sections) { section in standardSection(section) }
-        #endif
     }
 
     @ViewBuilder
@@ -132,7 +122,6 @@ extension LibraryView {
         }
     }
 
-    #if os(macOS)
     fileprivate func macSection(_ group: MacLibraryGroup) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(group.title)
@@ -153,11 +142,10 @@ extension LibraryView {
         }
         .padding(.top, 24)
     }
-    #endif
 }
 
-#if os(macOS)
-struct MacLibraryGroup: Identifiable {
+struct MacLibraryGroup
+: Identifiable {
     let id: String
     let title: String
     let entries: [LibraryEntry]
@@ -240,7 +228,6 @@ private struct MacLibraryRow: View {
         .onAppear { model.loadMoreIfNeeded(after: entry) }
     }
 }
-#endif
 
 private struct LibraryRow: View {
     let entry: LibraryEntry

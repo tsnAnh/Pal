@@ -1,4 +1,5 @@
 import Foundation
+import PalProtocol
 
 struct AttachmentStore: Sendable {
     let root: URL
@@ -15,7 +16,7 @@ struct AttachmentStore: Sendable {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             return try files.enumerated().map { index, file in
                 let stored = "\(submissionID)/\(index)-\(file.name)"
-                try file.data.write(to: root.appendingPathComponent(stored), options: Self.writeOptions)
+                try file.data.write(to: root.appendingPathComponent(stored), options: .protectedAtomic)
                 return StoredAttachment(name: file.name, mime: file.mime, stored: stored)
             }
         } catch {
@@ -43,11 +44,4 @@ struct AttachmentStore: Sendable {
         for name in names where !submissionIDs.contains(name) { remove(submissionID: name) }
     }
 
-    private static var writeOptions: Data.WritingOptions {
-        #if os(iOS)
-        [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-        #else
-        [.atomic]
-        #endif
-    }
 }

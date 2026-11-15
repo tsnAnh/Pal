@@ -42,7 +42,7 @@ final class ChatOpenPerfE2ETests: E2ETestCase {
             let accounts = (try? FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil)) ?? []
             return accounts.flatMap { account in
                 ((try? FileManager.default.contentsOfDirectory(at: account, includingPropertiesForKeys: nil)) ?? [])
-                    .filter { $0.lastPathComponent.hasPrefix("chat-") }
+                    .filter { $0.lastPathComponent.hasPrefix("timeline-") }
             }
         }
         return []

@@ -2,25 +2,14 @@ import PalDesign
 import SwiftUI
 
 enum MessageMenuMetrics {
-    #if os(macOS)
-    static let width: CGFloat = 205
-    static let rowHeight: CGFloat = 30
-    static let cellWidth: CGFloat = 32
-    static let emojiSize: CGFloat = 17
-    static let glyphSize: CGFloat = 12
-    static let glyphWidth: CGFloat = 16
-    static let textSize: CGFloat = 13
-    static let radius: CGFloat = 12
-    #else
-    static let width: CGFloat = 268
-    static let rowHeight: CGFloat = 44
-    static let cellWidth: CGFloat = 42
-    static let emojiSize: CGFloat = 23
-    static let glyphSize: CGFloat = 15
-    static let glyphWidth: CGFloat = 22
-    static let textSize: CGFloat = 16
-    static let radius: CGFloat = 16
-    #endif
+    static let width: CGFloat = PlatformVariant.pick(mac: 205, iOS: 268)
+    static let rowHeight: CGFloat = PlatformVariant.pick(mac: 30, iOS: 44)
+    static let cellWidth: CGFloat = PlatformVariant.pick(mac: 32, iOS: 42)
+    static let emojiSize: CGFloat = PlatformVariant.pick(mac: 17, iOS: 23)
+    static let glyphSize: CGFloat = PlatformVariant.pick(mac: 12, iOS: 15)
+    static let glyphWidth: CGFloat = PlatformVariant.pick(mac: 16, iOS: 22)
+    static let textSize: CGFloat = PlatformVariant.pick(mac: 13, iOS: 16)
+    static let radius: CGFloat = PlatformVariant.pick(mac: 12, iOS: 16)
 }
 
 struct MessageMenuSurface: ViewModifier {
@@ -68,14 +57,14 @@ struct MessageMenu: View {
         }
         .frame(width: MessageMenuMetrics.width - 10)
         .modifier(MessageMenuSurface(identifier: "messageContextMenu"))
-        #if os(macOS)
-        .background {
-            Button("", action: dismiss)
-                .keyboardShortcut(.cancelAction)
-                .opacity(0)
-                .accessibilityHidden(true)
+        .macOnly { menu in
+            menu.background {
+                Button("", action: dismiss)
+                    .keyboardShortcut(.cancelAction)
+                    .opacity(0)
+                    .accessibilityHidden(true)
+            }
         }
-        #endif
     }
 
     private var reactionRow: some View {
@@ -146,9 +135,7 @@ struct MessageMenuRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        #if os(macOS)
-        .onHover { hovering = $0 }
-        #endif
+        .macOnly { $0.onHover { hovering = $0 } }
         .accessibilityLabel(Text(title))
         .accessibilityIdentifier(identifier)
     }
@@ -173,7 +160,18 @@ extension EnvironmentValues {
     }
 }
 
-struct MessageMenuHost: View {
+private struct MessageMenuPresenter: ViewModifier {
+    @State private var request: MessageMenuRequest?
+
+    func body(content: Content) -> some View {
+        content
+            .environment(\.presentMessageMenu) { request = $0 }
+            .overlay { MessageMenuHost(request: $request) }
+    }
+}
+
+private struct MessageMenuHost: View {
+
     @Binding var request: MessageMenuRequest?
 
     var body: some View {
@@ -222,3 +220,13 @@ private struct MessageMenuPlacement: ViewModifier {
     }
 }
 #endif
+
+extension View {
+    func messageMenuPresenter() -> some View {
+        #if os(iOS)
+        modifier(MessageMenuPresenter())
+        #else
+        self
+        #endif
+    }
+}

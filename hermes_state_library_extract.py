@@ -32,6 +32,7 @@ _MEDIA_TAG_RE = re.compile(r"MEDIA:[ \t]*(?P<value>(?:~/|/|[A-Za-z]:[\\/]|https?
 _IMAGE_HINT_RE = re.compile(r"\[Image attached at: ([^\n\]]+)\]")
 _SENT_NOTE_RE = re.compile(
     r"\[The user sent [^\n]*?(?:saved at|voice message): (?P<path>(?:/|[A-Za-z]:[\\/])[^\s\]]+)")
+_VISION_NOTE_RE = re.compile(r"\[The user (?:sent|attached) an image[\s\S]*?image_url: (?P<path>[^\n]+?)(?: ~)?\]")
 _LINE_RANGE_RE = re.compile(r":\d+(?:-\d+)?$")
 _TRAILING_PUNCTUATION = ".,;:!?'\"*_`"
 
@@ -180,6 +181,9 @@ def _attachment_note_occurrences(text: str) -> Iterator[Occurrence]:
             yield found
     for match in _SENT_NOTE_RE.finditer(text):
         if (found := path_occurrence(match.group("path").rstrip(_TRAILING_PUNCTUATION))) is not None:
+            yield found
+    for match in _VISION_NOTE_RE.finditer(text):
+        if (found := path_occurrence(match.group("path"), media_class="image")) is not None:
             yield found
 
 

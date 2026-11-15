@@ -1,0 +1,36 @@
+name: ScrollSpike
+options:
+  bundleIdPrefix: dev.spike
+  deploymentTarget:
+    iOS: "26.0"
+    macOS: "26.0"
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    CODE_SIGN_STYLE: Automatic
+    DEVELOPMENT_TEAM: G94PJ7VQBJ
+    GENERATE_INFOPLIST_FILE: YES
+    ENABLE_APP_SANDBOX: NO
+targets:
+  ScrollSpike:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources: [App]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.spike.scrollspike
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+  ScrollSpikeUITests:
+    type: bundle.ui-testing
+    supportedDestinations: [iOS, macOS]
+    sources: [UITests]
+    dependencies: [{target: ScrollSpike}]
+    settings:
+      base:
+        TEST_TARGET_NAME: ScrollSpike
+        PRODUCT_BUNDLE_IDENTIFIER: dev.spike.scrollspike.uitests
+schemes:
+  ScrollSpike:
+    build: {targets: {ScrollSpike: all, ScrollSpikeUITests: [test]}}
+    test: {targets: [ScrollSpikeUITests]}

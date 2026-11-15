@@ -30,14 +30,27 @@ struct ReplyTarget: Equatable {
     let quote: String
 }
 
+struct ParsedMarkdown: Equatable {
+    let source: String
+    let document: MarkdownDocument
+
+    static func == (lhs: ParsedMarkdown, rhs: ParsedMarkdown) -> Bool { lhs.source == rhs.source }
+}
+
+enum ChatRowGap: Equatable {
+    case none
+    case sameSender
+    case senderSwitch
+}
+
 struct ChatRow: Identifiable, Equatable {
     enum Kind: Equatable {
         case user(text: String, delivery: BubbleDelivery)
-        case assistant(text: String)
-        case working(status: String?)
+        case assistant(ParsedMarkdown)
         case clarifyAnswered(question: String, answer: ClarifyRecord.Answer)
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
+        case approvalAnswered(ApprovalRecord)
         case connection(ConnectionCard)
         case notice(ChatNotice)
         case botThread(BotThreadLink)
@@ -46,13 +59,16 @@ struct ChatRow: Identifiable, Equatable {
 
     let id: String
     let kind: Kind
-    let separator: Date?
-    let showsUnreadDivider: Bool
+    var separator: Date?
+    var showsUnreadDivider = false
+    var gap: ChatRowGap = .none
     var images: [ImageReference] = []
+    var storedRowID: Int?
 
     var searchableText: String? {
         switch kind {
-        case .user(let text, _), .assistant(let text): text
+        case .user(let text, _): text
+        case .assistant(let parsed): parsed.source
         case .notice(.botMessage(_, let body)): body
         default: nil
         }
@@ -71,13 +87,35 @@ struct VoiceReply: Equatable {
     var turn: Int
 }
 
+enum OlderHistory: Equatable {
+    case idle
+    case loading
+    case failed
+    case complete
+
+    init(_ state: OlderState) {
+        switch state {
+        case .more, .unknown: self = .idle
+        case .loading: self = .loading
+        case .failed: self = .failed
+        case .start: self = .complete
+        }
+    }
+
+    var canLoad: Bool { self != .complete }
+}
+
 @MainActor
 @Observable
 final class ChatModel {
     private(set) var rows: [ChatRow] = []
     private(set) var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
+    private(set) var workingStatus: String?
     private(set) var hasPendingClarify = false
+    private(set) var hasPendingPrompt = false
+    private(set) var olderHistory = OlderHistory.idle
+    private(set) var isOpening = true
     private(set) var sendError: String?
     private(set) var answeringConnections: Set<String> = []
     private var pending = PendingAttachments()
@@ -90,9 +128,12 @@ final class ChatModel {
     private(set) var replyTarget: ReplyTarget?
     var isFinding = false
     var findQuery = "" {
-        didSet { recomputeFind(resetPosition: true) }
+        didSet { findQueryChanged() }
     }
-    private(set) var findMatches: [String] = []
+    private(set) var findMatches: [String] = [] {
+        didSet { findMatchIDs = Set(findMatches) }
+    }
+    private(set) var findMatchIDs: Set<String> = []
     private(set) var findPosition = 0
 
     private let openedBot: BotRow
@@ -105,10 +146,12 @@ final class ChatModel {
     private var link: BotLink?
     private var session: ChatSession?
     private var outbox: Outbox?
-    private var transcript = Transcript()
+    private var snapshot: TimelineSnapshot?
     private var outboxEntries: [OutboxEntry] = []
-    private var botThreadLinks: [BotThreadLink] = []
     private var arrivals: [String: Date] = [:]
+    private var aliases: [RowKey: String] = [:]
+    private var outboxRowIDs: Set<String> = []
+    private var built: [String: BuiltRow] = [:]
     private var hasBaseline = false
     private var hasBeenLive = false
     private var lastSignature = ActivitySignature(running: false, prompting: false)
@@ -116,16 +159,20 @@ final class ChatModel {
     private var delivering = false
     private var retried: Set<String> = []
     private var absorbedEchoes = AbsorbedEchoLedger()
-    private var hasHydrated = false
-    private var cachedItems: [TranscriptItem] = []
-    private var lastCached: CachedTranscript?
+    private var lastCached: CachedTimeline?
     private var pendingCacheSave: Task<Void, Never>?
-    private(set) var isLoadingOlder = false
-    private var findBackfill: Task<Void, Never>?
+    private var findSearch: Task<Void, Never>?
+    private var pendingReveal: RowKey?
 
     private struct ActivitySignature: Equatable {
         let running: Bool
         let prompting: Bool
+    }
+
+    private struct BuiltRow {
+        let item: TranscriptItem
+        let kind: ChatRow.Kind?
+        let images: [ImageReference]
     }
 
     var pendingDraft: String? { roster.drafts[bot.name] }
@@ -150,15 +197,17 @@ final class ChatModel {
         findMatches.indices.contains(findPosition) ? findMatches[findPosition] : nil
     }
 
+    private var timelineItems: [TranscriptItem] { snapshot?.rows.map(\.item) ?? [] }
+
     var voiceTurn: Int {
-        transcript.items.count { item in
+        timelineItems.count { item in
             if case .user = item.content { item.inbound.isPerson } else { false }
         }
     }
 
     var voiceReply: VoiceReply {
         var parts: [String] = []
-        for item in transcript.items.reversed() {
+        for item in timelineItems.reversed() {
             switch item.content {
             case .user where item.inbound.isPerson:
                 break
@@ -170,7 +219,11 @@ final class ChatModel {
             }
             break
         }
-        return VoiceReply(text: parts.reversed().joined(separator: "\n\n"), isComplete: !transcript.isRunning, turn: voiceTurn)
+        var text = parts.reversed().joined(separator: "\n\n")
+        if let streaming = snapshot?.streamingText, !streaming.isEmpty {
+            text = text.isEmpty ? streaming : text + "\n\n" + streaming
+        }
+        return VoiceReply(text: text, isComplete: !(snapshot?.isRunning ?? false), turn: voiceTurn)
     }
 
     init(bot: BotRow, links: BotLinks, roster: RosterModel, lastSeenStore: ChatLastSeenStore = ChatLastSeenStore()) {
@@ -181,40 +234,12 @@ final class ChatModel {
         lastSeenAtOpen = lastSeenStore.lastSeen(for: bot.name)
     }
 
-    var hasOlderHistory: Bool { transcript.hasOlder }
-
-    private func hydrateFromCache() {
-        guard !hasHydrated else { return }
-        hasHydrated = true
-        let cache = roster.conversationCache
-        let name = openedBot.name
-        Task {
-            let cached = await Task.detached(priority: .userInitiated) { cache.load(bot: name) }.value
-            guard let cached, transcript.sessionID == nil else { return }
-            lastCached = cached
-            cachedItems = cached.transcriptItems
-            rebuild()
-            LaunchClock.mark("chat \(name) shown from cache (\(cachedItems.count) items)", on: .osLog())
-        }
-    }
-
-    @discardableResult
-    func loadOlder() async -> Bool {
-        guard !isLoadingOlder, transcript.hasOlder, let session else { return false }
-        isLoadingOlder = true
-        defer { isLoadingOlder = false }
-        do {
-            guard try await session.loadOlder() else { return false }
-            transcript = await session.transcript
-            rebuild()
-            return true
-        } catch {
-            return false
-        }
+    func wantOlder() {
+        guard let session, olderHistory.canLoad else { return }
+        Task { await session.wantOlder() }
     }
 
     func start() {
-        hydrateFromCache()
         roster.markRead(bot.name)
         guard running == nil else { return }
         let link: BotLink
@@ -231,9 +256,10 @@ final class ChatModel {
 
     func stop() {
         markViewed()
-        saveCache()
         running?.cancel()
         running = nil
+        findSearch?.cancel()
+        findSearch = nil
         let session = self.session
         let link = self.link
         self.session = nil
@@ -337,7 +363,13 @@ final class ChatModel {
 
     func answerApproval(_ prompt: PendingPrompt, choice: String) {
         guard let session else { return }
-        Task { try? await session.answerApproval(prompt, choice: choice) }
+        Task {
+            do {
+                try await session.answerApproval(prompt, choice: choice)
+            } catch {
+                sendError = String(localized: "Your answer could not be sent. Try again.")
+            }
+        }
     }
 
     func answerConnection(opID: String, target: String, decision: ConnectionDecision) {
@@ -431,20 +463,14 @@ final class ChatModel {
 
     func beginFinding() {
         isFinding = true
-        guard findBackfill == nil else { return }
-        findBackfill = Task { [weak self] in
-            while let self, self.isFinding, self.transcript.hasOlder, !Task.isCancelled {
-                guard await self.loadOlder() else { break }
-            }
-            if !Task.isCancelled { self?.findBackfill = nil }
-        }
     }
 
     func endFinding() {
         isFinding = false
         findQuery = ""
-        findBackfill?.cancel()
-        findBackfill = nil
+        findSearch?.cancel()
+        findSearch = nil
+        pendingReveal = nil
     }
 
     func findNext() {
@@ -454,10 +480,13 @@ final class ChatModel {
 
     func findPrevious() {
         guard !findMatches.isEmpty else { return }
-        findPosition = (findPosition - 1 + findMatches.count) % findMatches.count
+        guard findPosition == 0, olderHistory.canLoad else {
+            findPosition = (findPosition - 1 + findMatches.count) % findMatches.count
+            return
+        }
+        searchOlder(excluding: Set(findMatches))
     }
 
-    /// Fetches the `/` picker's commands and skills once per chat; a failed fetch retries on the next `/`.
     func loadSlashItems() {
         guard slashItems.isEmpty, let session else { return }
         Task {
@@ -465,9 +494,6 @@ final class ChatModel {
         }
     }
 
-    /// Asks the gateway for the files `word` completes to. Keystrokes within the debounce collapse into
-    /// one request, a newer word cancels the older one, and a failed or unreachable lookup settles as an
-    /// empty answer so the picker shows its quiet empty state instead of waiting.
     func loadFileRefs(word: String) {
         fileRefTask?.cancel()
         fileRefTask = Task {
@@ -519,7 +545,7 @@ final class ChatModel {
         case .assistant: role = "assistant"
         default: return nil
         }
-        if rowID.hasPrefix("row:"), let id = Int(rowID.dropFirst(4)) { return .row(id) }
+        if let stored = row.storedRowID { return .row(stored) }
         let newest = rows.last { candidate in
             switch candidate.kind {
             case .user: role == "user"
@@ -530,16 +556,8 @@ final class ChatModel {
         return newest?.id == rowID ? .newest(role: role) : nil
     }
 
-    private var runningToolName: String? {
-        guard transcript.isRunning else { return nil }
-        for item in transcript.items.reversed() {
-            if case .tool(let call) = item.content, call.status == .running { return call.name }
-        }
-        return nil
-    }
-
     private var pendingClarify: PendingPrompt? {
-        transcript.pendingPrompts.first { $0.kind == .clarify }
+        snapshot?.pendingPrompts.first { $0.kind == .clarify }
     }
 
     private func run(_ link: BotLink) async {
@@ -549,14 +567,31 @@ final class ChatModel {
             return
         }
         self.session = session
-        let state = await session.state
-        transcript = state.transcript
-        if case .live = state.phase { noteLive() }
-        async let consuming: Void = consume(session)
+        if case .live = await session.phase { noteLive() }
+        let current = await session.timelineSnapshot
+        if current.rows.isEmpty, let cached = await loadCache() {
+            await session.seed(cached)
+        } else {
+            apply(current)
+        }
+        async let timeline: Void = consumeTimeline(session)
+        async let phases: Void = consumePhases(session)
         async let retrying: Void = retryLoop()
         await attach(session)
-        await consuming
+        await timeline
+        await phases
         await retrying
+    }
+
+    private func loadCache() async -> CachedTimeline? {
+        let cache = roster.conversationCache
+        let name = openedBot.name
+        let cached = await Task.detached(priority: .userInitiated) { cache.load(bot: name) }.value
+        if let cached {
+            lastCached = cached
+            LaunchClock.mark("chat \(name) shown from cache (\(cached.entryCount) entries)", on: .osLog())
+        }
+        return cached
     }
 
     private func attach(_ session: ChatSession) async {
@@ -570,8 +605,8 @@ final class ChatModel {
         while !Task.isCancelled {
             do {
                 try await session.start(intro: intro)
-                guard let settled = await session.awaitState(where: { $0.phase != .attaching }) else { return }
-                if settled.phase != .detached { return }
+                guard let settled = await session.settledPhase() else { return }
+                if settled != .detached { return }
             } catch {}
             noteDisconnected()
             try? await Task.sleep(for: delay)
@@ -589,21 +624,28 @@ final class ChatModel {
         connection = .live
     }
 
-    private func consume(_ session: ChatSession) async {
+    private func consumePhases(_ session: ChatSession) async {
         for await update in session.updates {
-            switch update {
-            case .phase(let phase):
-                if case .live = phase { noteLive() } else { noteDisconnected() }
-            case .transcript(let next):
-                transcript = next
-                scheduleCacheSave()
-                if case .live = await session.phase { noteLive() }
-            case .botThreadLinks(let links):
-                botThreadLinks = links
-            }
-            await refreshOutbox()
-            observeActivityChange()
+            guard case .phase(let phase) = update else { continue }
+            if case .live = phase { noteLive() } else { noteDisconnected() }
+            rebuild()
         }
+    }
+
+    private func consumeTimeline(_ session: ChatSession) async {
+        for await next in session.timelineSnapshots {
+            apply(next)
+            if next.sessionID != nil { scheduleCacheSave() }
+        }
+    }
+
+    private func apply(_ next: TimelineSnapshot) {
+        if let snapshot, next.version <= snapshot.version { return }
+        snapshot = next
+        olderHistory = OlderHistory(next.older)
+        rebuild()
+        observeActivityChange()
+        resolvePendingReveal()
     }
 
     private func retryLoop() async {
@@ -624,13 +666,13 @@ final class ChatModel {
     }
 
     private func observeActivityChange() {
-        let signature = ActivitySignature(running: transcript.isRunning, prompting: pendingClarify != nil)
+        let signature = ActivitySignature(running: snapshot?.isRunning ?? false, prompting: pendingClarify != nil)
         defer { lastSignature = signature }
         if signature != lastSignature { roster.nudge() }
     }
 
     private func scheduleCacheSave() {
-        guard transcript.sessionID != nil, pendingCacheSave == nil else { return }
+        guard pendingCacheSave == nil else { return }
         pendingCacheSave = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
@@ -641,40 +683,14 @@ final class ChatModel {
     private func saveCache() {
         pendingCacheSave?.cancel()
         pendingCacheSave = nil
-        guard let snapshot = CachedTranscript(sessionID: transcript.sessionID, items: transcript.items, date: effectiveDate),
-              snapshot != lastCached
-        else { return }
-        lastCached = snapshot
-        roster.conversationCache.save(snapshot, bot: openedBot.name)
-    }
-
-    private var displayedItems: [TranscriptItem] {
-        transcript.sessionID == nil && !cachedItems.isEmpty ? cachedItems : transcript.items
-    }
-
-    private func effectiveDate(_ item: TranscriptItem) -> Date? {
-        item.timestamp ?? arrivals[item.id]
-    }
-
-    private func allItems() -> [TranscriptItem] {
-        var items = BotThreadFolding.fold(displayedItems, links: botThreadLinks)
-        let known = Set(items.map(\.id))
-        let awaiting = outboxEntries.filter { entry in
-            entry.state == .pending && !retried.contains(entry.submissionID) && !known.contains("submission:\(entry.submissionID)")
+        guard let session else { return }
+        let cache = roster.conversationCache
+        let name = openedBot.name
+        Task {
+            guard let cached = await session.cachedTimeline(), cached != lastCached else { return }
+            lastCached = cached
+            cache.save(cached, bot: name)
         }
-        let absorbed = absorbedEchoes.hiddenSubmissions(
-            pending: awaiting.map { AbsorbedEchoLedger.Pending(submissionID: $0.submissionID, text: displayText(for: $0)) },
-            absorbed: transcript.absorbedWithoutEcho
-        )
-        for entry in outboxEntries where !retried.contains(entry.submissionID) {
-            let id = "submission:\(entry.submissionID)"
-            guard !known.contains(id), !absorbed.contains(entry.submissionID) else { continue }
-            if case .admitted = entry.state { continue }
-            var item = TranscriptItem(id: id, content: .user(text: displayText(for: entry), delivery: .sending), timestamp: entry.createdAt)
-            if case .failed(let reason) = entry.state { item.deliveryFailure = reason }
-            items.append(item)
-        }
-        return items
     }
 
     private func displayText(for entry: OutboxEntry) -> String {
@@ -683,37 +699,116 @@ final class ChatModel {
         return entry.attachments.isEmpty ? "" : String(localized: "Photo")
     }
 
+    private func rowID(for row: ChatTimelineRow) -> String {
+        if let alias = aliases[row.id] { return alias }
+        if outboxRowIDs.contains(row.item.id) {
+            aliases[row.id] = row.item.id
+            return row.item.id
+        }
+        return row.id.description
+    }
+
+    private func sourceItems() -> [(id: String, item: TranscriptItem, stored: Int?)] {
+        let timelineRows = snapshot?.rows ?? []
+        var sources = timelineRows.map { (id: rowID(for: $0), item: $0.item, stored: $0.rowID) }
+        let known = Set(timelineRows.map(\.item.id))
+        let awaiting = outboxEntries.filter { entry in
+            entry.state == .pending && !retried.contains(entry.submissionID) && !known.contains("submission:\(entry.submissionID)")
+        }
+        let absorbed = absorbedEchoes.hiddenSubmissions(
+            pending: awaiting.map { AbsorbedEchoLedger.Pending(submissionID: $0.submissionID, text: displayText(for: $0)) },
+            absorbed: timelineRows.map(\.item).filter { $0.id.hasPrefix("absorbed:") }
+        )
+        var shownOutbox: Set<String> = []
+        for entry in outboxEntries where !retried.contains(entry.submissionID) {
+            let id = "submission:\(entry.submissionID)"
+            guard !known.contains(id), !absorbed.contains(entry.submissionID) else { continue }
+            if case .admitted = entry.state { continue }
+            var item = TranscriptItem(id: id, content: .user(text: displayText(for: entry), delivery: .sending), timestamp: entry.createdAt)
+            if case .failed(let reason) = entry.state { item.deliveryFailure = reason }
+            sources.append((id: id, item: item, stored: nil))
+            shownOutbox.insert(id)
+        }
+        outboxRowIDs.formUnion(shownOutbox)
+        return sources
+    }
+
     private func rebuild() {
         let now = Date()
-        for item in transcript.items where hasBaseline && item.timestamp == nil && arrivals[item.id] == nil { arrivals[item.id] = now }
-        let items = allItems().filter { item in
-            if case .tool(let call) = item.content { return call.imageGeneration != nil }
-            return true
+        let sources = sourceItems()
+        for source in sources where hasBaseline && source.item.timestamp == nil && arrivals[source.item.id] == nil {
+            arrivals[source.item.id] = now
         }
-        let generated = Set(items.compactMap { item -> String? in
-            guard case .tool(let call) = item.content, case .ready(let image)? = call.imageGeneration else { return nil }
+        let generated = Set(sources.compactMap { source -> String? in
+            guard case .tool(let call) = source.item.content, case .ready(let image)? = call.imageGeneration else { return nil }
             return image.id
         })
-        let entries = ChatTimeline.entries(items: items, date: effectiveDate, lastSeen: lastSeenAtOpen)
+        let entries = ChatTimeline.entries(
+            items: sources.map(\.item),
+            date: { [arrivals] item in item.timestamp ?? arrivals[item.id] },
+            lastSeen: lastSeenAtOpen
+        )
+        let entryByItem = Dictionary(entries.map { ($0.item.id, $0) }, uniquingKeysWith: { first, _ in first })
         let visible = outboxEntries.filter { !retried.contains($0.submissionID) }
-        let byID = Dictionary(visible.map { ("submission:\($0.submissionID)", $0) }, uniquingKeysWith: { first, _ in first })
-        var built: [ChatRow] = []
-        for entry in entries {
-            let outbox = byID[entry.item.id]
-            guard let (kind, images) = rowKind(for: entry.item, outbox: outbox, generated: generated) else { continue }
-            built.append(ChatRow(id: entry.item.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider, images: images))
+        let outboxByItem = Dictionary(visible.map { ("submission:\($0.submissionID)", $0) }, uniquingKeysWith: { first, _ in first })
+        var next: [ChatRow] = []
+        var nextBuilt: [String: BuiltRow] = [:]
+        next.reserveCapacity(sources.count)
+        for source in sources {
+            guard let entry = entryByItem[source.item.id] else { continue }
+            let outboxEntry = outboxByItem[source.item.id]
+            let made = build(source.item, outbox: outboxEntry, generated: generated, reuse: outboxEntry == nil ? built[source.id] : nil)
+            nextBuilt[source.id] = made
+            guard let kind = made.kind, !Self.isEmpty(kind, images: made.images) else { continue }
+            var row = ChatRow(id: source.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider)
+            row.images = made.images
+            row.storedRowID = source.stored
+            next.append(row)
         }
-        if shouldShowThinking {
-            built.append(ChatRow(id: Self.thinkingRowID, kind: .working(status: runningToolName.map(ToolActivity.label(for:))), separator: nil, showsUnreadDivider: false))
+        built = nextBuilt
+        for index in next.indices {
+            next[index].gap = Self.gap(for: next[index], after: index > 0 ? next[index - 1] : nil)
         }
-        rows = built
-        isRunning = transcript.isRunning
+        if next != rows { rows = next }
+        isRunning = snapshot?.isRunning ?? false
+        workingStatus = snapshot?.runningToolName.map(ToolActivity.label(for:))
         hasPendingClarify = pendingClarify != nil
-        if !hasBaseline, transcript.sessionID != nil { hasBaseline = true }
+        hasPendingPrompt = !(snapshot?.pendingPrompts.isEmpty ?? true) || snapshot?.hasPendingConnection == true
+        if !hasBaseline, snapshot?.sessionID != nil { hasBaseline = true }
+        if isOpening, !next.isEmpty || snapshot?.sessionID != nil { isOpening = false }
         recomputeFind(resetPosition: false)
     }
 
-    private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>) -> (ChatRow.Kind, [ImageReference])? {
+    private static func isEmpty(_ kind: ChatRow.Kind, images: [ImageReference]) -> Bool {
+        if case .assistant(let parsed) = kind, parsed.source.isEmpty, images.isEmpty { return true }
+        return false
+    }
+
+    private static func gap(for row: ChatRow, after previous: ChatRow?) -> ChatRowGap {
+        guard previous != nil, row.separator == nil, !row.showsUnreadDivider else { return .none }
+        guard let sender = row.sender, sender == previous?.sender else { return .senderSwitch }
+        return .sameSender
+    }
+
+    private func build(_ item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, reuse: BuiltRow?) -> BuiltRow {
+        if let reuse, reuse.item == item, !Self.dependsOnConnection(item) {
+            if case .assistant = item.content, !generated.isEmpty {
+                return BuiltRow(item: item, kind: reuse.kind, images: reuse.images.filter { !generated.contains($0.id) })
+            }
+            return reuse
+        }
+        guard let (kind, images) = rowKind(for: item, outbox: entry, generated: generated, previous: reuse) else {
+            return BuiltRow(item: item, kind: nil, images: [])
+        }
+        return BuiltRow(item: item, kind: kind, images: images)
+    }
+
+    private static func dependsOnConnection(_ item: TranscriptItem) -> Bool {
+        if case .user(_, .sending) = item.content { return true }
+        return false
+    }
+
+    private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, previous: BuiltRow?) -> (ChatRow.Kind, [ImageReference])? {
         switch item.content {
         case .user(let text, let delivery):
             switch item.inbound {
@@ -738,12 +833,13 @@ final class ChatModel {
             case .processCompletion:
                 return (.notice(.backgroundTaskFinished(count: InboundKind.backgroundTaskCount(in: text), text: text)), [])
             }
-        case .assistant(let text, _, let streaming):
-            if streaming { return nil }
+        case .assistant(let text, _, _):
             let content = MessageImages.extract(from: text, role: .assistant)
             let images = content.images.filter { !generated.contains($0.id) }
-            if content.text.isEmpty, images.isEmpty { return nil }
-            return (.assistant(text: content.text), images)
+            if case .assistant(let parsed)? = previous?.kind, parsed.source == content.text {
+                return (.assistant(parsed), images)
+            }
+            return (.assistant(ParsedMarkdown(source: content.text, document: MarkdownDocument(parsing: content.text))), images)
         case .tool(let call):
             guard let generation = call.imageGeneration else { return nil }
             return (.imageGeneration(generation), [])
@@ -753,11 +849,64 @@ final class ChatModel {
             return (.clarify(card.prompt), [])
         case .approval(let card):
             return (.approval(card.prompt), [])
+        case .approvalAnswered(let record):
+            return (.approvalAnswered(record), [])
         case .connection(let card):
             return (.connection(card), [])
         case .botThread(let link):
             return (.botThread(link), [])
         }
+    }
+
+    private func findQueryChanged() {
+        recomputeFind(resetPosition: true)
+        findSearch?.cancel()
+        findSearch = nil
+        pendingReveal = nil
+        if findMatches.isEmpty { searchOlder(excluding: []) }
+    }
+
+    private func searchOlder(excluding known: Set<String>) {
+        let needle = findQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty, let session, olderHistory.canLoad else { return }
+        let knownKeys = Set((snapshot?.rows ?? []).filter { known.contains(rowID(for: $0)) }.map(\.id))
+        findSearch?.cancel()
+        findSearch = Task { [weak self] in
+            let key = await session.reveal { row in
+                !knownKeys.contains(row.id) && Self.matches(row.item, needle: needle)
+            }
+            guard !Task.isCancelled, let self, let key else { return }
+            self.pendingReveal = key
+            self.resolvePendingReveal()
+        }
+    }
+
+    private func resolvePendingReveal() {
+        guard let key = pendingReveal, let row = snapshot?.rows.first(where: { $0.id == key }) else { return }
+        pendingReveal = nil
+        let id = rowID(for: row)
+        recomputeFind(resetPosition: false)
+        if let index = findMatches.firstIndex(of: id) { findPosition = index }
+    }
+
+    nonisolated private static func occurrences(of needle: String, in text: String) -> Int {
+        var count = 0
+        var searchRange = text.startIndex..<text.endIndex
+        while let found = text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: searchRange) {
+            count += 1
+            searchRange = found.upperBound..<text.endIndex
+        }
+        return count
+    }
+
+    nonisolated private static func matches(_ item: TranscriptItem, needle: String) -> Bool {
+        let text: String
+        switch item.content {
+        case .user(let body, _): text = body
+        case .assistant(let body, _, _): text = body
+        default: return false
+        }
+        return text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
     }
 
     private func recomputeFind(resetPosition: Bool) {
@@ -768,11 +917,8 @@ final class ChatModel {
             findPosition = 0
             return
         }
-        findMatches = needle.isEmpty ? [] : rows.compactMap { row in
-            guard let text = row.searchableText,
-                  text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-            else { return nil }
-            return row.id
+        findMatches = needle.isEmpty ? [] : rows.flatMap { row in
+            Array(repeating: row.id, count: row.searchableText.map { Self.occurrences(of: needle, in: $0) } ?? 0)
         }
         if resetPosition {
             findPosition = max(0, findMatches.count - 1)
@@ -781,12 +927,6 @@ final class ChatModel {
         } else {
             findPosition = min(findPosition, max(0, findMatches.count - 1))
         }
-    }
-
-    private static let thinkingRowID = "thinking"
-
-    private var shouldShowThinking: Bool {
-        transcript.isRunning && transcript.pendingPrompts.isEmpty && transcript.pendingConnections().isEmpty
     }
 }
 

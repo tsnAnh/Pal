@@ -151,7 +151,7 @@ struct MacAccountMenu: View {
         .padding(4)
         .frame(width: 208)
         .background(PalTokens.elevated.opacity(0.82), in: shape)
-        .glassEffect(.regular, in: shape)
+        .palGlass(shape, interactive: false)
         .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
         .shadow(color: .black.opacity(0.3), radius: 24, y: 10)
         .background {

@@ -5,25 +5,26 @@ import SwiftUI
 
 struct ChatRowView: View {
     let row: ChatRow
-    var previous: ChatRow?
     let model: ChatModel
     let openThread: (BotThreadLink) -> Void
 
     @Environment(\.hermesTheme) private var theme
 
-    private var findQuery: String { model.isFinding ? model.findQuery : "" }
+    private var findQuery: String { model.isFinding && model.findMatchIDs.contains(row.id) ? model.findQuery : "" }
     private var isCurrentMatch: Bool { model.currentFindRowID == row.id }
 
     private var leadingGap: CGFloat {
-        guard let previous, row.separator == nil, !row.showsUnreadDivider else { return 0 }
-        guard let sender = row.sender, sender == previous.sender else { return ChatMetrics.senderSwitchGap }
-        return ChatMetrics.sameSenderGap
+        switch row.gap {
+        case .none: 0
+        case .sameSender: ChatMetrics.sameSenderGap
+        case .senderSwitch: ChatMetrics.senderSwitchGap
+        }
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if row.showsUnreadDivider {
-                UnreadDivider(label: String(localized: "NEW"))
+                UnreadDivider(label: String(localized: "New"), ink: BubblePalette.ink(accent: model.chatAccent))
                     .accessibilityIdentifier("unreadDivider")
             }
             if let separator = row.separator {
@@ -66,18 +67,20 @@ struct ChatRowView: View {
             }
             .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
             .environment(\.chatImageLoader, imageLoader)
-        case .assistant(let text):
-            AssistantBubble(text: text, images: row.images, highlight: findQuery, isCurrentMatch: isCurrentMatch)
-                .environment(\.messageActions, messageActions(for: text))
+        case .assistant(let parsed):
+            AssistantBubble(text: parsed.source, document: parsed.document, images: row.images, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+                .environment(\.messageActions, messageActions(for: parsed.source))
                 .environment(\.chatImageLoader, imageLoader)
-        case .working(let status):
-            ChatWorkingRow(status: status, accent: model.chatAccent)
         case .clarifyAnswered(let question, let answer):
             ClarifyAnsweredCard(question: question, answer: answer)
         case .clarify(let prompt):
             ClarifyCard(prompt: prompt) { answer in model.answer(prompt, with: answer) }
         case .approval(let prompt):
-            ApprovalCard(prompt: prompt) { choice in model.answerApproval(prompt, choice: choice) }
+            ApprovalCard(prompt: prompt, ink: BubblePalette.ink(accent: model.chatAccent), inkText: BubblePalette.inkText(accent: model.chatAccent)) { choice in
+                model.answerApproval(prompt, choice: choice)
+            }
+        case .approvalAnswered(let record):
+            ApprovalAnsweredCard(record: record)
         case .connection(let card):
             ConnectionRequestCard(card: card, answering: model.answeringConnections) { target, decision in
                 model.answerConnection(opID: card.operation.opID, target: target.name, decision: decision)
@@ -95,6 +98,7 @@ struct ChatRowView: View {
 
 struct AssistantBubble: View {
     let text: String
+    var document: MarkdownDocument?
     var images: [ImageReference] = []
     let highlight: String
     let isCurrentMatch: Bool
@@ -105,7 +109,7 @@ struct AssistantBubble: View {
             if !images.isEmpty { ChatImageGrid(images: images) }
             if !text.isEmpty {
                 ChatBubble(style: BubblePalette.agentBubble) {
-                    MarkdownView(document: MarkdownDocument(parsing: text, isStreaming: isStreaming), highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+                    MarkdownView(document: document ?? MarkdownDocument(parsing: text, isStreaming: isStreaming), highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
                         .bubbleTextSelection()
                 }
                 .bubbleAccessibility(text: text, identifier: "assistantBubble")
@@ -172,6 +176,7 @@ struct UserBubble: View {
             status
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
+        .modifier(SendRise(isFresh: delivery == .sending))
     }
 
     @ViewBuilder
@@ -206,6 +211,7 @@ struct NoticeRow: View {
     let isCurrentMatch: Bool
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.chatInk) private var chatInk
     @State private var expanded = false
 
     private var title: String {
@@ -281,7 +287,7 @@ struct NoticeRow: View {
         guard !highlight.isEmpty, case .botMessage(let name, let body) = notice,
               (name + " " + body).range(of: highlight, options: [.caseInsensitive, .diacriticInsensitive]) != nil
         else { return .clear }
-        return isCurrentMatch ? Color(theme.palette.primaryBadge).opacity(0.4) : Color.yellow.opacity(0.25)
+        return FindMark(ink: chatInk, surfaceText: nil, isCurrent: isCurrentMatch).fill
     }
 }
 
@@ -395,12 +401,7 @@ private extension View {
         accessibilityElement(children: .ignore).accessibilityLabel(Text(text)).accessibilityIdentifier(identifier)
     }
 
-    @ViewBuilder
     func bubbleTextSelection() -> some View {
-        #if os(macOS)
-        textSelection(.enabled)
-        #else
-        self
-        #endif
+        macOnly { $0.textSelection(.enabled) }
     }
 }

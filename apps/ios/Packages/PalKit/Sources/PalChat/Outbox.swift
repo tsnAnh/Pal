@@ -134,16 +134,9 @@ public struct OutboxStore: Sendable {
 
     private func writeUnlocked(_ entries: [OutboxEntry]) throws {
         let data = try Self.encoder.encode(File(version: 1, entries: entries))
-        try data.write(to: fileURL, options: Self.writeOptions)
+        try data.write(to: fileURL, options: .protectedAtomic)
     }
 
-    private static var writeOptions: Data.WritingOptions {
-        #if os(iOS)
-        [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-        #else
-        [.atomic]
-        #endif
-    }
 
     private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()

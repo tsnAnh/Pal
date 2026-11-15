@@ -44,7 +44,7 @@ struct RoomView: View {
                     .padding(.top, 10)
                 }
                 workingLine
-                if model.isUnreachable { ChatStatusLine(text: String(localized: "Reconnecting…"), dotColor: Color(theme.palette.chipSelectedFill)).padding(.top, 12) }
+                if model.isUnreachable { ChatStatusLine(text: String(localized: "Reconnecting…"), systemImage: "wifi.slash").padding(.top, 12) }
             }
             .padding(.horizontal, ChatMetrics.edgeMargin)
             .padding(.top, 8)
@@ -97,10 +97,10 @@ struct RoomView: View {
     private var workingLine: some View {
         let names = model.room.members.filter { model.busyMemberIDs().contains($0.memberID) }.map(\.displayName)
         if !names.isEmpty {
-            ChatWorkingRow(status: String(localized: "\(names.formatted(.list(type: .and))) working"), accent: nil)
+            ChatWorkingRow(status: String(localized: "\(names.formatted(.list(type: .and))) working"), ink: BubblePalette.ink(accent: nil))
                 .padding(.top, 12)
         } else if model.isBusy {
-            ChatWorkingRow(status: nil, accent: nil).padding(.top, 12)
+            ChatWorkingRow(status: nil, ink: BubblePalette.ink(accent: nil)).padding(.top, 12)
         }
     }
 
@@ -114,6 +114,7 @@ struct RoomView: View {
             ChatComposer(
                 botName: model.room.name,
                 accent: nil,
+                answersQuestion: false,
                 attachments: model.pendingAttachments,
                 slashItems: [],
                 loadSlashItems: {},

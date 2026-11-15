@@ -41,9 +41,7 @@ extension View {
                 makePrimaryButton(bot, roster: roster)
             }
             .labelStyle(.titleAndIcon)
-            #if os(macOS)
-            .tint(PalTokens.textSecondary)
-            #endif
+            .macOnly { $0.tint(PalTokens.textSecondary) }
         }
     }
 
@@ -108,11 +106,10 @@ extension View {
     }
 
     private func visibilityTitle(hidden: Bool) -> String {
-        #if os(macOS)
-        hidden ? String(localized: "Show in sidebar") : String(localized: "Hide from sidebar")
-        #else
-        hidden ? String(localized: "Show in list") : String(localized: "Hide from list")
-        #endif
+        PlatformVariant.pick(
+            mac: hidden ? String(localized: "Show in sidebar") : String(localized: "Hide from sidebar"),
+            iOS: hidden ? String(localized: "Show in list") : String(localized: "Hide from list")
+        )
     }
 
     private func deleteButton(_ bot: BotRow, router: AppRouter) -> some View {

@@ -16,7 +16,7 @@ from hermes_state_library_extract import RESULT_TOOL_NAMES, TOOL_NAMES, Occurren
 
 logger = logging.getLogger(__name__)
 
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 CATCH_UP_BUDGET_S = 2.0
 SCAN_CHUNK_ROWS = 400
 LIVE_CHECK_BATCH = 400

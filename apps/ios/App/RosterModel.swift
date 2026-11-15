@@ -36,6 +36,8 @@ private struct AssetWire: Decodable {
 @MainActor
 @Observable
 final class RosterModel {
+    private static let retiredChatCachePrefix = "chat-"
+
     private(set) var bots: [BotRow] = []
     private(set) var isLoaded = false
     private(set) var link: GatewayLink = .reconnecting
@@ -399,10 +401,11 @@ final class RosterModel {
         if firstSnapshot {
             LaunchClock.mark("roster live snapshot applied (\(profiles.count) bots)", on: .osLog())
             if !profiles.isEmpty {
+                connection.cache.prune(account: connection.accountKey, prefix: Self.retiredChatCachePrefix, keeping: [])
                 connection.cache.prune(
                     account: connection.accountKey,
-                    prefix: CachedTranscript.namePrefix,
-                    keeping: Set(profiles.map { CachedTranscript.cacheName(forBot: $0.name) })
+                    prefix: CachedTimeline.namePrefix,
+                    keeping: Set(profiles.map { CachedTimeline.cacheName(forBot: $0.name) })
                 )
             }
         }

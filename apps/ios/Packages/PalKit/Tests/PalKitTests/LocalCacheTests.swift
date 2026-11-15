@@ -77,13 +77,13 @@ struct LocalCacheTests {
     @Test func pruneRemovesOnlyUnlistedConversations() {
         let store = makeStore()
         for bot in ["alpha", "gone"] {
-            store.save(Payload(text: bot), name: CachedTranscript.cacheName(forBot: bot), account: "acct")
+            store.save(Payload(text: bot), name: CachedTimeline.cacheName(forBot: bot), account: "acct")
         }
         store.save(Payload(text: "roster"), name: "roster", account: "acct")
-        store.prune(account: "acct", prefix: CachedTranscript.namePrefix, keeping: [CachedTranscript.cacheName(forBot: "alpha")])
+        store.prune(account: "acct", prefix: CachedTimeline.namePrefix, keeping: [CachedTimeline.cacheName(forBot: "alpha")])
         store.drain()
-        #expect(store.load(Payload.self, name: CachedTranscript.cacheName(forBot: "alpha"), account: "acct") != nil)
-        #expect(store.load(Payload.self, name: CachedTranscript.cacheName(forBot: "gone"), account: "acct") == nil)
+        #expect(store.load(Payload.self, name: CachedTimeline.cacheName(forBot: "alpha"), account: "acct") != nil)
+        #expect(store.load(Payload.self, name: CachedTimeline.cacheName(forBot: "gone"), account: "acct") == nil)
         #expect(store.load(Payload.self, name: "roster", account: "acct") != nil)
     }
 
@@ -112,28 +112,5 @@ struct LocalCacheTests {
         let snapshot = RosterSnapshot(profiles: [["name": "alpha"]], live: [:], receivedAt: Date())
         let entry = RosterCache.entry(from: snapshot, photos: ["alpha": Data(count: RosterCache.maxPhotoBytes + 1)])
         #expect(entry.photos.isEmpty)
-    }
-
-    @Test func conversationCacheKeepsOnlySettledMessagesNewestFirstWithinBounds() throws {
-        let sender = BotSender(name: "Beta", handle: "beta")
-        let items: [TranscriptItem] = [
-            TranscriptItem(id: "row:1", content: .user(text: "one", delivery: .sent), timestamp: Date(timeIntervalSince1970: 1)),
-            TranscriptItem(id: "row:2", content: .assistant(text: "two", reasoning: "", isStreaming: false), timestamp: Date(timeIntervalSince1970: 2)),
-            TranscriptItem(id: "row:3", content: .user(text: "Message from 🤖 Beta (@beta): hi", delivery: .sent), inbound: .botMessage(sender, body: "hi")),
-            TranscriptItem(id: "stream:t:0", content: .assistant(text: "typing", reasoning: "", isStreaming: true)),
-            TranscriptItem(id: "submission:x", content: .user(text: "pending", delivery: .queued)),
-        ]
-        let cached = try #require(CachedTranscript(sessionID: "s1", items: items, date: { _ in Date(timeIntervalSince1970: 9) }))
-        let restored = cached.transcriptItems
-        #expect(restored.map(\.id) == ["row:1", "row:2", "row:3"])
-        #expect(restored[2].inbound == .botMessage(sender, body: "hi"))
-        #expect(restored[2].timestamp == Date(timeIntervalSince1970: 9))
-        let decoded = try JSONDecoder().decode(CachedTranscript.self, from: JSONEncoder().encode(cached))
-        #expect(decoded == cached)
-
-        let bounded = try #require(CachedTranscript(sessionID: "s1", items: items, date: { _ in nil }, maxItems: 2))
-        #expect(bounded.transcriptItems.map(\.id) == ["row:2", "row:3"])
-        #expect(CachedTranscript(sessionID: nil, items: items, date: { _ in nil }) == nil)
-        #expect(CachedTranscript(sessionID: "s1", items: [], date: { _ in nil }) == nil)
     }
 }

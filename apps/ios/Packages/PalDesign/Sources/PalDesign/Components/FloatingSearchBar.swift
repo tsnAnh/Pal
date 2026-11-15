@@ -46,10 +46,6 @@ public struct FloatingSearchBar: View {
 
     private var isSearching: Bool { isFocused || !text.isEmpty }
 
-    private var glass: Glass {
-        .regular
-    }
-
     public var body: some View {
         GlassEffectContainer(spacing: PalMetrics.searchBarLeadingButtonGap) {
             HStack(spacing: PalMetrics.searchBarLeadingButtonGap) {
@@ -108,7 +104,7 @@ public struct FloatingSearchBar: View {
         }
         .padding(.horizontal, 18)
         .frame(maxWidth: .infinity, minHeight: PalMetrics.searchBarHeight, maxHeight: PalMetrics.searchBarHeight)
-        .glassEffect(glass, in: .capsule)
+        .palGlass(Capsule(), interactive: false)
     }
 
     private func glassCircle(systemName: String, label: String, identifier: String, action: @escaping () -> Void) -> some View {
@@ -120,7 +116,7 @@ public struct FloatingSearchBar: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .glassEffect(glass.interactive(), in: .circle)
+        .palGlass(Circle())
         .accessibilityLabel(Text(label))
         .accessibilityIdentifier(identifier)
     }
@@ -161,10 +157,6 @@ public struct FloatingSearchLauncher: View {
         self.action = action
     }
 
-    private var glass: Glass {
-        .regular
-    }
-
     public var body: some View {
         GlassEffectContainer(spacing: PalMetrics.searchBarLeadingButtonGap) {
             HStack(spacing: PalMetrics.searchBarLeadingButtonGap) {
@@ -177,7 +169,7 @@ public struct FloatingSearchLauncher: View {
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-        .glassEffect(glass.interactive(), in: .circle)
+        .palGlass(Circle())
                     .accessibilityLabel(Text(leadingButton.accessibilityLabel))
                     .accessibilityIdentifier(leadingButton.accessibilityIdentifier)
                 }
@@ -196,7 +188,7 @@ public struct FloatingSearchLauncher: View {
                     .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .glassEffect(glass.interactive(), in: .capsule)
+                .palGlass(Capsule())
                 .accessibilityLabel(Text(accessibilityLabel))
                 .accessibilityIdentifier(accessibilityIdentifier)
             }

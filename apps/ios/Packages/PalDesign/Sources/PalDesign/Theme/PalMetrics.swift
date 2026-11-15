@@ -103,8 +103,9 @@ public enum PalTextStyle: CaseIterable, Sendable {
         case .chatStatus: 13
         case .botName: 13
         case .botPreview: 12
-        case .timestamp: 11
-        case .chatCode: 12.5
+        case .timestamp: 12
+        case .unreadLabel: 12
+        case .chatCode: 12
         case .heroName: 11
         default: iosSize
         }
@@ -117,7 +118,8 @@ public enum PalTextStyle: CaseIterable, Sendable {
         switch self {
         case .rowTitle, .rowValue, .sheetTitle: 15
         case .rowSubtitle, .version: 11
-        case .sectionCaption, .footnoteCaption, .timestamp: 10.5
+        case .sectionCaption, .footnoteCaption: 10.5
+        case .timestamp: 12
         case .botName: 15.5
         case .botPreview: 12.5
         case .heroName: 11
@@ -127,16 +129,16 @@ public enum PalTextStyle: CaseIterable, Sendable {
         case .nameField: 20
         case .searchPrompt: 17.5
         case .chatBody: 15
-        case .chatStatus, .composerField: 16
-        case .unreadLabel: 11
-        case .chatCode: 13.5
+        case .chatStatus: 15
+        case .composerField: 16
+        case .unreadLabel: 12
+        case .chatCode: 13
         }
     }
 
     public var weight: Font.Weight {
         switch self {
         case .largePill, .nameField: .medium
-        case .unreadLabel: .semibold
         default: .regular
         }
     }
@@ -174,7 +176,7 @@ extension View {
 public enum ChatMetrics {
     public static let edgeMargin: CGFloat = 16
     public static let bubbleHorizontalPadding: CGFloat = 12
-    public static let bubbleVerticalPadding: CGFloat = 8.5
+    public static let bubbleVerticalPadding: CGFloat = 8
     public static let bubbleRadius: CGFloat = 18
     #if os(macOS)
     public static let bubbleMaxWidth: CGFloat = 516
@@ -182,31 +184,39 @@ public enum ChatMetrics {
     public static let bubbleWidthFraction: CGFloat = 0.78
     public static let padColumn: CGFloat = 720
     #endif
-    public static let sameSenderGap: CGFloat = 2
-    public static let senderSwitchGap: CGFloat = 15
+    public static let sameSenderGap: CGFloat = 4
+    public static let senderSwitchGap: CGFloat = 16
     public static let bubbleTrailingGap: CGFloat = 60
     public static let rowSpacing: CGFloat = 12
     public static let bodyLineHeight: CGFloat = 20.3
-    public static let separatorTopPadding: CGFloat = 18
-    public static let separatorBottomPadding: CGFloat = 11
-    public static let unreadTopPadding: CGFloat = 2
-    public static let unreadBottomPadding: CGFloat = 9
-    public static let unreadLabelGap: CGFloat = 11.5
+    public static let separatorTopPadding: CGFloat = 20
+    public static let separatorBottomPadding: CGFloat = 12
+    public static let unreadTopPadding: CGFloat = 4
+    public static let unreadBottomPadding: CGFloat = 8
+    public static let unreadLabelGap: CGFloat = 12
     public static let unreadLineThickness: CGFloat = 1
-    public static let statusDotDiameter: CGFloat = 7.5
-    public static let statusDotSpacing: CGFloat = 3.3
-    public static let statusLeadingInset: CGFloat = 23
-    public static let statusTextGap: CGFloat = 11
+    public static let statusIconSize: CGFloat = 12
+    public static let statusLeadingInset: CGFloat = 24
+    public static let statusTextGap: CGFloat = 8
     public static let composerHeight: CGFloat = 50
     public static let composerButtonDiameter: CGFloat = 34
     public static let composerInset: CGFloat = 8
     public static let headerButtonDiameter: CGFloat = 44
     public static let headerAvatarSize: CGFloat = 26
-    public static let scrollButtonDiameter: CGFloat = 34
+    public static let scrollButtonDiameter: CGFloat = 36
+    public static let workingAvatarSize: CGFloat = 20
+    public static let workingMoodPeriod: Double = 1.6
+    public static let minimumHitTarget: CGFloat = {
+        #if os(macOS)
+        40
+        #else
+        44
+        #endif
+    }()
     public static let linkAvatarSize: CGFloat = 20
     public static let threadHeaderAvatarSize: CGFloat = 30
     public static let threadAvatarSize: CGFloat = 18
-    public static let threadAvatarGap: CGFloat = 7
+    public static let threadAvatarGap: CGFloat = 8
     public static let threadNameInset: CGFloat = 10
     public static let threadPillHeight: CGFloat = 36
 }

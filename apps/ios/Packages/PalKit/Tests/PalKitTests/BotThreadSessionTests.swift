@@ -1,5 +1,5 @@
 import Foundation
-import PalChat
+@testable import PalChat
 import PalProtocol
 import PalTransport
 import Synchronization

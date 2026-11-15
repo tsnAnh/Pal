@@ -85,11 +85,7 @@ struct RichPalette {
 
 enum RichCode {
     static var font: Font {
-        #if os(macOS)
-        .system(size: 12, design: .monospaced)
-        #else
-        .system(.footnote, design: .monospaced)
-        #endif
+        PlatformVariant.pick(mac: .system(size: 12, design: .monospaced), iOS: .system(.footnote, design: .monospaced))
     }
 
     static let collapseLines = 12

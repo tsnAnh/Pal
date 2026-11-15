@@ -55,7 +55,7 @@ final class BotChatE2ETests: E2ETestCase {
         let card = app.descendants(matching: .any)["clarifyCard"]
         waitFor(card, timeout: 60, "clarify card")
         XCTAssertTrue(app.staticTexts["Which flavor do you want?"].exists)
-        XCTAssertTrue(app.staticTexts["Or answer in the chat below"].exists)
+        XCTAssertEqual(app.descendants(matching: .any)["composerField"].placeholderValue, "Or type your own answer", "the composer invites a typed answer")
         shot(app, "chat-clarify")
         app.buttons["clarifyChoice-0"].hit()
         waitFor(bubbles(app, "assistantBubble", containing: "Got it, vanilla").firstMatch, timeout: 60, "card answer completes the turn")
@@ -178,4 +178,46 @@ final class BotChatE2ETests: E2ETestCase {
         XCTAssertTrue(reply.isHittable, "the new reply is on screen")
         XCTAssertLessThanOrEqual(reply.frame.maxY, composer.frame.minY, "the end of the new reply sits above the composer")
     }
+
+    #if os(iOS)
+    func test10SentPhotoKeepsAuthoredTextAndPhotoAfterReplyAndRelaunch() throws {
+        var app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-beta")
+        app.buttons["attachButton"].tap()
+        waitFor(app.buttons["attachPhotos"], timeout: 10, "attach menu")
+        app.buttons["attachPhotos"].tap()
+        let photo = app.images.matching(NSPredicate(format: "label BEGINSWITH %@", "Photo,")).firstMatch
+        waitFor(photo, timeout: 30, "photo library picker")
+        photo.tap()
+        let add = app.buttons["Add"]
+        if add.waitForExistence(timeout: 5) { add.tap() }
+        waitFor(app.descendants(matching: .any)["attachmentThumbnail"], timeout: 20, "thumbnail in the tray")
+        waitGone(app.descendants(matching: .any)["attachmentUploading"], timeout: 60, "upload finishes")
+        let caption = "photo check " + UUID().uuidString.prefix(6)
+        send(app, caption)
+        waitForReply(app, below: caption, timeout: 90)
+        assertAuthoredPhotoTurn(app, caption: caption, stage: "after reply")
+        shot(app, "photo-after-reply")
+
+        app.terminate()
+        app = launch()
+        signInIfNeeded(app)
+        openBot(app, "bot-beta")
+        waitFor(bubbles(app, "userBubble", containing: caption).firstMatch, timeout: 30, "caption after relaunch")
+        assertAuthoredPhotoTurn(app, caption: caption, stage: "after relaunch")
+        shot(app, "photo-after-relaunch")
+    }
+
+    private func assertAuthoredPhotoTurn(_ app: XCUIApplication, caption: String, stage: String) {
+        let user = bubbles(app, "userBubble", containing: caption).firstMatch
+        waitFor(user, timeout: 30, "caption bubble \(stage)")
+        XCTAssertFalse(user.label.contains("["), "only the authored text \(stage): \(user.label)")
+        waitFor(app.descendants(matching: .any)["chatImage"], timeout: 30, "photo \(stage)")
+        for marker in ["The user sent an image", "vision_analyze", "image_url:"] {
+            XCTAssertEqual(app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", marker)).count, 0, "\(marker) \(stage)")
+        }
+    }
+    #endif
 }
+

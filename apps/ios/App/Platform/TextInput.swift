@@ -23,6 +23,14 @@ extension View {
         #endif
     }
 
+    func urlKeyboard() -> some View {
+        #if os(iOS)
+        keyboardType(.URL)
+        #else
+        self
+        #endif
+    }
+
     func neverAutocapitalized() -> some View {
         #if os(iOS)
         textInputAutocapitalization(.never)

@@ -29,7 +29,7 @@ def server_lines(server):
 def host_lines(host):
     lines = ["Host decode and transcript build (PalKit, macOS arm64; stands in for the shared Mac and iOS code path)"]
     for key, report in host.items():
-        lines.append(f"  {key}: frame {report['frameBytes']} B, wire messages {report['wireMessages']}, items {report['transcriptItems']}, rows {report['timelineRows']}, cache {report['cachedItems']} items / {report['cacheBytes']} B, peak RSS {report['peakResidentMB']:.0f} MB, n={report['iterations']}")
+        lines.append(f"  {key}: frame {report['frameBytes']} B, wire messages {report['wireMessages']}, items {report['transcriptItems']}, rows {report['timelineRows']}, peak RSS {report['peakResidentMB']:.0f} MB, n={report['iterations']}")
         for stage in report["stageOrder"]:
             stats = report["stages"][stage]
             lines.append(f"    {stage}: {stats['medianMs']:.2f} [{stats['minMs']:.2f}-{stats['maxMs']:.2f}] ms")

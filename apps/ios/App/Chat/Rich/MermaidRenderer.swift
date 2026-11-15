@@ -1,12 +1,7 @@
 import Foundation
 import WebKit
-#if canImport(UIKit)
-import UIKit
-typealias MermaidImage = UIImage
-#elseif canImport(AppKit)
-import AppKit
-typealias MermaidImage = NSImage
-#endif
+
+typealias MermaidImage = PlatformImage
 
 enum MermaidRenderError: Error {
     case tooLarge

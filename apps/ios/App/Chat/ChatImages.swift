@@ -140,8 +140,6 @@ private struct ChatImageTile: View {
     let height: CGFloat
     let open: () -> Void
 
-    @Environment(\.hermesTheme) private var theme
-
     var body: some View {
         ChatImageSource(reference: reference, thumbnail: true, maxPixel: Int(width * 3)) { phase, retry in
             AnyView(tile(phase, retry: retry))
@@ -155,8 +153,8 @@ private struct ChatImageTile: View {
         switch phase {
         case .loading:
             ZStack {
-                Color(theme.palette.groupedCard)
-                DelayedProgressView().controlSize(.small)
+                PalTokens.agentBubble
+                DelayedProgressView(after: ChatEdgeFade.loadingDelay).controlSize(.small).tint(PalTokens.textTertiary)
             }
             .accessibilityIdentifier("chatImageLoading")
         case .loaded(let image):
@@ -173,12 +171,17 @@ private struct ChatImageTile: View {
         case .failed(let message):
             Button(action: retry) {
                 VStack(spacing: 4) {
-                    Image(systemName: "photo.badge.exclamationmark").font(.system(size: 20))
-                    Text(message).font(.caption2).multilineTextAlignment(.center).padding(.horizontal, 6)
+                    Image(systemName: "photo")
+                        .font(.system(size: 17))
+                        .foregroundStyle(PalTokens.textTertiary)
+                    Text("Couldn't load · Retry")
+                        .hermesText(.timestamp)
+                        .foregroundStyle(PalTokens.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 8)
                 }
-                .foregroundStyle(Color(theme.palette.textSecondary))
                 .frame(width: width, height: height)
-                .background(Color(theme.palette.groupedCard))
+                .background(PalTokens.agentBubble)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(message))
@@ -206,13 +209,9 @@ struct ChatImageViewer: View {
                         .accessibilityIdentifier("imageViewerClose")
                 }
             }
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
+            .iOSOnly { $0.toolbarTitleDisplayMode(.inline) }
         }
-        #if os(macOS)
-        .frame(minWidth: 480, idealWidth: 900, minHeight: 360, idealHeight: 700)
-        #endif
+        .macOnly { $0.frame(minWidth: 480, idealWidth: 900, minHeight: 360, idealHeight: 700) }
         .accessibilityIdentifier("imageViewer")
     }
 

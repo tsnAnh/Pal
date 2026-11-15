@@ -49,6 +49,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         case clarifyAnswered(ClarifyRecord)
         case clarify(PromptCard)
         case approval(PromptCard)
+        case approvalAnswered(ApprovalRecord)
         case botThread(BotThreadLink)
         case connection(ConnectionCard)
     }
@@ -59,6 +60,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
     public var deliveryFailure: String?
     public var timestamp: Date?
     public var inbound: InboundKind = .person
+    var liveSegment: LiveSegment?
 
     public init(
         id: String,
@@ -75,6 +77,11 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         self.timestamp = timestamp
         self.inbound = inbound
     }
+}
+
+struct LiveSegment: Sendable, Hashable {
+    var turnID: String
+    var segment: Int
 }
 
 public enum ApplyOutcome: Sendable, Hashable {
@@ -97,21 +104,17 @@ public struct Transcript: Sendable, Equatable {
     public private(set) var executionGeneration = 0
     public private(set) var resyncRequested = false
     public private(set) var lastError: String?
-    public private(set) var olderMessages = 0
-    public private(set) var oldestRowID: Int?
 
-    private var itemRows: [String: Int] = [:]
     private var segmentLengths: [Int: Int] = [:]
     private var currentSegment: Int?
     private var streamingID: String?
     private var turnOpenings: [String: String] = [:]
+    private var approvalChoices: [String: String] = [:]
     private var admissionInputs: [String: String] = [:]
     private var absorbedAdmissions: Set<String> = []
     private(set) var absorbedItemIDs: Set<String> = []
 
     public init() {}
-
-    public var hasOlder: Bool { olderMessages > 0 && oldestRowID != nil }
 
     static let absorbedPrefix = "absorbed:"
 
@@ -147,6 +150,10 @@ public struct Transcript: Sendable, Equatable {
         return .applied
     }
 
+    public mutating func noteApprovalChoice(_ choice: String?, promptID: String) {
+        approvalChoices[promptID] = choice
+    }
+
     public mutating func markFailed(submissionID: String, reason: String) {
         let id = Self.echoID(submissionID)
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
@@ -168,26 +175,15 @@ public struct Transcript: Sendable, Equatable {
         return true
     }
 
-    public mutating func prependOlder(_ page: HistoryPage) {
-        let (older, rows) = Self.historyItems(page.messages)
-        let present = Set(items.map(\.id))
-        items = older.filter { !present.contains($0.id) } + items
-        itemRows.merge(rows) { current, _ in current }
-        oldestRowID = page.messages.first?.rowID ?? oldestRowID
-        olderMessages = page.messages.isEmpty ? 0 : page.olderMessages
+    mutating func dropLiveItems(_ ids: Set<String>) {
+        guard !ids.isEmpty else { return }
+        if let streamingID, ids.contains(streamingID) { self.streamingID = nil }
+        items.removeAll { ids.contains($0.id) }
     }
 
     public mutating func load(_ snapshot: SessionSnapshot) {
-        let (window, rows) = Self.historyItems(snapshot.messages)
-        let retained = retainedOlderItems(before: snapshot)
-        let windowIDs = Set(window.map(\.id))
         sessionID = snapshot.sessionID
-        items = retained.filter { !windowIDs.contains($0.id) } + window
-        itemRows = rows.merging(retained.reduce(into: [:]) { $0[$1.id] = itemRows[$1.id] }) { current, _ in current }
-        if retained.isEmpty {
-            olderMessages = snapshot.olderMessages
-            oldestRowID = snapshot.messages.first?.rowID
-        }
+        items = snapshot.messages.flatMap(Self.items(from:))
         admissionInputs = [:]
         absorbedAdmissions = []
         absorbedItemIDs = []
@@ -221,6 +217,7 @@ public struct Transcript: Sendable, Equatable {
             case .clarifyAnswered(let record): Summary.Entry(kind: "clarify-answered", text: record.summaryText)
             case .clarify(let card): Summary.Entry(kind: "clarify", text: card.prompt.question ?? "")
             case .approval(let card): Summary.Entry(kind: "approval", text: card.prompt.command ?? "")
+            case .approvalAnswered(let record): Summary.Entry(kind: "approval-answered", text: record.request)
             case .botThread: nil
             case .connection(let card): Summary.Entry(kind: "connection", text: card.operation.targets.map(\.name).joined(separator: ", "))
             }
@@ -247,6 +244,19 @@ public struct Transcript: Sendable, Equatable {
             default: nil
             }
         }
+    }
+
+    public var runningToolName: String? {
+        guard isRunning else { return nil }
+        for item in items.reversed() {
+            if case .tool(let call) = item.content, call.status == .running { return call.name }
+        }
+        return nil
+    }
+
+    public var streamingText: String {
+        guard let streamingIndex, case .assistant(let text, _, _) = items[streamingIndex].content else { return "" }
+        return text
     }
 
     public func pendingConnections(now: Date = Date()) -> [ConnectionCard] {
@@ -326,24 +336,6 @@ public struct Transcript: Sendable, Equatable {
         timestamp.flatMap { $0.isFinite && $0 > 0 ? Date(timeIntervalSince1970: $0) : nil }
     }
 
-    private func retainedOlderItems(before snapshot: SessionSnapshot) -> [TranscriptItem] {
-        guard sessionID == snapshot.sessionID, snapshot.olderMessages > 0,
-              let windowStart = snapshot.messages.first?.rowID,
-              itemRows.values.contains(where: { $0 >= windowStart })
-        else { return [] }
-        return items.filter { item in itemRows[item.id].map { $0 < windowStart } ?? false }
-    }
-
-    private static func historyItems(_ messages: [WireMessage]) -> ([TranscriptItem], [String: Int]) {
-        var rows: [String: Int] = [:]
-        let built = messages.flatMap { message in
-            let made = items(from: message)
-            if let rowID = message.rowID { for item in made { rows[item.id] = rowID } }
-            return made
-        }
-        return (built, rows)
-    }
-
     private static func items(from message: WireMessage) -> [TranscriptItem] {
         let id = message.rowID.map { "row:\($0)" } ?? UUID().uuidString
         switch message.role {
@@ -411,10 +403,14 @@ public struct Transcript: Sendable, Equatable {
         case .messageInterim(let interim):
             sealStreaming()
             if !interim.text.isEmpty, !hasAssistantText(interim.text) {
-                items.append(TranscriptItem(
+                var item = TranscriptItem(
                     id: "interim:\(interim.turnID ?? "turn"):\(interim.segment ?? items.count)",
                     content: .assistant(text: interim.text, reasoning: "", isStreaming: false)
-                ))
+                )
+                if let turnID = interim.turnID, let segment = interim.segment {
+                    item.liveSegment = LiveSegment(turnID: turnID, segment: segment)
+                }
+                items.append(item)
             }
             segmentLengths = [:]
             currentSegment = nil
@@ -457,13 +453,12 @@ public struct Transcript: Sendable, Equatable {
             upsertConnection(operation)
         case .clarifyRequest(let prompt), .approvalRequest(let prompt):
             addCard(prompt)
-        case .clarifySettled(let settled), .approvalSettled(let settled):
+        case .clarifySettled(let settled):
             items.removeAll { item in
-                switch item.content {
-                case .clarify(let card), .approval(let card): card.prompt.promptID == settled.promptID
-                default: false
-                }
+                if case .clarify(let card) = item.content { card.prompt.promptID == settled.promptID } else { false }
             }
+        case .approvalSettled(let settled):
+            settleApproval(settled.promptID)
         case .sessionInfo(let info):
             if let running = info.running { isRunning = running }
             for admission in info.pending ?? [] { materialize(admission) }
@@ -604,7 +599,9 @@ public struct Transcript: Sendable, Equatable {
             items[index].content = .assistant(text: existing + text, reasoning: reasoning, isStreaming: true)
         } else {
             let id = uniqueStreamID("stream:\(delta.turnID ?? "turn"):\(segment)")
-            items.append(TranscriptItem(id: id, content: .assistant(text: text, reasoning: "", isStreaming: true)))
+            var item = TranscriptItem(id: id, content: .assistant(text: text, reasoning: "", isStreaming: true))
+            if let turnID = delta.turnID { item.liveSegment = LiveSegment(turnID: turnID, segment: segment) }
+            items.append(item)
             streamingID = id
         }
     }
@@ -629,12 +626,18 @@ public struct Transcript: Sendable, Equatable {
                 items.remove(at: index)
             } else {
                 items[index].content = .assistant(text: final, reasoning: reasoning, isStreaming: false)
+                items[index].uid = complete.identity.messageUID ?? items[index].uid
             }
         } else if !complete.text.isEmpty, !hasAssistantInCurrentTurn(text: complete.text) {
-            items.append(TranscriptItem(
-                id: "complete:\(items.count)",
-                content: .assistant(text: complete.text, reasoning: "", isStreaming: false)
-            ))
+            var item = TranscriptItem(
+                id: "complete:\(complete.identity.messageUID ?? String(items.count))",
+                content: .assistant(text: complete.text, reasoning: "", isStreaming: false),
+                uid: complete.identity.messageUID
+            )
+            if let turnID = complete.identity.turnID, let segment = complete.identity.segment {
+                item.liveSegment = LiveSegment(turnID: turnID, segment: segment)
+            }
+            items.append(item)
         }
         for index in items.indices {
             if case .tool(var call) = items[index].content, call.status == .running {
@@ -698,6 +701,14 @@ public struct Transcript: Sendable, Equatable {
         } else {
             items.append(contentsOf: answered)
         }
+    }
+
+    private mutating func settleApproval(_ promptID: String) {
+        let choice = approvalChoices.removeValue(forKey: promptID)
+        guard let index = items.firstIndex(where: { item in
+            if case .approval(let card) = item.content { card.prompt.promptID == promptID } else { false }
+        }), case .approval(let card) = items[index].content else { return }
+        items[index].content = .approvalAnswered(ApprovalRecord(prompt: card.prompt, choice: choice))
     }
 
     private static func connectionOperation(of complete: ToolComplete) -> ConnectionOperation? {

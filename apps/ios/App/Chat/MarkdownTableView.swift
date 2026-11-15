@@ -8,10 +8,11 @@ struct MarkdownTableView: View {
     let isCurrentMatch: Bool
 
     @Environment(\.hermesTheme) private var theme
-    @ScaledMetric(relativeTo: .body) private var characterWidth: CGFloat = 7.5
     @ScaledMetric(relativeTo: .body) private var cellPadding: CGFloat = 10
     @ScaledMetric(relativeTo: .body) private var minimumColumn: CGFloat = 56
     @ScaledMetric(relativeTo: .body) private var maximumColumn: CGFloat = 260
+
+    @State private var measured: [CGFloat] = []
 
     private let corner: CGFloat = 8
 
@@ -25,11 +26,39 @@ struct MarkdownTableView: View {
         .overlay {
             RoundedRectangle(cornerRadius: corner, style: .continuous).strokeBorder(PalTokens.divider, lineWidth: 1)
         }
+        .background { textMeasurement }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("markdownTable")
     }
 
     private var widths: [CGFloat] {
-        table.columnWidths(characterWidth: characterWidth, cellPadding: cellPadding, minimum: minimumColumn, maximum: maximumColumn)
+        table.columnWidths(measured: measured, cellPadding: cellPadding, minimum: minimumColumn, maximum: maximumColumn)
+    }
+
+    private var textMeasurement: some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(0..<table.columnCount, id: \.self) { column in
+                VStack(alignment: .leading, spacing: 0) {
+                    InlineText(text: table.header[column], highlight: "", isCurrentMatch: false, weight: .semibold)
+                        .fixedSize()
+                    ForEach(table.rows.indices, id: \.self) { index in
+                        InlineText(text: table.rows[index][column], highlight: "", isCurrentMatch: false)
+                            .fixedSize()
+                    }
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { record($0, column: column) }
+            }
+        }
+        .fixedSize()
+        .hidden()
+        .accessibilityHidden(true)
+    }
+
+    private func record(_ width: CGFloat, column: Int) {
+        var next = measured.count == table.columnCount ? measured : Array(repeating: 0, count: table.columnCount)
+        guard next[column] != width else { return }
+        next[column] = width
+        measured = next
     }
 
     private var grid: some View {

@@ -102,9 +102,7 @@ private struct HostUpdateProgressSheet: View {
         .background(PalTokens.elevated)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("hostUpdateSheet")
-        #if os(iOS)
-        .presentationDetents([.medium, .large])
-        #endif
+        .iOSOnly { $0.presentationDetents([.medium, .large]) }
     }
 
     @ViewBuilder

@@ -225,11 +225,14 @@ def _producer_card(event: Any) -> dict:
 
 
 def display_metadata_for_event(event: Any) -> dict:
-    """``{"display_text": ...}`` for an internal event whose producer named an async-result card, plus the
-    ``title_preview`` (titler-only) a canonical admission committed for this exact event."""
+    """``{"display_text": ...}`` for an internal event whose producer named an async-result card, the
+    ``title_preview`` (titler-only) a canonical admission committed for this exact event, and the
+    ``vision_notes`` stamp when inbound preparation prefixed image analysis to the typed text."""
     from gateway.session_display import admission_display
+    from agent.message_metadata import VISION_NOTES
     preview = admission_display(event).get("title_preview")
-    return {**_producer_card(event), **({"title_preview": preview} if preview else {})}
+    return {**_producer_card(event), **({"title_preview": preview} if preview else {}),
+            **({VISION_NOTES: True} if getattr(event, "_gateway_vision_notes", False) is True else {})}
 
 
 def persisted_user_metadata_for_event(event: Any) -> dict:

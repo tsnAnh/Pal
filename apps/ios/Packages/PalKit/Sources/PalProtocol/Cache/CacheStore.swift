@@ -72,7 +72,7 @@ public final class CacheStore: Sendable {
             let directory = accountDirectory(account)
             do {
                 try prepare(directory)
-                try data.write(to: fileURL(name: name, account: account), options: writeOptions)
+                try data.write(to: fileURL(name: name, account: account), options: .protectedAtomic)
             } catch {
                 diagnostics.warning("cache", "write failed: \(Diagnostics.describe(error))")
             }
@@ -135,13 +135,6 @@ public final class CacheStore: Sendable {
         accountDirectory(account).appending(path: Self.fileName(for: name), directoryHint: .notDirectory)
     }
 
-    private var writeOptions: Data.WritingOptions {
-        #if os(iOS)
-        [.atomic, .completeFileProtectionUntilFirstUserAuthentication]
-        #else
-        [.atomic]
-        #endif
-    }
 
     private func prepare(_ directory: URL) throws {
         let manager = FileManager.default

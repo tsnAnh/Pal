@@ -20,11 +20,21 @@ public enum BubblePalette {
 
     private static let minimumSaturation = 0.14
 
-    public static let agentBubble = AnyShapeStyle(LinearGradient(
-        colors: [PalTokens.agentBubbleTop, PalTokens.agentBubbleBottom],
-        startPoint: .top,
-        endPoint: .bottom
-    ))
+    public static let agentBubble = AnyShapeStyle(PalTokens.agentBubble)
+
+    public static func ink(accent: BotAccent?) -> Color {
+        guard let hue = inkHue(accent) else { return PalTokens.inverseFill }
+        return PalSwatch(dark: (blended(hue: hue, isDark: true), 1), light: (blended(hue: hue, isDark: false), 1)).color
+    }
+
+    public static func inkText(accent: BotAccent?) -> Color {
+        inkHue(accent) == nil ? PalTokens.inverseText : userText
+    }
+
+    private static func inkHue(_ accent: BotAccent?) -> Double? {
+        guard let accent, let hsl = hueAndSaturation(of: accent.accentHex), hsl.saturation >= minimumSaturation else { return nil }
+        return hsl.hue
+    }
 
     public static func userFill(accent: BotAccent?, isDark: Bool) -> Color {
         guard let accent, let hsl = hueAndSaturation(of: accent.accentHex), hsl.saturation >= minimumSaturation else {

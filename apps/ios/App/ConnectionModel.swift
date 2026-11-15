@@ -177,7 +177,6 @@ final class ConnectionModel {
     }
 
     func addressChanged() {
-        #if os(macOS)
         methodProbe?.cancel()
         signInMethod = .browser
         guard let baseURL = try? GatewayBaseURL(validating: baseURLText) else { return }
@@ -189,7 +188,6 @@ final class ConnectionModel {
             guard !Task.isCancelled else { return }
             signInMethod = method
         }
-        #endif
     }
 
     private var nativeSignIn: NativeSignIn {
@@ -206,9 +204,7 @@ final class ConnectionModel {
             return
         }
         phase = .signingIn
-        #if os(macOS)
         await methodProbe?.value
-        #endif
         do {
             let credentials: StoredCredentials
             if case .password(let provider) = signInMethod {

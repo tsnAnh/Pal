@@ -1,6 +1,6 @@
 import Foundation
 import PalAuth
-import PalChat
+@testable import PalChat
 import PalClient
 import PalDiagnostics
 import PalProtocol
@@ -301,7 +301,7 @@ struct ScriptedChatTests {
         defer { gateway.stop() }
         let connector = ScriptedConnector(url: gateway.url, delay: connectDelay)
         let chat = session(connector)
-        let starting = Task { try? await chat.start(intro: .kickoff) }
+        let starting = Task { try? await chat.start(intro: BotIntro(text: "Hello", hidden: false)) }
         try await Task.sleep(for: .milliseconds(connectDelay == .zero ? 60 : 60))
         await chat.close()
         _ = await starting.value
@@ -439,7 +439,7 @@ struct ScriptedChatTests {
         let gateway = try await FakeGateway.start(script.handle)
         defer { gateway.stop() }
         let chat = session(ScriptedConnector(url: gateway.url))
-        let outcome = try await chat.start(intro: .kickoff)
+        let outcome = try await chat.start(intro: BotIntro(text: "Hello", hidden: false))
         #expect(!outcome.created)
         #expect(outcome.introAdmission != nil)
         let params = try #require(script.submitted.withLock { $0.first })
@@ -454,7 +454,7 @@ struct ScriptedChatTests {
         let gateway = try await FakeGateway.start(script.handle)
         defer { gateway.stop() }
         let chat = session(ScriptedConnector(url: gateway.url))
-        let outcome = try await chat.start(intro: .kickoff)
+        let outcome = try await chat.start(intro: BotIntro(text: "Hello", hidden: false))
         #expect(outcome.introAdmission == nil)
         #expect(script.count("prompt.submit") == 0)
         await chat.close()

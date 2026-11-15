@@ -15,7 +15,6 @@ public enum ChatPhase: Sendable, Equatable {
 
 public enum ChatUpdate: Sendable {
     case phase(ChatPhase)
-    case transcript(Transcript)
     case botThreadLinks([BotThreadLink])
 }
 
@@ -26,6 +25,38 @@ public struct ReconnectPolicy: Sendable {
     public init(initialDelay: Duration = .milliseconds(250), maximumDelay: Duration = .seconds(8)) {
         self.initialDelay = initialDelay
         self.maximumDelay = maximumDelay
+    }
+}
+
+public struct PagingPolicy: Sendable {
+    public var firstPage: Int
+    public var olderPage: Int
+    public var fillPage: Int
+    public var fillPages: Int
+    public var freshness: Duration
+    public var retryBase: TimeInterval
+    public var retryMax: TimeInterval
+
+    public init(
+        firstPage: Int = 40,
+        olderPage: Int = 40,
+        fillPage: Int = 100,
+        fillPages: Int = 10,
+        freshness: Duration = .milliseconds(500),
+        retryBase: TimeInterval = 0.5,
+        retryMax: TimeInterval = 16
+    ) {
+        self.firstPage = firstPage
+        self.olderPage = olderPage
+        self.fillPage = fillPage
+        self.fillPages = fillPages
+        self.freshness = freshness
+        self.retryBase = retryBase
+        self.retryMax = retryMax
+    }
+
+    func backoff(_ attempt: Int) -> TimeInterval {
+        min(retryMax, retryBase * pow(2, Double(max(0, attempt - 1))))
     }
 }
 
@@ -40,9 +71,9 @@ public struct ChatStartOutcome: Sendable, Equatable {
     public var introAdmission: AdmissionStatus?
 }
 
-public struct ChatState: Sendable {
-    public let phase: ChatPhase
-    public let transcript: Transcript
+struct ChatState: Sendable {
+    let phase: ChatPhase
+    let transcript: Transcript
 }
 
 public actor ChatSession: OutboxSubmitter {
@@ -50,13 +81,11 @@ public actor ChatSession: OutboxSubmitter {
     public nonisolated let updates: AsyncStream<ChatUpdate>
 
     public private(set) var phase: ChatPhase = .detached
-    public private(set) var transcript = Transcript()
+    private(set) var transcript = Transcript()
     public private(set) var terminalFailure: ChatTerminalFailure?
     public private(set) var botThreadLinks: [BotThreadLink] = []
     public nonisolated let terminalFailures: AsyncStream<ChatTerminalFailure>
-
-    static let historyWindow = 60
-    static let olderPageSize = 60
+    public nonisolated let timelineSnapshots: AsyncStream<TimelineSnapshot>
     static let unknownOperationCode = 4004
 
     private static let botThreadsChangedEvent = "bot_threads.changed"
@@ -77,7 +106,22 @@ public actor ChatSession: OutboxSubmitter {
     private var linksRefresh: Task<Void, Never>?
     private var linksStale = false
     private var waiters: [UUID: StateWaiter] = [:]
-    private var loadingOlder = false
+    private let paging: PagingPolicy
+    private let timelineContinuation: AsyncStream<TimelineSnapshot>.Continuation
+    private var timeline = Timeline()
+    private var timelineVersion: UInt64 = 0
+    private var timelineCapable = false
+    private var lastWant: ContinuousClock.Instant?
+    private var wantSerial = 0
+    private var olderLoader: Task<Void, Never>?
+    private var olderFetch: Task<OlderFetch, Never>?
+    private var newestRefresh: Task<Void, Never>?
+    private var newestStale = false
+
+    private enum OlderFetch: Sendable {
+        case loaded
+        case failed
+    }
 
     private struct StateWaiter {
         let isSatisfied: @Sendable (ChatState) -> Bool
@@ -88,9 +132,12 @@ public actor ChatSession: OutboxSubmitter {
         profile: String,
         connector: any ChatConnector,
         reconnectPolicy: ReconnectPolicy = ReconnectPolicy(),
+        paging: PagingPolicy = PagingPolicy(),
         diagnostics: Diagnostics = .silent
     ) {
         self.profile = profile
+        self.paging = paging
+        (timelineSnapshots, timelineContinuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
         self.connector = connector
         self.reconnectPolicy = reconnectPolicy
         self.diagnostics = diagnostics
@@ -122,7 +169,10 @@ public actor ChatSession: OutboxSubmitter {
         let api = SessionAPI(connection: connection, profile: profile)
         attaching = connection
         do {
-            resolution = try await resolver.open(api, messageLimit: Self.historyWindow)
+            let capable = api.supportsTimeline
+            resolution = try await resolver.open(api, timelineLimit: capable ? paging.firstPage : nil)
+            timelineCapable = capable
+            try await adoptTimeline(resolution.snapshot, page: resolution.timeline, api: api, forced: false)
         } catch {
             attaching = nil
             await connection.close()
@@ -142,7 +192,7 @@ public actor ChatSession: OutboxSubmitter {
         _ = transcript.reconcile(with: resolution.snapshot)
         diagnostics.info("chat", "attached; \(transcript.items.count) items")
         goLive(connection)
-        guard let intro, resolution.created || resolution.snapshot.messages.isEmpty else {
+        guard let intro, resolution.created || (resolution.timeline?.entries ?? []).isEmpty && resolution.snapshot.messages.isEmpty else {
             return ChatStartOutcome(created: resolution.created, introAdmission: nil)
         }
         do {
@@ -197,6 +247,8 @@ public actor ChatSession: OutboxSubmitter {
     }
 
     public func imageAsset(ref: String, thumbnail: Bool) async throws -> Data {
+        if api == nil { _ = await awaitState { if case .live = $0.phase { true } else { false } } }
+        try Task.checkCancellation()
         guard let api else { throw ChatError.notConnected }
         return try await api.libraryAsset(ref: ref, thumbnail: thumbnail)
     }
@@ -223,12 +275,20 @@ public actor ChatSession: OutboxSubmitter {
 
     public func answerApproval(_ prompt: PendingPrompt, choice: String) async throws {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
-        _ = try await api.respondToApproval(
-            sessionID: sessionID,
-            executionGeneration: prompt.executionGeneration,
-            promptID: prompt.promptID,
-            choice: choice
-        )
+        transcript.noteApprovalChoice(choice, promptID: prompt.promptID)
+        timeline.noteApprovalChoice(choice, promptID: prompt.promptID)
+        do {
+            _ = try await api.respondToApproval(
+                sessionID: sessionID,
+                executionGeneration: prompt.executionGeneration,
+                promptID: prompt.promptID,
+                choice: choice
+            )
+        } catch {
+            transcript.noteApprovalChoice(nil, promptID: prompt.promptID)
+            timeline.noteApprovalChoice(nil, promptID: prompt.promptID)
+            throw error
+        }
     }
 
     public func answerConnection(
@@ -257,10 +317,12 @@ public actor ChatSession: OutboxSubmitter {
     private func settleRefusedConnection(api: SessionAPI, sessionID: String, opID: String, error: any Error) async {
         if case GatewayTransportError.rpc(let rpc) = error, rpc.code == Self.unknownOperationCode || rpc.reasonCode == "unknown_operation" {
             transcript.lapseConnection(opID: opID)
+            timeline.lapseConnection(opID: opID)
         } else if let status = try? await api.connectionStatus(sessionID: sessionID, opID: opID),
                   transcript.sessionID == sessionID
         {
             transcript.noteConnection(status)
+            timeline.noteConnection(status)
         } else {
             return
         }
@@ -277,23 +339,13 @@ public actor ChatSession: OutboxSubmitter {
         return try await api.steer(sessionID: sessionID, text: text, executionGeneration: transcript.executionGeneration)
     }
 
-    public var state: ChatState { ChatState(phase: phase, transcript: transcript) }
+    var state: ChatState { ChatState(phase: phase, transcript: transcript) }
 
-    @discardableResult
-    public func loadOlder() async throws -> Bool {
-        guard !loadingOlder, !closing, transcript.hasOlder, let api, let sessionID = transcript.sessionID,
-              let before = transcript.oldestRowID
-        else { return false }
-        loadingOlder = true
-        defer { loadingOlder = false }
-        let page = try await api.historyPage(sessionID: sessionID, beforeRowID: before, limit: Self.olderPageSize)
-        guard !closing, transcript.sessionID == sessionID, transcript.oldestRowID == before else { return false }
-        transcript.prependOlder(page)
-        continuation.yield(.transcript(transcript))
-        return true
+    public func settledPhase() async -> ChatPhase? {
+        await awaitState { $0.phase != .attaching }?.phase
     }
 
-    public func awaitState(where isSatisfied: @escaping @Sendable (ChatState) -> Bool) async -> ChatState? {
+    func awaitState(where isSatisfied: @escaping @Sendable (ChatState) -> Bool) async -> ChatState? {
         if isSatisfied(state) { return state }
         if closing { return nil }
         let id = UUID()
@@ -327,6 +379,11 @@ public actor ChatSession: OutboxSubmitter {
         pumps.removeAll()
         linksRefresh?.cancel()
         linksRefresh = nil
+        for task in [olderLoader, newestRefresh].compactMap({ $0 }) { task.cancel() }
+        olderFetch?.cancel()
+        olderLoader = nil
+        newestRefresh = nil
+        timelineContinuation.finish()
         let connection = self.connection
         let unattached = attaching
         attaching = nil
@@ -350,8 +407,10 @@ public actor ChatSession: OutboxSubmitter {
     ) async throws -> AdmissionStatus {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         if echo {
-            transcript.echoUser(submissionID: submissionID, text: text.isEmpty ? files.map(\.name).joined(separator: ", ") : text)
-            continuation.yield(.transcript(transcript))
+            let echoed = text.isEmpty ? files.map(\.name).joined(separator: ", ") : text
+            transcript.echoUser(submissionID: submissionID, text: echoed)
+            timeline.echoUser(submissionID: submissionID, text: echoed)
+            publishTimeline()
             notifyWaiters()
         }
         do {
@@ -367,7 +426,8 @@ public actor ChatSession: OutboxSubmitter {
         } catch {
             if echo, let refusal = RefusalReason(error), refusal.isPermanent {
                 transcript.markFailed(submissionID: submissionID, reason: refusal.reason)
-                continuation.yield(.transcript(transcript))
+                timeline.markFailed(submissionID: submissionID, reason: refusal.reason)
+                publishTimeline()
                 notifyWaiters()
             }
             throw error
@@ -402,6 +462,7 @@ public actor ChatSession: OutboxSubmitter {
                 if result.links != botThreadLinks {
                     botThreadLinks = result.links
                     continuation.yield(.botThreadLinks(result.links))
+                    publishTimeline()
                 }
             } catch {
                 diagnostics.debug("chat", "bot thread links unavailable: \(Diagnostics.describe(error))")
@@ -435,10 +496,15 @@ public actor ChatSession: OutboxSubmitter {
             refreshBotThreadLinks()
             return true
         }
-        switch transcript.apply(SessionEventFrame(event)) {
+        let frame = SessionEventFrame(event)
+        _ = timeline.apply(frame)
+        switch transcript.apply(frame) {
         case .applied:
             publishLive()
-            if event.type == Self.messageCompleteEvent { refreshBotThreadLinks() }
+            if event.type == Self.messageCompleteEvent {
+                refreshBotThreadLinks()
+                refreshNewest()
+            }
         case .resyncRequired(let reason):
             diagnostics.info("chat", "resync required (\(reason))")
             return await resync()
@@ -452,9 +518,10 @@ public actor ChatSession: OutboxSubmitter {
         guard let api, let sessionID = transcript.sessionID else { return false }
         setPhase(.resyncing)
         do {
-            let snapshot = try await api.resume(sessionID: sessionID, messageLimit: Self.historyWindow)
+            let resumed = try await resumeForTimeline(api, sessionID)
             transcript.requestResync()
-            _ = transcript.reconcile(with: snapshot)
+            _ = transcript.reconcile(with: resumed.snapshot)
+            try await adoptTimeline(resumed.snapshot, page: resumed.timeline, api: api, forced: true)
             publishLive()
             return true
         } catch {
@@ -519,32 +586,209 @@ public actor ChatSession: OutboxSubmitter {
     }
 
     private func reattach(_ api: SessionAPI) async throws {
+        timelineCapable = api.supportsTimeline
         guard let row = try await resolver.lookup(api) else {
-            let resolution = try await resolver.open(api, messageLimit: Self.historyWindow)
+            let resolution = try await resolver.open(api, timelineLimit: timelineCapable ? paging.firstPage : nil)
             transcript.requestResync()
             _ = transcript.reconcile(with: resolution.snapshot)
+            try await adoptTimeline(resolution.snapshot, page: resolution.timeline, api: api, forced: true)
             return
         }
         let target = BotChatResolver.target(of: row)
         guard target == transcript.sessionID, let cursor = transcript.cursor, !transcript.resyncRequested else {
-            let snapshot = try await api.resume(sessionID: target, messageLimit: Self.historyWindow)
+            let resumed = try await resumeForTimeline(api, target)
             transcript.requestResync()
-            _ = transcript.reconcile(with: snapshot)
+            _ = transcript.reconcile(with: resumed.snapshot)
+            try await adoptTimeline(resumed.snapshot, page: resumed.timeline, api: api, forced: true)
             return
         }
         let since = try await api.eventsSince(sessionID: target, lastSequence: cursor.lastSequence, replayEpoch: cursor.replayEpoch)
         if since.snapshotRequired {
             setPhase(.resyncing)
-            let snapshot = try await api.resume(sessionID: target, messageLimit: Self.historyWindow)
+            let resumed = try await resumeForTimeline(api, target)
             transcript.requestResync()
-            _ = transcript.reconcile(with: snapshot)
+            _ = transcript.reconcile(with: resumed.snapshot)
+            try await adoptTimeline(resumed.snapshot, page: resumed.timeline, api: api, forced: true)
             return
         }
         for raw in since.events {
             guard let event = GatewayEvent(params: raw) else { continue }
-            if case .resyncRequired = transcript.apply(SessionEventFrame(event)) { break }
+            let frame = SessionEventFrame(event)
+            _ = timeline.apply(frame)
+            if case .resyncRequired = transcript.apply(frame) { break }
         }
-        _ = transcript.reconcile(with: try await api.resume(sessionID: target, messageLimit: Self.historyWindow))
+        let resumed = try await resumeForTimeline(api, target)
+        _ = transcript.reconcile(with: resumed.snapshot)
+        try await adoptTimeline(resumed.snapshot, page: resumed.timeline, api: api, forced: false)
+    }
+
+    private func resumeForTimeline(_ api: SessionAPI, _ sessionID: String) async throws -> TimelineResume {
+        try await api.resumeTimeline(sessionID: sessionID, timelineLimit: paging.firstPage)
+    }
+
+    private func adoptTimeline(_ snapshot: SessionSnapshot, page: TimelinePageWire?, api: SessionAPI, forced: Bool) async throws {
+        if forced { timeline.forceLive(snapshot) } else { timeline.adoptLive(snapshot) }
+        guard timelineCapable else {
+            timeline.mergeNewest(TimelinePageWire(entries: Timeline.legacyEntries(snapshot.messages), older: nil, revision: ""))
+            return
+        }
+        try await mergeNewest(page ?? TimelinePageWire(entries: [], older: nil, revision: ""), api: api, sessionID: snapshot.sessionID)
+    }
+
+    private func mergeNewest(_ page: TimelinePageWire, api: SessionAPI, sessionID: String) async throws {
+        guard case .gap(var cursor) = timeline.mergeNewest(page) else { return }
+        var collected = page.entries
+        for _ in 0..<paging.fillPages {
+            let older = try await api.timelinePage(sessionID: sessionID, before: cursor, limit: paging.fillPage)
+            collected = older.entries + collected
+            let reached = older.entries.contains { timeline.contains(entryID: $0.id) }
+            guard !reached, let next = older.older else {
+                timeline.mergeNewest(TimelinePageWire(entries: collected, older: older.older, revision: page.revision))
+                return
+            }
+            cursor = next
+        }
+        diagnostics.info("chat", "timeline gap too wide to fill; showing the newest page")
+        timeline.reset(page)
+    }
+
+    private func refreshNewest() {
+        guard timelineCapable, !closing else { return }
+        guard newestRefresh == nil else {
+            newestStale = true
+            return
+        }
+        newestRefresh = Task { await self.runNewestRefresh() }
+    }
+
+    private func runNewestRefresh() async {
+        repeat {
+            newestStale = false
+            guard !closing, let api, let sessionID = transcript.sessionID else { break }
+            do {
+                let page = try await api.timelinePage(sessionID: sessionID, before: nil, limit: paging.firstPage)
+                guard !closing else { break }
+                try await mergeNewest(page, api: api, sessionID: sessionID)
+                publishTimeline()
+            } catch {
+                diagnostics.debug("chat", "newest timeline page unavailable: \(Diagnostics.describe(error))")
+            }
+        } while newestStale && !closing
+        newestRefresh = nil
+    }
+
+    public var timelineSnapshot: TimelineSnapshot { makeTimelineSnapshot() }
+
+    public func seed(_ cache: CachedTimeline) {
+        guard transcript.sessionID == nil || transcript.sessionID == cache.sessionID else { return }
+        timeline.seed(cache)
+        publishTimeline()
+    }
+
+    public func cachedTimeline() -> CachedTimeline? {
+        guard let sessionID = transcript.sessionID else { return nil }
+        return timeline.cacheable(sessionID: sessionID)
+    }
+
+    public func wantOlder() {
+        guard !closing else { return }
+        lastWant = .now
+        wantSerial += 1
+        guard olderLoader == nil else { return }
+        olderLoader = Task { await self.runOlderLoader() }
+    }
+
+    public func reveal(matching predicate: @Sendable (ChatTimelineRow) -> Bool) async -> RowKey? {
+        while !closing, !Task.isCancelled {
+            if let row = timeline.rows(links: botThreadLinks).first(where: predicate) { return row.id }
+            guard let outcome = await fetchOlder(), case .loaded = outcome else { return nil }
+        }
+        return nil
+    }
+
+    private var wantIsFresh: Bool {
+        lastWant.map { ContinuousClock.now - $0 <= paging.freshness } ?? false
+    }
+
+    private var shownRowCount: Int { timeline.rows(links: botThreadLinks).count }
+
+    private func runOlderLoader() async {
+        while !closing, !Task.isCancelled {
+            if case .failed(_, let retryAt, _) = timeline.older {
+                guard wantIsFresh else { break }
+                let wait = retryAt.timeIntervalSinceNow
+                if wait > 0 {
+                    try? await Task.sleep(for: .milliseconds(Int(wait * 1000) + 1))
+                    continue
+                }
+            }
+            let serial = wantSerial
+            let before = shownRowCount
+            guard let outcome = await fetchOlder() else { break }
+            if case .loaded = outcome, shownRowCount > before, wantSerial == serial || !wantIsFresh { break }
+        }
+        olderLoader = nil
+    }
+
+    private func fetchOlder() async -> OlderFetch? {
+        if let inFlight = olderFetch { return await inFlight.value }
+        guard timelineCapable, let api, let sessionID = transcript.sessionID,
+              let cursor = timeline.beginLoadingOlder(now: Date())
+        else { return nil }
+        publishTimeline()
+        let task = Task { await self.performOlderFetch(api: api, sessionID: sessionID, cursor: cursor) }
+        olderFetch = task
+        let outcome = await task.value
+        olderFetch = nil
+        return outcome
+    }
+
+    private func performOlderFetch(api: SessionAPI, sessionID: String, cursor: String) async -> OlderFetch {
+        do {
+            let page = try await api.timelinePage(sessionID: sessionID, before: cursor, limit: paging.olderPage)
+            if timeline.prepend(page, requested: cursor) { publishTimeline() }
+            return .loaded
+        } catch let error as GatewayTransportError where error.isCursorStale {
+            diagnostics.info("chat", "older cursor went stale; reloading the newest page")
+            do {
+                let page = try await api.timelinePage(sessionID: sessionID, before: nil, limit: paging.firstPage)
+                timeline.reset(page)
+                publishTimeline()
+                return .loaded
+            } catch {
+                return failOlder(cursor: cursor, error)
+            }
+        } catch {
+            return failOlder(cursor: cursor, error)
+        }
+    }
+
+    private func failOlder(cursor: String, _ error: any Error) -> OlderFetch {
+        diagnostics.debug("chat", "older timeline page failed: \(Diagnostics.describe(error))")
+        timeline.failOlder(requested: cursor, now: Date(), backoff: paging.backoff)
+        publishTimeline()
+        return .failed
+    }
+
+    private func makeTimelineSnapshot() -> TimelineSnapshot {
+        TimelineSnapshot(
+            version: timelineVersion,
+            sessionID: timeline.live.sessionID,
+            rows: timeline.rows(links: botThreadLinks),
+            older: timeline.older.state,
+            isRunning: timeline.live.isRunning,
+            pendingPrompts: timeline.live.pendingPrompts,
+            hasPendingConnection: !timeline.live.pendingConnections().isEmpty,
+            lastError: timeline.live.lastError,
+            executionGeneration: timeline.live.executionGeneration,
+            runningToolName: timeline.live.runningToolName,
+            streamingText: timeline.live.streamingText
+        )
+    }
+
+    private func publishTimeline() {
+        timelineVersion += 1
+        timelineContinuation.yield(makeTimelineSnapshot())
     }
 
     private func setPhase(_ next: ChatPhase) {
@@ -558,7 +802,7 @@ public actor ChatSession: OutboxSubmitter {
             phase = .live(lastSequence: cursor.lastSequence, replayEpoch: cursor.replayEpoch)
             continuation.yield(.phase(phase))
         }
-        continuation.yield(.transcript(transcript))
+        publishTimeline()
         notifyWaiters()
     }
 }

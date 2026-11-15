@@ -6,16 +6,16 @@ struct ConversationCache: Sendable {
     let store: CacheStore
     let account: String
 
-    func load(bot: String) -> CachedTranscript? {
-        store.load(CachedTranscript.self, name: CachedTranscript.cacheName(forBot: bot), account: account)
+    func load(bot: String) -> CachedTimeline? {
+        store.load(CachedTimeline.self, name: CachedTimeline.cacheName(forBot: bot), account: account)
     }
 
-    func save(_ transcript: CachedTranscript, bot: String) {
-        store.save(transcript, name: CachedTranscript.cacheName(forBot: bot), account: account)
+    func save(_ timeline: CachedTimeline, bot: String) {
+        store.save(timeline, name: CachedTimeline.cacheName(forBot: bot), account: account)
     }
 
     func remove(bot: String) {
-        store.remove(name: CachedTranscript.cacheName(forBot: bot), account: account)
+        store.remove(name: CachedTimeline.cacheName(forBot: bot), account: account)
     }
 }
 
