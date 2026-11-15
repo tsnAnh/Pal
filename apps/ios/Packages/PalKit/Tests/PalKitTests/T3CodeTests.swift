@@ -368,3 +368,105 @@ struct T3CodeControllerTests {
         #expect(rig.registrar.registerCalls.withLock { $0 } == 1)
     }
 }
+
+private final class FakeHost: T3RegistrationHost {
+    enum Behavior: Sendable {
+        case accept
+        case refuse
+        case fail
+        case offline
+    }
+
+    let behavior: Mutex<Behavior>
+    let registerCalls = Mutex(0)
+
+    init(_ behavior: Behavior) {
+        self.behavior = Mutex(behavior)
+    }
+
+    var hasConnection: Bool {
+        get async { behavior.withLock { $0 } != .offline }
+    }
+
+    func registerMcp(_ server: DeviceMcpServer) async throws -> Bool {
+        registerCalls.withLock { $0 += 1 }
+        switch behavior.withLock({ $0 }) {
+        case .accept: return true
+        case .refuse: return false
+        case .fail, .offline: throw McpOAuthError.gatewayUnavailable
+        }
+    }
+
+    func unregisterMcp(_ server: DeviceMcpServer) async throws {}
+}
+
+private final class HostPool: Sendable {
+    private let hosts: Mutex<[FakeHost]>
+
+    init(_ hosts: [FakeHost]) {
+        self.hosts = Mutex(hosts)
+    }
+
+    func current() -> [any T3RegistrationHost] { hosts.withLock { $0 } }
+    func set(_ next: [FakeHost]) { hosts.withLock { $0 = next } }
+}
+
+@MainActor
+private struct HostRig {
+    let sandbox: T3Sandbox
+    let pool: HostPool
+    let controller: T3CodeController
+
+    init(_ hosts: [FakeHost]) throws {
+        sandbox = try T3Sandbox()
+        pool = HostPool(hosts)
+        try sandbox.publish(origin: "http://127.0.0.1:47391")
+        try FileManager.default.createDirectory(at: sandbox.directory.appending(path: "T3 Code (Beta).app"), withIntermediateDirectories: true)
+        let pool = pool
+        controller = T3CodeController(
+            locator: sandbox.locator,
+            tokens: InMemoryT3TokenStore(T3Token(access: SecretString("saved-token"), expiresAt: nil)),
+            authorizer: FakeAuthorizer(outcome: .token("fresh-token"), seen: SeenURLs()),
+            registrar: T3HostRegistrar { pool.current() }
+        )
+    }
+}
+
+@MainActor
+@Suite("T3 registration across bots")
+struct T3RegistrationOutcomeTests {
+    @Test func noConnectedBotIsNotReportedAsConnected() async throws {
+        let rig = try HostRig([])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection != .connected)
+    }
+
+    @Test func botsThatAreAllOfflineAreNotReportedAsConnected() async throws {
+        let rig = try HostRig([FakeHost(.offline), FakeHost(.offline)])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection != .connected)
+    }
+
+    @Test func everyBotRefusingIsNotReportedAsConnected() async throws {
+        let rig = try HostRig([FakeHost(.refuse), FakeHost(.refuse)])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection != .connected)
+    }
+
+    @Test func everyBotFailingShowsTheRegistrationFailure() async throws {
+        let rig = try HostRig([FakeHost(.fail), FakeHost(.fail)])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection == .failed(.registration))
+    }
+
+    @Test func oneBotToldAndAnotherFailingIsNotReportedAsConnected() async throws {
+        let rig = try HostRig([FakeHost(.accept), FakeHost(.fail)])
+        defer { rig.sandbox.remove() }
+        await rig.controller.refresh()
+        #expect(rig.controller.connection != .connected)
+    }
+}
