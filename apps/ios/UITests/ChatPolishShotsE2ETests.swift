@@ -136,6 +136,41 @@ final class ChatPolishShotsE2ETests: E2ETestCase {
         }
     }
 
+    private func attachPhoto(_ app: XCUIApplication) {
+        app.buttons["attachButton"].tap()
+        waitFor(app.buttons["attachPhotos"], timeout: 10, "attach menu")
+        app.buttons["attachPhotos"].tap()
+        let photo = app.images.matching(NSPredicate(format: "label BEGINSWITH %@", "Photo,")).firstMatch
+        waitFor(photo, timeout: 30, "photo library picker")
+        photo.tap()
+        let add = app.buttons["Add"]
+        if add.waitForExistence(timeout: 5) { add.tap() }
+    }
+
+    func test7SendErrorStates() throws {
+        for mode in [AppearanceMode.light, .dark] {
+            let app = open(mode)
+            waitFor(element(app, "composerField"), timeout: 30, "composer")
+            attachPhoto(app)
+            waitFor(element(app, "attachmentThumbnail"), timeout: 20, "thumbnail in the tray")
+            waitGone(element(app, "attachmentUploading"), timeout: 60, "upload finishes")
+            try control("drop-staged-images")
+            app.buttons["sendButton"].tap()
+            waitFor(element(app, "deliveryFailed"), timeout: 60, "the refused message is marked not sent")
+            settle()
+            shot(app, "send-error-not-sent-\(mode.rawValue)")
+            try control("kill-gateway")
+            waitFor(element(app, "reconnectingIndicator"), timeout: 30, "reconnecting indicator")
+            attachPhoto(app)
+            waitFor(element(app, "composerNotice"), timeout: 30, "the composer explains the failed upload")
+            settle()
+            shot(app, "send-error-composer-notice-\(mode.rawValue)")
+            try control("start-gateway")
+            waitGone(element(app, "reconnectingIndicator"), timeout: 90, "connected again")
+            app.terminate()
+        }
+    }
+
     func test6WorkingRowLoop() throws {
         for mode in [AppearanceMode.light, .dark] {
             let app = open(mode)

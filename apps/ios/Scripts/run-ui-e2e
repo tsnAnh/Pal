@@ -112,6 +112,14 @@ probe_count() {
   [ "$total" = 1 ]
 }
 
+drop_staged_images() {
+  local staged
+  staged="$(find "$HERMES_IOS_E2E_HOME" -path '*/cache/images/upload_*' -type f 2>/dev/null)"
+  [ -n "$staged" ] || return 1
+  printf '%s\n' "$staged" | while IFS= read -r file; do rm -f "$file"; done
+  printf '%s\n' "$staged" >>"$ART/dropped-staged-images.txt"
+}
+
 external_turn() {
   local out="$CTL_DIR/external-$RANDOM.out"
   "$IOS_DIR/Scripts/gateway-client" submit --profile "$1" --text "$2" --hold 90 >"$out" 2>>"$ART/external-client.log" &
@@ -149,6 +157,7 @@ control_loop() {
         external-slow-alpha) external_turn bot-alpha "SLOW external turn" || status=fail ;;
         external-clarify-alpha) external_turn bot-alpha "CLARIFY external question" || status=fail ;;
         stop-external) stop_external || status=fail ;;
+        drop-staged-images) drop_staged_images || status=fail ;;
         *) status=fail ;;
       esac
       echo "$command -> $status" >>"$ART/control.log"
