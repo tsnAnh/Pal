@@ -197,7 +197,7 @@ class E2ETestCase: XCTestCase {
             let replies = app.descendants(matching: .any).matching(identifier: "assistantBubble")
             let replyCount = replies.count
             let reply = replyCount > 0 ? replies.element(boundBy: replyCount - 1) : nil
-            if let reply, userBubble.exists, reply.frame.minY > userBubble.frame.minY,
+            if let reply, reply.exists, userBubble.exists, reply.frame.minY > userBubble.frame.minY,
                !app.descendants(matching: .any)["assistantBubble-streaming"].exists {
                 return reply
             }
