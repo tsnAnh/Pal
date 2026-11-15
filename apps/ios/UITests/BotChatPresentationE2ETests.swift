@@ -132,7 +132,7 @@ final class BotChatPresentationE2ETests: E2ETestCase {
 
     private func toolRows(_ app: XCUIApplication) -> XCUIElementQuery {
         app.descendants(matching: .any).matching(NSPredicate(
-            format: "label BEGINSWITH %@ OR label BEGINSWITH %@ OR label CONTAINS[c] %@", "Running ", "Used ", "terminal"
+            format: "identifier != %@ AND (label BEGINSWITH %@ OR label BEGINSWITH %@ OR label CONTAINS[c] %@)", "workingStatus", "Running ", "Used ", "terminal"
         ))
     }
 

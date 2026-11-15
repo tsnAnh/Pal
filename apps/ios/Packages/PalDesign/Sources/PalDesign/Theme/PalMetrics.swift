@@ -204,7 +204,8 @@ public enum ChatMetrics {
     public static let headerButtonDiameter: CGFloat = 44
     public static let headerAvatarSize: CGFloat = 26
     public static let scrollButtonDiameter: CGFloat = 36
-    public static let workingDotDiameter: CGFloat = 8
+    public static let workingAvatarSize: CGFloat = 20
+    public static let workingMoodPeriod: Double = 1.6
     public static let minimumHitTarget: CGFloat = {
         #if os(macOS)
         40

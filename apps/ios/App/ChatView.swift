@@ -177,7 +177,7 @@ struct ChatView: View {
     @ViewBuilder
     private var footer: some View {
         if model.isRunning, !model.hasPendingPrompt {
-            ChatWorkingRow(status: model.workingStatus, ink: ink)
+            ChatWorkingRow(status: model.workingStatus, ink: ink, avatar: model.bot.spec)
                 .padding(.top, ChatMetrics.senderSwitchGap)
         }
         if connectionIsSlow {
