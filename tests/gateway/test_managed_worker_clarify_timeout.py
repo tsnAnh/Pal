@@ -1,4 +1,4 @@
-"""A managed worker's clarify wait honours the profile's clarify timeout (<= 0 = unlimited)."""
+"""A managed worker's clarify wait honours the profile's clarify timeout (<= 0 = unlimited); a Bot Chat question never times out."""
 import threading
 import time
 
@@ -51,4 +51,22 @@ def test_nonpositive_clarify_timeout_waits_unbounded(tmp_path, monkeypatch, body
 
     monkeypatch.setattr(worker.threading, 'Event', _Event)
     assert _controls()._ask('q?', [], False) is None
+    assert waits == [None]
+
+
+def test_a_bot_chat_question_waits_unbounded_whatever_the_configured_timeout(tmp_path, monkeypatch):
+    from agent import managed_worker as worker
+    from tools.bot_mode_probe import BOT_CHAT_TITLE
+    _config(tmp_path, monkeypatch, 'agent:\n  clarify_timeout: 1\n')
+    waits = []
+
+    class _Event(threading.Event):
+        def wait(self, timeout=None):
+            waits.append(timeout)
+            return True
+
+    monkeypatch.setattr(worker.threading, 'Event', _Event)
+    controls = _controls()
+    controls.agent = type('Agent', (), {'_session_title_hint': BOT_CHAT_TITLE})()
+    assert controls._ask('q?', [], False) is None
     assert waits == [None]

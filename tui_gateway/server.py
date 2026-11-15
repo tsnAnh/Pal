@@ -997,7 +997,9 @@ def _clarify_block(sid: str, questions: list[dict]) -> dict:
     from tui_gateway import server_requests
     wire = [{"qid": e["qid"], "question": e["question"], "choices": e["choices"], "multi_select": bool(e["multi_select"])}
             for e in questions]
-    result = server_requests.send("clarify", sid, {"questions": wire}, timeout=_clarify_timeout_seconds(),
+    session = _sessions.get(sid)
+    timeout = None if session is not None and _is_bot_mode_session(session) else _clarify_timeout_seconds()
+    result = server_requests.send("clarify", sid, {"questions": wire}, timeout=timeout,
                                   qids=[e["qid"] for e in questions])
     return result or {"answers": {}, "outcome": "undelivered"}
 
