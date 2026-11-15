@@ -330,6 +330,8 @@ struct ConnectionRequestCard: View {
             Text(decisions.contains(.allow) || decisions.contains(.deny) ? prompt(for: target) : Self.name(of: target))
                 .font(.body)
                 .foregroundStyle(Color(theme.palette.textPrimary))
+                .accessibilityIdentifier("connectionState-\(target.name)")
+                .accessibilityValue(target.state.rawValue)
             if let line = stateLine(for: target) {
                 Text(line)
                     .font(.subheadline)
@@ -360,8 +362,5 @@ struct ConnectionRequestCard: View {
                     .accessibilityIdentifier(Self.identifier(for: decision, target: target.name))
             }
         }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("connectionState-\(target.name)")
-        .accessibilityValue(target.state.rawValue)
     }
 }
