@@ -33,11 +33,8 @@ struct ReplyTarget: Equatable {
 struct ParsedMarkdown: Equatable {
     let source: String
     let document: MarkdownDocument
-    var isStreaming = false
 
-    static func == (lhs: ParsedMarkdown, rhs: ParsedMarkdown) -> Bool {
-        lhs.source == rhs.source && lhs.isStreaming == rhs.isStreaming
-    }
+    static func == (lhs: ParsedMarkdown, rhs: ParsedMarkdown) -> Bool { lhs.source == rhs.source }
 }
 
 enum ChatRowGap: Equatable {
@@ -112,7 +109,6 @@ final class ChatModel {
     private(set) var rows: [ChatRow] = []
     private(set) var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
-    private(set) var isStreamingReply = false
     private(set) var workingStatus: String?
     private(set) var hasPendingClarify = false
     private(set) var hasPendingPrompt = false
@@ -211,7 +207,7 @@ final class ChatModel {
             switch item.content {
             case .user where item.inbound.isPerson:
                 break
-            case .assistant(let text, _, false) where !text.isEmpty:
+            case .assistant(let text, _, _) where !text.isEmpty:
                 parts.append(text)
                 continue
             default:
@@ -751,7 +747,6 @@ final class ChatModel {
         }
         if next != rows { rows = next }
         isRunning = snapshot?.isRunning ?? false
-        isStreamingReply = if case .assistant(let parsed)? = next.last?.kind { parsed.isStreaming } else { false }
         workingStatus = snapshot?.runningToolName.map(ToolActivity.label(for:))
         hasPendingClarify = pendingClarify != nil
         hasPendingPrompt = !(snapshot?.pendingPrompts.isEmpty ?? true)
@@ -813,14 +808,13 @@ final class ChatModel {
             case .processCompletion:
                 return (.notice(.backgroundTaskFinished(count: InboundKind.backgroundTaskCount(in: text), text: text)), [])
             }
-        case .assistant(let text, _, let streaming):
+        case .assistant(let text, _, _):
             let content = MessageImages.extract(from: text, role: .assistant)
             let images = content.images.filter { !generated.contains($0.id) }
-            if case .assistant(let parsed)? = previous?.kind, parsed.source == content.text, parsed.isStreaming == streaming {
+            if case .assistant(let parsed)? = previous?.kind, parsed.source == content.text {
                 return (.assistant(parsed), images)
             }
-            let document = MarkdownDocument(parsing: content.text, isStreaming: streaming)
-            return (.assistant(ParsedMarkdown(source: content.text, document: document, isStreaming: streaming)), images)
+            return (.assistant(ParsedMarkdown(source: content.text, document: MarkdownDocument(parsing: content.text))), images)
         case .tool(let call):
             guard let generation = call.imageGeneration else { return nil }
             return (.imageGeneration(generation), [])

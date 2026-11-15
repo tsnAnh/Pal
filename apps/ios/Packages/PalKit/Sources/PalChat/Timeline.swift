@@ -432,7 +432,7 @@ struct Timeline: Sendable {
         if TranscriptVisibility.isHidden(row.item) { return false }
         switch row.item.content {
         case .tool(let call): return call.imageGeneration != nil
-        case .assistant(let text, _, let streaming): return !streaming || !text.isEmpty
+        case .assistant(_, _, let streaming): return !streaming
         default: return true
         }
     }

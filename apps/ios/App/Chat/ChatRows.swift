@@ -68,7 +68,7 @@ struct ChatRowView: View {
             .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
             .environment(\.chatImageLoader, imageLoader)
         case .assistant(let parsed):
-            AssistantBubble(text: parsed.source, document: parsed.document, images: row.images, highlight: findQuery, isCurrentMatch: isCurrentMatch, isStreaming: parsed.isStreaming)
+            AssistantBubble(text: parsed.source, document: parsed.document, images: row.images, highlight: findQuery, isCurrentMatch: isCurrentMatch)
                 .environment(\.messageActions, messageActions(for: parsed.source))
                 .environment(\.chatImageLoader, imageLoader)
         case .clarifyAnswered(let question, let answer):
