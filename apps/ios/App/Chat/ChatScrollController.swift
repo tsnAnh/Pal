@@ -4,14 +4,12 @@ nonisolated struct ChatViewport: Equatable {
     static let prefetchViewports: CGFloat = 2
     static let shortContentViewports: CGFloat = 1.5
 
-    var offset: CGFloat
     var distanceFromNewest: CGFloat
     var distanceFromOldest: CGFloat
     var viewportHeight: CGFloat
     var contentHeight: CGFloat
 
     init(_ geometry: ScrollGeometry) {
-        offset = geometry.contentOffset.y
         distanceFromNewest = geometry.contentOffset.y + geometry.contentInsets.top
         distanceFromOldest = geometry.contentSize.height + geometry.contentInsets.bottom - geometry.visibleRect.maxY
         viewportHeight = geometry.containerSize.height
@@ -41,7 +39,6 @@ final class ChatScrollController {
     private(set) var unseen = 0
     private(set) var wantsOlder = false
     @ObservationIgnored private var phase = ScrollPhase.idle
-    @ObservationIgnored private var offset: CGFloat = 0
     @ObservationIgnored private var distanceFromNewest: CGFloat = 0
     @ObservationIgnored private var viewportHeight: CGFloat = 0
     @ObservationIgnored private var lastRowID: String?
@@ -61,7 +58,6 @@ final class ChatScrollController {
     var showsJumpButton: Bool { mode == .reading }
 
     func observe(_ viewport: ChatViewport) {
-        offset = viewport.offset
         distanceFromNewest = viewport.distanceFromNewest
         viewportHeight = viewport.viewportHeight
         if wantsOlder != viewport.wantsOlder { wantsOlder = viewport.wantsOlder }
@@ -92,8 +88,8 @@ final class ChatScrollController {
         current.contentMinY = contentMinY
         pin = current
         guard mode == .reading, phase == .idle, let previous, abs(contentMinY - previous) > 0.5 else { return }
-        offset += contentMinY - previous
-        position.scrollTo(y: offset)
+        distanceFromNewest += contentMinY - previous
+        position.scrollTo(y: distanceFromNewest)
     }
 
     func rowsChanged(_ ids: [String]) {
