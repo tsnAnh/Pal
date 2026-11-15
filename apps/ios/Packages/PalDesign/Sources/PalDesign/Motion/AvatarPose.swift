@@ -24,6 +24,9 @@ struct AvatarPose: Equatable, Sendable {
     var bodyScaleX = 1.0
     var bodyScaleY = 1.0
     var bodyRotation = 0.0
+    var yaw = 0.0
+    var pitch = 0.0
+    var pairSpin = 0.0
     var opacity = 1.0
     var dots = SIMD3<Double>(0, 0, 0)
 
@@ -32,7 +35,7 @@ struct AvatarPose: Equatable, Sendable {
 
     static let geometry: [any WritableKeyPath<AvatarPose, Double> & Sendable] = [
         \.front, \.eyeX, \.eyeY, \.eyeRoll, \.eyeSpread, \.eyeScale,
-        \.bodyX, \.bodyY, \.bodyScaleX, \.bodyScaleY, \.bodyRotation,
+        \.bodyX, \.bodyY, \.bodyScaleX, \.bodyScaleY, \.bodyRotation, \.yaw, \.pitch, \.pairSpin,
     ]
     static let appearance: [any WritableKeyPath<AvatarPose, Double> & Sendable] = [\.eyeDot, \.eyeHappy, \.eyeOpen, \.opacity]
 
@@ -40,7 +43,7 @@ struct AvatarPose: Equatable, Sendable {
         "front": \.front, "eyeX": \.eyeX, "eyeY": \.eyeY, "eyeRoll": \.eyeRoll, "eyeSpread": \.eyeSpread,
         "eyeScale": \.eyeScale, "eyeDot": \.eyeDot, "eyeHappy": \.eyeHappy, "eyeOpen": \.eyeOpen,
         "bodyX": \.bodyX, "bodyY": \.bodyY, "bodyScaleX": \.bodyScaleX, "bodyScaleY": \.bodyScaleY,
-        "bodyRotation": \.bodyRotation, "opacity": \.opacity,
+        "bodyRotation": \.bodyRotation, "yaw": \.yaw, "pitch": \.pitch, "pairSpin": \.pairSpin, "opacity": \.opacity,
     ]
 
     func with(_ change: (inout AvatarPose) -> Void) -> AvatarPose {
