@@ -110,7 +110,7 @@ def _latest_message_preview(db, session_id):
     """≤80-char excerpt of the NEWEST active user/assistant message the owner's transcript shows,
     or "" (roster semantics). Same query shape as ``SessionDB.latest_message_row_id``;
     keep them in step."""
-    from gateway.response_filters import PREVIEW_HIDDEN_SCAN, is_hidden_from_owner_row
+    from gateway.display_markers import PREVIEW_HIDDEN_SCAN, owner_display_text
     try:
         with db._lock:
             rows = db._conn.execute(
@@ -121,8 +121,8 @@ def _latest_message_preview(db, session_id):
                 (session_id, PREVIEW_HIDDEN_SCAN)).fetchall()
     except Exception:
         return ""
-    row = next((r for r in rows if not is_hidden_from_owner_row(r[0], r[1], r[2])), None)
-    text = " ".join(str(row[1] or "").split()).strip() if row else ""
+    shown = next((t for r in rows if (t := owner_display_text(r[0], r[1], r[2])) is not None), "")
+    text = " ".join(shown.split()).strip()
     return text[:80] + "..." if len(text) > 80 else text
 
 
@@ -211,7 +211,7 @@ def _latest_profile_session_rows(db):
     any failure (missing state.db, locked db, older schema) degrades to (None, None) rather than failing the
     whole profiles.list call.
     """
-    from gateway.response_filters import owner_visible_prompt
+    from gateway.display_markers import owner_visible_prompt
     try:
         human = worker = None
         for s in db.list_sessions_rich(source=None, limit=20, order_by_last_active=True, compact_rows=True):

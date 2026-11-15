@@ -23,21 +23,21 @@ def _last_reply(candidates):
     assistant row shows nothing, so the reply before it stands; a carrier shows the reply it wraps."""
     from agent.compaction_display import project_compaction_message_for_display
     from agent.message_content import flatten_message_text
-    from gateway.response_filters import is_hidden_from_owner_row
+    from gateway.display_markers import owner_display_text
     from hermes_state_common import _shape_preview
     for content, summary in candidates:
         shown = project_compaction_message_for_display(
             {'role': 'assistant', 'content': content, '_compressed_summary': summary})
-        text = _shape_preview(flatten_message_text(shown['content'])) if shown is not None else ''
-        if text and not is_hidden_from_owner_row('assistant', text):
-            return text
+        text = owner_display_text('assistant', flatten_message_text(shown['content'])) if shown is not None else None
+        if text and (preview := _shape_preview(text)):
+            return preview
     return None
 
 
 def fill_picker_fields(db, items):
     """Set the picker fields on each ``(row, root, segment, listed)``: *listed* is the segment's
     ``list_sessions_rich`` row (its ``preview`` / ``last_active`` / branch / pin), None to read them."""
-    from gateway.response_filters import owner_visible_prompt
+    from gateway.display_markers import owner_visible_prompt
     from hermes_state_common import _shape_preview
     from hermes_state_sessions import workspace_key
     roots, segments, replies = db.picker_session_facts(

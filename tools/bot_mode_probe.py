@@ -38,6 +38,14 @@ def strip_legacy_protocol(text: str) -> str:
 # desktop plugin's createCanonicalChat title and the `-c "Bot Chat"` resume target.
 BOT_CHAT_TITLE = "Bot Chat"
 
+def is_bot_chat_agent(agent) -> bool:
+    title = str(getattr(agent, "_session_title_hint", "") or "").strip()
+    if not title:
+        db, session_id = getattr(agent, "_session_db", None), getattr(agent, "session_id", None)
+        title = str((db.get_session_title(session_id) if db and session_id else None) or "").strip()
+    return title == BOT_CHAT_TITLE
+
+
 _lock = threading.Lock()
 _cached: dict[str, str] = {}
 

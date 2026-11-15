@@ -301,3 +301,8 @@ def get_clarify_timeout() -> int:
         return resolve_clarify_timeout(load_config() or {})
     except Exception:
         return 90
+
+
+def clarify_timeout_for(agent) -> int:
+    from tools.bot_mode_probe import is_bot_chat_agent
+    return 0 if is_bot_chat_agent(agent) else get_clarify_timeout()
