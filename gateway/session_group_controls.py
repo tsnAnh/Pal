@@ -407,13 +407,13 @@ def _read_bot_sessions(db, subject, operator):
         def summary(root):
             tip = db._compression_tip_on(conn, root['id'])
             target = conn.execute('SELECT * FROM sessions WHERE id=?', (tip,)).fetchone() or root
-            from gateway.response_filters import PREVIEW_HIDDEN_SCAN, is_hidden_from_owner_row
+            from gateway.display_markers import PREVIEW_HIDDEN_SCAN, owner_display_text
             recent = conn.execute(
                 "SELECT role, content, display_kind FROM messages WHERE session_id=? AND active=1 "
                 "AND role IN ('user','assistant') AND TRIM(COALESCE(content,''))!='' "
                 f"ORDER BY id DESC LIMIT {PREVIEW_HIDDEN_SCAN}", (tip,)).fetchall()
-            message = next((m for m in recent if not is_hidden_from_owner_row(m[0], m[1], m[2])), None)
-            text = ' '.join(str(message[1] or '').split()) if message else ''
+            shown = next((t for m in recent if (t := owner_display_text(m[0], m[1], m[2])) is not None), '')
+            text = ' '.join(shown.split())
             return {'id': root['id'], 'resolved_id': tip, 'title': target['title'] or '',
                     'root_title': root['title'] or '',
                     'preview': text[:80] + '...' if len(text) > 80 else text,

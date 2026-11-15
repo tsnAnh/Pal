@@ -8,12 +8,6 @@ import re
 from .method_ctx import bind_module
 from agent.prompt_builder import STEER_DISPLAY_KIND
 
-# Discord routing note (gateway/run_inbound.py::discord_triggering_note) persisted as user
-# ``content`` by gateways before the authored-text fix; presentation-only heal for those rows.
-_DISCORD_TRIGGERING_NOTE_RE = re.compile(
-    r"(^|\n)\[Triggering message id: `[^`\n]*` — use as `message_id` for reply/react/pin via the discord tools\.\]\n*"
-)
-
 
 def _bridged_tool_labels(name: str, args: dict) -> list[dict]:
     from agent.display import tool_labels_for_call
@@ -244,22 +238,6 @@ def _is_text_only_busy_payload(content: Any) -> bool:
     return isinstance(content, (str, int, float)) or (isinstance(content, dict) and _history_text_only_part(content))
 
 
-def _is_display_hidden_marker(role: str | None, text: str) -> bool:
-    """Gateway notices (model-switch, personality) persist as role=user ``[System: …]`` rows so strict providers
-    accept them mid-history; they must never render as a user bubble. Filtering in this one projection hides
-    them everywhere (raw marker stays in ``session["history"]``) and keeps the desktop's user ordinals stable.
-
-    It also removes the stored marker from the payload the desktop reconciles against, so it can no longer
-    shift user-message ordinals and duplicate the optimistic prompt (#67603).
-    """
-    return role == "user" and text.lstrip().startswith("[System:")
-
-
-def _without_silence_marker(text: str) -> str:
-    from gateway.response_filters import is_intentional_silence_response, strip_trailing_silence_marker
-    return "" if is_intentional_silence_response(text) else strip_trailing_silence_marker(text)
-
-
 def _skill_scaffold_projection(content_text: str) -> str:
     """The invocation a slash-skill-expanded turn came from, else "" — UIs render ``/work fix the leak``."""
     return describe_skill_invocation(content_text, separator=" ") or ""
@@ -323,6 +301,7 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
     so a remote client's history read stays kilobytes instead of re-transmitting every stored attachment."""
     from agent.history_commentary import project_history_commentary
     from agent.message_metadata import withheld_prompt_text
+    from gateway.display_markers import display_text
 
     messages = []
     tool_call_args = {}
@@ -344,12 +323,11 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
         content_text = _user_image_display_text(m.get("content")) if role == "user" else None
         if content_text is None:
             content_text = _coerce_message_text(m.get("content"), image_urls=image_urls)
-        if _is_display_hidden_marker(role, content_text):
+        shown = display_text(role, content_text)
+        if shown is None and role == "user":
             continue
-        if role == "assistant":
-            content_text = _without_silence_marker(content_text)
+        content_text = shown or ""
         if role == "user":
-            content_text = _DISCORD_TRIGGERING_NOTE_RE.sub(r"\1", content_text)
             # A pre_llm_call veto stores a placeholder; the transcript shows what the user typed.
             content_text = withheld_prompt_text(m) or content_text
         if role == "user" and isinstance(m.get("content"), str):

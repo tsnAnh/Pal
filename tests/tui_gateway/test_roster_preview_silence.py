@@ -156,5 +156,5 @@ def test_the_picker_preview_hides_a_cron_first_prompt_and_keeps_a_quoting_one(ho
 
 def test_the_cron_prefix_is_the_one_cron_writes():
     from cron.scheduler_delivery import bot_chat_message
-    from gateway.response_filters import is_hidden_from_owner_row
-    assert is_hidden_from_owner_row("user", bot_chat_message({"name": "faker-kit-babysit"}, "output"))
+    from gateway.display_markers import owner_display_text
+    assert owner_display_text("user", bot_chat_message({"name": "faker-kit-babysit"}, "output")) is None

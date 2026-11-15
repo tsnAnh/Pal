@@ -16,20 +16,6 @@ from .method_ctx import HandlerRegistry, bind_module
 _registry = HandlerRegistry()
 
 
-def _bot_mode_delivery_text(response: Any, *, successful: bool) -> Any:
-    """Return the text Bot Mode may render or relay after a completed turn.
-
-    The gateway owns the canonical marker set.  Keep the row and completion
-    event intact, but make a successful bare marker invisible at every Bot
-    Mode delivery boundary.  Failed turns intentionally fail open so their
-    diagnostic text is never swallowed.
-    """
-    from gateway.response_filters import is_intentional_silence_response, strip_trailing_silence_marker
-    if not successful:
-        return response
-    return "" if is_intentional_silence_response(response) else strip_trailing_silence_marker(response)
-
-
 def _is_bot_mode_session(session: dict) -> bool:
     """Whether this completion belongs to the canonical Bot Chat surface.
 
@@ -799,6 +785,7 @@ def _invoke_agent(
     # be a bare silence marker ("NO"->"NO_REPLY") or its last line a closing one
     # ("Paris.\n\nNO"), so a marker is never shown or spoken (the client keeps streamed text
     # when message.complete is "").
+    from gateway.display_markers import display_text
     from gateway.response_filters import SilenceMarkerStreamHold
     hold = SilenceMarkerStreamHold() if _is_bot_mode_session(session) else None
 
@@ -826,10 +813,8 @@ def _invoke_agent(
     def _interim_assistant_cb(text: str, *, already_streamed: bool = False) -> None:
         if getattr(agent, "_mute_notification_reply", False):
             return
-        if hold is not None:
-            text = _bot_mode_delivery_text(text, successful=True)
-            if not text:
-                return
+        if hold is not None and not (text := display_text("assistant", text)):
+            return
         _emit("message.interim", sid, {"text": text, "already_streamed": already_streamed})
     agent.interim_assistant_callback = (
         _interim_assistant_cb if _load_interim_assistant_messages() else None)
@@ -993,8 +978,9 @@ def _complete_turn_payload(session: dict, st: _TurnRun, status_note: str | None,
     # The receipt verifies the stored row's body, which keeps the model's text as written;
     # only the delivered copy drops a silence marker.
     receipt = _persisted_turn_receipt(st, raw, status)
-    if _is_bot_mode_session(session):
-        raw = _bot_mode_delivery_text(raw, successful=status == "complete")
+    if status == "complete" and isinstance(raw, str) and _is_bot_mode_session(session):
+        from gateway.display_markers import display_text
+        raw = display_text("assistant", raw) or ""
     payload = {"text": raw, "usage": _get_usage(agent), "status": status}
     if receipt:
         payload["persisted_turn"] = receipt
