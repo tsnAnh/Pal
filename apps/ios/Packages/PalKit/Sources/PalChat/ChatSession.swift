@@ -57,6 +57,7 @@ public actor ChatSession: OutboxSubmitter {
 
     static let historyWindow = 60
     static let olderPageSize = 60
+    static let unknownOperationCode = 4004
 
     private static let botThreadsChangedEvent = "bot_threads.changed"
     private static let messageCompleteEvent = "message.complete"
@@ -228,6 +229,42 @@ public actor ChatSession: OutboxSubmitter {
             promptID: prompt.promptID,
             choice: choice
         )
+    }
+
+    public func answerConnection(
+        opID: String,
+        target: String,
+        decision: ConnectionDecision,
+        now: Date = Date()
+    ) async throws {
+        guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
+        guard let card = transcript.connectionCard(opID: opID),
+              let row = card.operation.targets.first(where: { $0.name == target }),
+              card.decisions(for: row, now: now).contains(decision)
+        else { throw ChatError.connectionNotActionable }
+        do {
+            try await api.respondToConnection(
+                sessionID: sessionID,
+                opID: opID,
+                targets: [ConnectionAnswer(name: target, decision: decision)]
+            )
+        } catch {
+            await settleRefusedConnection(api: api, sessionID: sessionID, opID: opID, error: error)
+            throw error
+        }
+    }
+
+    private func settleRefusedConnection(api: SessionAPI, sessionID: String, opID: String, error: any Error) async {
+        if case GatewayTransportError.rpc(let rpc) = error, rpc.code == Self.unknownOperationCode || rpc.reasonCode == "unknown_operation" {
+            transcript.lapseConnection(opID: opID)
+        } else if let status = try? await api.connectionStatus(sessionID: sessionID, opID: opID),
+                  transcript.sessionID == sessionID
+        {
+            transcript.noteConnection(status)
+        } else {
+            return
+        }
+        publishLive()
     }
 
     public func interrupt() async throws {

@@ -50,6 +50,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
         case clarify(PromptCard)
         case approval(PromptCard)
         case botThread(BotThreadLink)
+        case connection(ConnectionCard)
     }
 
     public var id: String
@@ -200,6 +201,7 @@ public struct Transcript: Sendable, Equatable {
             ))
         }
         for prompt in snapshot.prompts { addCard(prompt) }
+        if let pending = snapshot.pendingConnection { upsertConnection(pending) }
         cursor = StreamCursor(replayEpoch: snapshot.replayEpoch, lastSequence: snapshot.lastSequence)
         isRunning = snapshot.running
         executionGeneration = snapshot.executionGeneration
@@ -220,6 +222,7 @@ public struct Transcript: Sendable, Equatable {
             case .clarify(let card): Summary.Entry(kind: "clarify", text: card.prompt.question ?? "")
             case .approval(let card): Summary.Entry(kind: "approval", text: card.prompt.command ?? "")
             case .botThread: nil
+            case .connection(let card): Summary.Entry(kind: "connection", text: card.operation.targets.map(\.name).joined(separator: ", "))
             }
         })
     }
@@ -246,6 +249,32 @@ public struct Transcript: Sendable, Equatable {
         }
     }
 
+    public func pendingConnections(now: Date = Date()) -> [ConnectionCard] {
+        items.compactMap { item in
+            if case .connection(let card) = item.content, card.isActionable(now: now) { return card }
+            return nil
+        }
+    }
+
+    public func connectionCard(opID: String) -> ConnectionCard? {
+        let id = ConnectionCard.itemID(opID)
+        guard let item = items.first(where: { $0.id == id }), case .connection(let card) = item.content else { return nil }
+        return card
+    }
+
+    public mutating func noteConnection(_ operation: ConnectionOperation) {
+        upsertConnection(operation)
+    }
+
+    public mutating func lapseConnection(opID: String) {
+        let id = ConnectionCard.itemID(opID)
+        guard let index = items.firstIndex(where: { $0.id == id }), case .connection(var card) = items[index].content,
+              !card.lapsed
+        else { return }
+        card.lapsed = true
+        items[index].content = .connection(card)
+    }
+
     public var assistantTexts: [String] {
         items.compactMap { item in
             if case .assistant(let text, _, _) = item.content { return text }
@@ -258,6 +287,14 @@ public struct Transcript: Sendable, Equatable {
     private mutating func adoptLiveState(from snapshot: SessionSnapshot) {
         isRunning = snapshot.running
         for prompt in snapshot.prompts { addCard(prompt) }
+        if let pending = snapshot.pendingConnection { upsertConnection(pending) }
+        let openElsewhere = items.compactMap { item -> String? in
+            guard case .connection(let card) = item.content, !card.operation.settled, !card.lapsed,
+                  card.operation.opID != snapshot.pendingConnection?.opID
+            else { return nil }
+            return card.operation.opID
+        }
+        for opID in openElsewhere { lapseConnection(opID: opID) }
     }
 
     private mutating func dropStreamingTail() {
@@ -334,6 +371,16 @@ public struct Transcript: Sendable, Equatable {
             if message.name == nil || message.name == "clarify", let result = ClarifyResult(json: message.plainText) {
                 return answeredItems(toolID: toolID, records: result.records, timestamp: serverDate(message.timestamp))
             }
+            if message.name == nil || message.name == ConnectionCard.toolName,
+               let operation = ConnectionOperation(toolResult: message.plainText)
+            {
+                return [TranscriptItem(
+                    id: ConnectionCard.itemID(operation.opID),
+                    content: .connection(ConnectionCard(operation: operation.closed())),
+                    timestamp: serverDate(message.timestamp),
+                    uid: message.messageUID
+                )]
+            }
             return [TranscriptItem(
                 id: "tool:\(toolID)",
                 content: .tool(ToolCall(toolID: toolID, name: message.name ?? "tool", status: .finished, summary: nil, result: .string(message.plainText))),
@@ -403,6 +450,11 @@ public struct Transcript: Sendable, Equatable {
                     result: complete.resultValue ?? complete.resultText.map(JSONValue.string)
                 ))
             }
+            if complete.name == ConnectionCard.toolName, let operation = Self.connectionOperation(of: complete) {
+                upsertConnection(operation.closed())
+            }
+        case .connectionRequest(let operation), .connectionUpdate(let operation):
+            upsertConnection(operation)
         case .clarifyRequest(let prompt), .approvalRequest(let prompt):
             addCard(prompt)
         case .clarifySettled(let settled), .approvalSettled(let settled):
@@ -646,6 +698,23 @@ public struct Transcript: Sendable, Equatable {
         } else {
             items.append(contentsOf: answered)
         }
+    }
+
+    private static func connectionOperation(of complete: ToolComplete) -> ConnectionOperation? {
+        if let operation = ConnectionOperation(toolResult: complete.result ?? complete.resultText) { return operation }
+        return complete.resultValue.flatMap { ConnectionOperation(value: $0) }
+    }
+
+    private mutating func upsertConnection(_ operation: ConnectionOperation) {
+        if let owner = operation.ownerSessionID, let sessionID, owner != sessionID { return }
+        let id = ConnectionCard.itemID(operation.opID)
+        guard let index = items.firstIndex(where: { $0.id == id }) else {
+            items.append(TranscriptItem(id: id, content: .connection(ConnectionCard(operation: operation))))
+            return
+        }
+        guard case .connection(var card) = items[index].content, operation.seq > card.operation.seq else { return }
+        card.operation = operation
+        items[index].content = .connection(card)
     }
 
     private mutating func addCard(_ prompt: PendingPrompt) {

@@ -199,7 +199,7 @@ public struct OpenRequest: Codable, Sendable, Hashable {
     public var params: JSONValue?
 }
 
-public struct SessionSnapshot: Codable, Sendable, Hashable {
+public struct SessionSnapshot: Decodable, Sendable, Hashable {
     public var sessionID: String
     public var storedSessionID: String?
     public var messages: [WireMessage]
@@ -212,6 +212,7 @@ public struct SessionSnapshot: Codable, Sendable, Hashable {
     public var pending: [PendingAdmission]
     public var prompts: [PendingPrompt]
     public var openRequests: [OpenRequest]
+    public var pendingConnection: ConnectionOperation?
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -227,6 +228,7 @@ public struct SessionSnapshot: Codable, Sendable, Hashable {
         pending = try container.decodeIfPresent([PendingAdmission].self, forKey: .pending) ?? []
         prompts = try container.decodeIfPresent([PendingPrompt].self, forKey: .prompts) ?? []
         openRequests = try container.decodeIfPresent([OpenRequest].self, forKey: .openRequests) ?? []
+        pendingConnection = try? container.decodeIfPresent(ConnectionOperation.self, forKey: .pendingConnection)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -242,6 +244,7 @@ public struct SessionSnapshot: Codable, Sendable, Hashable {
         case pending
         case prompts
         case openRequests = "open_requests"
+        case pendingConnection = "pending_connection"
     }
 }
 

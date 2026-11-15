@@ -38,6 +38,7 @@ struct ChatRow: Identifiable, Equatable {
         case clarifyAnswered(question: String, answer: ClarifyRecord.Answer)
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
+        case connection(ConnectionCard)
         case notice(ChatNotice)
         case botThread(BotThreadLink)
         case imageGeneration(ImageGeneration)
@@ -78,6 +79,7 @@ final class ChatModel {
     private(set) var isRunning = false
     private(set) var hasPendingClarify = false
     private(set) var sendError: String?
+    private(set) var answeringConnections: Set<String> = []
     private var pending = PendingAttachments()
     var attachments: [PendingAttachment] { pending.items }
     private var localImages: [String: Data] = [:]
@@ -336,6 +338,20 @@ final class ChatModel {
     func answerApproval(_ prompt: PendingPrompt, choice: String) {
         guard let session else { return }
         Task { try? await session.answerApproval(prompt, choice: choice) }
+    }
+
+    func answerConnection(opID: String, target: String, decision: ConnectionDecision) {
+        guard let session else { return }
+        let key = ConnectionRequestCard.answerKey(opID: opID, target: target)
+        guard answeringConnections.insert(key).inserted else { return }
+        Task {
+            defer { answeringConnections.remove(key) }
+            do {
+                try await session.answerConnection(opID: opID, target: target, decision: decision)
+            } catch {
+                sendError = String(localized: "Your answer could not be sent. Try again.")
+            }
+        }
     }
 
     func submitVoice(_ text: String) async -> Bool {
@@ -737,6 +753,8 @@ final class ChatModel {
             return (.clarify(card.prompt), [])
         case .approval(let card):
             return (.approval(card.prompt), [])
+        case .connection(let card):
+            return (.connection(card), [])
         case .botThread(let link):
             return (.botThread(link), [])
         }
@@ -768,7 +786,7 @@ final class ChatModel {
     private static let thinkingRowID = "thinking"
 
     private var shouldShowThinking: Bool {
-        transcript.isRunning && transcript.pendingPrompts.isEmpty
+        transcript.isRunning && transcript.pendingPrompts.isEmpty && transcript.pendingConnections().isEmpty
     }
 }
 
