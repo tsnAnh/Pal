@@ -275,6 +275,7 @@ public actor ChatSession: OutboxSubmitter {
     public func answerApproval(_ prompt: PendingPrompt, choice: String) async throws {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         transcript.noteApprovalChoice(choice, promptID: prompt.promptID)
+        timeline.noteApprovalChoice(choice, promptID: prompt.promptID)
         do {
             _ = try await api.respondToApproval(
                 sessionID: sessionID,
@@ -284,6 +285,7 @@ public actor ChatSession: OutboxSubmitter {
             )
         } catch {
             transcript.noteApprovalChoice(nil, promptID: prompt.promptID)
+            timeline.noteApprovalChoice(nil, promptID: prompt.promptID)
             throw error
         }
     }

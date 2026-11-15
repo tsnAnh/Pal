@@ -118,6 +118,10 @@ struct Timeline: Sendable {
         adoptLive(snapshot)
     }
 
+    mutating func noteApprovalChoice(_ choice: String?, promptID: String) {
+        live.noteApprovalChoice(choice, promptID: promptID)
+    }
+
     mutating func apply(_ frame: SessionEventFrame) -> ApplyOutcome {
         let outcome = live.apply(frame)
         if outcome == .applied { settleOverlay() }
