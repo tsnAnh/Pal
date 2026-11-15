@@ -118,7 +118,13 @@ struct ChatView: View {
             chat
                 .toolbar {
                     ToolbarItem(placement: .principal) {
-                        BotCapsule(bot: model.bot, activity: model.activity, mood: model.avatarMood)
+                        Button { router.perform(.viewProfile, botName: model.bot.name) } label: {
+                            BotCapsule(bot: model.bot, activity: model.activity, mood: model.avatarMood)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(!router.supports(.viewProfile))
+                        .accessibilityHint(Text("Shows this bot's profile"))
+                        .accessibilityIdentifier("chatTitle")
                     }
                     .sharedBackgroundVisibility(.hidden)
                     ToolbarItem(placement: .trailingBar) {
@@ -440,10 +446,10 @@ private struct BotCapsule: View {
         }
         .padding(.horizontal, 13)
         .frame(height: ChatMetrics.headerButtonDiameter)
-        .palGlass(Capsule(), interactive: false)
+        .palGlass(Capsule(), interactive: true)
+        .contentShape(Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(bot.displayName))
         .accessibilityValue(Text(activity.accessibilityValue))
-        .accessibilityIdentifier("chatTitle")
     }
 }
