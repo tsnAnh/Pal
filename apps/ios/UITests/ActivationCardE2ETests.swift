@@ -23,7 +23,7 @@ final class ActivationCardE2ETests: E2ETestCase {
         shot(app, "activation-card-open")
         XCTAssertEqual(try fixtureEnabled(Self.owner), false, "an unanswered card enables nothing")
 
-        newestCard(app).buttons["connectionDeny-\(Self.server)"].hit()
+        tapWhenStill(newestCard(app).buttons["connectionDeny-\(Self.server)"])
         waitForValue(state(app), "skipped", "denied target state")
         waitForCard(app, value: "settled")
         shot(app, "activation-card-denied")
@@ -40,7 +40,7 @@ final class ActivationCardE2ETests: E2ETestCase {
 
         send(app, Self.prompt)
         waitForCard(app, value: "open")
-        newestCard(app).buttons["connectionAllow-\(Self.server)"].hit()
+        tapWhenStill(newestCard(app).buttons["connectionAllow-\(Self.server)"])
         waitForValue(state(app), "connected", "allowed target state", timeout: 60)
         waitForCard(app, value: "settled")
         shot(app, "activation-card-connected")
@@ -62,7 +62,7 @@ final class ActivationCardE2ETests: E2ETestCase {
         waitForCard(app, value: "open")
         assertOneCard(app, value: "open", "after reopening an open operation")
 
-        newestCard(app).buttons["connectionDeny-\(Self.server)"].hit()
+        tapWhenStill(newestCard(app).buttons["connectionDeny-\(Self.server)"])
         waitForValue(state(app), "skipped", "denied target state")
         waitForCard(app, value: "settled")
 
@@ -106,6 +106,18 @@ final class ActivationCardE2ETests: E2ETestCase {
 
     private func state(_ app: XCUIApplication) -> XCUIElement {
         newestCard(app).descendants(matching: .any)["connectionState-\(Self.server)"]
+    }
+
+    private func tapWhenStill(_ element: XCUIElement, timeout: TimeInterval = 10) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var last = element.exists ? element.frame : .null
+        while Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.3)
+            let current = element.exists ? element.frame : .null
+            if current == last, element.isHittable { break }
+            last = current
+        }
+        element.hit()
     }
 
     private func waitForCard(_ app: XCUIApplication, value: String, timeout: TimeInterval = 60) {

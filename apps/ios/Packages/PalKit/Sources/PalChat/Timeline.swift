@@ -65,6 +65,7 @@ enum TimelineRef: Sendable, Hashable {
     case uid(String)
     case segment(LiveSegment)
     case tool(String)
+    case connection(String)
 }
 
 enum NewestMerge: Sendable, Equatable {
@@ -341,6 +342,7 @@ struct Timeline: Sendable {
         if let segment = item.liveSegment { refs.append(.segment(segment)) }
         switch item.content {
         case .tool(let call): refs.append(.tool(call.toolID))
+        case .connection(let card): refs.append(.connection(card.operation.opID))
         case .clarifyAnswered where item.id.hasPrefix(toolPrefix): refs.append(.tool(String(item.id.dropFirst(toolPrefix.count))))
         default: break
         }
@@ -398,6 +400,12 @@ struct Timeline: Sendable {
                 let ref = "\(tool.callID)#\(index)"
                 return (TranscriptItem(id: toolPrefix + ref, content: .clarifyAnswered(record), timestamp: date), [.tool(ref)])
             }
+        }
+        if tool.name.isEmpty || tool.name == ConnectionCard.toolName,
+           let operation = ConnectionOperation(toolResult: tool.resultText) ?? tool.result.flatMap(ConnectionOperation.init(value:))
+        {
+            let item = TranscriptItem(id: ConnectionCard.itemID(operation.opID), content: .connection(ConnectionCard(operation: operation.closed())), timestamp: date)
+            return [(item, [.tool(tool.callID), .connection(operation.opID)])]
         }
         let call = ToolCall(
             toolID: tool.callID,

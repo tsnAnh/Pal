@@ -14,6 +14,7 @@ Failure cases this file pins:
 - a photo turn the gateway pre-analyzed for a text-only model shows the model-facing vision notes instead
   of the authored text, and loses the photo;
 - a user who types the vision-note wording verbatim has it rewritten.
+- a settled connection request loses its card on reopen because its result never reaches the wire.
 """
 import json
 
@@ -145,6 +146,17 @@ def test_a_tool_only_unit_paints_only_when_it_holds_a_rendered_tool(db):
     assert [tool['name'] for tool in entries[1]['tools']] == ['terminal', 'image_generate']
     assert 'result' not in entries[1]['tools'][0] and entries[1]['tools'][1]['result'] == '{"success": true}'
 
+
+def test_a_settled_connection_request_keeps_its_result_so_the_card_survives_reopen(db, tmp_path):
+    settled = json.dumps({'op_id': 'op-1', 'status': 'settled',
+                          'targets': [{'name': 'fixture-tools', 'state': 'skipped'}]})
+    db.append_message('s1', 'user', 'turn it on')
+    db.append_message('s1', 'assistant', '', tool_calls=_tool_calls([('manage_connections', 'c1')]))
+    db.append_message('s1', 'tool', settled, tool_call_id='c1', tool_name='manage_connections')
+    db.append_message('s1', 'assistant', 'skipped')
+    entries = list(_timeline(db, 's1', profile=str(tmp_path)).entries)
+    [card] = [tool for entry in entries for tool in entry.get('tools', ()) if tool['name'] == 'manage_connections']
+    assert card['call_id'] == 'c1' and json.loads(card['result']) == json.loads(settled)
 
 def test_a_user_turn_with_an_inline_image_keeps_its_text_and_image(db):
     uri = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='
