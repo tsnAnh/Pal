@@ -233,10 +233,26 @@ struct SolidSurface: Sendable {
 }
 
 struct SilhouetteProbe {
+    private enum Stroke {
+        case round(segments: [(CGPoint, CGPoint)], radius: Double)
+        case outline(Path)
+
+        func contains(_ point: CGPoint) -> Bool {
+            switch self {
+            case .outline(let path): return path.contains(point)
+            case .round(let segments, let radius):
+                let limit = radius * radius
+                return segments.contains { SilhouetteProbe.squaredDistance(from: point, toSegment: $0.0, $0.1) <= limit }
+            }
+        }
+    }
+
     private struct Part {
         let fill: Path?
-        let stroke: Path?
+        let stroke: Stroke?
     }
+
+    private static let curveSteps = 48
 
     private let parts: [Part]
 
@@ -245,11 +261,10 @@ struct SilhouetteProbe {
             Part(
                 fill: element.fill == nil ? nil : element.path,
                 stroke: element.stroke.map { stroke in
-                    element.path.strokedPath(StrokeStyle(
-                        lineWidth: stroke.width,
-                        lineCap: stroke.round ? .round : .butt,
-                        lineJoin: stroke.round ? .round : .miter
-                    ))
+                    if stroke.round {
+                        return .round(segments: Self.segments(of: element.path), radius: stroke.width / 2)
+                    }
+                    return .outline(element.path.strokedPath(StrokeStyle(lineWidth: stroke.width, lineCap: .butt, lineJoin: .miter)))
                 }
             )
         }
@@ -257,6 +272,56 @@ struct SilhouetteProbe {
 
     func contains(_ point: CGPoint) -> Bool {
         parts.contains { ($0.fill?.contains(point) ?? false) || ($0.stroke?.contains(point) ?? false) }
+    }
+
+    private static func segments(of path: Path) -> [(CGPoint, CGPoint)] {
+        var result: [(CGPoint, CGPoint)] = []
+        var start = CGPoint.zero
+        var cursor = CGPoint.zero
+        func line(_ to: CGPoint) {
+            result.append((cursor, to))
+            cursor = to
+        }
+        func lerp(_ a: CGPoint, _ b: CGPoint, _ t: Double) -> CGPoint {
+            CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+        }
+        path.forEach { element in
+            switch element {
+            case .move(let to):
+                start = to
+                cursor = to
+            case .line(let to):
+                line(to)
+            case .quadCurve(let to, let control):
+                let origin = cursor
+                for step in 1...curveSteps {
+                    let t = Double(step) / Double(curveSteps)
+                    line(lerp(lerp(origin, control, t), lerp(control, to, t), t))
+                }
+            case .curve(let to, let first, let second):
+                let origin = cursor
+                for step in 1...curveSteps {
+                    let t = Double(step) / Double(curveSteps)
+                    let a = lerp(origin, first, t)
+                    let b = lerp(first, second, t)
+                    let c = lerp(second, to, t)
+                    line(lerp(lerp(a, b, t), lerp(b, c, t), t))
+                }
+            case .closeSubpath:
+                if cursor != start { line(start) }
+            }
+        }
+        return result
+    }
+
+    fileprivate static func squaredDistance(from point: CGPoint, toSegment start: CGPoint, _ end: CGPoint) -> Double {
+        let ex = end.x - start.x
+        let ey = end.y - start.y
+        let span = ex * ex + ey * ey
+        let t = span > 0 ? max(0, min(1, ((point.x - start.x) * ex + (point.y - start.y) * ey) / span)) : 0
+        let dx = point.x - start.x - ex * t
+        let dy = point.y - start.y - ey * t
+        return dx * dx + dy * dy
     }
 
     func interiorPoint(near target: CGPoint, in box: CGRect) -> CGPoint {

@@ -80,7 +80,7 @@ struct AvatarMotionArtifacts {
         let idle = AvatarMoodClock(mood: .idle, since: start.addingTimeInterval(-10), blinkDelay: delay, loadingSeed: seed, reduceMotion: false)
         let clock = idle.changing(to: .work, at: start)
         let sequence = Motion(name: "sequence", duration: sequenceSeconds) { clock.pose(at: start.addingTimeInterval($0)) }
-        let clips = LoadingClips.all.map { clip in
+        let clips = (LoadingClips.all + SolidClips.all).map { clip in
             Motion(name: "clip-\(clip.name)", duration: clip.duration) { clip.pose(at: $0) }
         }
         return clips + [sequence]
@@ -106,6 +106,76 @@ struct AvatarMotionArtifacts {
                     try writePNG(view, scale: 2, to: folder.appendingPathComponent(String(format: "%04d.png", frame)))
                 }
             }
+        }
+    }
+
+    private static let realSizes: [CGFloat] = [25, 28, 43, 56, 66, 79, 88, 136, 160]
+    private static let sheetShapes: [(String, BotAvatarSpec)] = [
+        ("round", spec("Atlas", shape: "blobatar:k7q2m9x0:round", color: "#f4f4f4")),
+        ("organic", spec("Atlas", shape: "blobatar:k7q2m9x0:organic", color: "#8b5cf6")),
+        ("capsule", spec("Atlas", shape: "blobatar:k7q2m9x0:capsule", color: "#3e8ef7")),
+        ("cloud", spec("Atlas", shape: "cloud", color: "#f5a524")),
+        ("squircle", spec("Atlas", shape: "squircle", color: "#3e8ef7")),
+        ("pill", spec("Atlas", shape: "pill", color: "#2ec27e")),
+        ("hexagon", spec("Atlas", shape: "hexagon", color: "#e5484d")),
+    ]
+
+    @Test("rest, hover at the centre, hover right, hover up and hover left at the app's real sizes")
+    func hoverStates() throws {
+        let root = URL(fileURLWithPath: try #require(outputDirectory), isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let states: [(String, AvatarLook)] = [
+            ("rest", .zero),
+            ("hover centre", AvatarLook(amount: 1, x: 0, y: 0)),
+            ("hover right", AvatarLook(amount: 1, x: 1, y: 0)),
+            ("hover left", AvatarLook(amount: 1, x: -1, y: 0)),
+            ("hover up", AvatarLook(amount: 1, x: 0, y: -1)),
+            ("hover far right", AvatarLook(amount: 0.5, x: 1, y: 0.4)),
+        ]
+        for (kind, spec) in Self.sheetShapes {
+            let content = AvatarContent(spec)
+            let sheet = VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(states.enumerated()), id: \.offset) { _, state in
+                    HStack(spacing: 8) {
+                        Text(state.0).font(.system(size: 11)).foregroundStyle(.white).frame(width: 96, alignment: .leading)
+                        ForEach(Self.realSizes, id: \.self) { size in
+                            AvatarFrame(content: content, pose: .rest, size: size, look: state.1)
+                                .frame(width: size * 1.35, height: size * 1.35)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .background(stage)
+            try writePNG(sheet, scale: 2, to: root.appendingPathComponent("hover-\(kind).png"))
+        }
+    }
+
+    @Test("a contact sheet for every 2D and 3D loading clip at 28, 44 and 116 points")
+    func clipSheets() throws {
+        let root = URL(fileURLWithPath: try #require(outputDirectory), isDirectory: true)
+        let folder = root.appendingPathComponent("clip-sheets", isDirectory: true)
+        try? FileManager.default.removeItem(at: folder)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let content = AvatarContent(Self.featured[0].1)
+        let columns = 10
+        let sizes: [CGFloat] = [28, 44, 116]
+        for (index, clip) in (LoadingClips.all + SolidClips.all).enumerated() {
+            let poses = (0..<columns).map { clip.pose(at: clip.duration * Double($0) / Double(columns - 1)) }
+            let sheet = VStack(alignment: .leading, spacing: 4) {
+                Text("\(index < LoadingClips.all.count ? "2D" : "3D") \(clip.name) \(String(format: "%.1f", clip.duration)) s")
+                    .font(.system(size: 11)).foregroundStyle(.white)
+                ForEach(sizes, id: \.self) { size in
+                    HStack(spacing: 2) {
+                        ForEach(Array(poses.enumerated()), id: \.offset) { _, pose in
+                            AvatarFrame(content: content, pose: pose, size: size).frame(width: size * 1.3, height: size * 1.3)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .background(stage)
+            try writePNG(sheet, scale: 2, to: folder.appendingPathComponent(String(format: "%02d-%@.png", index, clip.name)))
         }
     }
 
