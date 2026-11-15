@@ -10,7 +10,9 @@ After sign-in the user sees their bots on the home screen: pinned bots as a row 
 - `roster-offline` shows every bot `offline` when the gateway is lost and `idle` again after it returns, with no user action.
 - `roster-pin` pins and unpins a bot from its context menu, moving it to or from the hero avatars.
 - `roster-primary` marks one bot as the primary bot with a star; `Make Primary` moves the star.
-- `roster-context-menu` offers Pin, Mark as Unread, Rename Bot, Copy conversation ID, Hide, Make Primary, View Profile and Share as Template.
+- `roster-context-menu` offers Pin/Unpin, Mark as Unread/Read, Rename Bot (not on the primary), Copy conversation ID (when one exists), Hide/Show, Delete (non-primary) or Replace with different Bot (primary), View Profile, Share as Template and Make Primary (non-primary).
+- `roster-rooms` shows a group chats section under the bot rows and a New Group Chat button (`createRoomButton`) when the gateway supports rooms. No shipped UI test.
+- `roster-glass` draws the search launcher and toolbar glass, tinted 40% black in dark mode.
 - `roster-hidden` hides a bot into the collapsed `Hidden Bots` section and shows it again. No shipped UI test.
 - `roster-unread` marks a bot unread or read from the context menu. No shipped UI test.
 - `roster-attention` shows the `attention` state when a bot's setup is incomplete (`BotActivity.attention`). No shipped UI test.
@@ -38,6 +40,8 @@ Preconditions:
 - **Working state** (`roster-live-activity`, seeded). `$S/drive HomeE2ETests/test5WorkingBotShowsItsActivity` sends `SLOW keep working` to `market-researcher` and waits for its row value `working`.
 - **Seeded roster** (`roster-parity-seed`). `$S/drive SeededRosterE2ETests/test1RosterShowsTheEightParityBots` waits for the eight rows and a seeded preview on `botRow-upwork-hunter`.
 - **Proof.** Each drive evidence dir holds `shots/*.png`, `run.mov` or `ui-e2e.mov`, and `verdict.txt`. Read the `working` and `offline` screenshots and confirm the row text and avatar match the state.
+
+- **Glass** (`roster-glass`). Run `$S/drive --label roster-glass ChatPolishShotsE2ETests/test5HomeGlass` and compare `home-glass-light` with `home-glass-dark`: the launcher glass is darker in dark mode.
 
 ## Gotchas
 

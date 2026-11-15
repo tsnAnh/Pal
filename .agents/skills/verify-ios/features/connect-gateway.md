@@ -8,14 +8,14 @@ A signed-out user sees the Pal landing, connects to their Hermes gateway through
 - `connect-account` shows the signed-in account in Settings, with the gateway host on the account row.
 - `connect-signout` asks `Sign out of Pal on this device?` in Settings and returns to the landing only after the user confirms. Needs the parity seed to drive.
 - `connect-add-account` offers Add Account, which warns that another account replaces this one and only signs out after `Continue`. Needs the parity seed to drive.
-- `connect-error` shows `Could not reach Hermes.` (and the other sign-in messages) on the landing (`signInErrorMessage`) or in the options sheet (`errorLabel`). No shipped UI test.
+- `connect-error` shows `Could not reach Pal.` (and the other sign-in messages) on the landing (`signInErrorMessage`) or in the options sheet (`errorLabel`). No shipped UI test.
 - `connect-restore` reconnects from the saved keychain session on launch, and shows `Your session expired. Sign in again.` when the session is no longer valid. No shipped UI test.
 - `connect-status` (a `Connected` row and the gateway instance ID) is unreachable on iOS while signed in. `ConnectionForm` (`statusLabel`, `instanceIDLabel`, `signOutButton`) renders only inside the options sheet, which `ConnectionView.swift` presents only while not connected, and Settings has no such row. Do not claim it.
 
 ## How to get to it (user POV)
 
-- Launch the app signed out. The landing shows `Pal`, a `Connect to your Hermes` button (it reads `Continue to <host>` once an address is saved) and an `Other options` link.
-- `Other options` opens the `Sign in` sheet with the `Hermes address` field and a `Sign in` button.
+- Launch the app signed out. The landing shows `Pal`, a `Connect to your Pal` button (it reads `Continue to <host>` once an address is saved) and an `Other options` link.
+- `Other options` opens the `Sign in` sheet with the `Pal address` field and a `Sign in` button.
 - After signing in, tap the avatar at the top left of the roster to open Settings. The account row names the gateway host; `Sign Out` sits further down the list.
 
 ## Driving it with verify-ios

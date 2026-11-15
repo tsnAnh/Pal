@@ -12,7 +12,13 @@ BUNDLE_ID="dev.tsnanh.hermes.bot"
 RUNNER_ID="dev.tsnanh.hermes.bot.uitests.xctrunner"
 LOG_SUBSYSTEM="dev.tsnanh.hermes.bot"
 DERIVED="$IOS_DIR/build/DerivedData"
-PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
+default_python() {
+  local main
+  [ -x "$REPO/.venv/bin/python" ] && { printf '%s\n' "$REPO/.venv/bin/python"; return; }
+  main="$(cd "$(git -C "$REPO" rev-parse --git-common-dir 2>/dev/null)/.." 2>/dev/null && pwd)"
+  printf '%s\n' "${main:-$REPO}/.venv/bin/python"
+}
+PYTHON="${HERMES_IOS_PYTHON:-$(default_python)}"
 MAX_SIMS="${CLAUDE_MAX_DEVICES:-4}"
 JQ="$(command -v jq || echo /usr/bin/jq)"
 SIM_DEVICES_DIR="$HOME/Library/Developer/CoreSimulator/Devices"

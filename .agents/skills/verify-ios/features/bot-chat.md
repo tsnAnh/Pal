@@ -1,6 +1,6 @@
 # Bot chat turn
 
-The user opens a bot, types a message, and sees a thinking row until the whole reply lands at once. The bot can ask a clarifying question with choices, and the answered card stays in the chat. A long chat opens at the newest message and follows new replies. Messages sent while the gateway is down are queued and delivered once after it returns.
+The user opens a bot, types a message, and sees a working row (the bot's avatar, a step label and animated dots) until the whole reply lands at once. The bot can ask a clarifying question with choices, and the answered card stays in the chat. A long chat opens at the newest message and follows new replies. Messages sent while the gateway is down are queued and delivered once after it returns.
 
 ## Sub-features
 
@@ -8,14 +8,21 @@ The user opens a bot, types a message, and sees a thinking row until the whole r
 - `chat-reply-whole` never shows a partial reply: the thinking row stays up until the reply is complete.
 - `chat-clarify` shows a clarify card with choices and a Skip, also accepts a typed answer from the composer, and keeps the answered card (no raw JSON) after the turn and after relaunch.
 - `chat-relaunch-midstream` keeps exactly one reply when the app is killed and relaunched mid-turn.
-- `chat-offline-queue` shows a reconnecting indicator, queues a send as `Queued, will send when online` with a retry, and delivers it exactly once after recovery.
+- `chat-offline-queue` shows a reconnecting indicator, marks a send `Waiting for connection` (`deliveryWaitingForConnection`), and delivers it exactly once after recovery.
 - `chat-dynamic-type` keeps roster and clarify card usable at extra-large text.
 - `chat-reopen-bottom` reopens a long chat at the newest message without scrolling.
 - `chat-follow-new-reply` scrolls a new reply into view in a long chat, above the composer.
-- `chat-find` searches the transcript from the chat menu, highlights matches, and steps through them with a counter. Needs the parity seed.
+- `chat-find` searches the transcript from the chat menu, highlights matches, and steps through them with a counter of occurrences (`findCount` `N of M`, `No results`) starting at the newest; Previous past the oldest loaded match pages in older history. Needs the parity seed.
 - `chat-bot-thread` folds bot-to-bot exchanges into a link row (`4 messages with <bot>`) that opens a read-only thread on both the sending and receiving bot. Needs the parity seed.
 - `chat-attach` attaches a photo from the library and sends it with a caption. Needs the parity seed.
 - `chat-voice` opens voice mode and closes it; `chat-dictation` starts dictation or explains why not. Needs the parity seed.
+- `chat-history-paging` lays the chat out newest-first and loads older pages on scroll; `chatScreen` reads `N messages`, plus `, loading earlier messages` while a page loads. Needs `VERIFY_IOS_SEED=perf`.
+- `chat-jump-pill` shows `scrollToBottomButton` (`N new`) when a reply lands while reading, and a `New` divider (`unreadDivider`) above unread rows.
+- `chat-approval` shows an approval card with `Allow` primary, `Don't allow`, `approvalMoreOptions` and `approvalDetails`, and leaves an `approvalAnswered` record naming the decision. Tool rows stay hidden behind the working row.
+- `chat-title-profile` opens the bot profile when the iOS title capsule (`chatTitle`) is tapped.
+- `chat-empty-intro` shows `newChatIntro` with a `newChatSuggestion` the user taps to send; nothing is sent on its own.
+- `chat-send-errors` shows `Not sent. Tap to retry` (`deliveryFailed`) on a refused send and a `composerNotice` above the composer.
+- `chat-photo-authored` shows only the typed caption plus `chatImage` in a user photo bubble, never the bot's vision notes.
 - `chat-slash-picker` opens a picker of gateway commands and skills when the draft starts with `/`. No shipped UI test.
 - `chat-hidden-rows` hides `[SILENT]` replies, cron-job turns and process-completion rows from the transcript (`TranscriptVisibility.swift`). No shipped UI test.
 - `chat-reply-react` long-presses a message for a menu with reactions and `Reply` (`contextReply`, `replyBar`, `messageReaction`). No shipped UI test on iOS.
@@ -24,7 +31,7 @@ The user opens a bot, types a message, and sees a thinking row until the whole r
 
 - Sign in, tap a bot row in the roster, type in `Message <bot>` and tap Send.
 - Reopen a bot from the roster after relaunching the app.
-- In a chat, the overflow menu holds Find in chat, View Profile and Share as Template; the paperclip attaches photos; the mic dictates; the voice button opens voice mode.
+- In a chat, the title capsule opens the bot profile; the overflow menu holds Find in chat, View Profile and Share as Template; the paperclip attaches photos; the mic dictates; the voice button opens voice mode.
 
 ## Driving it with verify-ios
 
@@ -37,10 +44,13 @@ Preconditions:
 - **Reply appears whole** (`chat-reply-whole`). Run `$S/drive --label chat-reply-whole BotChatPresentationE2ETests/test4ReplyAppearsWholeAfterThinking`. After a `SLOW` prompt the test samples the transcript for up to 90 s: a `Thinking` row (`assistantBubble-streaming`) is seen at least 5 times, no `slow-` text appears in it, and the first `assistantBubble` below the user bubble already contains `slow-00` and `slow-39`. `chat-reply-whole.png` is the final frame.
 - **Clarify** (`chat-clarify`). Run `$S/drive BotChatE2ETests/test3ClarifyCardAndComposerAnswer`. The prompt `CLARIFY pick one` shows `clarifyCard` with `Which flavor do you want?` and `Or answer in the chat below`; tapping `clarifyChoice-0` completes the turn with `Got it, vanilla`, the interactive card goes and a `clarifyAnswered` card stays; a second question answered from the composer with `chocolate` completes without adding a user bubble. Then `$S/drive BotChatPresentationE2ETests/test3AnsweredClarifyStaysOnScreenWithoutRawJSON` picks `clarifyChoice-1`, checks the answered card shows the question and the pick with no raw JSON bubble, relaunches and checks it is still there.
 - **Relaunch mid-turn** (`chat-relaunch-midstream`). Run `$S/drive BotChatE2ETests/test4RelaunchMidStreamKeepsOneReply`. The app is terminated while the thinking row (`assistantBubble-streaming`) exists, relaunched, and ends with one user bubble and one `slow-` reply.
-- **Offline queue** (`chat-offline-queue`). Run `$S/drive-control BotChatE2ETests/test5OfflineSendDeliversOnce`. After `kill-gateway`, `reconnectingIndicator` shows; sending `OFFLINE-PING-7731` shows `deliveryQueued`; after `start-gateway` the queued state clears and the sandbox DB holds exactly one such user message (`db-count.txt` total=1).
+- **Offline queue** (`chat-offline-queue`). Run `$S/drive-control BotChatE2ETests/test5OfflineSendDeliversOnce`. After `kill-gateway`, `reconnectingIndicator` shows; sending `OFFLINE-PING-7731` shows `deliveryWaitingForConnection`; after `start-gateway` the queued state clears and the sandbox DB holds exactly one such user message (`db-count.txt` total=1).
 - **Dynamic type** (`chat-dynamic-type`). Run `$S/drive BotChatE2ETests/test6DynamicTypeExtraLarge`. Read `roster-dynamic-type-xl.png` and `chat-clarify-dynamic-type-xl.png` for clipped or overlapping text.
 - **Reopen long chat** (`chat-reopen-bottom`). Run `$S/drive BotChatE2ETests/test7ReopenLongChatStartsAtBottom` (14 turns, a few minutes). The newest user message is hittable at first appearance and the oldest is not.
 - **Follow new reply** (`chat-follow-new-reply`). Run `$S/drive BotChatE2ETests/test8NewReplyInLongChatScrollsIntoView` (11 turns). The newest reply contains `slow-39`, is hittable and ends above `composerField`; `chat-long-new-reply.png`.
+- **History paging** (`chat-history-paging`, `chat-jump-pill`). Launch with `VERIFY_IOS_SEED=perf`, then run each of `ChatHistoryPagingE2ETests/test2ScrollToTopReachesTheFirstMessageWithNoGapsOrHidden`, `test3NewReplyWhileReadingDoesNotMoveAndShowsPill`, `test4CacheToLiveOpenDoesNotShrinkOrJump`, `test6FindRevealsAnOlderMatchAndTheAppGoesIdle`, `test7TableCellsKeepShortWordsWhole` with `$S/drive`, and `test5ReconnectWhileReadingKeepsHistoryAndPosition` with `$S/drive-control` (it restarts the gateway). `test2` walks the whole perf chat and takes about 20 minutes. `test1PrependKeepsTheVisibleRowStill` samples too few page loads to prove drift; do not count it either way.
+- **Polish states** (`chat-approval`, `chat-title-profile`, `chat-empty-intro`, `chat-send-errors`). Run `$S/drive --label chat-polish ChatPolishShotsE2ETests/test0FreshChatShowsIntroAndNotice ChatPolishShotsE2ETests/test1ComposerAndWorkingRow ChatPolishShotsE2ETests/test2ApprovalAndAnsweredCard ChatPolishShotsE2ETests/test3FindAndPill ChatPolishShotsE2ETests/test4TitleCapsuleOpensProfile ChatPolishShotsE2ETests/test6WorkingRowLoop` and `$S/drive-control --label chat-send-errors ChatPolishShotsE2ETests/test7SendErrorStates`. Each writes light and dark shots; read them. `BotChatPresentationE2ETests/test1ToolRunShowsThinkingAndNoToolRow` and `test2ApprovalCardUsesProductLanguage` prove the tool and approval wording.
+- **Photo bubble** (`chat-photo-authored`). Run `$S/drive BotChatE2ETests/test10SentPhotoKeepsAuthoredTextAndPhotoAfterReplyAndRelaunch` (needs a photo in the simulator library).
 - **Find in chat** (`chat-find`). With the parity seed, run `$S/drive --label chat-find SeededChatE2ETests/test1FindInChatHighlightsAndStepsThroughMatches`. `chatMenuButton` opens the menu (`chatMenuFind`, `chatMenuViewProfile`, `chatMenuShareTemplate` exist); typing `igloo` into `findField` gives `findCount` `2 of 2`, `findPrevious` gives `1 of 2`, a nonsense word gives `No results`, `findDone` returns the composer.
 - **Bot-to-bot thread** (`chat-bot-thread`). With the parity seed, run `$S/drive SeededChatE2ETests/test7BotToBotLinkOpensTheReadOnlyThreadAtTheTappedExchange SeededChatE2ETests/test8ReceivingSideShowsItsOwnLinkAndTheSameThread`. `botThreadLink` reads `4 messages with Market Researcher` on `cho-research-app` and `4 messages with chó research app` on `market-researcher`; the thread has `threadReadOnlyPill`, no composer, and shows the reply `7.1/10`.
 - **Attach, voice, dictation** (`chat-attach`, `chat-voice`, `chat-dictation`). With the parity seed, run `$S/drive SeededChatE2ETests/test4PhotoLibraryAttachmentIsSent` (needs a photo in the simulator library), `.../test5VoiceModeOpensAndCloses` and `.../test6DictationStartsOrExplainsWhyNot`. Dictation passes when the mic listens or the `Dictation unavailable` alert explains why.
@@ -50,7 +60,7 @@ Preconditions:
 ## Gotchas
 
 - Fake LLM replies are `stub-00 stub-01 ...`. Assert on the `stub-` prefix, not on real text.
-- Replies are not streamed to the screen. `assistantBubble-streaming` is the thinking row, not partial text.
+- Replies are not streamed to the screen. `assistantBubble-streaming` is the working row (avatar, step label `Thinking` or the tool step in `workingStatus`, dots), never partial text; its accessibility label stays `Thinking`.
 - `SLOW` makes the turn last about 10 s; the relaunch and whole-reply tests depend on it.
 - `test5` and the live-roster tests need `drive-control`; `drive` has no control channel and fails with `HERMES_UITEST_CTL not set`.
 - `userBubble` and `assistantBubble` are matched by label `CONTAINS`; a long history makes substring matches ambiguous, so use unique text like `history-07`.

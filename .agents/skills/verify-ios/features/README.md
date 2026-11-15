@@ -16,7 +16,7 @@ This directory is the maintained source for verifying user-facing behavior of th
 - Use `drive` for tests that only need the launched backend. Use `drive-control` for tests that kill and restart the gateway or inject external turns.
 - Prefer accessibility identifiers (`baseURLField`, `botRow-bot-alpha`, `composerField`) over labels or coordinates.
 - Several tests sign in on their own (`signInIfNeeded`), so any one can run alone, but state set by earlier tests (relaunch, history) is not assumed.
-- Fake LLM prompts: any text streams `stub-NN` words, text containing `CLARIFY` produces a clarify question with choices `vanilla` and `chocolate`, text containing `SLOW` streams `slow-NN` words slowly. The app shows each reply whole once it completes.
+- Fake LLM prompts: any text streams `stub-NN` words, text containing `CLARIFY` produces a clarify question with choices `vanilla` and `chocolate`, text containing `SLOW` streams `slow-NN` words slowly. `TOOLCALL` runs a 6 s terminal tool step, `APPROVE` asks to approve a dangerous command, `HOLD` waits 12 s before replying `hold-NN`. The app shows each reply whole once it completes.
 
 ## Proof and skip reporting
 
@@ -33,7 +33,7 @@ Each feature file starts with an H1 title and one paragraph. It then uses exactl
 
 - [Connect to a gateway](./connect-gateway.md) covers the sign-in landing, sign-in through the web auth session, the signed-in account in Settings, sign-out, add account, and sign-in errors.
 - [Bot roster](./bot-roster.md) covers the bot list and pinned hero avatars, the search launcher, the context menu (pin, primary, hide, unread), live activity state, and offline and recovery behavior.
-- [Bot chat turn](./bot-chat.md) covers sending, whole replies after a thinking row, clarify questions, relaunch mid-turn, offline queueing, large text, long chats, find in chat, bot-to-bot threads, attachments, voice and dictation.
+- [Bot chat turn](./bot-chat.md) covers sending, whole replies after a working row, history paging, the jump pill, approvals, the title capsule, empty and error states, clarify questions, relaunch mid-turn, offline queueing, large text, long chats, find in chat, bot-to-bot threads, attachments, voice and dictation.
 - [Bot avatar](./bot-avatar.md) covers avatar rendering and mood motion in the roster and chat header, and the host-side parity, motion, tone and pointer-look suites.
 
 ## Not mapped
