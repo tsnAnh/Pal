@@ -23,7 +23,7 @@ final class ActivationCardE2ETests: E2ETestCase {
         shot(app, "activation-card-open")
         XCTAssertEqual(try fixtureEnabled(Self.owner), false, "an unanswered card enables nothing")
 
-        app.buttons["connectionDeny-\(Self.server)"].hit()
+        newestCard(app).buttons["connectionDeny-\(Self.server)"].hit()
         waitForValue(state(app), "skipped", "denied target state")
         waitForCard(app, value: "settled")
         shot(app, "activation-card-denied")
@@ -40,7 +40,7 @@ final class ActivationCardE2ETests: E2ETestCase {
 
         send(app, Self.prompt)
         waitForCard(app, value: "open")
-        app.buttons["connectionAllow-\(Self.server)"].hit()
+        newestCard(app).buttons["connectionAllow-\(Self.server)"].hit()
         waitForValue(state(app), "connected", "allowed target state", timeout: 60)
         waitForCard(app, value: "settled")
         shot(app, "activation-card-connected")
@@ -62,7 +62,7 @@ final class ActivationCardE2ETests: E2ETestCase {
         waitForCard(app, value: "open")
         assertOneCard(app, value: "open", "after reopening an open operation")
 
-        app.buttons["connectionDeny-\(Self.server)"].hit()
+        newestCard(app).buttons["connectionDeny-\(Self.server)"].hit()
         waitForValue(state(app), "skipped", "denied target state")
         waitForCard(app, value: "settled")
 
@@ -99,15 +99,24 @@ final class ActivationCardE2ETests: E2ETestCase {
         app.descendants(matching: .any).matching(identifier: "connectionCard")
     }
 
-    private func state(_ app: XCUIApplication) -> XCUIElement {
-        app.descendants(matching: .any)["connectionState-\(Self.server)"]
+    private func newestCard(_ app: XCUIApplication) -> XCUIElement {
+        let query = cards(app)
+        return query.element(boundBy: max(query.count - 1, 0))
     }
 
-    private func waitForCard(_ app: XCUIApplication, value: String) {
-        let card = cards(app).firstMatch
-        if !card.waitForExistence(timeout: 60) { shot(app, "activation-card-missing") }
-        XCTAssertTrue(card.exists, "connection card (\(value)) never appeared\n" + app.debugDescription)
-        waitForValue(cards(app).firstMatch, value, "connection card is \(value)")
+    private func state(_ app: XCUIApplication) -> XCUIElement {
+        newestCard(app).descendants(matching: .any)["connectionState-\(Self.server)"]
+    }
+
+    private func waitForCard(_ app: XCUIApplication, value: String, timeout: TimeInterval = 60) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let card = newestCard(app)
+            if card.exists, card.value as? String == value { return }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        shot(app, "activation-card-missing")
+        XCTFail("connection card (\(value)) never appeared as the newest card\n" + app.debugDescription)
     }
 
     private func assertOneCard(_ app: XCUIApplication, value: String, _ when: String) {
