@@ -191,8 +191,16 @@ public final class T3CodeController {
     }
 }
 
+public protocol T3RegistrationHost: Sendable {
+    var hasConnection: Bool { get async }
+    func registerMcp(_ server: DeviceMcpServer) async throws -> Bool
+    func unregisterMcp(_ server: DeviceMcpServer) async throws
+}
+
+extension DeviceToolHost: T3RegistrationHost {}
+
 public struct T3HostRegistrar: T3Registering {
-    public typealias Hosts = @Sendable () async -> [DeviceToolHost]
+    public typealias Hosts = @Sendable () async -> [any T3RegistrationHost]
 
     private let hosts: Hosts
 
