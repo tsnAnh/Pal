@@ -1,9 +1,9 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -uo pipefail
 cd "$(dirname "$0")"
 VARIANT=${1:?variant}
 MODE=${2:-drive}
-APP=/tmp/ss2-dd-mac/Build/Products/Debug/ScrollSpike.app
+APP=${TMPDIR:?}/ss2-dd-mac/Build/Products/Debug/ScrollSpike.app
 OUT="$PWD/../results/macos"
 mkdir -p "$OUT"
 [ wheel -nt wheel.swift ] || swiftc -O wheel.swift -o wheel
