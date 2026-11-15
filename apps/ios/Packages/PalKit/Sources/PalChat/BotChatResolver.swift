@@ -11,15 +11,13 @@ public struct BotIntro: Sendable, Hashable {
         self.hidden = hidden
     }
 
-    public static let kickoff = BotIntro(text: "Hey, tell me about yourself!", hidden: false)
-
     public static let birthNotice = BotIntro(
         text: "You were just created and your owner has opened this chat. Greet them first, in one or two short sentences: say who you are, and ask what job you should own unless you already have one.",
         hidden: true
     )
 
-    public static func forGateway(greetsUnprompted: Bool) -> BotIntro {
-        greetsUnprompted ? .birthNotice : .kickoff
+    public static func forGateway(greetsUnprompted: Bool) -> BotIntro? {
+        greetsUnprompted ? .birthNotice : nil
     }
 }
 

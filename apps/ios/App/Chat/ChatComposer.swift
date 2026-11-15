@@ -7,6 +7,7 @@ import UniformTypeIdentifiers
 struct ChatComposer: View {
     let botName: String
     let accent: BotAccent?
+    let answersQuestion: Bool
     let attachments: [PendingAttachment]
     let slashItems: [SlashItem]
     let loadSlashItems: () -> Void
@@ -104,10 +105,10 @@ struct ChatComposer: View {
         PlatformVariant.pick(mac: 14, iOS: 8)
     }
 
-    private var promptText: Text { Text("Message \(botName)") }
+    private var promptText: Text { answersQuestion ? Text("Or type your own answer") : Text("Message \(botName)") }
 
-    private var actionFill: Color { accent?.accent ?? Color(rgb: 0xD7D7D7) }
-    private var actionInk: Color { accent?.foreground ?? Color(rgb: 0x161616) }
+    private var actionFill: Color { BubblePalette.ink(accent: accent) }
+    private var actionInk: Color { BubblePalette.inkText(accent: accent) }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -334,7 +335,7 @@ struct ChatComposer: View {
             .font(.system(size: PlatformVariant.pick(mac: 14, iOS: 17), weight: .regular))
             .foregroundStyle(PalTokens.textSecondary)
             .frame(width: PlatformVariant.pick(mac: 28, iOS: buttonDiameter), height: buttonDiameter)
-            .contentShape(Rectangle())
+            .minimumHitTarget(visual: buttonDiameter)
     }
 
     private func actionCircle(systemName: String, weight: Font.Weight) -> some View {
@@ -343,7 +344,7 @@ struct ChatComposer: View {
             .foregroundStyle(actionInk)
             .frame(width: buttonDiameter, height: buttonDiameter)
             .background(actionFill, in: Circle())
-            .contentShape(Circle())
+            .minimumHitTarget(visual: buttonDiameter)
     }
 }
 
@@ -460,7 +461,7 @@ private struct ReplyBar: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: 32, height: 32)
-                    .contentShape(Circle())
+                    .minimumHitTarget(visual: 32)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Cancel reply"))
@@ -547,14 +548,16 @@ private struct AttachmentTray: View {
         switch attachment.state {
         case .uploading:
             ZStack {
-                Color.black.opacity(0.35)
-                ProgressView().controlSize(.small)
+                PalTokens.content.opacity(0.55)
+                ProgressView().controlSize(.small).tint(PalTokens.textSecondary)
             }
             .accessibilityIdentifier("attachmentUploading")
         case .failed(let reason):
             ZStack {
-                Color.black.opacity(0.5)
-                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Color(theme.palette.destructive))
+                PalTokens.content.opacity(0.75)
+                Image(systemName: "exclamationmark.circle")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(PalTokens.textPrimary)
             }
             .accessibilityLabel(Text(reason))
             .accessibilityIdentifier("attachmentFailed")

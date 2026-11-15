@@ -133,8 +133,8 @@ struct ChatE2ETests {
         let profile = environment.concurrencyProfile
         let first = context.chat(profile, context.connector("a"))
         let second = context.chat(profile, context.connector("b"))
-        async let startedFirst = first.start(intro: .kickoff)
-        async let startedSecond = second.start(intro: .kickoff)
+        async let startedFirst = first.start(intro: BotIntro(text: "Hello", hidden: false))
+        async let startedSecond = second.start(intro: BotIntro(text: "Hello", hidden: false))
         let outcomes = try await [startedFirst, startedSecond]
         #expect(outcomes.allSatisfy { $0.created && $0.introAdmission != nil }, "both creators admitted the intro")
         #expect(Set(outcomes.compactMap { $0.introAdmission?.admissionID }).count == 1, "both intros resolved to one admission")

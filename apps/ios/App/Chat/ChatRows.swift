@@ -24,7 +24,7 @@ struct ChatRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if row.showsUnreadDivider {
-                UnreadDivider(label: String(localized: "NEW"))
+                UnreadDivider(label: String(localized: "New"), ink: BubblePalette.ink(accent: model.chatAccent))
                     .accessibilityIdentifier("unreadDivider")
             }
             if let separator = row.separator {
@@ -76,7 +76,11 @@ struct ChatRowView: View {
         case .clarify(let prompt):
             ClarifyCard(prompt: prompt) { answer in model.answer(prompt, with: answer) }
         case .approval(let prompt):
-            ApprovalCard(prompt: prompt) { choice in model.answerApproval(prompt, choice: choice) }
+            ApprovalCard(prompt: prompt, ink: BubblePalette.ink(accent: model.chatAccent), inkText: BubblePalette.inkText(accent: model.chatAccent)) { choice in
+                model.answerApproval(prompt, choice: choice)
+            }
+        case .approvalAnswered(let record):
+            ApprovalAnsweredCard(record: record)
         case .notice(let notice):
             NoticeRow(notice: notice, highlight: findQuery, isCurrentMatch: isCurrentMatch)
         case .botThread(let link):
@@ -168,6 +172,7 @@ struct UserBubble: View {
             status
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
+        .modifier(SendRise(isFresh: delivery == .sending))
     }
 
     @ViewBuilder
@@ -202,6 +207,7 @@ struct NoticeRow: View {
     let isCurrentMatch: Bool
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.chatInk) private var chatInk
     @State private var expanded = false
 
     private var title: String {
@@ -277,7 +283,7 @@ struct NoticeRow: View {
         guard !highlight.isEmpty, case .botMessage(let name, let body) = notice,
               (name + " " + body).range(of: highlight, options: [.caseInsensitive, .diacriticInsensitive]) != nil
         else { return .clear }
-        return isCurrentMatch ? Color(theme.palette.primaryBadge).opacity(0.4) : Color.yellow.opacity(0.25)
+        return FindMark(ink: chatInk, surfaceText: nil, isCurrent: isCurrentMatch).fill
     }
 }
 

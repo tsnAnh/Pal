@@ -73,8 +73,7 @@ enum PalSwatches {
     static let panelBorder = PalSwatch(dark: (0x252525, 1), light: (0x1C1C1C, 0.12))
     static let fieldBorder = PalSwatch(dark: (0x292929, 1), light: (0x1C1C1C, 0.14))
 
-    static let agentBubbleTop = PalSwatch(dark: (0x242424, 1), light: (0xFFFFFF, 1))
-    static let agentBubbleBottom = PalSwatch(dark: (0x1C1C1C, 1), light: (0xF2F2F2, 1))
+    static let agentBubble = PalSwatch(dark: (0x212121, 1), light: (0xF1F1F2, 1))
     static let userBubble = PalSwatch(dark: (0xF5F5F5, 0.18), light: (0x1C1C1C, 1))
 
     static let scrim = PalSwatch(dark: (0x000000, 0.70), light: (0x000000, 0.50))
@@ -105,8 +104,7 @@ public enum PalTokens {
     public static let panelBorder = PalSwatches.panelBorder.color
     public static let fieldBorder = PalSwatches.fieldBorder.color
 
-    public static let agentBubbleTop = PalSwatches.agentBubbleTop.color
-    public static let agentBubbleBottom = PalSwatches.agentBubbleBottom.color
+    public static let agentBubble = PalSwatches.agentBubble.color
     public static let userBubble = PalSwatches.userBubble.color
 
     public static let scrim = PalSwatches.scrim.color

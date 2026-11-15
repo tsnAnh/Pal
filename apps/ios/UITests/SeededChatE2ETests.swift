@@ -181,7 +181,7 @@ final class SeededChatE2ETests: E2ETestCase {
         }
         let mic = app.buttons["micButton"]
         mic.tap()
-        let unavailable = app.alerts["Dictation unavailable"]
+        let unavailable = app.descendants(matching: .any)["composerNotice"]
         var listening = false
         var explained = false
         let deadline = Date().addingTimeInterval(15)
@@ -195,7 +195,7 @@ final class SeededChatE2ETests: E2ETestCase {
         }
         shot(app, "dictation-\(listening ? "listening" : "unavailable")")
         XCTAssertTrue(listening || explained, "dictation either listens or explains why not")
-        if unavailable.exists { unavailable.buttons["OK"].tap() }
+        if unavailable.exists { app.buttons["composerNoticeDismiss"].tap() }
     }
 }
 

@@ -150,7 +150,7 @@ struct RoomActionCard: View {
                 .padding(.leading, 6)
             if action.isApproval {
                 if action.canAllowOnce || action.canDeny {
-                    ApprovalCard(prompt: prompt) { choice in
+                    ApprovalCard(prompt: prompt, ink: BubblePalette.ink(accent: nil), inkText: BubblePalette.inkText(accent: nil)) { choice in
                         guard !isBusy else { return }
                         approve(choice == "once")
                     }

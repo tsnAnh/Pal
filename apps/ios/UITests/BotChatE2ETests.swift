@@ -55,7 +55,7 @@ final class BotChatE2ETests: E2ETestCase {
         let card = app.descendants(matching: .any)["clarifyCard"]
         waitFor(card, timeout: 60, "clarify card")
         XCTAssertTrue(app.staticTexts["Which flavor do you want?"].exists)
-        XCTAssertTrue(app.staticTexts["Or answer in the chat below"].exists)
+        XCTAssertEqual(app.descendants(matching: .any)["composerField"].placeholderValue, "Or type your own answer", "the composer invites a typed answer")
         shot(app, "chat-clarify")
         app.buttons["clarifyChoice-0"].hit()
         waitFor(bubbles(app, "assistantBubble", containing: "Got it, vanilla").firstMatch, timeout: 60, "card answer completes the turn")

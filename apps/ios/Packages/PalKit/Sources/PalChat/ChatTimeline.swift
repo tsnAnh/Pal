@@ -49,7 +49,7 @@ public enum ChatTimeline {
         case .user: !item.inbound.isPerson
         case .assistant: true
         case .botThread(let link): link.kind == .messageFrom
-        case .tool, .clarifyAnswered, .clarify, .approval: false
+        case .tool, .clarifyAnswered, .clarify, .approval, .approvalAnswered: false
         }
     }
 }

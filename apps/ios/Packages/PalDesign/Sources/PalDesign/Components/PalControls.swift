@@ -87,3 +87,9 @@ public extension ButtonStyle where Self == PalPillButtonStyle {
         PalPillButtonStyle(height: height, fontSize: fontSize, horizontalPadding: horizontalPadding, fill: fill, textColor: textColor, disabledOpacity: disabledOpacity)
     }
 }
+
+extension View {
+    public func minimumHitTarget(visual side: CGFloat) -> some View {
+        contentShape(Rectangle().inset(by: -max(0, (ChatMetrics.minimumHitTarget - side) / 2)))
+    }
+}

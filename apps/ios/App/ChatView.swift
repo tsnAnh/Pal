@@ -15,6 +15,7 @@ struct ChatView: View {
     @State private var connectionIsSlow = false
     @State private var chrome = EdgeInsets()
     @FocusState private var composerFocused: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let teach: TeachModel
     let router: AppRouter
@@ -60,9 +61,11 @@ struct ChatView: View {
                         $0.frame(in: .named(ChatScrollController.contentSpace)).minY
                     } action: { scroll.rowMoved(row.id, contentMinY: $0) }
                 }
-                OlderHistoryRow(state: model.olderHistory) { model.wantOlder() }
-                    .newestFirst()
-                    .padding(.bottom, 8)
+                if !model.rows.isEmpty {
+                    OlderHistoryRow(state: model.olderHistory, ink: ink) { model.wantOlder() }
+                        .newestFirst()
+                        .padding(.bottom, 8)
+                }
             }
             .scrollTargetLayout()
             .coordinateSpace(.named(ChatScrollController.contentSpace))
@@ -74,9 +77,10 @@ struct ChatView: View {
         .contentMargins(.bottom, max(0, chrome.top - chrome.bottom), for: .automatic)
         .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { chrome = $0 }
         .newestFirst()
+        .mask { edgeFade }
+        .overlay { openingState }
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectHidden(true, for: .all)
-        .overlay(alignment: .top) { topFade }
         .safeAreaInset(edge: .top, spacing: 0) { TeachBanner(model: teach, surface: .chat) }
         .safeAreaInset(edge: .top, spacing: 0) { AutoApproveBanner(sessionID: model.bot.conversationID) }
         .teachPresentations(teach, surface: .chat)
@@ -99,12 +103,12 @@ struct ChatView: View {
         .accessibilityValue(Text(historySummary))
         .overlay(alignment: .bottom) {
             if scroll.showsJumpButton {
-                ScrollToBottomButton(newCount: scroll.unseen) { scroll.jumpToBottom() }
-                    .padding(.bottom, 10)
-                    .transition(.scale.combined(with: .opacity))
+                ScrollToBottomButton(newCount: scroll.unseen) { scroll.jumpToBottom(animated: !reduceMotion) }
+                    .padding(.bottom, 4)
+                    .transition(jumpButtonTransition)
             }
         }
-        .animation(.snappy(duration: 0.2), value: scroll.showsJumpButton)
+        .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0), value: scroll.showsJumpButton)
         .safeAreaBar(edge: .bottom) { bottomBar().chatColumn() }
         .onChange(of: model.currentFindRowID) { _, id in
             guard let id else { return }
@@ -139,6 +143,7 @@ struct ChatView: View {
         )
         .background(PlatformVariant.pick(mac: PalTokens.content, iOS: Color(theme.palette.canvas)))
         .messageMenuPresenter()
+        .environment(\.chatInk, ink)
         .task { model.start() }
         .task(id: model.bot.conversationID) { await autoApprove.load(sessionID: model.bot.conversationID) }
         .task(id: model.connection) {
@@ -167,28 +172,12 @@ struct ChatView: View {
         .fullCover(isPresented: $isVoiceModePresented) {
             VoiceModeView(model: model) { isVoiceModePresented = false }
         }
-        .alert(
-            Text("Something went wrong"),
-            isPresented: Binding(get: { model.sendError != nil }, set: { if !$0 { model.dismissError() } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.sendError ?? "")
-        }
-        .alert(
-            Text("Dictation unavailable"),
-            isPresented: Binding(get: { dictation.failure != nil }, set: { if !$0 { dictation.dismissFailure() } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(dictation.failure ?? "")
-        }
     }
 
     @ViewBuilder
     private var footer: some View {
         if model.isRunning, !model.hasPendingPrompt {
-            ChatWorkingRow(status: model.workingStatus, accent: model.chatAccent)
+            ChatWorkingRow(status: model.workingStatus, ink: ink)
                 .padding(.top, ChatMetrics.senderSwitchGap)
         }
         if connectionIsSlow {
@@ -201,11 +190,11 @@ struct ChatView: View {
     private var connectionStatus: some View {
         switch model.connection {
         case .reconnecting:
-            ChatStatusLine(text: String(localized: "Reconnecting…"), dotColor: dotColor)
+            ChatStatusLine(text: String(localized: "Reconnecting…"), systemImage: "wifi.slash")
                 .accessibilityIdentifier("reconnectingIndicator")
         case .connecting, .live:
             if model.isCatchingUp {
-                ChatStatusLine(text: String(localized: "Checking for new messages…"), dotColor: dotColor)
+                ChatStatusLine(text: String(localized: "Checking for new messages…"), systemImage: "clock")
                     .accessibilityIdentifier("chatStatusLine")
             }
         }
@@ -225,9 +214,49 @@ struct ChatView: View {
         return model.olderHistory == .loading ? count + ", " + String(localized: "loading earlier messages") : count
     }
 
-    private var dotColor: Color {
-        model.chatAccent?.accent ?? Color(theme.palette.chipSelectedFill)
+    private var ink: Color { BubblePalette.ink(accent: model.chatAccent) }
+
+    private var jumpButtonTransition: AnyTransition {
+        guard !reduceMotion else { return .opacity }
+        return .asymmetric(
+            insertion: .scale(scale: 0.9).combined(with: .opacity),
+            removal: .scale(scale: 0.9).combined(with: .opacity).animation(.easeIn(duration: 0.17))
+        )
     }
+
+    private var edgeFade: some View {
+        VStack(spacing: 0) {
+            Color.clear
+                .frame(height: max(0, max(chrome.top, ChatEdgeFade.topFloor) - ChatEdgeFade.feather / 2))
+            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                .frame(height: ChatEdgeFade.feather * 1.5)
+            Color.black
+            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                .frame(height: ChatEdgeFade.feather)
+            Color.clear
+                .frame(height: chrome.bottom)
+        }
+        .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private var openingState: some View {
+        if model.isOpening {
+            DelayedReveal(after: ChatEdgeFade.loadingDelay) {
+                Text("Loading…")
+                    .hermesText(.chatStatus)
+                    .foregroundStyle(PalTokens.textSecondary)
+                    .accessibilityIdentifier("chatLoading")
+            }
+        } else if model.rows.isEmpty, !model.isRunning {
+            NewChatIntro(bot: model.bot, mood: model.avatarMood, suggestion: Self.firstSuggestion) {
+                model.send(Self.firstSuggestion)
+            }
+            .padding(.horizontal, ChatMetrics.edgeMargin)
+        }
+    }
+
+    private static let firstSuggestion = String(localized: "Tell me about yourself")
 
     @ViewBuilder
     private func bottomBar() -> some View {
@@ -235,6 +264,14 @@ struct ChatView: View {
             FindBar(model: model)
         } else {
             VStack(spacing: 0) {
+                if let notice = dictation.failure ?? model.sendError {
+                    ComposerNotice(text: notice) {
+                        dictation.dismissFailure()
+                        model.dismissError()
+                    }
+                    .padding(.horizontal, ChatMetrics.edgeMargin)
+                    .transition(.opacity)
+                }
                 if let notice = hub.usageNotice {
                     UsageBanner(notice: notice) {
                         reviewUsage()
@@ -247,6 +284,7 @@ struct ChatView: View {
                 composer
             }
             .animation(.snappy(duration: 0.2), value: hub.usageNotice)
+            .animation(.easeOut(duration: 0.2), value: dictation.failure ?? model.sendError)
             .task { await hub.refreshUsageIfStale() }
         }
     }
@@ -260,23 +298,11 @@ struct ChatView: View {
         #endif
     }
 
-    private var topFade: some View {
-        #if os(macOS)
-        ChatTopFade(color: PalTokens.content, height: MacMetrics.topBarHeight + 10)
-            .ignoresSafeArea(.container, edges: .top)
-        #else
-        GeometryReader { proxy in
-            ChatTopFade(color: Color(theme.palette.canvas), height: proxy.safeAreaInsets.top + 14)
-                .ignoresSafeArea(.container, edges: .top)
-        }
-        .allowsHitTesting(false)
-        #endif
-    }
-
     private var composer: some View {
         ChatComposer(
             botName: model.bot.displayName,
             accent: model.chatAccent,
+            answersQuestion: model.hasPendingClarify,
             attachments: model.attachments,
             slashItems: model.slashItems,
             loadSlashItems: { model.loadSlashItems() },
@@ -290,9 +316,10 @@ struct ChatView: View {
             focused: $composerFocused,
             send: {
                 dictation.stop()
+                model.dismissError()
                 model.send(draft)
                 draft = ""
-                scroll.jumpToBottom()
+                scroll.jumpToBottom(animated: !reduceMotion)
             },
             openVoiceMode: {
                 dictation.stop()

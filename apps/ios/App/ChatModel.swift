@@ -50,6 +50,7 @@ struct ChatRow: Identifiable, Equatable {
         case clarifyAnswered(question: String, answer: ClarifyRecord.Answer)
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
+        case approvalAnswered(ApprovalRecord)
         case notice(ChatNotice)
         case botThread(BotThreadLink)
         case imageGeneration(ImageGeneration)
@@ -113,6 +114,7 @@ final class ChatModel {
     private(set) var hasPendingClarify = false
     private(set) var hasPendingPrompt = false
     private(set) var olderHistory = OlderHistory.idle
+    private(set) var isOpening = true
     private(set) var sendError: String?
     private var pending = PendingAttachments()
     var attachments: [PendingAttachment] { pending.items }
@@ -359,7 +361,13 @@ final class ChatModel {
 
     func answerApproval(_ prompt: PendingPrompt, choice: String) {
         guard let session else { return }
-        Task { try? await session.answerApproval(prompt, choice: choice) }
+        Task {
+            do {
+                try await session.answerApproval(prompt, choice: choice)
+            } catch {
+                sendError = String(localized: "Your answer could not be sent. Try again.")
+            }
+        }
     }
 
     func submitVoice(_ text: String) async -> Bool {
@@ -751,6 +759,7 @@ final class ChatModel {
         hasPendingClarify = pendingClarify != nil
         hasPendingPrompt = !(snapshot?.pendingPrompts.isEmpty ?? true)
         if !hasBaseline, snapshot?.sessionID != nil { hasBaseline = true }
+        if isOpening, !next.isEmpty || snapshot?.sessionID != nil { isOpening = false }
         recomputeFind(resetPosition: false)
     }
 
@@ -824,6 +833,8 @@ final class ChatModel {
             return (.clarify(card.prompt), [])
         case .approval(let card):
             return (.approval(card.prompt), [])
+        case .approvalAnswered(let record):
+            return (.approvalAnswered(record), [])
         case .botThread(let link):
             return (.botThread(link), [])
         }
@@ -860,6 +871,16 @@ final class ChatModel {
         if let index = findMatches.firstIndex(of: id) { findPosition = index }
     }
 
+    nonisolated private static func occurrences(of needle: String, in text: String) -> Int {
+        var count = 0
+        var searchRange = text.startIndex..<text.endIndex
+        while let found = text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive], range: searchRange) {
+            count += 1
+            searchRange = found.upperBound..<text.endIndex
+        }
+        return count
+    }
+
     nonisolated private static func matches(_ item: TranscriptItem, needle: String) -> Bool {
         let text: String
         switch item.content {
@@ -878,11 +899,8 @@ final class ChatModel {
             findPosition = 0
             return
         }
-        findMatches = needle.isEmpty ? [] : rows.compactMap { row in
-            guard let text = row.searchableText,
-                  text.range(of: needle, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-            else { return nil }
-            return row.id
+        findMatches = needle.isEmpty ? [] : rows.flatMap { row in
+            Array(repeating: row.id, count: row.searchableText.map { Self.occurrences(of: needle, in: $0) } ?? 0)
         }
         if resetPosition {
             findPosition = max(0, findMatches.count - 1)

@@ -61,7 +61,7 @@ struct FindBar: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Color(theme.palette.textPrimary))
                 .frame(width: 30, height: 30)
-                .contentShape(Rectangle())
+                .minimumHitTarget(visual: 30)
         }
         .buttonStyle(.plain)
         .disabled(model.findMatches.isEmpty)

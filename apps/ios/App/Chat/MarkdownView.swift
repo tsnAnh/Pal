@@ -126,6 +126,7 @@ struct InlineText: View {
     var foreground: Color?
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.chatInk) private var chatInk
     @ScaledMetric(relativeTo: .body) private var iconSize: CGFloat = 17
 
     var body: some View {
@@ -141,8 +142,8 @@ struct InlineText: View {
     private var defaultInk: Color { PalTokens.textPrimary }
 
     private var composed: Text {
-        let fill = isCurrentMatch ? Color(theme.palette.primaryBadge) : Color.yellow.opacity(0.35)
-        let highlighted = InlineTextComposer.highlight(text, query: highlight, fill: fill, ink: isCurrentMatch ? .black : nil)
+        let mark = FindMark(ink: chatInk, surfaceText: foreground, isCurrent: isCurrentMatch)
+        let highlighted = InlineTextComposer.highlight(text, query: highlight, fill: mark.fill, ink: mark.text)
         return InlineTextComposer.compose(highlighted) { link in
             if let icon = FaviconCache.shared.image(for: link, pointSize: iconSize) {
                 return Text(Image(platformImage: icon))

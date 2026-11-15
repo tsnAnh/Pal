@@ -2,6 +2,18 @@ import PalDesign
 import PalRoster
 import SwiftUI
 
+enum ChatEdgeFade {
+    static let feather: CGFloat = 24
+    static let loadingDelay = Duration.milliseconds(300)
+    static var topFloor: CGFloat {
+        #if os(macOS)
+        MacMetrics.topBarHeight
+        #else
+        0
+        #endif
+    }
+}
+
 extension View {
     func chatColumn() -> some View {
         #if os(macOS)

@@ -42,11 +42,13 @@ public struct ChatTimeSeparator: View {
 
 public struct UnreadDivider: View {
     public let label: String
+    public let ink: Color
 
     @Environment(\.hermesTheme) private var theme
 
-    public init(label: String) {
+    public init(label: String, ink: Color) {
         self.label = label
+        self.ink = ink
     }
 
     public var body: some View {
@@ -54,7 +56,7 @@ public struct UnreadDivider: View {
             line
             Text(label)
                 .hermesText(.unreadLabel)
-                .foregroundStyle(Color(theme.palette.accentBlue))
+                .foregroundStyle(ink)
             line
         }
         .padding(.top, ChatMetrics.unreadTopPadding)
@@ -65,26 +67,28 @@ public struct UnreadDivider: View {
 
     private var line: some View {
         Rectangle()
-            .fill(Color(theme.palette.unreadLine))
+            .fill(ink.opacity(0.28))
             .frame(height: ChatMetrics.unreadLineThickness)
     }
 }
 
 public struct ChatStatusLine: View {
     public let text: String
-    public let dotColor: Color
+    public let systemImage: String
 
     @Environment(\.hermesTheme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    public init(text: String, dotColor: Color) {
+    public init(text: String, systemImage: String) {
         self.text = text
-        self.dotColor = dotColor
+        self.systemImage = systemImage
     }
 
     public var body: some View {
         HStack(spacing: ChatMetrics.statusTextGap) {
-            dots
+            Image(systemName: systemImage)
+                .font(.system(size: ChatMetrics.statusIconSize, weight: .medium))
+                .foregroundStyle(Color(theme.palette.textSecondary))
+                .accessibilityHidden(true)
             Text(text)
                 .hermesText(.chatStatus)
                 .foregroundStyle(Color(theme.palette.textSecondary))
@@ -92,22 +96,6 @@ public struct ChatStatusLine: View {
         .padding(.leading, ChatMetrics.statusLeadingInset - ChatMetrics.edgeMargin)
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)
-    }
-
-    private var dots: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
-            let time = reduceMotion ? 0.5 : context.date.timeIntervalSinceReferenceDate
-            HStack(spacing: ChatMetrics.statusDotSpacing) {
-                ForEach(0..<3, id: \.self) { index in
-                    let phase = (sin(time * 5 - Double(index) * 0.9) + 1) / 2
-                    Circle()
-                        .fill(dotColor.opacity(0.45 + 0.55 * phase))
-                        .frame(width: ChatMetrics.statusDotDiameter, height: ChatMetrics.statusDotDiameter)
-                        .scaleEffect(0.8 + 0.2 * phase)
-                }
-            }
-        }
-        .accessibilityHidden(true)
     }
 }
 
@@ -160,35 +148,37 @@ public struct ScrollToBottomButton: View {
     public let action: () -> Void
 
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     public init(newCount: Int = 0, action: @escaping () -> Void) {
         self.newCount = newCount
         self.action = action
     }
 
+    private var diameter: CGFloat { ChatMetrics.scrollButtonDiameter }
+
     public var body: some View {
         Button(action: action) {
-            if newCount > 0 {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("\(newCount) new")
-                        .font(.system(size: 14, weight: .semibold))
-                        .monospacedDigit()
-                }
-                .foregroundStyle(Color(theme.palette.textPrimary))
-                .padding(.horizontal, 14)
-                .frame(height: ChatMetrics.scrollButtonDiameter)
-                .palGlass(Capsule())
-                .contentShape(Capsule())
-            } else {
+            HStack(spacing: 6) {
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .frame(width: ChatMetrics.scrollButtonDiameter, height: ChatMetrics.scrollButtonDiameter)
-                    .palGlass(Circle())
-                    .contentShape(Circle())
+                    .font(.system(size: 13, weight: .semibold))
+                if newCount > 0 {
+                    Text("\(newCount) new")
+                        .font(.system(size: 13, weight: .semibold))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(value: Double(newCount)))
+                        .fixedSize()
+                        .transition(.opacity)
+                }
             }
+            .foregroundStyle(Color(theme.palette.textPrimary))
+            .padding(.horizontal, newCount > 0 ? 14 : 0)
+            .frame(minWidth: diameter, minHeight: diameter, maxHeight: diameter)
+            .palGlass(Capsule())
+            .overlay(Capsule().strokeBorder(PalTokens.textPrimary.opacity(0.08), lineWidth: 1))
+            .frame(minWidth: ChatMetrics.minimumHitTarget, minHeight: ChatMetrics.minimumHitTarget)
+            .contentShape(Rectangle())
+            .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0), value: newCount)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(newCount > 0 ? Text("\(newCount) new messages. Scroll to latest") : Text("Scroll to latest"))

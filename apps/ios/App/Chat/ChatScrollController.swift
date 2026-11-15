@@ -42,6 +42,8 @@ final class ChatScrollController {
     private(set) var wantsOlder = false
     @ObservationIgnored private var phase = ScrollPhase.idle
     @ObservationIgnored private var offset: CGFloat = 0
+    @ObservationIgnored private var distanceFromNewest: CGFloat = 0
+    @ObservationIgnored private var viewportHeight: CGFloat = 0
     @ObservationIgnored private var lastRowID: String?
     @ObservationIgnored private var knownIDs: Set<String> = []
     @ObservationIgnored private var pin: Pin?
@@ -60,6 +62,8 @@ final class ChatScrollController {
 
     func observe(_ viewport: ChatViewport) {
         offset = viewport.offset
+        distanceFromNewest = viewport.distanceFromNewest
+        viewportHeight = viewport.viewportHeight
         if wantsOlder != viewport.wantsOlder { wantsOlder = viewport.wantsOlder }
         if viewport.distanceFromNewest <= Self.enterFollowing, !revealing {
             follow()
@@ -118,10 +122,16 @@ final class ChatScrollController {
         position.scrollTo(edge: .top)
     }
 
-    func jumpToBottom() {
+    static let jumpGlideViewports: CGFloat = 2
+
+    func jumpToBottom(animated: Bool) {
         revealing = false
+        revealTask?.cancel()
         follow()
-        withAnimation(.easeOut(duration: 0.2)) { position.scrollTo(edge: .top) }
+        let glides = animated && distanceFromNewest <= viewportHeight * Self.jumpGlideViewports
+        var transaction = Transaction(animation: glides ? .spring(duration: 0.35, bounce: 0) : nil)
+        transaction.disablesAnimations = !glides
+        withTransaction(transaction) { position.scrollTo(edge: .top) }
     }
 
     func reveal(_ id: String) {

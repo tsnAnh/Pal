@@ -274,12 +274,18 @@ public actor ChatSession: OutboxSubmitter {
 
     public func answerApproval(_ prompt: PendingPrompt, choice: String) async throws {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
-        _ = try await api.respondToApproval(
-            sessionID: sessionID,
-            executionGeneration: prompt.executionGeneration,
-            promptID: prompt.promptID,
-            choice: choice
-        )
+        transcript.noteApprovalChoice(choice, promptID: prompt.promptID)
+        do {
+            _ = try await api.respondToApproval(
+                sessionID: sessionID,
+                executionGeneration: prompt.executionGeneration,
+                promptID: prompt.promptID,
+                choice: choice
+            )
+        } catch {
+            transcript.noteApprovalChoice(nil, promptID: prompt.promptID)
+            throw error
+        }
     }
 
     public func interrupt() async throws {

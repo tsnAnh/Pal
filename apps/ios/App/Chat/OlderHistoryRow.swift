@@ -3,9 +3,8 @@ import SwiftUI
 
 struct OlderHistoryRow: View {
     let state: OlderHistory
+    let ink: Color
     let retry: () -> Void
-
-    @Environment(\.hermesTheme) private var theme
 
     var body: some View {
         content
@@ -21,22 +20,30 @@ struct OlderHistoryRow: View {
         case .idle:
             Color.clear
         case .loading:
-            ProgressView()
-                .controlSize(.small)
-                .accessibilityLabel(Text("Loading earlier messages"))
+            caption(Text("Loading earlier messages"))
         case .failed:
             Button(action: retry) {
-                Text("Couldn't load earlier messages. Tap to try again.")
-                    .hermesText(.chatStatus)
-                    .foregroundStyle(Color(theme.palette.textSecondary))
+                HStack(spacing: 0) {
+                    caption(Text("Couldn't load earlier messages · "))
+                    Text("Retry")
+                        .hermesText(.timestamp)
+                        .foregroundStyle(ink)
+                }
+                .frame(minHeight: ChatMetrics.minimumHitTarget)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(Text("Couldn't load earlier messages. Retry"))
             .accessibilityIdentifier("olderHistoryRetry")
         case .complete:
-            Text("Start of your chat")
-                .hermesText(.chatStatus)
-                .foregroundStyle(Color(theme.palette.textSecondary))
+            caption(Text("Start of your chat"))
         }
+    }
+
+    private func caption(_ text: Text) -> some View {
+        text
+            .hermesText(.timestamp)
+            .foregroundStyle(PalTokens.textTertiary)
     }
 
     private var accessibilityValue: String {
