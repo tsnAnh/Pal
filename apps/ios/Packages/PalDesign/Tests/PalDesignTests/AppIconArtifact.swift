@@ -32,7 +32,7 @@ struct AppIconArtifact {
         pose.eyeY = Self.gaze.y
         return ZStack(alignment: .topLeading) {
             Color.black
-            AvatarFrame(content: Self.turningRightEye(AvatarContent(spec)), pose: pose, size: canvas * Self.avatarScale)
+            AvatarFrame(content: Self.turningRightEye(flatContent(spec)), pose: pose, size: canvas * Self.avatarScale)
                 .offset(x: canvas * Self.avatarOffset.x, y: canvas * Self.avatarOffset.y)
         }
         .frame(width: canvas, height: canvas)

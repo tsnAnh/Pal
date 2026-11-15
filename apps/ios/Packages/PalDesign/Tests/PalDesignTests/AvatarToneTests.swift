@@ -7,7 +7,7 @@ private func spec(color: String, shape: String) -> BotAvatarSpec {
 }
 
 private func rig(color: String, shape: String, scheme: ColorScheme) throws -> AvatarRig {
-    guard case .rig(let rig) = AvatarContent(spec(color: color, shape: shape)).toned(for: scheme) else {
+    guard let rig = AvatarContent(spec(color: color, shape: shape)).toned(for: scheme).flatRig else {
         throw ToneError.notARig
     }
     return rig
@@ -41,7 +41,7 @@ struct AvatarToneTests {
     func whiteAvatarOnDarkScreen(shape: String) throws {
         let original = try rig(color: "#ffffff", shape: shape, scheme: .dark)
         let reference = AvatarContent(spec(color: "#ffffff", shape: shape))
-        guard case .rig(let base) = reference else { throw ToneError.notARig }
+        guard let base = reference.flatRig else { throw ToneError.notARig }
         #expect(original.body.map { css($0.fill) } == base.body.map { css($0.fill) })
         #expect(css(original.body.first?.fill ?? original.body.first?.stroke?.color) == "#ffffff")
         #expect(css(original.eyes.fill) == css(base.eyes.fill))

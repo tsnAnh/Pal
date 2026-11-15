@@ -32,7 +32,7 @@ public struct BotAvatarView: View {
         self.animated = animated
         self.outline = outline
         self.eyeInk = eyeInk
-        self.pointerReach = pointerReach ?? (size >= 72 ? (size * 0.4).rounded() : 0)
+        self.pointerReach = pointerReach ?? AvatarLook.defaultReach(size: size)
         _clock = State(initialValue: AvatarMoodClock(
             mood: mood,
             since: Date(),
@@ -80,10 +80,7 @@ private final class AvatarContentCache {
     func resolve(_ spec: BotAvatarSpec, _ scheme: ColorScheme, eyeInk: AvatarColor?) -> AvatarContent {
         if let content, self.spec == spec, self.scheme == scheme, self.eyeInk == eyeInk { return content }
         var built = AvatarContent(spec).toned(for: scheme)
-        if let eyeInk, case .rig(var rig) = built {
-            rig.eyes.fill = eyeInk
-            built = .rig(rig)
-        }
+        if let eyeInk { built = built.eyeInked(eyeInk) }
         self.spec = spec
         self.scheme = scheme
         self.eyeInk = eyeInk
@@ -167,6 +164,7 @@ extension ShapeAvatar {
 
 enum AvatarContent {
     case rig(AvatarRig)
+    case solid(AvatarSolid)
     case photo(CGImage)
 
     init(_ spec: BotAvatarSpec) {
@@ -175,10 +173,32 @@ enum AvatarContent {
             if let image = Self.decode(photo.data) {
                 self = .photo(image)
             } else {
-                self = .rig(Self.rig(photo.fallback))
+                self = Self.content(photo.fallback)
             }
         case .shape(let shape):
-            self = .rig(Self.rig(shape))
+            self = Self.content(shape)
+        }
+    }
+
+    static func content(_ shape: ShapeAvatar) -> AvatarContent {
+        switch shape {
+        case .blob, .classic: .solid(AvatarSolid(rig(shape)))
+        case .sigil: .rig(rig(shape))
+        }
+    }
+
+    var isSolid: Bool {
+        if case .solid = self { return true }
+        return false
+    }
+
+    func eyeInked(_ ink: AvatarColor) -> AvatarContent {
+        switch self {
+        case .rig(var rig):
+            rig.eyes.fill = ink
+            return .rig(rig)
+        case .solid(let solid): return .solid(solid.eyeInked(ink))
+        case .photo: return self
         }
     }
 
@@ -208,6 +228,8 @@ struct AvatarFrame: View {
         switch content {
         case .rig(let rig):
             AvatarCanvas(rig: rig, pose: pose, size: size, look: look, outline: outline, reduceMotion: reduceMotion)
+        case .solid(let solid):
+            SolidCanvas(solid: solid, pose: pose, size: size, look: look, outline: outline, reduceMotion: reduceMotion)
         case .photo(let image):
             Image(decorative: image, scale: 1)
                 .resizable()
@@ -255,12 +277,7 @@ private struct AvatarPainter {
 
     private var scale: CGFloat { size / max(rig.viewBox.width, rig.viewBox.height) }
 
-    private var placement: CGAffineTransform {
-        CGAffineTransform(scaleX: scale, y: scale).concatenating(CGAffineTransform(
-            translationX: (size - rig.viewBox.width * scale) / 2 + inset,
-            y: (size - rig.viewBox.height * scale) / 2 + inset
-        ))
-    }
+    private var placement: CGAffineTransform { rig.placement(size: size, inset: inset) }
 
     func paint(_ pose: AvatarPose, in context: inout GraphicsContext) {
         let pivot = rig.pivot.applying(placement)

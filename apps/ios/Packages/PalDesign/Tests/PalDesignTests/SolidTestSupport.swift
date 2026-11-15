@@ -19,6 +19,21 @@ func flatRig(_ shape: String, color: String = "#3e8ef7") -> AvatarRig {
     AvatarContent.rig(shapeAvatar(shape, color: color))
 }
 
+func flatContent(_ spec: BotAvatarSpec) -> AvatarContent {
+    guard case .shape(let avatar) = spec else { return AvatarContent(spec) }
+    return .rig(AvatarContent.rig(avatar))
+}
+
+extension AvatarContent {
+    var flatRig: AvatarRig? {
+        switch self {
+        case .rig(let rig): rig
+        case .solid(let solid): solid.rig
+        case .photo: nil
+        }
+    }
+}
+
 func solid(_ shape: String, color: String = "#3e8ef7") -> AvatarSolid {
     AvatarSolid(flatRig(shape, color: color))
 }

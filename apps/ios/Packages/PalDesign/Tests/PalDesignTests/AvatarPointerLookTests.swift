@@ -4,12 +4,7 @@ import Testing
 @testable import PalDesign
 
 private func rig(_ shape: String) throws -> AvatarRig {
-    let spec = BotAvatarSpec(name: "Atlas", meta: BotAvatarMeta(shape: shape, color: "#3e8ef7", custom: true))
-    guard case .rig(let rig) = AvatarContent(spec) else {
-        Issue.record("\(shape) did not build a rig")
-        throw CancellationError()
-    }
-    return rig
+    flatRig(shape)
 }
 
 private let shapes = BlobKind.allCases.map { "blobatar:k7q2m9x0:\($0.rawValue)" } + ClassicShape.allCases.map(\.rawValue)

@@ -230,3 +230,13 @@ struct SolidEyeTests {
         #expect(avatar.geometry.radius > 0 && avatar.geometry.surface.rim.allSatisfy { $0 > 0.5 })
     }
 }
+
+@Suite("Hover reach")
+struct HoverReachTests {
+    @Test("every avatar size follows the pointer, small rows included", arguments: [22.0, 25.3, 28, 43, 66, 72, 136, 160])
+    func everySizeReaches(size: Double) {
+        let reach = AvatarLook.defaultReach(size: CGFloat(size))
+        #expect(reach >= 9)
+        #expect(Double(reach) == (size * 0.4).rounded())
+    }
+}

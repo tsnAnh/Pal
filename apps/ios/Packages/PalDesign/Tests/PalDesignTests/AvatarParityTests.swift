@@ -20,8 +20,10 @@ struct ParityScore: Sendable {
 private func score(_ testCase: ParityMatrix.Case) throws -> ParityScore {
     let spec = BotAvatarSpec(name: testCase.name, uiMeta: testCase.uiMeta, photo: nil)
     let size = CGFloat(matrix.size)
+    let mood = AvatarMood(rawValue: testCase.mood) ?? .idle
     let renderer = ImageRenderer(
-        content: BotAvatarView(spec: spec, size: size, mood: AvatarMood(rawValue: testCase.mood) ?? .idle, animated: false)
+        content: AvatarFrame(content: flatContent(spec).toned(for: .dark), pose: AvatarMotion.staticPose(mood), size: size)
+            .frame(width: size, height: size)
             .environment(\.colorScheme, .dark)
     )
     renderer.scale = 1

@@ -44,6 +44,8 @@ struct AvatarLook: Equatable, Sendable, VectorArithmetic {
         return AvatarLook(amount: 1 - 0.5 * approach, x: x, y: y)
     }
 
+    static func defaultReach(size: CGFloat) -> CGFloat { (size * 0.4).rounded() }
+
     var released: AvatarLook { AvatarLook(amount: 0, x: x, y: y) }
 }
 
