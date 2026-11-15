@@ -108,4 +108,45 @@ final class ChatPolishShotsE2ETests: E2ETestCase {
             app.terminate()
         }
     }
+
+    func test4TitleCapsuleOpensProfile() throws {
+        for mode in [AppearanceMode.light, .dark] {
+            let app = open(mode)
+            let title = app.buttons["chatTitle"]
+            waitFor(title, timeout: 30, "title capsule")
+            settle()
+            shot(app, "chat-header-glass-\(mode.rawValue)")
+            title.tap()
+            waitFor(element(app, "botProfileScreen"), timeout: 20, "tapping the title capsule opens the bot profile")
+            waitFor(element(app, "profileAvatar"), timeout: 20, "profile avatar")
+            settle()
+            shot(app, "profile-from-capsule-\(mode.rawValue)")
+            app.terminate()
+        }
+    }
+
+    func test5HomeGlass() throws {
+        for mode in [AppearanceMode.light, .dark] {
+            let app = launch(extraArguments: ["-\(AppearanceStore.defaultsKey)", mode.rawValue])
+            signInIfNeeded(app)
+            waitFor(app.buttons["rosterSearchField"], timeout: 30, "home search launcher")
+            settle()
+            shot(app, "home-glass-\(mode.rawValue)")
+            app.terminate()
+        }
+    }
+
+    func test6WorkingRowLoop() throws {
+        for mode in [AppearanceMode.light, .dark] {
+            let app = open(mode)
+            send(app, "HOLD working row \(mode.rawValue)")
+            let working = element(app, "assistantBubble-streaming")
+            waitFor(working, timeout: 30, "working row")
+            shot(app, "working-row-hold-\(mode.rawValue)")
+            Thread.sleep(forTimeInterval: 6)
+            XCTAssertTrue(working.exists, "the working row stays while the turn holds")
+            waitGone(working, timeout: 60, "reply completes")
+            app.terminate()
+        }
+    }
 }
