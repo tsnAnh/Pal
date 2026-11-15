@@ -102,7 +102,7 @@ struct ChatView: View {
         .accessibilityIdentifier("chatScreen")
         .accessibilityValue(Text(historySummary))
         .overlay(alignment: .bottom) {
-            if scroll.showsJumpButton {
+            if scroll.showsJumpButton, !model.isFinding {
                 ScrollToBottomButton(newCount: scroll.unseen) { scroll.jumpToBottom(animated: !reduceMotion) }
                     .padding(.bottom, 4)
                     .transition(jumpButtonTransition)
@@ -190,7 +190,7 @@ struct ChatView: View {
     private var connectionStatus: some View {
         switch model.connection {
         case .reconnecting:
-            ChatStatusLine(text: String(localized: "Reconnecting…"), systemImage: "wifi.slash")
+            ChatStatusLine(text: String(localized: "Reconnecting…"), systemImage: "clock")
                 .accessibilityIdentifier("reconnectingIndicator")
         case .connecting, .live:
             if model.isCatchingUp {
@@ -225,18 +225,22 @@ struct ChatView: View {
     }
 
     private var edgeFade: some View {
-        VStack(spacing: 0) {
-            Color.clear
-                .frame(height: max(0, max(chrome.top, ChatEdgeFade.topFloor) - ChatEdgeFade.feather / 2))
-            LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                .frame(height: ChatEdgeFade.feather * 1.5)
-            Color.black
-            LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                .frame(height: ChatEdgeFade.feather)
-            Color.clear
-                .frame(height: chrome.bottom)
+        GeometryReader { proxy in
+            let insets = proxy.safeAreaInsets
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: max(0, max(insets.top, ChatEdgeFade.topFloor) - ChatEdgeFade.feather / 2))
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: ChatEdgeFade.feather * 1.5)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: ChatEdgeFade.feather)
+                Color.clear
+                    .frame(height: max(0, insets.bottom - ChatEdgeFade.feather))
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height + insets.top + insets.bottom)
+            .offset(y: -insets.top)
         }
-        .ignoresSafeArea()
     }
 
     @ViewBuilder
