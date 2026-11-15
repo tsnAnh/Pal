@@ -227,7 +227,7 @@ struct ConnectionView: View {
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
-        .glassEffect(.clear.interactive(), in: .capsule)
+        .palGlass(Capsule(), base: .clear)
         .disabled(model.isBusy)
         .accessibilityIdentifier("continueButton")
     }

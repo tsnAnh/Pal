@@ -4,6 +4,7 @@ import PalProtocol
 import SwiftUI
 
 struct ClarifyCard: View {
+    @Environment(\.colorScheme) private var colorScheme
     let prompt: PendingPrompt
     let answer: (String) -> Void
 
@@ -57,7 +58,7 @@ struct ClarifyCard: View {
             }
             if isMulti, !prompt.choices.isEmpty {
                 Button("Confirm and continue") { confirm() }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.glass(PalGlass.style(interactive: false, colorScheme: colorScheme)))
                     .disabled(selection.isEmpty)
                     .frame(maxWidth: .infinity)
                     .accessibilityIdentifier("clarifyConfirm")

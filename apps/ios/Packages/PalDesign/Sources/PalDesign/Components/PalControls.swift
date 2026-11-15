@@ -1,15 +1,29 @@
 import SwiftUI
 
 public extension View {
-    func palGlass<S: Shape>(_ shape: S, interactive: Bool = true) -> some View {
-        glassEffect(PalGlass.style(interactive: interactive), in: shape)
+    func palGlass<S: Shape>(_ shape: S, interactive: Bool = true, base: Glass = .regular) -> some View {
+        modifier(PalGlassEffect(shape: shape, interactive: interactive, base: base))
     }
 }
 
-enum PalGlass {
-    static func style(interactive: Bool) -> Glass {
-        let glass = Glass.regular
-        return interactive ? glass.interactive() : glass
+public enum PalGlass {
+    static let darkTint = Color.black.opacity(0.4)
+
+    public static func style(_ base: Glass = .regular, interactive: Bool, colorScheme: ColorScheme) -> Glass {
+        let tinted = colorScheme == .dark ? base.tint(darkTint) : base
+        return interactive ? tinted.interactive() : tinted
+    }
+}
+
+private struct PalGlassEffect<S: Shape>: ViewModifier {
+    @Environment(\.colorScheme) private var colorScheme
+
+    let shape: S
+    let interactive: Bool
+    let base: Glass
+
+    func body(content: Content) -> some View {
+        content.glassEffect(PalGlass.style(base, interactive: interactive, colorScheme: colorScheme), in: shape)
     }
 }
 

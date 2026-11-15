@@ -37,6 +37,7 @@ public enum SheetSurface: Sendable {
 }
 
 public struct SheetChrome<Trailing: View, Content: View>: View {
+    @Environment(\.colorScheme) private var colorScheme
     public let title: String?
     public let leading: SheetLeadingButton
     public let titleAlignment: SheetTitleAlignment
@@ -149,7 +150,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
                     Image(systemName: leading.systemName)
                         .frame(width: 20, height: 20)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.glass(PalGlass.style(interactive: false, colorScheme: colorScheme)))
                 .buttonBorderShape(.circle)
                 .accessibilityLabel(Text(leading.accessibilityLabel))
                 .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-\(leading.identifierSuffix)")
