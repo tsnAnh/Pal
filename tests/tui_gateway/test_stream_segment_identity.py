@@ -78,3 +78,18 @@ def test_deltas_and_seals_carry_turn_segment_and_utf16_offset(monkeypatch):
     assert len(first) == len(second) == 1 and None not in first | second and first != second
     # A finished turn leaves no cursor behind, so a later non-turn emitter's frame stays unstamped.
     assert srv.stream_segments.SESSION_KEY not in session
+
+
+def test_a_bot_chat_interim_that_is_only_a_silence_marker_never_reaches_the_client(monkeypatch):
+    monkeypatch.setattr(srv, "_is_bot_mode_session", lambda _session: True)
+
+    def run_conversation(agent, prompt, stream_callback=None, **_kwargs):
+        agent.interim_assistant_callback("NO_REPLY", already_streamed=False)
+        agent.interim_assistant_callback("Checking.\n\nNO_REPLY", already_streamed=False)
+        return {"final_response": "NO_REPLY", "messages": [
+            {"role": "user", "content": prompt}, {"role": "assistant", "content": "NO_REPLY"}]}
+
+    frames, _session = _submit_turns(monkeypatch, run_conversation, turns=1)
+
+    assert [p["text"] for e, p in frames if e == "message.interim"] == ["Checking."]
+    assert all("NO_REPLY" not in str(p.get("text", "")) for e, p in frames if e.startswith("message."))

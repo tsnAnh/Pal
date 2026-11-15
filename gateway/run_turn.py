@@ -541,15 +541,15 @@ class GatewayTurnMixin(GatewayBackgroundMixin, GatewayTurnPrepareMixin, GatewayT
             self._mcp_reload_refresh_cached_agents(multiplex, event.source.profile)
 
             # Append a note at the END of the history (preserves the prompt-cache prefix).
+            from gateway.display_markers import MCP_RELOAD_NOTICE_PREFIX
             change_parts = [
                 f"{label} servers: {', '.join(sorted(names))}"
                 for label, _key, names in (changes[1], changes[2], changes[0]) if names
             ]
             tool_summary = f"{len(new_tools)} MCP tool(s) now available" if new_tools else "No MCP tools available"
             change_detail = ". ".join(change_parts) + ". " if change_parts else ""
-            reload_msg = {
-                "role": "user",
-                "content": f"[IMPORTANT: MCP servers have been reloaded. {change_detail}{tool_summary}. The tool list for this conversation has been updated accordingly.]",
+            reload_msg = {"role": "user",
+                "content": f"{MCP_RELOAD_NOTICE_PREFIX} {change_detail}{tool_summary}. The tool list for this conversation has been updated accordingly.]",
             }
             with suppress(Exception):  # Best-effort; don't fail the reload over a transcript write
                 session_entry = await self.async_session_store.get_or_create_session(event.source)

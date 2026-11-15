@@ -15,6 +15,8 @@ Failure cases this file pins:
   of the authored text, and loses the photo;
 - a user who types the vision-note wording verbatim has it rewritten.
 - a settled connection request loses its card on reopen because its result never reaches the wire.
+- a reply the model stored as a bare silence marker (``NO_REPLY``) paints as a bubble, or a closing marker
+  stays on a real reply, or prose that only mentions the marker is dropped.
 """
 import json
 
@@ -157,6 +159,18 @@ def test_a_settled_connection_request_keeps_its_result_so_the_card_survives_reop
     entries = list(_timeline(db, 's1', profile=str(tmp_path)).entries)
     [card] = [tool for entry in entries for tool in entry.get('tools', ()) if tool['name'] == 'manage_connections']
     assert card['call_id'] == 'c1' and json.loads(card['result']) == json.loads(settled)
+
+@pytest.mark.parametrize('stored, shown', [
+    ('NO_REPLY', None),
+    ('[SILENT]', None),
+    ('Paris.\n\nNO_REPLY', 'Paris.'),
+    ('Reply NO_REPLY when there is nothing to add.', 'Reply NO_REPLY when there is nothing to add.'),
+])
+def test_a_stored_silence_marker_never_paints(db, tmp_path, stored, shown):
+    db.append_message('s1', 'user', 'anything new?')
+    db.append_message('s1', 'assistant', stored)
+    entries = list(_timeline(db, 's1', profile=str(tmp_path)).entries)
+    assert [entry['text'] for entry in entries if entry['role'] == 'assistant'] == ([shown] if shown else [])
 
 def test_a_user_turn_with_an_inline_image_keeps_its_text_and_image(db):
     uri = 'data:image/jpeg;base64,/9j/4AAQSkZJRg=='

@@ -1013,6 +1013,7 @@ class CLIInfoMixin:
                     self.enabled_toolsets = enabled_override
 
             # Tell the model tools changed — appended at the END so the prefix cache survives.
+            from gateway.display_markers import MCP_RELOAD_NOTICE_PREFIX
             change_parts = [
                 f"{label} servers: {', '.join(sorted(names))}" for label, names in diff.items() if names
             ]
@@ -1020,7 +1021,7 @@ class CLIInfoMixin:
             change_detail = ". ".join(change_parts) + ". " if change_parts else ""
             self.conversation_history.append({
                 "role": "user",
-                "content": f"[IMPORTANT: MCP servers have been reloaded. {change_detail}{tool_summary}. The tool list for this conversation has been updated accordingly.]",
+                "content": f"{MCP_RELOAD_NOTICE_PREFIX} {change_detail}{tool_summary}. The tool list for this conversation has been updated accordingly.]",
             })
 
             # Persist now so the session log reflects the refreshed tools list (best-effort).

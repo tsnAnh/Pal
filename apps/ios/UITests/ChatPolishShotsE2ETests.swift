@@ -184,4 +184,21 @@ final class ChatPolishShotsE2ETests: E2ETestCase {
             app.terminate()
         }
     }
+
+    func test8ClarifyOpenAndAnswered() throws {
+        for mode in [AppearanceMode.light, .dark] {
+            let app = open(mode)
+            send(app, "CLARIFY \(mode.rawValue) " + UUID().uuidString.prefix(4))
+            let choice = app.buttons["clarifyChoice-0"]
+            waitFor(choice, timeout: 60, "clarify card")
+            settle()
+            shot(app, "clarify-card-\(mode.rawValue)")
+            choice.tap()
+            waitFor(bubbles(app, "assistantBubble", containing: "Got it, vanilla").firstMatch, timeout: 60, "turn completes after the pick")
+            waitFor(bubbles(app, "clarifyAnswered", containing: "vanilla").firstMatch, timeout: 10, "answered card")
+            settle()
+            shot(app, "clarify-answered-\(mode.rawValue)")
+            app.terminate()
+        }
+    }
 }
