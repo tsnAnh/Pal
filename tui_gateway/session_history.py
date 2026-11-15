@@ -255,6 +255,11 @@ def _is_display_hidden_marker(role: str | None, text: str) -> bool:
     return role == "user" and text.lstrip().startswith("[System:")
 
 
+def _without_silence_marker(text: str) -> str:
+    from gateway.response_filters import is_intentional_silence_response, strip_trailing_silence_marker
+    return "" if is_intentional_silence_response(text) else strip_trailing_silence_marker(text)
+
+
 def _skill_scaffold_projection(content_text: str) -> str:
     """The invocation a slash-skill-expanded turn came from, else "" — UIs render ``/work fix the leak``."""
     return describe_skill_invocation(content_text, separator=" ") or ""
@@ -341,6 +346,8 @@ def _history_to_messages(history: list[dict], *, profile_home=None, image_urls: 
             content_text = _coerce_message_text(m.get("content"), image_urls=image_urls)
         if _is_display_hidden_marker(role, content_text):
             continue
+        if role == "assistant":
+            content_text = _without_silence_marker(content_text)
         if role == "user":
             content_text = _DISCORD_TRIGGERING_NOTE_RE.sub(r"\1", content_text)
             # A pre_llm_call veto stores a placeholder; the transcript shows what the user typed.

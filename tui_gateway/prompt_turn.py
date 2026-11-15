@@ -826,6 +826,10 @@ def _invoke_agent(
     def _interim_assistant_cb(text: str, *, already_streamed: bool = False) -> None:
         if getattr(agent, "_mute_notification_reply", False):
             return
+        if hold is not None:
+            text = _bot_mode_delivery_text(text, successful=True)
+            if not text:
+                return
         _emit("message.interim", sid, {"text": text, "already_streamed": already_streamed})
     agent.interim_assistant_callback = (
         _interim_assistant_cb if _load_interim_assistant_messages() else None)
