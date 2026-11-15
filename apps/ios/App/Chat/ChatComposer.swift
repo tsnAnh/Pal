@@ -216,7 +216,7 @@ struct ChatComposer: View {
         .padding(.trailing, PlatformVariant.pick(mac: 7, iOS: ChatMetrics.composerInset))
         .padding(.vertical, PlatformVariant.pick(mac: 7, iOS: ChatMetrics.composerInset))
         .frame(minHeight: surfaceHeight)
-        .modifier(ComposerSurface(cornerRadius: surfaceHeight / 2, isFocused: focused.wrappedValue))
+        .modifier(ComposerSurface(cornerRadius: surfaceHeight / 2))
         .macOnly { $0.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { surfaceFrame = $0 } }
 
     }
@@ -478,13 +478,12 @@ private struct ReplyBar: View {
 
 private struct ComposerSurface: ViewModifier {
     let cornerRadius: CGFloat
-    let isFocused: Bool
 
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        content
-            .background(PalTokens.elevated, in: shape)
-            .overlay(shape.strokeBorder(isFocused ? PalTokens.borderStrong : PalTokens.panelBorder, lineWidth: 1))
+        GlassEffectContainer {
+            content.palGlass(shape, interactive: false)
+        }
     }
 }
 
