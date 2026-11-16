@@ -332,7 +332,8 @@ def handle_computer_use(args: dict[str, Any], **kwargs) -> Any:
         admitted = _bd_lease.assert_agent_may_act()
     except _bd_lease.HumanHasControl as e:
         return _refused(e)
-    _bd_ensure_started()  # headless gateway: bring the profile's screen up before the backend probes DISPLAY
+    if (not_started := _bd_ensure_started()) is not None:  # headless gateway: bring the screen up before the backend probes DISPLAY
+        return json.dumps({"ok": False, "action": action, "code": "screen_start_failed", "error": not_started})
     if (err := _reject_unsafe(action, args)) is not None:
         return err
     scopes = ([action] if action in _ACTIONS and _ACTIONS[action].destructive else []) + (

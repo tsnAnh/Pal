@@ -20,6 +20,7 @@ from tools.bot_desktop import runtime
 DISK_CACHE_BYTES = 256 * 1024 * 1024
 
 _SYSTEM_BROWSERS = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
+_SNAP_BIN_DIR = "/snap/bin"
 
 
 def profile_dir() -> Path:
@@ -28,7 +29,12 @@ def profile_dir() -> Path:
     state lives), so ``pin`` means ``<HERMES_HOME>/pin`` and two profiles never share one jar by accident."""
     from tools.browser_session_cloud import user_data_dir
     override = user_data_dir()
-    return Path(override) if override else runtime.state_dir() / "browser-profile"
+    if override:
+        return Path(override)
+    exe = executable()
+    if exe and _is_snap(exe):
+        return Path.home() / "snap" / "chromium" / "common" / "hermes-bot-desktop" / runtime._profile_name() / "browser-profile"
+    return runtime.state_dir() / "browser-profile"
 
 
 def executable() -> Optional[str]:
@@ -64,7 +70,14 @@ def _is_headless_shell(exe: str) -> bool:
 
 
 def _system_executable() -> Optional[str]:
-    return next((shutil.which(name) for name in _SYSTEM_BROWSERS if shutil.which(name)), None)
+    """A service's PATH rarely carries ``/snap/bin``, where Ubuntu's Chromium snap lives."""
+    path = os.pathsep.join((os.environ.get("PATH", os.defpath), _SNAP_BIN_DIR))
+    return next((found for name in _SYSTEM_BROWSERS if (found := shutil.which(name, path=path))), None)
+
+
+def _is_snap(exe: str) -> bool:
+    """A snap-confined browser cannot write hidden directories under HOME (``~/.hermes``), only ``~/snap/<name>/common``."""
+    return os.path.dirname(exe) == _SNAP_BIN_DIR or os.path.basename(os.path.realpath(exe)) == "snap"
 
 
 def _is_root() -> bool:

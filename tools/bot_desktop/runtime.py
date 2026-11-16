@@ -377,33 +377,35 @@ def desktop_env(base_env: Optional[dict[str, str]] = None) -> dict[str, str]:
     return env
 
 
-def ensure_started_for_tool() -> None:
+def ensure_started_for_tool() -> Optional[str]:
     """Tool-boundary hook (``computer_use`` dispatch and the headed Chromium spawn sites of the browser tool).
 
     Under ``terminal`` placement the sandbox screen is brought up on first use unconditionally: the sandbox is
     the boundary the user chose, a screen inside it touches nothing outside it, and the tools below refuse
     rather than run on the host when it is not up. On the gateway host, ``bot_desktop.auto_start`` (opt-in,
     default off) starts a Linux host's screen when it has NO display and the packages installed, so a headless
-    gateway works the first time. Host failure is not an error here (the tool's own "no display" diagnosis is
-    the right message then); a sandbox start failure is logged and left for :func:`tool_placement` to raise."""
+    gateway works the first time. It returns why a host auto-start failed (``None`` otherwise) so the tool can say
+    so; a sandbox start failure is logged and left for :func:`tool_placement` to raise."""
     if published_env().get("DISPLAY"):
         touch_activity()
-        return
+        return None
     where = placement.resolve()
     if where.where == placement.REFUSED:
-        return  # tool_placement() raises the reason at the spawn site
+        return None  # tool_placement() raises the reason at the spawn site
     if where.where == placement.TERMINAL:
         try:
             start()
         except Exception as exc:
             logger.info("Bot Desktop sandbox start deferred to the tool: %s", exc)
-        return
+        return None
     if not _should_auto_start(os.environ):
-        return
+        return None
     try:
         start()
     except Exception as exc:
-        logger.info("Bot Desktop auto-start skipped: %s", exc)
+        logger.warning("Bot Desktop auto-start failed: %s", exc)
+        return str(exc)
+    return None
 
 
 def tool_placement() -> str:

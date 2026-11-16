@@ -27,7 +27,7 @@ def _seed(tmp_path: Path, fake_bins: list[str], browser_exec: str = "", profile_
     xauth.chmod(0o755)
     # The script's own tooling (mkdir, sed, cat, awk...) symlinked in, so PATH need not contain the
     # host's /usr/bin where a real chrome/thunar would leak into the dock under test.
-    for tool in ("mkdir", "sed", "cat", "printf", "dirname", "bash", "sh", "rm", "ln", "touch", "chmod", "xauth", "od", "tr", "awk", "grep"):
+    for tool in ("mkdir", "sed", "cat", "printf", "dirname", "bash", "sh", "rm", "ln", "touch", "chmod", "xauth", "od", "tr", "awk", "grep", "mv"):
         real = shutil.which(tool)
         if real and not (bindir / tool).exists():
             (bindir / tool).symlink_to(real)
@@ -91,6 +91,60 @@ def test_browser_launcher_seeded_before_the_marker_still_follows_a_rename(tmp_pa
         for line in d.read_text(encoding="utf-8-sig").splitlines() if line.startswith("Exec=") and "user-data-dir" in line
     ]
     assert execs == [f"Exec={chrome} --user-data-dir=/new name/bp"]
+
+
+def _browser_entries(cfg: Path) -> list[str]:
+    return [
+        line for d in (cfg / "xfce4/panel").glob("launcher-*/hermes.desktop")
+        for line in d.read_text(encoding="utf-8-sig").splitlines() if line == "Name=Browser"
+    ]
+
+
+def _panel(cfg: Path) -> Path:
+    return cfg / "xfce4/xfconf/xfce-perchannel-xml/xfce4-panel.xml"
+
+
+def _dock_execs(cfg: Path) -> list[str]:
+    root = ET.parse(_panel(cfg)).getroot()
+    dock = next(p for p in root.iter("property") if p.get("name") == "panel-2")
+    ids = [v.get("value") for v in next(p for p in dock if p.get("name") == "plugin-ids")]
+    return [
+        line.split("=", 1)[1]
+        for i in ids
+        for line in (cfg / f"xfce4/panel/launcher-{i}/hermes.desktop").read_text(encoding="utf-8-sig").splitlines()
+        if line.startswith("Exec=")
+    ]
+
+
+def test_dock_seeded_before_a_browser_existed_gets_the_browser_icon_later(tmp_path):
+    """The layout file seals the dock the first time the screen starts, browser or not: a Chromium that is
+    found on a later start (a snap, an install) must still reach the dock, with the owner's launchers kept."""
+    chrome = tmp_path / "bin" / "chrome"
+    cfg = _seed(tmp_path, ["xfce4-terminal"])
+    assert not (cfg / "xfce4/panel/.hermes-browser-launcher").exists()
+    panel = _panel(cfg)
+    panel.write_text(panel.read_text(encoding="utf-8-sig").replace("</channel>", "<!-- arranged by the owner -->\n</channel>"), encoding="utf-8")
+
+    _seed(tmp_path, ["xfce4-terminal", "chrome"], browser_exec=str(chrome))
+
+    assert _dock_execs(cfg) == ["xfce4-terminal", f"{chrome} --user-data-dir={tmp_path}/bp"]
+    assert "<!-- arranged by the owner -->" in panel.read_text(encoding="utf-8")
+
+    before = panel.read_text(encoding="utf-8")
+    _seed(tmp_path, ["xfce4-terminal", "chrome"], browser_exec=str(chrome))
+    assert panel.read_text(encoding="utf-8") == before, "a second start must not add a second Browser icon"
+
+
+def test_browser_icon_the_human_removed_is_not_added_back(tmp_path):
+    chrome = tmp_path / "bin" / "chrome"
+    cfg = _seed(tmp_path, ["xfce4-terminal", "chrome"], browser_exec=str(chrome))
+    launcher_dir = next(d for d in (cfg / "xfce4/panel").glob("launcher-*") if "Name=Browser" in (d / "hermes.desktop").read_text(encoding="utf-8-sig"))
+    shutil.rmtree(launcher_dir)
+    panel = _panel(cfg)
+    layout = panel.read_text(encoding="utf-8")
+    _seed(tmp_path, ["xfce4-terminal", "chrome"], browser_exec=str(chrome))
+    assert panel.read_text(encoding="utf-8") == layout
+    assert not launcher_dir.exists()
 
 
 def test_look_is_seeded_with_wallpaper_and_theme(tmp_path):

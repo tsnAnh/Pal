@@ -419,3 +419,38 @@ def test_a_real_user_pin_is_still_honoured(tmp_path, monkeypatch):
     monkeypatch.setattr("tools.browser_session_cloud.executable_path", lambda: str(mine))
 
     assert _agent_launch(monkeypatch)["executable"] == str(mine)
+
+
+def _snap_host(tmp_path, monkeypatch):
+    """A host whose only browser is a snap Chromium in /snap/bin, absent from the service's PATH."""
+    snap_bin = tmp_path / "snap-bin"
+    snap_bin.mkdir()
+    exe = snap_bin / "chromium"
+    exe.write_text("#!/bin/sh\n", encoding="utf-8")
+    exe.chmod(0o755)
+    _browser_config(monkeypatch, tmp_path / "home")
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    monkeypatch.setenv("HOME", str(tmp_path / "user"))
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "user")
+    monkeypatch.setattr(browser, "_SNAP_BIN_DIR", str(snap_bin))
+    monkeypatch.setattr(browser, "_managed_executable", lambda: None)
+    monkeypatch.setattr(browser, "_userns_restricted", lambda: False)
+    monkeypatch.setattr(runtime, "state_dir", lambda: tmp_path / "home" / "bot-desktop")
+    return exe
+
+
+def test_snap_chromium_off_the_service_path_is_the_headed_browser(tmp_path, monkeypatch):
+    exe = _snap_host(tmp_path, monkeypatch)
+    assert browser.executable() == str(exe)
+    assert browser.dock_launch()[0] == str(exe)
+
+
+def test_snap_chromium_profile_lives_where_the_snap_can_write(tmp_path, monkeypatch):
+    """A snap cannot write hidden directories under HOME (``~/.hermes``): its profile goes to ``~/snap``."""
+    _snap_host(tmp_path, monkeypatch)
+    monkeypatch.setattr(runtime, "_profile_name", lambda: "chief")
+    expected = tmp_path / "user" / "snap" / "chromium" / "common" / "hermes-bot-desktop" / "chief" / "browser-profile"
+    assert browser.profile_dir() == expected
+    assert browser.dock_launch()[1] == str(expected)
+    assert _agent_launch(monkeypatch)["user_data_dir"] == str(expected)
+
