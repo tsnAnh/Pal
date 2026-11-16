@@ -34,23 +34,12 @@ struct ChatRowView: View {
             content
         }
         .padding(.top, leadingGap)
+        .environment(\.chatImageOpener) { reference in model.openImage(reference, inRow: row.id) }
+        .environment(\.chatFileOpener) { file in model.filePreview = file }
     }
 
     private func timeSeparator(_ date: Date) -> some View {
         ChatTimeSeparator(text: ChatTimestamp.label(for: date))
-    }
-
-    private var imageLoader: ChatImageLoader {
-        let model = model
-        return { reference, thumbnail in try await model.loadImage(reference, thumbnail: thumbnail) }
-    }
-
-    private var fileActions: ChatFileActions {
-        let model = model
-        return ChatFileActions(
-            check: { try await model.fileAvailability($0) },
-            load: { try await model.loadFile($0) }
-        )
     }
 
     private func messageActions(for text: String) -> MessageActions {
@@ -74,16 +63,18 @@ struct ChatRowView: View {
                 model.retry(id)
             }
             .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
-            .environment(\.chatImageLoader, imageLoader)
+            .environment(\.chatImageLoader, model.imageLoader)
         case .assistant(let parsed):
             AssistantBubble(text: parsed.source, document: parsed.document, images: row.images, files: row.files, filesPending: row.isStreaming, highlight: findQuery, isCurrentMatch: isCurrentMatch)
                 .environment(\.messageActions, messageActions(for: parsed.source))
-                .environment(\.chatImageLoader, imageLoader)
-                .environment(\.chatFileActions, fileActions)
+                .environment(\.chatImageLoader, model.imageLoader)
+                .environment(\.chatFileActions, model.fileActions)
         case .clarifyAnswered(let question, let answer):
             ClarifyAnsweredCard(question: question, answer: answer)
+                .bubbleWidth(.leading)
         case .clarify(let prompt):
             ClarifyCard(prompt: prompt) { answer in model.answer(prompt, with: answer) }
+                .bubbleWidth(.leading)
         case .approval(let prompt):
             ApprovalCard(prompt: prompt, ink: BubblePalette.ink(accent: model.chatAccent), inkText: BubblePalette.inkText(accent: model.chatAccent)) { choice in
                 model.answerApproval(prompt, choice: choice)
@@ -100,7 +91,7 @@ struct ChatRowView: View {
             BotThreadLinkRow(link: link, avatars: model.avatars) { openThread(link) }
         case .imageGeneration(let generation):
             GeneratedImageRow(generation: generation)
-                .environment(\.chatImageLoader, imageLoader)
+                .environment(\.chatImageLoader, model.imageLoader)
         }
     }
 }
@@ -114,6 +105,8 @@ struct AssistantBubble: View {
     let highlight: String
     let isCurrentMatch: Bool
     var isStreaming: Bool = false
+
+    @Environment(\.chatFileOpener) private var openFile
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -130,6 +123,12 @@ struct AssistantBubble: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .bubbleWidth(.leading)
+        .environment(\.openURL, OpenURLAction { url in
+            let path = url.isFileURL ? url.path : (url.scheme == nil ? url.path : nil)
+            guard let path, let file = files.first(where: { $0.path == path }), let openFile else { return .systemAction }
+            openFile(file)
+            return .handled
+        })
     }
 }
 

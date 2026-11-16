@@ -66,9 +66,10 @@ public enum MessageImages {
         }
     }
 
-    private static func extractFromUser(_ text: String) -> MessageContent {
+    private static func extractFromUser(_ source: String) -> MessageContent {
+        let (text, noted) = peelVisionNotes(source)
         var kept: [Substring] = []
-        var images: [ImageReference] = []
+        var images = noted
         for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if let reference = userReference(in: trimmed) {
@@ -77,9 +78,32 @@ public enum MessageImages {
                 kept.append(line)
             }
         }
-        guard !images.isEmpty else { return MessageContent(text: text, images: []) }
+        guard !images.isEmpty else { return MessageContent(text: source, images: []) }
         let body = kept.filter { $0.trimmingCharacters(in: .whitespaces) != "[screenshot]" }
         return MessageContent(text: tidy(body.joined(separator: "\n")), images: unique(images))
+    }
+
+    private static func peelVisionNotes(_ text: String) -> (rest: String, images: [ImageReference]) {
+        var rest = Substring(text)
+        var images: [ImageReference] = []
+        while let note = visionNote(at: rest) {
+            if let reference = reference(forPath: note.path) { images.append(reference) }
+            rest = note.rest
+        }
+        return (String(rest), images)
+    }
+
+    private static func visionNote(at text: Substring) -> (path: String, rest: Substring)? {
+        guard text.hasPrefix("[The user sent an image") || text.hasPrefix("[The user attached an image"),
+              let marker = text.range(of: "image_url: ")
+        else { return nil }
+        let lineEnd = text[marker.upperBound...].firstIndex(of: "\n") ?? text.endIndex
+        guard let close = text[marker.upperBound..<lineEnd].firstIndex(of: "]") else { return nil }
+        let tail = text[text.index(after: close)...]
+        guard tail.isEmpty || tail.hasPrefix("\n\n") else { return nil }
+        var path = text[marker.upperBound..<close].trimmingCharacters(in: .whitespaces)
+        if path.hasSuffix(" ~") { path.removeLast(2) }
+        return (path, tail.dropFirst(2))
     }
 
     private static func userReference(in line: String) -> ImageReference? {

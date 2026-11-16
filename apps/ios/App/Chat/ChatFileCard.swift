@@ -11,10 +11,19 @@ private struct ChatFileActionsKey: EnvironmentKey {
     static let defaultValue: ChatFileActions? = nil
 }
 
+private struct ChatFileOpenerKey: EnvironmentKey {
+    static let defaultValue: ((FileReference) -> Void)? = nil
+}
+
 extension EnvironmentValues {
     var chatFileActions: ChatFileActions? {
         get { self[ChatFileActionsKey.self] }
         set { self[ChatFileActionsKey.self] = newValue }
+    }
+
+    var chatFileOpener: ((FileReference) -> Void)? {
+        get { self[ChatFileOpenerKey.self] }
+        set { self[ChatFileOpenerKey.self] = newValue }
     }
 }
 
@@ -44,6 +53,7 @@ struct ChatFileCard: View {
     let isStreaming: Bool
 
     @Environment(\.chatFileActions) private var actions
+    @Environment(\.chatFileOpener) private var opener
     @Environment(\.hermesTheme) private var theme
     @State private var phase: ChatFilePhase = .checking
     @State private var attempt = 0
@@ -69,6 +79,10 @@ struct ChatFileCard: View {
             }
             .padding(10)
             .background(Color(theme.palette.groupedCard), in: shape)
+            .contentShape(shape)
+            .onTapGesture {
+                if phase == .ready { opener?(file) }
+            }
             if let notice {
                 Text(notice)
                     .hermesText(.timestamp)

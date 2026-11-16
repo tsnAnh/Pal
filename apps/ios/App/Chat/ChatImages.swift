@@ -9,10 +9,19 @@ private struct ChatImageLoaderKey: EnvironmentKey {
     static let defaultValue: ChatImageLoader? = nil
 }
 
+private struct ChatImageOpenerKey: EnvironmentKey {
+    static let defaultValue: ((ImageReference) -> Void)? = nil
+}
+
 extension EnvironmentValues {
     var chatImageLoader: ChatImageLoader? {
         get { self[ChatImageLoaderKey.self] }
         set { self[ChatImageLoaderKey.self] = newValue }
+    }
+
+    var chatImageOpener: ((ImageReference) -> Void)? {
+        get { self[ChatImageOpenerKey.self] }
+        set { self[ChatImageOpenerKey.self] = newValue }
     }
 }
 
@@ -104,7 +113,7 @@ private struct ChatImageSource: View {
 struct ChatImageGrid: View {
     let images: [ImageReference]
 
-    @State private var viewing: ImageReference?
+    @Environment(\.chatImageOpener) private var opener
 
     private static let single: CGFloat = 220
     private static let tile: CGFloat = 108
@@ -113,12 +122,12 @@ struct ChatImageGrid: View {
     var body: some View {
         Group {
             if images.count == 1, let only = images.first {
-                ChatImageTile(reference: only, width: Self.single, height: Self.single * 0.75) { viewing = only }
+                ChatImageTile(reference: only, width: Self.single, height: Self.single * 0.75) { opener?(only) }
             } else {
                 let columns = Array(repeating: GridItem(.fixed(Self.tile), spacing: Self.spacing), count: 2)
                 LazyVGrid(columns: columns, alignment: .leading, spacing: Self.spacing) {
                     ForEach(images) { image in
-                        ChatImageTile(reference: image, width: Self.tile, height: Self.tile) { viewing = image }
+                        ChatImageTile(reference: image, width: Self.tile, height: Self.tile) { opener?(image) }
                     }
                 }
                 .frame(width: Self.tile * 2 + Self.spacing)
@@ -126,11 +135,6 @@ struct ChatImageGrid: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("chatImageGrid")
-        #if os(iOS)
-        .fullScreenCover(item: $viewing) { ChatImageViewer(reference: $0) }
-        #else
-        .sheet(item: $viewing) { ChatImageViewer(reference: $0) }
-        #endif
     }
 }
 
@@ -191,18 +195,24 @@ private struct ChatImageTile: View {
 }
 
 struct ChatImageViewer: View {
-    let reference: ImageReference
+    let model: ChatModel
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.hermesTheme) private var theme
+    @State private var zoom: CGFloat = 1
+    @GestureState private var pinch: CGFloat = 1
+    @FocusState private var focused: Bool
+
+    private static let swipeDistance: CGFloat = 60
 
     var body: some View {
         NavigationStack {
-            ChatImageSource(reference: reference, thumbnail: false, maxPixel: 4096) { phase, retry in
-                AnyView(content(phase, retry: retry))
+            Group {
+                if let state = model.imageViewer { stage(state) }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(theme.palette.canvas))
+            .navigationTitle(title)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) { dismiss() } label: { Text("Close") }
@@ -211,12 +221,74 @@ struct ChatImageViewer: View {
             }
             .iOSOnly { $0.toolbarTitleDisplayMode(.inline) }
         }
-        .macOnly { $0.frame(minWidth: 480, idealWidth: 900, minHeight: 360, idealHeight: 700) }
+        .focusable()
+        .focused($focused)
+        .focusEffectDisabled()
+        .onAppear { focused = true }
+        .onKeyPress(.leftArrow) { go(-1) }
+        .onKeyPress(.rightArrow) { go(1) }
+        .onKeyPress(.escape) {
+            dismiss()
+            return .handled
+        }
         .accessibilityIdentifier("imageViewer")
     }
 
+    private var title: String {
+        guard let state = model.imageViewer else { return "" }
+        return String(localized: "\(state.index + 1) of \(state.images.count)")
+    }
+
+    private func stage(_ state: ImageViewerState) -> some View {
+        let reference = state.current.reference
+        return ChatImageSource(reference: reference, thumbnail: false, maxPixel: 4096) { phase, retry in
+            AnyView(content(phase, reference: reference, retry: retry))
+        }
+        .id(state.current.id)
+        .scaleEffect(min(max(zoom * pinch, 1), 6))
+        .gesture(
+            MagnifyGesture()
+                .updating($pinch) { value, gesture, _ in gesture = value.magnification }
+                .onEnded { zoom = min(max(zoom * $0.magnification, 1), 6) }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: Self.swipeDistance).onEnded { drag in
+                guard zoom <= 1 else { return }
+                _ = go(drag.translation.width < 0 ? 1 : -1)
+            }
+        )
+        .onChange(of: state.current.id) { zoom = 1 }
+        .overlay { stepButtons(state) }
+    }
+
+    private func stepButtons(_ state: ImageViewerState) -> some View {
+        HStack {
+            Button { _ = go(-1) } label: {
+                Image(systemName: "chevron.left.circle.fill").font(.system(size: 32))
+            }
+            .disabled(!state.canGoPrevious)
+            .accessibilityLabel(Text("Previous image"))
+            .accessibilityIdentifier("imageViewerPrevious")
+            Spacer()
+            Button { _ = go(1) } label: {
+                Image(systemName: "chevron.right.circle.fill").font(.system(size: 32))
+            }
+            .disabled(!state.canGoNext)
+            .accessibilityLabel(Text("Next image"))
+            .accessibilityIdentifier("imageViewerNext")
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color(theme.palette.textSecondary))
+        .padding(.horizontal, 12)
+    }
+
+    private func go(_ step: Int) -> KeyPress.Result {
+        if step < 0 { model.imageViewer?.goPrevious() } else { model.imageViewer?.goNext() }
+        return .handled
+    }
+
     @ToolbarContentBuilder
-    private func imageActions(for image: CGImage) -> some ToolbarContent {
+    private func imageActions(for image: CGImage, reference: ImageReference) -> some ToolbarContent {
         let shareable = Image(platformImage: PlatformImage(cgImage: image))
         ToolbarItemGroup(placement: .primaryAction) {
             ShareLink(item: shareable, preview: SharePreview(reference.name, image: shareable))
@@ -231,7 +303,7 @@ struct ChatImageViewer: View {
     }
 
     @ViewBuilder
-    private func content(_ phase: ChatImagePhase, retry: @escaping () -> Void) -> some View {
+    private func content(_ phase: ChatImagePhase, reference: ImageReference, retry: @escaping () -> Void) -> some View {
         switch phase {
         case .loading:
             DelayedProgressView()
@@ -242,7 +314,7 @@ struct ChatImageViewer: View {
                 .padding()
                 .accessibilityLabel(Text("Image \(reference.name)"))
                 .accessibilityIdentifier("imageViewerImage")
-                .toolbar { imageActions(for: image) }
+                .toolbar { imageActions(for: image, reference: reference) }
         case .failed(let message):
             Button(action: retry) {
                 VStack(spacing: 8) {
