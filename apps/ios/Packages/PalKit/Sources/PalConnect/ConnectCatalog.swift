@@ -101,6 +101,7 @@ public enum ConnectAppSource: Sendable, Hashable {
     case hosted(slug: String)
     case mcp(name: String, requires: [String])
     case custom(CustomConnectorInfo)
+    case googleWorkspace
 }
 
 public struct ConnectApp: Identifiable, Sendable, Equatable {
@@ -192,7 +193,7 @@ public struct ConnectCatalog: Sendable, Equatable {
         return apps.filter { $0.name.localizedStandardContains(needle) || $0.summary.localizedStandardContains(needle) }
     }
 
-    public static func make(hosted: [HostedConnectorEntry], states: [HostedConnectorState], mcp: [McpPresetEntry], skills: [InstalledSkill] = [], servers: [McpServerEntry] = []) -> ConnectCatalog {
+    public static func make(hosted: [HostedConnectorEntry], states: [HostedConnectorState], mcp: [McpPresetEntry], skills: [InstalledSkill] = [], servers: [McpServerEntry] = [], google: GoogleWorkspaceStatus? = nil) -> ConnectCatalog {
         let stateBySlug = Dictionary(states.map { ($0.connector, $0) }, uniquingKeysWith: { _, last in last })
         let hostedSlugs = Set(hosted.map(\.slug))
         var apps = hosted.map { entry in
@@ -218,6 +219,15 @@ public struct ConnectCatalog: Sendable, Equatable {
                     iconURL: nil, source: .custom(info), state: entry.enabled ? .connected : .disconnected
                 )
             }
+        }
+        if let google {
+            apps.append(
+                ConnectApp(
+                    id: GoogleWorkspaceCatalog.appID, name: GoogleWorkspaceCatalog.name, summary: GoogleWorkspaceCatalog.summary,
+                    category: "Files and docs", iconURL: nil, source: .googleWorkspace, state: google.catalogState,
+                    authReason: google.state == .reauthNeeded ? (google.reauthReason ?? .unknown).plainReason : nil
+                )
+            )
         }
         apps.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         return ConnectCatalog(apps: apps, skills: skills)

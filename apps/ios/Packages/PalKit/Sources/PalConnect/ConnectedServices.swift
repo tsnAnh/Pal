@@ -3,6 +3,7 @@ import Foundation
 public enum ServiceKind: String, Sendable, CaseIterable {
     case slack
     case upwork
+    case google = "google-workspace"
 
     public var connectorSlug: String { rawValue }
 }
@@ -24,6 +25,7 @@ public struct ConnectedServices: Sendable, Equatable {
                 case .hosted(let slug): return slug
                 case .mcp(let name, _): return name
                 case .custom: return nil
+                case .googleWorkspace: return ServiceKind.google.connectorSlug
                 }
             })
         }

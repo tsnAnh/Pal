@@ -64,6 +64,10 @@ struct MacConnectApps: View {
             UpworkConnectionSheet(model: model, app: app)
                 .macSheetFrame()
         }
+        .sheet(item: $model.googleApp) { _ in
+            GoogleWorkspaceSheet(model: model.google)
+                .macSheetFrame()
+        }
         .sheet(item: $model.keyRequest) { request in
             CapabilityKeyEntrySheet(model: model, request: request)
                 .macSheetFrame()
@@ -429,6 +433,8 @@ struct MacConnectApps: View {
         let state = model.cardState(app)
         let action: MacRowAction = if app.requiresAppSignIn {
             MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state.isReconnect) { model.upworkApp = app }
+        } else if app.source == .googleWorkspace {
+            MacRowAction(title: GoogleWorkspaceText.actionTitle(app.state), prominent: app.state == .needsAuthorization) { model.googleApp = app }
         } else if case .custom = app.source {
             MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
         } else {
@@ -439,16 +445,22 @@ struct MacConnectApps: View {
             }
         }
         return tileRow(
-            title: app.name, summary: app.requiresAppSignIn ? UpworkCardText.summary(state, fallback: app.summary) : OtherConnectorCardText.summary(state, fallback: app.summary),
+            title: app.name, summary: summary(for: app, state: state),
             identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id)
         ) { icon(for: app) }
+    }
+
+    private func summary(for app: ConnectApp, state: ConnectorCardState) -> String {
+        if app.requiresAppSignIn { return UpworkCardText.summary(state, fallback: app.summary) }
+        if app.source == .googleWorkspace { return GoogleWorkspaceText.summary(app) }
+        return OtherConnectorCardText.summary(state, fallback: app.summary)
     }
 
     @ViewBuilder
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
         case .hosted: MacAppTile(url: app.iconURL)
-        case .mcp, .custom: MacAppTile(url: nil)
+        case .mcp, .custom, .googleWorkspace: MacAppTile(url: nil)
         }
     }
 

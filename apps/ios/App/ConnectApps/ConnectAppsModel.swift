@@ -95,6 +95,8 @@ final class ConnectAppsModel {
     var showsSkills = false
     var accountsModel: ConnectorAccountsModel?
     var upworkApp: ConnectApp?
+    var googleApp: ConnectApp?
+    let google: GoogleWorkspaceModel
     private(set) var pasteSession: (any McpPasteSigning)?
     var pastingApp: ConnectApp?
     private var pasteTargetID = UpworkConnector.service
@@ -131,6 +133,8 @@ final class ConnectAppsModel {
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
         capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
         surfaces = connection.surfaces
+        google = GoogleWorkspaceModel(service: GoogleWorkspaceService(rpc: ConnectionRPC(model: connection), diagnostics: .osLog()))
+        google.onChange = { [weak self] in await self?.reload() }
         if let held = surfaces.remembered(ConnectCatalog.self, catalogKey) {
             catalog = held
             phase = .ready
