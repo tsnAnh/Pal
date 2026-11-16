@@ -18,7 +18,10 @@ struct KanbanCardView: View {
 
     private var detail: KanbanCardDetail? { store.session.detail(board: board, taskID: taskID) }
     private var load: KanbanLoad { store.cardLoad(board: board, taskID: taskID) }
-    private var title: String { detail?.card.title ?? String(localized: "Card") }
+    private var title: String {
+        guard let detail else { return String(localized: "Card") }
+        return KanbanCardRow(card: detail.card, project: nil, detail: detail).displayTitle
+    }
 
     var body: some View {
         Group {
@@ -102,7 +105,7 @@ struct KanbanCardView: View {
     private func header(_ detail: KanbanCardDetail) -> some View {
         let row = KanbanCardRow(card: detail.card, project: store.session.cache(board)?.board?.projectID, detail: detail)
         return VStack(alignment: .leading, spacing: 10) {
-            Text(detail.card.title.isEmpty ? String(localized: "Untitled card") : detail.card.title)
+            Text(row.displayTitle)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(PalTokens.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)

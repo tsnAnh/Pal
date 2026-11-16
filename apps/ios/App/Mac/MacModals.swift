@@ -34,6 +34,13 @@ struct MacModalHost: View {
                     MacModalPanel(width: 824, height: 478, identifier: "shortcutsSheet", closeIdentifier: "shortcutsClose", close: { shell.showsShortcuts = false }) {
                         MacShortcutsSheet()
                     }
+                } else if router.sheet == .kanban {
+                    KanbanSurface(connection: connection, close: { router.dismissSheet() })
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(PalTokens.content)
+                        .accessibilityElement(children: .contain)
+                        .accessibilityIdentifier("kanbanPanel")
+                        .transition(.opacity)
                 } else if let sheet = router.sheet {
                     MacModalScrim { router.dismissSheet() }
                     panel(for: sheet)
@@ -118,9 +125,7 @@ struct MacModalHost: View {
                 .id(router.connectAppsProfile ?? "")
             }
         case .kanban:
-            MacModalPanel(width: 825, height: 643, identifier: "kanbanPanel", closeIdentifier: "kanban-close", close: { router.dismissSheet() }) {
-                KanbanSurface(connection: connection, close: nil)
-            }
+            EmptyView()
         }
     }
 }
