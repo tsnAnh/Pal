@@ -31,13 +31,14 @@ import { sessionCompacting } from '@/store/compaction'
 import { draftRetry } from '@/store/composer-draft-retry'
 import { browseBackward, browseForward, deriveUserHistory, isBrowsingHistory } from '@/store/composer-input-history'
 import { POPOUT_WIDTH_REM } from '@/store/composer-popout'
-import { parkQueuedPrompts } from '@/store/composer-queue'
+import { parkQueuedPrompts, serverOwnsComposerQueue } from '@/store/composer-queue'
+import { $connectionWires } from '@/store/connection-wire'
 import { $hudMode } from '@/store/hud'
 import { $showsAdvancedChrome } from '@/store/interface-mode'
 import { $chatOnboardingSolo } from '@/store/onboarding-intro'
 import { sessionBlockingPrompt } from '@/store/prompts'
 import { toggleReview } from '@/store/review'
-import { $gatewayState } from '@/store/session'
+import { $connection, $gatewayState } from '@/store/session'
 import { $botChatSessionIds, $sessionStates, $sessionTiles, isBotChatSession } from '@/store/session-states'
 import { useForcedTextDirection } from '@/store/text-direction'
 import { $threadScrolledUpBySession } from '@/store/thread-scroll'
@@ -399,6 +400,20 @@ export function ChatBar({
     poppedOut
   })
 
+  // A bot chat is a companion conversation, not a working session, so it has no
+  // repo to speak of — see the blank repoPath handed to CodingStatusRow below.
+  // Three stores: the scope set records the answer, and resolving this runtime
+  // id to the stored one it is filed under reads the other two.
+  const botChat = useStoresSelector([$botChatSessionIds, $sessionStates, $sessionTiles], () =>
+    isBotChatSession(sessionId)
+  )
+
+  const canonicalOwner = useStoresSelector([$connection, $connectionWires, $sessionStates], () =>
+    serverOwnsComposerQueue(sessionId ?? activeQueueSessionKey)
+  )
+
+  const yieldFirst = botChat && canonicalOwner
+
   const hasComposerPayload = hasText || attachments.length > 0
   const { cardWaiting } = useCardWaitingSubmit(sessionId ?? null, busy, hasComposerPayload)
 
@@ -410,7 +425,8 @@ export function ChatBar({
     compacting,
     hasComposerPayload,
     hasSteerHandler: !!onSteer,
-    isSteerableText
+    isSteerableText,
+    yieldFirst
   })
 
   // The submit engine — the orchestration seam where draft + queue meet. Owns
@@ -444,7 +460,8 @@ export function ChatBar({
     setComposerText,
     stashAt,
     rememberDraftRetry,
-    takeDraftRetry
+    takeDraftRetry,
+    yieldFirst
   })
 
   // Resting / reconnecting / starting placeholder text, re-rolled only on a real
@@ -1059,14 +1076,6 @@ export function ChatBar({
     handleInputDrop
   } = useComposerDrop({ cwd, insertInlineRefs, onAttachDroppedItems, recordUndoPoint, requestMainFocus, sessionId })
 
-  // A bot chat is a companion conversation, not a working session, so it has no
-  // repo to speak of — see the blank repoPath handed to CodingStatusRow below.
-  // Three stores: the scope set records the answer, and resolving this runtime
-  // id to the stored one it is filed under reads the other two.
-  const botChat = useStoresSelector([$botChatSessionIds, $sessionStates, $sessionTiles], () =>
-    isBotChatSession(sessionId)
-  )
-
   // Branch / worktree hand-offs (CodingStatusRow). Owns the worktree open +
   // branch-off/convert/list/switch actions; draft travels into the new session.
   const { handleBranchOff, handleConvertBranch, handleListBranches, handleSwitchBranch, openInWorktree } =
@@ -1149,6 +1158,7 @@ export function ChatBar({
         queueDraft()
       }}
       onSteer={canSteer ? () => steerDraft('steer') : undefined}
+      onStop={yieldFirst ? () => void Promise.resolve(haltRun()) : undefined}
       onToggleAutoSpeak={handleToggleAutoSpeak}
       state={state}
       voiceStatus={voiceStatus}
