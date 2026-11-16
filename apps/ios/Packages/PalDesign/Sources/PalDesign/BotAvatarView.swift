@@ -55,6 +55,7 @@ public struct BotAvatarView: View {
             look: look
         )
         .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.7), value: look)
+        .allowsHitTesting(false)
         .frame(width: size, height: size)
         .modifier(PointerLook(look: $look, size: size, reach: pointerReach))
         .accessibilityHidden(true)
