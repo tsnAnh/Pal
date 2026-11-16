@@ -24,7 +24,7 @@ struct MessageImagesTests {
         #expect(content.images.count == 1)
     }
 
-    @Test("a received message with MEDIA tags yields image items; other attachments and prose stay")
+    @Test("a received message with MEDIA tags yields image items and file items; prose stays")
     func receivedMessage() {
         let content = MessageImages.extract(
             from: "Here is the chart.\nMEDIA:/h/cache/images/chart.png\nAnd the report MEDIA:/h/cache/documents/report.pdf",
@@ -32,7 +32,8 @@ struct MessageImagesTests {
         )
         #expect(content.images.map(\.name) == ["chart.png"])
         #expect(content.text.contains("Here is the chart."))
-        #expect(content.text.contains("MEDIA:/h/cache/documents/report.pdf"))
+        #expect(content.text == "Here is the chart.\nAnd the report")
+        #expect(content.files.map(\.name) == ["report.pdf"])
         #expect(!content.text.contains("chart.png"))
     }
 

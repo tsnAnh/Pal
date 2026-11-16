@@ -189,6 +189,12 @@ class LibraryIndex:
             ts_us, order_us, session_id, message_id))
 
     @staticmethod
+    def assistant_message_ids(db, ids: list[int]) -> set[int]:
+        with db._read_ctx() as source:
+            return {row[0] for row in source.execute(
+                f"SELECT id FROM messages WHERE id IN ({','.join('?' * len(ids))}) AND role = 'assistant'", ids)}
+
+    @staticmethod
     def live_message_ids(db, ids: list[int]) -> set[int]:
         live: set[int] = set()
         with db._read_ctx() as source:

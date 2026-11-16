@@ -247,10 +247,33 @@ public actor ChatSession: OutboxSubmitter {
     }
 
     public func imageAsset(ref: String, thumbnail: Bool) async throws -> Data {
+        try await assetAPI().libraryAsset(ref: ref, thumbnail: thumbnail)
+    }
+
+    public func fileAsset(ref: String) async throws -> Data {
+        try await assetAPI().libraryFile(ref: ref, maxBytes: Self.fileDownloadLimit)
+    }
+
+    public func fileAvailability(ref: String) async throws -> FileAvailability {
+        do {
+            _ = try await assetAPI().libraryFile(ref: ref, maxBytes: 1)
+            return .available
+        } catch {
+            switch ImageLoadFailure.rpcCode(of: error) {
+            case 4152: return .available
+            case 4151: return .unavailable
+            default: throw error
+            }
+        }
+    }
+
+    private static let fileDownloadLimit = 16_000_000
+
+    private func assetAPI() async throws -> SessionAPI {
         if api == nil { _ = await awaitState { if case .live = $0.phase { true } else { false } } }
         try Task.checkCancellation()
         guard let api else { throw ChatError.notConnected }
-        return try await api.libraryAsset(ref: ref, thumbnail: thumbnail)
+        return api
     }
 
     public func attachFile(_ data: Data, name: String, mime: String) async throws -> StagedFile {
