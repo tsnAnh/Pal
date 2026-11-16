@@ -154,13 +154,13 @@ def _pack(*parts) -> str:
 def _unpack(token: str, prefix: str, strings: int, ints: int) -> tuple:
     try:
         parts = json.loads(base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)))
-        head, rest = parts[0], parts[1:]
-        if (head != prefix or len(rest) != strings + ints or not all(isinstance(p, str) for p in rest[:strings])
-                or not all(type(p) is int and p >= 0 for p in rest[strings:])):
-            raise ValueError
-    except (ValueError, TypeError, IndexError):
+    except (ValueError, TypeError):
         raise SnapshotRequired("invalid_cursor") from None
-    return tuple(rest)
+    if (not isinstance(parts, list) or len(parts) != 1 + strings + ints or parts[0] != prefix
+            or not all(isinstance(p, str) for p in parts[1:1 + strings])
+            or not all(type(p) is int and p >= 0 for p in parts[1 + strings:])):
+        raise SnapshotRequired("invalid_cursor")
+    return tuple(parts[1:])
 
 
 def _decode_cursor(cursor: str) -> tuple[str, str, str, int, int]:
