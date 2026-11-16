@@ -92,6 +92,8 @@ struct Timeline: Sendable {
     private var boundaries: [String: String?] = [:]
     private var alias: [TimelineRef: RowKey] = [:]
     private var liveKeys: [String: RowKey] = [:]
+    private var anchors: [RowKey: RowKey] = [:]
+    private var forwarded: [RowKey: RowKey] = [:]
     private var nextKey: UInt64 = 1
     private var failedAttempts = 0
     private var generation = 0
@@ -216,23 +218,66 @@ struct Timeline: Sendable {
     }
 
     func rows(links: [BotThreadLink]) -> [ChatTimelineRow] {
-        var rows: [ChatTimelineRow] = []
-        for entry in settled {
-            for part in entry.parts {
-                rows.append(ChatTimelineRow(id: part.key, item: part.item, entryID: entry.wire.id, rowID: entry.wire.rowID))
+        Self.fold(placed().filter(Self.isShown), links: links)
+    }
+
+    private func placed() -> [ChatTimelineRow] {
+        let stored = settled.flatMap { entry in
+            entry.parts.map { ChatTimelineRow(id: $0.key, item: $0.item, entryID: entry.wire.id, rowID: entry.wire.rowID) }
+        }
+        let overlay = live.items.compactMap { item in
+            liveKeys[item.id].map { ChatTimelineRow(id: $0, item: item, entryID: nil, rowID: nil) }
+        }
+        guard !overlay.isEmpty else { return stored }
+        let present = Set(stored.map(\.id)).union(overlay.map(\.id))
+        var following: [RowKey: [ChatTimelineRow]] = [:]
+        var trailing: [ChatTimelineRow] = []
+        for row in overlay {
+            if let anchor = anchor(of: row.id, among: present) {
+                following[anchor, default: []].append(row)
+            } else {
+                trailing.append(row)
             }
         }
-        for item in live.items {
-            guard let key = liveKeys[item.id] else { continue }
-            rows.append(ChatTimelineRow(id: key, item: item, entryID: nil, rowID: nil))
+        var ordered: [ChatTimelineRow] = []
+        ordered.reserveCapacity(stored.count + overlay.count)
+        func emit(_ row: ChatTimelineRow) {
+            ordered.append(row)
+            for next in following.removeValue(forKey: row.id) ?? [] { emit(next) }
         }
-        return Self.fold(rows.filter(Self.isShown), links: links)
+        stored.forEach(emit)
+        trailing.forEach(emit)
+        return ordered
+    }
+
+    private func anchor(of key: RowKey, among present: Set<RowKey>) -> RowKey? {
+        var cursor = anchors[key]
+        for _ in 0...anchors.count {
+            guard let current = cursor else { return nil }
+            if present.contains(current) { return current }
+            cursor = forwarded[current] ?? anchors[current]
+        }
+        return nil
     }
 
     private mutating func assignLiveKeys() {
-        for item in live.items where liveKeys[item.id] == nil {
-            liveKeys[item.id] = mint()
-            liveBirth[item.id] = generation
+        let items = live.items
+        guard let lastPainted = items.lastIndex(where: { liveKeys[$0.id] != nil }) ?? (items.isEmpty ? nil : -1),
+              items.contains(where: { liveKeys[$0.id] == nil })
+        else { return }
+        var tail = placed().last?.id
+        for index in items.indices where liveKeys[items[index].id] == nil {
+            let key = mint()
+            liveKeys[items[index].id] = key
+            liveBirth[items[index].id] = generation
+            if index < lastPainted {
+                anchors[key] = index > 0
+                    ? liveKeys[items[index - 1].id]
+                    : items.dropFirst().compactMap { liveKeys[$0.id] }.first.flatMap { anchors[$0] }
+            } else {
+                anchors[key] = tail
+                tail = key
+            }
         }
     }
 
@@ -286,17 +331,22 @@ struct Timeline: Sendable {
     private mutating func rebuild(_ wires: [TimelineEntryWire], fresh: Set<String>, textMatch: Bool) {
         generation += 1
         let previous = alias
+        let receipted = receiptMatches(wires)
         alias = [:]
         var used: Set<RowKey> = []
         var bound: Set<String> = []
+        var late: [String: RowKey] = [:]
         var built: [Settled] = []
         built.reserveCapacity(wires.count)
         for wire in wires {
             var parts: [Part] = []
             var matched = false
             for (item, refs) in Self.project(wire) {
+                let spoken = item.isAssistant ? receipted[wire.id] : nil
                 var key = refs.lazy.compactMap { previous[$0] }.first { !used.contains($0) }
-                if key == nil, fresh.contains(wire.id), let match = liveMatch(item, refs: refs, textMatch: textMatch, excluding: bound) {
+                if key == nil, fresh.contains(wire.id),
+                   let match = liveMatch(item, refs: refs, rowID: wire.rowID, receipted: spoken, textMatch: textMatch, excluding: bound)
+                {
                     bound.insert(match)
                     key = liveKeys[match]
                     matched = true
@@ -304,6 +354,7 @@ struct Timeline: Sendable {
                 let resolved = key ?? mint()
                 used.insert(resolved)
                 for ref in refs { alias[ref] = resolved }
+                if let spoken, !bound.contains(spoken) { late[spoken] = resolved }
                 parts.append(Part(key: resolved, item: item))
             }
             built.append(Settled(wire: wire, parts: parts))
@@ -315,15 +366,26 @@ struct Timeline: Sendable {
         unbound = unbound.filter { positions[$0.key] != nil }
         live.dropLiveItems(bound)
         for id in bound { liveKeys[id] = nil }
-        settleOverlay()
+        settleOverlay(late)
     }
 
-    private mutating func settleOverlay() {
-        let settledItems = Set(live.items.filter { item in
-            !Self.isStreaming(item) && Self.liveRefs(item).contains { alias[$0] != nil }
-        }.map(\.id))
+    private mutating func settleOverlay(_ late: [String: RowKey] = [:]) {
+        var settledKeys = late
+        let textKeys = Dictionary(settled.flatMap { entry in
+            entry.parts.filter(\.item.isAssistant).map { (entry.wire.id, $0.key) }
+        }, uniquingKeysWith: { first, _ in first })
+        for (wireID, liveID) in receiptMatches(settledWires) where settledKeys[liveID] == nil {
+            settledKeys[liveID] = textKeys[wireID]
+        }
+        let aliases = alias
+        for item in live.items where !Self.isStreaming(item) && settledKeys[item.id] == nil {
+            settledKeys[item.id] = Self.liveRefs(item).lazy.compactMap { aliases[$0] }.first
+        }
+        let settledItems = Set(live.items.map(\.id)).intersection(settledKeys.keys)
+        for id in settledItems {
+            if let liveKey = liveKeys.removeValue(forKey: id), let key = settledKeys[id], key != liveKey { forwarded[liveKey] = key }
+        }
         live.dropLiveItems(settledItems)
-        for id in settledItems { liveKeys[id] = nil }
         assignLiveKeys()
         bindLate()
     }
@@ -350,11 +412,36 @@ struct Timeline: Sendable {
         liveBirth = liveBirth.filter { liveKeys[$0.key] != nil }
     }
 
-    private func liveMatch(_ item: TranscriptItem, refs: [TimelineRef], textMatch: Bool, excluding bound: Set<String>) -> String? {
+    private func receiptMatches(_ wires: [TimelineEntryWire]) -> [String: String] {
+        var spokenByTurn: [Set<Int>: (count: Int, ids: [Int: String])] = [:]
+        for item in live.items where !Self.isStreaming(item) {
+            guard let receipt = item.receipt else { continue }
+            spokenByTurn[receipt.rowIDs, default: (receipt.count, [:])].ids[receipt.ordinal] = item.id
+        }
+        var matches: [String: String] = [:]
+        for (rows, spoken) in spokenByTurn {
+            let stored = wires.filter { wire in
+                wire.role == .assistant && wire.rowID.map(rows.contains) == true && !Transcript.isBlank(wire.text)
+            }
+            guard stored.count == spoken.count else { continue }
+            for (ordinal, wire) in stored.enumerated() {
+                if let id = spoken.ids[ordinal] { matches[wire.id] = id }
+            }
+        }
+        return matches
+    }
+
+    private func liveMatch(
+        _ item: TranscriptItem, refs: [TimelineRef], rowID: Int?, receipted: String?, textMatch: Bool, excluding bound: Set<String>
+    ) -> String? {
         let candidates = live.items.filter { !bound.contains($0.id) && !Self.isStreaming($0) }
         if let byRef = candidates.first(where: { !Set(Self.liveRefs($0)).isDisjoint(with: refs) }) { return byRef.id }
+        if let receipted, candidates.contains(where: { $0.id == receipted }) { return receipted }
         guard textMatch else { return nil }
-        return candidates.first { Self.sameText($0, item) }?.id
+        return candidates.first { candidate in
+            candidate.uid == nil && Self.sameText(candidate, item)
+                && candidate.receipt.map { receipt in rowID.map(receipt.rowIDs.contains) ?? false } != false
+        }?.id
     }
 
     private static func sameText(_ live: TranscriptItem, _ stored: TranscriptItem) -> Bool {
@@ -363,7 +450,7 @@ struct Timeline: Sendable {
             let body = MessageImages.extract(from: b, role: .user)
             guard live.carriesImage == !body.images.isEmpty else { return false }
             return Transcript.sameBody(a, body.text) || (live.carriesImage && body.text.isEmpty)
-        case (.assistant(let a, _, false), .assistant(let b, _, _)): return !a.isEmpty && Transcript.sameBody(a, b)
+        case (.assistant(let a, _, false), .assistant(let b, _, _)): return !Transcript.isBlank(a) && Transcript.sameBody(a, b)
         default: return false
         }
     }

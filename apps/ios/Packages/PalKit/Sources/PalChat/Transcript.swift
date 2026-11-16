@@ -62,6 +62,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
     public var inbound: InboundKind = .person
     var liveSegment: LiveSegment?
     var carriesImage = false
+    var receipt: TurnReceipt?
 
     public init(
         id: String,
@@ -80,9 +81,22 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
     }
 }
 
+extension TranscriptItem {
+    var isAssistant: Bool {
+        if case .assistant = content { return true }
+        return false
+    }
+}
+
 struct LiveSegment: Sendable, Hashable {
     var turnID: String
     var segment: Int
+}
+
+struct TurnReceipt: Sendable, Hashable {
+    var rowIDs: Set<Int>
+    var ordinal: Int
+    var count: Int
 }
 
 public enum ApplyOutcome: Sendable, Hashable {
@@ -109,6 +123,7 @@ public struct Transcript: Sendable, Equatable {
     private var segmentLengths: [Int: Int] = [:]
     private var currentSegment: Int?
     private var streamingID: String?
+    private var openTurnID: String?
     private var turnOpenings: [String: String] = [:]
     private var approvalChoices: [String: String] = [:]
     private var admissionInputs: [String: String] = [:]
@@ -209,6 +224,7 @@ public struct Transcript: Sendable, Equatable {
         segmentLengths = [:]
         currentSegment = nil
         streamingID = nil
+        openTurnID = nil
         turnOpenings = [:]
     }
 
@@ -401,22 +417,11 @@ public struct Transcript: Sendable, Equatable {
             lastError = nil
             sealStreaming()
             confirmOldestEcho()
-            _ = start
+            openTurnID = start.turnID
         case .messageDelta(let delta):
             appendDelta(delta)
         case .messageInterim(let interim):
-            let streamedHere = streamingIndex != nil
-            sealStreaming()
-            if !interim.text.isEmpty, !(interim.alreadyStreamed == true && streamedHere), !hasAssistantText(interim.text) {
-                var item = TranscriptItem(
-                    id: "interim:\(interim.turnID ?? "turn"):\(interim.segment ?? items.count)",
-                    content: .assistant(text: interim.text, reasoning: "", isStreaming: false)
-                )
-                if let turnID = interim.turnID, let segment = interim.segment {
-                    item.liveSegment = LiveSegment(turnID: turnID, segment: segment)
-                }
-                items.append(item)
-            }
+            sealInterim(interim, sealed: sealStreaming())
             segmentLengths = [:]
             currentSegment = nil
         case .messageComplete(let complete):
@@ -540,7 +545,7 @@ public struct Transcript: Sendable, Equatable {
         return result
     }
 
-    private static func isBlank(_ text: String) -> Bool {
+    static func isBlank(_ text: String) -> Bool {
         text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
@@ -625,6 +630,7 @@ public struct Transcript: Sendable, Equatable {
     private mutating func finishTurn(_ complete: MessageComplete) {
         isRunning = false
         if let error = complete.error, !error.isEmpty { lastError = error }
+        var finalID: String?
         if let index = streamingIndex, case .assistant(let existing, let reasoning, true) = items[index].content {
             let final = complete.text.isEmpty ? existing : complete.text
             if final.isEmpty, reasoning.isEmpty {
@@ -632,6 +638,7 @@ public struct Transcript: Sendable, Equatable {
             } else {
                 items[index].content = .assistant(text: final, reasoning: reasoning, isStreaming: false)
                 items[index].uid = complete.identity.messageUID ?? items[index].uid
+                finalID = items[index].id
             }
         } else if !complete.text.isEmpty, !hasAssistantInCurrentTurn(text: complete.text) {
             var item = TranscriptItem(
@@ -643,7 +650,9 @@ public struct Transcript: Sendable, Equatable {
                 item.liveSegment = LiveSegment(turnID: turnID, segment: segment)
             }
             items.append(item)
+            finalID = item.id
         }
+        stampReceipt(turnID: complete.identity.turnID ?? openTurnID, rowIDs: complete.identity.rowIDs, finalID: finalID)
         for index in items.indices {
             if case .tool(var call) = items[index].content, call.status == .running {
                 call.status = .finished
@@ -653,16 +662,52 @@ public struct Transcript: Sendable, Equatable {
         streamingID = nil
         segmentLengths = [:]
         currentSegment = nil
+        openTurnID = nil
     }
 
-    private mutating func sealStreaming() {
+    private mutating func stampReceipt(turnID: String?, rowIDs: [Int], finalID: String?) {
+        guard let turnID, !rowIDs.isEmpty else { return }
+        let spoken = items.indices.filter { index in
+            let item = items[index]
+            guard item.liveSegment?.turnID == turnID || item.id == finalID,
+                  case .assistant(let text, _, false) = item.content else { return false }
+            return !Self.isBlank(text) && !TranscriptVisibility.isHidden(item)
+        }
+        let rows = Set(rowIDs)
+        for (ordinal, index) in spoken.enumerated() {
+            items[index].receipt = TurnReceipt(rowIDs: rows, ordinal: ordinal, count: spoken.count)
+        }
+    }
+
+    @discardableResult
+    private mutating func sealStreaming() -> String? {
         defer { streamingID = nil }
-        guard let index = streamingIndex, case .assistant(let text, let reasoning, true) = items[index].content else { return }
+        guard let index = streamingIndex, case .assistant(let text, let reasoning, true) = items[index].content else { return nil }
         if text.isEmpty, reasoning.isEmpty {
             items.remove(at: index)
-        } else {
-            items[index].content = .assistant(text: text, reasoning: reasoning, isStreaming: false)
+            return nil
         }
+        items[index].content = .assistant(text: text, reasoning: reasoning, isStreaming: false)
+        return items[index].id
+    }
+
+    private mutating func sealInterim(_ interim: MessageInterim, sealed: String?) {
+        let segment = interim.turnID.flatMap { turnID in interim.segment.map { LiveSegment(turnID: turnID, segment: $0) } }
+        let owner = segment.flatMap { segment in items.lastIndex { $0.liveSegment == segment && $0.isAssistant } }
+            ?? sealed.flatMap { id in items.firstIndex { $0.id == id } }
+        if let owner {
+            if !interim.text.isEmpty, case .assistant(_, let reasoning, _) = items[owner].content {
+                items[owner].content = .assistant(text: interim.text, reasoning: reasoning, isStreaming: false)
+            }
+            return
+        }
+        guard !interim.text.isEmpty, !hasAssistantText(interim.text) else { return }
+        var item = TranscriptItem(
+            id: "interim:\(interim.turnID ?? "turn"):\(interim.segment ?? items.count)",
+            content: .assistant(text: interim.text, reasoning: "", isStreaming: false)
+        )
+        item.liveSegment = segment
+        items.append(item)
     }
 
     private func hasAssistantText(_ text: String) -> Bool {
