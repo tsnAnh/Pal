@@ -27,6 +27,7 @@ _HIMALAYA_AUTH_FAILURE = re.compile(
     r"authentication\s*failed|authenticationfailed|invalid credentials|\blogin failed|\bauthenticate failed"
     r"|\b535\b.{0,60}(?:auth|credential|password)|username and password not accepted|bad credentials"
     r"|\[AUTH\]|application-specific password required", re.IGNORECASE)
+_HIMALAYA_SECRET_COMMAND_ERROR = re.compile(r"\bError: Secret command error\b")
 _HIMALAYA_MISSING = re.compile(r"himalaya:\s*(?:command )?not found|no such file or directory.{0,20}himalaya", re.IGNORECASE)
 _MARKERS = ('"auth_required"', '"needs_reauth"', '"CONNECTION_REQUIRED"', '"CONNECTION_EXPIRED"')
 
@@ -101,6 +102,8 @@ def match_himalaya_failure(command: str, output: str, exit_code: Any) -> Optiona
         return None
     if not isinstance(command, str) or not isinstance(output, str) or not _invokes(command, "himalaya"):
         return None
+    if _HIMALAYA_SECRET_COMMAND_ERROR.search(output[:2000]):
+        return AuthNeed(EMAIL_SERVICE, "missing", flow="api_key")
     if _HIMALAYA_AUTH_FAILURE.search(output[-2000:]):
         return AuthNeed(EMAIL_SERVICE, "expired", flow="api_key")
     return None
