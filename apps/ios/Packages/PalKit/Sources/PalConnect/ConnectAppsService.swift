@@ -92,9 +92,10 @@ public struct ConnectAppsService: Sendable {
         async let presets = attempt { try decodeList(await call("mcp.catalog"), key: "servers", as: McpPresetEntry.self) }
         async let skills = attempt { InstalledSkill.parse(try await call("skills.manage", ["action": "list"])) }
         async let servers = attempt { try decodeList(await call("mcp.servers.list"), key: "servers", as: McpServerEntry.self) }
-        let (hostedResult, statesResult, presetsResult, skillsResult, serversResult) = await (hosted, states, presets, skills, servers)
+        async let google = attempt { try await GoogleWorkspaceService(rpc: rpc, diagnostics: diagnostics).status() }
+        let (hostedResult, statesResult, presetsResult, skillsResult, serversResult, googleResult) = await (hosted, states, presets, skills, servers, google)
         if hostedResult == nil, presetsResult == nil { throw ConnectAppsError.unavailable }
-        return ConnectCatalog.make(hosted: hostedResult ?? [], states: statesResult ?? [], mcp: presetsResult ?? [], skills: skillsResult ?? [], servers: serversResult ?? [])
+        return ConnectCatalog.make(hosted: hostedResult ?? [], states: statesResult ?? [], mcp: presetsResult ?? [], skills: skillsResult ?? [], servers: serversResult ?? [], google: googleResult)
     }
 
     private func attempt<T: Sendable>(_ work: () async throws -> T) async -> T? {
@@ -116,6 +117,7 @@ public struct ConnectAppsService: Sendable {
         case .mcp(let name, let requires): try await connectMcp(name: name, requires: requires, credentials: credentials)
         case .custom(let info):
             do { _ = try await testCustomConnector(name: info.name) } catch { throw ConnectAppsError.failed }
+        case .googleWorkspace: throw ConnectAppsError.unavailable
         }
     }
 
@@ -124,6 +126,8 @@ public struct ConnectAppsService: Sendable {
         case .hosted(let slug): try await disconnectHosted(slug: slug)
         case .mcp(let name, _): _ = try await call("mcp.servers.remove", ["name": .string(name)])
         case .custom(let info): _ = try await call("mcp.servers.remove", ["name": .string(info.name)])
+        case .googleWorkspace:
+            do { _ = try await GoogleWorkspaceService(rpc: rpc, diagnostics: diagnostics).signOut() } catch { throw ConnectAppsError.failed }
         }
     }
 

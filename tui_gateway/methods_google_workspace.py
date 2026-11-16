@@ -58,7 +58,14 @@ def _(rid, params: dict) -> dict:
 
 @method("google_workspace.signin.finish")
 def _(rid, params: dict) -> dict:
-    return _google_owner_only(rid, lambda gw: gw.finish_signin(params["flow_id"], params["pasted"]))
+    def finish(gw):
+        outcome = gw.finish_signin(params["flow_id"], params["pasted"])
+        if outcome.get("state") == "signed_in":
+            from gateway import auth_prompts
+            from tools.auth_required import GOOGLE_WORKSPACE_SERVICE
+            auth_prompts.complete_from_thread(gw._home(), GOOGLE_WORKSPACE_SERVICE)
+        return outcome
+    return _google_owner_only(rid, finish)
 
 
 @method("google_workspace.signin.cancel")

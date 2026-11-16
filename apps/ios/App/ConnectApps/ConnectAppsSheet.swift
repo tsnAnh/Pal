@@ -30,6 +30,7 @@ struct ConnectAppsSheet: View {
             }
         }
         .task { await model.start() }
+        .googleAuthTracking(model.google)
         .onDisappear { Task { await model.stop() } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.devices.refresh() } }
@@ -57,6 +58,10 @@ struct ConnectAppsSheet: View {
         }
         .sheet(item: $model.upworkApp) { app in
             UpworkConnectionSheet(model: model, app: app)
+                .macSheetFrame()
+        }
+        .sheet(item: $model.googleApp) { _ in
+            GoogleWorkspaceSheet(model: model.google)
                 .macSheetFrame()
         }
         .sheet(item: $model.pastingApp, onDismiss: { Task { await model.cancelPaste() } }) { app in
@@ -300,9 +305,24 @@ struct ConnectAppsSheet: View {
         ) { icon(for: app) }
     }
 
+    private func googleRow(_ listed: ConnectApp) -> some View {
+        let app = model.googleRow(listed)
+        return ConnectAppRow(
+            title: app.name, summary: GoogleWorkspaceText.summary(app), accessibilityIdentifier: "connectApp-\(app.id)",
+            isBusy: model.google.isSigningIn,
+            trailing: ConnectRowAction(GoogleWorkspaceText.actionTitle(app.state), kind: app.state == .needsAuthorization ? .accent : .neutral) { model.googleApp = app }
+        ) { icon(for: app) }
+    }
+
     @ViewBuilder
     private func appRow(_ app: ConnectApp) -> some View {
-        if app.requiresAppSignIn { upworkRow(app) } else { plainRow(app) }
+        if app.requiresAppSignIn {
+            upworkRow(app)
+        } else if app.source == .googleWorkspace {
+            googleRow(app)
+        } else {
+            plainRow(app)
+        }
     }
 
     private func plainRow(_ app: ConnectApp) -> some View {
@@ -331,7 +351,7 @@ struct ConnectAppsSheet: View {
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
         case .hosted: RemoteLogoTile(url: app.iconURL)
-        case .mcp, .custom: PluginGlyphTile()
+        case .mcp, .custom, .googleWorkspace: PluginGlyphTile()
         }
     }
 }

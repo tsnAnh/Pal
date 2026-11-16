@@ -48,7 +48,11 @@ struct PalApp: App {
             call: { method, params in try await model.rpc(method, params) },
             openBrowser: { _ = ExternalLink.open($0) },
             nativeSignIn: UpworkSignIn.serviceHandler(connection: model),
-            pasteSignIn: UpworkSignIn.servicePasteRoute(connection: model)
+            pasteSignIn: .routing(
+                [GoogleWorkspaceCatalog.serviceID: GoogleSignIn.servicePasteRoute(connection: model)],
+                fallback: UpworkSignIn.servicePasteRoute(connection: model)
+            ),
+            pasteOnlyServices: [GoogleWorkspaceCatalog.serviceID]
         )
         _signIn = State(initialValue: signIn)
         _autoApprove = State(initialValue: ActionAutoApprove { method, params in try await model.rpc(method, params) })
