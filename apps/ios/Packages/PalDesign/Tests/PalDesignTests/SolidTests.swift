@@ -18,7 +18,7 @@ private func resolved(
 }
 
 private func eyeCentre(_ frame: SolidFrame) -> CGPoint {
-    let centres = frame.eyes.map { centroid(of: $0.path) }
+    let centres = frame.eyes.map { centroid(of: $0) }
     return CGPoint(x: centres.map(\.x).reduce(0, +) / Double(centres.count), y: centres.map(\.y).reduce(0, +) / Double(centres.count))
 }
 
@@ -162,7 +162,7 @@ struct SolidEyeTests {
         #expect(mesh.eyes.count == 2)
         let middle = eyeCentre(mesh)
         #expect(middle.x > origin.x + 2 && middle.y < origin.y - 2)
-        for eye in mesh.eyes { #expect(raster.coverage(at: centroid(of: eye.path)) == 1) }
+        for eye in mesh.eyes { #expect(raster.coverage(at: centroid(of: eye)) == 1) }
     }
 
     @Test("pointing at the centre centres both eyes and stands them upright", arguments: ["circle", "blobatar:k7q2m9x0:round", "pill"])
@@ -172,8 +172,8 @@ struct SolidEyeTests {
         let origin = avatar.projection(size: size, inset: inset).point(SIMD2(0, SolidTuning.eye.y))
         let middle = eyeCentre(mesh)
         #expect(abs(middle.x - origin.x) < 0.5 && abs(middle.y - origin.y) < 0.5)
-        for eye in mesh.eyes { #expect(verticalTilt(of: eye.path) < 2, "\(shape) tilt \(verticalTilt(of: eye.path))") }
-        let ys = mesh.eyes.map { centroid(of: $0.path).y }
+        for eye in mesh.eyes { #expect(verticalTilt(of: eye) < 2, "\(shape) tilt \(verticalTilt(of: eye))") }
+        let ys = mesh.eyes.map { centroid(of: $0).y }
         #expect(abs(ys[0] - ys[1]) < 0.5)
     }
 
@@ -195,21 +195,31 @@ struct SolidEyeTests {
         #expect(frame(avatar, SolidPose(pitch: yaw)).eyes.isEmpty)
     }
 
-    @Test("an eye rolling over the limb is cut off and stays on the body", arguments: [55.0, 62, 70, 76])
-    func limbEyesStayInside(yaw: Double) {
-        let avatar = solid("circle")
-        let mesh = frame(avatar, SolidPose(yaw: yaw))
-        let raster = Raster(filling: mesh.silhouette)
-        #expect(mesh.eyes.count >= 1)
-        let origin = avatar.projection(size: size, inset: inset).origin
-        let radius = mesh.silhouette.boundingRect.width / 2
-        let slack = 0.03 * avatar.projection(size: size, inset: inset).unit
-        for eye in mesh.eyes {
-            for point in vertices(of: eye.path) {
-                #expect(hypot(point.x - origin.x, point.y - origin.y) <= radius + slack, "eye leaves the body at yaw \(yaw)")
-                #expect(raster.coverage(at: point) > 0 || hypot(point.x - origin.x, point.y - origin.y) > radius - 1)
+    @Test("the eyes turn as a pair: never one eye alone, and a pair crossing the edge is clipped together", arguments: ["circle", "blobatar:k7q2m9x0:round", "pill", "blobatar:k7q2m9x0:spark"])
+    func eyePair(shape: String) {
+        let avatar = solid(shape)
+        let turns = stride(from: -180.0, through: 180, by: 3)
+        let poses = turns.map { SolidPose(yaw: $0) } + turns.map { SolidPose(pitch: $0) }
+            + turns.map { SolidPose(yaw: $0, pitch: 25, roll: -14) } + turns.map { SolidPose(yaw: 40, pairSpin: $0) }
+        for pose in poses {
+            let mesh = frame(avatar, pose)
+            #expect(mesh.eyes.count == 0 || mesh.eyes.count == 2, "\(shape) shows \(mesh.eyes.count) eye at \(pose)")
+            guard mesh.eyes.count == 2 else { continue }
+            let raster = Raster(filling: mesh.silhouette)
+            for eye in mesh.eyes {
+                let inside = vertices(of: eye).filter { raster.coverage(at: $0) > 0 }.count
+                #expect(inside == vertices(of: eye).count || mesh.eyesNearEdge, "\(shape) eye leaves the body unclipped at \(pose)")
             }
         }
+    }
+
+    @Test("a facing pair is fully opaque and fades out as it reaches the edge")
+    func eyePairFade() {
+        let avatar = solid("circle")
+        #expect(frame(avatar, SolidPose()).eyeOpacity == 1)
+        let fades = stride(from: 0.0, through: 90, by: 2).map { frame(avatar, SolidPose(yaw: $0)).eyeOpacity }
+        #expect(zip(fades, fades.dropFirst()).allSatisfy { $1 <= $0 + 1e-9 })
+        #expect(fades.last == 0 || frame(avatar, SolidPose(yaw: 90)).eyes.isEmpty)
     }
 
     @Test("happy and dot eyes keep their shape on the surface")
@@ -217,12 +227,12 @@ struct SolidEyeTests {
         let avatar = solid("circle")
         let flat = frame(avatar, SolidPose(eyeDot: 1)).eyes
         for eye in flat {
-            let bounds = eye.path.boundingRect
+            let bounds = eye.boundingRect
             #expect(abs(bounds.width - bounds.height) / bounds.width < 0.08)
         }
         let happy = frame(avatar, SolidPose(eyeHappy: 1)).eyes
         #expect(happy.count == 2)
-        for eye in happy { #expect(eye.path.boundingRect.width > eye.path.boundingRect.height) }
+        for eye in happy { #expect(eye.boundingRect.width > eye.boundingRect.height) }
     }
 
     @Test("every shape builds a mesh whose eyes land inside it", arguments: SolidTestShapes.all)
@@ -231,7 +241,7 @@ struct SolidEyeTests {
         let mesh = frame(avatar, resolved(avatar))
         let raster = Raster(filling: mesh.silhouette)
         #expect(mesh.eyes.count == 2)
-        for eye in mesh.eyes { #expect(raster.coverage(at: centroid(of: eye.path)) == 1, "\(shape)") }
+        for eye in mesh.eyes { #expect(raster.coverage(at: centroid(of: eye)) == 1, "\(shape)") }
         #expect(avatar.geometry.radius > 0 && avatar.geometry.surface.rim.allSatisfy { $0 > 0.5 })
     }
 }

@@ -19,13 +19,10 @@ struct SolidRotation {
 }
 
 struct SolidFrame {
-    struct Eye {
-        var path: Path
-        var nearLimb: Bool
-    }
-
     let silhouette: Path
-    let eyes: [Eye]
+    let eyes: [Path]
+    let eyeOpacity: Double
+    let eyesNearEdge: Bool
     private let visibleTriangles: [Int32]
     private let corners: [CGPoint]
 
@@ -63,9 +60,10 @@ struct SolidFrame {
         silhouette = Path(path)
         visibleTriangles = visible
         self.corners = corners
-        eyes = SolidEyes.outlines(pose, surface: geometry.surface, rotation: rotation).map { outline in
-            Eye(path: Self.rounded(outline.points.map(projection.point)), nearLimb: outline.nearLimb)
-        }
+        let pair = SolidEyes.pair(pose, surface: geometry.surface, rotation: rotation)
+        eyes = pair.outlines.map { Self.rounded($0.map(projection.point)) }
+        eyeOpacity = pair.opacity
+        eyesNearEdge = pair.nearEdge
     }
 
     private static func rounded(_ points: [CGPoint]) -> Path {
