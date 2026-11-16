@@ -34,3 +34,10 @@ Any new connector, MCP preset or service tool that can fail on a missing, expire
 
 - `swift test` in `apps/ios/Packages/PalKit` covers `ConnectedServices` and the source scan.
 - UI tests pass `-hermes-record-external-links` (links are recorded, not opened; read `externalLinkProbe`) and `-hermes-test-connected-services slack` (see `BotProfileSupport.signedInApp`).
+
+## Learned
+
+- Mac UI tests: real Keychain, serial, fake creds; update: xcodegen, Release→/Applications, devicectl
+- Mac/iOS parity+shared code; no streamed text (avatar+step+dots); Liquid Glass ToolbarItems; pinned bots top; no other brands; bot Qs never expire; NO_REPLY-type markers never shown/flashed anywhere
+- Avatars: 14 blobs, 1:1:1 3D, unlit; black eyes (white→gray in light); body turns to pointer with eyes (no eyes-only/1-eye anims), upright on hover; rest eyes up-right, slanted; review render pre-build
+- T3 Code MCP: loopback <origin>/mcp (~/.t3 server-runtime.json), OAuth DCR+PKCE, no refresh; session tokens 401
