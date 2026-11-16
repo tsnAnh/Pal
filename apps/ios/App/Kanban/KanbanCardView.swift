@@ -4,21 +4,60 @@ import PalTransport
 import SwiftUI
 
 struct KanbanCardView: View {
+    enum Mode {
+        case page
+        case pane
+    }
+
     let store: KanbanStore
     let board: String
     let taskID: String
+    var mode: Mode = .page
     let openCard: (String) -> Void
     let back: () -> Void
 
     private var detail: KanbanCardDetail? { store.session.detail(board: board, taskID: taskID) }
     private var load: KanbanLoad { store.cardLoad(board: board, taskID: taskID) }
+    private var title: String { detail?.card.title ?? String(localized: "Card") }
 
     var body: some View {
-        KanbanPage(title: detail?.card.title ?? "Card", identifier: "kanbanCard", back: back, close: nil) {
-            content
+        Group {
+            switch mode {
+            case .page:
+                KanbanPage(title: title, identifier: "kanbanCard", back: back, close: nil) { content }
+            case .pane:
+                pane
+            }
         }
-        .task { await store.loadCard(board: board, taskID: taskID) }
+        .task(id: taskID) { await store.loadCard(board: board, taskID: taskID) }
         .refreshable { await store.loadCard(board: board, taskID: taskID) }
+    }
+
+    private var pane: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8) {
+                Text(title).hermesText(.rowTitle).foregroundStyle(PalTokens.textPrimary).lineLimit(1)
+                Spacer(minLength: 0)
+                Button(action: back) {
+                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(PalTokens.textSecondary)
+                        .frame(width: 28, height: 28)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Close card"))
+                .accessibilityIdentifier("kanbanCard-close")
+            }
+            .padding(.horizontal, PalMetrics.screenMargin)
+            .padding(.vertical, 10)
+            ScrollView {
+                VStack(alignment: .leading, spacing: PalMetrics.cardGap) { content }
+                    .padding(.bottom, 32)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(PalTokens.content)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("kanbanCard")
     }
 
     @ViewBuilder
@@ -30,7 +69,7 @@ struct KanbanCardView: View {
             switch load {
             case .idle, .loading, .ready:
                 LoadingRow(title: "Loading card", identifier: "kanbanCardLoading")
-            case .failed:
+            case .failed, .unreachable:
                 failure
             default:
                 KanbanUnavailable(load: load)
@@ -46,17 +85,44 @@ struct KanbanCardView: View {
 
     @ViewBuilder
     private func sections(_ detail: KanbanCardDetail) -> some View {
-        lifecycle(detail)
-        text("Description", detail.body, identifier: "kanbanBody")
+        header(detail)
+        bodySection(detail)
         text("Result", detail.result, identifier: "kanbanResult")
+        evidence(detail)
+        activity
+        lifecycle(detail)
         runs(detail)
         ciAcceptance(detail)
         outcome(detail)
         earlierProofs(detail)
-        evidence(detail)
         links("Prerequisites", detail.prerequisites, identifier: "kanbanPrerequisites")
         links("Dependents", detail.dependents, identifier: "kanbanDependents")
-        activity
+    }
+
+    private func header(_ detail: KanbanCardDetail) -> some View {
+        let row = KanbanCardRow(card: detail.card, project: store.session.cache(board)?.board?.projectID, detail: detail)
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(detail.card.title.isEmpty ? String(localized: "Untitled card") : detail.card.title)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(PalTokens.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("kanbanCardTitle")
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                KanbanBadges(row: row, now: context.date)
+            }
+        }
+        .padding(.horizontal, PalMetrics.screenMargin)
+    }
+
+    @ViewBuilder
+    private func bodySection(_ detail: KanbanCardDetail) -> some View {
+        let document = KanbanBody.parse(detail.body)
+        if !document.isEmpty || !document.metadata.isEmpty {
+            section("Description", identifier: "kanbanBody") {
+                KanbanBodyView(document: document)
+            }
+        }
     }
 
     private func section<Rows: View>(_ title: String, identifier: String, @ViewBuilder rows: () -> Rows) -> some View {
@@ -184,12 +250,20 @@ struct KanbanCardView: View {
         if !detail.evidence.isEmpty {
             section("Evidence", identifier: "kanbanEvidence") {
                 ForEach(detail.evidence) { item in
-                    SettingsRow.value(
-                        KanbanPresentation.evidenceTitle(item.kind),
-                        value: KanbanPresentation.evidenceSource(item.source),
-                        subtitle: evidenceSubtitle(item),
-                        accessibilityIdentifier: "kanbanEvidence-\(item.evidenceID)"
-                    )
+                    if let url = item.url {
+                        SettingsRow.external(
+                            KanbanPresentation.evidenceTitle(item.kind),
+                            subtitle: url.absoluteString,
+                            accessibilityIdentifier: "kanbanEvidence-\(item.evidenceID)"
+                        ) { ExternalLink.open(url) }
+                    } else {
+                        SettingsRow.value(
+                            KanbanPresentation.evidenceTitle(item.kind),
+                            value: KanbanPresentation.evidenceSource(item.source),
+                            subtitle: evidenceSubtitle(item),
+                            accessibilityIdentifier: "kanbanEvidence-\(item.evidenceID)"
+                        )
+                    }
                 }
             }
         }
@@ -226,7 +300,7 @@ struct KanbanCardView: View {
     private var activity: some View {
         let events = store.events(board: board, taskID: taskID)
         if !events.isEmpty {
-            section("Activity", identifier: "kanbanActivity") {
+            section("Timeline", identifier: "kanbanActivity") {
                 ForEach(events) { event in
                     SettingsRow.value(
                         KanbanPresentation.eventTitle(event.kind),

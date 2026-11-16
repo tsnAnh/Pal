@@ -51,7 +51,7 @@ struct KanbanReadOnlyTests {
     @Test("the UI has no write, claim, spawn, complete, merge, move or drag affordance")
     func uiHasNoWriteControls() throws {
         let files = try sources(in: "App/Kanban")
-        #expect(files.count == 4)
+        #expect(files.count == 7)
         let verbs = try Regex(#"\b(write|claim|spawn|complete|merge|assign|create|move|drag|drop|delete|archive|unblock|approve|reject|retry)[A-Za-z]*\s*\("#)
         let modifiers = [".draggable", ".onDrag", ".onDrop", ".dropDestination", ".swipeActions", ".onMove", ".contextMenu", ".onDelete", "TextField", "TextEditor"]
         for (path, text) in files {
