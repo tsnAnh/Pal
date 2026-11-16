@@ -479,6 +479,8 @@ class ModelCapabilities(Result):
     daybreak: bool = False
     reasoning: bool
     can_disable_reasoning: bool | None = None
+    # Explicit per-model effort ladder the route declares, source order; absent when the gateway has none.
+    efforts: list[str] | None = None
 
 
 class ProviderLimit(Result):

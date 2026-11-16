@@ -6,6 +6,7 @@ logger = logging.getLogger(__name__)
 _registry = HandlerRegistry()
 method = _registry.method
 
+_IMPORT_FAILED = "This template could not be imported."
 _TEMPLATE_ERROR_CODES = {
     "digest_mismatch": 4072,
     "name_unavailable": 4073,
@@ -66,9 +67,18 @@ def _commit_template(rid, params: dict, data: bytes):
         return None, _err(rid, _template_error_code(e.code), str(e))
     except (ValueError, FileExistsError) as e:
         return None, _err(rid, 4073, str(e))
-    except Exception as e:
+    except Exception:
         logger.exception("profiles.template.import failed")
-        return None, _err(rid, 5071, str(e))
+        return None, _err(rid, 5071, _IMPORT_FAILED)
+    try:
+        return _finish_import(created, params, profiles_mod), None
+    except Exception:
+        logger.exception("profiles.template.import post-steps failed")
+        bot_template.discard_profile(created["name"])
+        return None, _err(rid, 5071, _IMPORT_FAILED)
+
+
+def _finish_import(created: dict, params: dict, profiles_mod) -> dict:
     path = Path(created["path"])
     if not is_truthy_value(params.get("no_alias", False)):
         _best_effort(lambda: profiles_mod.check_alias_collision(created["name"])
@@ -79,11 +89,20 @@ def _commit_template(rid, params: dict, data: bytes):
         lambda: _pin_profile_model(path, pin["provider"], pin["default"]))
     if not model_set and is_truthy_value(params.get("mirror_credentials", True)):
         mirrored["model_inherited"] = _try(lambda: _inherit_launch_model(path), False)
-    return {"dry_run": False, "review": None, **created, "model_set": model_set, "mirrored": mirrored}, None
+    return {"dry_run": False, "review": None, **created, "model_set": model_set, "mirrored": mirrored}
+
+
+def _owner_connection_refusal(rid):
+    from tui_gateway.ws_legacy_fallback import connection_profile_home
+    if connection_profile_home() is not None:
+        return _err(rid, 4403, "Only the owner can import a bot template")
+    return None
 
 
 @method("profiles.template.import")
 def _(rid, params: dict) -> dict:
+    if refusal := _owner_connection_refusal(rid):
+        return refusal
     data, err = _template_payload(rid, params)
     if err is not None:
         return err
@@ -93,9 +112,9 @@ def _(rid, params: dict) -> dict:
             return _ok(rid, {"dry_run": True, "review": bot_template.inspect_template(data)})
         except bot_template.BotTemplateError as e:
             return _err(rid, _template_error_code(e.code), str(e))
-        except Exception as e:
+        except Exception:
             logger.exception("profiles.template.import review failed")
-            return _err(rid, 5071, str(e))
+            return _err(rid, 5071, _IMPORT_FAILED)
     result, err = _commit_template(rid, params, data)
     return err if err is not None else _ok(rid, result)
 

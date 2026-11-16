@@ -192,3 +192,119 @@ def test_imported_servers_arrive_off_with_blank_credentials_and_are_reviewed_tha
     servers = read_user_config_raw(get_profile_dir(result["name"]) / "config.yaml")["mcp_servers"]
     assert servers["evil"]["enabled"] is False and servers["evil"]["headers"] == {"Authorization": ""}
     assert "OPENAI_API_KEY" not in (get_profile_dir(result["name"]) / "config.yaml").read_text()
+
+
+CANARY = "CANARY-secret-7f3a91c2d4e85b06"
+
+
+def _files_text(root: Path) -> str:
+    return "\n".join(p.read_bytes().decode("utf-8", "replace") for p in sorted(root.rglob("*")) if p.is_file())
+
+
+def _archive_text(data: bytes) -> str:
+    import io
+    import tarfile
+
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        return "\n".join(archive.extractfile(m).read().decode("utf-8", "replace") for m in archive.getmembers() if m.isfile())
+
+
+def _import_params(data: bytes, **extra) -> dict:
+    return {"data": _b64(data), "reviewed_digest": hashlib.sha256(data).hexdigest(), "no_alias": True, **extra}
+
+
+def test_a_bot_bound_connection_cannot_review_or_import_templates(scout):
+    from tui_gateway.ws_legacy_fallback import _connection_profile_home
+
+    data, _ = _exported()
+    before = list_profile_names()
+    token = _connection_profile_home.set(str(get_profile_dir("scout")))
+    try:
+        assert _call("profiles.template.import", {"data": _b64(data), "dry_run": True})["error"]["code"] == 4403
+        assert _call("profiles.template.import", _import_params(data))["error"]["code"] == 4403
+    finally:
+        _connection_profile_home.reset(token)
+    assert list_profile_names() == before
+
+
+def test_worker_and_capability_less_connections_cannot_reach_template_import():
+    import types
+
+    from gateway.runtime_bootstrap import _PURPOSE_CAPABILITIES
+    from tui_gateway.ws_legacy_fallback import legacy_fallback_allowed
+
+    worker = types.SimpleNamespace(capabilities=frozenset({"worker:adopt"}))
+    owner = types.SimpleNamespace(capabilities=frozenset(_PURPOSE_CAPABILITIES["interactive"]))
+    for name in ("profiles.template.import", "profiles.configure"):
+        assert not legacy_fallback_allowed(worker, name)
+        assert not legacy_fallback_allowed(types.SimpleNamespace(capabilities=frozenset()), name)
+        assert legacy_fallback_allowed(owner, name)
+
+
+def _secret_servers() -> dict:
+    return {"vault": {
+        "url": "https://mcp.example/ok", "enabled": True,
+        "headers": {"Authorization": f"Bearer {CANARY}"}, "env": {"VAULT_TOKEN": CANARY},
+        "args": ["--api-key", CANARY],
+    }}
+
+
+def test_no_secret_reaches_responses_logs_or_the_created_profile(scout, caplog):
+    import logging
+
+    from hermes_cli.config import atomic_config_write, read_user_config_raw
+
+    caplog.set_level(logging.DEBUG)
+    config = read_user_config_raw(scout / "config.yaml")
+    config["mcp_servers"] = {"vault": {"url": "https://mcp.example/ok", "headers": {"Authorization": f"Bearer {CANARY}"},
+                                       "env": {"VAULT_TOKEN": CANARY}}}
+    atomic_config_write(scout / "config.yaml", config)
+    (scout / ".env").write_text(f"VAULT_TOKEN={CANARY}\n", encoding="utf-8")
+    exported, export_result = _exported()
+    crafted = _crafted_template(_secret_servers())
+
+    seen = [_archive_text(exported), repr(export_result["filename"])]
+    for data in (exported, crafted):
+        review = _ok("profiles.template.import", {"data": _b64(data), "dry_run": True})
+        committed = _ok("profiles.template.import", _import_params(data))
+        seen += [repr(review), repr(committed), _files_text(Path(committed["path"]))]
+    assert all(CANARY not in text for text in seen)
+    assert CANARY not in caplog.text
+
+
+@pytest.mark.parametrize("failing_step", ["publish", "overlay", "finish"])
+def test_a_failed_import_leaves_nothing_that_blocks_a_retry_with_the_same_name(scout, monkeypatch, caplog, failing_step):
+    import logging
+
+    from hermes_cli import bot_template, profiles as profiles_mod
+    
+    caplog.set_level(logging.DEBUG)
+    data = _crafted_template(_secret_servers())
+    before = list_profile_names()
+    wrapper_seen = []
+    params = {**_import_params(data), "name": "retry-bot", "no_alias": failing_step != "finish"}
+
+    def boom(*args, **kwargs):
+        wrapper_seen.append(profiles_mod._find_our_wrapper("retry-bot") is not None)
+        raise RuntimeError(f"disk exploded {CANARY}")
+
+    with monkeypatch.context() as broken:
+        if failing_step == "publish":
+            broken.setattr("hermes_cli.profile_memory_config.notify_memory_provider", boom)
+        elif failing_step == "overlay":
+            broken.setattr(bot_template, "_write_config", boom)
+        else:
+            broken.setattr(server, "_mirror_launch_credentials", boom)
+        response = _call("profiles.template.import", params)
+
+    assert response["error"]["code"] == 5071
+    assert CANARY not in repr(response)
+    assert list_profile_names() == before
+    assert not get_profile_dir("retry-bot").exists()
+    assert profiles_mod._find_our_wrapper("retry-bot") is None
+    if failing_step == "finish":
+        assert wrapper_seen == [True]
+
+    result = _ok("profiles.template.import", {**params, "no_alias": True})
+    assert result["name"] == "retry-bot"
+    assert get_profile_dir("retry-bot").is_dir()

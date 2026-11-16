@@ -1,10 +1,12 @@
 #if os(macOS)
+import PalBotProfile
 import PalDesign
 import PalRoster
 import SwiftUI
 
 struct MacCreateBot: View {
     @Bindable var model: CreateBotModel
+    @Bindable var importer: TemplateImportModel
     let roster: RosterModel
     let router: AppRouter
 
@@ -30,6 +32,8 @@ struct MacCreateBot: View {
                 .padding(.top, 16)
             CreateBotSourceRow(model: model, roster: roster)
                 .padding(.top, 12)
+            CreateBotImportRow(importer: importer, roster: roster, router: router)
+                .padding(.top, 10)
             Spacer(minLength: 0)
             PalHairline(color: PalTokens.panelBorder)
             MacCreateBotFooter(model: model, router: router, onCreate: create)

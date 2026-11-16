@@ -71,16 +71,81 @@ struct BotEffortTests {
         #expect(model.effort == "medium")
     }
 
-    @Test("options follow the model's capability: levels, unsupported or unknown")
+    @Test("only the efforts the gateway reports are offered, with Off only when the model can disable reasoning")
     func options() async {
-        let on = await loaded(ScriptedBots(), capability: ["reasoning": true, "can_disable_reasoning": true])
-        #expect(on.effortOptions == .levels(["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"]))
-        let fixed = await loaded(ScriptedBots(), capability: ["reasoning": true, "can_disable_reasoning": false])
-        #expect(fixed.effortOptions == .levels(["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]))
-        let off = await loaded(ScriptedBots(), capability: ["reasoning": false])
+        let on = await loaded(ScriptedBots(), capability: ["reasoning": true, "can_disable_reasoning": true, "efforts": ["low", "high"]])
+        #expect(on.effortOptions == .levels(["none", "low", "high"]))
+        let fixed = await loaded(ScriptedBots(), capability: ["reasoning": true, "can_disable_reasoning": false, "efforts": ["none", "low", "high"]])
+        #expect(fixed.effortOptions == .levels(["low", "high"]))
+        let off = await loaded(ScriptedBots(), capability: ["reasoning": false, "efforts": ["low"]])
         #expect(off.effortOptions == .unsupported)
         let silent = await loaded(ScriptedBots(), capability: nil)
         #expect(silent.effortOptions == .unknown)
+    }
+
+    @Test("a model with no reported list is unknown and read-only, never a guessed ladder")
+    func unreportedList() async {
+        for capability: JSONValue in [
+            ["reasoning": true],
+            ["reasoning": true, "can_disable_reasoning": true],
+            ["reasoning": true, "efforts": []],
+            ["reasoning": true, "efforts": "high"],
+            ["reasoning": true, "efforts": [1, 2]],
+            ["reasoning": true, "efforts": ["", "  "]],
+            ["reasoning": true, "efforts": ["none"], "can_disable_reasoning": false],
+        ] {
+            let model = await loaded(ScriptedBots(), capability: capability)
+            #expect(model.effortOptions == .unknown)
+            #expect(model.effortChoices == nil)
+        }
+        let nothing = await loaded(ScriptedBots(), effort: [:], capability: ["reasoning": true])
+        #expect(ReasoningEffort.title(nothing.effort) == "unknown")
+    }
+
+    @Test("a stored effort outside the reported list stays selected and visible")
+    func storedOutsideList() async {
+        let model = await loaded(ScriptedBots(), effort: ["value": "xhigh"], capability: ["reasoning": true, "efforts": ["low", "high"]])
+        #expect(model.effort == "xhigh")
+        #expect(model.effortChoices == ["low", "high", "xhigh"])
+        let inside = await loaded(ScriptedBots(), effort: ["value": "high"], capability: ["reasoning": true, "efforts": ["low", "high"]])
+        #expect(inside.effortChoices == ["low", "high"])
+        let off = await loaded(ScriptedBots(), effort: ["value": "none"], capability: ["reasoning": true, "efforts": ["low"]])
+        #expect(off.effortChoices == ["low", "none"])
+    }
+
+    @Test("an older gateway payload without efforts decodes as before and extra keys are tolerated")
+    func decoding() throws {
+        let oldPayload: JSONValue = ["reasoning": true, "can_disable_reasoning": false]
+        let old = try oldPayload.decoded(as: ModelCapability.self)
+        #expect(old == ModelCapability(reasoning: true, canDisableReasoning: false))
+        #expect(old.efforts == nil)
+        let newerPayload: JSONValue = ["reasoning": true, "efforts": ["low", "low", " high "], "future": ["nested": [1, 2]]]
+        let newer = try newerPayload.decoded(as: ModelCapability.self)
+        #expect(newer.efforts == ["low", "high"])
+        let providerPayload: JSONValue = [
+            "slug": "anthropic", "models": ["a"], "capabilities": ["a": ["efforts": ["low"], "extra": true], "b": 7],
+        ]
+        let provider = try providerPayload.decoded(as: ModelCatalogProvider.self)
+        #expect(provider.capabilities["a"]?.efforts == ["low"])
+    }
+
+    @Test("a canary in a refused effort write or a failed catalog never reaches the surfaced text")
+    func canary() async {
+        let bots = ScriptedBots()
+        let model = await loaded(bots, capability: ["reasoning": true, "efforts": ["low", "high"]])
+        bots.script("config.set") { _ in
+            throw GatewayTransportError.rpc(RPCError(code: 4002, message: "canary-effort-9f3", data: ["reason": "canary_effort_9f3", "detail": "canary-effort-9f3"]))
+        }
+        await model.chooseEffort("high")
+        #expect(model.save == .failed(BotModelClient.couldNotSaveEffort))
+        let broken = ScriptedBots()
+        broken.script("profiles.describe", described)
+        broken.script("model.options") { _ in throw GatewayTransportError.rpc(RPCError(code: 5000, message: "canary-effort-9f3")) }
+        broken.script("config.get", ["value": "high", "canary": "canary-effort-9f3"])
+        let degraded = BotModelsModel(client: BotModelClient(gateway: broken.gateway, profile: "atlas"), profile: "atlas", surfaces: scratchSurfaces())
+        await degraded.load()
+        let surfaced = "\(model.save) \(model.effortOptions) \(degraded.effortOptions) \(degraded.effort ?? "") \(degraded.save)"
+        #expect(!surfaced.contains("canary-effort"))
     }
 
     @Test("a cloud effort above the cap is shown as reported with a label")

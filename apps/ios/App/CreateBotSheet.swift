@@ -1,9 +1,11 @@
+import PalBotProfile
 import PalDesign
 import PalRoster
 import SwiftUI
 
 struct CreateBotSheet: View {
     @Bindable var model: CreateBotModel
+    @Bindable var importer: TemplateImportModel
     let roster: RosterModel
     let router: AppRouter
 
@@ -27,6 +29,8 @@ struct CreateBotSheet: View {
                         .padding(.top, 26)
                     CreateBotSourceRow(model: model, roster: roster)
                         .padding(.top, 20)
+                    CreateBotImportRow(importer: importer, roster: roster, router: router)
+                        .padding(.top, 14)
                 }
                 .padding(.bottom, 24)
             }
