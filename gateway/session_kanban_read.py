@@ -17,8 +17,15 @@ def handlers(connection):
         'kanban.events.since': events_since}.items()}
 
 
+def _remote_operator(connection) -> bool:
+    from gateway.session_identity import is_authenticated_identity
+    capabilities = connection.actor.capabilities
+    return ('session:operator' in capabilities and 'session:read' in capabilities
+            and is_authenticated_identity(getattr(connection, '_identity', None)))
+
+
 def _gateway(connection, params) -> str:
-    if not connection.native_owner:
+    if not (connection.native_owner or _remote_operator(connection)):
         raise RuntimeStoreError('permission_denied')
     authorize_profile(connection, params, 'session:read')
     gateway_id = connection.authority.instance_id
