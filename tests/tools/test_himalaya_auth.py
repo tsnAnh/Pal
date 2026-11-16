@@ -23,7 +23,11 @@ Suggestions:
 V2_SECRET_COMMAND_FAILED = "Error: Secret command error: " + V2_BACKTRACE
 V2_SERVER_REJECTED = "Error: IMAP AUTHENTICATE PLAIN failed: NO Authentication failed." + V2_BACKTRACE
 V2_SMTP_REJECTED = "Error: SMTP AUTH PLAIN failed: rejected 535 5.7.8 Authentication credentials invalid" + V2_BACKTRACE
+V2_JSON_SECRET_COMMAND_FAILED = '{"error":"Secret command error: ","sources":[],"backtrace":"   0: <unknown>\\n   1: <unknown>\\n   2: <unknown>\\n   3: <unknown>\\n   4: <unknown>\\n   5: <unknown>\\n   6: <unknown>\\n   7: <unknown>\\n   8: __libc_start_call_main\\n             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16\\n   9: __libc_start_main_impl\\n             at ./csu/../csu/libc-start.c:360:3\\n  10: <unknown>\\n"}'
+V2_JSON_SERVER_REJECTED = '{"error":"IMAP AUTHENTICATE PLAIN failed: NO Authentication failed.","sources":[],"backtrace":"   0: <unknown>\\n   1: <unknown>\\n   2: <unknown>\\n   3: <unknown>\\n   4: <unknown>\\n   5: <unknown>\\n   6: <unknown>\\n   7: __libc_start_call_main\\n             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16\\n   8: __libc_start_main_impl\\n             at ./csu/../csu/libc-start.c:360:3\\n   9: <unknown>\\n"}'
+V2_JSON_SMTP_REJECTED = '{"error":"SMTP AUTH PLAIN failed: rejected 535 5.7.8 Authentication credentials invalid","sources":[],"backtrace":"   0: <unknown>\\n   1: <unknown>\\n   2: <unknown>\\n   3: <unknown>\\n   4: <unknown>\\n   5: <unknown>\\n   6: <unknown>\\n   7: <unknown>\\n   8: <unknown>\\n   9: <unknown>\\n  10: __libc_start_call_main\\n             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16\\n  11: __libc_start_main_impl\\n             at ./csu/../csu/libc-start.c:360:3\\n  12: <unknown>\\n"}'
 LIST = {"command": "himalaya mailbox list"}
+JSON_LIST = {"command": "himalaya mailbox list --json"}
 
 
 def terminal_result(output, code):
@@ -208,4 +212,58 @@ def test_canary_password_never_reaches_a_failure_result_or_log(monkeypatch, capl
     failing = terminal_result(V2_SERVER_REJECTED, 1)
     with caplog.at_level("DEBUG"):
         out = auth_required.resolve("terminal", LIST, terminal_result(V2_SECRET_COMMAND_FAILED, 1), lambda: failing)
+    assert CANARY not in out and CANARY not in caplog.text
+
+
+@pytest.mark.parametrize("command", [
+    "himalaya mailbox list --json",
+    "himalaya --json mailbox list",
+    "himalaya -c /tmp/x.toml envelope list --json",
+])
+@pytest.mark.parametrize("output,expected", [
+    (V2_JSON_SECRET_COMMAND_FAILED, auth_required.AuthNeed("email:himalaya", "missing", "api_key")),
+    (V2_JSON_SERVER_REJECTED, auth_required.AuthNeed("email:himalaya", "expired", "api_key")),
+    (V2_JSON_SMTP_REJECTED, auth_required.AuthNeed("email:himalaya", "expired", "api_key")),
+])
+def test_v2_json_failures_classify_like_the_plain_text_ones(command, output, expected):
+    assert auth_required.detect("terminal", {"command": command}, terminal_result(output, 1)) == expected
+
+
+@pytest.mark.parametrize("command,output,code", [
+    ("himalaya mailbox list --json", V2_JSON_SECRET_COMMAND_FAILED, 0),
+    ("echo himalaya --json", V2_JSON_SECRET_COMMAND_FAILED, 1),
+    ("himalaya mailbox list --json", json.dumps({"error": "Spawn secret command error", "sources": []}), 1),
+    ("himalaya mailbox list --json", json.dumps({"error": "connection timed out", "sources": []}), 1),
+    ("himalaya message read 1 --json", json.dumps({"subject": "Secret command error", "body": "Authentication failed"}), 1),
+    ("himalaya message read 1 --json",
+     json.dumps([{"subject": "Error: Secret command error: x", "from": "AUTHENTICATIONFAILED"}]), 1),
+])
+def test_unrelated_json_output_never_triggers_the_popup(command, output, code):
+    assert auth_required.detect("terminal", {"command": command}, terminal_result(output, code)) is None
+
+
+def test_json_missing_password_prompts_once_retries_once_then_plain_auth_failed(monkeypatch):
+    prompts = _prompting(monkeypatch, lambda m: m.Resolution.SIGNED_IN)
+    failing = terminal_result(V2_JSON_SECRET_COMMAND_FAILED, 1)
+    calls = []
+    out = auth_required.resolve("terminal", JSON_LIST, failing, lambda: calls.append(1) or failing)
+    assert [p.reason for p in prompts] == ["missing"] and len(calls) == 1
+    assert json.loads(out)["error_type"] == "auth_failed"
+
+
+@pytest.mark.parametrize("outcome,error_type", [("DECLINED", "auth_declined"), ("TIMED_OUT", "auth_timeout")])
+def test_json_missing_password_decline_and_timeout_are_not_retried(monkeypatch, outcome, error_type):
+    _prompting(monkeypatch, lambda m: getattr(m.Resolution, outcome))
+    out = auth_required.resolve("terminal", JSON_LIST, terminal_result(V2_JSON_SECRET_COMMAND_FAILED, 1),
+                                lambda: pytest.fail("retried"))
+    assert json.loads(out)["error_type"] == error_type
+
+
+def test_json_canary_password_never_reaches_a_failure_result_or_log(monkeypatch, caplog):
+    _prompting(monkeypatch, lambda m: m.Resolution.SIGNED_IN)
+    monkeypatch.setenv("HIMALAYA_PASSWORD", CANARY)
+    failing = terminal_result(V2_JSON_SERVER_REJECTED, 1)
+    with caplog.at_level("DEBUG"):
+        out = auth_required.resolve("terminal", JSON_LIST, terminal_result(V2_JSON_SECRET_COMMAND_FAILED, 1),
+                                    lambda: failing)
     assert CANARY not in out and CANARY not in caplog.text
