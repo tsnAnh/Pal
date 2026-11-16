@@ -135,9 +135,6 @@ enum KanbanJSON {
     }
 }
 
-/// Failure cases written first: a half-assembled snapshot must never be published; a snapshot_required at any point restarts
-/// from page one and is bounded; ids and cursors never cross a gateway or board; replayed or reordered events never apply twice;
-/// a missing method stops polling instead of looping; transport errors back off up to a ceiling.
 @MainActor
 @Suite("Kanban store")
 struct KanbanStoreTests {

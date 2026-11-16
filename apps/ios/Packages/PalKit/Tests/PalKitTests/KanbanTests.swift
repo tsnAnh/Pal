@@ -4,13 +4,6 @@ import PalProtocol
 import PalTransport
 import Testing
 
-/// Failure cases covered here, written before the code under test:
-/// - an unknown status, event kind, evidence kind, contract kind, state or verification must decode and display, never throw;
-/// - a missing or null verification, evidence list or CI record must read as unknown, never as success;
-/// - "Independently verified" only when state is verified and verification is independent;
-/// - an attestation is never relabelled independent, and a CI result is never worded as a merge;
-/// - claim expiry, digests and receipts never reach the models.
-/// Fixture JSON for the four recorded tests comes from the real producer (see KanbanFixtures).
 @Suite("Kanban wire decoding")
 struct KanbanWireTests {
     private func card(_ json: String) throws -> KanbanCardDetail {

@@ -4,8 +4,6 @@ import PalProtocol
 import PalTransport
 import Testing
 
-/// Failure cases: a second kanban.* method string anywhere in the client, a write-shaped control in the UI
-/// (drag, swipe action, claim/spawn/merge/complete/create/move verbs) or a path to a claim lock or a filesystem path leaking into a model.
 @Suite("Kanban stays read-only")
 struct KanbanReadOnlyTests {
     private static let iosRoot: URL = URL(fileURLWithPath: #filePath)
