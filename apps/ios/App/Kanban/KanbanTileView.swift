@@ -122,18 +122,27 @@ struct KanbanTile: View {
     let isSelected: Bool
     let action: () -> Void
 
+    private var age: String? {
+        switch row.column {
+        case .inProgress, .blocked, .review: KanbanPresentation.age(since: KanbanPresentation.ageSource(row.card), now: now)
+        case .backlog, .ready, .done: nil
+        }
+    }
+
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(row.card.title.isEmpty ? String(localized: "Untitled card") : row.card.title)
-                    .hermesText(.rowTitle)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(row.displayTitle)
+                    .hermesText(.chip)
+                    .fontWeight(.medium)
                     .foregroundStyle(PalTokens.textPrimary)
                     .multilineTextAlignment(.leading)
-                    .lineLimit(3)
+                    .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                KanbanBadges(row: row, now: now)
+                meta
             }
-            .padding(12)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius))
             .overlay {
@@ -144,6 +153,27 @@ struct KanbanTile: View {
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("kanbanCard-\(row.card.taskID)")
+    }
+
+    private var meta: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(row.column.tone)
+                .frame(width: 7, height: 7)
+                .accessibilityHidden(true)
+            if let bot = row.bot {
+                Text(bot).lineLimit(1)
+            }
+            if !row.pullRequests.isEmpty {
+                Image(systemName: "arrow.triangle.pull")
+                    .foregroundStyle(row.hasMergedPullRequest ? .purple : PalTokens.textSecondary)
+                    .accessibilityLabel(row.hasMergedPullRequest ? Text("PR merged") : Text("PR"))
+            }
+            Spacer(minLength: 0)
+            if let age { Text(age) }
+        }
+        .hermesText(.footnoteCaption)
+        .foregroundStyle(PalTokens.textSecondary)
     }
 }
 
@@ -159,14 +189,14 @@ struct KanbanColumnView: View {
             HStack(spacing: 8) {
                 Circle().fill(layout.column.tone).frame(width: 8, height: 8)
                 Text(layout.column.title).hermesText(.rowTitle).foregroundStyle(PalTokens.textPrimary)
-                Text(count).hermesText(.rowSubtitle).foregroundStyle(PalTokens.textTertiary)
+                Text("\(layout.rows.count)").hermesText(.rowSubtitle).foregroundStyle(PalTokens.textTertiary)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 4)
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("kanbanColumnHeader-\(layout.column.id)")
             ScrollView {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: 6) {
                     ForEach(layout.rows) { row in
                         KanbanTile(row: row, now: now, isSelected: selected == row.card.taskID) { open(row.card.taskID) }
                     }
@@ -182,10 +212,10 @@ struct KanbanColumnView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .padding(10)
+        .padding(8)
         .frame(width: width)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .background(PalTokens.chipFill, in: RoundedRectangle(cornerRadius: 16))
+        .frame(maxWidth: width == nil ? .infinity : nil, maxHeight: .infinity, alignment: .top)
+        .background(PalTokens.chipFill, in: RoundedRectangle(cornerRadius: 14))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("kanbanColumn-\(layout.column.id)")
     }
@@ -193,9 +223,5 @@ struct KanbanColumnView: View {
     @ViewBuilder
     private var emptyLabel: some View {
         if layout.total == 0 { Text("No cards") } else { Text("No matches") }
-    }
-
-    private var count: String {
-        layout.rows.count == layout.total ? "\(layout.total)" : "\(layout.rows.count)/\(layout.total)"
     }
 }

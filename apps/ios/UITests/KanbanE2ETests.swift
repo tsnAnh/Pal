@@ -2,7 +2,7 @@ import XCTest
 
 @MainActor
 final class KanbanE2ETests: E2ETestCase {
-    private let title = "Write release notes"
+    private let title = "release notes"
 
     private func any(_ app: XCUIApplication, _ identifier: String) -> XCUIElement {
         app.descendants(matching: .any)[identifier]

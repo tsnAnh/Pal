@@ -54,7 +54,7 @@ struct KanbanSurface: View {
     private func destination(_ route: KanbanRoute) -> some View {
         switch route {
         case .board(let slug):
-            KanbanBoardView(store: store, board: slug, openCard: { path.append(.card(board: slug, taskID: $0)) }, back: pop)
+            KanbanBoardView(store: store, board: slug, openCard: { path.append(.card(board: slug, taskID: $0)) }, back: pop, close: close)
         case .card(let board, let taskID):
             KanbanCardView(store: store, board: board, taskID: taskID, openCard: { path.append(.card(board: board, taskID: $0)) }, back: pop)
         }
@@ -136,6 +136,18 @@ struct KanbanPage<Content: View>: View {
                     .accessibilityAddTraits(.isHeader)
             }
             Spacer()
+            if let close {
+                Button(action: close) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(PalTokens.textSecondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Close"))
+                .accessibilityIdentifier("kanban-close")
+            }
         }
         .padding(.leading, 29)
         .padding(.trailing, 38)

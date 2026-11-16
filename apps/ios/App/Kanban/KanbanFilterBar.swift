@@ -8,12 +8,7 @@ struct KanbanFilterBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            FloatingSearchBar(
-                text: $filter.text,
-                prompt: String(localized: "Search cards"),
-                accessibilityLabel: String(localized: "Search cards"),
-                accessibilityIdentifier: "kanbanSearch"
-            )
+            searchField
             ScrollView(.horizontal) {
                 HStack(spacing: PalMetrics.chipSpacing) {
                     menu(String(localized: "State"), identifier: "kanbanFilterState", selection: $filter.column, options: KanbanColumn.allCases, label: \.title)
@@ -35,7 +30,36 @@ struct KanbanFilterBar: View {
             .contentMargins(.horizontal, 22, for: .scrollContent)
             .scrollIndicators(.hidden)
         }
+        .padding(.top, 8)
         .padding(.bottom, 8)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundStyle(PalTokens.textSecondary)
+                .accessibilityHidden(true)
+            TextField("", text: $filter.text, prompt: Text("Search cards"))
+                .textFieldStyle(.plain)
+                .hermesText(.chip)
+                .foregroundStyle(PalTokens.textPrimary)
+                .autocorrectionDisabled()
+                .accessibilityLabel(Text("Search cards"))
+                .accessibilityIdentifier("kanbanSearch")
+            if !filter.text.isEmpty {
+                Button { filter.text = "" } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(PalTokens.textSecondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Clear search"))
+                .accessibilityIdentifier("kanbanSearch-clear")
+            }
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .background(PalTokens.chipFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .padding(.horizontal, 22)
     }
 
     private func menu<Value: Hashable>(
@@ -61,6 +85,9 @@ struct KanbanFilterBar: View {
             .background(isSet ? PalTokens.selected : PalTokens.chipFill, in: Capsule())
             .contentShape(Capsule())
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
         .accessibilityIdentifier(identifier)
     }
 }

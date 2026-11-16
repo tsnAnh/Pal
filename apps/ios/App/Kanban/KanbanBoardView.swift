@@ -8,6 +8,7 @@ struct KanbanBoardView: View {
     let board: String
     let openCard: (String) -> Void
     let back: () -> Void
+    let close: (() -> Void)?
 
     @State private var filter = KanbanFilter()
     @State private var pagerColumn: KanbanColumn = .backlog
@@ -28,7 +29,7 @@ struct KanbanBoardView: View {
     }
 
     var body: some View {
-        KanbanPage(title: cache?.board?.name ?? board, identifier: "kanbanBoard", back: back, close: nil, scrolls: cache == nil) {
+        KanbanPage(title: cache?.board?.name ?? board, identifier: "kanbanBoard", back: back, close: close, scrolls: cache == nil) {
             content
         }
         .refreshable { await store.refreshSnapshot(board: board) }
@@ -128,16 +129,22 @@ struct KanbanBoardView: View {
 
     private func wide(_ layout: KanbanBoardLayout, now: Date) -> some View {
         HStack(spacing: 0) {
-            ScrollView(.horizontal) {
-                HStack(alignment: .top, spacing: 12) {
-                    ForEach(layout.columns) { column in
-                        KanbanColumnView(layout: column, now: now, selected: selected, width: 260, open: select)
+            GeometryReader { proxy in
+                let inset = PalMetrics.screenMargin
+                let gaps = CGFloat(max(layout.columns.count - 1, 0)) * 10
+                let fit = (proxy.size.width - inset * 2 - gaps) / CGFloat(max(layout.columns.count, 1))
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(layout.columns) { column in
+                            KanbanColumnView(layout: column, now: now, selected: selected, width: max(fit, 220), open: select)
+                        }
                     }
+                    .padding(.horizontal, inset)
+                    .padding(.bottom, 12)
+                    .frame(height: proxy.size.height)
                 }
-                .padding(.horizontal, PalMetrics.screenMargin)
-                .padding(.bottom, 12)
+                .scrollIndicators(.hidden)
             }
-            .scrollIndicators(.hidden)
             if let selected {
                 Divider()
                 KanbanCardView(

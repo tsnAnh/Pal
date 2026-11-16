@@ -156,6 +156,22 @@ struct RootView: View {
         templateImport = TemplateImportModel(client: bots.services.templateImport)
     }
 
+    #if os(iOS)
+    private var sheetItem: Binding<AppSheet?> {
+        Binding(
+            get: { router.sheet == .kanban ? nil : router.sheet },
+            set: { if router.sheet != .kanban { router.sheet = $0 } }
+        )
+    }
+
+    private var kanbanPresented: Binding<Bool> {
+        Binding(
+            get: { router.sheet == .kanban },
+            set: { if !$0, router.sheet == .kanban { router.dismissSheet() } }
+        )
+    }
+    #endif
+
     private var showsWorkspace: Bool {
         model.isConnected || (model.phase == .connecting && roster.hasContent)
     }
@@ -293,7 +309,7 @@ struct RootView: View {
             .onChange(of: router.path.isEmpty) { _, _ in settleOpenConversation() }
             .onChange(of: sizeClass) { _, _ in settleOpenConversation() }
             .onChange(of: router.currentBotName) { _, name in rememberOpenConversation(name) }
-            .sheet(item: $router.sheet, onDismiss: { resetCreateBot() }) { sheet in
+            .sheet(item: sheetItem, onDismiss: { resetCreateBot() }) { sheet in
                 Group {
                     switch sheet {
                     case .settings:
@@ -313,10 +329,13 @@ struct RootView: View {
                             )
                         ) { router.dismissSheet() }
                     case .kanban:
-                        KanbanSurface(connection: model) { router.dismissSheet() }
+                        EmptyView()
                     }
                 }
                 .serviceSignInDialogHost()
+            }
+            .fullCover(isPresented: kanbanPresented) {
+                KanbanSurface(connection: model) { router.dismissSheet() }
             }
             .fullCover(isPresented: $router.isSearching) {
                 SearchHost(roster: roster, router: router)
