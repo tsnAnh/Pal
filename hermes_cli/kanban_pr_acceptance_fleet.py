@@ -86,7 +86,8 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
     same_head = [p for p in _pages(f"repos/{repo}/commits/{sha}/pulls?per_page=100", None, profile_home)
                  if p["number"] != number and p["state"] == "open" and p["head"]["sha"] == sha]
     branch_prs = _pages(f"repos/{repo}/pulls?state=all&head={owner}:{branch}&per_page=100", None, profile_home)
-    timeline = _pages(f"repos/{repo}/issues/{number}/timeline?per_page=100", None, profile_home)
+    timeline = [event for n in sorted({number, *(p["number"] for p in branch_prs)})
+                for event in _pages(f"repos/{repo}/issues/{n}/timeline?per_page=100", None, profile_home)]
     problems = (["another open PR shares this head"] if same_head else []) + (
         ["a PR from this branch targeted a non-default base"] if any(p["base"]["ref"] != default for p in branch_prs) else []) + (
         ["the PR base was retargeted"] if any(e.get("event") in _RETARGET_EVENTS for e in timeline) else [])

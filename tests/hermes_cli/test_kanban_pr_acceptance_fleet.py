@@ -34,7 +34,7 @@ def good_state(head=HEAD):
                            "pull_requests": [{"number": 7, "base": {"ref": "main"}}]}],
         "check_runs": [{"id": 100, "name": "build", "head_sha": head, "status": "completed", "conclusion": "success",
                         "check_suite": {"id": 11}, "html_url": "https://github.com/acme/widget/actions/runs/1"}],
-        "statuses": [],
+        "statuses": [], "sibling_timelines": {},
         "trees": {"main": {".github/workflows/ci.yml": "s1"}, head: {".github/workflows/ci.yml": "s1"}},
         "requests": [], "after_check_runs": None, "envs": [],
     }
@@ -66,8 +66,10 @@ def github(coord_env, tmp_path, monkeypatch):
                 value = pages(state["commit_prs"])
             elif route == f"{root}/pulls":
                 value = pages(state["branch_prs"])
-            elif route == f"{root}/issues/7/timeline":
-                value = state["timeline"] if not isinstance(state["timeline"], list) else pages(state["timeline"])
+            elif route.startswith(f"{root}/issues/") and route.endswith("/timeline"):
+                number = int(route.split("/")[-2])
+                events = state["timeline"] if number == 7 else state["sibling_timelines"].get(number, "gone")
+                value = events if not isinstance(events, list) else pages(events)
             elif route == f"{root}/actions/runs":
                 value = pages(state["workflow_runs"], "workflow_runs")
             elif route.endswith("/check-runs"):
@@ -170,6 +172,9 @@ SUCCESS = [
                                    "path": ".github/workflows/claude-review.yml"}),
         add_check(s, conclusion="failure", check_suite={"id": 12}),
         s["statuses"].append({"id": 1, "context": "security-review", "state": "failure"}))),
+    ("sibling PR with clean history on the same branch", lambda s: (
+        s["branch_prs"].append({"number": 3, "base": {"ref": "main"}}),
+        s["sibling_timelines"].update({3: [{"event": "labeled"}]}))),
     ("push run with branch workflows equal to the default branch", lambda s: push_run(s, True)),
 ]
 REFUSED = [
@@ -194,9 +199,14 @@ REFUSED = [
     ("workflow outside .github/workflows", lambda s: set_run(s, path="scripts/ci.yml"), "missing"),
     ("push run with workflows differing from the default branch", lambda s: push_run(s, False), "missing"),
     ("PR targets a non-default base", lambda s: s["pr"]["base"].update(ref="dev"), "provenance"),
-    ("a branch PR once targeted another base", lambda s: s["branch_prs"].append({"number": 3, "base": {"ref": "dev"}}), "provenance"),
+    ("a branch PR once targeted another base", lambda s: (
+        s["branch_prs"].append({"number": 3, "base": {"ref": "dev"}}), s["sibling_timelines"].update({3: []})), "provenance"),
     ("timeline base_ref_changed", lambda s: s["timeline"].append({"event": "base_ref_changed"}), "provenance"),
     ("timeline automatic_base_change_failed", lambda s: s["timeline"].append({"event": "automatic_base_change_failed"}), "provenance"),
+    ("sibling PR on the branch was retargeted back to the default base", lambda s: (
+        s["branch_prs"].append({"number": 3, "base": {"ref": "main"}}),
+        s["sibling_timelines"].update({3: [{"event": "base_ref_changed"}]})), "provenance"),
+    ("sibling PR timeline unreadable", lambda s: s["branch_prs"].append({"number": 3, "base": {"ref": "main"}}), "infra"),
     ("another open PR at the same head", lambda s: s["commit_prs"].append({"number": 9, "state": "open", "head": {"sha": HEAD}}), "provenance"),
     ("missing timeline pages", lambda s: s.update(timeline={"message": "gone"}), "infra"),
 ]
