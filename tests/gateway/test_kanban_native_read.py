@@ -550,3 +550,41 @@ async def test_a_completed_card_cannot_be_reclaimed_so_a_verified_proof_never_go
         assert claim_external(conn, gateway.ids['built'], profile=PROFILE, session_id='again', board='ops') is None
         assert not kb.reclaim_task(conn, gateway.ids['built']) and not kb.unblock_task(conn, gateway.ids['built'])
         assert kb.get_task(conn, gateway.ids['built']).status == 'done'
+
+
+def _token(raw):
+    import base64
+    data = raw if isinstance(raw, bytes) else raw.encode()
+    return base64.urlsafe_b64encode(data).decode().rstrip('=')
+
+
+MALFORMED_TOKENS = [
+    _token('{}'), _token('{"0":"kc2"}'), _token('"kc2"'), _token('5'), _token('null'), _token('true'), _token('[]'),
+    _token('[1]'), _token('["kc2"]'), _token('["kc2","g","b","gen",0]'), _token('["kc2","g","b","gen",0,0,0]'),
+    _token('["kc2",1,"b","gen",0,0]'), _token('["kc2","g","b","gen",-1,0]'), _token('["kc2","g","b","gen",true,0]'),
+    _token('["kc2","g","b","gen",0.5,0]'), _token('["kc2","g","b","gen","0",0]'), _token('["kc1","g","b","gen",0,0]'),
+    _token(b'\xff\xfe'), _token('not json'), '!!!', '=', 'a', 'éé',
+    _token('[' * 55 + ']' * 55),
+]
+
+
+@pytest.mark.asyncio
+async def test_malformed_cursors_and_page_tokens_answer_typed_snapshot_required_and_valid_ones_still_work(gateway):
+    _fill_board(gateway, 'badtoken', 30)
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        first = await ws.result('kanban.board.snapshot', board='badtoken', limit=10)
+        valid_cursor = (await ws.result('kanban.board.snapshot', board='ops'))['cursor']
+        for bad in MALFORMED_TOKENS:
+            events = await ws.call('kanban.events.since', board='ops', cursor=bad)
+            assert events.get('result', {}).get('reason') == 'invalid_cursor', (bad, events)
+            assert events['result']['state'] == 'snapshot_required' and events['result']['events'] == []
+            page = await ws.call('kanban.board.snapshot', board='ops', page_token=bad)
+            assert page.get('result', {}).get('reason') == 'invalid_cursor', (bad, page)
+            assert page['result']['state'] == 'snapshot_required' and page['result']['cards'] == []
+        assert (await ws.result('kanban.events.since', board='ops', cursor=first['next_page_token']))['reason'] == 'invalid_cursor'
+        assert (await ws.result('kanban.board.snapshot', board='badtoken', limit=10, page_token=valid_cursor))['reason'] == 'invalid_cursor'
+        assert (await ws.result('kanban.events.since', board='ops', cursor=valid_cursor))['state'] == 'ok'
+        assert (await ws.result('kanban.board.snapshot', board='badtoken', limit=10, page_token=first['next_page_token']))['state'] == 'present'
+        for field, value in (('cursor', 7), ('cursor', {'a': 1}), ('page_token', ['x'])):
+            method = 'kanban.events.since' if field == 'cursor' else 'kanban.board.snapshot'
+            assert (await ws.call(method, board='ops', **{field: value}))['error']['message'] == 'invalid_params'

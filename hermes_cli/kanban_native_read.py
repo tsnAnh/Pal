@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import dataclasses
 import hashlib
 import json
 import re
@@ -152,14 +153,17 @@ def _pack(*parts) -> str:
 
 
 def _unpack(token: str, prefix: str, strings: int, ints: int) -> tuple:
+    """The fields of a token this module issued; anything else, whatever JSON it decodes to, is ``invalid_cursor``."""
     try:
         parts = json.loads(base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)))
-        head, rest = parts[0], parts[1:]
-        if (head != prefix or len(rest) != strings + ints or not all(isinstance(p, str) for p in rest[:strings])
-                or not all(type(p) is int and p >= 0 for p in rest[strings:])):
-            raise ValueError
-    except (ValueError, TypeError, IndexError):
+    except ValueError:
         raise SnapshotRequired("invalid_cursor") from None
+    if not isinstance(parts, list) or len(parts) != 1 + strings + ints or parts[0] != prefix:
+        raise SnapshotRequired("invalid_cursor")
+    rest = parts[1:]
+    if (not all(isinstance(p, str) for p in rest[:strings])
+            or not all(type(p) is int and p >= 0 for p in rest[strings:])):
+        raise SnapshotRequired("invalid_cursor")
     return tuple(rest)
 
 
@@ -322,8 +326,9 @@ def subject_run(conn, task) -> Optional[int]:
 
 def _ci_entry(event) -> dict:
     payload = event.payload if isinstance(event.payload, dict) else {}
-    ok = payload.get("ok")
-    return {"state": "accepted" if ok is True else "rejected" if ok is False else "unknown",
+    ok, classification = payload.get("ok"), payload.get("classification")
+    state = "unknown" if not isinstance(ok, bool) else "accepted" if ok else "pending" if classification == "pending" else "rejected"
+    return {"state": state,
             "classification": scrub(payload.get("classification")), "run_id": event.run_id,
             "observed_at": event.created_at, "event_id": event.id}
 
@@ -341,6 +346,14 @@ def _outcome_entry(event) -> dict:
             "receipt": scrub({key: receipt[key] for key in _RECEIPT_FIELDS if key in receipt})}
 
 
+def _attributed(conn, event):
+    """A proof recorded before any run was live (the exact-head CI check of a first completion) belongs to the
+    run the card opens next; with none, it stays run-less."""
+    nxt = conn.execute("SELECT run_id FROM task_events WHERE task_id = ? AND id > ? AND run_id IS NOT NULL ORDER BY id LIMIT 1",
+                       (event.task_id, event.id)).fetchone()
+    return dataclasses.replace(event, run_id=nxt[0]) if nxt else event
+
+
 def proofs(conn, task, contract: Optional[dict]) -> dict:
     """CI acceptance and outcome verification for the subject run only; other runs' proofs are history."""
     run_id = subject_run(conn, task)
@@ -352,6 +365,8 @@ def proofs(conn, task, contract: Optional[dict]) -> dict:
                "run_id": None, "observed_at": None, "event_id": None}
     history = []
     for event in events:
+        if event.run_id is None:
+            event = _attributed(conn, event)
         current = event.run_id == run_id
         if event.kind == "pr_acceptance":
             entry = _ci_entry(event)

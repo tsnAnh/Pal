@@ -30125,6 +30125,7 @@
           "state": {
             "enum": [
               "accepted",
+              "pending",
               "rejected",
               "unknown"
             ],

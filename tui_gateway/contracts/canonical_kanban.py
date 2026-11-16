@@ -142,7 +142,7 @@ class KanbanOutcomeContract(Result):
 class KanbanCiAcceptance(Result):
     """The PR-acceptance gate's own verdict; ``unknown`` when none was recorded. Never a merge or consent claim."""
 
-    state: Literal['accepted', 'rejected', 'unknown']
+    state: Literal['accepted', 'pending', 'rejected', 'unknown']
     classification: str | None = None
     run_id: int | None = None
     observed_at: int | None = None

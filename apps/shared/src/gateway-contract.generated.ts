@@ -7097,7 +7097,7 @@ export interface KanbanOutcomeContract {
 }
 /** The PR-acceptance gate's own verdict; ``unknown`` when none was recorded. Never a merge or consent claim. */
 export interface KanbanCiAcceptance {
-  state: 'accepted' | 'rejected' | 'unknown'
+  state: 'accepted' | 'pending' | 'rejected' | 'unknown'
   classification?: string | null
   run_id?: number | null
   observed_at?: number | null
