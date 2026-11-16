@@ -2380,9 +2380,8 @@ def _dispatch_once_locked(
     may_spawn, spawn_budget = _tick_spawn_budget(
         conn, result, max_spawn=max_spawn, max_in_progress=max_in_progress, board=board,
     )
-    if not may_spawn:
+    if not may_spawn or not board_spawns_workers(board):
         return result
-
     ready_rows = _lane_rows(conn, "ready")
     # Review rows are enumerated up front so the budget split can see whether
     # review work exists at all.
@@ -2960,5 +2959,6 @@ def run_daemon(
 # Late-bound origin namespace (see module docstring); imported LAST so this
 # module is fully populated before ``kanban_db`` imports from it.
 from hermes_cli import kanban_db as _kb
+from hermes_cli.kanban_board_mode import board_spawns_workers
 from hermes_cli import kanban_db_connect as _kbc
 from hermes_cli import kanban_db_workspace as _kbw

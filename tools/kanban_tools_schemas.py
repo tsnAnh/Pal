@@ -106,6 +106,10 @@ KANBAN_COMPLETE_SCHEMA = _schema(
     ),
     {
         "task_id": _prop("string", _DESC_TASK_ID_DEFAULT),
+        "run_id": _prop("integer", (
+                "Coordinator run id returned by kanban_claim. Only for a card you claimed as a "
+                "coordinator profile; dispatcher workers never pass it."
+        )),
         "summary": _prop("string", (
                 "Human-readable handoff, 1-3 sentences. Appears in "
                 "Run History on the dashboard and in downstream "
@@ -296,6 +300,10 @@ KANBAN_HEARTBEAT_SCHEMA = _schema(
     ),
     {
         "task_id": _prop("string", _DESC_TASK_ID_DEFAULT),
+        "run_id": _prop("integer", (
+                "Coordinator run id returned by kanban_claim. Only for a card you claimed as a "
+                "coordinator profile; dispatcher workers never pass it."
+        )),
         "note": _prop("string", (
                 "Optional short note describing current progress. "
                 "Shown in the event log."
@@ -491,6 +499,11 @@ KANBAN_CREATE_SCHEMA = _schema(
                 "blocks the task for human review). Use this for "
                 "open-ended cards where one shot rarely finishes the "
                 "work. Defaults to false (classic single-shot worker)."
+        )),
+        "outcome_contract": _prop("object", (
+            "Governed outcome, immutable after creation: {\"kind\": \"merged_pr\", \"repo\": \"OWNER/REPO\"}, "
+            "{\"kind\": \"built_artifact\"}, {\"kind\": \"installed_app\"} or {\"kind\": \"other\", "
+            "\"name\": ..., \"required_fields\": [...]}. The card completes only with verified evidence."
         )),
         "completion_contract": _prop("string", (
             "Declare at creation: local-only (default), OWNER/REPO for PR publication, or an exact GitHub PR URL. "

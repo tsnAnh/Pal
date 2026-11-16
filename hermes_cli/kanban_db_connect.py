@@ -880,6 +880,7 @@ _LATER_TASK_COLUMNS = (
     ("goal_mode", "goal_mode INTEGER NOT NULL DEFAULT 0"),
     ("goal_max_turns", "goal_max_turns INTEGER"),
     ("completion_contract", "completion_contract TEXT"),
+    ("outcome_contract", "outcome_contract TEXT"),
     ("session_id", "session_id TEXT"),
     # Typed block reason (VALID_BLOCK_KINDS); NULL = generic human blocker.
     ("block_kind", "block_kind TEXT"),
@@ -904,6 +905,8 @@ _TASK_RUN_COLUMNS = (
     # Spawn-time start fingerprint of the run's worker_pid (PID-reuse guard for the
     # terminal-worker reaper; NULL = legacy row, never signalled).
     ("worker_started_at", "worker_started_at INTEGER"),
+    ("executor", "executor TEXT"),
+    ("executor_session", "executor_session TEXT"),
 )
 
 
@@ -994,6 +997,8 @@ def _migrate_add_optional_columns(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE task_events SET kind = ? WHERE kind = ?", (new, old))
 
     _rebuild_drifted_tables(conn)
+    from hermes_cli.kanban_outcomes_store import ensure_schema
+    ensure_schema(conn)
 
 
 def _backfill_legacy_inflight_runs(conn: sqlite3.Connection) -> None:
@@ -1084,7 +1089,7 @@ _REBUILD_SPECS = {
         " worker_pid INTEGER, worker_started_at INTEGER, max_runtime_seconds INTEGER,"
         " last_heartbeat_at INTEGER, started_at INTEGER NOT NULL,"
         " ended_at INTEGER, outcome TEXT, summary TEXT, metadata TEXT,"
-        " error TEXT)",
+        " error TEXT, executor TEXT, executor_session TEXT)",
         (
             "CREATE INDEX idx_runs_task ON task_runs(task_id, started_at)",
             "CREATE INDEX idx_runs_status ON task_runs(status)",

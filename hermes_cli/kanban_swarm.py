@@ -91,6 +91,7 @@ def _activate_root_inline(
                worker_pid   = NULL
          WHERE id = ?
            AND status = 'blocked'
+           AND outcome_contract IS NULL
         """,
         (int(time.time()), root_id),
     )

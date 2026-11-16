@@ -241,6 +241,15 @@ def _worker_run_id(task_id: str) -> Optional[int]:
         return None
 
 
+def _coordinator_run_id(args: dict) -> Optional[int]:
+    """Run id a coordinator profile (no dispatcher env) passes explicitly; the fence is checked in kanban_db."""
+    raw = args.get("run_id")
+    if raw is None:
+        return None
+    _check(isinstance(raw, int) and not isinstance(raw, bool), "run_id must be an integer")
+    return raw
+
+
 def _stamp_worker_session_metadata(task_id: str, metadata: Optional[dict]) -> Optional[dict]:
     """Add trusted worker session id metadata for this worker's own task."""
     session_id = _own_task_env(task_id, "HERMES_SESSION_ID")
@@ -421,7 +430,7 @@ def _opt_int(value: Any, default: Optional[int] = None) -> Optional[int]:
 _TASK_FIELDS = tuple(
     "id title body assignee status tenant priority workspace_kind workspace_path created_by "
     "created_at started_at completed_at result current_run_id model_override "
-    "provider_override completion_contract last_failure_error".split())
+    "provider_override completion_contract outcome_contract last_failure_error".split())
 _TASK_SUMMARY_FIELDS = tuple(
     "id title assignee status priority tenant workspace_kind workspace_path project_id created_by "
     "created_at started_at completed_at current_run_id model_override provider_override".split())
@@ -749,7 +758,8 @@ def _handle_complete(args: dict, **kw) -> str:
         try:
             ok = kb.complete_task(
                 conn, tid, result=result, summary=summary, metadata=metadata,
-                created_cards=created_cards, expected_run_id=_worker_run_id(tid))
+                created_cards=created_cards, expected_run_id=_worker_run_id(tid) or _coordinator_run_id(args),
+                actor_profile=_persisted_identity())
         except kb.ArtifactPreservationError as artifact_err:
             # Structured rejection — surface the phantom ids so the worker can retry with a corrected list
             # or drop the field. Audit event already landed in the DB. The task itself was NOT mutated (the
@@ -937,6 +947,11 @@ def _handle_heartbeat(args: dict, **kw) -> str:
     tid = _worker_guard("kanban_heartbeat", args)
     from hermes_cli import kanban_db_dispatch as kbd
     with _board(args.get("board")) as (kb, conn):
+        if _worker_run_id(tid) is None and _coordinator_run_id(args) is not None:
+            from hermes_cli.kanban_external_claim import heartbeat_external
+            _check(heartbeat_external(conn, tid, _coordinator_run_id(args), _persisted_identity(), note=args.get("note")),
+                   f"could not heartbeat {tid}: run {args.get('run_id')} is not your live coordinator run")
+            return _ok(task_id=tid)
         # The dispatcher pins HERMES_KANBAN_CLAIM_LOCK at spawn; the default
         # claimer covers locally-driven workers that bypassed the dispatcher.
         kb.heartbeat_claim(conn, tid, claimer=os.environ.get("HERMES_KANBAN_CLAIM_LOCK"))
@@ -1145,6 +1160,7 @@ def _handle_create(args: dict, **kw) -> str:
             model_override=model_override, provider_override=provider_override,
             goal_mode=goal_mode, goal_max_turns=_opt_int(args.get("goal_max_turns")),
             completion_contract=args.get("completion_contract"),
+            outcome_contract=args.get("outcome_contract"),
             initial_status=str(args.get("initial_status") or "running"),
             created_by=_persisted_identity(), session_id=session_id)
         landed = _fields(kb.get_task(conn, new_tid), _CREATED_FIELDS)

@@ -107,6 +107,8 @@ _BOARD_SPECS = [
         _arg("--color", help="Optional hex color (e.g. '#8b5cf6') for the dashboard"),
         _arg("--switch", action="store_true", help="Switch to the new board after creating it"),
         _arg("--default-workdir", help="Default workspace path for tasks created on this board"),
+        _arg("--dispatch-mode", choices=("workers", "external"), default=None,
+             help="external = coordinator-owned board: Kanban never spawns workers for it"),
     ], aliases=["new"], help="Create a new board"),
     _cmd("rm", [
         _SLUG,
@@ -122,6 +124,11 @@ _BOARD_SPECS = [
         _SLUG,
         _arg("path", nargs="?", help="Absolute path to use as default workdir. Omit to clear."),
     ], help="Set the default workspace path for tasks on a board"),
+    _cmd("set-dispatch-mode", [
+        _SLUG,
+        _arg("mode", choices=("workers", "external"),
+             help="workers = dispatcher spawns assignee workers; external = coordinator-owned, never spawns"),
+    ], help="Set whether Kanban spawns workers for a board"),
     _cmd("export", [
         _arg("slug", nargs="?", help="Board to export (default: the current board)"),
         _arg("-o", "--output", help="Archive path (default: ./<slug>.tar.gz)"),
@@ -203,6 +210,9 @@ _SPECS = [
         _arg("--provider", dest="provider_override",
              help="Provider the --model belongs to (passed as --provider <name> to "
                   "the worker). Requires --model."),
+        _arg("--outcome-contract", metavar="JSON", dest="outcome_contract",
+             help='Governed outcome: {"kind":"merged_pr","repo":"O/R"} | built_artifact | installed_app | '
+                  '{"kind":"other","name":"...","required_fields":[...]}. Immutable; completion needs verified evidence.'),
         _arg("--completion-contract", metavar="CONTRACT",
              help="local-only (default), OWNER/REPO for publication, or exact GitHub PR URL; required CI gates done."),
         _arg("--goal", action="store_true", dest="goal_mode",
@@ -276,7 +286,9 @@ _SPECS = [
     _cmd("claim", [
         _TASK_ID,
         _arg("--ttl", type=int, default=kb.DEFAULT_CLAIM_TTL_SECONDS, help="Claim TTL in seconds (default: 900)"),
-    ], help="Atomically claim a ready task (prints resolved workspace path)"),
+        _arg("--session", help="Coordinator session label recorded on the run (external boards)"),
+        _json_flag(help="External boards: print the claim (run_id) as JSON"),
+    ], help="Atomically claim a ready task (prints resolved workspace path; on an external board claims as the bound profile)"),
     _cmd("comment", [
         _TASK_ID,
         _arg("text", nargs="+", help="Comment body"),
@@ -302,8 +314,19 @@ _SPECS = [
                   '"tests_run": 12}\'). Stored on the closing run.'),
         _arg("--force", action="store_true",
              help="Override the live-claim guard: complete a running, claimed task "
-                  "even without owning its run (closes the worker's run)."),
+                  "even without owning its run (closes the worker's run). Never waives outcome evidence."),
+        _arg("--run-id", type=int, help="Coordinator run id returned by claim (required for external runs)"),
     ], help="Mark one or more tasks done"),
+    _cmd("evidence", children=("evidence_action", [
+        _cmd("add", [
+            _TASK_ID,
+            _arg("--run-id", type=int, required=True, help="Coordinator run id returned by claim"),
+            _arg("--kind", required=True,
+                 choices=("execution_ref", "pr_published", "pr_merged", "artifact_built", "app_installed", "other_result")),
+            _arg("--json", dest="json_payload", required=True, metavar="PAYLOAD", help="Evidence payload as a JSON object"),
+        ], help="Append evidence for the live coordinator run (immutable, deduplicated)"),
+        _cmd("list", [_TASK_ID, _json_flag()], help="List a task's evidence"),
+    ]), help="Record or list outcome evidence for governed cards"),
     _cmd("edit", [
         _TASK_ID,
         _arg("--title", help="Replace the task title"),
@@ -420,6 +443,7 @@ _SPECS = [
     _cmd("heartbeat", [
         _TASK_ID,
         _arg("--note", help="Optional short note attached to the heartbeat event"),
+        _arg("--run-id", type=int, help="Coordinator run id returned by claim (external boards)"),
     ], help="Emit a heartbeat event for a running task (worker liveness signal)"),
     _cmd("assignees", [_json_flag()],
          help="List known profiles + per-profile task counts (union of ~/.hermes/profiles/ and current assignees on the board)"),

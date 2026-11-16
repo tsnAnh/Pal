@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from hermes_cli import kanban_db as kb
+from hermes_cli.kanban_board_mode import require_worker_board
 from hermes_cli import kanban_db_connect as kbc
 
 from utils import env_int
@@ -195,7 +196,9 @@ def specify_task(
 ) -> SpecifyOutcome:
     """Specify one triage task and promote it to ``todo``. Expected failures
     (not in triage, no aux client, API error, malformed reply) surface as
-    ``ok=False`` so an ``--all`` sweep continues."""
+    ``ok=False`` so an ``--all`` sweep continues. Raises ``ExternalBoardError`` on a
+    coordinator-owned board."""
+    require_worker_board(None, "specification")
     task, reason = _load_triage_task(task_id)
     if task is None:
         return SpecifyOutcome(task_id, False, reason)
