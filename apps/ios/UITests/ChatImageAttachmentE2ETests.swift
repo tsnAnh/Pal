@@ -38,6 +38,8 @@ final class ChatImageAttachmentE2ETests: E2ETestCase {
         waitFor(sent, timeout: 60, "sent image rendered in the bubble")
         sent.tap()
         waitFor(any(app, "imageViewerImage"), timeout: 30, "enlarged image")
+        XCTAssertFalse(app.buttons["imageViewerPrevious"].isEnabled, "no previous image before the first")
+        XCTAssertFalse(app.buttons["imageViewerNext"].isEnabled, "a one-image conversation has no next image")
         any(app, "imageViewerClose").tap()
         waitGone(any(app, "imageViewer"), timeout: 10, "viewer closes")
     }

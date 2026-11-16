@@ -184,6 +184,13 @@ public enum ChatMetrics {
     public static let bubbleWidthFraction: CGFloat = 0.78
     public static let padColumn: CGFloat = 720
     #endif
+    public static func bubbleWidth(inColumn column: CGFloat) -> CGFloat {
+        #if os(macOS)
+        min(column, bubbleMaxWidth)
+        #else
+        column * bubbleWidthFraction
+        #endif
+    }
     public static let sameSenderGap: CGFloat = 4
     public static let senderSwitchGap: CGFloat = 16
     public static let bubbleTrailingGap: CGFloat = 60

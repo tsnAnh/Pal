@@ -17,6 +17,21 @@ struct MessageImagesTests {
         #expect(content.images.allSatisfy { $0.assetRef != nil })
     }
 
+    @Test("a text-mode vision note becomes the photo and leaves only the authored text")
+    func visionNote() {
+        let note = "[The user sent an image~ Here's what I can see:\na red cat\non two lines]\n[If you need a closer look, use vision_analyze with image_url: /h/cache/images/cat.png ~]"
+        let content = MessageImages.extract(from: note + "\n\nwhat is this?", role: .user)
+        #expect(content.text == "what is this?")
+        #expect(content.images.map(\.name) == ["cat.png"])
+        #expect(content.images.first?.assetRef == ImageReference.assetRef(forHostPath: "/h/cache/images/cat.png"))
+    }
+
+    @Test("a vision note with no loadable photo keeps the text untouched")
+    func visionNoteWithoutPhoto() {
+        let text = "[The user sent an image but I couldn't quite see it this time (>_<) with vision_analyze using image_url: not-a-path]\n\nhi"
+        #expect(MessageImages.extract(from: text, role: .user).images.isEmpty)
+    }
+
     @Test("an image-only sent message leaves no text")
     func imageOnly() {
         let content = MessageImages.extract(from: "@image:/h/images/a.png\n[screenshot]", role: .user)

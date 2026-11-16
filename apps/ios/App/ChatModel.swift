@@ -129,6 +129,8 @@ final class ChatModel {
     private(set) var reactions: [String: String] = [:]
     private(set) var replyTarget: ReplyTarget?
     var isFinding = false
+    var imageViewer: ImageViewerState?
+    var filePreview: FileReference?
     var findQuery = "" {
         didSet { findQueryChanged() }
     }
@@ -425,6 +427,25 @@ final class ChatModel {
 
     func removeAttachment(_ id: UUID) {
         pending.remove(id)
+    }
+
+    var imageLoader: ChatImageLoader {
+        { [self] reference, thumbnail in try await loadImage(reference, thumbnail: thumbnail) }
+    }
+
+    var fileActions: ChatFileActions {
+        ChatFileActions(
+            check: { [self] in try await fileAvailability($0) },
+            load: { [self] in try await loadFile($0) }
+        )
+    }
+
+    func openImage(_ reference: ImageReference, inRow rowID: String) {
+        let images = ConversationImages.list(from: rows.map { row in
+            if case .imageGeneration(.ready(let image)) = row.kind { return (row.id, [image]) }
+            return (row.id, row.images)
+        })
+        imageViewer = ImageViewerState(images: images, opening: "\(rowID)/\(reference.id)", anchorRowID: rowID)
     }
 
     func localImage(for reference: ImageReference) -> Data? {
