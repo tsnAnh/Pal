@@ -54,12 +54,12 @@ struct KanbanFollowTests {
             #expect(await store.pollOnce(board: "ops") == .wait)
             script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1"), KanbanJSON.card("t2")], cursor: "c9"))
             #expect(await store.pollOnce(board: "ops") == .wait)
-            #expect(script.calls("kanban.board.snapshot").count == 2, state)
+            #expect(script.calls("kanban.board.snapshot").count == 2, "\(state)")
             script.enqueue("kanban.card.get", KanbanJSON.cardResult("t2"))
             script.enqueue("kanban.events.since", KanbanJSON.events([KanbanJSON.event(1, task: "t2")], cursor: "c10"))
             #expect(await store.pollOnce(board: "ops") == .wait)
-            #expect(cursors(script) == ["c0", "c9"], state)
-            #expect(script.calls("kanban.board.snapshot").count == 2, state)
+            #expect(cursors(script) == ["c0", "c9"], "\(state)")
+            #expect(script.calls("kanban.board.snapshot").count == 2, "\(state)")
             #expect(store.session.cache("ops")?.cursor == "c10")
         }
     }
