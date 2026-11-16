@@ -1,7 +1,7 @@
 ---
 name: himalaya
 description: "Himalaya CLI: IMAP/SMTP email from terminal."
-version: 1.1.0
+version: 1.2.0
 author: community
 license: MIT
 platforms: [linux, macos, windows]
@@ -20,7 +20,7 @@ required_environment_variables:
 
 # Himalaya Email CLI
 
-Himalaya is a CLI email client that lets you manage emails from the terminal using IMAP, SMTP, Notmuch, or Sendmail backends.
+Himalaya is a CLI email client that lets you manage emails from the terminal using IMAP, JMAP, SMTP and other backends. This skill documents Himalaya v2; v1 flags and config keys do not work.
 
 This skill is separate from the Hermes Email gateway adapter. The gateway
 adapter lets people email the agent and uses Hermes' built-in IMAP/SMTP
@@ -29,12 +29,12 @@ requires the external `himalaya` CLI.
 
 ## References
 
-- `references/configuration.md` (config file setup + IMAP/SMTP authentication)
+- `references/configuration.md` (config file setup + IMAP/SMTP authentication, written for v1)
 - `references/message-composition.md` (MML syntax for composing emails)
 
 ## Prerequisites
 
-1. Himalaya CLI installed (`himalaya --version` to verify)
+1. Himalaya v2 installed (`himalaya --version` to verify)
 2. A configuration file at `~/.config/himalaya/config.toml`
 3. `HIMALAYA_PASSWORD` set; loading this skill asks the owner for it in a masked prompt. Never ask for the password in chat, never write it to a file or a command line.
 
@@ -54,177 +54,107 @@ cargo install himalaya --locked
 ## Configuration Setup
 
 Ask the owner for the address, IMAP and SMTP hosts and ports (none of these is secret), then write
-`~/.config/himalaya/config.toml` with the file tool. The password is never in the file: `printenv
-HIMALAYA_PASSWORD` reads it from the environment the skill's masked prompt filled. Do not run
-`himalaya account configure`.
+`~/.config/himalaya/config.toml` with the file tool. The password is never in the file: the `command`
+below reads `HIMALAYA_PASSWORD` from the environment the skill's masked prompt filled. Do not run
+`himalaya configure` or `himalaya account configure`.
 
 ```toml
 [accounts.personal]
+default = true
 email = "you@example.com"
 display-name = "Your Name"
-default = true
 
-backend.type = "imap"
-backend.host = "imap.example.com"
-backend.port = 993
-backend.encryption.type = "tls"
-backend.login = "you@example.com"
-backend.auth.type = "password"
-backend.auth.cmd = "printenv HIMALAYA_PASSWORD"
+imap.server = "imaps://imap.example.com:993"
+imap.sasl.plain.username = "you@example.com"
+imap.sasl.plain.password.command = "printenv HIMALAYA_PASSWORD"
 
-message.send.backend.type = "smtp"
-message.send.backend.host = "smtp.example.com"
-message.send.backend.port = 587
-message.send.backend.encryption.type = "start-tls"
-message.send.backend.login = "you@example.com"
-message.send.backend.auth.type = "password"
-message.send.backend.auth.cmd = "printenv HIMALAYA_PASSWORD"
+smtp.server = "smtp://smtp.example.com:587"
+smtp.starttls = true
+smtp.sasl.plain.username = "you@example.com"
+smtp.sasl.plain.password.command = "printenv HIMALAYA_PASSWORD"
 
-# Folder aliases (himalaya v1.2.0+ syntax). Required whenever the
-# server's folder names don't match himalaya's canonical names
-# (inbox/sent/drafts/trash). Gmail is the common case — see
-# `references/configuration.md` for the `[Gmail]/Sent Mail` mapping.
-folder.aliases.inbox = "INBOX"
-folder.aliases.sent = "Sent"
-folder.aliases.drafts = "Drafts"
-folder.aliases.trash = "Trash"
+mailbox.alias.inbox = "INBOX"
+mailbox.alias.sent = "Sent"
+mailbox.alias.drafts = "Drafts"
+mailbox.alias.trash = "Trash"
 ```
 
-> **Heads up on the alias syntax.** Pre-v1.2.0 docs used a
-> `[accounts.NAME.folder.alias]` sub-section (singular `alias`).
-> v1.2.0 silently ignores that form — TOML parses fine, but the
-> alias resolver never reads it, so every lookup falls through to
-> the canonical name. On Gmail this means save-to-Sent fails *after*
-> SMTP delivery succeeds, and `himalaya message send` exits non-zero.
-> Any caller (agent, script, user) that retries on that exit code
-> will re-run the entire send — including SMTP — producing duplicate
-> emails to recipients. Always use `folder.aliases.X` (plural, dotted
-> keys, directly under `[accounts.NAME]`).
+`mailbox.alias.*` is required whenever the server's mailbox names differ from himalaya's roles
+(inbox, sent, drafts, trash). On Gmail, sent is `[Gmail]/Sent Mail`. If saving to Sent fails after SMTP
+delivery succeeds, `himalaya message send` exits non-zero: do not re-run the send, or the recipient
+gets duplicates.
 
 ## Hermes Integration Notes
 
 - **Reading, listing, searching, moving, deleting** all work directly through the terminal tool
-- **Composing/replying/forwarding** — piped input (`cat << EOF | himalaya template send`) is recommended for reliability. Interactive `$EDITOR` mode works with `pty=true` + background + process tool, but requires knowing the editor and its commands
-- Use `--output json` for structured output that's easier to parse programmatically
-- An authentication failure opens the masked password prompt again on its own; do not retry the command or ask for the password in chat
+- **Composing/replying/forwarding** use flags (`--to`, `--subject`, `--body` or `--body-file`) with `--send`, or pipe a finished RFC 5322 message to `himalaya message send`. Without `--send` the draft is not sent
+- Add `--json` for structured output that is easier to parse
+- A missing or rejected password opens the masked password prompt again on its own; do not retry the command or ask for the password in chat
 
 ## Common Operations
 
-### List Folders
+### List Mailboxes
 
 ```bash
-himalaya folder list
+himalaya mailbox list
 ```
 
 ### List Emails
 
-List emails in INBOX (default):
+List emails in the inbox (default):
 
 ```bash
 himalaya envelope list
 ```
 
-List emails in a specific folder:
+List emails in a specific mailbox, with pagination:
 
 ```bash
-himalaya envelope list --folder "Sent"
-```
-
-List with pagination:
-
-```bash
-himalaya envelope list --page 1 --page-size 20
+himalaya envelope list --mailbox "Sent" --page 1 --page-size 20
 ```
 
 ### Search Emails
 
 ```bash
-himalaya envelope list from john@example.com subject meeting
+himalaya envelope search from john@example.com and subject meeting
 ```
 
 ### Read an Email
 
-Read email by ID (shows plain text):
-
 ```bash
 himalaya message read 42
-```
-
-Export raw MIME:
-
-```bash
-himalaya message export 42 --full
+himalaya message read 42 --raw
 ```
 
 ### Reply to an Email
 
-To reply non-interactively from Hermes, read the original message, compose a reply, and pipe it:
-
 ```bash
-# Get the reply template, edit it, and send
-himalaya template reply 42 | sed 's/^$/\nYour reply text here\n/' | himalaya template send
-```
-
-Or build the reply manually:
-
-```bash
-cat << 'EOF' | himalaya template send
-From: you@example.com
-To: sender@example.com
-Subject: Re: Original Subject
-In-Reply-To: <original-message-id>
-
-Your reply here.
-EOF
-```
-
-Reply-all (interactive — needs $EDITOR, use template approach above instead):
-
-```bash
-himalaya message reply 42 --all
+himalaya message reply 42 --body "Your reply here." --send
 ```
 
 ### Forward an Email
 
 ```bash
-# Get forward template and pipe with modifications
-himalaya template forward 42 | sed 's/^To:.*/To: newrecipient@example.com/' | himalaya template send
+himalaya message forward 42 --to newrecipient@example.com --send
 ```
 
 ### Write a New Email
 
-**Non-interactive (use this from Hermes)** — pipe the message via stdin:
-
 ```bash
-cat << 'EOF' | himalaya template send
-From: you@example.com
-To: recipient@example.com
-Subject: Test Message
-
-Hello from Himalaya!
-EOF
+himalaya message compose --to recipient@example.com --subject "Test Message" --body "Hello from Himalaya!" --send
 ```
 
-Or with headers flag:
+Or pipe a finished message:
 
 ```bash
-himalaya message write -H "To:recipient@example.com" -H "Subject:Test" "Message body here"
+printf 'From: you@example.com\nTo: recipient@example.com\nSubject: Test Message\n\nHello from Himalaya!\n' | himalaya message send
 ```
-
-Note: `himalaya message write` without piped input opens `$EDITOR`. This works with `pty=true` + background mode, but piping is simpler and more reliable.
 
 ### Move/Copy Emails
 
-Move to folder (target folder comes first, then the message ID):
-
 ```bash
-himalaya message move "Archive" 42
-```
-
-Copy to folder (target folder comes first, then the message ID):
-
-```bash
-himalaya message copy "Important" 42
+himalaya message move --to "Archive" 42
+himalaya message copy --to "Important" 42
 ```
 
 ### Delete an Email
@@ -235,72 +165,33 @@ himalaya message delete 42
 
 ### Manage Flags
 
-Add flag:
-
 ```bash
-himalaya flag add 42 --flag seen
-```
-
-Remove flag:
-
-```bash
-himalaya flag remove 42 --flag seen
+himalaya flag add --flag seen 42
+himalaya flag remove --flag seen 42
 ```
 
 ## Multiple Accounts
 
-List accounts:
-
 ```bash
 himalaya account list
-```
-
-Use a specific account:
-
-```bash
 himalaya --account work envelope list
 ```
 
 ## Attachments
 
-Save attachments from a message:
-
 ```bash
 himalaya attachment download 42
-```
-
-Save to specific directory:
-
-```bash
-himalaya attachment download 42 --downloads-dir ~/Downloads
-```
-
-## Output Formats
-
-Most commands support `--output` for structured output:
-
-```bash
-himalaya envelope list --output json
-himalaya envelope list --output plain
+himalaya attachment download 42 --dir ~/Downloads
 ```
 
 ## Debugging
 
-Enable debug logging:
-
 ```bash
-RUST_LOG=debug himalaya envelope list
-```
-
-Full trace with backtrace:
-
-```bash
-RUST_LOG=trace RUST_BACKTRACE=1 himalaya envelope list
+himalaya --log-level debug envelope list
 ```
 
 ## Tips
 
 - Use `himalaya --help` or `himalaya <command> --help` for detailed usage.
-- Message IDs are relative to the current folder; re-list after folder changes.
-- For composing rich emails with attachments, use MML syntax (see `references/message-composition.md`).
-- Store passwords securely using `pass`, system keyring, or a command that outputs the password.
+- Message IDs are relative to the current mailbox; re-list after switching mailboxes.
+- Attach files with `--attach <PATH>`.

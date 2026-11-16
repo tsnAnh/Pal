@@ -10,6 +10,22 @@ from tools.skills_tool_setup import _get_required_environment_variables
 CANARY = "canary-app-password-7391"
 
 
+V2_BACKTRACE = """
+
+Backtrace:
+   0: <unknown>
+   1: <unknown>
+   2: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+
+Suggestions:
+ - Run with --log-level to enable more verbose logs"""
+V2_SECRET_COMMAND_FAILED = "Error: Secret command error: " + V2_BACKTRACE
+V2_SERVER_REJECTED = "Error: IMAP AUTHENTICATE PLAIN failed: NO Authentication failed." + V2_BACKTRACE
+V2_SMTP_REJECTED = "Error: SMTP AUTH PLAIN failed: rejected 535 5.7.8 Authentication credentials invalid" + V2_BACKTRACE
+LIST = {"command": "himalaya mailbox list"}
+
+
 def terminal_result(output, code):
     return json.dumps({"output": output, "exit_code": code})
 
@@ -128,3 +144,68 @@ def test_loading_himalaya_with_a_password_does_not_prompt_and_forwards_it(tmp_pa
     assert result["success"] is True
     assert is_env_passthrough("HIMALAYA_PASSWORD")
     assert CANARY not in json.dumps(result)
+
+
+def test_v2_secret_command_failure_is_a_missing_password_need():
+    need = auth_required.detect("terminal", LIST, terminal_result(V2_SECRET_COMMAND_FAILED, 1))
+    assert need == auth_required.AuthNeed("email:himalaya", "missing", "api_key")
+
+
+def test_v2_server_rejection_stays_an_expired_password_need():
+    need = auth_required.detect("terminal", LIST, terminal_result(V2_SERVER_REJECTED, 1))
+    assert need == auth_required.AuthNeed("email:himalaya", "expired", "api_key")
+
+
+def test_v2_smtp_rejection_is_an_expired_password_need():
+    need = auth_required.detect("terminal", {"command": "himalaya message send"}, terminal_result(V2_SMTP_REJECTED, 1))
+    assert need == auth_required.AuthNeed("email:himalaya", "expired", "api_key")
+
+
+@pytest.mark.parametrize("command,output,code", [
+    ("himalaya mailbox list", V2_SECRET_COMMAND_FAILED, 0),
+    ("echo himalaya", V2_SECRET_COMMAND_FAILED, 1),
+    ("himalaya mailbox list", "Error: Spawn secret command error" + V2_BACKTRACE, 1),
+    ("himalaya mailbox list", "mail body: Secret command error was in the subject", 1),
+])
+def test_unrelated_secret_command_text_never_triggers_the_popup(command, output, code):
+    assert auth_required.detect("terminal", {"command": command}, terminal_result(output, code)) is None
+
+
+def _prompting(monkeypatch, outcome):
+    from gateway import auth_prompts
+    prompts = []
+    monkeypatch.setattr(auth_prompts, "call_from_thread",
+                        lambda home, need, bot: prompts.append(need) or outcome(auth_prompts))
+    return prompts
+
+
+def test_missing_password_prompts_once_retries_once_then_plain_auth_failed(monkeypatch):
+    prompts = _prompting(monkeypatch, lambda m: m.Resolution.SIGNED_IN)
+    failing = terminal_result(V2_SECRET_COMMAND_FAILED, 1)
+    calls = []
+    out = auth_required.resolve("terminal", LIST, failing, lambda: calls.append(1) or failing)
+    assert [p.reason for p in prompts] == ["missing"] and len(calls) == 1
+    assert json.loads(out)["error_type"] == "auth_failed"
+
+
+def test_missing_password_then_good_password_returns_the_retried_result(monkeypatch):
+    _prompting(monkeypatch, lambda m: m.Resolution.SIGNED_IN)
+    ok = terminal_result("NAME  ID\nINBOX 1", 0)
+    assert auth_required.resolve("terminal", LIST, terminal_result(V2_SECRET_COMMAND_FAILED, 1), lambda: ok) == ok
+
+
+@pytest.mark.parametrize("outcome,error_type", [("DECLINED", "auth_declined"), ("TIMED_OUT", "auth_timeout")])
+def test_missing_password_decline_and_timeout_are_not_retried(monkeypatch, outcome, error_type):
+    _prompting(monkeypatch, lambda m: getattr(m.Resolution, outcome))
+    out = auth_required.resolve("terminal", LIST, terminal_result(V2_SECRET_COMMAND_FAILED, 1),
+                                lambda: pytest.fail("retried"))
+    assert json.loads(out)["error_type"] == error_type
+
+
+def test_canary_password_never_reaches_a_failure_result_or_log(monkeypatch, caplog):
+    _prompting(monkeypatch, lambda m: m.Resolution.SIGNED_IN)
+    monkeypatch.setenv("HIMALAYA_PASSWORD", CANARY)
+    failing = terminal_result(V2_SERVER_REJECTED, 1)
+    with caplog.at_level("DEBUG"):
+        out = auth_required.resolve("terminal", LIST, terminal_result(V2_SECRET_COMMAND_FAILED, 1), lambda: failing)
+    assert CANARY not in out and CANARY not in caplog.text
