@@ -94,6 +94,9 @@ struct Timeline: Sendable {
     private var liveKeys: [String: RowKey] = [:]
     private var nextKey: UInt64 = 1
     private var failedAttempts = 0
+    private var generation = 0
+    private var liveBirth: [String: Int] = [:]
+    private var unbound: [String: Int] = [:]
 
     var settledIDs: [String] { settled.map(\.wire.id) }
     var settledWires: [TimelineEntryWire] { settled.map(\.wire) }
@@ -138,8 +141,8 @@ struct Timeline: Sendable {
         return outcome
     }
 
-    mutating func echoUser(submissionID: String, text: String) {
-        live.echoUser(submissionID: submissionID, text: text)
+    mutating func echoUser(submissionID: String, text: String, carriesImage: Bool = false) {
+        live.echoUser(submissionID: submissionID, text: text, carriesImage: carriesImage)
         assignLiveKeys()
     }
 
@@ -227,7 +230,10 @@ struct Timeline: Sendable {
     }
 
     private mutating func assignLiveKeys() {
-        for item in live.items where liveKeys[item.id] == nil { liveKeys[item.id] = mint() }
+        for item in live.items where liveKeys[item.id] == nil {
+            liveKeys[item.id] = mint()
+            liveBirth[item.id] = generation
+        }
     }
 
     func cacheable(sessionID: String, maxEntries: Int = CachedTimeline.maxEntries, maxBytes: Int = CachedTimeline.maxBytes) -> CachedTimeline? {
@@ -278,6 +284,7 @@ struct Timeline: Sendable {
     }
 
     private mutating func rebuild(_ wires: [TimelineEntryWire], fresh: Set<String>, textMatch: Bool) {
+        generation += 1
         let previous = alias
         alias = [:]
         var used: Set<RowKey> = []
@@ -286,11 +293,13 @@ struct Timeline: Sendable {
         built.reserveCapacity(wires.count)
         for wire in wires {
             var parts: [Part] = []
+            var matched = false
             for (item, refs) in Self.project(wire) {
                 var key = refs.lazy.compactMap { previous[$0] }.first { !used.contains($0) }
                 if key == nil, fresh.contains(wire.id), let match = liveMatch(item, refs: refs, textMatch: textMatch, excluding: bound) {
                     bound.insert(match)
                     key = liveKeys[match]
+                    matched = true
                 }
                 let resolved = key ?? mint()
                 used.insert(resolved)
@@ -298,10 +307,12 @@ struct Timeline: Sendable {
                 parts.append(Part(key: resolved, item: item))
             }
             built.append(Settled(wire: wire, parts: parts))
+            if textMatch, fresh.contains(wire.id), !matched { unbound[wire.id] = generation }
         }
         settled = built
         positions = Dictionary(uniqueKeysWithValues: built.enumerated().map { ($1.wire.id, $0) })
         boundaries = boundaries.filter { positions[$0.key] != nil }
+        unbound = unbound.filter { positions[$0.key] != nil }
         live.dropLiveItems(bound)
         for id in bound { liveKeys[id] = nil }
         settleOverlay()
@@ -314,20 +325,45 @@ struct Timeline: Sendable {
         live.dropLiveItems(settledItems)
         for id in settledItems { liveKeys[id] = nil }
         assignLiveKeys()
+        bindLate()
+    }
+
+    private mutating func bindLate() {
+        guard !unbound.isEmpty else { return }
+        var taken: Set<String> = []
+        for (entryID, seen) in unbound.sorted(by: { $0.key < $1.key }) {
+            guard let position = positions[entryID] else { continue }
+            for part in settled[position].parts {
+                let candidate = live.items.first { item in
+                    !taken.contains(item.id) && !Self.isStreaming(item) && (liveBirth[item.id] ?? generation) < seen
+                        && Self.sameText(item, part.item)
+                }
+                if let candidate {
+                    taken.insert(candidate.id)
+                    unbound[entryID] = nil
+                }
+            }
+        }
+        live.dropLiveItems(taken)
+        for id in taken { liveKeys[id] = nil; liveBirth[id] = nil }
+        liveBirth = liveBirth.filter { liveKeys[$0.key] != nil }
     }
 
     private func liveMatch(_ item: TranscriptItem, refs: [TimelineRef], textMatch: Bool, excluding bound: Set<String>) -> String? {
         let candidates = live.items.filter { !bound.contains($0.id) && !Self.isStreaming($0) }
         if let byRef = candidates.first(where: { !Set(Self.liveRefs($0)).isDisjoint(with: refs) }) { return byRef.id }
         guard textMatch else { return nil }
-        return candidates.first { Self.sameText($0.content, item.content) }?.id
+        return candidates.first { Self.sameText($0, item) }?.id
     }
 
-    private static func sameText(_ live: TranscriptItem.Content, _ stored: TranscriptItem.Content) -> Bool {
-        switch (live, stored) {
-        case (.user(let a, .sent), .user(let b, _)): a == b
-        case (.assistant(let a, _, false), .assistant(let b, _, _)): !a.isEmpty && a == b
-        default: false
+    private static func sameText(_ live: TranscriptItem, _ stored: TranscriptItem) -> Bool {
+        switch (live.content, stored.content) {
+        case (.user(let a, .sent), .user(let b, _)):
+            let body = MessageImages.extract(from: b, role: .user)
+            guard live.carriesImage == !body.images.isEmpty else { return false }
+            return Transcript.sameBody(a, body.text) || (live.carriesImage && body.text.isEmpty)
+        case (.assistant(let a, _, false), .assistant(let b, _, _)): return !a.isEmpty && Transcript.sameBody(a, b)
+        default: return false
         }
     }
 
