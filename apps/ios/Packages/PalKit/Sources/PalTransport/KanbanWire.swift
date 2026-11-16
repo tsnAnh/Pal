@@ -45,15 +45,16 @@ public enum KanbanCardStatus: Sendable, Hashable {
     public static let displayOrder: [KanbanCardStatus] = [.triage, .todo, .scheduled, .ready, .running, .blocked, .review, .done, .archived]
 
     public init(wire: String) {
-        switch wire {
+        let key = wire.lowercased().filter { $0 != "-" && $0 != "_" && !$0.isWhitespace }
+        switch key {
         case "triage": self = .triage
         case "todo": self = .todo
         case "scheduled": self = .scheduled
         case "ready": self = .ready
-        case "running": self = .running
+        case "running", "inprogress": self = .running
         case "blocked": self = .blocked
-        case "review": self = .review
-        case "done": self = .done
+        case "review", "inreview": self = .review
+        case "done", "completed": self = .done
         case "archived": self = .archived
         default: self = .unknown(wire)
         }

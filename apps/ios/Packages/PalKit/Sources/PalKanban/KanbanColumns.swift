@@ -54,6 +54,9 @@ public struct KanbanCardRow: Sendable, Hashable, Identifiable {
 
     public var id: String { card.cardID }
     public var column: KanbanColumn { KanbanColumn(status: card.status) }
+    public var displayTitle: String {
+        KanbanBody.title(of: body, fallback: card.title.isEmpty ? card.taskID : card.title)
+    }
     public var bot: String? { card.assignee.flatMap { $0.isEmpty ? nil : $0 } }
     public var body: String? { detail?.body }
     public var evidenceCount: Int { detail?.evidence.count ?? 0 }
