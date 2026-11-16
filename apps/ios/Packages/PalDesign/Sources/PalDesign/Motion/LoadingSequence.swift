@@ -57,6 +57,10 @@ struct LoadingSequence: Sendable {
         return Array(indices.prefix(count))
     }
 
+    func playedBag(_ index: Int) -> [Int] {
+        bag(index).filter { !LoadingClips.eyesOnly.contains(LoadingClips.all[$0].name) }
+    }
+
     func solidBag(_ index: Int) -> [Int] {
         var order = shuffled(index, count: SolidClips.all.count, salt: Self.solidSalt)
         if index >= 1, order[0] == shuffled(index - 1, count: order.count, salt: Self.solidSalt)[order.count - 1] {
@@ -72,13 +76,13 @@ struct LoadingSequence: Sendable {
     func clips(inSuperCycle index: Int) -> [LoadingClip] {
         let flat = LoadingClips.all
         let solid = SolidClips.all
-        let flatOrder = (0..<Self.superCycleBags.flat).flatMap { bag(index * Self.superCycleBags.flat + $0) }
+        let flatOrder = (0..<Self.superCycleBags.flat).flatMap { playedBag(index * Self.superCycleBags.flat + $0) }
         let solidOrder = (0..<Self.superCycleBags.solid).flatMap { solidBag(index * Self.superCycleBags.solid + $0) }
         return zip(flatOrder, solidOrder).flatMap { [flat[$0], solid[$1]] }
     }
 
     static let superCycleBags: (flat: Int, solid: Int) = {
-        let flat = LoadingClips.all.count
+        let flat = LoadingClips.played.count
         let solid = SolidClips.all.count
         let shared = lcm(flat, solid)
         return (shared / flat, shared / solid)
@@ -98,7 +102,7 @@ struct LoadingSequence: Sendable {
         let cycle = LoadingClips.cycleDuration
         let time = max(t, 0)
         let index = (time / cycle).rounded(.down)
-        return Self.walk(clips: bag(Int(index)).map { clips[$0] }, at: time - index * cycle)
+        return Self.walk(clips: playedBag(Int(index)).map { clips[$0] }, at: time - index * cycle)
     }
 
     private func interleavedPose(at t: Double) -> AvatarPose {

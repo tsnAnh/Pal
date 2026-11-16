@@ -38,8 +38,10 @@ enum LoadingClips {
     static let resourceName = "avatar-loading-clips"
 
     static let all: [LoadingClip] = parse(bundledData())
+    static let eyesOnly: Set<String> = ["squint", "dot-stare"]
+    static let played: [LoadingClip] = all.filter { !eyesOnly.contains($0.name) }
 
-    static let cycleDuration: Double = all.reduce(0) { $0 + $1.duration }
+    static let cycleDuration: Double = played.reduce(0) { $0 + $1.duration }
 
     static func bundledData() -> Data {
         guard let url = Bundle.module.url(forResource: resourceName, withExtension: "json") else {

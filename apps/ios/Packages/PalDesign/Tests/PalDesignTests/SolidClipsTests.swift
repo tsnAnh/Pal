@@ -3,7 +3,7 @@ import Testing
 @testable import PalDesign
 
 private let solidClips = SolidClips.all
-private let flatClips = LoadingClips.all
+private let flatClips = LoadingClips.played
 private let turningFields: [String: Set<String>] = [
     "spin-around": ["yaw"], "peekaboo": ["yaw"], "front-flip": ["pitch"], "roll-over": ["bodyRotation"],
     "dot-chase": ["pairSpin"], "dizzy-eyes": ["eyeRoll"],
@@ -44,10 +44,10 @@ private func angle(_ pose: AvatarPose, _ field: String) -> Double {
 
 @Suite("3D loading clips")
 struct SolidClipTests {
-    @Test("fifteen distinct clips with names the 2D set does not use")
+    @Test("fourteen distinct clips with names the 2D set does not use")
     func catalogue() {
-        #expect(solidClips.count == 15)
-        #expect(Set(solidClips.map(\.name)).count == 15)
+        #expect(solidClips.count == 14)
+        #expect(Set(solidClips.map(\.name)).count == 14)
         #expect(Set(solidClips.map(\.name)).isDisjoint(with: Set(flatClips.map(\.name))))
         for clip in solidClips { #expect((1.5...4.2).contains(clip.duration), "\(clip.name) lasts \(clip.duration)") }
     }
@@ -133,7 +133,7 @@ struct SolidSequenceTests {
     @Test("a 3D clip follows every 2D clip")
     func alternates() {
         let clips = superCycle(key)
-        #expect(clips.count == 120)
+        #expect(clips.count == 2 * LoadingSequence.superCycleBags.flat * flatClips.count)
         let flatNames = Set(flatClips.map(\.name))
         let solidNames = Set(solidClips.map(\.name))
         for (index, clip) in clips.enumerated() {
@@ -141,16 +141,25 @@ struct SolidSequenceTests {
         }
     }
 
-    @Test("the 2D order is the desktop's, untouched")
+    @Test("the 2D slots keep the desktop order, minus eyes-only clips")
     func flatOrderUnchanged() {
+        let bags = LoadingSequence.superCycleBags.flat
         for key in ["alpha", key, "", "Nova"] {
             let sequence = LoadingSequence(key: key)
             for index in 0..<3 {
                 let played = sequence.clips(inSuperCycle: index).enumerated().filter { $0.offset.isMultiple(of: 2) }.map(\.element.name)
-                let expected = sequence.clipIndices(first: 60 * (index + 1)).dropFirst(60 * index).map { flatClips[$0].name }
+                let expected = (index * bags..<(index + 1) * bags).flatMap { sequence.playedBag($0) }.map { LoadingClips.all[$0].name }
                 #expect(played == Array(expected), "\(key) super cycle \(index)")
             }
         }
+    }
+
+    @Test("clips that move only the eyes never play")
+    func noEyesOnlyClips() {
+        let sequence = LoadingSequence(key: key)
+        let names = (0..<2).flatMap { sequence.clips(inSuperCycle: $0) }.map(\.name)
+        for name in ["squint", "dot-stare", "eye-morph"] { #expect(!names.contains(name), "\(name) still plays") }
+        #expect(Set(names) == Set(flatClips.map(\.name) + solidClips.map(\.name)))
     }
 
     @Test("every 3D bag plays each clip once and nothing repeats back to back")
@@ -203,10 +212,10 @@ struct SolidSequenceTests {
     @Test("without 3D clips the sequence is the plain 2D bag walk")
     func flatOnly() {
         let flat = LoadingSequence(key: key, interleavesSolid: false)
-        let order = flat.bag(0)
+        let order = flat.playedBag(0)
         var start = 0.0
         for index in order {
-            let clip = flatClips[index]
+            let clip = LoadingClips.all[index]
             #expect(close(flat.pose(at: start + clip.duration / 2), clip.pose(at: clip.duration / 2)))
             start += clip.duration
         }

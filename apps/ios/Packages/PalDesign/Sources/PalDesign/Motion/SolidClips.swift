@@ -6,7 +6,7 @@ enum SolidClips {
 
     static let all: [LoadingClip] = [
         spinAround, lookOrbit, readingLines, hop, ponderUp, dotChase, jelly, rollOver,
-        frontFlip, eyeMorph, peekaboo, dizzyEyes, nodding, glanceAround, sleepyDroop,
+        frontFlip, peekaboo, dizzyEyes, nodding, glanceAround, sleepyDroop,
     ]
 
     static let cycleDuration: Double = all.reduce(0) { $0 + $1.duration }
@@ -157,16 +157,6 @@ enum SolidClips {
             $0.bodyScaleY = p < 0.1 ? 1 - 0.12 * sin(p / 0.1 * Double.pi) : 1
             $0.eyeOpen = k > 0 && k < 1 ? 0.7 : 1
         }
-    }
-
-    static let eyeMorph = clip("eye-morph", 4) { t in
-        keyframed(cycle(t, 4), [
-            (0, pose { _ in }), (0.15, pose { _ in }),
-            (0.25, pose { $0.eyeDot = 1 }), (0.4, pose { $0.eyeDot = 1 }),
-            (0.5, pose { $0.eyeHappy = 1 }), (0.65, pose { $0.eyeHappy = 1 }),
-            (0.75, pose { $0.eyeOpen = 0.08 }), (0.88, pose { $0.eyeOpen = 0.08 }),
-            (1, pose { _ in }),
-        ])
     }
 
     static let peekaboo = clip("peekaboo", 3.2) { t in

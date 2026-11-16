@@ -128,13 +128,13 @@ struct LoadingSequenceTests {
     @Test("time walks the bag clip by clip")
     func walksBag() {
         var start = 0.0
-        for index in sequence.bag(0) {
+        for index in sequence.playedBag(0) {
             let clip = clips[index]
             let inside = start + clip.duration / 2
             #expect(close(sequence.pose(at: inside), clip.pose(at: clip.duration / 2)), "\(clip.name)")
             start += clip.duration
         }
-        let second = clips[sequence.bag(1)[0]]
+        let second = clips[sequence.playedBag(1)[0]]
         #expect(close(sequence.pose(at: cycle + second.duration / 2), second.pose(at: second.duration / 2)))
     }
 
@@ -149,7 +149,7 @@ struct LoadingSequenceTests {
         }
         for index in 0..<3 {
             var boundary = Double(index) * cycle
-            for clipIndex in sequence.bag(index) {
+            for clipIndex in sequence.playedBag(index) {
                 #expect(sameAsFacing(sequence.pose(at: boundary), tolerance: 1e-6), "not facing at t=\(boundary)")
                 boundary += clips[clipIndex].duration
             }
