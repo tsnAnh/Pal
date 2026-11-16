@@ -14,7 +14,7 @@ LAUNCHER = Path(__file__).resolve().parents[2] / "tools" / "bot_desktop" / "laun
 pytestmark = pytest.mark.platforms("linux")
 
 
-def _seed(tmp_path: Path, fake_bins: list[str], browser_exec: str = "", profile_dir: str = "") -> Path:
+def _seed(tmp_path: Path, fake_bins: list[str], browser_exec: str = "", profile_dir: str = "", icon: str = "") -> Path:
     bindir = tmp_path / "bin"
     bindir.mkdir(exist_ok=True)
     for name in fake_bins:
@@ -39,6 +39,7 @@ def _seed(tmp_path: Path, fake_bins: list[str], browser_exec: str = "", profile_
         "HERMES_BD_SOCKET": str(tmp_path / "rfb.sock"), "HERMES_BD_XAUTH": str(tmp_path / "Xauthority"),
         "HERMES_BD_ENV_FILE": str(tmp_path / "env"), "HERMES_BD_CONFIG_HOME": str(cfg),
         "HERMES_BD_SEED_ONLY": "1",
+        **({"HERMES_BD_BROWSER_ICON": icon} if icon else {}),
         **({"HERMES_BD_BROWSER_EXEC": browser_exec, "HERMES_BD_BROWSER_EXEC_LINE": f"Exec={browser_exec} --user-data-dir={profile_dir or f'{tmp_path}/bp'}"} if browser_exec else {}),
     }
     subprocess.run(["bash", str(LAUNCHER)], env=env, check=True, stdin=subprocess.DEVNULL, capture_output=True, timeout=30)
@@ -154,3 +155,39 @@ def test_look_is_seeded_with_wallpaper_and_theme(tmp_path):
     assert str(LAUNCHER.with_name("wallpaper.png")) in desktop
     assert "PLACEHOLDER" not in desktop + xsettings
     assert os.path.isfile(LAUNCHER.with_name("wallpaper.png"))
+
+
+def _icons(cfg: Path) -> dict[str, str]:
+    out = {}
+    for d in (cfg / "xfce4/panel").glob("launcher-*/hermes.desktop"):
+        lines = d.read_text(encoding="utf-8-sig").splitlines()
+        out[next(line[5:] for line in lines if line.startswith("Name="))] = next(line[5:] for line in lines if line.startswith("Icon="))
+    return out
+
+
+def test_fresh_dock_browser_entry_uses_the_icon_the_host_has(tmp_path):
+    chrome = tmp_path / "bin" / "chrome"
+    cfg = _seed(tmp_path, ["xfce4-terminal", "chrome"], browser_exec=str(chrome), icon="/snap/chromium/current/meta/gui/chromium.png")
+    assert _icons(cfg) == {"Terminal": "utilities-terminal", "Browser": "/snap/chromium/current/meta/gui/chromium.png"}
+
+
+def test_existing_browser_entry_with_the_missing_theme_icon_is_repaired_and_nothing_else(tmp_path):
+    chrome = tmp_path / "bin" / "chrome"
+    cfg = _seed(tmp_path, ["xfce4-terminal", "chrome"], browser_exec=str(chrome))
+    assert _icons(cfg)["Browser"] == "internet-web-browser"
+    panel = _panel(cfg)
+    layout = panel.read_text(encoding="utf-8")
+    shutil.rmtree(tmp_path / "bin")
+    _seed(tmp_path, ["xfce4-terminal", "chrome"], browser_exec=str(chrome), icon="/usr/share/icons/hicolor/64x64/apps/chromium-browser.png")
+    assert _icons(cfg) == {"Terminal": "utilities-terminal", "Browser": "/usr/share/icons/hicolor/64x64/apps/chromium-browser.png"}
+    assert panel.read_text(encoding="utf-8") == layout
+
+
+def test_browser_icon_the_human_chose_is_not_replaced(tmp_path):
+    chrome = tmp_path / "bin" / "chrome"
+    cfg = _seed(tmp_path, ["xfce4-terminal", "chrome"], browser_exec=str(chrome))
+    entry = next(d for d in (cfg / "xfce4/panel").glob("launcher-*/hermes.desktop") if "Name=Browser" in d.read_text(encoding="utf-8-sig"))
+    entry.write_text(entry.read_text(encoding="utf-8-sig").replace("Icon=internet-web-browser", "Icon=mine"), encoding="utf-8")
+    shutil.rmtree(tmp_path / "bin")
+    _seed(tmp_path, ["xfce4-terminal", "chrome"], browser_exec=str(chrome), icon="/x/chromium.png")
+    assert _icons(cfg)["Browser"] == "mine"

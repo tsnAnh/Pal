@@ -2490,10 +2490,10 @@ DEFAULT_CONFIG = {
     # Desktop where a human can watch, take over (logins, 2FA, CAPTCHAs) and hand back. `hermes computer-use screen`.
     "bot_desktop": {
         "geometry": "1440x900",
-        # Opt-in: start the screen automatically the first time computer_use needs a display on a headless
-        # host. Off by default so installing TigerVNC for other reasons never yields a screen nobody asked
-        # for; Hermes Desktop's Screen pane offers Start and this toggle.
-        "auto_start": False,
+        # Start the screen automatically the first time computer_use or a headed browser needs a display on a
+        # headless host that has the screen's packages installed. The start gates below (min_free_memory_mb,
+        # max_screens) and idle_stop_minutes still bound it; set false to start it only from the Screen pane.
+        "auto_start": True,
         # Refuse to start below this much free memory (MB), measured on the host or its container cgroup,
         # whichever is tighter. Xvnc + Xfce idle at ~220 MB and a takeover's browser adds 0.5-1 GB, so a
         # screen with one page runs past 1 GB; the kernel OOM killer picks its victim by score, so on a

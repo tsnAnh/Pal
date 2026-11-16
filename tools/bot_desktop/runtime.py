@@ -382,8 +382,8 @@ def ensure_started_for_tool() -> Optional[str]:
 
     Under ``terminal`` placement the sandbox screen is brought up on first use unconditionally: the sandbox is
     the boundary the user chose, a screen inside it touches nothing outside it, and the tools below refuse
-    rather than run on the host when it is not up. On the gateway host, ``bot_desktop.auto_start`` (opt-in,
-    default off) starts a Linux host's screen when it has NO display and the packages installed, so a headless
+    rather than run on the host when it is not up. On the gateway host, ``bot_desktop.auto_start`` (default
+    on) starts a Linux host's screen when it has NO display and the packages installed, so a headless
     gateway works the first time. It returns why a host auto-start failed (``None`` otherwise) so the tool can say
     so; a sandbox start failure is logged and left for :func:`tool_placement` to raise."""
     if published_env().get("DISPLAY"):
@@ -431,7 +431,7 @@ def _should_auto_start(env: dict[str, str]) -> bool:
         return False
     from hermes_cli.config import load_config_readonly
     cfg = load_config_readonly().get("bot_desktop") or {}
-    return bool(cfg.get("auto_start", False))
+    return bool(cfg.get("auto_start", True))
 
 
 # ---- idle auto-stop -------------------------------------------------------------------------------
@@ -883,11 +883,12 @@ def _spawn_and_wait(sd: Path, wait_seconds: float) -> DesktopStatus:
         })
         from tools.bot_desktop import chrome_profile
         child_env["HERMES_SHARED_FILES"] = str(chrome_profile.ensure_shared_files_dir())
-        from tools.bot_desktop.browser import dock_exec_line, dock_launch, dock_wrapper
+        from tools.bot_desktop.browser import dock_exec_line, dock_icon, dock_launch, dock_wrapper
         if (browser := dock_launch()) is not None:
             # The bare executable (the launcher checks it exists) and the ready-made, spec-quoted Exec= line.
             child_env["HERMES_BD_BROWSER_EXEC"] = browser[0]
-            child_env["HERMES_BD_BROWSER_EXEC_LINE"] = dock_exec_line(*browser, wrapper=dock_wrapper(browser[1]))
+            child_env["HERMES_BD_BROWSER_EXEC_LINE"] = dock_exec_line(*browser, wrapper=dock_wrapper(browser[1], browser[0]))
+            child_env["HERMES_BD_BROWSER_ICON"] = dock_icon(browser[0])
         # A new file per start: the log is a diagnostic for THIS launch, and nothing rotates it otherwise. Not
         # truncated in place: the old screen's idle check (in a session of its own) may still hold the old file
         # open, and its late write would land in this one behind a run of NUL bytes.
@@ -912,6 +913,7 @@ def _spawn_and_wait(sd: Path, wait_seconds: float) -> DesktopStatus:
             if env_file.exists() and (sd / "rfb.sock").exists():
                 logger.info("Bot Desktop for profile %s up on :%s", _profile_name(), num)
                 touch_activity()
+                _sync_snap_cookie()
                 return status()
             time.sleep(0.1)
         # Giving up must take the launch down: left alone, the launcher publishes DISPLAY and rfb.sock a moment
@@ -928,6 +930,23 @@ def _sandbox_env(*, create: bool):
     """The terminal environment hosting this profile's screen, or None. ``create=False`` for status probes
     (a status call must never build a container)."""
     return placement.terminal_environment(create=create)
+
+
+def _sync_snap_cookie() -> None:
+    from tools.bot_desktop import browser
+    if (exe := browser.executable()) and browser._is_snap(exe):
+        try:
+            browser.sync_snap_xauthority()
+        except OSError as exc:
+            logger.warning("Bot Desktop could not place the X authority where a snap browser can read it: %s", exc.strerror or "I/O error")
+
+
+def _drop_snap_cookie() -> None:
+    from tools.bot_desktop import browser
+    try:
+        browser.remove_snap_xauthority()
+    except OSError:
+        pass
 
 
 def _start_in_sandbox(wait_seconds: float) -> DesktopStatus:
@@ -1069,6 +1088,7 @@ def _reset_sandbox() -> list[str]:
 
 def _stop_locked(sd: Path, *, write_back: bool = True) -> bool:
     from tools.bot_desktop import chrome_profile
+    _drop_snap_cookie()
     pid = _launcher_pid()
     if pid is None:
         reaped = _reap_orphaned_server(sd)

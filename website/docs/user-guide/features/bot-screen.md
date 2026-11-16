@@ -146,13 +146,13 @@ Every bot's computer is one click away in three places of Hermes Desktop:
   its conversations too.
 
 1. Open the Screen with any of the entries above.
-   The screen is **off by default** and nothing starts it for you: click
-   **Start screen** in the pane, run `hermes computer-use screen start` on the
-   host, or set `bot_desktop.auto_start: true` if you want a headless host to
-   start the screen by itself on the bot's first `computer_use` call or first
-   headed browser use (`browser.headed: true`) — off so that installing
-   TigerVNC never yields a screen nobody asked for. A headed browser opens on
-   the screen once it is running.
+   Click **Start screen** in the pane or run `hermes computer-use screen start`
+   on the host. With the default `bot_desktop.auto_start: true`, a headless
+   host with the screen's packages installed also starts it by itself on the
+   bot's first `computer_use` call or first headed browser use
+   (`browser.headed: true`), within the memory gate below; set it to `false` to
+   start the screen only by hand. A headed browser opens on the screen once it
+   is running.
 2. The pane streams the bot's desktop. The chip in the header says who is in
    control: **Bot is in control** by default.
 3. Click **Take over**. The border turns red, your keyboard and mouse now drive
@@ -206,7 +206,11 @@ icon you removed is not added back.
 A snap Chromium (Ubuntu's `chromium`, found in `/snap/bin` even when a service's
 `PATH` lacks it) is accepted as the headed browser. Snap confinement cannot
 write hidden directories such as `~/.hermes`, so its default profile lives in
-`~/snap/chromium/common/hermes-bot-desktop/<profile>/browser-profile`.
+`~/snap/chromium/common/hermes-bot-desktop/<profile>/browser-profile`, and
+the screen's X cookie is copied (mode 0600) next to it as `Xauthority` for the
+snap's launches, replaced on each screen start and removed on stop. The dock's
+Browser icon uses the browser's own icon file, or one Hermes ships when the
+host's theme has none.
 
 Which Chromium the dock and the bot use: an explicit
 `browser.executable_path` wins; otherwise Hermes uses the PM-managed
@@ -348,17 +352,18 @@ forwarded over the same `docker exec` / `ssh` channel.
 ```yaml
 bot_desktop:
   geometry: "1440x900"      # screen size; the viewer scales to fit the pane
-  auto_start: false         # set true to start on the first computer_use call or headed browser use
+  auto_start: true          # start on the first computer_use call or headed browser use (false = by hand only)
   min_free_memory_mb: 1536  # refuse to start below this much free memory (0 = never check)
   idle_stop_minutes: 30     # stop a screen nobody used for this long (0 = keep it up)
   placement: auto           # auto | terminal | gateway — see "Where the screen runs"
 ```
 
-`auto_start` is off by default. Start the screen from the Desktop's Screen
-pane (**Start screen**), from `hermes computer-use screen start`, or set the
-flag to `true` for a headless host that should bring its screen up the first
+`auto_start` is on by default: a headless host brings its screen up the first
 time the bot calls `computer_use` or opens a headed browser (`browser.headed:
-true`) and no display is available.
+true`) and no display is available. One screen with one Chromium and an idle page
+used about 2.3 GiB on an 8 GB Pi; `min_free_memory_mb`, `max_screens` and
+`idle_stop_minutes` bound it. Set it to `false` to start the screen only from
+the Desktop's Screen pane (**Start screen**) or `hermes computer-use screen start`.
 
 State lives under `<HERMES_HOME>/bot-desktop/` per profile (RFB Unix socket,
 Xauthority, launcher log, per-profile xfconf).

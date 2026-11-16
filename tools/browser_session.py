@@ -179,6 +179,8 @@ def _bot_desktop_target() -> Optional[tuple[str, dict[str, Any]]]:
     udd = str(_bd_browser.profile_dir())
     kwargs: dict[str, Any] = {"executable": _bd_browser.executable(), "user_data_dir": udd, "ephemeral": False,
                               "extra_args": _bd_browser.SHARED_PROFILE_ARGS}
+    if kwargs["executable"] and _bd_browser._is_snap(kwargs["executable"]):
+        kwargs["env"] = _bd_browser.snap_env(build_browser_env())
     if chrome_profile.is_managed_copy(udd):
         kwargs["prepare"] = lambda: chrome_profile.prepare_launch(Path(udd))
     return f"profile:{udd}", kwargs
