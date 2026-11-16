@@ -31,6 +31,7 @@ def deliver_steer_row(agent: Any, messages: MutableSequence, steer_text: str, *,
     callback = getattr(agent, "input_absorbed_callback", None)
     if admission_ids and callback is not None:
         try:
-            callback(admission_ids=admission_ids, message_uid=row["message_uid"], text=steer_text)
+            callback(admission_ids=admission_ids, message_uid=row["message_uid"], text=steer_text,
+                     display_kind=row["display_kind"])
         except Exception:
             logger.debug("input_absorbed_callback failed", exc_info=True)

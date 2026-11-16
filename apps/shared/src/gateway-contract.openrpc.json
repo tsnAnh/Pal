@@ -13141,6 +13141,18 @@
             ],
             "default": null,
             "title": "Steering"
+          },
+          "display_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Kind"
           }
         },
         "required": [
@@ -29323,6 +29335,18 @@
           "text": {
             "title": "Text",
             "type": "string"
+          },
+          "display_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Display Kind"
           }
         },
         "required": [

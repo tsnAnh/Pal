@@ -446,6 +446,18 @@ def admission_display(payload):
     return card
 
 
+def pending_display_kind(payload):
+    from gateway.response_filters import INTERNAL_NOTIFICATION_DISPLAY_KIND, PRODUCER_CARD_KINDS
+    from gateway.session_display import HIDDEN
+    if (payload.get('display_v1') or {}).get('kind') == HIDDEN:
+        return HIDDEN
+    descriptor = _descriptor(payload)
+    if not descriptor:
+        return None
+    kind = descriptor.get('display_kind')
+    return kind if kind in PRODUCER_CARD_KINDS else INTERNAL_NOTIFICATION_DISPLAY_KIND
+
+
 def committed_route_envelope(authority, entry):
     """The route's last committed native envelope with connector provenance (what a producer turn
     borrows), or ``None`` while no human message was admitted there."""

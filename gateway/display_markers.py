@@ -54,20 +54,21 @@ def display_text(role: Any, text: str) -> Optional[str]:
     return text
 
 
-_PROCESS_COMPLETION_DISPLAY_KINDS = frozenset({"process_complete", "async_delegation_complete"})
-_BACKGROUND_PROCESS_PREFIX = "[IMPORTANT: Background process"
+_PERSON_DISPLAY_KINDS = frozenset({None, "steer"})
+_MACHINE_TURN_PREFIXES = ("[IMPORTANT: Background process", "[ASYNC DELEGATION ")
 PREVIEW_HIDDEN_SCAN = 64
 
 
 def owner_display_text(role: Any, content: Any, display_kind: Any = None) -> Optional[str]:
     """A stored row as an owner's transcript preview shows it, ``None`` when it shows nothing: a marker
-    row, or an inbound user turn that is cron or process-completion plumbing (the rule of Pal's
-    ``TranscriptVisibility``). The row stays in history; this only decides what a preview reads."""
+    row, or an inbound user turn a person did not write: any machine ``display_kind``, or cron and
+    background-result plumbing an older row carries untagged (the rule of Pal's ``InboundKind``). The
+    row stays in history; this only decides what a preview reads."""
     text = content if isinstance(content, str) else ""
     if role == "user":
         from cron.constants import BOT_CHAT_TURN_PREFIX
-        if display_kind in _PROCESS_COMPLETION_DISPLAY_KINDS or text.strip().startswith(
-                (BOT_CHAT_TURN_PREFIX, _BACKGROUND_PROCESS_PREFIX)):
+        if display_kind not in _PERSON_DISPLAY_KINDS or text.strip().startswith(
+                (BOT_CHAT_TURN_PREFIX, *_MACHINE_TURN_PREFIXES)):
             return None
     elif role != "assistant":
         return text
