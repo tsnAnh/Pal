@@ -371,11 +371,10 @@ struct Timeline: Sendable {
 
     private mutating func settleOverlay(_ late: [String: RowKey] = [:]) {
         var settledKeys = late
-        let textKeys = Dictionary(settled.flatMap { entry in
-            entry.parts.filter(\.item.isAssistant).map { (entry.wire.id, $0.key) }
-        }, uniquingKeysWith: { first, _ in first })
-        for (wireID, liveID) in receiptMatches(settledWires) where settledKeys[liveID] == nil {
-            settledKeys[liveID] = textKeys[wireID]
+        if live.items.contains(where: { $0.receipt != nil }) {
+            for (wireID, liveID) in receiptMatches(settledWires) where settledKeys[liveID] == nil {
+                settledKeys[liveID] = positions[wireID].flatMap { settled[$0].parts.first(where: \.item.isAssistant)?.key }
+            }
         }
         let aliases = alias
         for item in live.items where !Self.isStreaming(item) && settledKeys[item.id] == nil {
