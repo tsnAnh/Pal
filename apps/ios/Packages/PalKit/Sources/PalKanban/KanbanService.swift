@@ -24,10 +24,11 @@ public enum KanbanFailure: Error, Sendable, Equatable {
     case invalidParams
     case invalidResponse
     case unavailable
+    case unreachable
 
     static func classify(_ error: any Error) -> KanbanFailure {
         if let failure = error as? KanbanFailure { return failure }
-        guard case GatewayTransportError.rpc(let rpc) = error else { return .unavailable }
+        guard case GatewayTransportError.rpc(let rpc) = error else { return .unreachable }
         if rpc.code == -32601 { return .unsupported }
         switch rpc.reasonCode ?? rpc.message {
         case "permission_denied": return .permissionDenied

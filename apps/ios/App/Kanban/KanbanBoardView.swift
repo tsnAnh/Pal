@@ -9,26 +9,41 @@ struct KanbanBoardView: View {
     let openCard: (String) -> Void
     let back: () -> Void
 
+    @State private var filter = KanbanFilter()
+    @State private var pagerColumn: KanbanColumn = .backlog
+    @State private var selected: String?
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
+
     private var cache: KanbanBoardCache? { store.session.cache(board) }
     private var load: KanbanLoad { store.load(of: board) }
 
+    private var showsColumns: Bool {
+        #if os(macOS)
+        return true
+        #else
+        return sizeClass == .regular
+        #endif
+    }
+
     var body: some View {
-        KanbanPage(title: cache?.board?.name ?? board, identifier: "kanbanBoard", back: back, close: nil) {
+        KanbanPage(title: cache?.board?.name ?? board, identifier: "kanbanBoard", back: back, close: nil, scrolls: cache == nil) {
             content
         }
         .refreshable { await store.refreshSnapshot(board: board) }
+        .task(id: cache?.generation) { await store.prefetchDetails(board: board) }
     }
 
     @ViewBuilder
     private var content: some View {
-        if let cache {
-            if load == .failed { failure }
-            cards(cache)
+        if cache != nil {
+            loaded
         } else {
             switch load {
             case .idle, .loading, .ready:
-                LoadingRow(title: "Loading cards", identifier: "kanbanBoardLoading")
-            case .failed:
+                LoadingRow(title: String(localized: "Loading cards"), identifier: "kanbanBoardLoading")
+            case .failed, .unreachable:
                 failure
             default:
                 KanbanUnavailable(load: load)
@@ -37,39 +52,125 @@ struct KanbanBoardView: View {
     }
 
     private var failure: some View {
-        FailureCard(message: KanbanLoad.failed.message ?? "", identifier: "kanbanBoardFailure") {
+        FailureCard(message: (load == .unreachable ? KanbanLoad.unreachable : KanbanLoad.failed).message ?? "", identifier: "kanbanBoardFailure") {
             Task { await store.refreshSnapshot(board: board) }
         }
     }
 
+    private var loaded: some View {
+        let rows = KanbanBoardLayout.rows(session: store.session, board: board)
+        let layout = KanbanBoardLayout(rows: rows, filter: filter)
+        return VStack(spacing: 0) {
+            notice
+            if rows.isEmpty {
+                ContentUnavailableView("No cards yet", systemImage: "rectangle.split.3x1", description: Text("Cards on this board appear here."))
+                    .accessibilityIdentifier("kanbanBoardEmpty")
+            } else {
+                KanbanFilterBar(filter: $filter, layout: layout)
+                if layout.matchingCards == 0 {
+                    noMatches
+                } else {
+                    columns(layout)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
     @ViewBuilder
-    private func cards(_ cache: KanbanBoardCache) -> some View {
-        let groups = KanbanPresentation.groups(cards: cache.sortedCards, board: cache.board)
-        if groups.isEmpty {
-            ContentUnavailableView("No cards yet", systemImage: "rectangle.split.3x1", description: Text("Cards on this board appear here."))
+    private var notice: some View {
+        if load == .unreachable || load == .failed, let message = load.message {
+            HStack(spacing: 8) {
+                Image(systemName: "wifi.exclamationmark")
+                Text(message).fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .hermesText(.rowSubtitle)
+            .foregroundStyle(PalTokens.textSecondary)
+            .padding(.horizontal, PalMetrics.screenMargin)
+            .padding(.vertical, 8)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("kanbanBoardNotice")
+        }
+    }
+
+    private var noMatches: some View {
+        ContentUnavailableView {
+            Label("No matching cards", systemImage: "line.3.horizontal.decrease.circle")
+        } description: {
+            Text("Try a different search or clear the filters.")
+        } actions: {
+            Button("Clear filters") { filter = KanbanFilter() }
+        }
+        .accessibilityIdentifier("kanbanNoMatches")
+    }
+
+    private func columns(_ layout: KanbanBoardLayout) -> some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            arrangement(layout, now: context.date)
+        }
+    }
+
+    @ViewBuilder
+    private func arrangement(_ layout: KanbanBoardLayout, now: Date) -> some View {
+        if showsColumns {
+            wide(layout, now: now)
         } else {
-            ForEach(groups) { group in
-                VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
-                    SectionCaption("\(group.title) · \(group.count)", accessibilityIdentifier: "kanbanGroup-\(group.id)")
-                    GroupedCard(accessibilityIdentifier: "kanbanGroupCards-\(group.id)") {
-                        ForEach(group.cards) { card in
-                            SettingsRow.navigate(
-                                card.title,
-                                subtitle: subtitle(card),
-                                accessibilityIdentifier: "kanbanCard-\(card.taskID)"
-                            ) { openCard(card.taskID) }
-                        }
+            #if os(iOS)
+            pager(layout, now: now)
+            #endif
+        }
+    }
+
+    private func select(_ taskID: String) {
+        if showsColumns { selected = taskID } else { openCard(taskID) }
+    }
+
+    private func wide(_ layout: KanbanBoardLayout, now: Date) -> some View {
+        HStack(spacing: 0) {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 12) {
+                    ForEach(layout.columns) { column in
+                        KanbanColumnView(layout: column, now: now, selected: selected, width: 260, open: select)
                     }
                 }
+                .padding(.horizontal, PalMetrics.screenMargin)
+                .padding(.bottom, 12)
+            }
+            .scrollIndicators(.hidden)
+            if let selected {
+                Divider()
+                KanbanCardView(
+                    store: store, board: board, taskID: selected, mode: .pane,
+                    openCard: { self.selected = $0 }, back: { self.selected = nil }
+                )
+                .frame(width: 360)
             }
         }
     }
 
-    private func subtitle(_ card: KanbanCard) -> String? {
-        var parts: [String] = []
-        if let assignee = card.assignee, !assignee.isEmpty { parts.append(assignee) }
-        if let kind = card.blockKind, !kind.isEmpty { parts.append(kind) }
-        if card.governed { parts.append("Outcome contract") }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    #if os(iOS)
+    private func pager(_ layout: KanbanBoardLayout, now: Date) -> some View {
+        let current = Binding<KanbanColumn>(
+            get: { layout.columns.contains { $0.column == pagerColumn } ? pagerColumn : .backlog },
+            set: { pagerColumn = $0 }
+        )
+        return VStack(spacing: 8) {
+            FilterChipBar(
+                items: layout.columns.map { FilterChipItem(id: $0.column, title: "\($0.column.title) \($0.rows.count)") },
+                selection: current,
+                accessibilityIdentifier: "kanbanColumns"
+            )
+            TabView(selection: current) {
+                ForEach(layout.columns) { column in
+                    KanbanColumnView(layout: column, now: now, selected: nil, width: nil, open: select)
+                        .padding(.horizontal, PalMetrics.screenMargin)
+                        .padding(.bottom, 8)
+                        .tag(column.column)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+        }
     }
+    #endif
 }

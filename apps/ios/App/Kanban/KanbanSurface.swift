@@ -8,11 +8,6 @@ enum KanbanRoute: Hashable {
     case card(board: String, taskID: String)
 }
 
-private struct KanbanPollID: Hashable {
-    let board: String?
-    let isActive: Bool
-}
-
 extension KanbanStore {
     static func live(connection: ConnectionModel) -> KanbanStore {
         KanbanStore(service: KanbanService(gateway: KanbanGateway { method, params in try await connection.rpc(method, params) }))
@@ -39,7 +34,7 @@ struct KanbanSurface: View {
     }
 
     var body: some View {
-        let pollID = KanbanPollID(board: visibleBoard, isActive: scenePhase == .active)
+        let target = KanbanFollowTarget(board: visibleBoard, isActive: scenePhase == .active)
         NavigationStack(path: $path) {
             KanbanBoardsView(store: store, open: { path.append(.board($0)) }, close: close)
                 .environment(\.sheetChromeHostedInNavigation, true)
@@ -49,8 +44,8 @@ struct KanbanSurface: View {
                 }
         }
         .tint(.primary)
-        .task(id: pollID) {
-            guard pollID.isActive, let board = pollID.board else { return }
+        .task(id: target) {
+            guard let board = target.followedBoard else { return }
             await store.poll(board: board)
         }
     }
@@ -75,13 +70,15 @@ struct KanbanPage<Content: View>: View {
     let identifier: String
     let back: (() -> Void)?
     let close: (() -> Void)?
+    let scrolls: Bool
     private let content: Content
 
-    init(title: String, identifier: String, back: (() -> Void)?, close: (() -> Void)?, @ViewBuilder content: () -> Content) {
+    init(title: String, identifier: String, back: (() -> Void)?, close: (() -> Void)?, scrolls: Bool = true, @ViewBuilder content: () -> Content) {
         self.title = title
         self.identifier = identifier
         self.back = back
         self.close = close
+        self.scrolls = scrolls
         self.content = content()
     }
 
@@ -105,12 +102,17 @@ struct KanbanPage<Content: View>: View {
         #endif
     }
 
+    @ViewBuilder
     private var scrolling: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: PalMetrics.cardGap) { content }
-                .padding(.bottom, 32)
+        if scrolls {
+            ScrollView {
+                VStack(alignment: .leading, spacing: PalMetrics.cardGap) { content }
+                    .padding(.bottom, 32)
+            }
+            .scrollIndicators(.hidden)
+        } else {
+            content
         }
-        .scrollIndicators(.hidden)
     }
 
     #if os(macOS)

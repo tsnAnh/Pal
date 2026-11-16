@@ -404,8 +404,8 @@ struct KanbanStoreTests {
             if delays.record(delay) == 8 { throw CancellationError() }
         })
         await store.poll(board: "ops")
-        #expect(delays.all == [.seconds(5), .seconds(10), .seconds(20), .seconds(40), .seconds(60), .seconds(60), .seconds(60), .seconds(60)])
-        #expect(KanbanPollSchedule.delay(afterFailures: 0) == .seconds(5))
+        #expect(delays.all == [.seconds(2), .seconds(4), .seconds(8), .seconds(16), .seconds(32), .seconds(60), .seconds(60), .seconds(60)])
+        #expect(KanbanPollSchedule.delay(afterFailures: 0) == .seconds(2))
         #expect(KanbanPollSchedule.delay(afterFailures: 99) == .seconds(60))
     }
 

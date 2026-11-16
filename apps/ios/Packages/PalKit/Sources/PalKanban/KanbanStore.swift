@@ -12,15 +12,17 @@ public enum KanbanLoad: Sendable, Equatable {
     case boardArchived
     case cardAbsent
     case failed
+    case unreachable
 
     public var message: String? {
         switch self {
         case .unsupported: "This server doesn't offer boards yet."
-        case .permissionDenied: "This device can't read the board on this server."
+        case .permissionDenied: "This device isn't allowed to read boards on this server. Ask the server's owner for access."
         case .boardAbsent: "This board isn't on the server anymore."
         case .boardArchived: "This board is archived."
         case .cardAbsent: "This card isn't on the board anymore."
         case .failed: "Couldn't load the board. Retrying shortly."
+        case .unreachable: "Can't reach the server. Showing the last update and reconnecting automatically."
         case .idle, .loading, .ready: nil
         }
     }
@@ -29,9 +31,22 @@ public enum KanbanLoad: Sendable, Equatable {
         switch failure {
         case .unsupported: .unsupported
         case .permissionDenied, .profileMismatch: .permissionDenied
+        case .unreachable: .unreachable
         default: .failed
         }
     }
+}
+
+public struct KanbanFollowTarget: Sendable, Hashable {
+    public let board: String?
+    public let isActive: Bool
+
+    public init(board: String?, isActive: Bool) {
+        self.board = board
+        self.isActive = isActive
+    }
+
+    public var followedBoard: String? { isActive ? board : nil }
 }
 
 public enum KanbanPollStep: Sendable, Equatable {
@@ -50,6 +65,7 @@ public final class KanbanStore {
     public static let eventPageSize = 200
     public static let maxSnapshotRestarts = 3
     public static let maxCardRefreshes = 20
+    public static let maxPrefetchedCards = 40
 
     public private(set) var session = KanbanSession()
     public private(set) var boardsLoad: KanbanLoad = .idle
@@ -149,12 +165,20 @@ public final class KanbanStore {
         }
     }
 
+    public func prefetchDetails(board: String) async {
+        let missing = (session.cache(board)?.sortedCards ?? []).filter { session.detail(board: board, taskID: $0.taskID) == nil }
+        for card in missing.prefix(Self.maxPrefetchedCards) {
+            if Task.isCancelled { return }
+            await loadCard(board: board, taskID: card.taskID)
+        }
+    }
+
     public func pollOnce(board: String) async -> KanbanPollStep {
         guard let cache = session.cache(board), let cursor = cache.cursor else {
             await refreshSnapshot(board: board)
             switch boardLoads[board] ?? .idle {
             case .unsupported, .permissionDenied: return .stop
-            case .failed: return .backoff
+            case .failed, .unreachable: return .backoff
             default: return .wait
             }
         }
@@ -179,6 +203,9 @@ public final class KanbanStore {
             case .permissionDenied, .profileMismatch:
                 boardLoads[board] = .permissionDenied
                 return .stop
+            case .unreachable:
+                if session.cache(board) != nil { boardLoads[board] = .unreachable }
+                return .backoff
             default:
                 return .backoff
             }
@@ -257,6 +284,7 @@ public final class KanbanStore {
     private func handle(_ page: KanbanEventsPage, board: String, generation: Int) async -> KanbanPollStep {
         switch page.state {
         case .ok:
+            if boardLoads[board] == .unreachable { boardLoads[board] = .ready }
             let applied = session.apply(page, board: board, generation: generation)
             await refreshCards(applied.affectedTaskIDs, board: board)
             return page.hasMore && !applied.affectedTaskIDs.isEmpty ? .again : .wait

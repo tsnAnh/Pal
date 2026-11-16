@@ -1,15 +1,6 @@
 import Foundation
 import PalTransport
 
-public struct KanbanStatusGroup: Sendable, Equatable, Identifiable {
-    public let status: KanbanCardStatus
-    public let count: Int
-    public let cards: [KanbanCard]
-
-    public var id: String { status.wire }
-    public var title: String { KanbanPresentation.statusTitle(status) }
-}
-
 public enum KanbanPresentation {
     public static let verifiedIndependently = "Independently verified"
     public static let attested = "Attested by the producer (not independently verified)"
@@ -90,9 +81,11 @@ public enum KanbanPresentation {
         switch status {
         case .triage: "Triage"
         case .todo: "To do"
+        case .scheduled: "Scheduled"
         case .ready: "Ready"
         case .running: "Running"
         case .blocked: "Blocked"
+        case .review: "In review"
         case .done: "Done"
         case .archived: "Archived"
         case .unknown(let raw): raw.isEmpty ? unknown : humanized(raw)
@@ -109,15 +102,24 @@ public enum KanbanPresentation {
         }
     }
 
-    public static func groups(cards: [KanbanCard], board: KanbanBoard?) -> [KanbanStatusGroup] {
-        let byStatus = Dictionary(grouping: cards, by: \.status)
-        let extras = byStatus.keys.filter { !KanbanCardStatus.displayOrder.contains($0) }.sorted { $0.wire < $1.wire }
-        return (KanbanCardStatus.displayOrder + extras).compactMap { status -> KanbanStatusGroup? in
-            let members = byStatus[status] ?? []
-            let count = board?.count(of: status) ?? members.count
-            guard !members.isEmpty || count > 0 else { return nil }
-            return KanbanStatusGroup(status: status, count: count, cards: members)
+    public static func age(since seconds: Int?, now: Date) -> String? {
+        guard let seconds, seconds > 0 else { return nil }
+        let elapsed = max(0, Int(now.timeIntervalSince1970) - seconds)
+        let days = elapsed / 86_400
+        switch elapsed {
+        case ..<60: return String(localized: "now")
+        case ..<3_600: return "\(elapsed / 60)m"
+        case ..<86_400: return "\(elapsed / 3_600)h"
+        default:
+            if days < 14 { return "\(days)d" }
+            if days < 60 { return "\(days / 7)w" }
+            if days < 365 { return "\(days / 30)mo" }
+            return "\(days / 365)y"
         }
+    }
+
+    public static func ageSource(_ card: KanbanCard) -> Int? {
+        card.completedAt ?? card.startedAt ?? card.createdAt
     }
 
     private static func humanized(_ raw: String) -> String {

@@ -24,13 +24,13 @@ struct KanbanBoardsView: View {
     private var content: some View {
         let boards = store.session.boards
         if !boards.isEmpty {
-            if store.boardsLoad == .failed { failure }
+            if store.boardsLoad == .failed || store.boardsLoad == .unreachable { failure }
             list(boards)
         } else {
             switch store.boardsLoad {
             case .idle, .loading:
                 LoadingRow(title: "Loading boards", identifier: "kanbanBoardsLoading")
-            case .failed:
+            case .failed, .unreachable:
                 failure
             case .ready:
                 ContentUnavailableView("No boards yet", systemImage: "rectangle.split.3x1", description: Text("Boards on this server appear here."))
@@ -41,7 +41,7 @@ struct KanbanBoardsView: View {
     }
 
     private var failure: some View {
-        FailureCard(message: KanbanLoad.failed.message ?? "", identifier: "kanbanBoardsFailure") {
+        FailureCard(message: (store.boardsLoad == .unreachable ? KanbanLoad.unreachable : KanbanLoad.failed).message ?? "", identifier: "kanbanBoardsFailure") {
             Task { await store.loadBoards() }
         }
     }

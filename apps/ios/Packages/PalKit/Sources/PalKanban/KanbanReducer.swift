@@ -186,12 +186,12 @@ public struct KanbanSession: Sendable, Equatable {
 }
 
 public enum KanbanPollSchedule {
-    public static let interval: Duration = .seconds(5)
+    public static let interval: Duration = .seconds(2)
     public static let ceiling: Duration = .seconds(60)
 
     public static func delay(afterFailures failures: Int) -> Duration {
         guard failures > 0 else { return interval }
-        let steps = min(failures, 5)
+        let steps = min(failures, 6)
         return min(interval * (1 << (steps - 1)), ceiling)
     }
 }
