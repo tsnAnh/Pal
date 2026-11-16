@@ -28,8 +28,12 @@ struct MessageFilesTests {
     func codeIsLiteral() {
         let fenced = "Example:\n```\nMEDIA:\(csv)\n```"
         let inline = "Write `MEDIA:\(csv)` to attach a file."
-        #expect(MessageImages.extract(from: fenced, role: .assistant) == MessageContent(text: fenced, images: []))
-        #expect(MessageImages.extract(from: inline, role: .assistant) == MessageContent(text: inline, images: []))
+        for text in [fenced, inline] {
+            let content = MessageImages.extract(from: text, role: .assistant)
+            #expect(content.text == text)
+            #expect(content.images.isEmpty)
+            #expect(content.files.isEmpty)
+        }
     }
 
     @Test("malformed directives stay as text")
