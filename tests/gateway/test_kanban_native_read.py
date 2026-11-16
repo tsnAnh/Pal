@@ -550,3 +550,83 @@ async def test_a_completed_card_cannot_be_reclaimed_so_a_verified_proof_never_go
         assert claim_external(conn, gateway.ids['built'], profile=PROFILE, session_id='again', board='ops') is None
         assert not kb.reclaim_task(conn, gateway.ids['built']) and not kb.unblock_task(conn, gateway.ids['built'])
         assert kb.get_task(conn, gateway.ids['built']).status == 'done'
+
+
+def _token(*parts):
+    import base64
+    return base64.urlsafe_b64encode(json.dumps(parts[0] if len(parts) == 1 and isinstance(parts[0], list) else list(parts), separators=(',', ':')).encode()).decode().rstrip('=')
+
+
+def _raw_token(raw: bytes):
+    import base64
+    return base64.urlsafe_b64encode(raw).decode().rstrip('=')
+
+
+MALFORMED_TOKENS = {
+    'object': _raw_token(b'{}'), 'object_with_zero_key': _raw_token(b'{"0":"c"}'), 'string': _raw_token(b'"c"'),
+    'null': _raw_token(b'null'), 'number': _raw_token(b'7'), 'bool': _raw_token(b'true'), 'empty_array': _raw_token(b'[]'),
+    'prefix_only': _raw_token(b'["c"]'), 'too_many': _raw_token(b'["c","a","b","c",1,2,3]'), 'string_element_is_int': _raw_token(b'["c",1,"b","c",1,2]'),
+    'int_element_is_string': _raw_token(b'["c","a","b","c","1",2]'), 'negative': _raw_token(b'["c","a","b","c",-1,2]'),
+    'bool_element': _raw_token(b'["c","a","b","c",true,2]'), 'float_element': _raw_token(b'["c","a","b","c",1.5,2]'),
+    'wrong_prefix': _raw_token(b'["x","a","b","c",1,2]'), 'bad_json': _raw_token(b'[1,'), 'invalid_utf8': _raw_token(b'\xff\xfe'),
+    'not_base64': '!!!!', 'non_ascii': 'éé',
+}
+
+
+@pytest.mark.asyncio
+async def test_malformed_cursor_and_page_token_shapes_are_typed_refusals_and_valid_tokens_still_work(gateway):
+    _kanban_env(gateway)
+    _fill_board(gateway, 'tokens', 5)
+    before = _db_fingerprint(gateway)
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        first = await ws.result('kanban.board.snapshot', board='tokens', limit=2)
+        valid_page_token, cursor = first['next_page_token'], (await _pages(ws, 'tokens', 500))[-1]['cursor']
+        for name, token in MALFORMED_TOKENS.items():
+            replay = await ws.result('kanban.events.since', board='tokens', cursor=token)
+            page = await ws.result('kanban.board.snapshot', board='tokens', limit=2, page_token=token)
+            assert (replay['state'], replay['events'], replay['reason']) == ('snapshot_required', [], 'invalid_cursor'), name
+            assert (page['state'], page['reason']) == ('snapshot_required', 'invalid_cursor'), name
+        crossed = await ws.result('kanban.events.since', board='tokens', cursor=valid_page_token)
+        assert (crossed['state'], crossed['reason']) == ('snapshot_required', 'invalid_cursor')
+        crossed = await ws.result('kanban.board.snapshot', board='tokens', limit=2, page_token=cursor)
+        assert (crossed['state'], crossed['reason']) == ('snapshot_required', 'invalid_cursor')
+        second = await ws.result('kanban.board.snapshot', board='tokens', limit=2, page_token=valid_page_token)
+        assert second['state'] == 'present' and second == await ws.result('kanban.board.snapshot', board='tokens', limit=2, page_token=valid_page_token)
+        assert (await ws.result('kanban.events.since', board='tokens', cursor=cursor))['state'] == 'ok'
+        assert (await ws.result('kanban.board.snapshot', board='tokens', limit=2, page_token=encode_token(valid_page_token, gateway='f' * 32)))['reason'] == 'wrong_gateway'
+    assert _db_fingerprint(gateway) == before
+
+
+@pytest.mark.asyncio
+async def test_policy_recorder_receipts_project_for_the_current_run_and_stay_history_after_a_new_run(gateway, monkeypatch):
+    from hermes_cli import kanban_pr_acceptance_store as store
+    from hermes_cli.kanban_external_claim import claim_external
+    kb, kbc = _kanban_env(gateway)
+    kb.create_board('accept', dispatch_mode='external')
+    outcome = {'ok': False, 'classification': 'failure'}
+    receipt = lambda: {**outcome, 'pr_url': 'https://github.com/acme/repo/pull/7', 'head_sha': 'a' * 40, 'checks': [],
+                       'recovery': 'retry after CI is green', 'detail': 'GitHub double'}
+    monkeypatch.setattr(store, 'collect_acceptance', lambda *a, **k: receipt())
+    published = {'published_pr': 'https://github.com/acme/repo/pull/7'}
+
+    async def ci(task):
+        async with native_socket(gateway.home, gateway.descriptor) as ws:
+            detail = (await ws.result('kanban.card.get', board='accept', task_id=task))['detail']
+        return detail['proof_run_id'], detail['ci_acceptance'], detail['proof_history']
+    with kbc.connect_closing(board='accept') as conn:
+        task = kb.create_task(conn, title='ship', assignee=PROFILE, completion_contract='acme/repo', board='accept')
+        run_1 = claim_external(conn, task, profile=PROFILE, session_id='s1', board='accept').current_run_id
+        assert not kb.complete_task(conn, task, result='done', metadata=published, expected_run_id=run_1, actor_profile=PROFILE)
+    proof_run, state, history = await ci(task)
+    assert proof_run == run_1 and (state['classification'], state['run_id']) == ('failure', run_1) and history == []
+    with kbc.connect_closing(board='accept') as conn:
+        assert kb.reclaim_task(conn, task, reason='retry')
+        run_2 = claim_external(conn, task, profile=PROFILE, session_id='s2', board='accept').current_run_id
+    proof_run, state, history = await ci(task)
+    assert proof_run == run_2 and state['state'] == 'unknown' and [(h['kind'], h['run_id']) for h in history] == [('pr_acceptance', run_1)]
+    outcome.update(ok=True, classification='green')
+    with kbc.connect_closing(board='accept') as conn:
+        assert kb.complete_task(conn, task, result='done', metadata=published, expected_run_id=run_2, actor_profile=PROFILE)
+    proof_run, state, history = await ci(task)
+    assert (state['state'], state['classification'], state['run_id']) == ('accepted', 'green', run_2)
+    assert [h['run_id'] for h in history] == [run_1]
