@@ -22,7 +22,8 @@ from tools.mcp_tool_content import (
     _render_mcp_dropped_block_notice, _render_mcp_resource_block, _strip_reserved_meta_keys,
     _truncate_mcp_text_result)
 from tools.mcp_tool_errors import (
-    _auth_error_detail, _is_auth_error, _is_session_expired_error, _mcp_call_failed_message)
+    _auth_error_detail, _is_auth_error, _is_session_expired_error, _mcp_call_failed_message, refusal_message,
+    typed_refusal_code)
 
 logger = logging.getLogger("tools.mcp_tool")
 _MISSING = object()
@@ -291,9 +292,20 @@ def _result_is_error(result) -> bool:
         return False
 
 
+def _result_is_refusal(result) -> bool:
+    try:
+        payload = json.loads(result)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(payload, dict) and "error" in payload and isinstance(payload.get("refusal"), str)
+
+
 def _record_call_outcome(server_name: str, result) -> Any:
     """Breaker bookkeeping: an error payload from the tool itself still counts as a strike (#10447),
-    flagged as an application error so the open-breaker message stays truthful."""
+    flagged as an application error so the open-breaker message stays truthful. A typed refusal
+    (``refusal`` field, set only by ``_render_call_tool_result``) is a working server's answer: no strike."""
+    if _result_is_refusal(result):
+        return result
     if _result_is_error(result):
         _core._bump_server_error(server_name, application=True)
     else:
@@ -706,12 +718,16 @@ def _render_call_tool_result(result, server_name: str, image_paths: Optional[lis
     reorganisation costs only tokens, so data-preservation wins. No richness or size heuristic is
     used. ``structuredContent`` fills ``result`` when the blocks rendered effectively empty
     (structuredContent-only servers); ``_meta`` minus reserved keys is always surfaced."""
-    if mcp_field(result, "is_error", "isError", False):
+    is_error = mcp_field(result, "is_error", "isError", False)
+    structured = _capped_structured_content(result)
+    answers_with_error = is_error or (isinstance(structured, dict) and "error" in structured)
+    if refusal := typed_refusal_code(structured if answers_with_error else None, _error_result_text(result) if is_error else ""):
+        return tool_error(refusal_message(refusal, server_name), refusal=refusal, retryable=False, server=server_name)
+    if is_error:
         return tool_error(_sanitize_error(_truncate_mcp_text_result(_error_result_text(result) or "MCP tool returned an error")))
     text_result, usable_parts, cached_images = _render_content_blocks(result, server_name)
     if image_paths is not None:
         image_paths.extend(cached_images)
-    structured = _capped_structured_content(result)
     meta = _strip_reserved_meta_keys(mcp_field(result, "meta", "meta"))
     # A str here is the over-cap truncation stand-in (wire structuredContent is always an object): next to
     # usable text it would be a second multi-MB copy — the flood #56059 caps — so it only fills an empty result.
