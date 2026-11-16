@@ -2,11 +2,11 @@ import CoreGraphics
 import SwiftUI
 
 enum SolidTuning {
-    static let turn = 34.0
-    static let restLook = (x: 0.55, y: 0.6)
-    static let restEyeSlant = 25.0
+    static let turn = 41.0
+    static let restLook = (x: 0.7, y: 0.51)
+    static let restEyeSlant = 11.0
     static let eyeReach = 1.1
-    static let eye = (width: 0.25, height: 0.56, gap: 0.5, y: 0.0)
+    static let eye = (width: 0.23, height: 0.53, gap: 0.54, y: 0.14)
     static let eyeLift = 0.02
     static let nearLimb = 0.18
 }
@@ -15,7 +15,15 @@ struct AvatarSolid {
     let geometry: SolidGeometry
     let rig: AvatarRig
 
+    static let eyeInk = AvatarColor(css: "#000000") ?? .primary
+    static let blackEyesFromContrast = 3.0
+    static let lightSchemeWhite = AvatarColor(css: "#c7c7cc") ?? .primary
+
     init(_ rig: AvatarRig) {
+        var rig = rig
+        if let body = rig.bodyColor {
+            rig.eyes.fill = body.contrastWithBlack < Self.blackEyesFromContrast ? AvatarColor(css: AvatarColor.lightEyeFillCSS) ?? .primary : Self.eyeInk
+        }
         self.init(geometry: SolidGeometry.shared(for: rig), rig: rig)
     }
 
@@ -24,12 +32,30 @@ struct AvatarSolid {
         self.rig = rig
     }
 
+    func detailed(for size: CGFloat) -> AvatarSolid {
+        let detail = SolidGeometry.Detail(size: size)
+        guard detail != .standard else { return self }
+        return AvatarSolid(geometry: SolidGeometry.shared(for: rig, detail: detail), rig: rig)
+    }
+
     var bodyFill: AvatarColor? { rig.bodyColor }
     var eyeFill: AvatarColor { rig.eyes.fill }
     var restTilt: Double { rig.restTilt }
 
+
     func toned(for scheme: ColorScheme) -> AvatarSolid {
-        AvatarSolid(geometry: geometry, rig: rig.toned(for: scheme))
+        guard scheme == .light, let body = bodyFill, body.isWhite else { return self }
+        let gray = Self.lightSchemeWhite
+        func grayed(_ element: AvatarDrawing.Element) -> AvatarDrawing.Element {
+            var result = element
+            result.fill = element.fill.map { $0.recolored(to: gray) }
+            result.stroke = element.stroke.map { AvatarDrawing.Stroke(color: $0.color.recolored(to: gray), width: $0.width, round: $0.round) }
+            return result
+        }
+        var rig = rig
+        rig.body = rig.body.map(grayed)
+        rig.dots = rig.dots.map(grayed)
+        return AvatarSolid(geometry: geometry, rig: rig)
     }
 
     func eyeInked(_ ink: AvatarColor) -> AvatarSolid {

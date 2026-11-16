@@ -64,11 +64,20 @@ struct SolidFrame {
         visibleTriangles = visible
         self.corners = corners
         eyes = SolidEyes.outlines(pose, surface: geometry.surface, rotation: rotation).map { outline in
-            var shape = Path()
-            shape.addLines(outline.points.map(projection.point))
-            shape.closeSubpath()
-            return Eye(path: shape, nearLimb: outline.nearLimb)
+            Eye(path: Self.rounded(outline.points.map(projection.point)), nearLimb: outline.nearLimb)
         }
+    }
+
+    private static func rounded(_ points: [CGPoint]) -> Path {
+        var shape = Path()
+        guard let last = points.last, let first = points.first else { return shape }
+        func middle(_ a: CGPoint, _ b: CGPoint) -> CGPoint { CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2) }
+        shape.move(to: middle(last, first))
+        for (index, point) in points.enumerated() {
+            shape.addQuadCurve(to: middle(point, points[(index + 1) % points.count]), control: point)
+        }
+        shape.closeSubpath()
+        return shape
     }
 
     func boundary() -> Path {

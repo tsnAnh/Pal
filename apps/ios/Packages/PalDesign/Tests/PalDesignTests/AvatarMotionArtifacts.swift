@@ -179,6 +179,53 @@ struct AvatarMotionArtifacts {
         }
     }
 
+    @Test("every blob kind at rest, the way the shapes gallery shows them")
+    func restKinds() throws {
+        let root = URL(fileURLWithPath: try #require(outputDirectory), isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let kinds = BlobKind.allCases
+        let sheet = VStack(alignment: .leading, spacing: 12) {
+            ForEach(0..<3, id: \.self) { row in
+                HStack(spacing: 12) {
+                    ForEach(kinds.dropFirst(row * 5).prefix(5), id: \.self) { kind in
+                        VStack(spacing: 6) {
+                            AvatarFrame(content: AvatarContent(spec("pal", shape: "blobatar::\(kind.rawValue)", color: "#ffffff")), pose: .rest, size: 100)
+                                .frame(width: 130, height: 120)
+                            Text(kind.rawValue).font(.system(size: 13)).foregroundStyle(.gray)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color(white: 0.055))
+        try writePNG(sheet, scale: 1, to: root.appendingPathComponent("rest-kinds.png"))
+        let ladder = HStack(alignment: .bottom, spacing: 18) {
+            ForEach([24, 32, 44, 72, 120] as [CGFloat], id: \.self) { size in
+                AvatarFrame(content: AvatarContent(spec("pal", shape: "blobatar::round", color: "#ffffff")), pose: .rest, size: size)
+                    .frame(width: size, height: size)
+            }
+        }
+        .padding(14)
+        .background(Color(white: 0.055))
+        try writePNG(ladder, scale: 1, to: root.appendingPathComponent("rest-ladder.png"))
+        let colors = ["#ffffff", "#f4f4f4", "#ffd60a", "#ff7a00", "#e5484d", "#ec4899", "#8b5cf6", "#3e8ef7", "#5ad1e0", "#30a46c", "#6b7280", "#14213d"]
+        let themes = VStack(spacing: 0) {
+            ForEach([(ColorScheme.dark, Color(white: 0.055)), (.light, Color(white: 0.97))], id: \.0) { scheme, page in
+                HStack(spacing: 10) {
+                    ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
+                        BotAvatarView(spec: spec("bot\(index)", shape: "blobatar:k7q2m9x0:\(BlobKind.allCases[index % BlobKind.allCases.count].rawValue)", color: color), size: 56, animated: false)
+                            .frame(width: 64, height: 64)
+                    }
+                }
+                .padding(14)
+                .background(page)
+                .environment(\.colorScheme, scheme)
+            }
+        }
+        try writePNG(themes, scale: 2, to: root.appendingPathComponent("eye-ink-themes.png"))
+    }
+
     @Test("every avatar kind at every size through the key poses")
     func gallery() throws {
         let root = URL(fileURLWithPath: try #require(outputDirectory), isDirectory: true)

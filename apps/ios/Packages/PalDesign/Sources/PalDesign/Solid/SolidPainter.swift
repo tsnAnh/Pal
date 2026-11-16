@@ -12,7 +12,8 @@ struct SolidCanvas: View {
     var body: some View {
         let inset = (size * 0.3).rounded()
         let side = size + 2 * inset
-        Canvas { context, _ in
+        let solid = solid.detailed(for: size)
+        return Canvas { context, _ in
             SolidPainter(solid: solid, size: size, inset: inset, outline: outline)
                 .paint(
                     SolidPose.resolve(pose: pose, look: look, restTilt: solid.restTilt, reduceMotion: reduceMotion),

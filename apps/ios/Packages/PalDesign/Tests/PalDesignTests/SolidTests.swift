@@ -73,11 +73,16 @@ struct SolidBodyTests {
         #expect(abs(edge.minY - bounds.minY) < 0.01 && abs(edge.maxY - bounds.maxY) < 0.01)
     }
 
-    @Test("blob and classic bodies keep their fill; toning for light recolours a white body")
-    func toning() throws {
+    @Test("eyes are black; a white body is gray on a light screen and white on a dark one; dark bodies keep light eyes")
+    func eyeInk() throws {
         let white = solid("round", color: "#ffffff")
-        #expect(white.toned(for: .dark).bodyFill == white.bodyFill)
-        #expect(white.toned(for: .light).bodyFill != white.bodyFill)
+        for scheme in [ColorScheme.light, .dark] {
+            guard case .solid(let toned) = AvatarContent.solid(white).toned(for: scheme) else { Issue.record("not solid"); return }
+            #expect(toned.bodyFill?.css == (scheme == .light ? "#c7c7cc" : white.bodyFill?.css))
+            #expect(toned.eyeFill.css == "#000000")
+        }
+        for color in ["#ff7a00", "#e5484d", "#8b5cf6", "#6b7280"] { #expect(solid("round", color: color).eyeFill.css == "#000000", "\(color)") }
+        #expect(solid("round", color: "#14213d").eyeFill.css == AvatarColor.lightEyeFillCSS)
     }
 }
 
@@ -88,10 +93,10 @@ struct SolidPoseTests {
     @Test("resting turns the face up and to the right with tilted slanted eyes")
     func rest() {
         let pose = resolved(avatar)
-        #expect(abs(pose.yaw - 0.55 * 34) < 1e-9)
-        #expect(abs(pose.pitch - 0.6 * 34) < 1e-9)
+        #expect(abs(pose.yaw - SolidTuning.restLook.x * SolidTuning.turn) < 1e-9)
+        #expect(abs(pose.pitch - SolidTuning.restLook.y * SolidTuning.turn) < 1e-9)
         #expect(pose.roll == avatar.restTilt)
-        #expect(abs(pose.eyeRoll - 25) < 1e-9)
+        #expect(abs(pose.eyeRoll - SolidTuning.restEyeSlant) < 1e-9)
     }
 
     @Test("facing the viewer has no turn, no tilt and no slant")
@@ -110,8 +115,8 @@ struct SolidPoseTests {
     func hoverDirections() {
         let right = resolved(avatar, look: AvatarLook(amount: 1, x: 1, y: 0))
         let up = resolved(avatar, look: AvatarLook(amount: 1, x: 0, y: -1))
-        #expect(abs(right.yaw - 34) < 1e-9 && abs(right.pitch) < 1e-9)
-        #expect(abs(up.pitch - 34) < 1e-9 && abs(up.yaw) < 1e-9)
+        #expect(abs(right.yaw - SolidTuning.turn) < 1e-9 && abs(right.pitch) < 1e-9)
+        #expect(abs(up.pitch - SolidTuning.turn) < 1e-9 && abs(up.yaw) < 1e-9)
     }
 
     @Test("the 2D eye offsets of the old clips become body turns")
@@ -164,7 +169,7 @@ struct SolidEyeTests {
     func centredEyes(shape: String) {
         let avatar = solid(shape)
         let mesh = frame(avatar, resolved(avatar, look: AvatarLook(amount: 1, x: 0, y: 0)))
-        let origin = avatar.projection(size: size, inset: inset).origin
+        let origin = avatar.projection(size: size, inset: inset).point(SIMD2(0, SolidTuning.eye.y))
         let middle = eyeCentre(mesh)
         #expect(abs(middle.x - origin.x) < 0.5 && abs(middle.y - origin.y) < 0.5)
         for eye in mesh.eyes { #expect(verticalTilt(of: eye.path) < 2, "\(shape) tilt \(verticalTilt(of: eye.path))") }

@@ -35,6 +35,15 @@ public struct AvatarColor: Equatable, Hashable, Sendable {
         luminance < Self.darkLuminance
     }
 
+    public var contrastWithBlack: Double {
+        func linear(_ channel: Double) -> Double {
+            let c = channel / 255
+            return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        let relative = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+        return (relative + 0.05) / 0.05
+    }
+
     public var isWhite: Bool {
         luminance >= Self.whiteLuminance
     }

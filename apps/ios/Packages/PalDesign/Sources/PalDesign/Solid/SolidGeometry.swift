@@ -4,8 +4,20 @@ import Synchronization
 import SwiftUI
 
 struct SolidGeometry: Sendable {
-    static let rimCount = 96
-    static let ringCount = 8
+    enum Detail: Sendable {
+        case standard
+        case fine
+
+        static let fineFromSize: CGFloat = 200
+
+        init(size: CGFloat) {
+            self = size >= Self.fineFromSize ? .fine : .standard
+        }
+
+        var rim: Int { self == .fine ? 288 : 96 }
+        var rings: Int { self == .fine ? 32 : 8 }
+    }
+
     static let walkSteps = 12
     static let slopeReach = 0.01
 
@@ -18,11 +30,11 @@ struct SolidGeometry: Sendable {
     private static let built = Mutex<[String: SolidGeometry]>([:])
     private static let remembered = 64
 
-    static func shared(for rig: AvatarRig) -> SolidGeometry {
+    static func shared(for rig: AvatarRig, detail: Detail = .standard) -> SolidGeometry {
         let body = rig.body.map { "\($0.fill != nil) \($0.stroke?.width ?? 0) \($0.stroke?.round ?? false) \($0.path.description)" }
-        let key = "\(rig.restTilt)|" + body.joined(separator: "|")
+        let key = "\(detail)|\(rig.restTilt)|" + body.joined(separator: "|")
         if let known = built.withLock({ $0[key] }) { return known }
-        let geometry = SolidGeometry(rig: rig)
+        let geometry = SolidGeometry(rig: rig, detail: detail)
         built.withLock { cache in
             if cache.count >= remembered { cache.removeAll() }
             cache[key] = geometry
@@ -30,26 +42,25 @@ struct SolidGeometry: Sendable {
         return geometry
     }
 
-    init(rig: AvatarRig) {
+    init(rig: AvatarRig, detail: Detail = .standard) {
         let probe = SilhouetteProbe(rig.body)
         let box = AvatarRig.bounds(of: rig.body)
         let seed = probe.interiorPoint(near: rig.pivot, in: box)
         let reach = max(box.width, box.height)
-        let measured = Self.measure(probe, from: seed, reach: reach, turn: 0)
+        let measured = Self.measure(probe, from: seed, reach: reach, turn: 0, count: detail.rim)
         let centre = Self.centroid(of: measured, around: seed) ?? seed
-        let canonical = Self.measure(probe, from: centre, reach: reach, turn: -rig.restTilt * Double.pi / 180)
+        let canonical = Self.measure(probe, from: centre, reach: reach, turn: -rig.restTilt * Double.pi / 180, count: detail.rim)
         let radius = Self.inscribedRadius(of: canonical)
         let rim = Self.smoothed(canonical).map { $0 / radius }
         self.centre = centre
         self.radius = radius
         surface = SolidSurface(rim: rim)
-        (vertices, triangles) = Self.mesh(surface: surface)
+        (vertices, triangles) = Self.mesh(surface: surface, rings: detail.rings)
     }
 
-    private static func mesh(surface: SolidSurface) -> ([SIMD3<Double>], [Int32]) {
+    private static func mesh(surface: SolidSurface, rings: Int) -> ([SIMD3<Double>], [Int32]) {
         let rim = surface.rim
-        let count = rimCount
-        let rings = ringCount
+        let count = rim.count
         var vertices: [SIMD3<Double>] = []
         var triangles: [Int32] = []
         for side in [1.0, -1.0] {
@@ -89,10 +100,10 @@ struct SolidGeometry: Sendable {
         return (vertices, triangles)
     }
 
-    private static func measure(_ probe: SilhouetteProbe, from centre: CGPoint, reach: Double, turn: Double) -> [Double] {
+    private static func measure(_ probe: SilhouetteProbe, from centre: CGPoint, reach: Double, turn: Double, count: Int) -> [Double] {
         let coarse = reach / 48
-        return (0..<rimCount).map { angle in
-            let theta = Double(angle) / Double(rimCount) * 2 * Double.pi + turn
+        return (0..<count).map { angle in
+            let theta = Double(angle) / Double(count) * 2 * Double.pi + turn
             let dx = cos(theta)
             let dy = -sin(theta)
             func covered(_ r: Double) -> Bool { probe.contains(CGPoint(x: centre.x + dx * r, y: centre.y + dy * r)) }
@@ -181,7 +192,7 @@ struct SolidSurface: Sendable {
     let rim: [Double]
 
     func rho(_ x: Double, _ y: Double) -> Double {
-        let count = SolidGeometry.rimCount
+        let count = rim.count
         let turns = atan2(y, x) / (2 * Double.pi)
         let position = (turns - turns.rounded(.down)) * Double(count)
         let index = Int(position)
