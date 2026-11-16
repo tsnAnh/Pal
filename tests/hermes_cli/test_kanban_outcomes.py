@@ -358,3 +358,26 @@ def test_swarm_root_activation_cannot_close_a_governed_card(conn):
     conn.commit()
     assert not ks._activate_root_inline(conn, task_id, summary="s", metadata={})
     assert kb.get_task(conn, task_id).status == "blocked"
+
+
+def test_governed_contract_is_refused_on_a_board_that_cannot_provide_evidence(coord_env):
+    kb.create_board("ordinary")
+    with pytest.raises(ValueError, match="coordinator-owned board"):
+        _create_on("ordinary")
+
+
+def _create_on(board):
+    from hermes_cli import kanban_db_connect as kbc
+    with kbc.connect_closing(board=board) as c:
+        return kb.create_task(c, title="stranded", assignee=PROFILE, board=board,
+                              outcome_contract={"kind": "built_artifact"})
+
+
+def test_verification_status_is_reported_honestly(conn, tmp_path):
+    parent, _child, run_id, _workspace, digest, _ = _installed_card(conn, tmp_path)
+    add(conn, parent, run_id, "artifact_built", {"sha256": digest, "name": "app.zip"})
+    add(conn, parent, run_id, "app_installed",
+        {"app_id": "dev.acme.app", "artifact_sha256": digest, "readback_sha256": digest, "host": "mac-1"})
+    assert complete(conn, parent, run_id)
+    row = conn.execute("SELECT payload FROM task_events WHERE task_id=? AND kind='outcome_verified'", (parent,)).fetchone()
+    assert json.loads(row[0])["verified"]["verification"] == "attested"

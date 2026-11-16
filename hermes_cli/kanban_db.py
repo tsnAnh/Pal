@@ -1190,9 +1190,9 @@ def create_task(
     from hermes_cli.kanban_pr_acceptance import validate_contract
 
     completion_contract = validate_contract(completion_contract)
-    from hermes_cli.kanban_outcomes import contract_json
+    from hermes_cli.kanban_outcomes_store import create_time_contract
 
-    outcome_contract = contract_json(outcome_contract)
+    outcome_contract = create_time_contract(outcome_contract, board)
     model_override, provider_override = _validate_model_override(model_override, provider_override)
     reasoning_effort = normalize_reasoning_effort(reasoning_effort)
     assignee = _canonical_assignee(assignee)
@@ -4172,6 +4172,7 @@ def current_run_started_ats(conn: sqlite3.Connection, task_ids: Iterable[str]) -
 
 
 # --- Split modules (imported at the tail: they import this module as ``_kb``) ---
+from hermes_cli.kanban_board_mode import ExternalBoardError
 from hermes_cli.kanban_db_boards import (
     _default_board_display_name,
     _dir_holds_board,

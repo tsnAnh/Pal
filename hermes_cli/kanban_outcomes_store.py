@@ -262,3 +262,17 @@ def record_outcome(conn, task_id: str, prepared) -> bool:
 def append_outcome_verified(conn, task_id: str, prepared, run_id: Optional[int]) -> None:
     from hermes_cli import kanban_db as kb
     kb._append_event(conn, task_id, "outcome_verified", prepared[1], run_id=run_id)
+
+
+def create_time_contract(value, board: Optional[str]) -> Optional[str]:
+    """Canonical contract JSON; a governed card is accepted only on a board whose coordinators can attach its evidence."""
+    from hermes_cli.kanban_board_mode import board_dispatch_mode
+    from hermes_cli.kanban_outcomes import contract_json
+
+    canonical = contract_json(value)
+    if canonical is not None and board_dispatch_mode(board) != "external":
+        raise ValueError(
+            "outcome_contract requires a coordinator-owned board (dispatch_mode=external): "
+            "only an external coordinator run can attach the evidence it demands"
+        )
+    return canonical

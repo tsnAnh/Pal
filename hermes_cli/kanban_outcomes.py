@@ -240,7 +240,8 @@ def _eval_merged_pr(contract, latest, fetch_pr, attachments) -> Verdict:
     if pr.get("merge_commit") != merged.payload["merge_commit"]:
         return _refuse("mismatch", "the merge commit on GitHub differs from the merge_commit in the evidence")
     return Verdict(True, receipt={"pr_url": merged.payload["pr_url"], "head_sha": pr["head_sha"],
-                                  "merge_commit": pr["merge_commit"], "state": "MERGED"})
+                                  "merge_commit": pr["merge_commit"], "state": "MERGED",
+                                  "verification": "independent"})
 
 
 def _verified_build(latest, attachments):
@@ -261,7 +262,7 @@ def _verified_build(latest, attachments):
 
 def _eval_built_artifact(contract, latest, fetch_pr, attachments) -> Verdict:
     build, refusal = _verified_build(latest, attachments)
-    return refusal or Verdict(True, receipt=build)
+    return refusal or Verdict(True, receipt={**build, "verification": "independent"})
 
 
 def _eval_installed_app(contract, latest, fetch_pr, attachments) -> Verdict:
@@ -276,7 +277,8 @@ def _eval_installed_app(contract, latest, fetch_pr, attachments) -> Verdict:
     p = installed.payload
     if not (p["artifact_sha256"] == p["readback_sha256"] == built.payload["sha256"]):
         return _refuse("mismatch", "the installed readback hash must equal artifact_sha256 and the built artifact sha256")
-    return Verdict(True, receipt={"app_id": p["app_id"], "host": p["host"], "sha256": p["readback_sha256"]})
+    return Verdict(True, receipt={"app_id": p["app_id"], "host": p["host"], "sha256": p["readback_sha256"],
+                                  "verification": "attested"})
 
 
 def _eval_other(contract, latest, fetch_pr, attachments) -> Verdict:
@@ -292,7 +294,8 @@ def _eval_other(contract, latest, fetch_pr, attachments) -> Verdict:
              (isinstance(receipt.get(f), str) and not receipt[f].strip())]
     if empty:
         return _refuse("malformed", f"receipt is missing required field(s): {', '.join(empty)}")
-    return Verdict(True, receipt={"name": contract.name, "fields": list(contract.required_fields)})
+    return Verdict(True, receipt={"name": contract.name, "fields": list(contract.required_fields),
+                                  "verification": "attested"})
 
 
 _EVALUATORS = {

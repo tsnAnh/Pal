@@ -73,3 +73,19 @@ def test_patch_route_refuses_then_accepts_verified_force(client, conn, fake_gith
     assert accepted.status_code == 200, accepted.text
     assert kb.get_task(conn, parent).status == "done" and kb.get_task(conn, child).status == "ready"
     assert hooks.count(("kanban_task_completed", parent)) == 1
+
+
+@pytest.mark.parametrize("verb", ["specify", "decompose"])
+def test_dashboard_route_refuses_aux_workers_on_external_board(client, conn, monkeypatch, verb):
+    from hermes_cli import kanban_decompose, kanban_specify
+
+    def boom(*_a, **_kw):
+        raise AssertionError("auxiliary worker reached on a coordinator-owned board")
+
+    monkeypatch.setattr(kanban_specify, "_call_aux", boom)
+    monkeypatch.setattr(kanban_decompose, "_call_aux", boom)
+    task_id = kb.create_task(conn, title="triage me", assignee=PROFILE, triage=True)
+    response = client.post(f"/api/plugins/kanban/tasks/{task_id}/{verb}?board={BOARD}", json={})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is False and "coordinator-owned" in body["reason"]
