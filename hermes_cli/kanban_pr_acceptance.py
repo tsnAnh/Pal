@@ -20,11 +20,23 @@ _REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 _PR = re.compile(r"https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)/pull/([1-9][0-9]*)")
 
 
+FLEET_PREFIX = "fleet-ci:"
+
+
+def split_contract(contract: str) -> tuple[str, str]:
+    """``(policy, target)``: ``fleet-ci:`` selects the fleet exact-head CI policy, else required checks."""
+    if contract.startswith(FLEET_PREFIX):
+        return "fleet-ci", contract[len(FLEET_PREFIX):]
+    return "required-checks", contract
+
+
 def validate_contract(value: str | None) -> str:
     if value is None or value == "local-only":
         return "local-only"
-    if not isinstance(value, str) or not (_REPO.fullmatch(value) or _PR.fullmatch(value)):
-        raise ValueError("completion_contract must be local-only, OWNER/REPO, or an exact GitHub PR URL")
+    target = split_contract(value)[1] if isinstance(value, str) else None
+    if not isinstance(value, str) or not (_REPO.fullmatch(target) or _PR.fullmatch(target)):
+        raise ValueError("completion_contract must be local-only, OWNER/REPO, an exact GitHub PR URL, "
+                         "or either of those prefixed with fleet-ci:")
     return value
 
 
@@ -111,7 +123,13 @@ def collect_acceptance(contract: str, published_pr: str | None,
                "recovery": "Fix required failures, rerun infrastructure checks or wait, then retry completion. "
                            "Use kanban_block if human input is needed; receipts remain on the task event log."}
     try:
+        policy, contract = split_contract(contract)
+        if policy == "fleet-ci" and not assignee:
+            raise _GateAuthError("fleet-ci acceptance needs an assigned profile; it never uses the ambient login")
         profile_home = _assignee_profile_home(assignee)
+        if policy == "fleet-ci":
+            from hermes_cli.kanban_pr_acceptance_fleet import collect
+            return collect(receipt, contract, published_pr, profile_home)
         declared = _PR.fullmatch(contract)
         url = contract if declared else published_pr
         match = _PR.fullmatch(url or "")
