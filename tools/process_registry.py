@@ -1956,7 +1956,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
 
     @staticmethod
     def _status_head(session: ProcessSession) -> dict:
-        return {"session_id": session.id, "command": session.command, "status": "exited" if session.exited else "running"}
+        return {"session_id": session.id, "command": session.command, "status": "exited" if session.exited else "running", **({} if session.exited else {"pending": pending_marker("background_command", "the command to finish", session_id=session.id)})}
 
     def poll(self, session_id: str) -> dict:
         """Check status and get new output for a background process."""
@@ -2071,7 +2071,7 @@ class ProcessRegistry(ProcessTerminationMixin, ProcessCheckpointMixin, ProcessOu
         result = {
             "status": "timeout", "command": session.command, "output": _output_tail(session, 1000),
             # Not a failure — models re-issued identical waits after misreading this as an error.
-            "process_running": True}
+            "process_running": True, "pending": pending_marker("background_command", "the command to finish", session_id=session.id)}
         base_note = (
             f"Wait window of {effective_timeout}s elapsed — the process is still running. This is not an error.")
         if session.started_at:
@@ -2548,7 +2548,7 @@ process_registry = ProcessRegistry()
 
 
 # --- the "process_manage" tool schema + handler -----------------------------------
-from tools.registry import registry, tool_error
+from tools.registry import pending_marker, registry, tool_error
 
 PROCESS_SCHEMA = {
     "name": "process_manage",

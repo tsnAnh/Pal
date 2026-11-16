@@ -186,8 +186,11 @@ def spawn_background_process(
             effective_pty=effective_pty, persist_on_release=persist_on_release,
             internal_policy=internal_policy,
         )
+        from tools.registry import pending_marker
         result_data = {"output": "Background process started", "session_id": proc_session.id,
-                       "pid": proc_session.pid, "exit_code": 0, "error": None}
+                       "pid": proc_session.pid, "exit_code": 0, "error": None, "status": "running",
+                       "pending": pending_marker("background_command", "the command to finish",
+                                                 session_id=proc_session.id)}
         if persist_on_release:
             result_data["persist_on_release"] = True
         if approval_note:

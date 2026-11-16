@@ -1104,6 +1104,15 @@ def tool_error(message, **extra) -> str:
     return json.dumps({"error": _bound_error_text(str(message)), **extra}, ensure_ascii=False)
 
 
+PENDING_GUIDANCE = ("Outcome not known yet. Tell the owner you are waiting for {waiting_for}. Do not state success "
+                    "or failure. Re-read the real result when it arrives.")
+
+
+def pending_marker(kind: str, waiting_for: str, **detail) -> dict:
+    """The typed ``pending`` field of a tool or skill-load result whose outcome is not known yet."""
+    return {"kind": kind, **detail, "guidance": PENDING_GUIDANCE.format(waiting_for=waiting_for)}
+
+
 def tool_result(data=None, **kwargs) -> str:
     """JSON-encode a dict positional arg *or* keyword arguments (not both)."""
     return json.dumps(data if data is not None else kwargs, ensure_ascii=False)
