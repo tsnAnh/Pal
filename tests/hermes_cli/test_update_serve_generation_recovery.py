@@ -997,7 +997,7 @@ def test_serve_backend_survives_selection_when_the_dashboard_unit_restarts(monke
         _get_pid_cgroup_path=lambda pid: "/user.slice/hermes-serve.service",
         _get_systemd_service_for_pid=lambda pid: "hermes-serve.service",
         _dashboard_cmdline_for_pid=lambda pid: None,
-        _try_restart_systemd_service=lambda svc, cg: restarted.append(svc) or True,
+        _restart_stopped_systemd_unit=lambda svc, cg, units, argv=None: restarted.append(svc),
         _respawn_dashboard_processes=lambda cmds: [],
     )
     monkeypatch.setattr(dashboard_procs, "_lock_owned_serve_pids", lambda: set())

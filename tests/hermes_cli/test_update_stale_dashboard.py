@@ -336,14 +336,14 @@ class TestSupervisedBackendRestart:
                           return_value="/system.slice/hermes-serve.service"), \
              patch.object(main_dashboard, "_get_systemd_service_for_pid",
                           return_value="hermes-serve.service"), \
-             patch.object(main_dashboard, "_try_restart_systemd_service", return_value=True) as restart, \
+             patch.object(main_dashboard, "_restart_stopped_systemd_unit", return_value=None) as restart, \
              patch("os.kill", side_effect=fake_kill), \
              patch("time.sleep"):
             _kill_stale_dashboard_processes(restart_managed=True)
 
-        restart.assert_called_once_with(
-            "hermes-serve.service", "/system.slice/hermes-serve.service"
-        )
+        restart.assert_called_once()
+        assert restart.call_args.args[:3] == (
+            "hermes-serve.service", "/system.slice/hermes-serve.service", {"hermes-serve.service"})
         # Supervised restart succeeded — no manual hint.
         assert "when you're ready" not in capsys.readouterr().out
 
@@ -360,7 +360,7 @@ class TestSupervisedBackendRestart:
                           return_value="/system.slice/hermes-serve.service"), \
              patch.object(main_dashboard, "_get_systemd_service_for_pid",
                           return_value="hermes-serve.service"), \
-             patch.object(main_dashboard, "_try_restart_systemd_service") as restart, \
+             patch.object(main_dashboard, "_restart_stopped_systemd_unit") as restart, \
              patch("os.kill") as kill, \
              patch("time.sleep"):
             result = _kill_stale_dashboard_processes(
@@ -385,7 +385,7 @@ class TestSupervisedBackendRestart:
 
         def fake_probe(cmd, *, timeout):
             probes.append(list(cmd))
-            out = main_pid if cmd[-2:] == ["--property=MainPID", "--value"] else ""
+            out = main_pid if cmd[-2:] == ["--property=MainPID", "--value"] else "active" if "is-active" in cmd else ""
             return MagicMock(returncode=0, stdout=out, stderr="")
 
         def fake_kill(pid, sig):
@@ -396,6 +396,7 @@ class TestSupervisedBackendRestart:
              patch.object(live, "_find_stale_dashboard_pids", return_value=[4321]), \
              patch.object(main_dashboard, "_pid_unified_cgroup_entries", lambda pid: iter([unit_cgroup])), \
              patch.object(main_dashboard, "_run_probe", side_effect=fake_probe), \
+             patch.object(main_dashboard, "_backend_answers", return_value=True), \
              patch.object(main_dashboard, "_dashboard_cmdline_for_pid", return_value=argv), \
              patch("hermes_cli.dashboard_procs._hermes_home_for_pid", return_value=None), \
              patch.object(live, "_respawn_dashboard_processes", return_value=[]) as respawn, \
