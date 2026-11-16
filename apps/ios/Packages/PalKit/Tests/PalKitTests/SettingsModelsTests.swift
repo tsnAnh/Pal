@@ -5,6 +5,16 @@ import PalTransport
 import Synchronization
 import Testing
 
+private func vaultEntry(
+    id: String, kind: String, label: String, origin: String? = nil, identifier: String? = nil, backend: String = "local"
+) throws -> VaultEntry {
+    var object: [String: String] = ["id": id, "kind": kind, "label": label, "backend": backend]
+    object["origin"] = origin
+    object["identifier"] = identifier
+    let data = try JSONSerialization.data(withJSONObject: object)
+    return VaultEntry(try SettingsWire.decoder.decode(SettingsWire.VaultItem.self, from: data))
+}
+
 @Suite("Settings usage mapping")
 struct UsageMappingTests {
     private static let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -266,6 +276,49 @@ struct SettingsBehaviourTests {
         #expect(entries.map(\.isRemovable) == [true, false, true])
     }
 
+    @Test func vaultWireDecodesEveryKindToleratingUnknownAndMissingFields() throws {
+        let list = try SettingsWire.decoder.decode(SettingsWire.VaultList.self, from: Data("""
+        {"items": [
+          {"id": "1", "kind": "login", "label": "Shop", "origin": "https://shop.example.com", "identifier": "me@example.com",
+           "identifier_type": "email", "backend": "local", "future_field": {"a": 1}},
+          {"id": "2", "kind": "payment", "label": "Visa", "backend": "local", "last4": "4242"},
+          {"id": "3", "kind": "address", "label": "Home"},
+          {"id": "4", "kind": "api_key", "label": "OpenAI", "created_at": "2026-01-01T00:00:00Z", "backend": "local", "extra": true}]}
+        """.utf8))
+        let entries = list.items.map(VaultEntry.init)
+        #expect(entries.map(\.kind) == [.login, .payment, .address, .apiKey])
+        #expect(entries[3].subtitle == nil)
+        #expect(entries[3].kind.symbolName == "key.horizontal")
+        #expect(entries.map(\.isEditable) == [true, true, true, true])
+        #expect(entries[0].origin == "https://shop.example.com")
+        #expect(entries[0].identifier == "me@example.com")
+    }
+
+    @Test func apiKeyDraftNeedsExactlyANameAndAKey() {
+        var draft = VaultAPIKeyDraft()
+        #expect(!draft.isComplete)
+        draft.label = "  OpenAI  "
+        #expect(!draft.isComplete)
+        draft.apiKey = "test-key-do-not-use"
+        #expect(draft.isComplete)
+        #expect(draft.trimmedLabel == "OpenAI")
+        draft.label = "   "
+        #expect(!draft.isComplete)
+    }
+
+    @Test func editDraftStartsWithoutSecretsAndValidatesPerKind() throws {
+        let login = try vaultEntry(id: "1", kind: "login", label: "Shop", origin: "https://shop.example.com", identifier: "me@example.com")
+        var draft = VaultEditDraft(entry: login)
+        #expect(draft.secret.isEmpty)
+        #expect(draft.isComplete)
+        draft.website = "ftp://x"
+        #expect(!draft.isComplete)
+        let payment = VaultEditDraft(entry: try vaultEntry(id: "2", kind: "payment", label: "Visa"))
+        #expect(payment.isComplete)
+        let manager = try vaultEntry(id: "3", kind: "login", label: "Bw", backend: "bitwarden")
+        #expect(!manager.isEditable)
+    }
+
     @Test func failuresClassifyByReasonAndSpeakProductLanguage() {
         func failure(_ data: JSONValue?, code: Int = 4001) -> SettingsFailure {
             SettingsFailure(GatewayTransportError.rpc(RPCError(code: code, message: "raw message", data: data)))
@@ -377,6 +430,85 @@ struct SettingsAPICallTests {
         #expect(params["secret"]?["password"] == "hunter2")
         #expect(params["secret"]?["identifier_type"] == "email")
         #expect(params["password"] == nil)
+    }
+
+    @Test func vaultAddAPIKeySendsOnlyTheKeyInsideTheSecretObject() async throws {
+        let recorder = Recorder()
+        let api = Self.api(reply: ["id": "v2"], recorder: recorder)
+        try await api.addVaultAPIKey(VaultAPIKeyDraft(label: " OpenAI ", apiKey: "test-key-do-not-use"))
+        let params = try #require(recorder.calls[0].1)
+        #expect(recorder.calls[0].0 == "vault.add")
+        #expect(params["kind"] == "api_key")
+        #expect(params["label"] == "OpenAI")
+        #expect(params["secret"]?["api_key"] == "test-key-do-not-use")
+        #expect(params["secret"]?["password"] == nil)
+        #expect(params["secret"]?["identifier"] == nil)
+        #expect(params["origin"] == nil)
+        #expect(params["api_key"] == nil)
+    }
+
+    @Test func vaultUpdateOmitsEmptySecretsAndSendsProvidedOnes() async throws {
+        let recorder = Recorder()
+        let api = Self.api(reply: ["id": "v1", "kind": "login", "label": "Shop", "future": 1], recorder: recorder)
+        let login = try vaultEntry(id: "v1", kind: "login", label: "Shop", origin: "https://shop.example.com", identifier: "me@example.com")
+        var draft = VaultEditDraft(entry: login)
+        draft.label = " Shop 2 "
+        try await api.updateVaultItem(draft)
+        draft.secret = "hunter3"
+        try await api.updateVaultItem(draft)
+        let key = try vaultEntry(id: "k1", kind: "api_key", label: "OpenAI")
+        var keyDraft = VaultEditDraft(entry: key)
+        try await api.updateVaultItem(keyDraft)
+        keyDraft.secret = "test-key-do-not-use"
+        try await api.updateVaultItem(keyDraft)
+        let payment = try vaultEntry(id: "p1", kind: "payment", label: "Visa")
+        try await api.updateVaultItem(VaultEditDraft(entry: payment))
+        let calls = recorder.calls
+        #expect(calls.allSatisfy { $0.0 == "vault.update" })
+        #expect(calls[0].1?["id"] == "v1")
+        #expect(calls[0].1?["label"] == "Shop 2")
+        #expect(calls[0].1?["origin"] == "https://shop.example.com")
+        #expect(calls[0].1?["secret"]?["password"] == nil)
+        #expect(calls[1].1?["secret"]?["password"] == "hunter3")
+        #expect(calls[2].1?["secret"] == nil)
+        #expect(calls[3].1?["secret"]?["api_key"] == "test-key-do-not-use")
+        #expect(calls[4].1?["secret"] == nil)
+        #expect(calls[4].1?["origin"] == nil)
+        #expect(calls[4].1?["label"] == "Visa")
+    }
+
+    @Test func scopedApiCarriesTheBotProfileOnEveryVaultVerb() async throws {
+        let recorder = Recorder()
+        let api = Self.api(reply: ["items": [], "id": "v1", "removed": true], recorder: recorder).scoped(to: "bot-b")
+        _ = try await api.vaultItems()
+        try await api.addVaultAPIKey(VaultAPIKeyDraft(label: "K", apiKey: "test-key-do-not-use"))
+        try await api.updateVaultItem(VaultEditDraft(entry: try vaultEntry(id: "p1", kind: "payment", label: "Visa")))
+        try await api.removeVaultItem(id: "v1")
+        let calls = recorder.calls
+        #expect(calls.map(\.0) == ["vault.list", "vault.add", "vault.update", "vault.remove"])
+        #expect(calls.allSatisfy { $0.1?["profile"] == "bot-b" })
+    }
+
+    @Test func failuresNeverEchoTheKey() async {
+        let secret = "test-key-do-not-use"
+        let api = SettingsAPI(profile: "default") { _, _ in
+            throw GatewayTransportError.rpc(RPCError(code: 5320, message: "bad \(secret)", data: ["code": "storage_unavailable", "detail": .string(secret)]))
+        }
+        do {
+            try await api.addVaultAPIKey(VaultAPIKeyDraft(label: "K", apiKey: secret))
+            Issue.record("expected failure")
+        } catch {
+            let failure = SettingsFailure(error)
+            #expect(failure == .unavailable)
+            #expect(!failure.message.contains(secret))
+            #expect(!"\(failure)".contains(secret))
+        }
+        do {
+            try await api.addVaultAPIKey(VaultAPIKeyDraft(label: "", apiKey: secret))
+            Issue.record("expected failure")
+        } catch {
+            #expect(!SettingsFailure(error).message.contains(secret))
+        }
     }
 
     @Test func incompleteVaultDraftNeverReachesTheWire() async {

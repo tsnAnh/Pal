@@ -84,6 +84,11 @@ def _cmd_add(args) -> None:
             meta = get_vault_store().add_item(
                 kind="login", label=label, secret=secret, origin=origin
             )
+        elif kind == "api_key":
+            api_key = ""
+            while not api_key:
+                api_key = getpass.getpass("API key (hidden): ").strip()
+            meta = get_vault_store().add_item(kind=kind, label=label, secret={"api_key": api_key})
         else:
             from agent.vault_store import ADDRESS_FIELDS, PAYMENT_FIELDS, REQUIRED_FIELDS
 
@@ -252,10 +257,10 @@ def register_cli(subparser) -> None:
 
     p_add = subs.add_parser(
         "add",
-        help="Save a login, card or address ahead of time (optional: the agent asks you on the page when it needs one)",
+        help="Save a login, card, address or API key ahead of time (optional: the agent asks you on the page when it needs one)",
     )
     p_add.add_argument(
-        "--kind", choices=["login", "payment", "address"], default=None,
+        "--kind", choices=["login", "payment", "address", "api_key"], default=None,
         help="Item kind (interactive prompt when omitted)",
     )
     p_add.set_defaults(_vault_handler=_cmd_add)

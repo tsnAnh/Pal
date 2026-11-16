@@ -5732,7 +5732,7 @@
     },
     {
       "name": "vault.add",
-      "summary": "Add a login / payment / address item to the local vault.",
+      "summary": "Add a login / payment / address / API key item to the local vault.",
       "params": [
         {
           "name": "params",
@@ -5871,6 +5871,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/VaultUnlockResult"
+        }
+      }
+    },
+    {
+      "name": "vault.update",
+      "summary": "Edit a local vault item's label, origin or secret fields (blank secret fields are kept).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/VaultUpdateParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/VaultUpdateResult"
         }
       }
     },
@@ -60544,7 +60562,8 @@
         "enum": [
           "login",
           "payment",
-          "address"
+          "address",
+          "api_key"
         ],
         "title": "VaultKind",
         "type": "string"
@@ -60970,6 +60989,173 @@
           "name"
         ],
         "title": "VaultUnlockResult",
+        "type": "object"
+      },
+      "VaultUpdateParams": {
+        "additionalProperties": false,
+        "description": "A blank ``secret`` field keeps the stored value; the item's kind never changes.",
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Id"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Label"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Origin"
+          },
+          "secret": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Secret"
+          }
+        },
+        "title": "VaultUpdateParams",
+        "type": "object"
+      },
+      "VaultUpdateResult": {
+        "additionalProperties": false,
+        "description": "The edited item's metadata; never a secret.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "origin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Origin"
+          },
+          "created_at": {
+            "default": "",
+            "title": "Created At",
+            "type": "string"
+          },
+          "identifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Identifier"
+          },
+          "identifier_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Identifier Type"
+          },
+          "has_otp": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Has Otp"
+          },
+          "allowed_origins": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Allowed Origins"
+          },
+          "backend": {
+            "title": "Backend",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "backend"
+        ],
+        "title": "VaultUpdateResult",
         "type": "object"
       },
       "VerificationEvidenceRow": {
@@ -65456,7 +65642,7 @@
     },
     {
       "name": "vault.add",
-      "summary": "Add a login / payment / address item to the local vault.",
+      "summary": "Add a login / payment / address / API key item to the local vault.",
       "params": [
         {
           "name": "params",
@@ -65559,6 +65745,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/VaultUnlockResult"
+        }
+      }
+    },
+    {
+      "name": "vault.update",
+      "summary": "Edit a local vault item's label, origin or secret fields (blank secret fields are kept).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/VaultUpdateParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/VaultUpdateResult"
         }
       }
     },

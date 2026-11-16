@@ -13,8 +13,9 @@ Design notes:
   instead (agent/vault_keychain.py); ``hermes vault key migrate`` moves it.
 - Ported design (opaque-handle vault fill) from Merit-Systems/OpenInstinct
   (MIT): lib/manager/server/secret-store.ts + vault services.
-- Three item kinds: ``login`` (password-only secret), ``payment`` (card fields) and
-  ``address``; ``PAYMENT_FIELDS`` / ``ADDRESS_FIELDS`` are the canonical payload names.
+- Four item kinds: ``login`` (password-only secret), ``payment`` (card fields), ``address`` and
+  ``api_key`` (one named key, no origin); ``PAYMENT_FIELDS`` / ``ADDRESS_FIELDS`` are the canonical
+  payload names.
 """
 
 from __future__ import annotations
@@ -38,7 +39,7 @@ from utils import atomic_write_bytes
 
 logger = logging.getLogger(__name__)
 
-VAULT_KINDS = ("login", "payment", "address")
+VAULT_KINDS = ("login", "payment", "address", "api_key")
 
 LOGIN_IDENTIFIER_TYPES = ("email", "phone", "username")
 
@@ -54,7 +55,10 @@ ADDRESS_FIELDS = {
     "state": "address-level1", "postal_code": "postal-code", "country": "country-name",
 }
 REQUIRED_FIELDS = {"payment": ("card_number", "exp_month", "exp_year", "cvc"),
-                   "address": ("address_line1", "city", "postal_code", "country")}
+                   "address": ("address_line1", "city", "postal_code", "country"),
+                   "api_key": ("api_key",)}
+SECRET_FIELDS = {"login": ("password", "otp_secret"), "payment": tuple(PAYMENT_FIELDS),
+                 "address": tuple(ADDRESS_FIELDS), "api_key": ("api_key",)}
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
@@ -137,6 +141,18 @@ def totp_now(seed: str, *, digits: int = 6, period: int = 30, at: Optional[float
     offset = digest[-1] & 0x0F
     code = (struct.unpack(">I", digest[offset:offset + 4])[0] & 0x7FFFFFFF) % (10 ** digits)
     return str(code).zfill(digits)
+
+
+def _reject_unknown_fields(kind: str, fields: dict[str, Any], allowed: tuple) -> None:
+    unknown = sorted(str(k) for k in fields if k not in allowed)
+    if unknown:
+        raise VaultError(f"{kind} items do not take {', '.join(unknown)}")
+
+
+def _require_fields(kind: str, secret: dict[str, Any]) -> None:
+    missing = [f for f in REQUIRED_FIELDS[kind] if f not in secret]
+    if missing:
+        raise VaultError(f"{kind} items require {', '.join(missing)}")
 
 
 def normalize_origin(url_or_origin: str) -> str:
@@ -586,12 +602,14 @@ class VaultStore:
             # metadata and any stray origin echo is dropped.
             otp_secret = normalize_otp_secret(str(secret.get("otp_secret") or ""))
             secret = {"password": secret["password"], **({"otp_secret": otp_secret} if otp_secret else {})}
+        elif kind == "api_key":
+            _reject_unknown_fields(kind, secret, SECRET_FIELDS[kind])
+            secret = {k: v.strip() for k, v in secret.items() if isinstance(v, str) and v.strip()}
+            _require_fields(kind, secret)
         else:
             allowed = PAYMENT_FIELDS if kind == "payment" else ADDRESS_FIELDS
             secret = {k: str(v) for k, v in secret.items() if k in allowed and str(v or "").strip()}
-            missing = [f for f in REQUIRED_FIELDS[kind] if f not in secret]
-            if missing:
-                raise VaultError(f"{kind} items require {', '.join(missing)}")
+            _require_fields(kind, secret)
             if origin:
                 norm_origin = normalize_origin(origin)
 
@@ -611,6 +629,62 @@ class VaultStore:
             items.append(record)
             self._write_all(items)
         return self._meta(record)
+
+    def update_item(
+        self,
+        item_id: str,
+        *,
+        label: Optional[str] = None,
+        origin: Optional[str] = None,
+        secret: Optional[dict[str, Any]] = None,
+    ) -> VaultItemMeta:
+        """Edit an item in place; the kind never changes. ``secret`` maps field names to new values: a
+        missing or blank field keeps the stored value, a non-blank one replaces it (a login's
+        ``identifier`` / ``identifier_type`` are metadata, the rest is encrypted payload). An
+        unknown field or a result that fails ``add_item``'s rules raises and writes nothing."""
+        if secret is not None and not isinstance(secret, dict):
+            raise VaultError("secret must be an object of fields")
+        with self._locked():
+            items = self._read_all()
+            index = next((i for i, rec in enumerate(items) if rec.get("id") == item_id), None)
+            if index is None:
+                raise VaultError(f"no vault item with id {item_id!r}")
+            items[index] = self._updated(items[index], label, origin, secret or {})
+            self._write_all(items)
+            return self._meta(items[index])
+
+    @staticmethod
+    def _updated(rec: dict[str, Any], label: Optional[str], origin: Optional[str], secret: dict[str, Any]) -> dict[str, Any]:
+        kind = str(rec.get("kind", ""))
+        rec = {**rec, "secret": dict(rec.get("secret") or {})}
+        if label is not None:
+            rec["label"] = (label or "").strip()
+            if not rec["label"]:
+                raise VaultError("label is required")
+        if origin is not None and kind != "api_key":
+            if not origin.strip() and kind == "login":
+                raise VaultError("origin is required for login items")
+            rec["origin"] = normalize_origin(origin) if origin.strip() else None
+        metadata = ("identifier", "identifier_type") if kind == "login" else ()
+        _reject_unknown_fields(kind, secret, SECRET_FIELDS.get(kind, ()) + metadata)
+        changes = {k: str(v) for k, v in secret.items() if v is not None and str(v).strip()}
+        if "identifier_type" in changes:
+            if changes["identifier_type"] not in LOGIN_IDENTIFIER_TYPES:
+                raise VaultError(f"identifier_type must be one of {LOGIN_IDENTIFIER_TYPES}")
+            rec["identifier_type"] = changes.pop("identifier_type")
+        if "identifier" in changes:
+            rec["identifier"] = changes.pop("identifier").strip()
+        if "otp_secret" in changes:
+            changes["otp_secret"] = normalize_otp_secret(changes["otp_secret"])
+        if "api_key" in changes:
+            changes["api_key"] = changes["api_key"].strip()
+        rec["secret"].update(changes)
+        if kind == "login":
+            if not (rec["secret"].get("password") and rec.get("identifier")):
+                raise VaultError("login items require identifier and password")
+        else:
+            _require_fields(kind, rec["secret"])
+        return rec
 
     def list_items(self) -> list[VaultItemMeta]:
         """Metadata-only listing. Secret payloads are never included."""
@@ -677,9 +751,10 @@ def scrub_secret_from_text(text: str, secret: dict[str, Any]) -> str:
     message) before it can be surfaced. Case-sensitive exact substring scrub."""
     scrubbed = text
     for value in secret.values():
-        if isinstance(value, str) and len(value) >= 3 and value in scrubbed:
-            scrubbed = scrubbed.replace(value, "[REDACTED]")
+        for form in (value, value.strip()) if isinstance(value, str) else ():
+            if len(form) >= 3 and form in scrubbed:
+                scrubbed = scrubbed.replace(form, "[REDACTED]")
     # Also collapse anything that looks like a leaked password-ish token in
     # common key=value echoes.
-    scrubbed = re.sub(r"(password['\"]?\s*[:=]\s*)\S+", r"\1[REDACTED]", scrubbed)
+    scrubbed = re.sub(r"((?:password|api_key)['\"]?\s*[:=]\s*)\S+", r"\1[REDACTED]", scrubbed)
     return scrubbed

@@ -532,6 +532,7 @@ class VaultKind(WireEnum):
     login = "login"
     payment = "payment"
     address = "address"
+    api_key = "api_key"
 
 
 class VaultItem(Result):
@@ -651,7 +652,24 @@ class VaultAddResult(Result):
 
 
 method("vault.add", params=VaultAddParams, result=VaultAddResult,
-       doc="Add a login / payment / address item to the local vault.")
+       doc="Add a login / payment / address / API key item to the local vault.")
+
+
+class VaultUpdateParams(ProfileParams):
+    """A blank ``secret`` field keeps the stored value; the item's kind never changes."""
+
+    id: str | None = None
+    label: str | None = None
+    origin: str | None = None
+    secret: dict[str, JsonValue] | None = None
+
+
+class VaultUpdateResult(VaultItem):
+    """The edited item's metadata; never a secret."""
+
+
+method("vault.update", params=VaultUpdateParams, result=VaultUpdateResult,
+       doc="Edit a local vault item's label, origin or secret fields (blank secret fields are kept).")
 
 
 class VaultRemoveParams(ProfileParams):

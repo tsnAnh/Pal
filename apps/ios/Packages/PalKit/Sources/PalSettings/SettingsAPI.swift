@@ -129,6 +129,34 @@ public struct SettingsAPI: Sendable {
         ])
     }
 
+    public func addVaultAPIKey(_ draft: VaultAPIKeyDraft) async throws {
+        guard draft.isComplete else { throw SettingsFailure.rejected(code: "incomplete") }
+        _ = try await perform(SettingsWire.VaultAdded.self, "vault.add", [
+            "kind": "api_key",
+            "label": .string(draft.trimmedLabel),
+            "secret": .object(["api_key": .string(draft.apiKey)]),
+        ])
+    }
+
+    public func updateVaultItem(_ draft: VaultEditDraft) async throws {
+        guard draft.isComplete else { throw SettingsFailure.rejected(code: "incomplete") }
+        var params: [String: JSONValue] = ["id": .string(draft.id), "label": .string(draft.trimmedLabel)]
+        var secret: [String: JSONValue] = [:]
+        switch draft.kind {
+        case .login:
+            if let origin = draft.normalizedOrigin { params["origin"] = .string(origin) }
+            secret["identifier"] = .string(draft.trimmedIdentifier)
+            secret["identifier_type"] = .string(draft.identifierType)
+            if !draft.secret.isEmpty { secret["password"] = .string(draft.secret) }
+        case .apiKey:
+            if !draft.secret.isEmpty { secret["api_key"] = .string(draft.secret) }
+        case .payment, .address, .other:
+            break
+        }
+        if !secret.isEmpty { params["secret"] = .object(secret) }
+        _ = try await perform(SettingsWire.VaultUpdated.self, "vault.update", params)
+    }
+
     public func removeVaultItem(id: String) async throws {
         _ = try await perform(SettingsWire.VaultRemoval.self, "vault.remove", ["id": .string(id)])
     }

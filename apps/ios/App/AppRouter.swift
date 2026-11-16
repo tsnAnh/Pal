@@ -14,6 +14,7 @@ enum AppRoute: Hashable {
     case botModel(botName: String)
     case botTools(botName: String)
     case botKeys(botName: String)
+    case botVault(botName: String)
     case computer(botName: String)
     case room(roomID: String)
 }

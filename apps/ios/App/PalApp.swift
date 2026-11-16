@@ -241,6 +241,9 @@ struct RootView: View {
         case .botKeys(let name):
             let displayName = roster.bot(named: name)?.displayName ?? name
             BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name, surfaces: bots.services.surfaces), displayName: displayName)
+        case .botVault(let name):
+            VaultScreen(hub: hub, profile: name, back: { if !router.path.isEmpty { router.path.removeLast() } })
+                .environment(\.sheetChromeHostedInNavigation, true)
         case .messagingSettings(let name):
             MessagingSettingsView(model: MessagingSettingsModel(
                 botName: name,

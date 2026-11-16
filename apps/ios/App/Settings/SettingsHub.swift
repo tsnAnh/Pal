@@ -67,6 +67,11 @@ final class SettingsHub {
         }
     }
 
+    func api(for profile: String?) -> SettingsAPI {
+        guard let profile else { return api }
+        return api.scoped(to: profile)
+    }
+
     var deviceTimeZone: String { TimeZone.current.identifier }
 
     var timeZoneIsAutomatic: Bool { aboutYou?.timezoneAuto ?? false }

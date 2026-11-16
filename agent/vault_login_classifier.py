@@ -351,3 +351,37 @@ _FILL_JS_TEMPLATE = """(() => {
   find("[data-hermes-vault-slot]").forEach((n) => n.removeAttribute("data-hermes-vault-slot"));
   return JSON.stringify({ filled });
 })()"""
+
+
+_FOCUSED_FIELD_JS = """(() => {
+  let el = document.activeElement;
+  while (el && el.shadowRoot && el.shadowRoot.activeElement) el = el.shadowRoot.activeElement;
+  if (!el || el === document.body || el === document.documentElement) return JSON.stringify({ refused: "no_focused_field" });
+  const textTypes = ["", "text", "search", "url", "tel", "email", "password", "number"];
+  const editable = el.tagName === "TEXTAREA" || el.isContentEditable
+    || (el.tagName === "INPUT" && textTypes.includes((el.getAttribute("type") || "").toLowerCase()));
+  if (!editable || el.disabled || el.readOnly) return JSON.stringify({ refused: "not_editable" });
+  __WRITE__
+})()"""
+
+_FOCUSED_WRITE_JS = """const value = __VALUE__;
+  if (el.isContentEditable && el.tagName !== "INPUT" && el.tagName !== "TEXTAREA") {
+    document.execCommand("selectAll", false, null);
+    if (!document.execCommand("insertText", false, value)) { el.textContent = value; el.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText" })); }
+  } else {
+    const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const setter = Object.getOwnPropertyDescriptor(proto, "value");
+    if (setter && setter.set) { setter.set.call(el, value); } else { el.value = value; }
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, composed: true, inputType: "insertText" }));
+    el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
+  }
+  return JSON.stringify({ filled: 1 });"""
+
+
+def build_focused_field_js(value: str | None = None) -> str:
+    """JS that checks the page's focused element is an editable text field and, when ``value`` is given,
+    writes it there (no submit, nothing echoed). Without ``value`` it only probes, so a refusal never has to
+    carry the secret into the page. Returns ``{"refused": "no_focused_field" | "not_editable"}``,
+    ``{"ready": true}`` for the probe, or ``{"filled": 1}``."""
+    write = 'return JSON.stringify({ ready: true });' if value is None else _FOCUSED_WRITE_JS.replace("__VALUE__", json.dumps(value))
+    return _FOCUSED_FIELD_JS.replace("__WRITE__", write)
