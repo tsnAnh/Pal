@@ -46,7 +46,7 @@ def _tree(repo: str, ref: str, profile_home: str | None) -> dict[str, str]:
 
 
 def _qualifies(run: dict, *, repo: str, sha: str, number: int, branch: str, default: str,
-               opened: str, workflows_match) -> bool:
+               opened: str, workflows_match, linked: bool) -> bool:
     path = _workflow_path(run)
     if (run.get("head_sha") != sha or not path.startswith(_WORKFLOW_DIR) or path in _NON_BUILD_WORKFLOWS
             or (run.get("repository") or {}).get("full_name", "").lower() != repo.lower()
@@ -56,8 +56,10 @@ def _qualifies(run: dict, *, repo: str, sha: str, number: int, branch: str, defa
     if run.get("event") == "push":
         return workflows_match()
     if run.get("event") == "pull_request":
-        attached = any(p.get("number") == number and (p.get("base") or {}).get("ref") == default
-                       for p in run.get("pull_requests") or [])
+        listed = run.get("pull_requests")
+        # GitHub drops pull_requests from a run once its PR merges; an empty list is then proven by the commit-to-PR link.
+        attached = linked if listed == [] else any(
+            p.get("number") == number and (p.get("base") or {}).get("ref") == default for p in listed or [])
         return attached and (run.get("run_started_at") or run.get("created_at") or "") >= opened
     return False
 
@@ -83,8 +85,9 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
         receipt["classification"] = "provenance"
         return receipt
     owner = repo.split("/")[0]
-    same_head = [p for p in _pages(f"repos/{repo}/commits/{sha}/pulls?per_page=100", None, profile_home)
-                 if p["number"] != number and p["state"] == "open" and p["head"]["sha"] == sha]
+    commit_prs = _pages(f"repos/{repo}/commits/{sha}/pulls?per_page=100", None, profile_home)
+    same_head = [p for p in commit_prs if p["number"] != number and p["state"] == "open" and p["head"]["sha"] == sha]
+    linked = any(p["number"] == number and p["base"]["ref"] == default and p["head"]["sha"] == sha for p in commit_prs)
     branch_prs = _pages(f"repos/{repo}/pulls?state=all&head={owner}:{branch}&per_page=100", None, profile_home)
     timeline = [event for n in sorted({number, *(p["number"] for p in branch_prs)})
                 for event in _pages(f"repos/{repo}/issues/{n}/timeline?per_page=100", None, profile_home)]
@@ -123,7 +126,7 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
             classification = "success"
         counted = (classification == "success" and run["conclusion"] == "success" and workflow is not None
                    and _qualifies(workflow, repo=repo, sha=sha, number=number, branch=branch, default=default,
-                                  opened=pr["created_at"], workflows_match=workflows_match))
+                                  opened=pr["created_at"], workflows_match=workflows_match, linked=linked))
         qualifying += counted
         outcomes.append(classification)
         receipt["checks"].append({"name": run["name"], "id": run["id"], "url": run.get("html_url"),

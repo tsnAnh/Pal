@@ -119,10 +119,10 @@ def test_step5_evidence_names_the_real_pr_head_and_a_qualifying_check(accepted):
     assert "classification=success" in evidence and "qualifying_checks=1" in evidence
 
 
-def test_ci_policy_rejects_the_unmodified_pr139_recording(recorded):
+def test_ci_policy_accepts_the_unmodified_pr139_recording(recorded):
     status, evidence = recorded["rows"]["5"]
-    assert status == "fail" and "classification=missing" in evidence and "qualifying_checks=0" in evidence
-    assert recorded["rc"] == 1
+    assert status == "pass" and "classification=success" in evidence and "qualifying_checks=1" in evidence, recorded["stdout"]
+    assert recorded["rc"] == 0
     for step in ("4a", "4b", "6", "6w"):
         assert recorded["rows"][step][0] == "pass", recorded["stdout"]
 

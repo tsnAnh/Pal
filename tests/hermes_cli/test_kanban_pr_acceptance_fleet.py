@@ -63,7 +63,7 @@ def github(coord_env, tmp_path, monkeypatch):
             elif route == f"{root}/pulls/7":
                 value = state["pr"]
             elif route.endswith("/pulls") and "/commits/" in route:
-                value = pages(state["commit_prs"])
+                value = state.get("commit_prs_raw") or pages(state["commit_prs"])
             elif route == f"{root}/pulls":
                 value = pages(state["branch_prs"])
             elif route.startswith(f"{root}/issues/") and route.endswith("/timeline"):
@@ -128,6 +128,16 @@ def attempt(conn, contract=f"fleet-ci:{REPO}", assignee=PROFILE, **kw):
     return tid, done
 
 
+def merged_shape(s, linked=True):
+    s["pr"].update(state="closed", merged=True)
+    set_run(s, pull_requests=[])
+    s["workflow_runs"].append({**s["workflow_runs"][0], "id": 2, "check_suite_id": 12,
+                               "path": ".github/workflows/faker-kit-checks.yml"})
+    s["check_runs"].append({**s["check_runs"][0], "id": 101, "name": "kit", "check_suite": {"id": 12}})
+    if linked:
+        s["commit_prs"].append({"number": 7, "state": "closed", "base": {"ref": "main"}, "head": {"sha": s["pr"]["head"]["sha"]}})
+
+
 def set_run(state, **changes):
     state["workflow_runs"][0].update(changes)
 
@@ -165,6 +175,8 @@ def push_run(s, same_workflows):
 
 
 SUCCESS = [
+    ("merged PR whose runs lost pull_requests, proven by the commit-to-PR link", merged_shape),
+
     ("exact head", lambda s: None),
     ("150 neutral/skipped checks around the success", lambda s: many_skipped(s)),
     ("ignored claude-review job and security-review status", lambda s: (
@@ -178,6 +190,29 @@ SUCCESS = [
     ("push run with branch workflows equal to the default branch", lambda s: push_run(s, True)),
 ]
 REFUSED = [
+    ("merged shape, commit-to-PR list omits this PR", lambda s: merged_shape(s, linked=False), "missing"),
+    ("merged shape, commit-to-PR list names a different PR", lambda s: (
+        merged_shape(s, linked=False),
+        s["commit_prs"].append({"number": 8, "state": "closed", "base": {"ref": "main"}, "head": {"sha": HEAD}})), "missing"),
+    ("merged shape, run lists another PR though this PR is linked", lambda s: (
+        merged_shape(s), set_run(s, pull_requests=[{"number": 8, "base": {"ref": "main"}}])), "missing"),
+    ("merged shape, linked PR has a non-default base", lambda s: (
+        merged_shape(s, linked=False),
+        s["commit_prs"].append({"number": 7, "state": "closed", "base": {"ref": "dev"}, "head": {"sha": HEAD}})), "missing"),
+    ("merged shape, linked PR head differs", lambda s: (
+        merged_shape(s, linked=False),
+        s["commit_prs"].append({"number": 7, "state": "closed", "base": {"ref": "main"}, "head": {"sha": "b" * 40}})), "missing"),
+    ("merged shape, run on another head", lambda s: (merged_shape(s), set_run(s, head_sha="b" * 40)), "missing"),
+    ("merged shape, run from a fork", lambda s: (merged_shape(s), set_run(s, head_repository={"full_name": "fork/widget"})), "missing"),
+    ("merged shape, run started before the PR opened", lambda s: (merged_shape(s), set_run(s, run_started_at="2025-12-31T00:00:00Z")), "missing"),
+    ("merged shape, run on another branch", lambda s: (merged_shape(s), set_run(s, head_branch="other")), "missing"),
+    ("merged shape, push-event run with empty list", lambda s: (merged_shape(s), set_run(s, event="push"), s["trees"].update({HEAD: {}})), "missing"),
+    ("merged shape, retargeted sibling", lambda s: (
+        merged_shape(s), s["branch_prs"].append({"number": 3, "base": {"ref": "dev"}}), s["sibling_timelines"].update({3: []})), "provenance"),
+    ("merged shape, another open PR shares the head", lambda s: (
+        merged_shape(s), s["commit_prs"].append({"number": 9, "state": "open", "base": {"ref": "main"}, "head": {"sha": HEAD}})), "provenance"),
+    ("merged shape, unreadable commit-to-PR page", lambda s: (merged_shape(s), s.update(commit_prs_raw={"message": "gone"})), "infra"),
+
     ("pending", lambda s: add_check(s, status="in_progress", conclusion=None), "pending"),
     ("failure beyond the first page", lambda s: many_skipped(s, failing_at=120), "failure"),
     ("failing legacy status", lambda s: s["statuses"].append({"id": 2, "context": "lint", "state": "failure"}), "failure"),
