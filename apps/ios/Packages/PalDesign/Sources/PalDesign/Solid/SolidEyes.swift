@@ -1,9 +1,12 @@
 import Foundation
 import simd
 
-struct SolidEyeOutline {
-    var points: [SIMD2<Double>]
-    var nearLimb: Bool
+struct SolidEyePair {
+    var outlines: [[SIMD2<Double>]]
+    var opacity: Double
+    var nearEdge: Bool
+
+    static let hidden = SolidEyePair(outlines: [], opacity: 0, nearEdge: false)
 }
 
 enum SolidEyes {
@@ -41,7 +44,7 @@ enum SolidEyes {
         }
     }
 
-    static func outlines(_ pose: SolidPose, surface: SolidSurface, rotation: simd_double3x3) -> [SolidEyeOutline] {
+    static func pair(_ pose: SolidPose, surface: SolidSurface, rotation: simd_double3x3) -> SolidEyePair {
         let happy = pose.eyeHappy
         let bend = happy * 5
         let turnAngle = happy * Double.pi / 2
@@ -53,11 +56,10 @@ enum SolidEyes {
         let widthScale = pose.eyeScale * (1 - 0.2 * happy)
         let heightScale = pose.eyeScale * max(0.06, pose.eyeOpen) * (1 - 0.45 * happy)
         let facingRow = SIMD3(rotation[0][2], rotation[1][2], rotation[2][2])
-        return centres(pose).compactMap { centre in
+        var leastFacing = 1.0
+        let outlines = centres(pose).map { centre in
             var projected: [SIMD2<Double>] = []
-            var facing: [Double] = []
             projected.reserveCapacity(segments)
-            facing.reserveCapacity(segments)
             for vertex in template {
                 let u = vertex.outline.x + (vertex.circle.x - vertex.outline.x) * pose.eyeDot
                 let v = vertex.outline.y + (vertex.circle.y - vertex.outline.y) * pose.eyeDot
@@ -74,27 +76,13 @@ enum SolidEyes {
                 let lifted = SIMD3(spot.x, spot.y, surface.height(spot.x, spot.y) + SolidTuning.eyeLift)
                 let turned = rotation * lifted
                 projected.append(SIMD2(turned.x, turned.y))
-                facing.append((facingRow * surface.normal(spot.x, spot.y)).sum())
+                leastFacing = min(leastFacing, (facingRow * surface.normal(spot.x, spot.y)).sum())
             }
-            let nearLimb = facing.contains { $0 < SolidTuning.nearLimb }
-            let visible = nearLimb ? clipped(projected, facing) : projected
-            guard visible.count >= 3 else { return nil }
-            return SolidEyeOutline(points: visible, nearLimb: nearLimb)
+            return projected
         }
-    }
-
-    private static func clipped(_ points: [SIMD2<Double>], _ facing: [Double]) -> [SIMD2<Double>] {
-        var kept: [SIMD2<Double>] = []
-        for index in points.indices {
-            let next = (index + 1) % points.count
-            let here = facing[index]
-            let there = facing[next]
-            if here >= 0 { kept.append(points[index]) }
-            if (here >= 0) != (there >= 0) {
-                let t = here / (here - there)
-                kept.append(points[index] + (points[next] - points[index]) * t)
-            }
-        }
-        return kept
+        let fade = min(1, max(0, leastFacing / SolidTuning.nearLimb))
+        let opacity = fade * fade * (3 - 2 * fade)
+        guard opacity > 0 else { return .hidden }
+        return SolidEyePair(outlines: outlines, opacity: opacity, nearEdge: leastFacing < SolidTuning.edgeClip)
     }
 }

@@ -62,13 +62,14 @@ struct SolidPainter {
     }
 
     private func paintEyes(_ frame: SolidFrame, in context: inout GraphicsContext) {
-        let ink = GraphicsContext.Shading.color(solid.eyeFill.swiftUIColor)
-        for eye in frame.eyes where !eye.nearLimb { context.fill(eye.path, with: ink) }
-        let limb = frame.eyes.filter(\.nearLimb)
-        guard !limb.isEmpty else { return }
+        let ink = GraphicsContext.Shading.color(solid.eyeFill.swiftUIColor.opacity(frame.eyeOpacity))
+        guard frame.eyesNearEdge else {
+            for eye in frame.eyes { context.fill(eye, with: ink) }
+            return
+        }
         context.drawLayer { layer in
             layer.clipToLayer { mask in mask.fill(frame.silhouette, with: .color(.black)) }
-            for eye in limb { layer.fill(eye.path, with: ink) }
+            for eye in frame.eyes { layer.fill(eye, with: ink) }
         }
     }
 

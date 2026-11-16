@@ -9,6 +9,7 @@ enum SolidTuning {
     static let eye = (width: 0.23, height: 0.53, gap: 0.54, y: 0.14)
     static let eyeLift = 0.02
     static let nearLimb = 0.18
+    static let edgeClip = 0.5
 }
 
 struct AvatarSolid {
