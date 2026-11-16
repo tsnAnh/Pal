@@ -54,6 +54,16 @@ struct HomeView: View {
                     .tint(.primary)
                 }
             }
+            if router.capabilities.contains(.kanban) {
+                ToolbarItem(placement: .trailingBar) {
+                    Button { router.presentKanban() } label: {
+                        Image(systemName: "rectangle.split.3x1")
+                    }
+                    .accessibilityLabel(Text("Work boards"))
+                    .accessibilityIdentifier("kanbanButton")
+                    .tint(.primary)
+                }
+            }
             ToolbarItem(placement: .trailingBar) {
                 Button { router.present(.createBot) } label: {
                     Image(systemName: "plus")

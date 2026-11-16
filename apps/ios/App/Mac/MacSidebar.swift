@@ -424,6 +424,20 @@ private struct MacSidebarFooter: View {
                 .accessibilityLabel(Text("Connect apps"))
                 .accessibilityIdentifier("connectAppsButton")
             }
+            if router.capabilities.contains(.kanban) {
+                Button { router.presentKanban() } label: {
+                    Image(systemName: "rectangle.split.3x1")
+                        .font(.system(size: 15))
+                        .foregroundStyle(PalTokens.textSecondary)
+                        .frame(width: 34, height: 34)
+                        .palGlass(Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "Work boards"))
+                .accessibilityLabel(Text("Work boards"))
+                .accessibilityIdentifier("kanbanButton")
+            }
         }
         .padding(.leading, 15)
         .padding(.trailing, 14)
@@ -467,6 +481,19 @@ private struct MacRail: View {
                         .help(String(localized: "Connect apps"))
                         .accessibilityLabel(Text("Connect apps"))
                         .accessibilityIdentifier("connectAppsButton")
+                    }
+                    if router.capabilities.contains(.kanban) {
+                        Button { router.presentKanban() } label: {
+                            Image(systemName: "rectangle.split.3x1")
+                                .font(.system(size: 15))
+                                .foregroundStyle(PalTokens.textSecondary)
+                                .frame(width: 28, height: 28)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(String(localized: "Work boards"))
+                        .accessibilityLabel(Text("Work boards"))
+                        .accessibilityIdentifier("kanbanButton")
                     }
                 }
                 Button { shell.showsAccountMenu.toggle() } label: {
