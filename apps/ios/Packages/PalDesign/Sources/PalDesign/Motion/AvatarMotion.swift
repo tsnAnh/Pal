@@ -51,12 +51,14 @@ enum AvatarMotion {
 
     static var doneDuration: Double { done.duration }
 
-    static func pose(_ mood: AvatarMood, at t: Double, reduceMotion: Bool = false, seed: UInt64) -> AvatarPose {
+    static func pose(
+        _ mood: AvatarMood, at t: Double, reduceMotion: Bool = false, seed: UInt64, solidClips: Bool = true
+    ) -> AvatarPose {
         switch (mood, reduceMotion) {
         case (.idle, _):
             return .rest
         case (.think, false), (.work, false):
-            var pose = LoadingSequence(seed: seed).pose(at: t)
+            var pose = LoadingSequence(seed: seed, interleavesSolid: solidClips).pose(at: t)
             pose.dots = workingDots(mood, at: t)
             return pose
         case (.think, true), (.work, true):

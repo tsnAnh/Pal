@@ -4,12 +4,7 @@ import Testing
 @testable import PalDesign
 
 private func rig(_ shape: String) throws -> AvatarRig {
-    let spec = BotAvatarSpec(name: "Atlas", meta: BotAvatarMeta(shape: shape, color: "#3e8ef7", custom: true))
-    guard case .rig(let rig) = AvatarContent(spec) else {
-        Issue.record("\(shape) did not build a rig")
-        throw CancellationError()
-    }
-    return rig
+    flatRig(shape)
 }
 
 private let bodyShapes = BlobKind.allCases.map { "blobatar:k7q2m9x0:\($0.rawValue)" } + ClassicShape.allCases.map(\.rawValue)
@@ -122,7 +117,7 @@ struct EyeSurfaceTests {
         let rig = try rig(shape)
         for clip in LoadingClips.all {
             for t in stride(from: 0.0, through: clip.duration, by: 1.0 / 120) {
-                let pose = clip.track.pose(at: t)
+                let pose = clip.pose(at: t)
                 if abs(pose.eyeX) >= 0.75 || abs(pose.eyeY) >= 0.75 {
                     let gone = rig.eyePaths(pose).allSatisfy { $0.isEmpty }
                     #expect(gone, "\(clip.name) t \(t)")

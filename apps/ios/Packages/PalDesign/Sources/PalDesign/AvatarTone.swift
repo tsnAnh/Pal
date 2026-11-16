@@ -30,6 +30,7 @@ extension AvatarContent {
     func toned(for scheme: ColorScheme) -> AvatarContent {
         switch self {
         case .rig(let rig): .rig(rig.toned(for: scheme))
+        case .solid(let solid): .solid(solid.toned(for: scheme))
         case .photo: self
         }
     }

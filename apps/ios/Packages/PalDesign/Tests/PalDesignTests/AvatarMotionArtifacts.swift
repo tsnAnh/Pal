@@ -63,7 +63,7 @@ struct AvatarMotionArtifacts {
 
     private static func clipPose(_ name: String, atFraction fraction: Double) -> AvatarPose {
         let clip = LoadingClips.all.first { $0.name == name }!
-        return clip.track.pose(at: clip.duration * fraction)
+        return clip.pose(at: clip.duration * fraction)
     }
 
     private static func doneMotion(for spec: BotAvatarSpec) -> Motion {
@@ -80,8 +80,8 @@ struct AvatarMotionArtifacts {
         let idle = AvatarMoodClock(mood: .idle, since: start.addingTimeInterval(-10), blinkDelay: delay, loadingSeed: seed, reduceMotion: false)
         let clock = idle.changing(to: .work, at: start)
         let sequence = Motion(name: "sequence", duration: sequenceSeconds) { clock.pose(at: start.addingTimeInterval($0)) }
-        let clips = LoadingClips.all.map { clip in
-            Motion(name: "clip-\(clip.name)", duration: clip.duration) { clip.track.pose(at: $0) }
+        let clips = (LoadingClips.all + SolidClips.all).map { clip in
+            Motion(name: "clip-\(clip.name)", duration: clip.duration) { clip.pose(at: $0) }
         }
         return clips + [sequence]
     }
@@ -107,6 +107,123 @@ struct AvatarMotionArtifacts {
                 }
             }
         }
+    }
+
+    private static let realSizes: [CGFloat] = [25, 28, 43, 56, 66, 79, 88, 136, 160]
+    private static let sheetShapes: [(String, BotAvatarSpec)] = [
+        ("round", spec("Atlas", shape: "blobatar:k7q2m9x0:round", color: "#f4f4f4")),
+        ("organic", spec("Atlas", shape: "blobatar:k7q2m9x0:organic", color: "#8b5cf6")),
+        ("capsule", spec("Atlas", shape: "blobatar:k7q2m9x0:capsule", color: "#3e8ef7")),
+        ("cloud", spec("Atlas", shape: "cloud", color: "#f5a524")),
+        ("squircle", spec("Atlas", shape: "squircle", color: "#3e8ef7")),
+        ("pill", spec("Atlas", shape: "pill", color: "#2ec27e")),
+        ("hexagon", spec("Atlas", shape: "hexagon", color: "#e5484d")),
+    ]
+
+    @Test("rest, hover at the centre, hover right, hover up and hover left at the app's real sizes")
+    func hoverStates() throws {
+        let root = URL(fileURLWithPath: try #require(outputDirectory), isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let states: [(String, AvatarLook)] = [
+            ("rest", .zero),
+            ("hover centre", AvatarLook(amount: 1, x: 0, y: 0)),
+            ("hover right", AvatarLook(amount: 1, x: 1, y: 0)),
+            ("hover left", AvatarLook(amount: 1, x: -1, y: 0)),
+            ("hover up", AvatarLook(amount: 1, x: 0, y: -1)),
+            ("hover far right", AvatarLook(amount: 0.5, x: 1, y: 0.4)),
+        ]
+        for (kind, spec) in Self.sheetShapes {
+            let content = AvatarContent(spec)
+            let sheet = VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(states.enumerated()), id: \.offset) { _, state in
+                    HStack(spacing: 8) {
+                        Text(state.0).font(.system(size: 11)).foregroundStyle(.white).frame(width: 96, alignment: .leading)
+                        ForEach(Self.realSizes, id: \.self) { size in
+                            AvatarFrame(content: content, pose: .rest, size: size, look: state.1)
+                                .frame(width: size * 1.35, height: size * 1.35)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .background(stage)
+            try writePNG(sheet, scale: 2, to: root.appendingPathComponent("hover-\(kind).png"))
+        }
+    }
+
+    @Test("a contact sheet for every 2D and 3D loading clip at 28, 44 and 116 points")
+    func clipSheets() throws {
+        let root = URL(fileURLWithPath: try #require(outputDirectory), isDirectory: true)
+        let folder = root.appendingPathComponent("clip-sheets", isDirectory: true)
+        try? FileManager.default.removeItem(at: folder)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let content = AvatarContent(Self.featured[0].1)
+        let columns = 10
+        let sizes: [CGFloat] = [28, 44, 116]
+        for (index, clip) in (LoadingClips.all + SolidClips.all).enumerated() {
+            let poses = (0..<columns).map { clip.pose(at: clip.duration * Double($0) / Double(columns - 1)) }
+            let sheet = VStack(alignment: .leading, spacing: 4) {
+                Text("\(index < LoadingClips.all.count ? "2D" : "3D") \(clip.name) \(String(format: "%.1f", clip.duration)) s")
+                    .font(.system(size: 11)).foregroundStyle(.white)
+                ForEach(sizes, id: \.self) { size in
+                    HStack(spacing: 2) {
+                        ForEach(Array(poses.enumerated()), id: \.offset) { _, pose in
+                            AvatarFrame(content: content, pose: pose, size: size).frame(width: size * 1.3, height: size * 1.3)
+                        }
+                    }
+                }
+            }
+            .padding(8)
+            .background(stage)
+            try writePNG(sheet, scale: 2, to: folder.appendingPathComponent(String(format: "%02d-%@.png", index, clip.name)))
+        }
+    }
+
+    @Test("every blob kind at rest, the way the shapes gallery shows them")
+    func restKinds() throws {
+        let root = URL(fileURLWithPath: try #require(outputDirectory), isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let kinds = BlobKind.allCases
+        let sheet = VStack(alignment: .leading, spacing: 12) {
+            ForEach(0..<3, id: \.self) { row in
+                HStack(spacing: 12) {
+                    ForEach(kinds.dropFirst(row * 5).prefix(5), id: \.self) { kind in
+                        VStack(spacing: 6) {
+                            AvatarFrame(content: AvatarContent(spec("pal", shape: "blobatar::\(kind.rawValue)", color: "#ffffff")), pose: .rest, size: 100)
+                                .frame(width: 130, height: 120)
+                            Text(kind.rawValue).font(.system(size: 13)).foregroundStyle(.gray)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color(white: 0.055))
+        try writePNG(sheet, scale: 1, to: root.appendingPathComponent("rest-kinds.png"))
+        let ladder = HStack(alignment: .bottom, spacing: 18) {
+            ForEach([24, 32, 44, 72, 120] as [CGFloat], id: \.self) { size in
+                AvatarFrame(content: AvatarContent(spec("pal", shape: "blobatar::round", color: "#ffffff")), pose: .rest, size: size)
+                    .frame(width: size, height: size)
+            }
+        }
+        .padding(14)
+        .background(Color(white: 0.055))
+        try writePNG(ladder, scale: 1, to: root.appendingPathComponent("rest-ladder.png"))
+        let colors = ["#ffffff", "#f4f4f4", "#ffd60a", "#ff7a00", "#e5484d", "#ec4899", "#8b5cf6", "#3e8ef7", "#5ad1e0", "#30a46c", "#6b7280", "#14213d"]
+        let themes = VStack(spacing: 0) {
+            ForEach([(ColorScheme.dark, Color(white: 0.055)), (.light, Color(white: 0.97))], id: \.0) { scheme, page in
+                HStack(spacing: 10) {
+                    ForEach(Array(colors.enumerated()), id: \.offset) { index, color in
+                        BotAvatarView(spec: spec("bot\(index)", shape: "blobatar:k7q2m9x0:\(BlobKind.allCases[index % BlobKind.allCases.count].rawValue)", color: color), size: 56, animated: false)
+                            .frame(width: 64, height: 64)
+                    }
+                }
+                .padding(14)
+                .background(page)
+                .environment(\.colorScheme, scheme)
+            }
+        }
+        try writePNG(themes, scale: 2, to: root.appendingPathComponent("eye-ink-themes.png"))
     }
 
     @Test("every avatar kind at every size through the key poses")
