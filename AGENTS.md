@@ -166,4 +166,3 @@ Per `REVIEW.md`: Blocking rules are P1. Mark findings `[blocking]` or `[nit]`; s
 - faker-kit ~/AIProjects/faker-kit: Pi ~/.hermes/faker-kit/kit/hermes/install.sh --ref <sha> --no-gateway (resets kit edits); routines: event babysit only
 - Bot chats: reply to owner now, never queue; long work async
 - Claude-config tests: unset CLAUDE_CONFIG_DIR
-- T3 Code MCP: loopback <origin>/mcp (~/.t3 server-runtime.json), OAuth DCR+PKCE, no refresh; session tokens 401
