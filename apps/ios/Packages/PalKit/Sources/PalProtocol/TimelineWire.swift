@@ -164,6 +164,7 @@ public struct LiveMessageIdentity: Decodable, Sendable, Hashable {
     public var messageUID: String?
     public var turnID: String?
     public var segment: Int?
+    public var rowIDs: [Int] = []
 
     public init(messageUID: String? = nil, turnID: String? = nil, segment: Int? = nil) {
         self.messageUID = messageUID
@@ -176,6 +177,7 @@ public struct LiveMessageIdentity: Decodable, Sendable, Hashable {
         let persisted = try? container.nestedContainer(keyedBy: PersistedTurnKeys.self, forKey: .persistedTurn)
         messageUID = (try? persisted?.decodeIfPresent(String.self, forKey: .finalAssistantMessageUID))
             ?? (try? container.decodeIfPresent(String.self, forKey: .messageUID))
+        rowIDs = (try? persisted?.decodeIfPresent([Int].self, forKey: .rowIDs)) ?? []
         turnID = try? container.decodeIfPresent(String.self, forKey: .turnID)
         segment = try? container.decodeIfPresent(Int.self, forKey: .segment)
     }
@@ -189,5 +191,6 @@ public struct LiveMessageIdentity: Decodable, Sendable, Hashable {
 
     enum PersistedTurnKeys: String, CodingKey {
         case finalAssistantMessageUID = "final_assistant_message_uid"
+        case rowIDs = "row_ids"
     }
 }

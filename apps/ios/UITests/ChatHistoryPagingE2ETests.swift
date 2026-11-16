@@ -341,5 +341,31 @@ final class ChatHistoryPagingE2ETests: BotProfileTestCase {
         let wrapped = cells.filter { $0.frame.height > lineHeight * 1.5 }.map(\.label)
         XCTAssertTrue(wrapped.isEmpty, "short cells wrap mid-word: \(wrapped)")
     }
-}
 
+    func test8NarratedTurnWhileReadingDoesNotMove() throws {
+        let (app, driver, _) = try openLongChat("bot-alpha")
+        let prompt = "NARRATE reading probe " + UUID().uuidString.prefix(6)
+        send(app, prompt)
+        waitFor(bubbles(app, "userBubble", containing: prompt).firstMatch, timeout: 15, "the sent prompt appears")
+        for _ in 0..<4 { driver.dragOlder() }
+        let reading = try driver.settled().reading
+        let anchor = try XCTUnwrap(driver.anchor(in: reading), "a marked row is on screen after scrolling up")
+        shot(app, "narrate-reading-0-history")
+        let samples = try driver.observe(anchor, for: 25)
+        shot(app, "narrate-reading-1-after-turn")
+        let drift = samples.maxDrift(from: anchor)
+        record(["samples": samples.count, "max_drift_pt": PagingMeasurements.points(drift), "lost_anchor_samples": samples.lostAnchorCount()])
+        XCTAssertEqual(samples.lostAnchorCount(), 0, "the marked row stayed in the list through the narrated turn")
+        XCTAssertLessThanOrEqual(drift, Self.driftTolerance, "the marked row did not move while commentary, tool and reply settled (worst drift in points)")
+
+        let pill = element(app, "scrollToBottomButton")
+        waitFor(pill, timeout: 5, "jump pill")
+        pill.tap()
+        waitFor(bubbles(app, "assistantBubble", containing: "hermes-stub-narrate").firstMatch, timeout: 30, "the reply is on screen after the jump")
+        let commentary = "Pal đã nhận việc 145 nhưng cần xem hàng đợi trước."
+        let watch = TurnWatch(app: app, prompt: prompt, replies: [commentary, "hermes-stub-narrate"])
+        try watch.sample(for: 2)
+        shot(app, "narrate-reading-2-at-newest")
+        watch.assertEachReplyOnceInPlace(ordered: [commentary, "hermes-stub-narrate"])
+    }
+}
