@@ -654,6 +654,7 @@ def _kill_stale_dashboard_processes(
     pid_service: dict[int, str | None] = {}
     pid_launchd: dict[int, tuple[str, str, int | None]] = {}
     pid_cmdline: dict[int, list[str]] = {}
+    pid_service_argv: dict[int, list[str] | None] = {}
     pid_home: dict[int, str | None] = {}
     # macOS: a backend supervised by a launchd job (LaunchAgent / LaunchDaemon) must come back
     # through launchd, never as a detached argv respawn — the respawn holds the job's port, the
@@ -670,6 +671,7 @@ def _kill_stale_dashboard_processes(
             pid_cgroup[pid] = _dash._get_pid_cgroup_path(pid)
             pid_service[pid] = _dash._get_systemd_service_for_pid(pid)
             if pid_service[pid]:
+                pid_service_argv[pid] = _dash._dashboard_cmdline_for_pid(pid)
                 continue
             cmdline = _dash._dashboard_cmdline_for_pid(pid)
             if launchd_jobs and (job := _launchd_owner(pid, cmdline)):
@@ -700,7 +702,8 @@ def _kill_stale_dashboard_processes(
         print(f"    ✗ failed to stop PID {pid}: {err_msg}")
     if killed and restart_managed:
         unrecovered = _restart_killed_backends(
-            killed, pid_service, pid_cgroup, pid_cmdline, pid_home, pid_launchd=pid_launchd)
+            killed, pid_service, pid_cgroup, pid_cmdline, pid_home, pid_launchd=pid_launchd,
+            pid_service_argv=pid_service_argv)
     else:
         unrecovered = list(killed)
         # A stopped launchd job with KeepAlive restarts itself: say so instead of a misleading
@@ -717,7 +720,8 @@ def _kill_stale_dashboard_processes(
 def _restart_killed_backends(
     killed: list[int], pid_service: dict[int, str | None], pid_cgroup: dict[int, str | None],
     pid_cmdline: dict[int, list[str]], pid_home: dict[int, str | None], *,
-    pid_launchd: dict[int, tuple[str, str, int | None]] | None = None) -> list[int]:
+    pid_launchd: dict[int, tuple[str, str, int | None]] | None = None,
+    pid_service_argv: dict[int, list[str] | None] | None = None) -> list[int]:
     """Update path: restart systemd units, kickstart launchd jobs (macOS), respawn manual argv
     (detached, headless, logged to logs/dashboard-restart.log; one per profile, no ``--port 0``).
     Returns PIDs not brought back."""
@@ -729,6 +733,7 @@ def _restart_killed_backends(
     unrecovered: list[int] = []
     failed_restarts: list[tuple[str, str]] = []
     seen_services: set[str] = set()
+    stopped_units = {unit for pid in killed if (unit := pid_service.get(pid))}
     respawn_candidates: list[tuple[int, list[str], str | None]] = []
     for pid in killed:
         svc_name = pid_service.get(pid)
@@ -737,10 +742,12 @@ def _restart_killed_backends(
             if svc_name in seen_services:
                 continue
             seen_services.add(svc_name)
-            if _dash._try_restart_systemd_service(svc_name, pid_cgroup.get(pid)):
-                print(f"    ✓ restarted systemd service {svc_name}")
-            else:
-                failed_restarts.append((svc_name, "systemctl restart returned non-zero"))
+            failure = _dash._restart_stopped_systemd_unit(
+                svc_name, pid_cgroup.get(pid), stopped_units, (pid_service_argv or {}).get(pid))
+            if failure:
+                from hermes_cli.update_receipt import record_user_action
+                record_user_action("backend_restart", f"{svc_name}: {failure}")
+                failed_restarts.append((svc_name, failure))
                 unrecovered.append(pid)
         elif launchd_job:
             # launchd owns the backend: the job brings it back (KeepAlive, or the kickstart below),

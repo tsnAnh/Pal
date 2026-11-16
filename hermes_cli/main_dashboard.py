@@ -5,6 +5,7 @@ are imported lazily inside the functions that use them (avoids an import cycle).
 """
 
 import contextlib
+import http.client
 import os
 import re
 import shlex
@@ -268,6 +269,85 @@ def _try_restart_systemd_service(svc_name: str, cgroup_path: str | None = None) 
         except _SYSTEMCTL_ERRORS:
             continue
     return False
+
+
+_SAFE_SERVICE_UNIT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.@:-]*\.service")
+_STARTUP_WAIT_SECONDS = 30.0
+_STARTUP_POLL_SECONDS = 1.0
+_ANSWER_TIMEOUT_SECONDS = 3.0
+
+
+def _backend_listen_address(argv: list[str] | None) -> tuple[str, int] | None:
+    parsed = _parse_dashboard_runtime(shlex.join(argv)) if argv else None
+    if parsed is None or parsed[2] <= 0:
+        return None
+    return _dashboard_probe_host(parsed[1]), parsed[2]
+
+
+def _backend_answers(host: str, port: int) -> bool:
+    conn = http.client.HTTPConnection(host, port, timeout=_ANSWER_TIMEOUT_SECONDS)
+    try:
+        conn.request("GET", "/")
+        conn.getresponse()
+        return True
+    except (OSError, http.client.HTTPException):
+        return False
+    finally:
+        conn.close()
+
+
+def _unit_is_active(unit: str, scope: str | None) -> bool:
+    for scope_args in {"user": [["--user"]], "system": [[]]}.get(scope or "", [[], ["--user"]]):
+        try:
+            result = _run_probe(["systemctl", *scope_args, "is-active", unit], timeout=10)
+        except _SYSTEMCTL_ERRORS:
+            continue
+        if result.returncode == 0 and (result.stdout or "").strip() == "active":
+            return True
+    return False
+
+
+def _sudo_restart_stopped_unit(unit: str) -> bool:
+    cmd = ["sudo", "-n", "systemctl", "restart", unit]
+    print(f"    → plain restart failed; running: {shlex.join(cmd)}")
+    try:
+        result = _run_probe(cmd, timeout=60)
+    except _SYSTEMCTL_ERRORS as e:
+        print(f"      {e}")
+        return False
+    if result.returncode != 0:
+        print(f"      {(result.stderr or result.stdout or '').strip()[:300]}")
+    return result.returncode == 0
+
+
+def _restart_stopped_systemd_unit(
+    svc_name: str, cgroup_path: str | None, stopped_units: set[str] | frozenset[str],
+    argv: list[str] | None = None,
+) -> str | None:
+    if not _SAFE_SERVICE_UNIT.fullmatch(svc_name):
+        return f"refusing unsafe unit name {svc_name!r}; nothing was run"
+    scope = _extract_scope_from_cgroup(cgroup_path) if cgroup_path else None
+    manual = _format_restart_commands(_systemd_restart_commands(svc_name, scope))
+    restarted = _try_restart_systemd_service(svc_name, cgroup_path)
+    if not restarted and scope == "system" and svc_name in stopped_units:
+        restarted = _sudo_restart_stopped_unit(svc_name)
+    if not restarted:
+        return f"systemctl restart failed; run {manual}"
+    address = _backend_listen_address(argv)
+    deadline = time.monotonic() + _STARTUP_WAIT_SECONDS
+    while True:
+        active = _unit_is_active(svc_name, scope)
+        answering = active and (address is None or _backend_answers(*address))
+        if answering or time.monotonic() >= deadline:
+            break
+        time.sleep(_STARTUP_POLL_SECONDS)
+    if not active:
+        return f"{svc_name} is not active after restart; run {manual}"
+    if not answering:
+        return f"{svc_name} is active but {address[0]}:{address[1]} did not answer; run {manual}"
+    where = f"{address[0]}:{address[1]} answering" if address else "listen address unknown, not probed"
+    print(f"    ✓ {svc_name} active and {where}" if address else f"    ✓ {svc_name} active ({where})")
+    return None
 
 
 # launchd plist directories that can supervise a ``hermes dashboard`` / ``hermes serve`` backend on
