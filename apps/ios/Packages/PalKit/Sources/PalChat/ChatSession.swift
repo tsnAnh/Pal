@@ -408,8 +408,9 @@ public actor ChatSession: OutboxSubmitter {
         guard case .live = phase, let api, let sessionID = transcript.sessionID else { throw ChatError.notConnected }
         if echo {
             let echoed = text.isEmpty ? files.map(\.name).joined(separator: ", ") : text
-            transcript.echoUser(submissionID: submissionID, text: echoed)
-            timeline.echoUser(submissionID: submissionID, text: echoed)
+            let carriesImage = !attachments.isEmpty || files.contains { $0.kind == .image }
+            transcript.echoUser(submissionID: submissionID, text: echoed, carriesImage: carriesImage)
+            timeline.echoUser(submissionID: submissionID, text: echoed, carriesImage: carriesImage)
             publishTimeline()
             notifyWaiters()
         }

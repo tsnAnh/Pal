@@ -61,6 +61,7 @@ public struct TranscriptItem: Sendable, Hashable, Identifiable {
     public var timestamp: Date?
     public var inbound: InboundKind = .person
     var liveSegment: LiveSegment?
+    var carriesImage = false
 
     public init(
         id: String,
@@ -123,10 +124,12 @@ public struct Transcript: Sendable, Equatable {
         items.filter { $0.id.hasPrefix(Self.absorbedPrefix) }
     }
 
-    public mutating func echoUser(submissionID: String, text: String) {
+    public mutating func echoUser(submissionID: String, text: String, carriesImage: Bool = false) {
         let id = Self.echoID(submissionID)
         guard !items.contains(where: { $0.id == id }) else { return }
-        items.append(TranscriptItem(id: id, content: .user(text: text, delivery: .sending)))
+        var item = TranscriptItem(id: id, content: .user(text: text, delivery: .sending))
+        item.carriesImage = carriesImage
+        items.append(item)
     }
 
     public mutating func apply(_ frame: SessionEventFrame) -> ApplyOutcome {
@@ -402,8 +405,9 @@ public struct Transcript: Sendable, Equatable {
         case .messageDelta(let delta):
             appendDelta(delta)
         case .messageInterim(let interim):
+            let streamedHere = streamingIndex != nil
             sealStreaming()
-            if !interim.text.isEmpty, !hasAssistantText(interim.text) {
+            if !interim.text.isEmpty, !(interim.alreadyStreamed == true && streamedHere), !hasAssistantText(interim.text) {
                 var item = TranscriptItem(
                     id: "interim:\(interim.turnID ?? "turn"):\(interim.segment ?? items.count)",
                     content: .assistant(text: interim.text, reasoning: "", isStreaming: false)
@@ -663,9 +667,13 @@ public struct Transcript: Sendable, Equatable {
 
     private func hasAssistantText(_ text: String) -> Bool {
         items.contains { item in
-            if case .assistant(let existing, _, _) = item.content { return existing == text }
+            if case .assistant(let existing, _, _) = item.content { return Self.sameBody(existing, text) }
             return false
         }
+    }
+
+    static func sameBody(_ a: String, _ b: String) -> Bool {
+        a == b || a.trimmingCharacters(in: .whitespacesAndNewlines) == b.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func hasAssistantInCurrentTurn(text: String) -> Bool {
