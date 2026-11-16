@@ -3222,9 +3222,30 @@ export interface VaultAddParams {
   origin?: string | null
   secret?: Record<string, unknown> | null
 }
-export type VaultKind = 'login' | 'payment' | 'address'
+export type VaultKind = 'login' | 'payment' | 'address' | 'api_key'
 export interface VaultAddResult {
   id: string
+}
+/** A blank ``secret`` field keeps the stored value; the item's kind never changes. */
+export interface VaultUpdateParams {
+  profile?: string | null
+  id?: string | null
+  label?: string | null
+  origin?: string | null
+  secret?: Record<string, unknown> | null
+}
+/** The edited item's metadata; never a secret. */
+export interface VaultUpdateResult {
+  id: string
+  kind: string
+  label: string
+  origin?: string | null
+  created_at?: string
+  identifier?: string | null
+  identifier_type?: string | null
+  has_otp?: boolean | null
+  allowed_origins?: string[] | null
+  backend: string
 }
 export interface VaultRemoveParams {
   profile?: string | null
@@ -8623,7 +8644,7 @@ export interface RpcMethods {
   'toolsets.list': { params: _SessionScoped; result: ToolsetsListResult }
   /** Two-bar dollar usage view shared by /usage, /topup and /subscription; fail-open to unavailable. */
   'usage.bars': { params: ProfileParams; result: UsageModel }
-  /** Add a login / payment / address item to the local vault. */
+  /** Add a login / payment / address / API key item to the local vault. */
   'vault.add': { params: VaultAddParams; result: VaultAddResult }
   /** Metadata-only listing across the local vault and every unlocked password manager. */
   'vault.list': { params: ProfileParams; result: VaultListResult }
@@ -8639,6 +8660,8 @@ export interface RpcMethods {
   'vault.sources': { params: ProfileParams; result: VaultSourcesResult }
   /** Unlock a password manager for this session with its master password. */
   'vault.unlock': { params: VaultUnlockParams; result: VaultUnlockResult }
+  /** Edit a local vault item's label, origin or secret fields (blank secret fields are kept). */
+  'vault.update': { params: VaultUpdateParams; result: VaultUpdateResult }
   /** Best known verification evidence for a cwd/session; read-only, never runs checks. */
   'verification.status': { params: VerificationStatusParams; result: VerificationStatusResult }
   /** VAD-bounded push-to-talk; the transcript arrives as a voice.transcript event. */
@@ -8996,6 +9019,7 @@ export const RPC_METHODS = [
   'vault.source.set',
   'vault.sources',
   'vault.unlock',
+  'vault.update',
   'verification.status',
   'voice.record',
   'voice.toggle',
@@ -9275,7 +9299,7 @@ export interface CanonicalRpcMethods {
   'shell.exec': { params: CanonicalShellExecParams; result: ShellExecResult }
   /** Skills hub backend: list the profile's skills, search / browse / inspect the hub, and install / check / update / uninstall for the scoped profile. */
   'skills.manage': { params: SkillsManageParams; result: SkillsManageResult }
-  /** Add a login / payment / address item to the local vault. */
+  /** Add a login / payment / address / API key item to the local vault. */
   'vault.add': { params: VaultAddParams; result: VaultAddResult }
   /** Metadata-only listing across the local vault and every unlocked password manager. */
   'vault.list': { params: ProfileParams; result: VaultListResult }
@@ -9287,6 +9311,8 @@ export interface CanonicalRpcMethods {
   'vault.sources': { params: ProfileParams; result: VaultSourcesResult }
   /** Unlock a password manager for this session with its master password. */
   'vault.unlock': { params: VaultUnlockParams; result: VaultUnlockResult }
+  /** Edit a local vault item's label, origin or secret fields (blank secret fields are kept). */
+  'vault.update': { params: VaultUpdateParams; result: VaultUpdateResult }
   /** Adopt a registered execution after verifying the live producer claim. */
   'worker.adopt': { params: WorkerScopeParams; result: WorkerExecution }
   /** Sequence-fenced typed persistence write from an adopted worker. */
@@ -9443,6 +9469,7 @@ export const CANONICAL_RPC_METHODS = [
   'vault.remove',
   'vault.sources',
   'vault.unlock',
+  'vault.update',
   'worker.adopt',
   'worker.persist',
   'worker.register'

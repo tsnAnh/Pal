@@ -11,6 +11,8 @@ JSON-RPC channel every other Settings surface uses. Contracts:
   payload arrives over the local RPC channel, goes straight into the
   encrypted store, and is never logged. Error strings are defensively
   scrubbed with ``scrub_secret_from_text`` before they leave the handler.
+- ``vault.update`` → edits label / origin / secret fields of one item (a blank secret field keeps the
+  stored value; the kind never changes); result is the item's metadata, never a secret.
 - ``vault.remove`` → {removed: bool}.
 - ``vault.sources`` / ``vault.source.set`` → external password-manager status and enable toggle.
 - ``vault.preview.fill`` → the Browser bar's key button: fill a saved login (identifier + password) into
@@ -140,7 +142,7 @@ def _(rid, params: dict) -> dict:
 def _(rid, params: dict) -> dict:
     """Add a vault item. ``secret`` values go straight into the encrypted store.
 
-    Params: ``kind`` (login|payment|address), ``label``, ``origin?``,
+    Params: ``kind`` (login|payment|address|api_key), ``label``, ``origin?``,
     ``secret`` (dict). Result: ``{id}`` — metadata only. Exception text is
     scrubbed of secret values before it can reach a response or a log line.
     """
@@ -166,6 +168,30 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5095, scrub_secret_from_text(str(e), secret))
     except Exception as e:
         return _err(rid, 5095, scrub_secret_from_text(str(e), secret))
+
+
+@method("vault.update")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    """Edit a vault item. Params: ``id``, ``label?``, ``origin?``, ``secret?`` (field -> new value; a
+    blank field keeps the stored one). Result: the item's metadata, never a secret."""
+    from agent.vault_store import get_vault_store, scrub_secret_from_text
+
+    item_id = str(params.get("id") or "")
+    if not item_id:
+        return _err(rid, 5095, "id is required")
+    secret, label, origin = params.get("secret"), params.get("label"), params.get("origin")
+    scrubbed_of = secret if isinstance(secret, dict) else {}
+    try:
+        meta = get_vault_store().update_item(
+            item_id,
+            label=None if label is None else str(label),
+            origin=None if origin is None else str(origin),
+            secret=secret,
+        )
+        return _ok(rid, {**meta.to_dict(), "backend": "local"})
+    except Exception as e:  # health: allow BLE001 -- the error text is scrubbed of the secret before it leaves
+        return _err(rid, 5095, scrub_secret_from_text(str(e), scrubbed_of))
 
 
 @method("vault.remove")

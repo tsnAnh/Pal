@@ -289,7 +289,7 @@ def browser_vault_list() -> str:
             continue
         for meta in metas:
             entry = {"handle": meta.id, "backend": backend.name, "label": meta.label, "kind": meta.kind,
-                     "origin": meta.origin, "available": meta.kind == "login" or bool(meta.origin)}
+                     "origin": meta.origin, "available": meta.kind in ("login", "api_key") or bool(meta.origin)}
             if len(meta.allowed_origins) > 1:
                 entry["allowed_origins"] = list(meta.allowed_origins)
             if meta.has_otp or backend.needs_unlock:
@@ -408,6 +408,8 @@ def browser_vault_enter_code(handle: str = "", task_id: Optional[str] = None) ->
 
     effective_task_id = task_id or "default"
     backend, meta = _saved_login(handle)
+    if meta is not None and meta.kind == "api_key":
+        return json.dumps(_API_KEY_NOT_FILLABLE)
     if meta is not None:
         bound = _bound_page_origin(effective_task_id, meta, "otp")
         if isinstance(bound, dict):
@@ -500,6 +502,9 @@ def browser_vault_fill(handle: str, task_id: Optional[str] = None, *, with_ident
                 ),
             }
         )
+    if meta.kind == "api_key":
+        with backend.fill_context():
+            return _fill_focused_field(backend, handle, effective_task_id)
     # Origin binding pre-check (the authoritative re-check runs inside the fill script), before the user is
     # asked to confirm a card, before the backend's fill_context is entered and before any value is resolved.
     page_origin = _bound_page_origin(effective_task_id, meta, meta.kind)
@@ -639,6 +644,77 @@ def _fill_bound_page(backend: Any, handle: str, meta: Any, page_origin: str, eff
     return json.dumps(out)
 
 
+_API_KEY_NOT_FILLABLE = {"success": False, "error_type": "unsupported_kind",
+                         "error": "API keys have no one-time code. Focus the key field on the page and use "
+                                  "browser_vault action=fill with this handle."}
+
+_FOCUS_REFUSALS = {
+    "no_focused_field": ("no_focused_field", "Nothing on the page has keyboard focus. Click the field that "
+                                             "takes the API key, then call fill again."),
+    "not_editable": ("field_not_editable", "The focused element is not a text field, so the API key was not "
+                                           "written. Click the field that takes it, then call fill again."),
+}
+
+
+def _focus_refusal(parsed: Any) -> Optional[dict[str, Any]]:
+    refused = _FOCUS_REFUSALS.get(parsed.get("refused")) if isinstance(parsed, dict) else None
+    return {"success": False, "error_type": refused[0], "error": refused[1]} if refused else None
+
+
+def _has_page(task_id: str) -> bool:
+    if _page_backend(task_id) is not None:
+        return True
+    try:
+        return _ensure_supervisor(task_id) is not None
+    except Exception as exc:  # health: allow BLE001 -- a failed attach means no page to fill
+        logger.debug("vault fill: supervisor unavailable (%s)", exc)
+        return False
+
+
+def _fill_focused_field(backend: Any, handle: str, task_id: str) -> str:
+    """Write an API key into the page's focused text field. An API key has no bound site, so there is no
+    origin guard; the focus check runs first with a script that carries no secret, and the write script
+    re-checks focus in the page. Never submits."""
+    from agent.redact import register_vault_redaction_value
+    from agent.vault_login_classifier import build_focused_field_js
+    from agent.vault_store import scrub_secret_from_text
+
+    if not _has_page(task_id):
+        return json.dumps({"success": False, "error_type": "no_page",
+                           "error": "No browser page is open for this task. Open the page with browser_exec and "
+                                    "focus the API key field first."})
+    probe = _eval_js(task_id, build_focused_field_js())
+    parsed = _parse_json_result(probe.get("result")) if probe.get("success") else None
+    if isinstance(parsed, str):
+        parsed = _parse_json_result(parsed)
+    refusal = _focus_refusal(parsed)
+    if refusal or not (isinstance(parsed, dict) and parsed.get("ready")):
+        return json.dumps(refusal or {"success": False, "error_type": "eval_failed",
+                                      "error": "Could not check which field has focus on the current page."})
+    key = backend.resolve_secret(handle).get("api_key") or ""
+    if not key:
+        return json.dumps({"success": False, "error": "This vault item has no API key stored."})
+    register_vault_redaction_value(key)
+    secret = {"api_key": key}
+    try:
+        result = _eval_js_secret(task_id, build_focused_field_js(key))
+    except Exception as exc:  # health: allow BLE001 -- any CDP failure becomes a typed result; its text is scrubbed of the key
+        return json.dumps({"success": False, "error": scrub_secret_from_text(str(exc), secret)})
+    if not result.get("success"):
+        out = {"success": False, "error": scrub_secret_from_text(str(result.get("error") or "fill failed"), secret)}
+        if result.get("error_type"):
+            out["error_type"] = "no_page" if result["error_type"] == "supervisor_required" else result["error_type"]
+        return json.dumps(out)
+    parsed = _parse_json_result(result.get("result"))
+    if isinstance(parsed, str):
+        parsed = _parse_json_result(parsed)
+    filled = int(parsed.get("filled", 0)) if isinstance(parsed, dict) else 0
+    if not filled:
+        return json.dumps(_focus_refusal(parsed) or {"success": False, "error_type": "eval_failed",
+                                                     "error": "The API key could not be written into the page."})
+    return json.dumps({"success": True, "filled_fields": filled, "kind": "api_key"})
+
+
 def _confirm_payment_fill(label: str, origin: str) -> bool:
     """Human confirmation before a card is written into a page: a prompt injection that reaches a checkout
     must not be able to spend. Routes through the approval surface of the active session (gateway button
@@ -659,12 +735,12 @@ def _confirm_payment_fill(label: str, origin: str) -> bool:
 BROWSER_VAULT_SCHEMA = {
     "name": "browser_vault",
     "description": (
-        "Fill saved logins, 2FA codes, cards and addresses on the CURRENT browser page. Secrets never "
+        "Fill saved logins, 2FA codes, cards, addresses and API keys on the CURRENT browser page. Secrets never "
         "enter the conversation. "
         "Actions: list (call first: saved logins/cards/addresses as handles; logins carry the identifier you type "
         "yourself with the browser's input tool; locked password managers appear under `locked`); fill (handle: "
         "the password for a login, card fields after the user confirms, address fields; refused unless the page "
-        "origin matches the item); save_login (nothing saved for this site: the user enters it in a masked prompt, "
+        "origin matches the item; an API key goes into the field you focused first, any site); save_login (nothing saved for this site: the user enters it in a masked prompt, "
         "Hermes saves and fills it); enter_code (a one-time/2FA code after the password: generated from a saved "
         "authenticator key or asked of the user; no_code_field means approve on their device); unlock (backend: "
         "ask the user to unlock 1Password/Bitwarden). Never type, ask for or repeat a password, card number, CVC "
