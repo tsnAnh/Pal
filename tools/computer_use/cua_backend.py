@@ -240,7 +240,7 @@ def _empty_discovery_reason() -> str:
                 "a locked compositor hides windows and freezes app renderers")
     if sys.platform == "linux" and not os.environ.get("DISPLAY"):
         return ("no DISPLAY is set — X11/XWayland is not reachable from this process; the bot's screen is not "
-                "running: start it with `hermes computer-use screen start` (or `bot_desktop.auto_start: true`)")
+                "running: start it with `hermes computer-use screen start` (or enable `bot_desktop.auto_start`)")
     if sys.platform == "darwin":  # headless Mac / asleep panel: ScreenCaptureKit has 0 shareable displays while TCC looks fine
         return ("window discovery returned no windows; on macOS this usually means no shareable display (headless Mac or "
                 "panel asleep) — wake the display or attach a monitor/HDMI dummy, then run `hermes computer-use doctor`")

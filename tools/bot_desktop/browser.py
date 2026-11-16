@@ -21,6 +21,12 @@ DISK_CACHE_BYTES = 256 * 1024 * 1024
 
 _SYSTEM_BROWSERS = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
 _SNAP_BIN_DIR = "/snap/bin"
+_SNAP_ROOT = "/snap"
+_ICON_ROOT = "/usr/share/icons"
+_HICOLOR_SIZES = ("256x256", "128x128", "64x64", "48x48", "32x32", "22x22")
+_HICOLOR_NAMES = ("chromium-browser", "chromium", "google-chrome")
+_THEME_ICONS = ("internet-web-browser", "web-browser")
+SHIPPED_ICON = Path(__file__).with_name("browser-icon.svg")
 
 
 def profile_dir() -> Path:
@@ -33,7 +39,7 @@ def profile_dir() -> Path:
         return Path(override)
     exe = executable()
     if exe and _is_snap(exe):
-        return Path.home() / "snap" / "chromium" / "common" / "hermes-bot-desktop" / runtime._profile_name() / "browser-profile"
+        return _snap_home() / "browser-profile"
     return runtime.state_dir() / "browser-profile"
 
 
@@ -75,6 +81,59 @@ def _system_executable() -> Optional[str]:
     return next((found for name in _SYSTEM_BROWSERS if (found := shutil.which(name, path=path))), None)
 
 
+def _snap_home() -> Path:
+    return Path.home() / "snap" / "chromium" / "common" / "hermes-bot-desktop" / runtime._profile_name()
+
+
+def dock_icon(exe: str) -> str:
+    """``Icon=`` for the dock's Browser entry that this host can draw: the browser's own icon file, else a
+    theme name the installed theme has, else the icon Hermes ships (a theme without it renders a blank page)."""
+    import glob
+    snap_gui = glob.glob(f"{_SNAP_ROOT}/{os.path.basename(exe)}/current/meta/gui/*.png") if _is_snap(exe) else []
+    hicolor = [f"{_ICON_ROOT}/hicolor/{size}/apps/{icon}.png" for icon in _HICOLOR_NAMES for size in _HICOLOR_SIZES]
+    hicolor += [f"{_ICON_ROOT}/hicolor/scalable/apps/{icon}.svg" for icon in _HICOLOR_NAMES]
+    if found := next((c for c in (*sorted(snap_gui), *hicolor) if os.path.isfile(c)), None):
+        return found
+    for theme_icon in _THEME_ICONS:
+        if glob.glob(f"{_ICON_ROOT}/**/{theme_icon}.*", recursive=True):
+            return theme_icon
+    return str(SHIPPED_ICON)
+
+
+def snap_xauthority() -> Path:
+    return _snap_home() / "Xauthority"
+
+
+def sync_snap_xauthority() -> None:
+    """Copy the screen's X cookie to where a snap-confined browser may read it (strict confinement cannot read
+    ``~/.hermes``). Mode 0600 in a 0700 directory, replaced on every screen start; the content is never read
+    into a log."""
+    target = snap_xauthority()
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = target.with_name(target.name + ".new")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as out:
+        out.write((runtime.state_dir() / "Xauthority").read_bytes())
+    os.replace(tmp, target)
+
+
+def remove_snap_xauthority() -> None:
+    snap_xauthority().unlink(missing_ok=True)
+
+
+def snap_env(env: dict[str, str]) -> dict[str, str]:
+    """``env`` with ``XAUTHORITY`` on the snap-readable cookie copy. Raises in plain words when it cannot be
+    made: a snap browser without it cannot reach the screen, and headless would hide that."""
+    try:
+        sync_snap_xauthority()
+    except OSError as exc:
+        raise RuntimeError("The browser is a snap, and snap confinement cannot read the bot screen's X authority; "
+                           f"Hermes could not place a copy where the snap may read it ({exc.strerror or 'I/O error'}). "
+                           "Set browser.executable_path to a non-snap Chromium, or fix the permissions of "
+                           f"{snap_xauthority().parent}.") from exc
+    return {**env, "XAUTHORITY": str(snap_xauthority())}
+
+
 def _is_snap(exe: str) -> bool:
     """A snap-confined browser cannot write hidden directories under HOME (``~/.hermes``), only ``~/snap/<name>/common``."""
     return os.path.dirname(exe) == _SNAP_BIN_DIR or os.path.basename(os.path.realpath(exe)) == "snap"
@@ -114,7 +173,12 @@ def dock_argv(exe: str, user_data_dir: str, *, sandbox_bypass: Optional[bool] = 
                                               else sandbox_bypass) else ())]
 
 
-def dock_wrapper(user_data_dir: str) -> tuple[str, ...]:
+def dock_wrapper(user_data_dir: str, exe: str = "") -> tuple[str, ...]:
+    snap = ("env", f"XAUTHORITY={snap_xauthority()}") if exe and _is_snap(exe) else ()
+    return (*snap, *_managed_wrapper(user_data_dir))
+
+
+def _managed_wrapper(user_data_dir: str) -> tuple[str, ...]:
     from tools.bot_desktop import chrome_profile
     if not chrome_profile.is_managed_copy(user_data_dir):
         return ()

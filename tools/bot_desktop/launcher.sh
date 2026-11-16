@@ -148,7 +148,7 @@ if [[ ! -e "$X/xfce4-panel.xml" ]]; then
   # The bot's browser: runtime.py resolves the executable the agent's browser runs plus the profile's
   # persistent user-data-dir, so a human taking over lands in the bot's own cookie jar.
   [[ -n "${HERMES_BD_BROWSER_EXEC:-}" ]] && \
-    add_launcher "Browser" internet-web-browser "$HERMES_BD_BROWSER_EXEC" "${HERMES_BD_BROWSER_EXEC_LINE:-}" && \
+    add_launcher "Browser" "${HERMES_BD_BROWSER_ICON:-internet-web-browser}" "$HERMES_BD_BROWSER_EXEC" "${HERMES_BD_BROWSER_EXEC_LINE:-}" && \
     echo "$n" > "$L/.hermes-browser-launcher"
   add_launcher "Files" system-file-manager "thunar"
   add_launcher "Text Editor" accessories-text-editor "mousepad"
@@ -244,8 +244,8 @@ add_browser_to_seeded_dock() {
       print "<property name=\"plugin-" id "\" type=\"string\" value=\"launcher\"><property name=\"items\" type=\"array\"><value type=\"string\" value=\"hermes.desktop\"/></property></property>"; b = 1 }
     END { exit !(a && b) }' "$xml" > "$xml.new" || { rm -f "$xml.new"; return 0; }
   mkdir -p "$L/launcher-$id"
-  printf '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Browser\nIcon=internet-web-browser\n%s\nTerminal=false\nStartupNotify=false\n' \
-    "$HERMES_BD_BROWSER_EXEC_LINE" > "$L/launcher-$id/hermes.desktop"
+  printf '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Browser\nIcon=%s\n%s\nTerminal=false\nStartupNotify=false\n' \
+    "${HERMES_BD_BROWSER_ICON:-internet-web-browser}" "$HERMES_BD_BROWSER_EXEC_LINE" > "$L/launcher-$id/hermes.desktop"
   mv "$xml.new" "$xml"
   echo "$id" > "$L/.hermes-browser-launcher"
 }
@@ -271,6 +271,9 @@ if [[ -n "${HERMES_BD_BROWSER_EXEC:-}" && -n "${HERMES_BD_BROWSER_EXEC_LINE:-}" 
   bn="$(cat "$L/.hermes-browser-launcher")"
   d="$L/launcher-$bn/hermes.desktop"
   [[ -f "$d" ]] && sed -i "s|^Exec=.*|$(printf '%s' "$HERMES_BD_BROWSER_EXEC_LINE" | sed 's/[&|\\]/\\&/g')|" "$d"
+  # A theme without the stock name drew our entry as a blank page; only that old default is replaced.
+  [[ -f "$d" && -n "${HERMES_BD_BROWSER_ICON:-}" ]] && grep -qx 'Icon=internet-web-browser' "$d" && \
+    sed -i "s|^Icon=internet-web-browser$|Icon=$(printf '%s' "$HERMES_BD_BROWSER_ICON" | sed 's/[&|\\]/\\&/g')|" "$d"
 fi
 
 # Tests seed the config tree on a fake PATH and stop here (no X server needed).

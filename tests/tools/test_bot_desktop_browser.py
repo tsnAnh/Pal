@@ -449,8 +449,112 @@ def test_snap_chromium_profile_lives_where_the_snap_can_write(tmp_path, monkeypa
     """A snap cannot write hidden directories under HOME (``~/.hermes``): its profile goes to ``~/snap``."""
     _snap_host(tmp_path, monkeypatch)
     monkeypatch.setattr(runtime, "_profile_name", lambda: "chief")
+    (tmp_path / "home" / "bot-desktop").mkdir(parents=True)
+    (tmp_path / "home" / "bot-desktop" / "Xauthority").write_bytes(b"cookie")
     expected = tmp_path / "user" / "snap" / "chromium" / "common" / "hermes-bot-desktop" / "chief" / "browser-profile"
     assert browser.profile_dir() == expected
     assert browser.dock_launch()[1] == str(expected)
     assert _agent_launch(monkeypatch)["user_data_dir"] == str(expected)
 
+
+
+def _touch(path: Path, data: bytes = b"x") -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
+def _icon_host(tmp_path, monkeypatch):
+    exe = _snap_host(tmp_path, monkeypatch)
+    monkeypatch.setattr(browser, "_SNAP_ROOT", str(tmp_path / "snap"))
+    monkeypatch.setattr(browser, "_ICON_ROOT", str(tmp_path / "icons"))
+    monkeypatch.setattr(browser, "SHIPPED_ICON", tmp_path / "shipped.svg")
+    return exe
+
+
+def test_dock_icon_prefers_the_snaps_own_icon_then_hicolor_then_theme_then_the_shipped_one(tmp_path, monkeypatch):
+    exe = str(_icon_host(tmp_path, monkeypatch))
+    assert browser.dock_icon(exe) == str(tmp_path / "shipped.svg"), "nothing on the host: the icon Hermes ships"
+    _touch(tmp_path / "icons" / "Adwaita" / "symbolic" / "legacy" / "web-browser-symbolic.svg")
+    assert browser.dock_icon(exe) == str(tmp_path / "shipped.svg"), "a symbolic-only theme has no usable name"
+    _touch(tmp_path / "icons" / "Adwaita" / "48x48" / "apps" / "web-browser.png")
+    assert browser.dock_icon(exe) == "web-browser"
+    hicolor = _touch(tmp_path / "icons" / "hicolor" / "48x48" / "apps" / "chromium-browser.png")
+    assert browser.dock_icon(exe) == str(hicolor)
+    gui = _touch(tmp_path / "snap" / "chromium" / "current" / "meta" / "gui" / "chromium.png")
+    assert browser.dock_icon(exe) == str(gui)
+
+
+def _cookie_host(tmp_path, monkeypatch):
+    exe = _snap_host(tmp_path, monkeypatch)
+    monkeypatch.setattr(runtime, "_profile_name", lambda: "chief")
+    state = tmp_path / "home" / "bot-desktop"
+    _touch(state / "Xauthority", b"cookie-1")
+    return exe, state
+
+
+def test_snap_gets_a_private_copy_of_the_x_cookie_it_can_read(tmp_path, monkeypatch):
+    _cookie_host(tmp_path, monkeypatch)
+    expected = tmp_path / "user" / "snap" / "chromium" / "common" / "hermes-bot-desktop" / "chief" / "Xauthority"
+    assert browser.snap_env({"DISPLAY": ":21", "XAUTHORITY": "/hidden/Xauthority"}) == {"DISPLAY": ":21", "XAUTHORITY": str(expected)}
+    assert expected.read_bytes() == b"cookie-1"
+    assert expected.stat().st_mode & 0o777 == 0o600 and expected.parent.stat().st_mode & 0o777 == 0o700
+    _touch(tmp_path / "home" / "bot-desktop" / "Xauthority", b"cookie-2")
+    browser.sync_snap_xauthority()
+    assert expected.read_bytes() == b"cookie-2"
+    browser.remove_snap_xauthority()
+    assert not expected.exists()
+
+
+def test_snap_without_a_readable_cookie_fails_in_plain_words(tmp_path, monkeypatch):
+    _, state = _cookie_host(tmp_path, monkeypatch)
+    (state / "Xauthority").unlink()
+    with pytest.raises(RuntimeError, match="snap confinement"):
+        browser.snap_env({})
+
+
+def test_dock_exec_line_points_a_snap_at_the_copy_and_a_plain_browser_at_nothing(tmp_path, monkeypatch):
+    exe, _ = _cookie_host(tmp_path, monkeypatch)
+    wrapper = browser.dock_wrapper("/p", str(exe))
+    assert wrapper[:2] == ("env", f"XAUTHORITY={browser.snap_xauthority()}")
+    assert browser.dock_wrapper("/p", "/usr/bin/google-chrome") == ()
+
+
+def test_agents_headed_launch_gets_the_snap_cookie_env_only_for_a_snap(tmp_path, monkeypatch):
+    from tools import browser_session
+    _cookie_host(tmp_path, monkeypatch)
+    monkeypatch.setattr(runtime, "published_env", lambda: {"DISPLAY": ":21", "XAUTHORITY": "/hidden/Xauthority"})
+    monkeypatch.setattr(browser_session, "build_browser_env", lambda: {"DISPLAY": ":21", "XAUTHORITY": "/hidden/Xauthority"})
+    _, kwargs = browser_session._bot_desktop_target()
+    assert kwargs["env"]["XAUTHORITY"] == str(browser.snap_xauthority())
+    monkeypatch.setattr(browser, "_is_snap", lambda exe: False)
+    _, kwargs = browser_session._bot_desktop_target()
+    assert "env" not in kwargs
+
+
+def test_stopping_the_screen_removes_the_snap_cookie_copy(tmp_path, monkeypatch):
+    from tools.bot_desktop import chrome_profile
+    _, state = _cookie_host(tmp_path, monkeypatch)
+    browser.sync_snap_xauthority()
+    monkeypatch.setattr(runtime, "_launcher_pid", lambda: None)
+    monkeypatch.setattr(runtime, "_reap_orphaned_server", lambda sd: False)
+    monkeypatch.setattr(chrome_profile, "shutdown", lambda **kw: None)
+    runtime._stop_locked(state)
+    assert not browser.snap_xauthority().exists()
+
+
+def test_screen_start_places_the_cookie_copy_for_a_snap(tmp_path, monkeypatch):
+    _cookie_host(tmp_path, monkeypatch)
+    runtime._sync_snap_cookie()
+    assert browser.snap_xauthority().read_bytes() == b"cookie-1"
+
+
+def test_auto_start_is_on_by_default_and_an_explicit_value_wins(monkeypatch):
+    from hermes_cli.config_defaults import DEFAULT_CONFIG
+    assert DEFAULT_CONFIG["bot_desktop"]["auto_start"] is True
+    monkeypatch.setattr(runtime, "is_supported_host", lambda: True)
+    monkeypatch.setattr(runtime, "missing_binaries", list)
+    monkeypatch.setattr("hermes_cli.config.load_config_readonly", dict)
+    assert runtime._should_auto_start({}) is True
+    monkeypatch.setattr("hermes_cli.config.load_config_readonly", lambda: {"bot_desktop": {"auto_start": False}})
+    assert runtime._should_auto_start({}) is False

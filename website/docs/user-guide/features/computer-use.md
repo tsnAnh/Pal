@@ -471,9 +471,9 @@ of screenshot context, not ~600K.
     get one from [Bot Screen](./bot-screen.md): a per-profile Xfce
     desktop over TigerVNC, streamed into Hermes Desktop, where you can
     take over for logins and 2FA. You start it from the Desktop's
-    Screen pane or `hermes computer-use screen start`; it starts on
-    first use (the first `computer_use` call or headed browser use) only
-    when `bot_desktop.auto_start: true` is set (off by default).
+    Screen pane or `hermes computer-use screen start`; it also starts on
+    first use (the first `computer_use` call or headed browser use) unless
+    `bot_desktop.auto_start: false` is set (on by default).
     Pure Wayland sessions need an XWayland bridge for screen capture
     (cua-driver's Wayland inject path handles input independently).
 
