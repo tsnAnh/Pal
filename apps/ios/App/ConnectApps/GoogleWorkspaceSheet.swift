@@ -1,6 +1,8 @@
 import PalAuth
 import PalConnect
 import PalDesign
+import PalDevice
+import PalProtocol
 import SwiftUI
 
 enum GoogleWorkspaceText {
@@ -21,6 +23,29 @@ enum GoogleWorkspaceText {
     static func summary(_ app: ConnectApp) -> String {
         guard app.state == .needsAuthorization, let reason = app.authReason else { return app.summary }
         return reason
+    }
+}
+
+private struct GoogleAuthTracking: ViewModifier {
+    let model: GoogleWorkspaceModel
+
+    @Environment(ServiceSignInCenter.self) private var signIn
+
+    private var pending: ServiceSignInReason? { signIn.pendingReason(for: GoogleWorkspaceCatalog.serviceID) }
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: pending, initial: true) { _, reason in model.noteAuthRequired(reason) }
+            .onChange(of: signIn.lastResolution) { _, resolution in
+                guard let resolution, resolution.service == GoogleWorkspaceCatalog.serviceID, resolution.outcome == .signedIn else { return }
+                Task { await model.reloadAfterSignIn() }
+            }
+    }
+}
+
+extension View {
+    func googleAuthTracking(_ model: GoogleWorkspaceModel) -> some View {
+        modifier(GoogleAuthTracking(model: model))
     }
 }
 

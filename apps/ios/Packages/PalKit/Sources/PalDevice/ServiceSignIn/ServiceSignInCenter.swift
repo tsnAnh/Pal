@@ -37,6 +37,18 @@ public struct ServicePasteSignIn: Sendable {
     }
 }
 
+extension ServicePasteSignIn {
+    public static func routing(_ routes: [String: ServicePasteSignIn], fallback: ServicePasteSignIn) -> ServicePasteSignIn {
+        let pick: @Sendable (String) -> ServicePasteSignIn = { routes[$0] ?? fallback }
+        return ServicePasteSignIn(
+            begin: { service in await pick(service).begin(service) },
+            submit: { service, text in await pick(service).submit(service, text) },
+            cancel: { service in await pick(service).cancel(service) },
+            reopen: { service in pick(service).reopen(service) }
+        )
+    }
+}
+
 public enum ServiceSignInPhase: Sendable, Hashable {
     case prompting
     case signingIn
@@ -115,10 +127,16 @@ public final class ServiceSignInCenter {
 
     public var current: ServiceSignInDialog? { dialogs.first }
 
+    public func pendingReason(for service: String) -> ServiceSignInReason? {
+        guard let dialog = dialogs.first(where: { $0.service == service }), dialog.phase != .signedIn else { return nil }
+        return dialog.reason
+    }
+
     @ObservationIgnored private let call: Call
     @ObservationIgnored private let openBrowser: SystemBrowserOpener
     @ObservationIgnored private let nativeSignIn: ServiceNativeSignIn?
     @ObservationIgnored private let pasteSignIn: ServicePasteSignIn?
+    @ObservationIgnored private let pasteOnlyServices: Set<String>
     @ObservationIgnored private let dismissDelay: Duration
     @ObservationIgnored private var dismissals: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var nativeSignIns: [String: Task<ServiceNativeOutcome, Never>] = [:]
@@ -128,12 +146,14 @@ public final class ServiceSignInCenter {
         openBrowser: @escaping SystemBrowserOpener,
         nativeSignIn: ServiceNativeSignIn? = nil,
         pasteSignIn: ServicePasteSignIn? = nil,
+        pasteOnlyServices: Set<String> = [],
         dismissDelay: Duration = ServiceSignInCenter.signedInDismissDelay
     ) {
         self.call = call
         self.openBrowser = openBrowser
         self.nativeSignIn = nativeSignIn
         self.pasteSignIn = pasteSignIn
+        self.pasteOnlyServices = pasteOnlyServices
         self.dismissDelay = dismissDelay
     }
 
@@ -398,7 +418,7 @@ public final class ServiceSignInCenter {
             server: event.server,
             phase: .prompting,
             requiresAppSignIn: event.requiresAppSignIn,
-            automaticSignInAvailable: nativeSignIn != nil,
+            automaticSignInAvailable: nativeSignIn != nil && !pasteOnlyServices.contains(event.service),
             pasteSignInAvailable: pasteSignIn != nil
         )
     }

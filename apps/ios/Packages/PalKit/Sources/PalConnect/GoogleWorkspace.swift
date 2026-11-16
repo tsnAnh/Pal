@@ -42,6 +42,17 @@ public enum GoogleReauthReason: String, CaseIterable, Sendable, Equatable {
     }
 }
 
+extension GoogleReauthReason {
+    public init(signIn reason: ServiceSignInReason) {
+        switch reason {
+        case .missing: self = .tokenMissing
+        case .expired: self = .tokenUnreadable
+        case .revoked: self = .revoked
+        case .unknown: self = .unknown
+        }
+    }
+}
+
 public struct GoogleWorkspaceStatus: Sendable, Equatable, Decodable {
     public enum State: String, Sendable, Equatable {
         case notConfigured = "not_configured"
@@ -102,6 +113,15 @@ public struct GoogleScopeSelection: Sendable, Equatable {
     public init() {
         read = Set(GoogleService.allCases)
         write = []
+    }
+
+    public init(granted status: GoogleWorkspaceStatus?) {
+        let current = status.flatMap { known in
+            (known.state == .signedIn || known.state == .reauthNeeded) && !known.services.isEmpty ? known : nil
+        }
+        let reads = current.map { Set($0.services) } ?? Set(GoogleService.allCases)
+        read = reads
+        write = Set((current?.writeServices ?? []).filter { $0.hasWriteOptIn && reads.contains($0) })
     }
 
     public var isEmpty: Bool { read.isEmpty }
@@ -176,6 +196,7 @@ public enum GoogleWorkspaceError: Error, Sendable, Equatable {
 
 public enum GoogleWorkspaceCatalog {
     public static let appID = "google:workspace"
+    public static let serviceID = appID
     public static let name = "Google Workspace"
     public static let summary = "Gmail, Calendar, Drive, Contacts, Sheets and Docs"
 }
@@ -188,9 +209,12 @@ public enum GoogleWorkspaceCardState: Sendable, Equatable {
     case needsReauth(GoogleReauthReason)
     case failed(String)
 
-    public static func resolve(status: GoogleWorkspaceStatus?, signingIn: Bool, failure: String?) -> GoogleWorkspaceCardState {
+    public static func resolve(
+        status: GoogleWorkspaceStatus?, signingIn: Bool, failure: String?, authRequired: ServiceSignInReason? = nil
+    ) -> GoogleWorkspaceCardState {
         if signingIn { return .signingIn }
         if let reason = failure?.trimmingCharacters(in: .whitespacesAndNewlines), !reason.isEmpty { return .failed(reason) }
+        if let authRequired { return .needsReauth(GoogleReauthReason(signIn: authRequired)) }
         guard let status else { return .notSignedIn }
         switch status.state {
         case .notConfigured: return .notConfigured
@@ -224,5 +248,15 @@ extension GoogleWorkspaceStatus {
         case .reauthNeeded: .needsAuthorization
         case .notConfigured, .needsSignIn: .disconnected
         }
+    }
+}
+
+extension ConnectApp {
+    public func applyingGoogleAuthRequired(_ reason: ServiceSignInReason?) -> ConnectApp {
+        guard source == .googleWorkspace, let reason else { return self }
+        var row = self
+        row.state = .needsAuthorization
+        row.authReason = GoogleReauthReason(signIn: reason).plainReason
+        return row
     }
 }

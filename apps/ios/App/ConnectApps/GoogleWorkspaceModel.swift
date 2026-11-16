@@ -14,7 +14,10 @@ final class GoogleWorkspaceModel {
         case clientSecret
     }
 
-    private(set) var status: GoogleWorkspaceStatus?
+    private(set) var status: GoogleWorkspaceStatus? {
+        didSet { if status?.state == .signedIn { authRequired = nil } }
+    }
+    private(set) var authRequired: ServiceSignInReason?
     private(set) var session: GoogleSignInSession?
     private(set) var secretState: SecretEntryState = .idle
     private(set) var failure: String?
@@ -35,7 +38,16 @@ final class GoogleWorkspaceModel {
     var isSigningIn: Bool { session != nil }
 
     var cardState: GoogleWorkspaceCardState {
-        .resolve(status: status, signingIn: isSigningIn, failure: failure)
+        .resolve(status: status, signingIn: isSigningIn, failure: failure, authRequired: authRequired)
+    }
+
+    func noteAuthRequired(_ reason: ServiceSignInReason?) {
+        authRequired = reason
+    }
+
+    func reloadAfterSignIn() async {
+        await load()
+        await onChange?()
     }
 
     var needsClient: Bool { status?.state == .notConfigured }

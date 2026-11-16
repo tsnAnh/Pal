@@ -148,6 +148,8 @@ final class ConnectAppsModel {
         if case .customConnector(let connector) = mode { connector } else { nil }
     }
 
+    func googleRow(_ app: ConnectApp) -> ConnectApp { app.applyingGoogleAuthRequired(google.authRequired) }
+
     var connectedCount: Int { catalog.connectedApps.count }
 
     var connectedApps: [ConnectApp] { catalog.connectedApps }

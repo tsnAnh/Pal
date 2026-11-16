@@ -33,6 +33,7 @@ struct MacConnectApps: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectApps")
         .task { await model.start() }
+        .googleAuthTracking(model.google)
         .onDisappear { Task { await model.stop() } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.devices.refresh() } }
@@ -434,7 +435,10 @@ struct MacConnectApps: View {
         let action: MacRowAction = if app.requiresAppSignIn {
             MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state.isReconnect) { model.upworkApp = app }
         } else if app.source == .googleWorkspace {
-            MacRowAction(title: GoogleWorkspaceText.actionTitle(app.state), prominent: app.state == .needsAuthorization) { model.googleApp = app }
+            MacRowAction(
+                title: GoogleWorkspaceText.actionTitle(model.googleRow(app).state),
+                prominent: model.googleRow(app).state == .needsAuthorization
+            ) { model.googleApp = app }
         } else if case .custom = app.source {
             MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
         } else {
@@ -452,7 +456,7 @@ struct MacConnectApps: View {
 
     private func summary(for app: ConnectApp, state: ConnectorCardState) -> String {
         if app.requiresAppSignIn { return UpworkCardText.summary(state, fallback: app.summary) }
-        if app.source == .googleWorkspace { return GoogleWorkspaceText.summary(app) }
+        if app.source == .googleWorkspace { return GoogleWorkspaceText.summary(model.googleRow(app)) }
         return OtherConnectorCardText.summary(state, fallback: app.summary)
     }
 

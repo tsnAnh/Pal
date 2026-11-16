@@ -30,6 +30,7 @@ struct ConnectAppsSheet: View {
             }
         }
         .task { await model.start() }
+        .googleAuthTracking(model.google)
         .onDisappear { Task { await model.stop() } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.devices.refresh() } }
@@ -304,8 +305,9 @@ struct ConnectAppsSheet: View {
         ) { icon(for: app) }
     }
 
-    private func googleRow(_ app: ConnectApp) -> some View {
-        ConnectAppRow(
+    private func googleRow(_ listed: ConnectApp) -> some View {
+        let app = model.googleRow(listed)
+        return ConnectAppRow(
             title: app.name, summary: GoogleWorkspaceText.summary(app), accessibilityIdentifier: "connectApp-\(app.id)",
             isBusy: model.google.isSigningIn,
             trailing: ConnectRowAction(GoogleWorkspaceText.actionTitle(app.state), kind: app.state == .needsAuthorization ? .accent : .neutral) { model.googleApp = app }

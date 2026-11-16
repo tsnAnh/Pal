@@ -238,6 +238,29 @@ async def complete(authority, home: Path, service: str) -> bool:
     return True
 
 
+def complete_from_thread(home: Path, service: str) -> None:
+    """``complete`` for a caller off the gateway loop (a sync RPC handler); nothing to do when no gateway in this
+    process owns the home or the caller is the loop itself."""
+    from gateway.session_cron import owner_for_home
+    bound = owner_for_home(home)
+    if bound is None:
+        return
+    authority, loop = bound
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if running is loop:
+        return
+    future = asyncio.run_coroutine_threadsafe(complete(authority, home, service), loop)
+
+    def log_failure(done) -> None:
+        if not done.cancelled() and (exc := done.exception()) is not None:
+            logger.warning("completing the %s sign-in failed (%s)", service, type(exc).__name__)
+
+    future.add_done_callback(log_failure)
+
+
 async def submit_credential(authority, request_id: str, value: str) -> CredentialOutcome:
     req = _owned(authority, request_id)
     store = getattr(req.flow, "store", None) if req is not None else None

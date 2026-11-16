@@ -728,6 +728,33 @@ class ProviderPasteFlow:
         self._done.set()
 
 
+class GoogleWorkspaceFlow:
+    """The Google Workspace sign-in runs in the owner's app (google_workspace.signin.*), which ends this request
+    through ``auth_prompts.complete`` once it stores the token; nothing is pasted through the prompt."""
+
+    kind = "oauth_paste"
+    signin_on = "owner_app"
+    user_code = None
+    verification_uri = None
+    expires_in = int(PASTE_TTL_SECONDS)
+
+    def __init__(self) -> None:
+        self._cancelled = asyncio.Event()
+
+    async def begin(self) -> None:
+        return None
+
+    async def authorize_url(self) -> Optional[str]:
+        return None
+
+    async def wait(self) -> bool:
+        await self._cancelled.wait()
+        return False
+
+    def cancel(self) -> None:
+        self._cancelled.set()
+
+
 def provider_flow(home: Path, service: str) -> SigninFlow:
     from hermes_cli import model_provider_control as control
     provider = service.partition(":")[2]
@@ -747,3 +774,4 @@ register("mcp", McpServerFlow)
 register("connector", HostedConnectorFlow)
 register("provider", provider_flow)
 register("email", lambda home, service: EmailPasswordFlow())
+register("google", lambda home, service: GoogleWorkspaceFlow())

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 from dataclasses import dataclass
@@ -21,8 +22,17 @@ _GH_REASONS = (
                            r"|to use github cli in automation, set the gh_token", re.IGNORECASE)),
 )
 _ENV_ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-_SERVICE_NAMES = {"github": "GitHub", "email:himalaya": "Email"}
+_SERVICE_NAMES = {"github": "GitHub", "email:himalaya": "Email", "google:workspace": "Google Workspace"}
 EMAIL_SERVICE = "email:himalaya"
+GOOGLE_WORKSPACE_SERVICE = "google:workspace"
+_GOOGLE_SKILL_SCRIPTS = {"google_api.py": False, "setup.py": True}
+_GOOGLE_CLIENT_DISABLED = re.compile(r"^\s*OAUTH_CLIENT_DISABLED:", re.MULTILINE)
+_GOOGLE_REASONS = (
+    ("revoked", re.compile(r"^\s*TOKEN_REVOKED:", re.MULTILINE)),
+    ("expired", re.compile(r"^\s*(?:TOKEN_CORRUPT|REFRESH_FAILED|TOKEN_INVALID):", re.MULTILINE)),
+    ("missing", re.compile(r"^\s*NOT_AUTHENTICATED:|^\s*Not authenticated\. Run the setup script first:", re.MULTILINE)),
+)
+_GAPI_REFERENCE = ("$GAPI", "${GAPI}")
 _HIMALAYA_AUTH_FAILURE = re.compile(
     r"authentication\s*failed|authenticationfailed|invalid credentials|\blogin failed|\bauthenticate failed"
     r"|\b535\b.{0,60}(?:auth|credential|password)|username and password not accepted|bad credentials"
@@ -106,6 +116,58 @@ def match_himalaya_failure(command: str, output: str, exit_code: Any) -> Optiona
     return None
 
 
+def _shell_segments(command: str) -> list[list[str]]:
+    lexer = shlex.shlex(command.replace("\n", " ; "), posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    try:
+        words = list(lexer)
+    except ValueError:
+        return []
+    segments: list[list[str]] = [[]]
+    for word in words:
+        if word and set(word) <= set(";&|()"):
+            segments.append([])
+        else:
+            segments[-1].append(word)
+    return [segment for segment in segments if segment]
+
+
+def _runs_google_skill_script(words: list[str], gapi_defined: bool) -> bool:
+    while words and _ENV_ASSIGNMENT.match(words[0]):
+        words = words[1:]
+    if not words:
+        return False
+    if words[0] in _GAPI_REFERENCE:
+        return gapi_defined
+    script = words[0]
+    if os.path.basename(script).startswith("python"):
+        rest = [word for word in words[1:] if not word.startswith("-")]
+        script = rest[0] if rest else ""
+    name = os.path.basename(script)
+    return name in _GOOGLE_SKILL_SCRIPTS and (not _GOOGLE_SKILL_SCRIPTS[name] or "google-workspace" in script)
+
+
+def _invokes_google_workspace(command: str) -> bool:
+    segments = _shell_segments(command)
+    gapi_defined = any(
+        word.startswith("GAPI=") and "google_api.py" in word for segment in segments for word in segment)
+    return any(_runs_google_skill_script(segment, gapi_defined) for segment in segments)
+
+
+def match_google_workspace_failure(command: str, output: str, exit_code: Any) -> Optional[AuthNeed]:
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int) or exit_code == 0:
+        return None
+    if not isinstance(command, str) or not isinstance(output, str) or not _invokes_google_workspace(command):
+        return None
+    tail = output[-2000:]
+    if _GOOGLE_CLIENT_DISABLED.search(tail):
+        return None
+    for reason, pattern in _GOOGLE_REASONS:
+        if pattern.search(tail):
+            return AuthNeed(GOOGLE_WORKSPACE_SERVICE, reason, flow="oauth_paste")
+    return None
+
+
 def himalaya_not_installed(function_name: str, function_args: Any, result: Any) -> bool:
     if function_name != "terminal" or not isinstance(function_args, dict) or not isinstance(result, str):
         return False
@@ -158,7 +220,8 @@ def detect(function_name: str, function_args: Any, result: Any) -> Optional[Auth
         return hosted
     if function_name == "terminal" and isinstance(function_args, dict):
         command, output, code = function_args.get("command", ""), str(body.get("output", "")), body.get("exit_code")
-        return match_gh_failure(command, output, code) or match_himalaya_failure(command, output, code)
+        return (match_gh_failure(command, output, code) or match_himalaya_failure(command, output, code)
+                or match_google_workspace_failure(command, output, code))
     return None
 
 
