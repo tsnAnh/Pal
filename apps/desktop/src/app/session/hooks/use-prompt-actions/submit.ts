@@ -77,6 +77,7 @@ import {
   withSessionBusyRetry,
   withSessionNotFoundResume
 } from './utils'
+import { isAdmissionReceiptStatus, isQueuedSend, trackedReceiptStatus } from './yield-first-submit'
 
 interface SubmitPromptDeps {
   activeSessionIdRef: MutableRefObject<string | null>
@@ -1125,7 +1126,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           // the next turn untouched — without it, losing the settle race
           // (client saw idle, server still unwinding) redirects or interrupts
           // the live turn with text the user explicitly queued.
-          ...((options?.fromQueue || queueAdmission) && { queued: true }),
+          ...(isQueuedSend(options?.fromQueue, queueAdmission, guardSessionId) && { queued: true }),
           ...(titlePreview && { title_preview: titlePreview })
         })
 
@@ -1268,7 +1269,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
               !legacyAccepted &&
               ((result?.submission_id ?? result?.admission_id) !== submissionId ||
                 (result?.session_id !== undefined && result.session_id !== receiptSessionId) ||
-                !['queued', 'started', 'terminal', 'unknown'].includes(result?.status ?? ''))
+                !isAdmissionReceiptStatus(result?.status))
             ) {
               dropOptimistic(sessionId)
               releaseBusy()
@@ -1281,7 +1282,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
                 id: submissionId,
                 text,
                 displayText: options?.displayText,
-                status: result.status
+                status: trackedReceiptStatus(result.status)
               })
 
               // Queued is also the initial receipt for an idle session's first

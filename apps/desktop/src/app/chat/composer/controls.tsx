@@ -12,6 +12,7 @@ import { recordAction } from '@/store/desktop-metrics'
 import { $hudMode, closeHud, resetHudLayout } from '@/store/hud'
 import { $wakeWord, toggleWakeWord } from '@/store/wake-word'
 
+import type { ComposerBusyAction } from './busy-submit-state'
 import { ACTIVE_ICON_BTN, GHOST_ICON_BTN, PRIMARY_ICON_BTN } from './control-classes'
 import type { ConversationStatus } from './hooks/use-voice-conversation'
 import { ModelPill } from './model-pill'
@@ -66,12 +67,13 @@ export function ComposerControls({
   onDictate,
   onQueue,
   onSteer,
+  onStop,
   onToggleAutoSpeak
 }: {
   autoSpeak: boolean
   botLayout?: boolean
   busy: boolean
-  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop'
+  busyAction: ComposerBusyAction
   canSubmit: boolean
   /** A card parked on the session takes typed text as its answer, so queueing that text would leave the card waiting. */
   cardWaiting?: boolean
@@ -88,6 +90,7 @@ export function ComposerControls({
   onDictate: () => void
   onQueue: () => void
   onSteer?: () => void
+  onStop?: () => void
   onToggleAutoSpeak: () => void
 }) {
   const { t } = useI18n()
@@ -135,6 +138,7 @@ export function ComposerControls({
   const sendCluster = (
     <>
       {renderSteerButton(busy, busyAction, onSteer, disabled, c.steer)}
+      {renderStopBesideSendButton(busy && hasComposerPayload, onStop, disabled, c.stop)}
       {showQueueButton ? (
         <Tip label={<TipKeybindLabel actionId="composer.queue" text={c.queueMessage} />} placement="control">
           <Button
@@ -293,24 +297,26 @@ function VoiceControls({
 // never while a card waits (its Send answers the card).
 function queueButtonVisible(
   busy: boolean,
-  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop',
+  busyAction: ComposerBusyAction,
   hasPayload: boolean,
   cardWaiting: boolean
 ): boolean {
-  return busy && busyAction !== 'stop' && busyAction !== 'queue' && hasPayload && !cardWaiting
+  return busy && busyAction !== 'stop' && busyAction !== 'queue' && busyAction !== 'send' && hasPayload && !cardWaiting
 }
 
 function composerSendLabel(
   busy: boolean,
-  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop',
+  busyAction: ComposerBusyAction,
   c: { redirect: string; queueMessage: string; send: string; steer: string; stop: string }
 ): string {
-  return busy ? { interrupt: c.redirect, queue: c.queueMessage, steer: c.steer, stop: c.stop }[busyAction] : c.send
+  return busy
+    ? { interrupt: c.redirect, queue: c.queueMessage, send: c.send, steer: c.steer, stop: c.stop }[busyAction]
+    : c.send
 }
 
 function renderSteerButton(
   busy: boolean,
-  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop',
+  busyAction: ComposerBusyAction,
   onSteer: (() => void) | undefined,
   disabled: boolean,
   label: string
@@ -327,6 +333,30 @@ function renderSteerButton(
         variant="ghost"
       >
         <Codicon name="debug-step-over" size="0.875rem" />
+      </Button>
+    </Tip>
+  ) : null
+}
+
+function renderStopBesideSendButton(
+  visible: boolean,
+  onStop: (() => void) | undefined,
+  disabled: boolean,
+  label: string
+) {
+  return visible && onStop ? (
+    <Tip label={label}>
+      <Button
+        aria-label={label}
+        className={GHOST_ICON_BTN}
+        disabled={disabled}
+        onClick={onStop}
+        onMouseDown={keepEditorFocus}
+        size="icon"
+        type="button"
+        variant="ghost"
+      >
+        <Square className={iconSize.sm} />
       </Button>
     </Tip>
   ) : null

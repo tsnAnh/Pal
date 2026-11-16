@@ -20,6 +20,7 @@ import { setSessionDraftingTool } from '@/store/tool-drafting'
 import { handleDeferredPickEvent } from './deferred-pick'
 import { handleDesktopBridgeEvent } from './desktop-bridge'
 import { handleFreeTierEvent } from './free-tier'
+import { handleInputAbsorbedEvent } from './input-absorbed'
 import { handleInputRequestEvent } from './input-requests'
 import { handleLifecycleEvent } from './lifecycle'
 import { handleMessageStreamEvent } from './message-stream'
@@ -90,6 +91,7 @@ const HANDLERS: GatewayEventHandler[] = [
   handleSessionInfoEvent,
   handleDeferredPickEvent,
   handleControlEvent,
+  handleInputAbsorbedEvent,
   handleMessageStreamEvent,
   handleToolProgressEvent,
   handleToolEvent,
