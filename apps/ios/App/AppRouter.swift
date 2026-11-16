@@ -21,6 +21,7 @@ enum AppSheet: String, Identifiable {
     case settings
     case createBot
     case connectApps
+    case kanban
 
     var id: String { rawValue }
 }
@@ -29,6 +30,7 @@ enum AppCapability: Hashable {
     case botProfile
     case shareAsTemplate
     case connectApps
+    case kanban
 }
 
 enum BotMenuAction: CaseIterable, Identifiable {
@@ -73,6 +75,10 @@ final class AppRouter {
     func presentConnectApps(profile: String? = nil) {
         connectAppsProfile = profile
         sheet = .connectApps
+    }
+
+    func presentKanban() {
+        sheet = .kanban
     }
 
     func dismissSheet() {

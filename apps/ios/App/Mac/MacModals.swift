@@ -114,6 +114,10 @@ struct MacModalHost: View {
                 )
                 .id(router.connectAppsProfile ?? "")
             }
+        case .kanban:
+            MacModalPanel(width: 825, height: 643, identifier: "kanbanPanel", closeIdentifier: "kanban-close", close: { router.dismissSheet() }) {
+                KanbanSurface(connection: connection, close: nil)
+            }
         }
     }
 }

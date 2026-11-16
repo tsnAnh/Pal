@@ -38,7 +38,7 @@ struct PalApp: App {
         _model = State(initialValue: model)
         let roster = RosterModel(connection: model)
         _roster = State(initialValue: roster)
-        let router = AppRouter(capabilities: [.botProfile, .connectApps])
+        let router = AppRouter(capabilities: [.botProfile, .connectApps, .kanban])
         _router = State(initialValue: router)
         _appearance = State(initialValue: AppearanceStore())
         let consent = DevicePermissionPresenter { profile in roster.displayName(forProfile: profile) }
@@ -293,6 +293,8 @@ struct RootView: View {
                                 currentBot: roster.currentBotName(forProfile: router.connectAppsProfile)
                             )
                         ) { router.dismissSheet() }
+                    case .kanban:
+                        KanbanSurface(connection: model) { router.dismissSheet() }
                     }
                 }
                 .serviceSignInDialogHost()
