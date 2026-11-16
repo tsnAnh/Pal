@@ -40,7 +40,7 @@ import {
   touchSessionActivity
 } from '@/store/session'
 import { profileScopeForSessionOwner } from '@/store/session-request-router'
-import { $sessionStates, $sessionTiles, isBotChatSession } from '@/store/session-states'
+import { $sessionStates, $sessionTiles } from '@/store/session-states'
 import type { SessionInfo } from '@/types/hermes'
 
 import { cronRunWriteGateApplies, refreshCronRunWriteGate } from '../../../cron/open-cron-run'
@@ -77,6 +77,7 @@ import {
   withSessionBusyRetry,
   withSessionNotFoundResume
 } from './utils'
+import { isAdmissionReceiptStatus, isQueuedSend, trackedReceiptStatus } from './yield-first-submit'
 
 interface SubmitPromptDeps {
   activeSessionIdRef: MutableRefObject<string | null>
@@ -201,18 +202,6 @@ type SubmitReceipt = Pick<PromptSubmitResult, 'forwarded' | 'user_row_id'> & {
   /** TUI-26: the owner ended the session's voice chat on a typed stop phrase and admitted nothing. */
   voice_stopped?: boolean
 }
-
-const ADMISSION_RECEIPT_STATUSES: ReadonlySet<string> = new Set([
-  'queued',
-  'started',
-  'steered',
-  'terminal',
-  'turn',
-  'unknown'
-])
-
-const trackedReceiptStatus = (status: string): string =>
-  status === 'turn' ? 'started' : status === 'steered' ? 'queued' : status
 
 /** A refusal the backend issued before admitting anything, so an identityless retry cannot duplicate a turn. */
 function isPreAdmissionRefusal(error: unknown): boolean {
@@ -352,8 +341,6 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       const queueAdmission =
         serverQueue &&
         Boolean(options?.fromQueue || isTargetSessionBusy($sessionStates.get(), guardSessionId, busyRef.current))
-
-      const yieldFirstSend = serverQueue && !options?.fromQueue && isBotChatSession(guardSessionId)
 
       if (
         !hasSendable ||
@@ -1139,7 +1126,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           // the next turn untouched — without it, losing the settle race
           // (client saw idle, server still unwinding) redirects or interrupts
           // the live turn with text the user explicitly queued.
-          ...((options?.fromQueue || (queueAdmission && !yieldFirstSend)) && { queued: true }),
+          ...(isQueuedSend(options?.fromQueue, queueAdmission, guardSessionId) && { queued: true }),
           ...(titlePreview && { title_preview: titlePreview })
         })
 
@@ -1282,7 +1269,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
               !legacyAccepted &&
               ((result?.submission_id ?? result?.admission_id) !== submissionId ||
                 (result?.session_id !== undefined && result.session_id !== receiptSessionId) ||
-                !ADMISSION_RECEIPT_STATUSES.has(result?.status ?? ''))
+                !isAdmissionReceiptStatus(result?.status))
             ) {
               dropOptimistic(sessionId)
               releaseBusy()
@@ -1295,7 +1282,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
                 id: submissionId,
                 text,
                 displayText: options?.displayText,
-                status: result.status && trackedReceiptStatus(result.status)
+                status: trackedReceiptStatus(result.status)
               })
 
               // Queued is also the initial receipt for an idle session's first

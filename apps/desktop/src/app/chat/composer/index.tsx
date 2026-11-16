@@ -24,22 +24,20 @@ import { sanitizeComposerInput } from '@/lib/composer-input-sanitize'
 import { DATA_IMAGE_URL_RE } from '@/lib/embedded-images'
 import { triggerHaptic } from '@/lib/haptics'
 import { $touchPointer } from '@/lib/touch-interaction'
-import { useStoreSelector, useStoresSelector } from '@/lib/use-session-slice'
+import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { useChatPersona } from '@/store/chat-persona'
 import { sessionCompacting } from '@/store/compaction'
 import { draftRetry } from '@/store/composer-draft-retry'
 import { browseBackward, browseForward, deriveUserHistory, isBrowsingHistory } from '@/store/composer-input-history'
 import { POPOUT_WIDTH_REM } from '@/store/composer-popout'
-import { parkQueuedPrompts, serverOwnsComposerQueue } from '@/store/composer-queue'
-import { $connectionWires } from '@/store/connection-wire'
+import { parkQueuedPrompts } from '@/store/composer-queue'
 import { $hudMode } from '@/store/hud'
 import { $showsAdvancedChrome } from '@/store/interface-mode'
 import { $chatOnboardingSolo } from '@/store/onboarding-intro'
 import { sessionBlockingPrompt } from '@/store/prompts'
 import { toggleReview } from '@/store/review'
-import { $connection, $gatewayState } from '@/store/session'
-import { $botChatSessionIds, $sessionStates, $sessionTiles, isBotChatSession } from '@/store/session-states'
+import { $gatewayState } from '@/store/session'
 import { useForcedTextDirection } from '@/store/text-direction'
 import { $threadScrolledUpBySession } from '@/store/thread-scroll'
 import { $autoSpeakReplies } from '@/store/voice-prefs'
@@ -88,6 +86,7 @@ import { useMiddlewareSubmit } from './hooks/use-middleware-submit'
 import { useSlashCompletions } from './hooks/use-slash-completions'
 import { useStatusDrawer } from './hooks/use-status-drawer'
 import { useSessionStatusPresence } from './hooks/use-status-presence'
+import { useYieldFirst } from './hooks/use-yield-first'
 import { shouldConvertPasteToAttachment } from './large-paste'
 import { ActionBadges } from './micro-actions'
 import { chipTypedPathOnSpace, pathifyRefs } from './path-refs'
@@ -400,19 +399,7 @@ export function ChatBar({
     poppedOut
   })
 
-  // A bot chat is a companion conversation, not a working session, so it has no
-  // repo to speak of — see the blank repoPath handed to CodingStatusRow below.
-  // Three stores: the scope set records the answer, and resolving this runtime
-  // id to the stored one it is filed under reads the other two.
-  const botChat = useStoresSelector([$botChatSessionIds, $sessionStates, $sessionTiles], () =>
-    isBotChatSession(sessionId)
-  )
-
-  const canonicalOwner = useStoresSelector([$connection, $connectionWires, $sessionStates], () =>
-    serverOwnsComposerQueue(sessionId ?? activeQueueSessionKey)
-  )
-
-  const yieldFirst = botChat && canonicalOwner
+  const { botChat, onStop, yieldFirst } = useYieldFirst({ haltRun, queueScopeKey: activeQueueSessionKey, sessionId })
 
   const hasComposerPayload = hasText || attachments.length > 0
   const { cardWaiting } = useCardWaitingSubmit(sessionId ?? null, busy, hasComposerPayload)
@@ -1158,7 +1145,7 @@ export function ChatBar({
         queueDraft()
       }}
       onSteer={canSteer ? () => steerDraft('steer') : undefined}
-      onStop={yieldFirst ? () => void Promise.resolve(haltRun()) : undefined}
+      onStop={onStop}
       onToggleAutoSpeak={handleToggleAutoSpeak}
       state={state}
       voiceStatus={voiceStatus}

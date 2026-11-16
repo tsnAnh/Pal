@@ -138,22 +138,7 @@ export function ComposerControls({
   const sendCluster = (
     <>
       {renderSteerButton(busy, busyAction, onSteer, disabled, c.steer)}
-      {busy && hasComposerPayload && onStop ? (
-        <Tip label={c.stop}>
-          <Button
-            aria-label={c.stop}
-            className={GHOST_ICON_BTN}
-            disabled={disabled}
-            onClick={onStop}
-            onMouseDown={keepEditorFocus}
-            size="icon"
-            type="button"
-            variant="ghost"
-          >
-            <Square className={iconSize.sm} />
-          </Button>
-        </Tip>
-      ) : null}
+      {renderStopBesideSendButton(busy && hasComposerPayload, onStop, disabled, c.stop)}
       {showQueueButton ? (
         <Tip label={<TipKeybindLabel actionId="composer.queue" text={c.queueMessage} />} placement="control">
           <Button
@@ -348,6 +333,30 @@ function renderSteerButton(
         variant="ghost"
       >
         <Codicon name="debug-step-over" size="0.875rem" />
+      </Button>
+    </Tip>
+  ) : null
+}
+
+function renderStopBesideSendButton(
+  visible: boolean,
+  onStop: (() => void) | undefined,
+  disabled: boolean,
+  label: string
+) {
+  return visible && onStop ? (
+    <Tip label={label}>
+      <Button
+        aria-label={label}
+        className={GHOST_ICON_BTN}
+        disabled={disabled}
+        onClick={onStop}
+        onMouseDown={keepEditorFocus}
+        size="icon"
+        type="button"
+        variant="ghost"
+      >
+        <Square className={iconSize.sm} />
       </Button>
     </Tip>
   ) : null
