@@ -107,4 +107,18 @@ private func admission(_ text: String, kind: String?, status: String = "queued",
         chat.send("session.info", ["running": true, "pending": [admission("hello there", kind: nil)]])
         #expect(chat.inbound(of: "hello there") == .person)
     }
+
+    @Test func ownersSkillInvocationStaysTheOwnersBubble() throws {
+        var transcript = Transcript()
+        let object: JSONValue = [
+            "session_id": "s1", "running": false, "replay_epoch": "e1", "last_sequence": 0, "execution_generation": 1,
+            "pending": [], "prompts": [],
+            "messages": [["role": "user", "text": "/work fix the leak", "display_kind": "skill_invocation"]],
+        ]
+        _ = transcript.reconcile(with: try object.decoded(as: SessionSnapshot.self))
+        let shown = transcript.items.first { item in
+            if case .user(let text, _) = item.content { text == "/work fix the leak" } else { false }
+        }
+        #expect(shown?.inbound == .person)
+    }
 }

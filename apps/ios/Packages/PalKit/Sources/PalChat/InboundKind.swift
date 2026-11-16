@@ -22,7 +22,7 @@ public enum InboundKind: Sendable, Hashable {
 
 extension InboundKind {
     private static let processCompletionKinds: Set<String> = ["process_complete", "async_delegation_complete"]
-    private static let personKinds: Set<String> = ["steer"]
+    private static let personKinds: Set<String> = ["steer", "skill_invocation"]
     private static let processCompletionPrefixes = ["[IMPORTANT: Background process", "[ASYNC DELEGATION "]
     private static let backgroundBatch = try! NSRegularExpression(
         pattern: "\\A\\[IMPORTANT: (\\d+) background process results arrived "
