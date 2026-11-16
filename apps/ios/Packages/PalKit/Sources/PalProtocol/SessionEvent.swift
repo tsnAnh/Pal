@@ -77,11 +77,13 @@ public struct MessageInterim: Codable, Sendable, Hashable {
     public var text: String
     public var turnID: String?
     public var segment: Int?
+    public var alreadyStreamed: Bool?
 
     enum CodingKeys: String, CodingKey {
         case text
         case turnID = "turn_id"
         case segment
+        case alreadyStreamed = "already_streamed"
     }
 }
 
