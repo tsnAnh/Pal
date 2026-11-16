@@ -481,3 +481,67 @@ def test_a_comfortable_start_is_not_logged(tmp_path, monkeypatch, caplog):
     with caplog.at_level("WARNING", logger="tools.bot_desktop.runtime"):
         runtime.start()
     assert not [m for m in (r.getMessage() for r in caplog.records) if "available" in m]
+
+
+def _headless_host(monkeypatch, *, auto_start: bool):
+    monkeypatch.setattr(runtime, "published_env", dict)
+    monkeypatch.setattr(runtime, "is_supported_host", lambda: True)
+    monkeypatch.setattr(runtime, "missing_binaries", list)
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setattr("hermes_cli.config.load_config_readonly", lambda: {"bot_desktop": {"auto_start": auto_start}})
+    from tools.bot_desktop import placement
+    monkeypatch.setattr(placement, "resolve", lambda: placement.Placement(placement.GATEWAY, ""))
+
+
+def test_first_tool_use_starts_a_stopped_screen_when_auto_start_is_on(monkeypatch):
+    _headless_host(monkeypatch, auto_start=True)
+    started: list[int] = []
+    monkeypatch.setattr(runtime, "start", lambda **kw: started.append(1))
+    runtime.ensure_started_for_tool()
+    assert started == [1]
+
+
+def test_first_tool_use_leaves_a_stopped_screen_alone_when_auto_start_is_off(monkeypatch):
+    _headless_host(monkeypatch, auto_start=False)
+    monkeypatch.setattr(runtime, "start", lambda **kw: pytest.fail("auto_start is off"))
+    runtime.ensure_started_for_tool()
+
+
+def test_failed_auto_start_is_logged_loudly_enough_to_find(monkeypatch, caplog):
+    _headless_host(monkeypatch, auto_start=True)
+
+    def refuse(**kw):
+        raise RuntimeError("not enough free memory")
+
+    monkeypatch.setattr(runtime, "start", refuse)
+    with caplog.at_level("WARNING", logger=runtime.logger.name):
+        runtime.ensure_started_for_tool()
+    assert any("not enough free memory" in r.getMessage() and r.levelname == "WARNING" for r in caplog.records)
+
+
+def test_failed_auto_start_is_reported_to_the_tool_with_its_reason(monkeypatch):
+    _headless_host(monkeypatch, auto_start=True)
+
+    def refuse(**kw):
+        raise RuntimeError("not enough free memory")
+
+    monkeypatch.setattr(runtime, "start", refuse)
+    assert runtime.ensure_started_for_tool() == "not enough free memory"
+
+
+def test_computer_use_answers_screen_start_failed_instead_of_probing_a_missing_display(monkeypatch):
+    import json
+
+    from tools.computer_use import tool
+    monkeypatch.setattr(runtime, "ensure_started_for_tool", lambda: "not enough free memory")
+    out = json.loads(tool.handle_computer_use({"action": "capture"}))
+    assert out["code"] == "screen_start_failed" and "not enough free memory" in out["error"]
+
+
+def test_no_display_diagnosis_says_how_to_start_the_screen(monkeypatch):
+    from tools.computer_use import cua_backend as cb
+    monkeypatch.setattr(cb, "_linux_session_locked", lambda: False)
+    monkeypatch.setattr(cb.sys, "platform", "linux")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    assert "hermes computer-use screen start" in cb._empty_discovery_reason()

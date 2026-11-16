@@ -198,7 +198,15 @@ The guard is the panel layout file
 while it exists the launcher leaves the panel alone, so changing
 `browser.executable_path` or `browser.user_data_dir` and restarting the
 screen does not re-pin the Browser icon. Delete that file and the dock is
-rebuilt on the next `screen start` from whatever is installed then.
+rebuilt on the next `screen start` from whatever is installed then. A dock
+seeded while no browser was installed gets the Browser icon added on the next
+`screen start` once one is; your other launchers stay as they are. A Browser
+icon you removed is not added back.
+
+A snap Chromium (Ubuntu's `chromium`, found in `/snap/bin` even when a service's
+`PATH` lacks it) is accepted as the headed browser. Snap confinement cannot
+write hidden directories such as `~/.hermes`, so its default profile lives in
+`~/snap/chromium/common/hermes-bot-desktop/<profile>/browser-profile`.
 
 Which Chromium the dock and the bot use: an explicit
 `browser.executable_path` wins; otherwise Hermes uses the PM-managed

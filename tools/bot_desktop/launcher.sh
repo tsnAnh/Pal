@@ -224,6 +224,31 @@ for a in xfce4-screensaver light-locker xfce4-power-manager xfce-polkit \
   [[ -e "$XDG_CONFIG_HOME/autostart/$a.desktop" ]] || \
     printf '[Desktop Entry]\nType=Application\nName=%s\nHidden=true\n' "$a" > "$XDG_CONFIG_HOME/autostart/$a.desktop"
 done
+# A dock seeded while no browser could be found (no `.hermes-browser-launcher` marker, no Browser entry) gets
+# the Browser launcher added once one exists. Only ever an addition to the layout on disk: the launchers the
+# human arranged stay, and a human who removed our Browser entry left the marker behind, so it is not re-added.
+add_browser_to_seeded_dock() {
+  local xml="$X/xfce4-panel.xml" L="$XDG_CONFIG_HOME/xfce4/panel" d id
+  [[ -n "${HERMES_BD_BROWSER_EXEC:-}" && -n "${HERMES_BD_BROWSER_EXEC_LINE:-}" && -r "$xml" && ! -e "$L/.hermes-browser-launcher" ]] || return 0
+  command -v "$HERMES_BD_BROWSER_EXEC" >/dev/null 2>&1 || return 0
+  for d in "$L"/launcher-*/hermes.desktop; do
+    [[ -f "$d" ]] && grep -qx 'Name=Browser' "$d" && return 0
+  done
+  id=$(awk 'match($0, /name="plugin-[0-9]+"/) { v = substr($0, RSTART + 13, RLENGTH - 14) + 0; if (v > m) m = v } END { print m + 1 }' "$xml")
+  awk -v id="$id" '
+    /name="panel-2"/ { in_dock = 1 }
+    in_dock && /name="plugin-ids"/ { in_ids = 1 }
+    in_ids && /<\/property>/ && !a { sub(/<\/property>/, "<value type=\"int\" value=\"" id "\"/></property>"); a = 1; in_ids = 0 }
+    { print }
+    /<property name="plugins" type="empty">/ && !b {
+      print "<property name=\"plugin-" id "\" type=\"string\" value=\"launcher\"><property name=\"items\" type=\"array\"><value type=\"string\" value=\"hermes.desktop\"/></property></property>"; b = 1 }
+    END { exit !(a && b) }' "$xml" > "$xml.new" || { rm -f "$xml.new"; return 0; }
+  mkdir -p "$L/launcher-$id"
+  printf '[Desktop Entry]\nVersion=1.0\nType=Application\nName=Browser\nIcon=internet-web-browser\n%s\nTerminal=false\nStartupNotify=false\n' \
+    "$HERMES_BD_BROWSER_EXEC_LINE" > "$L/launcher-$id/hermes.desktop"
+  mv "$xml.new" "$xml"
+  echo "$id" > "$L/.hermes-browser-launcher"
+}
 # The Browser launcher's Exec= line binds the bot's user-data-dir by absolute path. The panel layout is
 # seeded once (the human may have rearranged it), but this one line is ours and must follow the profile:
 # after `hermes profile rename` the old path would open a browser with an empty, unshared cookie jar.
@@ -241,6 +266,7 @@ if [[ -n "${HERMES_BD_BROWSER_EXEC:-}" && -n "${HERMES_BD_BROWSER_EXEC_LINE:-}" 
     done < "$d"
   done
 fi
+add_browser_to_seeded_dock
 if [[ -n "${HERMES_BD_BROWSER_EXEC:-}" && -n "${HERMES_BD_BROWSER_EXEC_LINE:-}" && -r "$L/.hermes-browser-launcher" ]]; then
   bn="$(cat "$L/.hermes-browser-launcher")"
   d="$L/launcher-$bn/hermes.desktop"
