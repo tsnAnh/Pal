@@ -229,7 +229,10 @@ class _KanbanDispatcher:
         _review_probe = kbd.review_dispatch_enabled()
         from hermes_cli import kanban_db as _kb
         with _kb.pin_first_board_resolution():
+            from hermes_cli.kanban_board_mode import board_spawns_workers
             for slug in self._board_slugs():
+                if not board_spawns_workers(slug):
+                    continue
                 conn = None
                 try:
                     conn = _kbc().connect(board=slug)
@@ -252,6 +255,7 @@ class _KanbanDispatcher:
         try:
             from hermes_cli import kanban_decompose as _decomp
             from hermes_cli.kanban_db import scoped_current_board
+            from hermes_cli.kanban_board_mode import board_spawns_workers
         except Exception as exc:  # pragma: no cover
             logger.warning("kanban auto-decompose: import failed (%s); skipping", exc)
             return 0
@@ -266,6 +270,8 @@ class _KanbanDispatcher:
                 # env pin is process-wide, so for the whole aux-LLM call every gateway turn, kanban tool
                 # and spawned subprocess that names no board would resolve this one instead.
                 with scoped_current_board(slug):
+                    if not board_spawns_workers(slug):
+                        continue
                     try:
                         triage_ids = _decomp.list_triage_ids()
                     except Exception as exc:

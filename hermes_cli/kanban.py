@@ -23,6 +23,9 @@ from hermes_cli import kanban_db_workspace as kbw
 from hermes_cli import kanban_db_notify as kbn
 from hermes_cli import kanban_swarm as ks
 from hermes_cli import kanban_workflow
+from hermes_cli.kanban_board_mode import ExternalBoardError
+from hermes_cli.kanban_external_claim import ExternalRunFenceError, bound_profile as _bound_profile
+from hermes_cli.kanban_outcomes_store import OutcomeRefusedError
 from hermes_cli.kanban_output import (
     _ATTACHMENT_FIELDS, _RUNS_RUN_FIELDS, _SHOW_RUN_FIELDS, _bulk_apply, _err,
     _fmt_counts, _fmt_task_line, _fmt_ts, _json_out, _obj_dict, _print_json,
@@ -209,14 +212,14 @@ _DELEGATED_CHILD_DENIED_ACTIONS: frozenset[str] = frozenset({
     "init", "create", "swarm", "assign", "reclaim", "reassign", "link", "unlink",
     "claim", "comment", "attach", "attach-rm", "complete", "edit", "block",
     "schedule", "unblock", "promote", "archive", "dispatch", "daemon", "repair",
-    "heartbeat", "notify-subscribe", "notify-unsubscribe", "specify", "decompose",
+    "heartbeat", "evidence", "notify-subscribe", "notify-unsubscribe", "specify", "decompose",
     "request-review", "request-changes", "reopen-review",
     "gc",
 })
 
 _DELEGATED_CHILD_DENIED_BOARD_ACTIONS: frozenset[str] = frozenset({
     "create", "new", "rm", "remove", "delete", "switch", "use", "rename",
-    "set-default-workdir", "import",
+    "set-default-workdir", "set-dispatch-mode", "import",
 })
 
 
@@ -310,11 +313,19 @@ def _cmd_init(args: argparse.Namespace) -> int:
 
 
 def _cmd_heartbeat(args: argparse.Namespace) -> int:
+    if getattr(args, "run_id", None) is not None and _worker_run_id_for(args.task_id) is None:
+        from hermes_cli import kanban_outcomes_cli
+        return kanban_outcomes_cli.heartbeat(args)
     with kbc.connect_closing() as conn:
         ok = kbd.heartbeat_worker(conn, args.task_id, note=getattr(args, "note", None),
                                  expected_run_id=_worker_run_id_for(args.task_id))
     return _ok_or_err(ok, f"cannot heartbeat {args.task_id} (not running?)",
                       f"Heartbeat recorded for {args.task_id}")
+
+
+def _cmd_evidence(args: argparse.Namespace) -> int:
+    from hermes_cli import kanban_outcomes_cli
+    return kanban_outcomes_cli.evidence(args)
 
 
 def _cmd_assignees(args: argparse.Namespace) -> int:
@@ -374,6 +385,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
             goal_mode=bool(getattr(args, "goal_mode", False)),
             goal_max_turns=getattr(args, "goal_max_turns", None),
             completion_contract=getattr(args, "completion_contract", None),
+            outcome_contract=getattr(args, "outcome_contract", None),
             initial_status=getattr(args, "initial_status", "running"),
             creator_task_id=(os.environ.get("HERMES_KANBAN_TASK")
                              if is_dispatcher_owned_worker_context() else None),
@@ -733,6 +745,10 @@ def _cmd_unlink(args: argparse.Namespace) -> int:
 
 
 def _cmd_claim(args: argparse.Namespace) -> int:
+    from hermes_cli.kanban_board_mode import board_spawns_workers
+    if not board_spawns_workers():
+        from hermes_cli import kanban_outcomes_cli
+        return kanban_outcomes_cli.claim(args)
     with kbc.connect_closing() as conn:
         task = kb.claim_task(conn, args.task_id, ttl_seconds=args.ttl)
         if task is None:
@@ -920,12 +936,15 @@ def _cmd_complete(args: argparse.Namespace) -> int:
             fail_msg[tid] = f"cannot complete {tid} (unknown id or terminal state)"
             try:
                 done = kb.complete_task(conn, tid, result=args.result, summary=summary, metadata=metadata,
-                                        expected_run_id=_worker_run_id_for(tid),
-                                        force=bool(getattr(args, "force", False)))
+                                        expected_run_id=_worker_run_id_for(tid) or getattr(args, "run_id", None),
+                                        actor_profile=_bound_profile(), force=bool(getattr(args, "force", False)))
             except kb.LiveClaimError:
                 fail_msg[tid] = (f"cannot complete {tid}: a live worker is running it. Wait for the "
                                  f"worker, `hermes kanban reclaim {tid}` to release it, or re-run with "
                                  f"--force to close its run and complete anyway.")
+                return False
+            except (OutcomeRefusedError, ExternalRunFenceError) as refused:
+                fail_msg[tid] = f"cannot complete {tid}: {refused}. Status, dependents and workspace are unchanged."
                 return False
             except kb.EmptyCompletionError as empty_err:
                 fail_msg[tid] = (f"cannot complete {tid}: {empty_err}. Pass --result/--summary "
@@ -1274,7 +1293,10 @@ def _run_triage_sweep(args: argparse.Namespace, verb: str, mod, run_one, json_ke
 
     ok_count = 0
     for tid in ids:
-        outcome = run_one(tid, author=author)
+        try:
+            outcome = run_one(tid, author=author)
+        except ExternalBoardError as exc:
+            return _err(f"kanban {verb}: {exc}")
         if outcome.ok:
             ok_count += 1
         if want_json:
@@ -1332,7 +1354,7 @@ _HANDLERS = {
     "reopen-review": _cmd_reopen_review, "promote": _cmd_promote,
     "archive": _cmd_archive, "tail": _cmd_tail, "dispatch": _cmd_dispatch,
     "daemon": _cmd_daemon, "watch": _cmd_watch, "stats": _cmd_stats,
-    "log": _cmd_log, "runs": _cmd_runs, "heartbeat": _cmd_heartbeat,
+    "log": _cmd_log, "runs": _cmd_runs, "heartbeat": _cmd_heartbeat, "evidence": _cmd_evidence,
     "assignees": _cmd_assignees, "notify-subscribe": _cmd_notify_subscribe,
     "notify-list": _cmd_notify_list, "notify-unsubscribe": _cmd_notify_unsubscribe,
     "context": _cmd_context, "specify": _cmd_specify, "decompose": _cmd_decompose,

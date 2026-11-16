@@ -638,6 +638,7 @@ class Task:
     block_kind: Optional[str] = None
     block_recurrences: int = 0               # unblock-loop counter, see BLOCK_RECURRENCE_LIMIT
     completion_contract: Optional[str] = None
+    outcome_contract: Optional[str] = None
 
     @classmethod
     def from_row(cls, row: sqlite3.Row) -> Task:
@@ -669,7 +670,7 @@ _TASK_EPOCH_COLUMNS = ("created_at", "started_at", "completed_at", "claim_expire
 _TASK_OPTIONAL_COLUMNS = (
     "branch_name", "project_id", "tenant", "result", "idempotency_key", "worker_pid",
     "max_runtime_seconds", "current_run_id", "workflow_template_id",
-    "current_step_key", "max_retries", "session_id", "completion_contract",
+    "current_step_key", "max_retries", "session_id", "completion_contract", "outcome_contract",
 )
 # Text columns where "" is stored/read as "not set".
 _TASK_EMPTY_IS_NULL_COLUMNS = (
@@ -1168,6 +1169,7 @@ def create_task(
     project_source_task_id: Optional[str] = None,
     creator_task_id: Optional[str] = None,
     completion_contract: Optional[str] = None,
+    outcome_contract: Any = None,
 ) -> str:
     """Create a task (optionally under ``parents``); returns its id.
 
@@ -1188,6 +1190,9 @@ def create_task(
     from hermes_cli.kanban_pr_acceptance import validate_contract
 
     completion_contract = validate_contract(completion_contract)
+    from hermes_cli.kanban_outcomes import contract_json
+
+    outcome_contract = contract_json(outcome_contract)
     model_override, provider_override = _validate_model_override(model_override, provider_override)
     reasoning_effort = normalize_reasoning_effort(reasoning_effort)
     assignee = _canonical_assignee(assignee)
@@ -1267,8 +1272,8 @@ def create_task(
                         max_runtime_seconds,
                         skills, max_retries, model_override, provider_override,
                         reasoning_effort,
-                        goal_mode, goal_max_turns, session_id, completion_contract
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        goal_mode, goal_max_turns, session_id, completion_contract, outcome_contract
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         task_id, title.strip(), body, assignee, task_status, priority,
@@ -1277,7 +1282,7 @@ def create_task(
                         _opt_int(max_runtime_seconds),
                         json.dumps(skills_list) if skills_list is not None else None,
                         _opt_int(max_retries), model_override, provider_override, reasoning_effort,
-                        1 if goal_mode else 0, _opt_int(goal_max_turns), session_id, completion_contract,
+                        1 if goal_mode else 0, _opt_int(goal_max_turns), session_id, completion_contract, outcome_contract,
                     ),
                 )
                 for pid in parents:
@@ -2641,7 +2646,7 @@ def complete_task(
     conn: sqlite3.Connection, task_id: str, *, result: Optional[str] = None,
     summary: Optional[str] = None, metadata: Optional[dict] = None,
     created_cards: Optional[Iterable[str]] = None, expected_run_id: Optional[int] = None,
-    fire_lifecycle_hook: bool = True, force: bool = False,
+    fire_lifecycle_hook: bool = True, force: bool = False, actor_profile: Optional[str] = None,
 ) -> bool:
     """``running|ready|blocked|review -> done``; records ``result``.
 
@@ -2664,6 +2669,9 @@ def complete_task(
     # Cheap pre-check; re-checked inside the txn to close the parent-reopen race.
     if not _parents_satisfied(conn, task_id):
         return False
+    from hermes_cli.kanban_outcomes_store import (
+        append_outcome_verified, prepare_outcome, record_outcome,
+    )
     from hermes_cli.kanban_pr_acceptance_store import prepare_acceptance, record_acceptance
     verified_cards = _gate_created_cards(conn, task_id, created_cards, summary or result)
     _gate_empty_completion(conn, task_id, result=result, summary=summary)
@@ -2671,6 +2679,9 @@ def complete_task(
         conn, task_id, metadata, summary=summary, result=result,
     )
     handoff_summary = summary if summary is not None else result
+    outcome = prepare_outcome(conn, task_id, expected_run_id, actor_profile=actor_profile, force=force)
+    if outcome is False:
+        return False
     acceptance = prepare_acceptance(conn, task_id, expected_run_id, metadata)
     if acceptance is False:
         return False
@@ -2678,6 +2689,8 @@ def complete_task(
         # Hard invariant even for human review approval: a parent may have
         # reopened while this task waited.
         if not _parents_satisfied(conn, task_id):
+            return False
+        if outcome is not None and not record_outcome(conn, task_id, outcome):
             return False
         if acceptance is not None and not record_acceptance(conn, task_id, acceptance):
             return False
@@ -2725,6 +2738,8 @@ def complete_task(
             run_id = _synthesize_ended_run(
                 conn, task_id, outcome="completed", summary=synth_summary, metadata=synth_metadata,
             )
+        if outcome is not None:
+            append_outcome_verified(conn, task_id, outcome, run_id)
         event_summary = handoff_summary
         if prior_status == "review" and not event_summary:
             event_summary = _REVIEW_APPROVED_NOTE
@@ -2768,44 +2783,6 @@ def _gate_created_cards(
             )
         raise HallucinatedCardsError(phantom_cards, task_id)
     return verified_cards
-
-
-def _substantive_text(value: Optional[str]) -> bool:
-    return bool(value is not None and str(value).strip())
-
-
-def _gate_empty_completion(
-    conn: sqlite3.Connection,
-    task_id: str,
-    *,
-    result: Optional[str],
-    summary: Optional[str],
-) -> None:
-    """Refuse a completion that would leave the card with no evidence.
-
-    Review approvals are exempt: a human vouches for the card and
-    ``_REVIEW_APPROVED_NOTE`` is the documented record.
-    """
-    row = conn.execute(
-        "SELECT status, result FROM tasks WHERE id = ?",
-        (task_id,),
-    ).fetchone()
-    if row is None:
-        return
-    if row["status"] == "review":
-        return
-    stored = row["result"]
-    if _substantive_text(result) or _substantive_text(summary) or _substantive_text(stored):
-        return
-    with write_txn(conn):
-        _append_event(
-            conn, task_id, "completion_blocked_empty_result",
-            {
-                "result_preview": _first_line(result, 200) or None,
-                "summary_preview": _first_line(summary, 200) or None,
-            },
-        )
-    raise EmptyCompletionError(task_id)
 
 
 def _stage_completion_artifacts(
@@ -4210,6 +4187,7 @@ from hermes_cli.kanban_db_connect import (
     init_db,
     write_txn,
 )
+from hermes_cli.kanban_db_completion import _gate_empty_completion
 from hermes_cli.kanban_db_workspace import (
     _cleanup_workspace,
     _is_managed_scratch_path,

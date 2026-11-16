@@ -48,6 +48,7 @@ def read_board_metadata(board: Optional[str] = None) -> dict:
         "default_workdir": None,
         # Project scope: new tasks inherit it (deterministic worktree + branch).
         "project_id": None,
+        "dispatch_mode": "workers",
         "created_at": None,
         "archived": False,
     }
@@ -70,10 +71,12 @@ def write_board_metadata(
     board: Optional[str], *, name: Optional[str] = None, description: Optional[str] = None,
     icon: Optional[str] = None, color: Optional[str] = None, archived: Optional[bool] = None,
     default_workdir: Optional[str] = None, project_id: Optional[str] = None,
+    dispatch_mode: Optional[str] = None,
 ) -> dict:
     """Create/update ``board.json``; unmentioned fields are preserved, ``created_at``
     set on first write. ``project_id``/``default_workdir``: ``None`` = unchanged,
-    "" = clear (``project_id`` is not validated here)."""
+    "" = clear (``project_id`` is not validated here). ``dispatch_mode``: ``None`` =
+    unchanged, else one of ``kanban_board_mode.DISPATCH_MODES``."""
     _kb._assert_not_delegated_child_mutation()
     slug = _kb._slug_or_default(board)
     meta = read_board_metadata(slug)
@@ -89,6 +92,9 @@ def write_board_metadata(
     for key, value in (("default_workdir", default_workdir), ("project_id", project_id)):
         if value is not None:
             meta[key] = str(value) if value else None
+    if dispatch_mode is not None:
+        from hermes_cli.kanban_board_mode import validate_dispatch_mode
+        meta["dispatch_mode"] = validate_dispatch_mode(dispatch_mode)
     if not meta.get("created_at"):
         meta["created_at"] = int(time.time())
     path = board_metadata_path(slug)
@@ -103,7 +109,7 @@ def write_board_metadata(
 def create_board(
     slug: str, *, name: Optional[str] = None, description: Optional[str] = None,
     icon: Optional[str] = None, color: Optional[str] = None, default_workdir: Optional[str] = None,
-    project_id: Optional[str] = None,
+    project_id: Optional[str] = None, dispatch_mode: Optional[str] = None,
 ) -> dict:
     """Create board dir + DB + metadata (``mkdir -p`` semantics: existing board returns its metadata)."""
     normed = _kb._require_slug(slug)
@@ -113,6 +119,7 @@ def create_board(
     meta = write_board_metadata(
         normed, name=name, description=description, icon=icon, color=color,
         default_workdir=default_workdir, project_id=project_id, archived=False,
+        dispatch_mode=dispatch_mode,
     )
     # Touch the DB so list_boards() sees it immediately.
     _kb.init_db(board=normed)
@@ -187,6 +194,7 @@ def remove_board(slug: str, *, archive: bool = True) -> dict:
             color=prior_meta.get("color"),
             default_workdir=prior_meta.get("default_workdir"),
             project_id=prior_meta.get("project_id"),
+            dispatch_mode=prior_meta.get("dispatch_mode"),
             archived=True,
         )
         return {"slug": normed, "action": "archived", "new_path": str(target)}

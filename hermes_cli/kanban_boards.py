@@ -78,7 +78,7 @@ def _cmd_boards_create(args: argparse.Namespace) -> int:
     already = kb.board_exists(normed) and normed != kb.DEFAULT_BOARD
     meta = kb.create_board(
         normed, name=args.name, description=args.description, icon=args.icon, color=args.color,
-        default_workdir=args.default_workdir,
+        default_workdir=args.default_workdir, dispatch_mode=args.dispatch_mode,
     )
     print(f"Board {meta['slug']!r} {'already exists' if already else 'created'}.\n"
           f"  Display name: {meta.get('name', '')}\n"
@@ -160,6 +160,15 @@ def _cmd_boards_set_default_workdir(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_boards_set_dispatch_mode(args: argparse.Namespace) -> int:
+    normed, rc = _board_slug_arg(args, "set-dispatch-mode", must_exist=True)
+    if rc:
+        return rc
+    mode = kb.write_board_metadata(normed, dispatch_mode=args.mode)["dispatch_mode"]
+    print(f"Board {normed!r} dispatch mode set to {mode!r}.")
+    return 0
+
+
 def _cmd_boards_export(args: argparse.Namespace) -> int:
     from hermes_cli import kanban_transfer
     from hermes_cli.sizefmt import format_bytes
@@ -214,6 +223,7 @@ _BOARD_HANDLERS = {
     "show": _cmd_boards_show, "current": _cmd_boards_show,
     "rename": _cmd_boards_rename,
     "set-default-workdir": _cmd_boards_set_default_workdir,
+    "set-dispatch-mode": _cmd_boards_set_dispatch_mode,
     "export": _cmd_boards_export,
     "import": _cmd_boards_import,
 }

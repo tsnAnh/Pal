@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field
 
 from hermes_cli import kanban_db
 from hermes_cli import kanban_workflow
+from hermes_cli.kanban_board_mode import ExternalBoardError
 from hermes_cli.web_read_coalescing import coalesced_read
 from hermes_cli import kanban_db_connect as kbc
 from hermes_cli import kanban_db_notify as kbn
@@ -1026,7 +1027,10 @@ class SpecifyBody(BaseModel):
 def specify_task_endpoint(task_id: str, payload: SpecifyBody, board: Optional[str] = Query(None)):
     """Flesh out a triage task via the auxiliary LLM (``hermes kanban specify``). Non-OK is NOT
     an HTTP error — the UI renders the reason inline. Sync ``def`` → runs in the threadpool."""
-    outcome = _run_aux(board, "kanban_specify", "specify_task", task_id, payload.author)
+    try:
+        outcome = _run_aux(board, "kanban_specify", "specify_task", task_id, payload.author)
+    except ExternalBoardError as exc:
+        return {"ok": False, "task_id": task_id, "reason": str(exc), "new_title": None}
     return {"ok": bool(outcome.ok), "task_id": outcome.task_id, "reason": outcome.reason, "new_title": outcome.new_title}
 
 
@@ -1603,7 +1607,10 @@ class DecomposeBody(BaseModel):
 def decompose_task_endpoint(task_id: str, payload: DecomposeBody, board: Optional[str] = Query(None)):
     """Fan a triage task out into child tasks via the auxiliary LLM (``hermes kanban decompose``).
     Non-OK is NOT an HTTP error. Sync ``def`` → runs in the threadpool."""
-    outcome = _run_aux(board, "kanban_decompose", "decompose_task", task_id, payload.author)
+    try:
+        outcome = _run_aux(board, "kanban_decompose", "decompose_task", task_id, payload.author)
+    except ExternalBoardError as exc:
+        return {"ok": False, "task_id": task_id, "reason": str(exc), "fanout": False, "child_ids": [], "new_title": None}
     return {
         "ok": bool(outcome.ok), "task_id": outcome.task_id, "reason": outcome.reason,
         "fanout": bool(outcome.fanout), "child_ids": outcome.child_ids or [], "new_title": outcome.new_title}
