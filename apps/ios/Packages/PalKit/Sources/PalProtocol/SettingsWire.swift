@@ -142,6 +142,10 @@ public enum SettingsWire {
         public var id: String
     }
 
+    public struct VaultUpdated: Decodable, Sendable, Equatable {
+        public var id: String
+    }
+
     public struct VaultRemoval: Decodable, Sendable, Equatable {
         public var removed: Bool
     }

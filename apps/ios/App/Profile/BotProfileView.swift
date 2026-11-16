@@ -177,6 +177,11 @@ struct BotProfileView: View {
                     accessibilityIdentifier: "profileKeysRow"
                 ) { router.push(.botKeys(botName: model.botName)) }
                 SettingsRow.navigate(
+                    String(localized: "Vault"),
+                    icon: .symbol("lock"),
+                    accessibilityIdentifier: "profileVaultRow"
+                ) { router.push(.botVault(botName: model.botName)) }
+                SettingsRow.navigate(
                     String(localized: "Routines"),
                     value: model.routinesText,
                     icon: .symbol("clock"),

@@ -618,6 +618,7 @@ private struct MacPermissionsSection: View {
 private enum MacVaultFilter: String, CaseIterable, Identifiable {
     case all
     case logins
+    case apiKeys
     case payments
     case contact
 
@@ -627,6 +628,7 @@ private enum MacVaultFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: String(localized: "All")
         case .logins: String(localized: "Logins")
+        case .apiKeys: String(localized: "API keys")
         case .payments: String(localized: "Payments")
         case .contact: String(localized: "Contact info")
         }
@@ -636,6 +638,7 @@ private enum MacVaultFilter: String, CaseIterable, Identifiable {
         switch self {
         case .all: true
         case .logins: entry.kind == .login
+        case .apiKeys: entry.kind == .apiKey
         case .payments: entry.kind == .payment
         case .contact: entry.kind == .address
         }
@@ -673,6 +676,7 @@ private struct MacVaultSection: View {
     @State private var filter = MacVaultFilter.all
     @State private var query = ""
     @State private var adding = false
+    @State private var editing: VaultEntry?
     @State private var removing: VaultEntry?
 
     init(hub: SettingsHub) {
@@ -698,7 +702,11 @@ private struct MacVaultSection: View {
         )
         .task { await model.load(api: hub.api) }
         .sheet(isPresented: $adding) {
-            AddVaultLoginSheet(model: model, hub: hub) { adding = false }
+            AddVaultSheet(model: model, api: hub.api) { adding = false }
+                .macSheetFrame()
+        }
+        .sheet(item: $editing) { entry in
+            VaultEditSheet(model: model, api: hub.api, entry: entry) { editing = nil }
                 .macSheetFrame()
         }
         .confirmationDialog(
@@ -756,7 +764,7 @@ private struct MacVaultSection: View {
                     ForEach(shown) { row($0) }
                 }
             }
-            MacFootnote(text: String(localized: "Passwords are stored encrypted on the computer that runs Pal. Your Bots can use them but never read them."), identifier: "vaultFootnote")
+            MacFootnote(text: String(localized: "Passwords and API keys are stored encrypted on the computer that runs Pal. Your Bots can use them but never read them."), identifier: "vaultFootnote")
         }
     }
 
@@ -794,6 +802,11 @@ private struct MacVaultSection: View {
                 }
             }
             Spacer()
+            if entry.isEditable {
+                Button("Edit") { editing = entry }
+                    .buttonStyle(.palPill(height: 24, fontSize: 11))
+                    .accessibilityIdentifier("vaultEditButton-\(entry.id)")
+            }
             if entry.isRemovable {
                 Button("Remove") { removing = entry }
                     .buttonStyle(.palPill(height: 24, fontSize: 11))
