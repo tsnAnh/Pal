@@ -12,7 +12,7 @@ private struct ChatFileActionsKey: EnvironmentKey {
 }
 
 private struct ChatFileOpenerKey: EnvironmentKey {
-    nonisolated(unsafe) static let defaultValue: ((FileReference) -> Void)? = nil
+    static let defaultValue: (@MainActor (FileReference) -> Void)? = nil
 }
 
 extension EnvironmentValues {
@@ -21,7 +21,7 @@ extension EnvironmentValues {
         set { self[ChatFileActionsKey.self] = newValue }
     }
 
-    var chatFileOpener: ((FileReference) -> Void)? {
+    var chatFileOpener: (@MainActor (FileReference) -> Void)? {
         get { self[ChatFileOpenerKey.self] }
         set { self[ChatFileOpenerKey.self] = newValue }
     }

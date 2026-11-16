@@ -10,7 +10,7 @@ private struct ChatImageLoaderKey: EnvironmentKey {
 }
 
 private struct ChatImageOpenerKey: EnvironmentKey {
-    nonisolated(unsafe) static let defaultValue: ((ImageReference) -> Void)? = nil
+    static let defaultValue: (@MainActor (ImageReference) -> Void)? = nil
 }
 
 extension EnvironmentValues {
@@ -19,7 +19,7 @@ extension EnvironmentValues {
         set { self[ChatImageLoaderKey.self] = newValue }
     }
 
-    var chatImageOpener: ((ImageReference) -> Void)? {
+    var chatImageOpener: (@MainActor (ImageReference) -> Void)? {
         get { self[ChatImageOpenerKey.self] }
         set { self[ChatImageOpenerKey.self] = newValue }
     }
