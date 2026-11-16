@@ -112,7 +112,7 @@ public enum KanbanPresentation {
     public static func groups(cards: [KanbanCard], board: KanbanBoard?) -> [KanbanStatusGroup] {
         let byStatus = Dictionary(grouping: cards, by: \.status)
         let extras = byStatus.keys.filter { !KanbanCardStatus.displayOrder.contains($0) }.sorted { $0.wire < $1.wire }
-        return (KanbanCardStatus.displayOrder + extras).compactMap { status in
+        return (KanbanCardStatus.displayOrder + extras).compactMap { status -> KanbanStatusGroup? in
             let members = byStatus[status] ?? []
             let count = board?.count(of: status) ?? members.count
             guard !members.isEmpty || count > 0 else { return nil }

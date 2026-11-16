@@ -90,16 +90,16 @@ public struct KanbanSession: Sendable, Equatable {
 
     public init() {}
 
-    public func key(_ board: String) -> KanbanBoardKey? {
+    public func boardKey(_ board: String) -> KanbanBoardKey? {
         gatewayID.map { KanbanBoardKey(gatewayID: $0, board: board) }
     }
 
     public func cache(_ board: String) -> KanbanBoardCache? {
-        key(board).flatMap { caches[$0] }
+        boardKey(board).flatMap { caches[$0] }
     }
 
     public func detail(board: String, taskID: String) -> KanbanCardDetail? {
-        key(board).flatMap { details[KanbanCardKey(board: $0, taskID: taskID)] }
+        boardKey(board).flatMap { details[KanbanCardKey(board: $0, taskID: taskID)] }
     }
 
     @discardableResult
@@ -137,13 +137,13 @@ public struct KanbanSession: Sendable, Equatable {
     }
 
     public mutating func removeBoard(_ board: String) {
-        guard let key = key(board) else { return }
+        guard let key = boardKey(board) else { return }
         caches[key] = nil
         details = details.filter { $0.key.board != key }
     }
 
     public mutating func apply(_ page: KanbanEventsPage, board: String, generation: Int) -> KanbanEventApplication {
-        guard let key = key(board), var cache = caches[key], cache.generation == generation else {
+        guard let key = boardKey(board), var cache = caches[key], cache.generation == generation else {
             return KanbanEventApplication(advanced: false, affectedTaskIDs: [])
         }
         var seen = Set<Int>()
@@ -163,7 +163,7 @@ public struct KanbanSession: Sendable, Equatable {
     }
 
     public mutating func store(_ result: KanbanCardResult, board: String) {
-        guard let key = key(board), result.scope.gatewayID == key.gatewayID else { return }
+        guard let key = boardKey(board), result.scope.gatewayID == key.gatewayID else { return }
         guard let detail = result.detail, result.state == .present else { return }
         let taskID = detail.card.taskID
         details[KanbanCardKey(board: key, taskID: taskID)] = detail
@@ -177,7 +177,7 @@ public struct KanbanSession: Sendable, Equatable {
     }
 
     public mutating func removeCard(board: String, taskID: String) {
-        guard let key = key(board), var cache = caches[key] else { return }
+        guard let key = boardKey(board), var cache = caches[key] else { return }
         cache.cards = cache.cards.filter { $0.value.taskID != taskID }
         cache.prerequisites = cache.prerequisites.filter { $0.taskID != taskID && $0.requiresTaskID != taskID }
         caches[key] = cache
