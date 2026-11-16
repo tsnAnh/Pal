@@ -2682,7 +2682,7 @@ def complete_task(
     outcome = prepare_outcome(conn, task_id, expected_run_id, actor_profile=actor_profile, force=force)
     if outcome is False:
         return False
-    acceptance = prepare_acceptance(conn, task_id, expected_run_id, metadata)
+    acceptance = prepare_acceptance(conn, task_id, expected_run_id, metadata, outcome)
     if acceptance is False:
         return False
     with write_txn(conn):

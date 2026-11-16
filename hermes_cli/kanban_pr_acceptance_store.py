@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from hermes_cli.kanban_db_connect import write_txn
-from hermes_cli.kanban_pr_acceptance import _PR, collect_acceptance
+from hermes_cli.kanban_pr_acceptance import _PR, collect_acceptance, split_contract
 
 
 def _snapshot(conn, task_id):
@@ -10,7 +10,7 @@ def _snapshot(conn, task_id):
     return tuple(row) if row else None
 
 
-def prepare_acceptance(conn, task_id, expected_run_id, metadata):
+def prepare_acceptance(conn, task_id, expected_run_id, metadata, outcome=None):
     snapshot = _snapshot(conn, task_id)
     if snapshot is None:
         return False
@@ -22,17 +22,24 @@ def prepare_acceptance(conn, task_id, expected_run_id, metadata):
     published_pr = metadata.get("published_pr") if isinstance(metadata, dict) else None
     match = _PR.fullmatch(published_pr) if isinstance(published_pr, str) else None
     # Publication binds once. Retrying cannot replace the task's PR with a green sibling.
-    if match and contract == match[1]:
+    policy, target = split_contract(contract)
+    if match and target == match[1]:
+        bound = published_pr if policy == "required-checks" else f"fleet-ci:{published_pr}"
         with write_txn(conn):
             if _snapshot(conn, task_id) != snapshot:
                 return False
-            conn.execute("UPDATE tasks SET completion_contract=? WHERE id=?", (published_pr, task_id))
-        snapshot = (run_id, status, published_pr)
-        contract = published_pr
+            conn.execute("UPDATE tasks SET completion_contract=? WHERE id=?", (bound, task_id))
+        snapshot = (run_id, status, bound)
+        contract = bound
     # The assignee profile's gh login owns the repo: acceptance must not run as
     # the ambient login of whichever process completes the card (#122689).
     assignee = conn.execute("SELECT assignee FROM tasks WHERE id=?", (task_id,)).fetchone()["assignee"]
-    return snapshot, collect_acceptance(contract, published_pr, assignee=assignee)
+    receipt = collect_acceptance(contract, published_pr, assignee=assignee)
+    verified = outcome[1]["verified"] if outcome and outcome[1]["kind"] == "merged_pr" else None
+    if receipt["ok"] and verified and (verified["pr_url"], verified["head_sha"]) != (receipt["pr_url"], receipt["head_sha"]):
+        receipt.update(ok=False, classification="mismatch",
+                       detail="The merged outcome and the CI acceptance name different pull requests or heads.")
+    return snapshot, receipt
 
 
 def record_acceptance(conn, task_id, acceptance):

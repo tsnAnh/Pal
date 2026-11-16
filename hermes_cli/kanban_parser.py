@@ -214,7 +214,8 @@ _SPECS = [
              help='Governed outcome: {"kind":"merged_pr","repo":"O/R"} | built_artifact | installed_app | '
                   '{"kind":"other","name":"...","required_fields":[...]}. Immutable; completion needs verified evidence.'),
         _arg("--completion-contract", metavar="CONTRACT",
-             help="local-only (default), OWNER/REPO for publication, or exact GitHub PR URL; required CI gates done."),
+             help="local-only (default), OWNER/REPO for publication, or exact GitHub PR URL; required CI gates done. "
+                  "Prefix fleet-ci: to accept exact-head qualifying CI instead of required checks (needs an assignee)."),
         _arg("--goal", action="store_true", dest="goal_mode",
              help="Run the worker in a goal loop: after each turn a judge checks the "
                   "response against the card title/body and, if not done, the worker "

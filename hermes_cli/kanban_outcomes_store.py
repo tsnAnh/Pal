@@ -131,6 +131,11 @@ def _check_pr_binding(conn, task_id: str, contract: OutcomeContract, pr_url: str
     repo, _ = pr_parts(pr_url)
     if contract.kind == "merged_pr" and repo != contract.repo:
         raise EvidenceError("mismatch", f"the PR is in {repo}; the contract requires {contract.repo}")
+    from hermes_cli.kanban_pr_acceptance import _PR, split_contract
+    accepted = conn.execute("SELECT completion_contract FROM tasks WHERE id = ?", (task_id,)).fetchone()[0]
+    target = split_contract(accepted)[1] if accepted else ""
+    if _PR.fullmatch(target) and target != pr_url:
+        raise EvidenceError("mismatch", f"CI acceptance is bound to {target}; evidence for a different PR cannot be recorded")
     for row in conn.execute("SELECT payload FROM task_evidence WHERE task_id = ? AND kind IN ('pr_published','pr_merged')",
                             (task_id,)).fetchall():
         bound = json.loads(row["payload"])["pr_url"]
