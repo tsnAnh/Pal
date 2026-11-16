@@ -6977,6 +6977,196 @@ export interface PushUnregisterParams {
 export interface PushUnregisterResult {
   removed: boolean
 }
+export interface KanbanReadParams {
+  gateway_id?: string | null
+}
+export interface KanbanBoardsListResult {
+  gateway_id: string
+  boards: KanbanBoard[]
+}
+export interface KanbanBoard {
+  scope: KanbanScope
+  name: string
+  description: string
+  icon: string
+  color: string
+  archived: boolean
+  dispatch_mode: string
+  project_id?: string | null
+  created_at?: number | null
+  task_counts?: Record<string, number> | null
+}
+export interface KanbanScope {
+  gateway_id: string
+  board: string
+  board_id: string
+}
+export interface KanbanSnapshotParams {
+  gateway_id?: string | null
+  board: string
+  limit?: number | null
+  page_token?: string | null
+}
+export interface KanbanSnapshotResult {
+  state: 'present' | 'board_absent' | 'board_archived' | 'snapshot_required'
+  reason?: string | null
+  scope: KanbanScope
+  board?: KanbanBoard | null
+  cards?: KanbanCard[]
+  prerequisites?: KanbanPrerequisite[]
+  next_page_token?: string | null
+  cursor?: string | null
+}
+export interface KanbanCard {
+  card_id: string
+  task_id: string
+  title: string
+  status: string
+  assignee?: string | null
+  priority?: number | null
+  created_at?: number | null
+  started_at?: number | null
+  completed_at?: number | null
+  block_kind?: string | null
+  governed: boolean
+}
+/** ``task_id`` waits for ``requires_task_id`` (a parent-child link is a prerequisite edge, not containment). */
+export interface KanbanPrerequisite {
+  task_id: string
+  requires_task_id: string
+}
+export interface KanbanCardParams {
+  gateway_id?: string | null
+  board: string
+  task_id: string
+}
+export interface KanbanCardResult {
+  state: 'present' | 'board_absent' | 'board_archived' | 'card_absent'
+  scope: KanbanScope
+  detail?: KanbanCardDetail | null
+}
+export interface KanbanCardDetail {
+  card: KanbanCard
+  body?: string | null
+  result?: string | null
+  branch_name?: string | null
+  lifecycle: KanbanCardLifecycle
+  execution: KanbanExecution
+  outcome_contract?: KanbanOutcomeContract | null
+  proof_run_id?: number | null
+  ci_acceptance: KanbanCiAcceptance
+  outcome_verification: KanbanOutcomeVerification
+  proof_history: KanbanProofHistory[]
+  evidence: KanbanEvidence[]
+  prerequisites: string[]
+  dependents: string[]
+  cursor: string
+}
+export interface KanbanCardLifecycle {
+  status: string
+  assignee?: string | null
+  block_kind?: string | null
+  created_at?: number | null
+  started_at?: number | null
+  completed_at?: number | null
+}
+export interface KanbanExecution {
+  current_run_id?: number | null
+  claim_expires?: number | null
+  runs: KanbanRun[]
+}
+export interface KanbanRun {
+  run_id: number
+  profile?: string | null
+  executor?: string | null
+  executor_session?: string | null
+  status: string
+  outcome?: string | null
+  started_at?: number | null
+  ended_at?: number | null
+  claim_expires?: number | null
+  last_heartbeat_at?: number | null
+  summary?: string | null
+  error?: string | null
+}
+export interface KanbanOutcomeContract {
+  kind: 'merged_pr' | 'built_artifact' | 'installed_app' | 'other'
+  repo?: string | null
+  name?: string | null
+  required_fields?: string[]
+}
+/** The PR-acceptance gate's own verdict; ``unknown`` when none was recorded. Never a merge or consent claim. */
+export interface KanbanCiAcceptance {
+  state: 'accepted' | 'rejected' | 'unknown'
+  classification?: string | null
+  run_id?: number | null
+  observed_at?: number | null
+  event_id?: number | null
+}
+/** ``verification`` is copied from the stored receipt: ``attested`` (install, other) is never shown as ``independent``. */
+export interface KanbanOutcomeVerification {
+  state: 'verified' | 'refused' | 'unknown' | 'not_governed'
+  verification?: 'independent' | 'attested' | 'unknown' | null
+  receipt?: Record<string, unknown> | null
+  run_id?: number | null
+  observed_at?: number | null
+  event_id?: number | null
+}
+export interface KanbanProofHistory {
+  kind: 'pr_acceptance' | 'outcome_verified' | 'outcome_refused'
+  state: string
+  verification?: 'independent' | 'attested' | 'unknown' | null
+  run_id?: number | null
+  observed_at?: number | null
+  event_id?: number | null
+}
+export interface KanbanEvidence {
+  evidence_id: number
+  run_id: number
+  kind: 'execution_ref' | 'pr_published' | 'pr_merged' | 'artifact_built' | 'app_installed' | 'other_result'
+  digest: string
+  payload: Record<string, unknown>
+  producer_profile: string
+  producer_session?: string | null
+  source: string
+  observed_at: number
+}
+export interface KanbanEvidenceParams {
+  gateway_id?: string | null
+  board: string
+  task_id: string
+  run_id?: number | null
+}
+export interface KanbanEvidenceResult {
+  state: 'present' | 'board_absent' | 'board_archived' | 'card_absent'
+  scope: KanbanScope
+  card_id?: string | null
+  evidence?: KanbanEvidence[]
+}
+export interface KanbanEventsParams {
+  gateway_id?: string | null
+  board: string
+  cursor?: string | null
+  task_id?: string | null
+  limit?: number | null
+}
+export interface KanbanEventsResult {
+  state: 'ok' | 'snapshot_required' | 'board_absent' | 'board_archived' | 'card_absent'
+  scope: KanbanScope
+  reason?: string | null
+  events?: KanbanEvent[]
+  has_more?: boolean
+  cursor?: string | null
+}
+export interface KanbanEvent {
+  event_id: number
+  card_id: string
+  task_id: string
+  run_id?: number | null
+  kind: string
+  created_at: number
+  data: Record<string, unknown>
+}
 export interface McpAutoApproveGetParams {
   session_id: string
   server: string
@@ -8946,6 +9136,16 @@ export interface CanonicalRpcMethods {
   'groups.peer.revoke': { params: CanonicalGroupsPeerRevokeParams; result: GroupsPeerRevokeResult }
   'groups.retry': { params: CanonicalRoomAttemptParams; result: GroupsRetryResult }
   'image.attach_bytes': { params: ImageAttachBytesParams; result: CanonicalAttachedImageResult }
+  /** One coherent read of a board's cards and the event cursor taken at the same commit. */
+  'kanban.board.snapshot': { params: KanbanSnapshotParams; result: KanbanSnapshotResult }
+  /** Boards with a readable database on this gateway (never creates one). Native owner only. */
+  'kanban.boards.list': { params: KanbanReadParams; result: KanbanBoardsListResult }
+  /** One card: lifecycle, execution, CI acceptance, outcome verification and evidence, kept separate. */
+  'kanban.card.get': { params: KanbanCardParams; result: KanbanCardResult }
+  /** Bounded event replay after a cursor; a cursor that cannot continue answers snapshot_required. */
+  'kanban.events.since': { params: KanbanEventsParams; result: KanbanEventsResult }
+  /** Immutable evidence receipts of one card, optionally one run, with producer provenance. */
+  'kanban.evidence.list': { params: KanbanEvidenceParams; result: KanbanEvidenceResult }
   /** Native-owner only: admit the dispatcher's current claim on a kanban task. */
   'kanban.run': { params: KanbanRunParams; result: KanbanRunResult }
   /** Bytes of a library media item or file, base64, only for files the profile's library indexed. */
@@ -9162,6 +9362,11 @@ export const CANONICAL_RPC_METHODS = [
   'groups.peer.revoke',
   'groups.retry',
   'image.attach_bytes',
+  'kanban.board.snapshot',
+  'kanban.boards.list',
+  'kanban.card.get',
+  'kanban.events.since',
+  'kanban.evidence.list',
   'kanban.run',
   'library.asset',
   'library.list',

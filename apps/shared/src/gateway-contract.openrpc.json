@@ -29643,6 +29643,1317 @@
         "title": "InterruptStatus",
         "type": "string"
       },
+      "KanbanBoard": {
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "$ref": "#/components/schemas/KanbanScope"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "color": {
+            "title": "Color",
+            "type": "string"
+          },
+          "archived": {
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "dispatch_mode": {
+            "title": "Dispatch Mode",
+            "type": "string"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Project Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
+          },
+          "task_counts": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Task Counts"
+          }
+        },
+        "required": [
+          "scope",
+          "name",
+          "description",
+          "icon",
+          "color",
+          "archived",
+          "dispatch_mode"
+        ],
+        "title": "KanbanBoard",
+        "type": "object"
+      },
+      "KanbanBoardsListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "gateway_id": {
+            "title": "Gateway Id",
+            "type": "string"
+          },
+          "boards": {
+            "items": {
+              "$ref": "#/components/schemas/KanbanBoard"
+            },
+            "title": "Boards",
+            "type": "array"
+          }
+        },
+        "required": [
+          "gateway_id",
+          "boards"
+        ],
+        "title": "KanbanBoardsListResult",
+        "type": "object"
+      },
+      "KanbanCard": {
+        "additionalProperties": false,
+        "properties": {
+          "card_id": {
+            "title": "Card Id",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Assignee"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Priority"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Completed At"
+          },
+          "block_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Block Kind"
+          },
+          "governed": {
+            "title": "Governed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "card_id",
+          "task_id",
+          "title",
+          "status",
+          "governed"
+        ],
+        "title": "KanbanCard",
+        "type": "object"
+      },
+      "KanbanCardDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "card": {
+            "$ref": "#/components/schemas/KanbanCard"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Body"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Result"
+          },
+          "branch_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Branch Name"
+          },
+          "lifecycle": {
+            "$ref": "#/components/schemas/KanbanCardLifecycle"
+          },
+          "execution": {
+            "$ref": "#/components/schemas/KanbanExecution"
+          },
+          "outcome_contract": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KanbanOutcomeContract"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "proof_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Proof Run Id"
+          },
+          "ci_acceptance": {
+            "$ref": "#/components/schemas/KanbanCiAcceptance"
+          },
+          "outcome_verification": {
+            "$ref": "#/components/schemas/KanbanOutcomeVerification"
+          },
+          "proof_history": {
+            "items": {
+              "$ref": "#/components/schemas/KanbanProofHistory"
+            },
+            "title": "Proof History",
+            "type": "array"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/KanbanEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "prerequisites": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "dependents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Dependents",
+            "type": "array"
+          },
+          "cursor": {
+            "title": "Cursor",
+            "type": "string"
+          }
+        },
+        "required": [
+          "card",
+          "lifecycle",
+          "execution",
+          "ci_acceptance",
+          "outcome_verification",
+          "proof_history",
+          "evidence",
+          "prerequisites",
+          "dependents",
+          "cursor"
+        ],
+        "title": "KanbanCardDetail",
+        "type": "object"
+      },
+      "KanbanCardLifecycle": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Assignee"
+          },
+          "block_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Block Kind"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Completed At"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "KanbanCardLifecycle",
+        "type": "object"
+      },
+      "KanbanCardParams": {
+        "additionalProperties": false,
+        "properties": {
+          "gateway_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gateway Id"
+          },
+          "board": {
+            "title": "Board",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "board",
+          "task_id"
+        ],
+        "title": "KanbanCardParams",
+        "type": "object"
+      },
+      "KanbanCardResult": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "present",
+              "board_absent",
+              "board_archived",
+              "card_absent"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/KanbanScope"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KanbanCardDetail"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "state",
+          "scope"
+        ],
+        "title": "KanbanCardResult",
+        "type": "object"
+      },
+      "KanbanCiAcceptance": {
+        "additionalProperties": false,
+        "description": "The PR-acceptance gate's own verdict; ``unknown`` when none was recorded. Never a merge or consent claim.",
+        "properties": {
+          "state": {
+            "enum": [
+              "accepted",
+              "rejected",
+              "unknown"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "classification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Classification"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Run Id"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed At"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Id"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "KanbanCiAcceptance",
+        "type": "object"
+      },
+      "KanbanEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "event_id": {
+            "title": "Event Id",
+            "type": "integer"
+          },
+          "card_id": {
+            "title": "Card Id",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Run Id"
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "integer"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          }
+        },
+        "required": [
+          "event_id",
+          "card_id",
+          "task_id",
+          "kind",
+          "created_at",
+          "data"
+        ],
+        "title": "KanbanEvent",
+        "type": "object"
+      },
+      "KanbanEventsParams": {
+        "additionalProperties": false,
+        "properties": {
+          "gateway_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gateway Id"
+          },
+          "board": {
+            "title": "Board",
+            "type": "string"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cursor"
+          },
+          "task_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Task Id"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Limit"
+          }
+        },
+        "required": [
+          "board"
+        ],
+        "title": "KanbanEventsParams",
+        "type": "object"
+      },
+      "KanbanEventsResult": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "ok",
+              "snapshot_required",
+              "board_absent",
+              "board_archived",
+              "card_absent"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/KanbanScope"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "events": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KanbanEvent"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "has_more": {
+            "default": false,
+            "title": "Has More",
+            "type": "boolean"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cursor"
+          }
+        },
+        "required": [
+          "state",
+          "scope"
+        ],
+        "title": "KanbanEventsResult",
+        "type": "object"
+      },
+      "KanbanEvidence": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "integer"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "execution_ref",
+              "pr_published",
+              "pr_merged",
+              "artifact_built",
+              "app_installed",
+              "other_result"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "digest": {
+            "title": "Digest",
+            "type": "string"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "title": "Payload",
+            "type": "object"
+          },
+          "producer_profile": {
+            "title": "Producer Profile",
+            "type": "string"
+          },
+          "producer_session": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Producer Session"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "observed_at": {
+            "title": "Observed At",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "run_id",
+          "kind",
+          "digest",
+          "payload",
+          "producer_profile",
+          "source",
+          "observed_at"
+        ],
+        "title": "KanbanEvidence",
+        "type": "object"
+      },
+      "KanbanEvidenceParams": {
+        "additionalProperties": false,
+        "properties": {
+          "gateway_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gateway Id"
+          },
+          "board": {
+            "title": "Board",
+            "type": "string"
+          },
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Run Id"
+          }
+        },
+        "required": [
+          "board",
+          "task_id"
+        ],
+        "title": "KanbanEvidenceParams",
+        "type": "object"
+      },
+      "KanbanEvidenceResult": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "present",
+              "board_absent",
+              "board_archived",
+              "card_absent"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/KanbanScope"
+          },
+          "card_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Card Id"
+          },
+          "evidence": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KanbanEvidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          }
+        },
+        "required": [
+          "state",
+          "scope"
+        ],
+        "title": "KanbanEvidenceResult",
+        "type": "object"
+      },
+      "KanbanExecution": {
+        "additionalProperties": false,
+        "properties": {
+          "current_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Current Run Id"
+          },
+          "claim_expires": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Claim Expires"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/KanbanRun"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "KanbanExecution",
+        "type": "object"
+      },
+      "KanbanOutcomeContract": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "merged_pr",
+              "built_artifact",
+              "installed_app",
+              "other"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "repo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Repo"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "required_fields": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Fields",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "KanbanOutcomeContract",
+        "type": "object"
+      },
+      "KanbanOutcomeVerification": {
+        "additionalProperties": false,
+        "description": "``verification`` is copied from the stored receipt: ``attested`` (install, other) is never shown as ``independent``.",
+        "properties": {
+          "state": {
+            "enum": [
+              "verified",
+              "refused",
+              "unknown",
+              "not_governed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "verification": {
+            "anyOf": [
+              {
+                "enum": [
+                  "independent",
+                  "attested",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Verification"
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Receipt"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Run Id"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed At"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Id"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "KanbanOutcomeVerification",
+        "type": "object"
+      },
+      "KanbanPrerequisite": {
+        "additionalProperties": false,
+        "description": "``task_id`` waits for ``requires_task_id`` (a parent-child link is a prerequisite edge, not containment).",
+        "properties": {
+          "task_id": {
+            "title": "Task Id",
+            "type": "string"
+          },
+          "requires_task_id": {
+            "title": "Requires Task Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "requires_task_id"
+        ],
+        "title": "KanbanPrerequisite",
+        "type": "object"
+      },
+      "KanbanProofHistory": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "pr_acceptance",
+              "outcome_verified",
+              "outcome_refused"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "verification": {
+            "anyOf": [
+              {
+                "enum": [
+                  "independent",
+                  "attested",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Verification"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Run Id"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed At"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Id"
+          }
+        },
+        "required": [
+          "kind",
+          "state"
+        ],
+        "title": "KanbanProofHistory",
+        "type": "object"
+      },
+      "KanbanReadParams": {
+        "additionalProperties": false,
+        "properties": {
+          "gateway_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gateway Id"
+          }
+        },
+        "title": "KanbanReadParams",
+        "type": "object"
+      },
+      "KanbanRun": {
+        "additionalProperties": false,
+        "properties": {
+          "run_id": {
+            "title": "Run Id",
+            "type": "integer"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "executor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Executor"
+          },
+          "executor_session": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Executor Session"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Outcome"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Started At"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Ended At"
+          },
+          "claim_expires": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Claim Expires"
+          },
+          "last_heartbeat_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Last Heartbeat At"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Summary"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          }
+        },
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "KanbanRun",
+        "type": "object"
+      },
       "KanbanRunParams": {
         "additionalProperties": false,
         "properties": {
@@ -29700,6 +31011,167 @@
           "receipt"
         ],
         "title": "KanbanRunResult",
+        "type": "object"
+      },
+      "KanbanScope": {
+        "additionalProperties": false,
+        "properties": {
+          "gateway_id": {
+            "title": "Gateway Id",
+            "type": "string"
+          },
+          "board": {
+            "title": "Board",
+            "type": "string"
+          },
+          "board_id": {
+            "title": "Board Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "gateway_id",
+          "board",
+          "board_id"
+        ],
+        "title": "KanbanScope",
+        "type": "object"
+      },
+      "KanbanSnapshotParams": {
+        "additionalProperties": false,
+        "properties": {
+          "gateway_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Gateway Id"
+          },
+          "board": {
+            "title": "Board",
+            "type": "string"
+          },
+          "limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Limit"
+          },
+          "page_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page Token"
+          }
+        },
+        "required": [
+          "board"
+        ],
+        "title": "KanbanSnapshotParams",
+        "type": "object"
+      },
+      "KanbanSnapshotResult": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "enum": [
+              "present",
+              "board_absent",
+              "board_archived",
+              "snapshot_required"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/KanbanScope"
+          },
+          "board": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KanbanBoard"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "cards": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KanbanCard"
+            },
+            "title": "Cards",
+            "type": "array"
+          },
+          "prerequisites": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/KanbanPrerequisite"
+            },
+            "title": "Prerequisites",
+            "type": "array"
+          },
+          "next_page_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Page Token"
+          },
+          "cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cursor"
+          }
+        },
+        "required": [
+          "state",
+          "scope"
+        ],
+        "title": "KanbanSnapshotResult",
         "type": "object"
       },
       "KitCredential": {
@@ -62632,6 +64104,96 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/CanonicalAttachedImageResult"
+        }
+      }
+    },
+    {
+      "name": "kanban.board.snapshot",
+      "summary": "One coherent read of a board's cards and the event cursor taken at the same commit.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/KanbanSnapshotParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KanbanSnapshotResult"
+        }
+      }
+    },
+    {
+      "name": "kanban.boards.list",
+      "summary": "Boards with a readable database on this gateway (never creates one). Native owner only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/KanbanReadParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KanbanBoardsListResult"
+        }
+      }
+    },
+    {
+      "name": "kanban.card.get",
+      "summary": "One card: lifecycle, execution, CI acceptance, outcome verification and evidence, kept separate.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/KanbanCardParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KanbanCardResult"
+        }
+      }
+    },
+    {
+      "name": "kanban.events.since",
+      "summary": "Bounded event replay after a cursor; a cursor that cannot continue answers snapshot_required.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/KanbanEventsParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KanbanEventsResult"
+        }
+      }
+    },
+    {
+      "name": "kanban.evidence.list",
+      "summary": "Immutable evidence receipts of one card, optionally one run, with producer provenance.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/KanbanEvidenceParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/KanbanEvidenceResult"
         }
       }
     },

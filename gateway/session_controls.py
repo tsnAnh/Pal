@@ -259,6 +259,8 @@ class AuthorityConnection:
         handlers.update(tui_config_handlers(self))
         from gateway.session_ancillary import handlers as ancillary_handlers
         handlers.update(ancillary_handlers(self))
+        from gateway.session_kanban_read import handlers as kanban_read_handlers
+        handlers.update(kanban_read_handlers(self))
         from gateway.session_shell import handlers as shell_handlers
         handlers.update(shell_handlers(self))
         from gateway.session_timeline import handlers as timeline_handlers
