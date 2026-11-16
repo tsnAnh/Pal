@@ -41,8 +41,13 @@ TOOL_COMMANDS = {
     "TOOLCALL": "sleep 6",
     "APPROVE": 'cd "$(mktemp -d)" && git reset --hard',
     "STEER": "echo hermes-stub-steer-probe",
+    "NARRATE": "sleep 3; echo hermes-stub-narrate",
 }
 TOOL_PREAMBLE_CHUNKS = {"STEER": 60}
+COMMENTARY = ["Pal đã nhận việc ", "145 nhưng cần ", "xem hàng đợi trước.\n\n"]
+COMMENTARY_DELAY = 0.1
+TOOL_PREAMBLES = {"NARRATE": COMMENTARY}
+NARRATED_CLARIFY_TRIGGER = "NARRASK"
 
 log_lock = threading.Lock()
 
@@ -238,9 +243,13 @@ def plan(body):
         if tool_trigger in TOOL_PREAMBLE_CHUNKS:
             preamble = words(tool_trigger.lower(), TOOL_PREAMBLE_CHUNKS[tool_trigger])
             return "tool", {**call, "preamble": preamble}, SLOW_DELAY
+        if tool_trigger in TOOL_PREAMBLES:
+            return "tool", {**call, "preamble": TOOL_PREAMBLES[tool_trigger]}, COMMENTARY_DELAY
         return "tool", call, 0
     if "clarify" in names and last_role == "tool":
         return "final", clarify_reply(text_of(last.get("content"))), NORMAL_DELAY
+    if "clarify" in names and last_role == "user" and NARRATED_CLARIFY_TRIGGER in last_user:
+        return "clarify", {"preamble": COMMENTARY}, COMMENTARY_DELAY
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:
         return "clarify", None, 0
     if names and last_role == "user" and "HOLD" in last_user:
@@ -263,6 +272,10 @@ def clarify_reply(tool_result):
     if not picks:
         return "No problem, I'll pick for you."
     return "Got it, " + ", ".join(picks) + "."
+
+
+def preamble_of(content):
+    return content.get("preamble", []) if isinstance(content, dict) else []
 
 
 def words(prefix, count):
@@ -336,6 +349,7 @@ class Handler(BaseHTTPRequestHandler):
         finish = "stop"
         if kind in ("clarify", "iphone"):
             call_id, name, arguments = self.tool_call(kind, content)
+            message["content"] = "".join(preamble_of(content)) or None
             message["tool_calls"] = [{"id": call_id, "type": "function", "function": {"name": name, "arguments": arguments}}]
             finish = "tool_calls"
         elif kind == "tool":
@@ -359,6 +373,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.chunk({"role": "assistant", "content": ""}, None)
             if kind in ("clarify", "iphone"):
+                for piece in preamble_of(content):
+                    self.chunk({"content": piece}, None)
+                    time.sleep(delay)
                 call_id, name, arguments = self.tool_call(kind, content)
                 half = len(arguments) // 2
                 call = {"index": 0, "id": call_id, "type": "function",
