@@ -22,6 +22,7 @@ Suggestions:
  - Run with --log-level to enable more verbose logs"""
 V2_SECRET_COMMAND_FAILED = "Error: Secret command error: " + V2_BACKTRACE
 V2_SERVER_REJECTED = "Error: IMAP AUTHENTICATE PLAIN failed: NO Authentication failed." + V2_BACKTRACE
+V2_SMTP_REJECTED = "Error: SMTP AUTH PLAIN failed: rejected 535 5.7.8 Authentication credentials invalid" + V2_BACKTRACE
 LIST = {"command": "himalaya mailbox list"}
 
 
@@ -152,6 +153,11 @@ def test_v2_secret_command_failure_is_a_missing_password_need():
 
 def test_v2_server_rejection_stays_an_expired_password_need():
     need = auth_required.detect("terminal", LIST, terminal_result(V2_SERVER_REJECTED, 1))
+    assert need == auth_required.AuthNeed("email:himalaya", "expired", "api_key")
+
+
+def test_v2_smtp_rejection_is_an_expired_password_need():
+    need = auth_required.detect("terminal", {"command": "himalaya message send"}, terminal_result(V2_SMTP_REJECTED, 1))
     assert need == auth_required.AuthNeed("email:himalaya", "expired", "api_key")
 
 
