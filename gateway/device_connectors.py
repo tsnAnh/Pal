@@ -36,6 +36,7 @@ class ConnectorStatus:
 
 
 _lock = threading.RLock()
+_last_enabled: dict[str, bool] = {}
 
 
 def _path(home: Path) -> Path:
@@ -172,11 +173,13 @@ def device_kinds(home: Path) -> dict[str, str]:
 
 
 def any_enabled(home: Path) -> bool:
+    key = str(home)
     with _lock:
         try:
             devices = _load(home)
         except StoreUnreadable:
-            return False
-    return any(status.state is not ConnectorState.OFF
-               for device in devices.values() if isinstance(device, dict) for status in _status(device))
-
+            return _last_enabled.get(key, False)
+        enabled = any(status.state is not ConnectorState.OFF
+                      for device in devices.values() if isinstance(device, dict) for status in _status(device))
+        _last_enabled[key] = enabled
+        return enabled
