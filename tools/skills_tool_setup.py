@@ -80,8 +80,9 @@ def _get_required_environment_variables(frontmatter: dict[str, Any]) -> list[dic
     return list(required.values())
 
 
-def _capture_result(missing_names, setup_skipped=False, gateway_setup_hint=None):
-    return {"missing_names": missing_names, "setup_skipped": setup_skipped, "gateway_setup_hint": gateway_setup_hint}
+def _capture_result(missing_names, setup_skipped=False, gateway_setup_hint=None, unanswered=()):
+    result = {"missing_names": missing_names, "setup_skipped": setup_skipped, "gateway_setup_hint": gateway_setup_hint}
+    return {**result, "unanswered_names": list(unanswered)} if unanswered else result
 
 
 def _capture_required_environment_variables(
@@ -105,6 +106,7 @@ def _capture_required_environment_variables(
     if callback is None and (callback := _st._secret_capture_callback) is None:
         return _capture_result(missing_names)
     remaining_names: list[str] = []
+    unanswered: list[str] = []
     for entry in missing_entries:
         metadata = {"skill_name": skill_name, **{k: entry[k] for k in ("help", "required_for") if entry.get(k)}}
         try:
@@ -115,7 +117,10 @@ def _capture_required_environment_variables(
         ok = isinstance(callback_result, dict) and callback_result.get("success")
         if not (ok and not callback_result.get("skipped")):
             remaining_names.append(entry["name"])
-    return _capture_result(remaining_names, bool(remaining_names))
+            if isinstance(callback_result, dict) and callback_result.get("reason") == "unanswered":
+                unanswered.append(entry["name"])
+    return _capture_result(remaining_names, bool(remaining_names) and len(unanswered) < len(remaining_names),
+                           unanswered=unanswered)
 
 
 def _is_gateway_surface() -> bool:

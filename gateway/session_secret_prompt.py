@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
+UNANSWERED = "unanswered"
 SECRET_TIMEOUT_S = 120  # main's CLI secret panel deadline (hermes_cli/callbacks.py)
 
 
@@ -40,10 +42,14 @@ def secret_prompt_scope(turn, agent):
         if live is None:
             return _skipped(var_name, "cancelled", "Secret setup was skipped.")
         params = {"env_var": var_name, "prompt": prompt, **({"metadata": metadata} if metadata else {})}
+        started = time.monotonic()
         value = ask_viewer(live.event_stream, session_id, "secret", params, timeout=SECRET_TIMEOUT_S,
                            cancelled=lambda: bool(getattr(agent, "_interrupt_requested", False)))
         if not value:
-            return _skipped(var_name, "cancelled", "Secret setup was skipped.")
+            unanswered = (bool(getattr(agent, "_interrupt_requested", False))
+                          or time.monotonic() - started >= SECRET_TIMEOUT_S - 1)
+            return _skipped(var_name, UNANSWERED if unanswered else "cancelled",
+                            "Secret setup is still waiting for the owner." if unanswered else "Secret setup was skipped.")
         from hermes_cli.config import save_env_value_secure
         return {**save_env_value_secure(var_name, value), "skipped": False,
                 "message": "Secret stored securely. The secret value was not exposed to the model."}

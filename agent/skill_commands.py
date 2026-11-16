@@ -348,6 +348,9 @@ _SETUP_SKIPPED_NOTE = (
 
 
 def _setup_note(loaded_skill: dict[str, Any]) -> Optional[str]:
+    pending = loaded_skill.get("pending")
+    if isinstance(pending, dict) and pending.get("guidance"):
+        return pending["guidance"]
     if loaded_skill.get("setup_skipped"):
         return _SETUP_SKIPPED_NOTE
     return loaded_skill.get("gateway_setup_hint") or (

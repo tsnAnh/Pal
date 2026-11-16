@@ -274,6 +274,20 @@ _NOT_INSTALLED_TEXT = ("The email tool is not installed on this device yet. Do n
                        "user to open a terminal; tell the user email is not available here yet.")
 
 
+def _pending_offer(result: Any, need: AuthNeed) -> Any:
+    from tools.registry import pending_marker
+    try:
+        body = json.loads(result)
+    except (TypeError, ValueError):
+        return result
+    if not isinstance(body, dict):
+        return result
+    name = service_display_name(need.service)
+    body["pending"] = pending_marker("auth_prompt", f"the owner to answer the {name} sign-in prompt",
+                                     service=need.service)
+    return json.dumps(body, ensure_ascii=False)
+
+
 def resolve(function_name: str, function_args: Any, result: Any, retry) -> Any:
     if himalaya_not_installed(function_name, function_args, result):
         from tools.registry import tool_error
@@ -286,8 +300,7 @@ def resolve(function_name: str, function_args: Any, result: Any, retry) -> Any:
     home = get_hermes_home()
     bot = profile_name_for_home(home) or "default"
     if not need.blocking:
-        auth_prompts.offer_from_thread(home, need, bot)
-        return result
+        return _pending_offer(result, need) if auth_prompts.offer_from_thread(home, need, bot) else result
     outcome = auth_prompts.call_from_thread(home, need, bot)
     Resolution = auth_prompts.Resolution
     if outcome is Resolution.UNAVAILABLE:

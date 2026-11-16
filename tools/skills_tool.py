@@ -538,6 +538,10 @@ def _skill_readiness(frontmatter: dict[str, Any], skill_name: str) -> tuple[dict
     extras: dict = {}
     if setup_help := next((e["help"] for e in required_env_vars if e.get("help")), None):
         extras["setup_help"] = setup_help
+    if capture_result.get("unanswered_names"):
+        from tools.registry import pending_marker
+        extras["pending"] = pending_marker("secret_prompt", "the owner to answer the secure prompt",
+                                           env_vars=capture_result["unanswered_names"])
     if capture_result["gateway_setup_hint"]:
         extras["gateway_setup_hint"] = capture_result["gateway_setup_hint"]
     missing_items = [f"env ${n}" for n in remaining] + [f"file {p}" for p in missing_cred_files]

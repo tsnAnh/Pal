@@ -336,19 +336,20 @@ async def _offer(authority, home: Path, need: AuthNeed, bot: str) -> None:
         await request_signin(authority, home, need, bot)
 
 
-def offer_from_thread(home: Path, need: AuthNeed, bot: str) -> None:
-    """Raise the sign-in prompt on the attached apps without making the calling turn wait for the answer."""
+def offer_from_thread(home: Path, need: AuthNeed, bot: str) -> bool:
+    """Raise the sign-in prompt on the attached apps without making the calling turn wait for the answer;
+    True when the offer was handed to the gateway loop."""
     from gateway.session_cron import owner_for_home
     bound = owner_for_home(home)
     if bound is None:
-        return
+        return False
     authority, loop = bound
     try:
         running = asyncio.get_running_loop()
     except RuntimeError:
         running = None
     if running is loop:
-        return
+        return False
     future = asyncio.run_coroutine_threadsafe(_offer(authority, home, need, bot), loop)
 
     def log_failure(done) -> None:
@@ -356,6 +357,7 @@ def offer_from_thread(home: Path, need: AuthNeed, bot: str) -> None:
             logger.warning("sign-in offer for %s failed (%s)", need.service, type(exc).__name__)
 
     future.add_done_callback(log_failure)
+    return True
 
 
 def call_from_thread(home: Path, need: AuthNeed, bot: str) -> Resolution:
