@@ -107,6 +107,40 @@ struct TimelineIdentityTests {
         #expect(rig.texts == expected)
     }
 
+    @Test func lateBindKeepsTheKeyTheReaderAlreadySaw() throws {
+        var rig = try Rig()
+        rig.refresh([user("u0", "start")])
+        rig.send("message.start", ["turn_id": "t1"])
+        rig.send("message.delta", ["text": "Quick lead-in", "turn_id": "t1", "segment": 0, "offset": 0])
+        rig.refresh([user("u0", "start"), clarifyEntry(id: "a1", lead: "Quick lead-in")])
+        let seen = rig.rows
+        #expect(rig.texts == ["user:start", "assistant:Quick lead-in"] + questions)
+        rig.send("tool.start", ["tool_id": "c1", "name": "clarify"])
+        rig.send("tool.complete", ["tool_id": "c1", "name": "clarify", "result": .string(answers)])
+        #expect(rig.texts == ["user:start", "assistant:Quick lead-in"] + questions)
+        #expect(rig.rows.map(\.id) == seen.map(\.id))
+        rig.send("message.complete", ["text": "Thanks", "turn_id": "t1", "message_uid": "a2"])
+        #expect(Array(rig.rows.map(\.id).prefix(seen.count)) == seen.map(\.id))
+        #expect(Set(rig.rows.map(\.id)).count == rig.rows.count)
+    }
+
+    @Test func unmatchedEntriesBindInTimelineOrderNotIDOrder() throws {
+        var rig = try Rig()
+        rig.refresh([])
+        rig.timeline.echoUser(submissionID: "one", text: "same")
+        rig.timeline.echoUser(submissionID: "two", text: "same")
+        rig.refresh([user("z9", "same"), user("a1", "same")])
+        #expect(ownerRows(rig) == ["same", "same", "same", "same"])
+        let keys = rig.rows.map(\.id)
+        rig.send("message.start", ["turn_id": "t1"])
+        #expect(ownerRows(rig) == ["same", "same", "same"])
+        #expect(Array(rig.rows.map(\.id).prefix(2)) == Array(keys.prefix(2)))
+        rig.send("message.start", ["turn_id": "t2"])
+        #expect(ownerRows(rig) == ["same", "same"])
+        #expect(rig.rows.map(\.id) == Array(keys.prefix(2)))
+        #expect(rig.rows.compactMap(\.entryID) == ["z9", "a1"])
+    }
+
     @Test func interimSealOfAnAlreadyStreamedLeadInAddsNoSecondCopy() throws {
         var rig = try Rig()
         rig.refresh([user("u0", "start")])

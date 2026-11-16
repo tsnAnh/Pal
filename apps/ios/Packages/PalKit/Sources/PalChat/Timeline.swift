@@ -331,8 +331,9 @@ struct Timeline: Sendable {
     private mutating func bindLate() {
         guard !unbound.isEmpty else { return }
         var taken: Set<String> = []
-        for (entryID, seen) in unbound.sorted(by: { $0.key < $1.key }) {
-            guard let position = positions[entryID] else { continue }
+        for position in unbound.keys.compactMap({ positions[$0] }).sorted() {
+            let entryID = settled[position].wire.id
+            guard let seen = unbound[entryID] else { continue }
             for part in settled[position].parts {
                 let candidate = live.items.first { item in
                     !taken.contains(item.id) && !Self.isStreaming(item) && (liveBirth[item.id] ?? generation) < seen
