@@ -1,0 +1,412 @@
+"""Native Kanban reads through the real ticket WebSocket of a real gateway process; the capability matrix test uses stand-in connections (test double)."""
+import asyncio
+import hashlib
+import json
+import os
+from pathlib import Path
+import sqlite3
+from types import SimpleNamespace
+
+import pytest
+from websockets.asyncio.client import connect
+from websockets.exceptions import InvalidStatus
+
+from tests.gateway.kanban_native_read_support import (
+    NativeSocket, isolated_env, native_socket, running_gateway, ticket, write_gateway_config,
+)
+
+PROFILE = 'projbot'
+SESSION = 'sess-1'
+SECRET_PATH = '/home/canary-user/secret-workspace'
+EXPECTED_METHODS = {'kanban.boards.list', 'kanban.board.snapshot', 'kanban.card.get', 'kanban.evidence.list',
+                    'kanban.events.since'}
+
+
+def _add_file(conn, kb, task_id, directory: Path, name='app.zip', data=b'build-bytes'):
+    path = directory / name
+    path.write_bytes(data)
+    kb.add_attachment(conn, task_id, filename=name, stored_path=str(path), size=len(data))
+    return hashlib.sha256(data).hexdigest()
+
+
+def _lifecycle(kb, conn, task_id, evidence, *, directory, complete=True):
+    from hermes_cli.kanban_external_claim import claim_external
+    from hermes_cli.kanban_outcomes_store import record_evidence
+    run_id = claim_external(conn, task_id, profile=PROFILE, session_id=SESSION, board='ops').current_run_id
+    for kind, payload in evidence:
+        record_evidence(conn, task_id, run_id=run_id, kind=kind, payload=payload, profile=PROFILE)
+    if complete:
+        kb.complete_task(conn, task_id, summary='done', expected_run_id=run_id, actor_profile=PROFILE)
+    return run_id
+
+
+def _seed(kanban_home: Path, scratch: Path) -> dict:
+    from hermes_cli import kanban_db as kb
+    from hermes_cli import kanban_db_connect as kbc
+    from hermes_cli import kanban_db_workspace as kbw
+    os.environ['HERMES_KANBAN_HOME'] = str(kanban_home)
+    kb.init_db()
+    kb.create_board('ops', name='Ops', dispatch_mode='external')
+    kb.create_board('lab', name='Lab')
+    kb.create_board('retired')
+    kb.remove_board('retired', archive=True)
+    sha = 'd' * 64
+    ids = {}
+    with kbc.connect_closing(board='ops') as conn:
+        def card(title, contract):
+            return kb.create_task(conn, title=title, assignee=PROFILE, outcome_contract=contract, board='ops')
+        ids['built'], ids['installed'] = card('built card', {'kind': 'built_artifact'}), card('installed card', {'kind': 'installed_app'})
+        ids['other'], ids['wip'] = (card('other card', {'kind': 'other', 'name': 'report', 'required_fields': ['url']}),
+                                    card('wip card', {'kind': 'built_artifact'}))
+        ids['plain'] = kb.create_task(conn, title='ungoverned card', assignee=PROFILE, board='ops')
+        ids['child'] = kb.create_task(conn, title='waits on wip', assignee=PROFILE, parents=(ids['wip'],), board='ops')
+        built_sha = _add_file(conn, kb, ids['built'], scratch)
+        ids['built_run'] = _lifecycle(kb, conn, ids['built'], [
+            ('execution_ref', {'session_id': SESSION, 'runtime': 'pi'}),
+            ('artifact_built', {'sha256': built_sha, 'name': 'app.zip'})], directory=scratch)
+        ids['installed_run'] = _lifecycle(kb, conn, ids['installed'], [
+            ('artifact_built', {'sha256': sha, 'name': 'app.zip'}),
+            ('app_installed', {'app_id': 'dev.pal', 'artifact_sha256': sha, 'readback_sha256': sha, 'host': 'mac-mini'})],
+            directory=scratch)
+        ids['other_run'] = _lifecycle(kb, conn, ids['other'], [
+            ('other_result', {'name': 'report', 'receipt': {'url': 'https://example.test/r', 'note': f'wrote {SECRET_PATH}/r.txt'}})],
+            directory=scratch)
+        ids['wip_run'] = _lifecycle(kb, conn, ids['wip'], [('execution_ref', {'session_id': SESSION, 'runtime': 'pi'})],
+                                    directory=scratch, complete=False)
+        kbw.set_workspace_path(conn, ids['wip'], SECRET_PATH)
+        ids['lock'] = kb.get_task(conn, ids['wip']).claim_lock
+        kb._append_event(conn, ids['wip'], 'spawned', {'pid': 4242, 'token': 'canary-token', 'path': SECRET_PATH},
+                         run_id=ids['wip_run'])
+        kb._append_event(conn, ids['plain'], 'pr_acceptance', {'ok': True, 'classification': 'green'})
+    with kbc.connect_closing(board='lab') as lab:
+        lab.execute("INSERT INTO tasks (id, title, status, created_at, workspace_kind) VALUES (?, 'same id, other board', 'ready', 1, 'scratch')",
+                    (ids['built'],))
+        lab.commit()
+    return ids
+
+
+@pytest.fixture(scope='module')
+def gateway(tmp_path_factory):
+    base = tmp_path_factory.mktemp('kanban-native-read')
+    home, user, kanban_home, scratch = base / 'state', base / 'user', base / 'kanban-root', base / 'scratch'
+    for path in (user, kanban_home, scratch):
+        path.mkdir()
+    home.mkdir(mode=0o700)
+    write_gateway_config(home)
+    previous = os.environ.get('HERMES_KANBAN_HOME')
+    ids = _seed(kanban_home, scratch)
+    env = isolated_env(home, user, kanban_home)
+    try:
+        with running_gateway(home, env) as descriptor:
+            yield SimpleNamespace(home=home, descriptor=descriptor, ids=ids, kanban_home=kanban_home, base=base)
+    finally:
+        os.environ.pop('HERMES_KANBAN_HOME', None) if previous is None else os.environ.__setitem__('HERMES_KANBAN_HOME', previous)
+
+
+def _board_db(gateway, slug):
+    return gateway.kanban_home / 'kanban' / 'boards' / slug / 'kanban.db'
+
+
+def _tree(root: Path):
+    return sorted(str(p.relative_to(root)) for p in root.rglob('*'))
+
+
+def _db_fingerprint(gateway):
+    out = {}
+    for slug in ('ops', 'lab'):
+        with sqlite3.connect(_board_db(gateway, slug)) as conn:
+            out[slug] = [conn.execute(f'SELECT COUNT(*) FROM {t}').fetchone()[0]
+                         for t in ('tasks', 'task_events', 'task_runs', 'task_evidence', 'task_links')]
+            out[slug].append(conn.execute('SELECT group_concat(status) FROM (SELECT status FROM tasks ORDER BY id)').fetchone()[0])
+    return out
+
+
+@pytest.mark.asyncio
+async def test_authorized_owner_reads_boards_snapshot_card_and_evidence(gateway):
+    ids = gateway.ids
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        listing = await ws.result('kanban.boards.list')
+        gid = listing['gateway_id']
+        assert gid == gateway.descriptor['instance_id']
+        boards = {b['scope']['board']: b for b in listing['boards']}
+        assert set(boards) == {'default', 'ops', 'lab', 'retired'}
+        assert boards['ops']['dispatch_mode'] == 'external' and boards['lab']['dispatch_mode'] == 'workers'
+        assert boards['retired']['archived'] is True and boards['retired']['task_counts'] is None
+        assert boards['ops']['scope']['board_id'] == f'{gid}/ops'
+
+        snap = await ws.result('kanban.board.snapshot', board='ops', gateway_id=gid)
+        assert snap['state'] == 'present' and snap['truncated'] is False
+        cards = {c['task_id']: c for c in snap['cards']}
+        assert set(cards) == {ids[k] for k in ('built', 'installed', 'other', 'wip', 'plain', 'child')}
+        assert cards[ids['built']]['card_id'] == f"{gid}/ops/{ids['built']}" and cards[ids['plain']]['governed'] is False
+        assert snap['prerequisites'] == [{'task_id': ids['child'], 'requires_task_id': ids['wip']}]
+        assert cards[ids['child']]['status'] == 'todo' and cards[ids['built']]['status'] == 'done'
+
+        detail = (await ws.result('kanban.card.get', board='ops', task_id=ids['built']))['detail']
+        assert detail['lifecycle']['status'] == 'done'
+        assert detail['execution']['runs'][0]['executor'] == 'external'
+        assert detail['execution']['runs'][0]['executor_session'] == SESSION
+        evidence = (await ws.result('kanban.evidence.list', board='ops', task_id=ids['built']))['evidence']
+        assert [e['kind'] for e in evidence] == ['execution_ref', 'artifact_built']
+        assert {e['producer_profile'] for e in evidence} == {PROFILE} and {e['producer_session'] for e in evidence} == {SESSION}
+        assert {e['kind']: e['source'] for e in evidence}['artifact_built'] == 'local-file'
+        only = await ws.result('kanban.evidence.list', board='ops', task_id=ids['built'], run_id=999)
+        assert only['evidence'] == []
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_ci_and_outcome_verification_stay_separate_and_attestations_stay_attested(gateway):
+    ids = gateway.ids
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        async def detail(key):
+            return (await ws.result('kanban.card.get', board='ops', task_id=ids[key]))['detail']
+        built, installed, other, wip, plain = [await detail(k) for k in ('built', 'installed', 'other', 'wip', 'plain')]
+        assert built['outcome_verification']['verification'] == 'independent'
+        assert installed['outcome_verification']['verification'] == 'attested'
+        assert other['outcome_verification']['verification'] == 'attested'
+        assert installed['outcome_verification']['receipt']['host'] == 'mac-mini'
+        assert {e['kind'] for e in installed['evidence']} == {'artifact_built', 'app_installed'}
+        assert [e['source'] for e in installed['evidence'] if e['kind'] == 'app_installed'] == ['attestation']
+        assert built['ci_acceptance']['state'] == 'unknown'
+        assert wip['outcome_verification']['state'] == 'unknown' and wip['outcome_verification']['verification'] is None
+        assert wip['lifecycle']['status'] == 'running' and wip['execution']['current_run_id'] == ids['wip_run']
+        assert plain['outcome_contract'] is None and plain['outcome_verification']['state'] == 'not_governed'
+        assert plain['ci_acceptance'] == {'state': 'accepted', 'classification': 'green', 'run_id': None,
+                                          'observed_at': plain['ci_acceptance']['observed_at'],
+                                          'event_id': plain['ci_acceptance']['event_id']}
+        assert plain['lifecycle']['status'] != 'done'
+
+
+@pytest.mark.asyncio
+async def test_wire_never_carries_claim_locks_paths_or_unlisted_event_data(gateway):
+    ids = gateway.ids
+    frames = []
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        gid = (await ws.result('kanban.boards.list'))['gateway_id']
+        frames.append(await ws.call('kanban.boards.list'))
+        snap = await ws.call('kanban.board.snapshot', board='ops')
+        frames.append(snap)
+        for key in ('built', 'installed', 'other', 'wip', 'plain', 'child'):
+            frames.append(await ws.call('kanban.card.get', board='ops', task_id=ids[key]))
+            frames.append(await ws.call('kanban.evidence.list', board='ops', task_id=ids[key]))
+        cursor = encode(gid, 'ops', snap['result']['cursor'], event_id=0)
+        replay = await ws.call('kanban.events.since', board='ops', cursor=cursor, limit=500)
+        frames.append(replay)
+        kinds = {e['kind'] for e in replay['result']['events']}
+    assert {'claimed', 'evidence_recorded', 'outcome_verified', 'spawned'} <= kinds
+    wire = json.dumps(frames)
+    for canary in (ids['lock'], 'canary-user', 'canary-token', str(gateway.home), str(gateway.kanban_home), 'kanban.db', 'claim_lock'):
+        assert canary not in wire, canary
+    claimed = next(e for e in replay['result']['events'] if e['kind'] == 'claimed')
+    assert set(claimed['data']) <= {'executor', 'profile', 'session', 'run_id'}
+    assert next(e for e in replay['result']['events'] if e['kind'] == 'spawned')['data'] == {}
+
+
+def encode(gateway_id, board, cursor, *, event_id=None, generation=None, gateway=None):
+    from hermes_cli import kanban_native_read as read
+    _gw, _slug, gen, head = read._decode_cursor(cursor)
+    return read.encode_cursor(gateway or gateway_id, board, generation or gen, head if event_id is None else event_id)
+
+
+@pytest.mark.asyncio
+async def test_same_task_id_on_two_boards_is_two_cards_and_cursors_do_not_cross(gateway):
+    tid = gateway.ids['built']
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        ops = (await ws.result('kanban.card.get', board='ops', task_id=tid))['detail']
+        lab = (await ws.result('kanban.card.get', board='lab', task_id=tid))['detail']
+        assert ops['card']['card_id'] != lab['card']['card_id'] and ops['card']['title'] == 'built card'
+        assert lab['card']['title'] == 'same id, other board' and lab['evidence'] == []
+        gid = (await ws.result('kanban.boards.list'))['gateway_id']
+        cursor = (await ws.result('kanban.board.snapshot', board='ops'))['cursor']
+        crossed = await ws.result('kanban.events.since', board='lab', cursor=cursor)
+        assert (crossed['state'], crossed['reason']) == ('snapshot_required', 'wrong_board')
+        foreign = encode(gid, 'ops', cursor, gateway='f' * 32)
+        reply = await ws.result('kanban.events.since', board='ops', cursor=foreign)
+        assert (reply['state'], reply['reason']) == ('snapshot_required', 'wrong_gateway')
+        other_gateway = await ws.call('kanban.board.snapshot', board='ops', gateway_id='f' * 32)
+        assert other_gateway['error']['message'] == 'gateway_mismatch'
+
+
+@pytest.mark.asyncio
+async def test_snapshot_cursor_replay_is_gapless_idempotent_and_survives_reconnect(gateway):
+    from hermes_cli import kanban_db as kb
+    from hermes_cli import kanban_db_connect as kbc
+    ids = gateway.ids
+    os.environ['HERMES_KANBAN_HOME'] = str(gateway.kanban_home)
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        snap = await ws.result('kanban.board.snapshot', board='ops')
+        first_cursor = snap['cursor']
+        assert (await ws.result('kanban.events.since', board='ops', cursor=first_cursor))['events'] == []
+        with kbc.connect_closing(board='ops') as conn:
+            for n in range(5):
+                kb.add_comment(conn, ids['plain'], 'tester', f'note {n}')
+        pages, cursor = [], first_cursor
+        while True:
+            page = await ws.result('kanban.events.since', board='ops', cursor=cursor, limit=2)
+            pages.append(page)
+            cursor = page['cursor']
+            if not page['has_more']:
+                break
+        got = [e['event_id'] for p in pages for e in p['events']]
+        assert len(got) == 5 and got == sorted(got) and got == list(range(got[0], got[0] + 5))
+        assert [len(p['events']) for p in pages] == [2, 2, 1]
+        full = await ws.result('kanban.events.since', board='ops', cursor=first_cursor, limit=500)
+        assert [e['event_id'] for e in full['events']] == got
+        assert full == await ws.result('kanban.events.since', board='ops', cursor=first_cursor, limit=500)
+        assert (await ws.result('kanban.board.snapshot', board='ops'))['cursor'] == full['cursor'] == cursor
+        only_plain = await ws.result('kanban.events.since', board='ops', cursor=first_cursor, task_id=ids['plain'])
+        assert [e['event_id'] for e in only_plain['events']] == got
+    async with native_socket(gateway.home, gateway.descriptor) as fresh:
+        replay = await fresh.result('kanban.events.since', board='ops', cursor=first_cursor, limit=500)
+        assert [e['event_id'] for e in replay['events']] == got
+
+
+@pytest.mark.asyncio
+async def test_unusable_cursors_demand_a_snapshot_instead_of_partial_results(gateway):
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        gid = (await ws.result('kanban.boards.list'))['gateway_id']
+        cursor = (await ws.result('kanban.board.snapshot', board='ops'))['cursor']
+
+        async def reason(**kw):
+            reply = await ws.result('kanban.events.since', board='ops', **kw)
+            assert reply['state'] == 'snapshot_required' and reply['events'] == [], reply
+            return reply['reason']
+        assert await reason() == 'cursor_required'
+        assert await reason(cursor='not-a-cursor') == 'invalid_cursor'
+        assert await reason(cursor=encode(gid, 'ops', cursor, generation='0' * 12)) == 'stale_generation'
+        assert await reason(cursor=encode(gid, 'ops', cursor, event_id=10_000)) == 'ahead_of_log'
+    db = sqlite3.connect(_board_db(gateway, 'ops'))
+    try:
+        oldest = db.execute('SELECT MIN(id) FROM task_events').fetchone()[0]
+        db.execute('UPDATE sqlite_sequence SET seq = seq WHERE name = ?', ('task_events',))
+        db.execute('DELETE FROM task_events WHERE id <= ?', (oldest + 2,))
+        db.commit()
+    finally:
+        db.close()
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        assert await _reason(ws, cursor=encode(gid, 'ops', cursor, event_id=0)) == 'expired'
+
+
+async def _reason(ws, **kw):
+    reply = await ws.result('kanban.events.since', board='ops', **kw)
+    assert reply['state'] == 'snapshot_required', reply
+    return reply['reason']
+
+
+@pytest.mark.asyncio
+async def test_absent_archived_and_hostile_requests_answer_typed_without_touching_disk(gateway):
+    before_tree, before_db = _tree(gateway.kanban_home), _db_fingerprint(gateway)
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        for method, extra in (('kanban.board.snapshot', {}), ('kanban.card.get', {'task_id': 'nope'}),
+                              ('kanban.evidence.list', {'task_id': 'nope'}), ('kanban.events.since', {'cursor': 'x'})):
+            assert (await ws.result(method, board='never-created', **extra))['state'] == 'board_absent'
+            assert (await ws.result(method, board='retired', **extra))['state'] == 'board_archived'
+        assert (await ws.result('kanban.card.get', board='ops', task_id='nope'))['state'] == 'card_absent'
+        assert (await ws.result('kanban.evidence.list', board='ops', task_id='nope'))['state'] == 'card_absent'
+        for board in ('../lab', '/etc', 'ops/../lab', 'OPS bad', '..', 'a' * 90):
+            reply = await ws.call('kanban.board.snapshot', board=board)
+            assert reply['error']['message'] == 'invalid_params', (board, reply)
+        for hostile in ({'db': str(_board_db(gateway, 'lab'))}, {'profile': 'foreign-profile'}, {'path': '/etc/passwd'},
+                        {'principal': 'someone-else'}):
+            reply = await ws.call('kanban.board.snapshot', board='ops', **hostile)
+            assert 'error' in reply and 'result' not in reply, (hostile, reply)
+        assert (await ws.call('kanban.card.get', board='ops'))['error']['message'] == 'invalid_params'
+    assert _tree(gateway.kanban_home) == before_tree and _db_fingerprint(gateway) == before_db
+
+
+@pytest.mark.asyncio
+async def test_reads_never_mutate_the_lifecycle_or_start_workers_even_when_retried(gateway):
+    before_tree, before_db = _tree(gateway.kanban_home), _db_fingerprint(gateway)
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        for _ in range(3):
+            await ws.result('kanban.boards.list')
+            snap = await ws.result('kanban.board.snapshot', board='ops')
+            for card in snap['cards']:
+                await ws.result('kanban.card.get', board='ops', task_id=card['task_id'])
+                await ws.result('kanban.evidence.list', board='ops', task_id=card['task_id'])
+            await ws.result('kanban.events.since', board='ops', cursor=snap['cursor'])
+    assert _tree(gateway.kanban_home) == before_tree and _db_fingerprint(gateway) == before_db
+    with sqlite3.connect(_board_db(gateway, 'ops')) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM task_events WHERE kind IN ('spawned', 'reclaimed') AND payload LIKE '%pid%' AND id > 1000").fetchone()[0] == 0
+        assert conn.execute('SELECT COUNT(*) FROM tasks WHERE worker_pid IS NOT NULL').fetchone()[0] == 0
+    from tui_gateway.contracts.registry import CANONICAL_METHODS
+    assert {m for m in CANONICAL_METHODS if m.startswith('kanban.')} == EXPECTED_METHODS | {'kanban.run'}
+
+
+@pytest.mark.asyncio
+async def test_tickets_that_are_missing_forged_spent_or_for_another_purpose_read_nothing(gateway):
+    url = gateway.descriptor['api_origin'].replace('http:', 'ws:') + '/api/ws'
+    with pytest.raises(InvalidStatus):
+        async with connect(url, subprotocols=['hermes-gateway-v1']):
+            pass
+    with pytest.raises(InvalidStatus):
+        async with connect(url, subprotocols=['hermes-gateway-v1', 'hermes-gateway-ticket.forged']):
+            pass
+    protocols = ['hermes-gateway-v1', 'hermes-gateway-ticket.' + ticket(gateway.home, gateway.descriptor)]
+    async with connect(url, subprotocols=protocols) as first:
+        assert 'result' in await NativeSocket(first).call('kanban.boards.list')
+    with pytest.raises(InvalidStatus):
+        async with connect(url, subprotocols=protocols):
+            pass
+    try:
+        async with native_socket(gateway.home, gateway.descriptor, purpose='worker-adoption') as worker:
+            reply = await worker.call('kanban.boards.list')
+    except InvalidStatus:
+        return
+    assert 'result' not in reply and reply['error']['message'] in ('permission_denied', 'unknown_method'), reply
+
+
+@pytest.mark.asyncio
+async def test_events_after_a_snapshot_are_gapless_while_another_process_writes(gateway):
+    import threading
+    from hermes_cli import kanban_db as kb
+    from hermes_cli import kanban_db_connect as kbc
+    os.environ['HERMES_KANBAN_HOME'] = str(gateway.kanban_home)
+    plain, stop, written = gateway.ids['plain'], threading.Event(), []
+
+    def writer():
+        with kbc.connect_closing(board='ops') as conn:
+            for n in range(60):
+                kb.add_comment(conn, plain, 'tester', f'race {n}')
+                written.append(n)
+            stop.set()
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        start = (await ws.result('kanban.board.snapshot', board='ops'))['cursor']
+        thread = threading.Thread(target=writer)
+        thread.start()
+        seen, cursor = [], start
+        while not stop.is_set() or len(seen) < 60:
+            page = await ws.result('kanban.events.since', board='ops', cursor=cursor, limit=7)
+            seen += [e['event_id'] for e in page['events']]
+            cursor = page['cursor']
+            await ws.result('kanban.board.snapshot', board='ops')
+            assert len(seen) <= 60
+        thread.join()
+        from hermes_cli import kanban_native_read as read
+        head = read._decode_cursor(cursor)[3]
+        assert seen == list(range(read._decode_cursor(start)[3] + 1, head + 1)) and len(seen) == 60
+
+
+@pytest.mark.asyncio
+async def test_capability_matrix_with_stand_in_connections():
+    from gateway import session_kanban_read as handlers_module
+    from hermes_state_runtime import RuntimeStoreError
+
+    def connection(*, native, capabilities, profile='p', actor_profile='p'):
+        authority = SimpleNamespace(profile_id=profile, instance_id='gw', retiring=False, runner=None)
+        return SimpleNamespace(native_owner=native, authority=authority,
+                               actor=SimpleNamespace(profile_id=actor_profile, capabilities=frozenset(capabilities)))
+    denied = {
+        'non-native (dashboard or bot-origin)': connection(native=False, capabilities={'session:read'}),
+        'worker-only grant': connection(native=True, capabilities={'worker:adopt'}),
+        'revoked / no capability': connection(native=True, capabilities=set()),
+        'another profile': connection(native=True, capabilities={'session:read'}, actor_profile='q'),
+    }
+    for label, conn in denied.items():
+        for method, params in (('kanban.boards.list', {}), ('kanban.board.snapshot', {'board': 'ops'}),
+                               ('kanban.card.get', {'board': 'ops', 'task_id': 't'}),
+                               ('kanban.evidence.list', {'board': 'ops', 'task_id': 't'}),
+                               ('kanban.events.since', {'board': 'ops'})):
+            with pytest.raises(RuntimeStoreError) as refused:
+                await handlers_module.handlers(conn)[method](None, params)
+            assert refused.value.reason in ('permission_denied', 'profile_mismatch'), (label, method)
