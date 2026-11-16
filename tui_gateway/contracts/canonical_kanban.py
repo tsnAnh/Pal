@@ -9,9 +9,6 @@ from typing import Literal
 from .base import JsonValue, Params, Result
 from .registry import canonical_method
 
-ReadState = Literal['present', 'board_absent', 'board_archived']
-
-
 class KanbanScope(Result):
     gateway_id: str
     board: str
@@ -74,17 +71,25 @@ canonical_method("kanban.boards.list", params=KanbanReadParams, result=KanbanBoa
 
 class KanbanSnapshotParams(KanbanBoardParams):
     limit: int | None = None
+    # ``next_page_token`` of the previous page of this snapshot; omitted for the first page.
+    page_token: str | None = None
 
 
 class KanbanSnapshotResult(Result):
-    state: ReadState
+    # ``snapshot_required``: a page token that cannot continue (see ``reason``); restart from the first page.
+    state: Literal['present', 'board_absent', 'board_archived', 'snapshot_required']
+    # wrong_gateway, wrong_board, stale_generation, invalid_cursor or changed_during_snapshot (the board's
+    # event log moved or lost events between pages; no page of the old set may be kept).
+    reason: str | None = None
     scope: KanbanScope
     board: KanbanBoard | None = None
     cards: list[KanbanCard] = []
     prerequisites: list[KanbanPrerequisite] = []
-    # More cards exist than ``limit`` returned; the cards shown are the oldest by creation.
-    truncated: bool = False
-    # Pass to ``kanban.events.since``: every event after it is not in this snapshot.
+    # Cards of this page in task-id order; with ``prerequisites`` for those cards (an edge belongs to its child's page).
+    # Non-null while more pages remain: pass it back as ``page_token`` with the same ``limit``.
+    next_page_token: str | None = None
+    # Only on the final page: the complete card set is then coherent at this cursor. Pass it to
+    # ``kanban.events.since``; every event after it is not in the snapshot.
     cursor: str | None = None
 
 
@@ -155,6 +160,15 @@ class KanbanOutcomeVerification(Result):
     event_id: int | None = None
 
 
+class KanbanProofHistory(Result):
+    kind: Literal['pr_acceptance', 'outcome_verified', 'outcome_refused']
+    state: str
+    verification: Literal['independent', 'attested', 'unknown'] | None = None
+    run_id: int | None = None
+    observed_at: int | None = None
+    event_id: int | None = None
+
+
 class KanbanEvidence(Result):
     evidence_id: int
     run_id: int
@@ -176,8 +190,12 @@ class KanbanCardDetail(Result):
     lifecycle: KanbanCardLifecycle
     execution: KanbanExecution
     outcome_contract: KanbanOutcomeContract | None = None
+    # The run the two proofs below refer to: the live run, else the card's latest. Earlier runs' proofs are
+    # only in ``proof_history``, never presented as this run's.
+    proof_run_id: int | None = None
     ci_acceptance: KanbanCiAcceptance
     outcome_verification: KanbanOutcomeVerification
+    proof_history: list[KanbanProofHistory]
     evidence: list[KanbanEvidence]
     prerequisites: list[str]
     dependents: list[str]
@@ -231,7 +249,8 @@ class KanbanEventsResult(Result):
     state: Literal['ok', 'snapshot_required', 'board_absent', 'board_archived', 'card_absent']
     scope: KanbanScope
     # Why a snapshot is needed: cursor_required, invalid_cursor, wrong_gateway, wrong_board,
-    # stale_generation, ahead_of_log or expired.
+    # stale_generation, ahead_of_log, history_changed (events at or below the cursor were deleted) or
+    # gap (an event after the cursor was deleted before it could be replayed).
     reason: str | None = None
     events: list[KanbanEvent] = []
     has_more: bool = False

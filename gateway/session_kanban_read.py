@@ -77,14 +77,17 @@ def _guarded(slug, model, work, absent):
 
 async def board_snapshot(connection, ref, params):
     gateway_id, slug = _board(connection, params)
-    limit = _limit(params)
+    limit, token = _limit(params), _text(params, 'page_token', optional=True)
+    where = read.scope(gateway_id, slug)
 
     def work(conn, meta, generation):
-        return {'state': 'present', 'scope': read.scope(gateway_id, slug),
-                'board': read.board_row(gateway_id, meta, read.status_counts(conn)),
-                **read.snapshot(conn, gateway_id, slug, generation, limit)}
+        try:
+            page = read.snapshot(conn, gateway_id, slug, generation, limit, token)
+        except read.SnapshotRequired as exc:
+            return {'state': 'snapshot_required', 'scope': where, 'reason': exc.reason}
+        return {'state': 'present', 'scope': where, 'board': read.board_row(gateway_id, meta, read.status_counts(conn)), **page}
     return await asyncio.to_thread(_guarded, slug, wire.KanbanSnapshotResult, work,
-                                   lambda state: {'state': state, 'scope': read.scope(gateway_id, slug)})
+                                   lambda state: {'state': state, 'scope': where})
 
 
 async def card_get(connection, ref, params):
@@ -122,14 +125,12 @@ async def events_since(connection, ref, params):
         if cursor is None:
             return {'state': 'snapshot_required', 'scope': where, 'reason': 'cursor_required'}
         try:
-            after = read.resolve_cursor(conn, cursor, gateway_id, slug, generation)
+            after, count = read.resolve_cursor(conn, cursor, gateway_id, slug, generation)
+            if task_id is not None and not read.task_exists(conn, task_id):
+                return {'state': 'card_absent', 'scope': where}
+            page = read.events_page(conn, gateway_id, slug, after, count, limit, task_id)
         except read.SnapshotRequired as exc:
             return {'state': 'snapshot_required', 'scope': where, 'reason': exc.reason}
-        if task_id is not None and not read.task_exists(conn, task_id):
-            return {'state': 'card_absent', 'scope': where}
-        head = read.head_event_id(conn)
-        events, has_more = read.events_after(conn, gateway_id, slug, after, limit, task_id)
-        position = events[-1]['event_id'] if has_more else head
-        return {'state': 'ok', 'scope': where, 'events': events, 'has_more': has_more,
-                'cursor': read.encode_cursor(gateway_id, slug, generation, position)}
+        return {'state': 'ok', 'scope': where, 'events': page['events'], 'has_more': page['has_more'],
+                'cursor': read.encode_cursor(gateway_id, slug, generation, page['position'], page['count'])}
     return await asyncio.to_thread(_guarded, slug, wire.KanbanEventsResult, work, lambda state: {'state': state, 'scope': where})

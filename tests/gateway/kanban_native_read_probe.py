@@ -85,8 +85,8 @@ async def _read(home: Path, descriptor: dict, lifecycle: dict) -> dict:
 
 def _cursor_zero(cursor: str) -> str:
     from hermes_cli import kanban_native_read as read
-    gateway_id, slug, generation, _event_id = read._decode_cursor(cursor)
-    return read.encode_cursor(gateway_id, slug, generation, 0)
+    gateway_id, slug, generation, _event_id, _count = read._decode_cursor(cursor)
+    return read.encode_cursor(gateway_id, slug, generation, 0, 0)
 
 
 def main() -> int:

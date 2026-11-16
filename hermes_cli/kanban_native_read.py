@@ -11,7 +11,8 @@ from typing import Any, Iterator, Optional
 
 DEFAULT_PAGE = 100
 MAX_PAGE = 500
-_CURSOR_PREFIX = "kc1"
+_CURSOR_PREFIX = "kc2"
+_PAGE_PREFIX = "kp1"
 
 # Event kinds whose payload carries cross-profile facts; every other kind projects to ``{}``.
 # ``claimed`` deliberately omits ``lock`` and ``expires`` (the claim lock is a bearer secret).
@@ -142,41 +143,62 @@ def list_boards(gateway_id: str) -> list[dict]:
     return rows
 
 
-def encode_cursor(gateway_id: str, slug: str, generation: str, event_id: int) -> str:
-    raw = json.dumps([_CURSOR_PREFIX, gateway_id, slug, generation, event_id], separators=(",", ":"))
-    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
+def encode_cursor(gateway_id: str, slug: str, generation: str, event_id: int, count: int) -> str:
+    return _pack(_CURSOR_PREFIX, gateway_id, slug, generation, event_id, count)
 
 
-def _decode_cursor(cursor: str) -> tuple[str, str, str, int]:
+def _pack(*parts) -> str:
+    return base64.urlsafe_b64encode(json.dumps(list(parts), separators=(",", ":")).encode()).decode().rstrip("=")
+
+
+def _unpack(token: str, prefix: str, strings: int, ints: int) -> tuple:
     try:
-        parts = json.loads(base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)))
-        prefix, gateway_id, slug, generation, event_id = parts
-        if (prefix != _CURSOR_PREFIX or not all(isinstance(p, str) for p in (gateway_id, slug, generation))
-                or type(event_id) is not int or event_id < 0):
+        parts = json.loads(base64.urlsafe_b64decode(token + "=" * (-len(token) % 4)))
+        head, rest = parts[0], parts[1:]
+        if (head != prefix or len(rest) != strings + ints or not all(isinstance(p, str) for p in rest[:strings])
+                or not all(type(p) is int and p >= 0 for p in rest[strings:])):
             raise ValueError
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, IndexError):
         raise SnapshotRequired("invalid_cursor") from None
-    return gateway_id, slug, generation, event_id
+    return tuple(rest)
+
+
+def _decode_cursor(cursor: str) -> tuple[str, str, str, int, int]:
+    return _unpack(cursor, _CURSOR_PREFIX, 3, 2)
+
+
+def log_position(conn) -> tuple[int, int]:
+    """``(highest event id, number of events)``: appends move the first, a purge moves only the second."""
+    return tuple(conn.execute("SELECT COALESCE(MAX(id), 0), COUNT(*) FROM task_events").fetchone())
 
 
 def head_event_id(conn) -> int:
-    return conn.execute("SELECT COALESCE(MAX(id), 0) FROM task_events").fetchone()[0]
+    return log_position(conn)[0]
 
 
-def resolve_cursor(conn, cursor: str, gateway_id: str, slug: str, generation: str) -> int:
-    cursor_gateway, cursor_slug, cursor_generation, event_id = _decode_cursor(cursor)
-    if cursor_gateway != gateway_id:
+def _check_scope(found: tuple, gateway_id: str, slug: str, generation: str) -> None:
+    if found[0] != gateway_id:
         raise SnapshotRequired("wrong_gateway")
-    if cursor_slug != slug:
+    if found[1] != slug:
         raise SnapshotRequired("wrong_board")
-    if cursor_generation != generation:
+    if found[2] != generation:
         raise SnapshotRequired("stale_generation")
+
+
+def resolve_cursor(conn, cursor: str, gateway_id: str, slug: str, generation: str) -> tuple[int, int]:
+    """``(event id, events up to it)`` a cursor continues from, or ``SnapshotRequired`` naming why it cannot.
+
+    Appends only add ids above the cursor, so the number of events at or below it can change only by a
+    deletion (task purge, event retention): the cursor then no longer describes the log the client holds.
+    """
+    found = _decode_cursor(cursor)
+    _check_scope(found, gateway_id, slug, generation)
+    event_id, count = found[3], found[4]
     if event_id > head_event_id(conn):
         raise SnapshotRequired("ahead_of_log")
-    oldest = conn.execute("SELECT MIN(id) FROM task_events").fetchone()[0]
-    if oldest is not None and event_id + 1 < oldest:
-        raise SnapshotRequired("expired")
-    return event_id
+    if conn.execute("SELECT COUNT(*) FROM task_events WHERE id <= ?", (event_id,)).fetchone()[0] != count:
+        raise SnapshotRequired("history_changed")
+    return event_id, count
 
 
 def event_row(gateway_id: str, slug: str, event) -> dict:
@@ -191,13 +213,21 @@ def event_row(gateway_id: str, slug: str, event) -> dict:
     }
 
 
-def events_after(conn, gateway_id: str, slug: str, after: int, limit: int, task_id: Optional[str]) -> tuple[list[dict], bool]:
+def events_page(conn, gateway_id: str, slug: str, after: int, count: int, limit: int, task_id: Optional[str]) -> dict:
+    """Events after ``after`` plus the next ``(event_id, count)`` position; ``SnapshotRequired('gap')`` when an
+    event between the cursor and that position was deleted (a client would never learn of it)."""
     kb = _kb()
     sql, args = "SELECT * FROM task_events WHERE id > ?", [after]
     if task_id is not None:
         sql, args = sql + " AND task_id = ?", [*args, task_id]
     rows = conn.execute(sql + " ORDER BY id LIMIT ?", [*args, limit + 1]).fetchall()
-    return [event_row(gateway_id, slug, kb.Event.from_row(row)) for row in rows[:limit]], len(rows) > limit
+    has_more = len(rows) > limit
+    shown = rows[:limit]
+    position = shown[-1]["id"] if has_more else head_event_id(conn)
+    if conn.execute("SELECT COUNT(*) FROM task_events WHERE id > ? AND id <= ?", (after, position)).fetchone()[0] != position - after:
+        raise SnapshotRequired("gap")
+    return {"events": [event_row(gateway_id, slug, kb.Event.from_row(row)) for row in shown], "has_more": has_more,
+            "position": position, "count": count + position - after}
 
 
 def card_summary(gateway_id: str, slug: str, task, *, governed: bool) -> dict:
@@ -209,18 +239,35 @@ def card_summary(gateway_id: str, slug: str, task, *, governed: bool) -> dict:
     }
 
 
-def snapshot(conn, gateway_id: str, slug: str, generation: str, limit: int) -> dict:
+def snapshot(conn, gateway_id: str, slug: str, generation: str, limit: int, page_token: Optional[str]) -> dict:
+    """One page of the complete card set, keyed by task id.
+
+    Every page pins the event position (head id and count) of the first page; a page taken after the log
+    moved or lost events raises ``SnapshotRequired`` instead of mixing two states. Only the final page
+    carries the replay ``cursor`` (that position), so a client cannot adopt a cursor for an incomplete set.
+    """
     kb = _kb()
-    rows = conn.execute("SELECT * FROM tasks ORDER BY created_at, id LIMIT ?", (limit + 1,)).fetchall()
+    head, count = log_position(conn)
+    after = ""
+    if page_token:
+        found = _unpack(page_token, _PAGE_PREFIX, 4, 2)
+        _check_scope(found, gateway_id, slug, generation)
+        pinned = (int(found[4]), int(found[5]))
+        if pinned != (head, count):
+            raise SnapshotRequired("changed_during_snapshot")
+        after = found[3]
+    rows = conn.execute("SELECT * FROM tasks WHERE id > ? ORDER BY id LIMIT ?", (after, limit + 1)).fetchall()
     shown = rows[:limit]
-    ids = {row["id"] for row in shown}
-    edges = [{"task_id": row["child_id"], "requires_task_id": row["parent_id"]}
-             for row in conn.execute("SELECT parent_id, child_id FROM task_links ORDER BY parent_id, child_id")
-             if row["child_id"] in ids and row["parent_id"] in ids]
-    cards = [card_summary(gateway_id, slug, kb.Task.from_row(row), governed=bool(row["outcome_contract"]))
-             for row in shown]
-    return {"cards": cards, "prerequisites": edges, "truncated": len(rows) > limit,
-            "cursor": encode_cursor(gateway_id, slug, generation, head_event_id(conn))}
+    ids = [row["id"] for row in shown]
+    marks = ",".join("?" * len(ids))
+    edges = [{"task_id": row["child_id"], "requires_task_id": row["parent_id"]} for row in conn.execute(
+        f"SELECT parent_id, child_id FROM task_links WHERE child_id IN ({marks}) ORDER BY child_id, parent_id", ids)]
+    more = len(rows) > limit
+    return {"cards": [card_summary(gateway_id, slug, kb.Task.from_row(row), governed=bool(row["outcome_contract"]))
+                      for row in shown],
+            "prerequisites": edges,
+            "next_page_token": _pack(_PAGE_PREFIX, gateway_id, slug, generation, ids[-1], head, count) if more else None,
+            "cursor": None if more else encode_cursor(gateway_id, slug, generation, head, count)}
 
 
 def _contract(task) -> Optional[dict]:
@@ -262,35 +309,63 @@ def evidence_rows(conn, task_id: str, run_id: Optional[int]) -> list[dict]:
     } for ev in list_evidence(conn, task_id, run_id)]
 
 
-def _latest_event(conn, task_id: str, kind: str):
-    row = conn.execute("SELECT * FROM task_events WHERE task_id = ? AND kind = ? ORDER BY id DESC LIMIT 1",
-                       (task_id, kind)).fetchone()
-    return _kb().Event.from_row(row) if row else None
+_PROOF_KINDS = ("pr_acceptance", "outcome_verified", "outcome_refused")
+_HISTORY_LIMIT = 20
 
 
-def ci_acceptance(conn, task_id: str) -> dict:
-    event = _latest_event(conn, task_id, "pr_acceptance")
-    payload = event.payload if event and isinstance(event.payload, dict) else None
-    if payload is None or not isinstance(payload.get("ok"), bool):
-        return {"state": "unknown", "classification": None, "run_id": None, "observed_at": None, "event_id": None}
-    return {"state": "accepted" if payload["ok"] else "rejected", "classification": scrub(payload.get("classification")),
-            "run_id": event.run_id, "observed_at": event.created_at, "event_id": event.id}
+def subject_run(conn, task) -> Optional[int]:
+    """The run proofs are judged for: the live run, else the card's latest."""
+    if task.current_run_id is not None:
+        return task.current_run_id
+    return conn.execute("SELECT MAX(id) FROM task_runs WHERE task_id = ?", (task.id,)).fetchone()[0]
 
 
-def outcome_verification(conn, task_id: str, contract: Optional[dict]) -> dict:
-    blank = {"verification": None, "receipt": None, "run_id": None, "observed_at": None, "event_id": None}
-    if contract is None:
-        return {"state": "not_governed", **blank}
-    event = _latest_event(conn, task_id, "outcome_verified")
-    stored = event.payload if event and isinstance(event.payload, dict) else {}
+def _ci_entry(event) -> dict:
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    ok = payload.get("ok")
+    return {"state": "accepted" if ok is True else "rejected" if ok is False else "unknown",
+            "classification": scrub(payload.get("classification")), "run_id": event.run_id,
+            "observed_at": event.created_at, "event_id": event.id}
+
+
+def _outcome_entry(event) -> dict:
+    """``verification`` is copied from the stored receipt: an attestation is never relabelled independent."""
+    blank = {"verification": None, "receipt": None, "run_id": event.run_id, "observed_at": event.created_at,
+             "event_id": event.id}
+    stored = event.payload if isinstance(event.payload, dict) else {}
     receipt = stored.get("verified") if isinstance(stored.get("verified"), dict) else None
-    if receipt is None:
-        refused = _latest_event(conn, task_id, "outcome_refused")
-        return {**blank, "state": "refused" if refused else "unknown"}
+    if event.kind != "outcome_verified" or receipt is None:
+        return {**blank, "state": "refused" if event.kind == "outcome_refused" else "unknown"}
     label = receipt.get("verification")
-    return {"state": "verified", "verification": label if label in ("independent", "attested") else "unknown",
-            "receipt": scrub({key: receipt[key] for key in _RECEIPT_FIELDS if key in receipt}),
-            "run_id": event.run_id, "observed_at": event.created_at, "event_id": event.id}
+    return {**blank, "state": "verified", "verification": label if label in ("independent", "attested") else "unknown",
+            "receipt": scrub({key: receipt[key] for key in _RECEIPT_FIELDS if key in receipt})}
+
+
+def proofs(conn, task, contract: Optional[dict]) -> dict:
+    """CI acceptance and outcome verification for the subject run only; other runs' proofs are history."""
+    run_id = subject_run(conn, task)
+    marks = ",".join("?" * len(_PROOF_KINDS))
+    events = [_kb().Event.from_row(r) for r in conn.execute(
+        f"SELECT * FROM task_events WHERE task_id = ? AND kind IN ({marks}) ORDER BY id", (task.id, *_PROOF_KINDS))]
+    ci = {"state": "unknown", "classification": None, "run_id": None, "observed_at": None, "event_id": None}
+    outcome = {"state": "not_governed" if contract is None else "unknown", "verification": None, "receipt": None,
+               "run_id": None, "observed_at": None, "event_id": None}
+    history = []
+    for event in events:
+        current = event.run_id == run_id
+        if event.kind == "pr_acceptance":
+            entry = _ci_entry(event)
+            if current:
+                ci = entry
+        else:
+            entry = _outcome_entry(event)
+            if current and contract is not None:
+                outcome = entry
+        if not current:
+            history.append({"kind": event.kind, **{k: entry[k] for k in ("state", "run_id", "observed_at", "event_id")},
+                            "verification": entry.get("verification")})
+    return {"proof_run_id": run_id, "ci_acceptance": ci, "outcome_verification": outcome,
+            "proof_history": history[-_HISTORY_LIMIT:]}
 
 
 def card_detail(conn, gateway_id: str, slug: str, generation: str, task_id: str) -> Optional[dict]:
@@ -302,6 +377,7 @@ def card_detail(conn, gateway_id: str, slug: str, generation: str, task_id: str)
     contract = _contract(task)
     parents = [r[0] for r in conn.execute("SELECT parent_id FROM task_links WHERE child_id = ? ORDER BY parent_id", (task_id,))]
     children = [r[0] for r in conn.execute("SELECT child_id FROM task_links WHERE parent_id = ? ORDER BY child_id", (task_id,))]
+    head, count = log_position(conn)
     return {
         "card": card_summary(gateway_id, slug, task, governed=contract is not None),
         "body": scrub(task.body), "result": scrub(task.result), "branch_name": task.branch_name,
@@ -311,11 +387,10 @@ def card_detail(conn, gateway_id: str, slug: str, generation: str, task_id: str)
         "execution": {"current_run_id": task.current_run_id, "claim_expires": task.claim_expires,
                       "runs": _runs(conn, task_id)},
         "outcome_contract": contract,
-        "ci_acceptance": ci_acceptance(conn, task_id),
-        "outcome_verification": outcome_verification(conn, task_id, contract),
+        **proofs(conn, task, contract),
         "evidence": evidence_rows(conn, task_id, None),
         "prerequisites": parents, "dependents": children,
-        "cursor": encode_cursor(gateway_id, slug, generation, head_event_id(conn)),
+        "cursor": encode_cursor(gateway_id, slug, generation, head, count),
     }
 
 

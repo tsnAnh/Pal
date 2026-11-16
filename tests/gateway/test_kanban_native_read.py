@@ -135,7 +135,7 @@ async def test_authorized_owner_reads_boards_snapshot_card_and_evidence(gateway)
         assert boards['ops']['scope']['board_id'] == f'{gid}/ops'
 
         snap = await ws.result('kanban.board.snapshot', board='ops', gateway_id=gid)
-        assert snap['state'] == 'present' and snap['truncated'] is False
+        assert snap['state'] == 'present' and snap['next_page_token'] is None and snap['cursor']
         cards = {c['task_id']: c for c in snap['cards']}
         assert set(cards) == {ids[k] for k in ('built', 'installed', 'other', 'wip', 'plain', 'child')}
         assert cards[ids['built']]['card_id'] == f"{gid}/ops/{ids['built']}" and cards[ids['plain']]['governed'] is False
@@ -204,8 +204,8 @@ async def test_wire_never_carries_claim_locks_paths_or_unlisted_event_data(gatew
 
 def encode(gateway_id, board, cursor, *, event_id=None, generation=None, gateway=None):
     from hermes_cli import kanban_native_read as read
-    _gw, _slug, gen, head = read._decode_cursor(cursor)
-    return read.encode_cursor(gateway or gateway_id, board, generation or gen, head if event_id is None else event_id)
+    _gw, _slug, gen, head, count = read._decode_cursor(cursor)
+    return read.encode_cursor(gateway or gateway_id, board, generation or gen, head if event_id is None else event_id, count if event_id is None else min(count, event_id))
 
 
 @pytest.mark.asyncio
@@ -275,22 +275,6 @@ async def test_unusable_cursors_demand_a_snapshot_instead_of_partial_results(gat
         assert await reason(cursor='not-a-cursor') == 'invalid_cursor'
         assert await reason(cursor=encode(gid, 'ops', cursor, generation='0' * 12)) == 'stale_generation'
         assert await reason(cursor=encode(gid, 'ops', cursor, event_id=10_000)) == 'ahead_of_log'
-    db = sqlite3.connect(_board_db(gateway, 'ops'))
-    try:
-        oldest = db.execute('SELECT MIN(id) FROM task_events').fetchone()[0]
-        db.execute('UPDATE sqlite_sequence SET seq = seq WHERE name = ?', ('task_events',))
-        db.execute('DELETE FROM task_events WHERE id <= ?', (oldest + 2,))
-        db.commit()
-    finally:
-        db.close()
-    async with native_socket(gateway.home, gateway.descriptor) as ws:
-        assert await _reason(ws, cursor=encode(gid, 'ops', cursor, event_id=0)) == 'expired'
-
-
-async def _reason(ws, **kw):
-    reply = await ws.result('kanban.events.since', board='ops', **kw)
-    assert reply['state'] == 'snapshot_required', reply
-    return reply['reason']
 
 
 @pytest.mark.asyncio
@@ -410,3 +394,159 @@ async def test_capability_matrix_with_stand_in_connections():
             with pytest.raises(RuntimeStoreError) as refused:
                 await handlers_module.handlers(conn)[method](None, params)
             assert refused.value.reason in ('permission_denied', 'profile_mismatch'), (label, method)
+
+
+def _kanban_env(gateway):
+    os.environ['HERMES_KANBAN_HOME'] = str(gateway.kanban_home)
+    from hermes_cli import kanban_db as kb
+    from hermes_cli import kanban_db_connect as kbc
+    return kb, kbc
+
+
+def _fill_board(gateway, slug, count):
+    kb, kbc = _kanban_env(gateway)
+    kb.create_board(slug)
+    with kbc.connect_closing(board=slug) as conn:
+        ids = [kb.create_task(conn, title=f'card {n}', assignee=PROFILE, board=slug) for n in range(count)]
+        child = kb.create_task(conn, title='late child', assignee=PROFILE, parents=(ids[0], ids[-1]), board=slug)
+    return [*ids, child]
+
+
+async def _pages(ws, board, limit, **kw):
+    pages, token = [], None
+    while True:
+        page = await ws.result('kanban.board.snapshot', board=board, limit=limit, **({'page_token': token} if token else {}), **kw)
+        pages.append(page)
+        token = page['next_page_token']
+        if token is None:
+            return pages
+
+
+@pytest.mark.asyncio
+async def test_snapshot_enumerates_every_card_and_edge_across_pages_beyond_the_page_maximum(gateway):
+    ids = _fill_board(gateway, 'big', 620)
+    kb, kbc = _kanban_env(gateway)
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        for limit in (500, 100, 10_000):
+            pages = await _pages(ws, 'big', limit)
+            cards = [c['task_id'] for p in pages for c in p['cards']]
+            assert sorted(cards) == sorted(ids) and len(set(cards)) == len(ids), limit
+            assert all(len(p['cards']) <= 500 for p in pages) and len(pages) >= 2
+            assert [p['cursor'] is None for p in pages] == [True] * (len(pages) - 1) + [False]
+            edges = {(e['task_id'], e['requires_task_id']) for p in pages for e in p['prerequisites']}
+            assert edges == {(ids[-1], ids[0]), (ids[-1], ids[-2])}
+        first = await ws.result('kanban.board.snapshot', board='big', limit=100)
+        second = await ws.result('kanban.board.snapshot', board='big', limit=100, page_token=first['next_page_token'])
+        assert second == await ws.result('kanban.board.snapshot', board='big', limit=100, page_token=first['next_page_token'])
+        assert [c['task_id'] for c in second['cards']] == sorted(c['task_id'] for c in second['cards'])
+        assert not {c['task_id'] for c in first['cards']} & {c['task_id'] for c in second['cards']}
+        wrong = await ws.result('kanban.board.snapshot', board='ops', limit=100, page_token=first['next_page_token'])
+        assert (wrong['state'], wrong['reason']) == ('snapshot_required', 'wrong_board')
+        bad = await ws.result('kanban.board.snapshot', board='big', page_token='garbage')
+        assert (bad['state'], bad['reason']) == ('snapshot_required', 'invalid_cursor')
+        final = (await _pages(ws, 'big', 500))[-1]
+        with kbc.connect_closing(board='big') as conn:
+            late = kb.create_task(conn, title='after snapshot', assignee=PROFILE, board='big')
+        replay = await ws.result('kanban.events.since', board='big', cursor=final['cursor'])
+        assert [(e['task_id'], e['kind']) for e in replay['events']] == [(late, 'created')]
+
+
+@pytest.mark.asyncio
+async def test_a_snapshot_whose_board_changes_between_pages_restarts_instead_of_stitching(gateway):
+    _fill_board(gateway, 'busy', 30)
+    kb, kbc = _kanban_env(gateway)
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        first = await ws.result('kanban.board.snapshot', board='busy', limit=10)
+        with kbc.connect_closing(board='busy') as conn:
+            kb.create_task(conn, title='written between pages', assignee=PROFILE, board='busy')
+        stale = await ws.result('kanban.board.snapshot', board='busy', limit=10, page_token=first['next_page_token'])
+        assert (stale['state'], stale['reason'], stale['cards']) == ('snapshot_required', 'changed_during_snapshot', [])
+        restarted = await _pages(ws, 'busy', 10)
+        assert sum(len(p['cards']) for p in restarted) == 32
+        gid = (await ws.result('kanban.boards.list'))['gateway_id']
+        other = await ws.result('kanban.board.snapshot', board='busy', limit=10, page_token=encode_token(first['next_page_token'], gateway='f' * 32))
+        assert other['reason'] == 'wrong_gateway' and gid
+
+
+def encode_token(token, *, gateway):
+    from hermes_cli import kanban_native_read as read
+    prefix, _gw, *rest = json.loads(__import__('base64').urlsafe_b64decode(token + '=' * (-len(token) % 4)))
+    return read._pack(prefix, gateway, *rest)
+
+
+@pytest.mark.asyncio
+async def test_supported_purge_and_retention_invalidate_cursors_and_a_fresh_snapshot_is_sound(gateway):
+    import time
+    from tests.waiting import wait_until
+    kb, kbc = _kanban_env(gateway)
+    kb.create_board('purge')
+    with kbc.connect_closing(board='purge') as conn:
+        keep, doomed, after = (kb.create_task(conn, title=t, assignee=PROFILE, board='purge') for t in ('keep', 'doomed', 'after'))
+    async with native_socket(gateway.home, gateway.descriptor) as ws:
+        clean = await ws.result('kanban.board.snapshot', board='purge')
+        with kbc.connect_closing(board='purge') as conn:
+            kb.add_comment(conn, keep, 'tester', 'seen by the client')
+        assert (await ws.result('kanban.events.since', board='purge', cursor=clean['cursor']))['state'] == 'ok'
+        cursor = (await ws.result('kanban.board.snapshot', board='purge'))['cursor']
+        with kbc.connect_closing(board='purge') as conn:
+            assert kb.delete_task(conn, doomed) is True
+        stale = await ws.result('kanban.events.since', board='purge', cursor=cursor)
+        assert (stale['state'], stale['reason'], stale['events']) == ('snapshot_required', 'history_changed', [])
+        fresh = await ws.result('kanban.board.snapshot', board='purge')
+        assert sorted(c['task_id'] for c in fresh['cards']) == sorted([keep, after])
+        assert (await ws.result('kanban.events.since', board='purge', cursor=fresh['cursor']))['events'] == []
+
+        gap_start = fresh['cursor']
+        with kbc.connect_closing(board='purge') as conn:
+            unseen = kb.create_task(conn, title='unseen', assignee=PROFILE, board='purge')
+            kb.add_comment(conn, after, 'tester', 'after the hole')
+            kb.complete_task(conn, unseen, summary='done')
+            wait_until(lambda: int(time.time()) > max(e.created_at for e in kb.list_events(conn, unseen)), what='clock tick')
+            assert kb.gc_events(conn, older_than_seconds=0) >= 2
+        lost = await ws.result('kanban.events.since', board='purge', cursor=gap_start)
+        assert (lost['state'], lost['reason'], lost['events']) == ('snapshot_required', 'gap', [])
+        again = await ws.result('kanban.board.snapshot', board='purge')
+        assert unseen in {c['task_id'] for c in again['cards']}
+        assert (await ws.result('kanban.events.since', board='purge', cursor=again['cursor']))['events'] == []
+
+
+@pytest.mark.asyncio
+async def test_a_new_run_never_inherits_an_earlier_runs_proofs(gateway):
+    from hermes_cli.kanban_external_claim import claim_external
+    from hermes_cli.kanban_outcomes_store import OutcomeRefusedError
+    kb, kbc = _kanban_env(gateway)
+    kb.create_board('rerun', dispatch_mode='external')
+    with kbc.connect_closing(board='rerun') as conn:
+        task = kb.create_task(conn, title='retried', assignee=PROFILE, outcome_contract={'kind': 'built_artifact'}, board='rerun')
+        run_1 = claim_external(conn, task, profile=PROFILE, session_id='s1', board='rerun').current_run_id
+        with pytest.raises(OutcomeRefusedError):
+            kb.complete_task(conn, task, summary='x', expected_run_id=run_1, actor_profile=PROFILE)
+        kb._append_event(conn, task, 'pr_acceptance', {'ok': True, 'classification': 'green'}, run_id=run_1)
+        assert kb.reclaim_task(conn, task, reason='retry')
+        run_2 = claim_external(conn, task, profile=PROFILE, session_id='s2', board='rerun').current_run_id
+    assert run_2 != run_1
+
+    async def detail():
+        async with native_socket(gateway.home, gateway.descriptor) as ws:
+            return (await ws.result('kanban.card.get', board='rerun', task_id=task))['detail']
+    current = await detail()
+    assert current['proof_run_id'] == run_2 and current['execution']['current_run_id'] == run_2
+    assert current['outcome_verification']['state'] == 'unknown' and current['outcome_verification']['run_id'] is None
+    assert current['ci_acceptance']['state'] == 'unknown'
+    assert {(h['kind'], h['run_id'], h['state']) for h in current['proof_history']} == {
+        ('outcome_refused', run_1, 'refused'), ('pr_acceptance', run_1, 'accepted')}
+    with kbc.connect_closing(board='rerun') as conn, pytest.raises(OutcomeRefusedError):
+        kb.complete_task(conn, task, summary='x', expected_run_id=run_2, actor_profile=PROFILE)
+    refused = await detail()
+    assert (refused['outcome_verification']['state'], refused['outcome_verification']['run_id']) == ('refused', run_2)
+    assert refused['ci_acceptance']['state'] == 'unknown'
+
+
+@pytest.mark.asyncio
+async def test_a_completed_card_cannot_be_reclaimed_so_a_verified_proof_never_goes_stale(gateway):
+    from hermes_cli.kanban_external_claim import claim_external
+    kb, kbc = _kanban_env(gateway)
+    with kbc.connect_closing(board='ops') as conn:
+        assert claim_external(conn, gateway.ids['built'], profile=PROFILE, session_id='again', board='ops') is None
+        assert not kb.reclaim_task(conn, gateway.ids['built']) and not kb.unblock_task(conn, gateway.ids['built'])
+        assert kb.get_task(conn, gateway.ids['built']).status == 'done'

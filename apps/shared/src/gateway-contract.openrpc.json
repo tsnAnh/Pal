@@ -29912,11 +29912,30 @@
             ],
             "default": null
           },
+          "proof_run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Proof Run Id"
+          },
           "ci_acceptance": {
             "$ref": "#/components/schemas/KanbanCiAcceptance"
           },
           "outcome_verification": {
             "$ref": "#/components/schemas/KanbanOutcomeVerification"
+          },
+          "proof_history": {
+            "items": {
+              "$ref": "#/components/schemas/KanbanProofHistory"
+            },
+            "title": "Proof History",
+            "type": "array"
           },
           "evidence": {
             "items": {
@@ -29950,6 +29969,7 @@
           "execution",
           "ci_acceptance",
           "outcome_verification",
+          "proof_history",
           "evidence",
           "prerequisites",
           "dependents",
@@ -30699,6 +30719,83 @@
         "title": "KanbanPrerequisite",
         "type": "object"
       },
+      "KanbanProofHistory": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "pr_acceptance",
+              "outcome_verified",
+              "outcome_refused"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "verification": {
+            "anyOf": [
+              {
+                "enum": [
+                  "independent",
+                  "attested",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Verification"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Run Id"
+          },
+          "observed_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Observed At"
+          },
+          "event_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Event Id"
+          }
+        },
+        "required": [
+          "kind",
+          "state"
+        ],
+        "title": "KanbanProofHistory",
+        "type": "object"
+      },
       "KanbanReadParams": {
         "additionalProperties": false,
         "properties": {
@@ -30970,6 +31067,18 @@
             ],
             "default": null,
             "title": "Limit"
+          },
+          "page_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page Token"
           }
         },
         "required": [
@@ -30985,10 +31094,23 @@
             "enum": [
               "present",
               "board_absent",
-              "board_archived"
+              "board_archived",
+              "snapshot_required"
             ],
             "title": "State",
             "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
           },
           "scope": {
             "$ref": "#/components/schemas/KanbanScope"
@@ -31020,10 +31142,17 @@
             "title": "Prerequisites",
             "type": "array"
           },
-          "truncated": {
-            "default": false,
-            "title": "Truncated",
-            "type": "boolean"
+          "next_page_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Next Page Token"
           },
           "cursor": {
             "anyOf": [

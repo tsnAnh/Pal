@@ -7005,14 +7005,16 @@ export interface KanbanSnapshotParams {
   gateway_id?: string | null
   board: string
   limit?: number | null
+  page_token?: string | null
 }
 export interface KanbanSnapshotResult {
-  state: 'present' | 'board_absent' | 'board_archived'
+  state: 'present' | 'board_absent' | 'board_archived' | 'snapshot_required'
+  reason?: string | null
   scope: KanbanScope
   board?: KanbanBoard | null
   cards?: KanbanCard[]
   prerequisites?: KanbanPrerequisite[]
-  truncated?: boolean
+  next_page_token?: string | null
   cursor?: string | null
 }
 export interface KanbanCard {
@@ -7051,8 +7053,10 @@ export interface KanbanCardDetail {
   lifecycle: KanbanCardLifecycle
   execution: KanbanExecution
   outcome_contract?: KanbanOutcomeContract | null
+  proof_run_id?: number | null
   ci_acceptance: KanbanCiAcceptance
   outcome_verification: KanbanOutcomeVerification
+  proof_history: KanbanProofHistory[]
   evidence: KanbanEvidence[]
   prerequisites: string[]
   dependents: string[]
@@ -7104,6 +7108,14 @@ export interface KanbanOutcomeVerification {
   state: 'verified' | 'refused' | 'unknown' | 'not_governed'
   verification?: 'independent' | 'attested' | 'unknown' | null
   receipt?: Record<string, unknown> | null
+  run_id?: number | null
+  observed_at?: number | null
+  event_id?: number | null
+}
+export interface KanbanProofHistory {
+  kind: 'pr_acceptance' | 'outcome_verified' | 'outcome_refused'
+  state: string
+  verification?: 'independent' | 'attested' | 'unknown' | null
   run_id?: number | null
   observed_at?: number | null
   event_id?: number | null
