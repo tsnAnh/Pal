@@ -33,22 +33,26 @@ public enum KanbanReadState: Sendable, Hashable {
 public enum KanbanCardStatus: Sendable, Hashable {
     case triage
     case todo
+    case scheduled
     case ready
     case running
     case blocked
+    case review
     case done
     case archived
     case unknown(String)
 
-    public static let displayOrder: [KanbanCardStatus] = [.triage, .todo, .ready, .running, .blocked, .done, .archived]
+    public static let displayOrder: [KanbanCardStatus] = [.triage, .todo, .scheduled, .ready, .running, .blocked, .review, .done, .archived]
 
     public init(wire: String) {
         switch wire {
         case "triage": self = .triage
         case "todo": self = .todo
+        case "scheduled": self = .scheduled
         case "ready": self = .ready
         case "running": self = .running
         case "blocked": self = .blocked
+        case "review": self = .review
         case "done": self = .done
         case "archived": self = .archived
         default: self = .unknown(wire)
@@ -59,9 +63,11 @@ public enum KanbanCardStatus: Sendable, Hashable {
         switch self {
         case .triage: "triage"
         case .todo: "todo"
+        case .scheduled: "scheduled"
         case .ready: "ready"
         case .running: "running"
         case .blocked: "blocked"
+        case .review: "review"
         case .done: "done"
         case .archived: "archived"
         case .unknown(let raw): raw
@@ -245,17 +251,19 @@ public struct KanbanBoard: Sendable, Hashable, Identifiable {
     public let description: String
     public let archived: Bool
     public let dispatchMode: String
+    public let projectID: String?
     public let createdAt: Int?
     public let taskCounts: [String: Int]?
 
     public var id: String { scope.boardID }
 
-    public init(scope: KanbanScope, name: String, description: String = "", archived: Bool = false, dispatchMode: String = "workers", createdAt: Int? = nil, taskCounts: [String: Int]? = nil) {
+    public init(scope: KanbanScope, name: String, description: String = "", archived: Bool = false, dispatchMode: String = "workers", projectID: String? = nil, createdAt: Int? = nil, taskCounts: [String: Int]? = nil) {
         self.scope = scope
         self.name = name
         self.description = description
         self.archived = archived
         self.dispatchMode = dispatchMode
+        self.projectID = projectID
         self.createdAt = createdAt
         self.taskCounts = taskCounts
     }
@@ -268,6 +276,7 @@ public struct KanbanBoard: Sendable, Hashable, Identifiable {
         description = Field.string(json, "description") ?? ""
         archived = json["archived"]?.boolValue ?? false
         dispatchMode = Field.string(json, "dispatch_mode") ?? "workers"
+        projectID = Field.string(json, "project_id").flatMap { $0.isEmpty ? nil : $0 }
         createdAt = Field.integer(json, "created_at")
         if let counts = json["task_counts"]?.objectValue {
             taskCounts = counts.compactMapValues(\.intValue)
@@ -569,12 +578,18 @@ public struct KanbanEvidence: Sendable, Hashable, Identifiable {
     public let source: String
     public let observedAt: Int?
     public let summary: String?
+    public let url: URL?
 
     public var id: Int { evidenceID }
 
     private static let summaryKeys: [KanbanEvidenceKind: String] = [
         .prPublished: "pr_url", .prMerged: "pr_url", .artifactBuilt: "name",
     ]
+
+    private static func webURL(_ raw: String?) -> URL? {
+        guard let raw, let url = URL(string: raw), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        return url
+    }
 
     public init?(_ json: JSONValue) {
         guard let evidenceID = Field.integer(json, "evidence_id") else { return nil }
@@ -587,6 +602,7 @@ public struct KanbanEvidence: Sendable, Hashable, Identifiable {
         source = Field.string(json, "source") ?? ""
         observedAt = Field.integer(json, "observed_at")
         summary = Self.summaryKeys[kind].flatMap { json["payload"]?[$0]?.stringValue }.flatMap { $0.isEmpty ? nil : String($0.prefix(200)) }
+        url = kind == .prPublished || kind == .prMerged ? Self.webURL(json["payload"]?["pr_url"]?.stringValue) : nil
     }
 }
 

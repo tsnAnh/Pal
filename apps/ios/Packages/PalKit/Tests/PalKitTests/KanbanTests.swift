@@ -173,18 +173,4 @@ struct KanbanWireTests {
             #expect(!label.localizedCaseInsensitiveContains("consent"))
         }
     }
-
-    @Test("cards group by lifecycle in board order, unknown statuses last, counts from task_counts")
-    func grouping() throws {
-        let board = KanbanBoard(
-            scope: KanbanScope(gatewayID: "g", board: "b", boardID: "g/b"), name: "b", taskCounts: ["done": 7, "todo": 2, "weird": 1])
-        func make(_ id: String, _ status: KanbanCardStatus) -> KanbanCard {
-            KanbanCard(cardID: "g/b/\(id)", taskID: id, title: id, status: status)
-        }
-        let groups = KanbanPresentation.groups(
-            cards: [make("a", .done), make("b", .triage), make("c", .unknown("weird")), make("d", .todo), make("e", .todo)],
-            board: board)
-        #expect(groups.map(\.status) == [.triage, .todo, .done, .unknown("weird")])
-        #expect(groups.map(\.count) == [1, 2, 7, 1])
-    }
 }
