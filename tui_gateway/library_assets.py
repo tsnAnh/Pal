@@ -51,13 +51,23 @@ def serve_roots(home: Path) -> list[Path]:
     return roots
 
 
-def servable_path(home: Path, locator: str) -> Path | None:
+def _delivered_path(locator: str) -> Path | None:
+    from gateway.platforms.base import validate_media_delivery_path
+    safe = validate_media_delivery_path(locator)
+    return Path(safe) if safe else None
+
+
+def servable_path(home: Path, locator: str, *, assistant_produced: bool = False) -> Path | None:
     if not os.path.isabs(locator) or locator.lower().startswith(("http://", "https://")):
         return None
     try:
         target = Path(locator).resolve()
         if not any(root in target.parents for root in serve_roots(home)):
-            return None
+            if not assistant_produced:
+                return None
+            target = _delivered_path(locator)
+            if target is None:
+                return None
         return target if stat.S_ISREG(target.stat().st_mode) else None
     except (OSError, RuntimeError, ValueError):
         return None
@@ -116,8 +126,10 @@ def _thumbnail(data: bytes) -> tuple[bytes, str] | None:
         return None
 
 
-def read_asset(home: Path, item: IndexedItem, *, max_bytes: int, thumbnail: bool) -> AssetPayload:
-    path = servable_path(home, item.locator) if item.kind != "link" else None
+def read_asset(
+    home: Path, item: IndexedItem, *, max_bytes: int, thumbnail: bool, assistant_produced: bool = False,
+) -> AssetPayload:
+    path = servable_path(home, item.locator, assistant_produced=assistant_produced) if item.kind != "link" else None
     if path is None:
         raise AssetUnavailable("This item is not available to download.")
     mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"

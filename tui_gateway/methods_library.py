@@ -120,9 +120,11 @@ def _(rid, params: dict) -> dict:
                 return unknown
             if item.message_id not in LibraryIndex.live_message_ids(db, [item.message_id]):
                 return unknown
+            assistant_produced = item.message_id in LibraryIndex.assistant_message_ids(db, [item.message_id])
         finally:
             _library_close_db(db, owns)
-        payload = read_asset(home, item, max_bytes=cap, thumbnail=parsed.thumbnail)
+        payload = read_asset(
+            home, item, max_bytes=cap, thumbnail=parsed.thumbnail, assistant_produced=assistant_produced)
     except AssetUnavailable as exc:
         return _err(rid, 4151, str(exc))
     except AssetTooLarge:

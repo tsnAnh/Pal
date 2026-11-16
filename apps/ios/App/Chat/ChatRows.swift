@@ -45,6 +45,14 @@ struct ChatRowView: View {
         return { reference, thumbnail in try await model.loadImage(reference, thumbnail: thumbnail) }
     }
 
+    private var fileActions: ChatFileActions {
+        let model = model
+        return ChatFileActions(
+            check: { try await model.fileAvailability($0) },
+            load: { try await model.loadFile($0) }
+        )
+    }
+
     private func messageActions(for text: String) -> MessageActions {
         let id = row.id
         let model = model
@@ -68,9 +76,10 @@ struct ChatRowView: View {
             .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
             .environment(\.chatImageLoader, imageLoader)
         case .assistant(let parsed):
-            AssistantBubble(text: parsed.source, document: parsed.document, images: row.images, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+            AssistantBubble(text: parsed.source, document: parsed.document, images: row.images, files: row.files, filesPending: row.isStreaming, highlight: findQuery, isCurrentMatch: isCurrentMatch)
                 .environment(\.messageActions, messageActions(for: parsed.source))
                 .environment(\.chatImageLoader, imageLoader)
+                .environment(\.chatFileActions, fileActions)
         case .clarifyAnswered(let question, let answer):
             ClarifyAnsweredCard(question: question, answer: answer)
         case .clarify(let prompt):
@@ -100,6 +109,8 @@ struct AssistantBubble: View {
     let text: String
     var document: MarkdownDocument?
     var images: [ImageReference] = []
+    var files: [FileReference] = []
+    var filesPending = false
     let highlight: String
     let isCurrentMatch: Bool
     var isStreaming: Bool = false
@@ -115,6 +126,7 @@ struct AssistantBubble: View {
                 .bubbleAccessibility(text: text, identifier: "assistantBubble")
                 .messageActions(side: .assistant)
             }
+            if !files.isEmpty { ChatFileStack(files: files, isStreaming: filesPending) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .bubbleWidth(.leading)

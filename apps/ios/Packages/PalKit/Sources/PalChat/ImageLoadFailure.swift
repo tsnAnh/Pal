@@ -26,6 +26,14 @@ public struct ImageLoadFailure: Error, Sendable, Equatable {
         }
     }
 
+    public static func rpcCode(of error: Error) -> Int? {
+        switch error {
+        case let rpc as RPCError: rpc.code
+        case GatewayTransportError.rpc(let rpc): rpc.code
+        default: nil
+        }
+    }
+
     public var message: String { "Image could not be loaded: \(reason)" }
 
     private static func reason(forRPC rpc: RPCError) -> String {

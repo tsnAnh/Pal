@@ -35,7 +35,7 @@ public struct ImageReference: Sendable, Hashable, Identifiable {
         digest(of: Data("media\u{0}\(path)".utf8))
     }
 
-    private static func digest(of data: Data) -> String {
+    static func digest(of data: Data) -> String {
         SHA256.hash(data: data).prefix(16).map { String(format: "%02x", $0) }.joined()
     }
 
@@ -48,6 +48,7 @@ public struct ImageReference: Sendable, Hashable, Identifiable {
 public struct MessageContent: Sendable, Hashable {
     public var text: String
     public var images: [ImageReference]
+    public var files: [FileReference] = []
 }
 
 public enum MessageImages {
@@ -58,10 +59,10 @@ public enum MessageImages {
 
     public static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "heic", "heif", "tif", "tiff"]
 
-    public static func extract(from text: String, role: Role) -> MessageContent {
+    public static func extract(from text: String, role: Role, isStreaming: Bool = false) -> MessageContent {
         switch role {
         case .user: extractFromUser(text)
-        case .assistant: extractFromAssistant(text)
+        case .assistant: extractFromAssistant(text, isStreaming: isStreaming)
         }
     }
 
@@ -91,8 +92,9 @@ public enum MessageImages {
         return inlineReference(in: line) ?? remoteImageReference(in: line)
     }
 
-    private static func extractFromAssistant(_ text: String) -> MessageContent {
-        var body = text
+    private static func extractFromAssistant(_ text: String, isStreaming: Bool) -> MessageContent {
+        let split = MessageFiles.extract(from: text, isStreaming: isStreaming)
+        var body = split.text
         var images: [ImageReference] = []
         var videos: [URL] = []
         var search = body.startIndex..<body.endIndex
@@ -123,11 +125,11 @@ public enum MessageImages {
                 kept.append(line)
             }
         }
-        guard !images.isEmpty || !videos.isEmpty else { return MessageContent(text: text, images: []) }
+        guard !images.isEmpty || !videos.isEmpty else { return MessageContent(text: split.text, images: [], files: split.files) }
         let videoLines = videos.map(\.absoluteString).joined(separator: "\n\n")
         let remaining = tidy(kept.joined(separator: "\n"))
         let joined = [remaining, videoLines].filter { !$0.isEmpty }.joined(separator: "\n\n")
-        return MessageContent(text: joined, images: unique(images))
+        return MessageContent(text: joined, images: unique(images), files: split.files)
     }
 
     static func remoteVideoURL(in token: String) -> URL? {

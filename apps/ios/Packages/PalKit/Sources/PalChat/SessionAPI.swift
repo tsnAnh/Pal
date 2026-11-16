@@ -182,6 +182,19 @@ public struct SessionAPI: Sendable {
         return data
     }
 
+    public func libraryFile(ref: String, maxBytes: Int) async throws -> Data {
+        let result = try await call("library.asset", [
+            "asset_ref": .string(ref),
+            "thumbnail": .bool(false),
+            "max_bytes": .int(maxBytes),
+        ])
+        let wire = try decode(LibraryAssetPayload.self, result, "library.asset")
+        guard let data = Data(base64Encoded: wire.dataBase64) else {
+            throw ChatError.unexpectedResponse(method: "library.asset")
+        }
+        return data
+    }
+
     public func attachFile(sessionID: String, data: Data, name: String, mime: String) async throws -> StagedFile {
         let result = try await call("file.attach", [
             "session_id": .string(sessionID),

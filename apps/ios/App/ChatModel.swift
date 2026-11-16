@@ -63,6 +63,8 @@ struct ChatRow: Identifiable, Equatable {
     var showsUnreadDivider = false
     var gap: ChatRowGap = .none
     var images: [ImageReference] = []
+    var files: [FileReference] = []
+    var isStreaming = false
     var storedRowID: Int?
 
     var searchableText: String? {
@@ -173,6 +175,7 @@ final class ChatModel {
         let item: TranscriptItem
         let kind: ChatRow.Kind?
         let images: [ImageReference]
+        var files: [FileReference] = []
     }
 
     var pendingDraft: String? { roster.drafts[bot.name] }
@@ -451,6 +454,16 @@ final class ChatModel {
         } catch {
             throw ImageLoadFailure(describing: error)
         }
+    }
+
+    func fileAvailability(_ reference: FileReference) async throws -> FileAvailability {
+        guard let session else { throw ChatError.notConnected }
+        return try await session.fileAvailability(ref: reference.id)
+    }
+
+    func loadFile(_ reference: FileReference) async throws -> Data {
+        guard let session else { throw ChatError.notConnected }
+        return try await session.fileAsset(ref: reference.id)
     }
 
     func keepLocalImage(_ data: Data, forHostPath path: String) {
@@ -759,9 +772,11 @@ final class ChatModel {
             let outboxEntry = outboxByItem[source.item.id]
             let made = build(source.item, outbox: outboxEntry, generated: generated, reuse: outboxEntry == nil ? built[source.id] : nil)
             nextBuilt[source.id] = made
-            guard let kind = made.kind, !Self.isEmpty(kind, images: made.images) else { continue }
+            guard let kind = made.kind, !Self.isEmpty(kind, images: made.images, files: made.files) else { continue }
             var row = ChatRow(id: source.id, kind: kind, separator: entry.separator, showsUnreadDivider: entry.showsNewDivider)
             row.images = made.images
+            row.files = made.files
+            if case .assistant(_, _, let streaming) = made.item.content { row.isStreaming = streaming }
             row.storedRowID = source.stored
             next.append(row)
         }
@@ -779,8 +794,8 @@ final class ChatModel {
         recomputeFind(resetPosition: false)
     }
 
-    private static func isEmpty(_ kind: ChatRow.Kind, images: [ImageReference]) -> Bool {
-        if case .assistant(let parsed) = kind, parsed.source.isEmpty, images.isEmpty { return true }
+    private static func isEmpty(_ kind: ChatRow.Kind, images: [ImageReference], files: [FileReference]) -> Bool {
+        if case .assistant(let parsed) = kind, parsed.source.isEmpty, images.isEmpty, files.isEmpty { return true }
         return false
     }
 
@@ -793,14 +808,14 @@ final class ChatModel {
     private func build(_ item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, reuse: BuiltRow?) -> BuiltRow {
         if let reuse, reuse.item == item, !Self.dependsOnConnection(item) {
             if case .assistant = item.content, !generated.isEmpty {
-                return BuiltRow(item: item, kind: reuse.kind, images: reuse.images.filter { !generated.contains($0.id) })
+                return BuiltRow(item: item, kind: reuse.kind, images: reuse.images.filter { !generated.contains($0.id) }, files: reuse.files)
             }
             return reuse
         }
-        guard let (kind, images) = rowKind(for: item, outbox: entry, generated: generated, previous: reuse) else {
+        guard let (kind, images, files) = rowKind(for: item, outbox: entry, generated: generated, previous: reuse) else {
             return BuiltRow(item: item, kind: nil, images: [])
         }
-        return BuiltRow(item: item, kind: kind, images: images)
+        return BuiltRow(item: item, kind: kind, images: images, files: files)
     }
 
     private static func dependsOnConnection(_ item: TranscriptItem) -> Bool {
@@ -808,7 +823,7 @@ final class ChatModel {
         return false
     }
 
-    private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, previous: BuiltRow?) -> (ChatRow.Kind, [ImageReference])? {
+    private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, previous: BuiltRow?) -> (ChatRow.Kind, [ImageReference], [FileReference])? {
         switch item.content {
         case .user(let text, let delivery):
             switch item.inbound {
@@ -825,36 +840,36 @@ final class ChatModel {
                     content.images = (staged + content.images).filter { seen.insert($0.id).inserted }
                     if entry.text.isEmpty, entry.files.isEmpty { content.text = "" }
                 }
-                return (.user(text: content.text, delivery: state), content.images)
+                return (.user(text: content.text, delivery: state), content.images, [])
             case .botMessage(let sender, let body):
-                return (.notice(.botMessage(senderName: sender.name, body: body)), [])
+                return (.notice(.botMessage(senderName: sender.name, body: body)), [], [])
             case .systemNotification:
-                return (.notice(.notification), [])
+                return (.notice(.notification), [], [])
             case .processCompletion:
-                return (.notice(.backgroundTaskFinished(count: InboundKind.backgroundTaskCount(in: text), text: text)), [])
+                return (.notice(.backgroundTaskFinished(count: InboundKind.backgroundTaskCount(in: text), text: text)), [], [])
             }
-        case .assistant(let text, _, _):
-            let content = MessageImages.extract(from: text, role: .assistant)
+        case .assistant(let text, _, let streaming):
+            let content = MessageImages.extract(from: text, role: .assistant, isStreaming: streaming)
             let images = content.images.filter { !generated.contains($0.id) }
             if case .assistant(let parsed)? = previous?.kind, parsed.source == content.text {
-                return (.assistant(parsed), images)
+                return (.assistant(parsed), images, content.files)
             }
-            return (.assistant(ParsedMarkdown(source: content.text, document: MarkdownDocument(parsing: content.text))), images)
+            return (.assistant(ParsedMarkdown(source: content.text, document: MarkdownDocument(parsing: content.text))), images, content.files)
         case .tool(let call):
             guard let generation = call.imageGeneration else { return nil }
-            return (.imageGeneration(generation), [])
+            return (.imageGeneration(generation), [], [])
         case .clarifyAnswered(let record):
-            return (.clarifyAnswered(question: record.question, answer: record.answer), [])
+            return (.clarifyAnswered(question: record.question, answer: record.answer), [], [])
         case .clarify(let card):
-            return (.clarify(card.prompt), [])
+            return (.clarify(card.prompt), [], [])
         case .approval(let card):
-            return (.approval(card.prompt), [])
+            return (.approval(card.prompt), [], [])
         case .approvalAnswered(let record):
-            return (.approvalAnswered(record), [])
+            return (.approvalAnswered(record), [], [])
         case .connection(let card):
-            return (.connection(card), [])
+            return (.connection(card), [], [])
         case .botThread(let link):
-            return (.botThread(link), [])
+            return (.botThread(link), [], [])
         }
     }
 
