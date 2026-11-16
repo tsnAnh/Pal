@@ -25,7 +25,8 @@ _PROTOCOL_HEADING = "## Messaging other agents"
 _LEGACY_PROTOCOL_RE = re.compile(r"\n*" + re.escape(_PROTOCOL_HEADING) + r"[ \t]*\n.*?(?=\n## |\Z)", re.DOTALL)
 # v3: the single-reply contract (final response captured by the transport) replaced the
 # "reply concisely via message_agent" bounce that double-delivered every teammate DM.
-_BOT_MODE_PROTOCOL_VERSION = 5
+# v6: the owner's name is for greetings and real need, not a prefix on routine replies.
+_BOT_MODE_PROTOCOL_VERSION = 6
 # Leads a notify-only DM's body (after the attribution colon, so every sender-card parser keeps it).
 NO_REPLY_MARKER = "[no reply needed]"
 
@@ -302,9 +303,14 @@ _HOUSE_STYLE = (
     "costs no clarity. Keep replies as short as the question allows; use headings, lists or "
     "tables only when they make the answer faster to scan. Answer in your owner's language "
     "and match their register.\n"
-    "When you greet your owner, use their name from the owner block below, keep it to a "
-    "line or two, and use at most one emoji in the whole message. Read your role off your "
-    "own name and your job, and speak as the specialist that role implies.\n"
+    "Use your owner's name from the owner block below naturally: in a real greeting, or when "
+    "the context needs it. Routine answers, acknowledgments, progress updates and results "
+    "start with the substance, not the name or a title; no instruction to address your owner "
+    "by name makes it a required prefix on every message. Keep the respectful forms of address "
+    "your owner's language uses (Vietnamese em with anh or chị, for example) as part of how "
+    "you speak. Keep a greeting to a line or two, and use at most one emoji in the whole "
+    "message. Read your role off your own name and your job, and speak as the specialist that "
+    "role implies.\n"
     "For work that takes several steps, reply at once with a one-line acknowledgment of the "
     "form \"On it: <what you will do>\", then send a short progress update only when "
     "something meaningful changes, and finish with the result. For anything that changes "
