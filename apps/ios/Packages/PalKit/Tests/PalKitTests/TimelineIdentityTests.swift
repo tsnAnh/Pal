@@ -6,10 +6,23 @@ import Testing
 private struct Rig {
     var timeline = Timeline()
     private var seq = 0
+    private var epoch = "e1"
 
-    init() throws {
-        let object: JSONValue = ["session_id": "s1", "messages": [], "replay_epoch": "e1", "last_sequence": 0]
-        timeline.adoptLive(try object.decoded(as: SessionSnapshot.self))
+    init(seed: CachedTimeline? = nil, resumedAt sequence: Int = 0) throws {
+        if let seed { timeline.seed(seed) }
+        seq = sequence
+        timeline.adoptLive(try Self.snapshot(epoch: "e1", sequence: sequence))
+    }
+
+    static func snapshot(epoch: String, sequence: Int = 0) throws -> SessionSnapshot {
+        let object: JSONValue = ["session_id": "s1", "messages": [], "replay_epoch": .string(epoch), "last_sequence": .int(sequence)]
+        return try object.decoded(as: SessionSnapshot.self)
+    }
+
+    mutating func resync(epoch next: String) throws {
+        epoch = next
+        seq = 0
+        timeline.forceLive(try Self.snapshot(epoch: next))
     }
 
     @discardableResult
@@ -19,7 +32,7 @@ private struct Rig {
     }
 
     func frame(_ type: String, _ payload: JSONValue, seq: Int) -> SessionEventFrame {
-        SessionEventFrame(event: SessionEvent(type: type, payload: payload), sessionID: "s1", seq: seq, replayEpoch: "e1")
+        SessionEventFrame(event: SessionEvent(type: type, payload: payload), sessionID: "s1", seq: seq, replayEpoch: epoch)
     }
 
     mutating func refresh(_ entries: [TimelineEntryWire]) {
@@ -248,5 +261,88 @@ struct TimelineIdentityTests {
             user("u2", Self.stored), assistant("r-u2", "ok"),
         ])
         #expect(ownerRows(rig) == [Self.stored, Self.stored])
+    }
+
+    private func keyed(_ rig: Rig) -> [String: RowKey] {
+        Dictionary(rig.rows.map { ("\($0.item.id)", $0.id) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    @Test func reopenFromCacheMidLeadInShowsTheLeadInOnceAndKeepsKeys() throws {
+        var first = try Rig()
+        first.refresh([user("u0", "start")])
+        first.send("message.start", ["turn_id": "t1"])
+        first.send("message.delta", ["text": "Quick lead-in", "turn_id": "t1", "segment": 0, "offset": 0])
+        first.refresh([user("u0", "start"), clarifyEntry(id: "a1", lead: "Quick lead-in")])
+        let cache = try #require(first.timeline.cacheable(sessionID: "s1"))
+
+        var reopened = try Rig(seed: cache, resumedAt: 2)
+        #expect(reopened.timeline.apply(reopened.frame("message.delta", ["text": "Quick lead-in", "turn_id": "t1", "segment": 0, "offset": 0], seq: 2)) == .duplicate)
+        #expect(reopened.texts == ["user:start", "assistant:Quick lead-in"] + questions)
+        let seededKeys = reopened.rows.map(\.id)
+        reopened.send("tool.start", ["tool_id": "c1", "name": "clarify"])
+        reopened.send("tool.complete", ["tool_id": "c1", "name": "clarify", "result": .string(answers)])
+        reopened.send("message.delta", ["text": "Thanks", "turn_id": "t1", "segment": 0, "offset": 13])
+        reopened.send("message.complete", ["text": "Thanks", "turn_id": "t1", "message_uid": "a2"])
+        #expect(reopened.texts == ["user:start", "assistant:Quick lead-in"] + questions + ["assistant:Thanks"])
+        reopened.refresh([user("u0", "start"), clarifyEntry(id: "a1", lead: "Quick lead-in"), assistant("a2", "Thanks")])
+        #expect(reopened.texts == ["user:start", "assistant:Quick lead-in"] + questions + ["assistant:Thanks"])
+        #expect(Array(reopened.rows.map(\.id).prefix(seededKeys.count)) == seededKeys)
+    }
+
+    @Test func replayEpochResetMidLeadInSettlesOnceInOrder() throws {
+        var rig = try Rig()
+        rig.refresh([user("u0", "start")])
+        rig.send("message.start", ["turn_id": "t1"])
+        rig.send("message.delta", ["text": "Quick lead-in", "turn_id": "t1", "segment": 0, "offset": 0])
+        let stale = rig.frame("message.delta", ["text": "more", "turn_id": "t1", "segment": 0, "offset": 13], seq: 3)
+        let moved = SessionEventFrame(event: stale.event, sessionID: "s1", seq: 3, replayEpoch: "e2")
+        #expect(rig.timeline.apply(moved) == .resyncRequired(.epochChanged))
+        try rig.resync(epoch: "e2")
+        rig.refresh([user("u0", "start"), clarifyEntry(id: "a1", lead: "Quick lead-in")])
+        #expect(rig.texts == ["user:start", "assistant:Quick lead-in"] + questions)
+        let keys = rig.rows.map(\.id)
+        rig.send("message.start", ["turn_id": "t2"])
+        rig.send("message.delta", ["text": "Thanks", "turn_id": "t2", "segment": 0, "offset": 0])
+        rig.send("message.complete", ["text": "Thanks", "turn_id": "t2", "message_uid": "a2"])
+        rig.refresh([user("u0", "start"), clarifyEntry(id: "a1", lead: "Quick lead-in"), assistant("a2", "Thanks")])
+        #expect(rig.texts == ["user:start", "assistant:Quick lead-in"] + questions + ["assistant:Thanks"])
+        #expect(Array(rig.rows.map(\.id).prefix(keys.count)) == keys)
+    }
+
+    @Test func overlappingPagesAndLaterIdenticalMessagesStayExactlyOnce() throws {
+        var rig = try Rig()
+        let base = [user("u0", "start"), clarifyEntry(id: "a1", lead: "Quick lead-in"), assistant("a2", "Ok")]
+        rig.refresh(base)
+        let keys = rig.rows.map(\.id)
+        rig.refresh(base)
+        #expect(rig.rows.map(\.id) == keys)
+        rig.timeline.echoUser(submissionID: "s2", text: "again")
+        rig.send("message.start", ["turn_id": "t2"])
+        rig.send("message.delta", ["text": "Ok", "turn_id": "t2", "segment": 0, "offset": 0])
+        rig.send("message.complete", ["text": "Ok", "turn_id": "t2", "message_uid": "a4"])
+        #expect(rig.texts.filter { $0 == "assistant:Ok" }.count == 2)
+        let overlap = Array(base.suffix(2)) + [user("u3", "again"), assistant("a4", "Ok")]
+        rig.refresh(overlap + [])
+        #expect(rig.texts == ["user:start", "assistant:Quick lead-in"] + questions + ["assistant:Ok", "user:again", "assistant:Ok"])
+        #expect(Array(rig.rows.map(\.id).prefix(keys.count)) == keys)
+    }
+
+    @Test func aLaterLiveLeadInIdenticalToCachedHistoryIsAnotherMessage() throws {
+        var first = try Rig()
+        first.refresh([user("u0", "start"), clarifyEntry(id: "a1", lead: "Quick lead-in"), assistant("a2", "Thanks")])
+        let cache = try #require(first.timeline.cacheable(sessionID: "s1"))
+        var rig = try Rig(seed: cache)
+        rig.timeline.echoUser(submissionID: "s2", text: "again")
+        rig.send("message.start", ["turn_id": "t2"])
+        rig.send("message.delta", ["text": "Quick lead-in", "turn_id": "t2", "segment": 0, "offset": 0])
+        rig.send("tool.start", ["tool_id": "c2", "name": "terminal"])
+        #expect(rig.texts.filter { $0 == "assistant:Quick lead-in" }.count == 2)
+        rig.send("message.complete", ["text": "Done", "turn_id": "t2", "message_uid": "a6"])
+        rig.refresh([
+            user("u0", "start"), clarifyEntry(id: "a1", lead: "Quick lead-in"), assistant("a2", "Thanks"),
+            user("u3", "again"), assistant("a5", "Quick lead-in"), assistant("a6", "Done"),
+        ])
+        #expect(rig.texts.filter { $0 == "assistant:Quick lead-in" }.count == 2)
+        #expect(rig.texts.last == "assistant:Done")
     }
 }
