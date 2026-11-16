@@ -4,21 +4,25 @@ import PalProtocol
 public struct ModelCapability: Sendable, Hashable, Decodable {
     public let reasoning: Bool?
     public let canDisableReasoning: Bool?
+    public let efforts: [String]?
 
-    public init(reasoning: Bool? = nil, canDisableReasoning: Bool? = nil) {
+    public init(reasoning: Bool? = nil, canDisableReasoning: Bool? = nil, efforts: [String]? = nil) {
         self.reasoning = reasoning
         self.canDisableReasoning = canDisableReasoning
+        self.efforts = ReasoningEffort.reported(efforts)
     }
 
     enum CodingKeys: String, CodingKey {
         case reasoning
         case canDisableReasoning = "can_disable_reasoning"
+        case efforts
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         reasoning = try? container.decodeIfPresent(Bool.self, forKey: .reasoning)
         canDisableReasoning = try? container.decodeIfPresent(Bool.self, forKey: .canDisableReasoning)
+        efforts = ReasoningEffort.reported(try? container.decodeIfPresent([String].self, forKey: .efforts))
     }
 }
 
@@ -29,14 +33,27 @@ public enum EffortOptions: Sendable, Equatable {
 }
 
 public enum ReasoningEffort {
-    static let ladder = ["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]
     static let aboveCloudCap: Set<String> = ["xhigh", "max", "ultra"]
     public static let unknown = "unknown"
 
     public static func options(for capability: ModelCapability?) -> EffortOptions {
-        guard let capability, let reasoning = capability.reasoning else { return .unknown }
-        guard reasoning else { return .unsupported }
-        return .levels((capability.canDisableReasoning == true ? ["none"] : []) + ladder)
+        guard let capability else { return .unknown }
+        if capability.reasoning == false { return .unsupported }
+        guard let efforts = capability.efforts else { return .unknown }
+        let offered = (capability.canDisableReasoning == true ? ["none"] : []) + efforts.filter { $0 != "none" }
+        return offered.isEmpty ? .unknown : .levels(offered)
+    }
+
+    public static func choices(_ levels: [String], keeping current: String?) -> [String] {
+        guard let current = clean(current), !levels.contains(current) else { return levels }
+        return levels + [current]
+    }
+
+    static func reported(_ efforts: [String]?) -> [String]? {
+        guard let efforts else { return nil }
+        var seen = Set<String>()
+        let levels = efforts.compactMap(clean).filter { seen.insert($0).inserted }
+        return levels.isEmpty ? nil : levels
     }
 
     public static func title(_ effort: String?) -> String {

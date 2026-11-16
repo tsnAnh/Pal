@@ -465,13 +465,36 @@ def _reasoning_catalog_reader(slug: str):
     return read
 
 
+def _declared_efforts(slug: str, model: str, profile: Any, openrouter_detail: dict | None) -> list[str] | None:
+    """Explicit per-model effort ladder the route itself declares, in the source's order, or None.
+
+    Sources: the OpenRouter catalog (Hermes clamps to it, so it is the truth there), the Codex/OpenAI
+    Responses ladder for ``openai-codex``, and a provider profile's own declaration. Never the generic
+    OpenAI-compatible wire set: that is a ceiling for undiscoverable vocabularies, not a per-model list.
+    The Nous Portal catalog is skipped: it under-reports levels the Portal serves."""
+    from agent.reasoning_effort import OPENAI_COMPAT_WIRE_EFFORTS, codex_supported_efforts
+
+    declared: Any = None
+    if slug == "openrouter" and openrouter_detail:
+        declared = openrouter_detail.get("supported_efforts")
+    elif slug == "openai-codex":
+        declared = codex_supported_efforts(model)
+    elif profile is not None:
+        declared = profile.supported_reasoning_efforts(model)
+    levels = [str(level).strip().lower() for level in declared or () if str(level).strip()]
+    if not levels or tuple(levels) == OPENAI_COMPAT_WIRE_EFFORTS:
+        return None
+    return levels
+
+
 def _apply_capabilities(rows: list[dict], *, metadata_config: dict | None = None) -> None:
     """Attach ``{model: {fast, reasoning, ...}}`` per row. ``reasoning`` defaults True when the catalog is
     silent (the dial is a no-op on models that ignore it; hiding it from a capable model is worse). A
-    serving aggregator's detail overrides models.dev (adds ``can_disable_reasoning``). ``supported_efforts``
-    is deliberately NOT forwarded — it under-reports levels that work."""
+    serving aggregator's detail overrides models.dev (adds ``can_disable_reasoning``). ``efforts`` appears
+    only when the route declares an explicit per-model list (``_declared_efforts``); absent means unknown."""
     from agent.codex_service_tiers import daybreak_offered, ultrafast_offered
     from hermes_cli.models import model_supports_ultrafast, resolve_fast_mode_overrides
+    from providers import get_provider_profile
 
     try:
         from agent.models_dev import get_model_capabilities
@@ -487,6 +510,7 @@ def _apply_capabilities(rows: list[dict], *, metadata_config: dict | None = None
         slug = row.get("slug") or ""
         caps: dict[str, dict[str, Any]] = {}
         read_reasoning_catalog = _reasoning_catalog_reader(slug.lower())
+        profile = get_provider_profile(slug) if slug else None
         for model in row.get("models") or []:
             reasoning = True
             if get_model_capabilities is not None and slug:
@@ -506,6 +530,7 @@ def _apply_capabilities(rows: list[dict], *, metadata_config: dict | None = None
             if not _app_server and daybreak_offered(model, provider=slug, base_url=row.get("api_url")):
                 entry["daybreak"] = True
 
+            detail = None
             if reasoning and read_reasoning_catalog is not None:
                 try:
                     detail = read_reasoning_catalog(model)
@@ -517,6 +542,9 @@ def _apply_capabilities(rows: list[dict], *, metadata_config: dict | None = None
                     entry["reasoning"] = False
                 elif detail:
                     entry["can_disable_reasoning"] = not detail.get("mandatory")
+
+            if entry["reasoning"] and (efforts := _declared_efforts(slug.lower(), model, profile, detail)):
+                entry["efforts"] = efforts
 
             caps[model] = entry
 

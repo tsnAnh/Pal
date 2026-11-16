@@ -254,6 +254,16 @@ struct MacInspector: View {
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
                 }
             }
+            InspectorSection(title: String(localized: "Tools"), identifier: "inspectorTools") {
+                EmptyView()
+            } content: {
+                InspectorRow(identifier: "profileToolsRow", action: { router.push(.botTools(botName: botName)) }) {
+                    Image(systemName: "wrench.and.screwdriver").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    Text("Choose which tools this Bot can use").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                }
+            }
             InspectorSection(title: String(localized: "Messaging"), identifier: "inspectorMessaging") {
                 EmptyView()
             } content: {

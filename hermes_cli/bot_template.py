@@ -743,9 +743,11 @@ def _create_routines(routines: list[dict], profile_dir: Path) -> tuple[int, list
     return imported, skipped
 
 
-def _discard_profile(slug: str) -> None:
-    from hermes_cli.profiles import delete_profile
+def discard_profile(slug: str) -> None:
+    from hermes_cli.profiles import delete_profile, get_profile_dir
 
+    if not get_profile_dir(slug).exists():
+        return
     try:
         with contextlib.redirect_stdout(io.StringIO()):
             delete_profile(slug, yes=True)
@@ -774,11 +776,17 @@ def import_template(
     if not reviewed_digest or reviewed_digest != parsed.digest:
         raise _fail("digest_mismatch", "This template changed after it was reviewed. Open it again to review it.")
     slug, shown = _resolve_names(parsed, name, display_name)
-    profile_dir = create_profile(slug, no_alias=True, description=parsed.description or None, soul=parsed.soul)
+    try:
+        profile_dir = create_profile(slug, no_alias=True, description=parsed.description or None, soul=parsed.soul)
+    except FileExistsError:
+        raise
+    except BaseException:
+        discard_profile(slug)
+        raise
     try:
         imported, skipped = _overlay(parsed, profile_dir, shown)
     except BaseException:
-        _discard_profile(slug)
+        discard_profile(slug)
         raise
     return {
         "name": slug,

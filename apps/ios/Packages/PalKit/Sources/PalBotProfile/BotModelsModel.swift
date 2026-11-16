@@ -72,6 +72,11 @@ public final class BotModelsModel {
         return ReasoningEffort.options(for: capability)
     }
 
+    public var effortChoices: [String]? {
+        guard case .levels(let levels) = effortOptions else { return nil }
+        return ReasoningEffort.choices(levels, keeping: effort)
+    }
+
     public func displayName(for choice: ModelChoice) -> String {
         choice.model
     }

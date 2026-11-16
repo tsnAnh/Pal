@@ -44,7 +44,16 @@ public struct ModelCatalogProvider: Sendable, Hashable, Identifiable, Decodable 
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? id
         models = try container.decodeIfPresent([String].self, forKey: .models) ?? []
         hasCredential = try container.decodeIfPresent(Bool.self, forKey: .authenticated) ?? true
-        capabilities = (try? container.decodeIfPresent([String: ModelCapability].self, forKey: .capabilities)) ?? [:]
+        let reported = (try? container.decodeIfPresent([String: TolerantCapability].self, forKey: .capabilities)) ?? [:]
+        capabilities = reported.compactMapValues(\.capability)
+    }
+
+    private struct TolerantCapability: Decodable {
+        let capability: ModelCapability?
+
+        init(from decoder: any Decoder) throws {
+            capability = try? ModelCapability(from: decoder)
+        }
     }
 }
 

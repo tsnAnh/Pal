@@ -1,4 +1,5 @@
 #if os(macOS)
+import PalBotProfile
 import PalDesign
 import SwiftUI
 
@@ -8,18 +9,20 @@ struct MacModalHost: View {
     @Bindable var router: AppRouter
     let hostPool: DeviceHostPool
     @Bindable var createBot: CreateBotModel
+    @Bindable var templateImport: TemplateImportModel
     let hub: SettingsHub
 
     @Environment(MacShell.self) private var shell
     @State private var confirmingSignOut = false
     @State private var confirmingAdd = false
 
-    init(connection: ConnectionModel, roster: RosterModel, router: AppRouter, hostPool: DeviceHostPool, createBot: CreateBotModel, hub: SettingsHub) {
+    init(connection: ConnectionModel, roster: RosterModel, router: AppRouter, hostPool: DeviceHostPool, createBot: CreateBotModel, templateImport: TemplateImportModel, hub: SettingsHub) {
         self.connection = connection
         self.roster = roster
         self.router = router
         self.hostPool = hostPool
         self.createBot = createBot
+        self.templateImport = templateImport
         self.hub = hub
     }
 
@@ -97,7 +100,7 @@ struct MacModalHost: View {
             }
         case .createBot:
             MacModalPanel(width: 404, height: 571, identifier: "createBotSheet", closeIdentifier: "createBotClose", close: { router.dismissSheet() }) {
-                MacCreateBot(model: createBot, roster: roster, router: router)
+                MacCreateBot(model: createBot, importer: templateImport, roster: roster, router: router)
             }
         case .connectApps:
             MacModalPanel(width: 825, height: 643, identifier: "connectAppsPanel", closeIdentifier: "connectApps-close", close: { router.dismissSheet() }) {

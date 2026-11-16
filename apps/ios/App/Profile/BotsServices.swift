@@ -21,6 +21,8 @@ struct BotsServices: Sendable {
     let models: @Sendable (String) -> BotModelClient
     let persona: @Sendable (String) -> BotPersonaClient
     let keys: BotKeysService
+    let toolsets: @Sendable (String) -> BotToolsetsClient
+    let templateImport: TemplateImportClient
     let surfaces: SurfaceCache
 
     @MainActor
@@ -39,6 +41,8 @@ struct BotsServices: Sendable {
         computer = ComputerService(gateway: gateway)
         models = { profile in BotModelClient(gateway: gateway, profile: profile) }
         keys = BotKeysService(gateway: gateway)
+        toolsets = { profile in BotToolsetsClient(gateway: gateway, profile: profile) }
+        templateImport = TemplateImportClient(gateway: gateway)
         surfaces = connection.surfaces
         persona = { profile in BotPersonaClient(gateway: gateway, profile: profile) }
         teach = TeachService(gateway: gateway)

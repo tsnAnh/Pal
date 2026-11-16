@@ -128,6 +128,7 @@ struct RootView: View {
     let hostPool: DeviceHostPool
     let links: BotLinks
     @State private var createBot = CreateBotModel()
+    @State private var templateImport: TemplateImportModel
     @State private var bots: BotsKit
     @State private var rooms: RoomsModel
     @State private var hub: SettingsHub
@@ -145,8 +146,14 @@ struct RootView: View {
         self.links = links
         let kit = BotsKit(connection: model)
         _bots = State(initialValue: kit)
+        _templateImport = State(initialValue: TemplateImportModel(client: kit.services.templateImport))
         _rooms = State(initialValue: RoomsModel(services: kit.services, roster: roster))
         _hub = State(initialValue: SettingsHub(connection: model, roster: roster))
+    }
+
+    private func resetCreateBot() {
+        createBot = CreateBotModel()
+        templateImport = TemplateImportModel(client: bots.services.templateImport)
     }
 
     private var showsWorkspace: Bool {
@@ -226,6 +233,11 @@ struct RootView: View {
                 model: BotModelsModel(client: bots.services.models(name), profile: name, surfaces: bots.services.surfaces),
                 displayName: roster.bot(named: name)?.displayName ?? name
             )
+        case .botTools(let name):
+            BotToolsetsView(
+                model: BotToolsetsModel(client: bots.services.toolsets(name)),
+                displayName: roster.bot(named: name)?.displayName ?? name
+            )
         case .botKeys(let name):
             let displayName = roster.bot(named: name)?.displayName ?? name
             BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name, surfaces: bots.services.surfaces), displayName: displayName)
@@ -278,13 +290,13 @@ struct RootView: View {
             .onChange(of: router.path.isEmpty) { _, _ in settleOpenConversation() }
             .onChange(of: sizeClass) { _, _ in settleOpenConversation() }
             .onChange(of: router.currentBotName) { _, name in rememberOpenConversation(name) }
-            .sheet(item: $router.sheet, onDismiss: { createBot = CreateBotModel() }) { sheet in
+            .sheet(item: $router.sheet, onDismiss: { resetCreateBot() }) { sheet in
                 Group {
                     switch sheet {
                     case .settings:
                         SettingsSheet(model: model, hub: hub, initialRoute: router.settingsRoute, openConnectApps: { router.presentConnectApps() }) { router.dismissSheet() }
                     case .createBot:
-                        CreateBotSheet(model: createBot, roster: roster, router: router)
+                        CreateBotSheet(model: createBot, importer: templateImport, roster: roster, router: router)
                     case .connectApps:
                         ConnectAppsSheet(
                             model: ConnectAppsModel(
@@ -307,10 +319,10 @@ struct RootView: View {
             #else
             .overlay(alignment: .top) { ScreenCaptureBadge(indicator: hostPool.screenIndicator) }
             .overlay {
-                MacModalHost(connection: model, roster: roster, router: router, hostPool: hostPool, createBot: createBot, hub: hub)
+                MacModalHost(connection: model, roster: roster, router: router, hostPool: hostPool, createBot: createBot, templateImport: templateImport, hub: hub)
             }
             .onChange(of: router.sheet) { _, sheet in
-                if sheet == nil { createBot = CreateBotModel() }
+                if sheet == nil { resetCreateBot() }
             }
             #endif
     }

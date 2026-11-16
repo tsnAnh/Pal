@@ -109,8 +109,8 @@ struct BotModelView: View {
             .padding(.bottom, PalMetrics.captionToCardGap)
         GroupedCard(accessibilityIdentifier: "botEffortCard") {
             switch model.effortOptions {
-            case .levels(let levels):
-                effortMenu(levels)
+            case .levels:
+                effortMenu(model.effortChoices ?? [])
             case .unsupported:
                 SettingsRow.value(
                     String(localized: "Effort"), value: String(localized: "Not supported"),
