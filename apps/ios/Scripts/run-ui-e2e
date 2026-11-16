@@ -156,6 +156,7 @@ control_loop() {
         count-offline-ping) probe_count || status=fail ;;
         external-slow-alpha) external_turn bot-alpha "SLOW external turn" || status=fail ;;
         external-clarify-alpha) external_turn bot-alpha "CLARIFY external question" || status=fail ;;
+        external-delegate-alpha) external_turn bot-alpha 'CALL-TOOL delegate_task {"tasks": [{"goal": "count the apples"}, {"goal": "count the pears"}]}' || status=fail ;;
         stop-external) stop_external || status=fail ;;
         drop-staged-images) drop_staged_images || status=fail ;;
         *) status=fail ;;

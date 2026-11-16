@@ -55,13 +55,14 @@ public struct AdmissionStatus: Codable, Sendable, Hashable {
     }
 }
 
-public struct PendingAdmission: Codable, Sendable, Hashable {
+public struct PendingAdmission: Codable, Sendable, Hashable, InboundRowWire {
     public var admissionID: String
     public var status: AdmissionState
     public var sequence: Int?
     public var inputID: String?
     public var text: String?
     public var executionGeneration: Int?
+    public var displayKind: String?
 
     public init(
         admissionID: String,
@@ -69,7 +70,8 @@ public struct PendingAdmission: Codable, Sendable, Hashable {
         sequence: Int? = nil,
         inputID: String? = nil,
         text: String? = nil,
-        executionGeneration: Int? = nil
+        executionGeneration: Int? = nil,
+        displayKind: String? = nil
     ) {
         self.admissionID = admissionID
         self.status = status
@@ -77,6 +79,7 @@ public struct PendingAdmission: Codable, Sendable, Hashable {
         self.inputID = inputID
         self.text = text
         self.executionGeneration = executionGeneration
+        self.displayKind = displayKind
     }
 
     enum CodingKeys: String, CodingKey {
@@ -86,6 +89,7 @@ public struct PendingAdmission: Codable, Sendable, Hashable {
         case inputID = "input_id"
         case text
         case executionGeneration = "execution_generation"
+        case displayKind = "display_kind"
     }
 }
 
@@ -153,7 +157,7 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
     }
 }
 
-public struct WireMessage: Codable, Sendable, Hashable {
+public struct WireMessage: Codable, Sendable, Hashable, InboundRowWire {
     public var role: String
     public var text: String?
     public var content: JSONValue?

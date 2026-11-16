@@ -41,7 +41,7 @@ public struct TimelineToolWire: Codable, Sendable, Hashable {
     }
 }
 
-public struct TimelineEntryWire: Codable, Sendable, Hashable {
+public struct TimelineEntryWire: Codable, Sendable, Hashable, InboundRowWire {
     public enum Role: String, Codable, Sendable, Hashable {
         case user
         case assistant

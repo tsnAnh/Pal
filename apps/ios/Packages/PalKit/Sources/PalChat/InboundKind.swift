@@ -1,4 +1,5 @@
 import Foundation
+import PalProtocol
 
 public struct BotSender: Sendable, Hashable {
     public var name: String
@@ -21,8 +22,8 @@ public enum InboundKind: Sendable, Hashable {
 
 extension InboundKind {
     private static let processCompletionKinds: Set<String> = ["process_complete", "async_delegation_complete"]
-    private static let internalNotificationKind = "internal_notification"
-    private static let backgroundProcessPrefix = "[IMPORTANT: Background process"
+    private static let personKinds: Set<String> = ["steer"]
+    private static let processCompletionPrefixes = ["[IMPORTANT: Background process", "[ASYNC DELEGATION "]
     private static let backgroundBatch = try! NSRegularExpression(
         pattern: "\\A\\[IMPORTANT: (\\d+) background process results arrived "
     )
@@ -33,10 +34,13 @@ extension InboundKind {
         options: [.dotMatchesLineSeparators]
     )
 
-    public static func classify(text: String, displayKind: String?) -> InboundKind {
+    public static func classify(text: String, of row: some InboundRowWire) -> InboundKind {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayKind = row.displayKind
         if let displayKind, processCompletionKinds.contains(displayKind) { return .processCompletion }
-        if trimmed.hasPrefix(backgroundProcessPrefix) || batchCount(in: trimmed) != nil { return .processCompletion }
+        if processCompletionPrefixes.contains(where: trimmed.hasPrefix) || batchCount(in: trimmed) != nil {
+            return .processCompletion
+        }
         let range = NSRange(trimmed.startIndex..., in: trimmed)
         if let match = botStamp.firstMatch(in: trimmed, range: range),
            let name = Range(match.range(at: 1), in: trimmed),
@@ -45,7 +49,7 @@ extension InboundKind {
         {
             return .botMessage(BotSender(name: String(trimmed[name]), handle: String(trimmed[handle])), body: String(trimmed[body]))
         }
-        if displayKind == internalNotificationKind { return .systemNotification }
+        if let displayKind, !personKinds.contains(displayKind) { return .systemNotification }
         return .person
     }
 
