@@ -10,7 +10,7 @@ private struct ChatImageLoaderKey: EnvironmentKey {
 }
 
 private struct ChatImageOpenerKey: EnvironmentKey {
-    static let defaultValue: ((ImageReference) -> Void)? = nil
+    nonisolated(unsafe) static let defaultValue: ((ImageReference) -> Void)? = nil
 }
 
 extension EnvironmentValues {
