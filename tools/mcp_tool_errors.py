@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import errno
 import importlib
+import json
 import logging
 import os
 import re
@@ -535,3 +536,46 @@ def _is_session_expired_error(exc: BaseException) -> bool:
         msg = str(current).lower()
         found = found or isinstance(current, transport_error_types) or any(m in msg for m in _SESSION_EXPIRED_MARKERS)
     return found
+
+
+_REFUSAL_CODE_RE = re.compile(
+    r"(?:^|_)(?:unauthori[sz]ed|unauthenticated|forbidden|permission_denied|access_denied"
+    r"|insufficient_(?:scope|permissions?)|(?:auth(?:entication|orization)?|oauth|credentials?)_required"
+    r"|needs_(?:re)?auth)(?:$|_)")
+_REFUSAL_PLAIN_TEXT = {
+    "thread_credential_required": "needs a T3 Code thread: this tool only works from an agent running inside a "
+                                  "T3 Code thread. Do not retry it from here."}
+
+
+def _payload_refusal_code(obj: Any) -> Optional[str]:
+    if not isinstance(obj, dict):
+        return None
+    for field in ("code", "error_code", "errorCode"):
+        if isinstance(obj.get(field), str):
+            return obj[field]
+    error = obj.get("error")
+    return error if isinstance(error, str) else _payload_refusal_code(error)
+
+
+def typed_refusal_code(structured: Any, error_text: str) -> Optional[str]:
+    """The typed auth/authorization/permission code a *working* server answered with, else None. Read from
+    ``structuredContent`` or from the error text (a JSON payload, or ``code: message``); only a typed code
+    counts, never free prose, so an ordinary failure that merely mentions a word is never taken for one."""
+    candidates = [_payload_refusal_code(structured)]
+    if error_text:
+        try:
+            candidates.append(_payload_refusal_code(json.loads(error_text)))
+        except ValueError:
+            lead = re.match(r"\s*([A-Za-z][\w\-]*)\s*[:\-]", error_text)
+            candidates.append(lead.group(1) if lead else None)
+    for code in candidates:
+        normalized = re.sub(r"[\s\-]+", "_", code.strip().lower()) if isinstance(code, str) else ""
+        if normalized in _REFUSAL_PLAIN_TEXT or _REFUSAL_CODE_RE.search(normalized):
+            return normalized
+    return None
+
+
+def refusal_message(code: str, server_name: str) -> str:
+    return _REFUSAL_PLAIN_TEXT.get(code) or (
+        f"MCP server '{server_name}' refused this call ({code}): the server is working, but it needs sign-in or "
+        f"permission that is not available here. Do not retry the same call.")

@@ -6,6 +6,7 @@ import os
 from unittest.mock import patch
 
 import pytest
+from agent.redact_config import CONFIG_SECRET_PLACEHOLDER
 import hermes_yaml as yaml
 
 from hermes_cli.config import (
@@ -986,8 +987,7 @@ class TestConfigGetRedaction:
         get_config_value(key)
         out = capsys.readouterr().out
         assert self.SECRET not in out
-        # Still identifies the key (mask keeps head/tail) and non-secret siblings stay readable.
-        assert self.SECRET[:4] in out
+        assert CONFIG_SECRET_PLACEHOLDER in out
         if key == "providers":
             assert "gemini" in out
 
@@ -1022,7 +1022,7 @@ class TestConfigGetRedaction:
         get_config_value(key)
         out = capsys.readouterr().out.strip()
         if masked:
-            assert self.SECRET not in out and self.SECRET[:4] in out
+            assert self.SECRET not in out and CONFIG_SECRET_PLACEHOLDER in out
         else:
             assert out == {"TERMINAL_SSH_HOST": self.SECRET, "mcp_servers.s.auth": "oauth"}.get(
                 key, "${UNSET_THING_API_KEY}")
