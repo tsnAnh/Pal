@@ -161,9 +161,9 @@ def publish_progress(turn, event_type, name, preview, kwargs) -> None:
     turn._publish_execution(event_type, payload)
 
 
-def publish_input_absorbed(turn, *, admission_ids, message_uid, text) -> None:
+def publish_input_absorbed(turn, *, admission_ids, message_uid, text, display_kind) -> None:
     turn._publish_execution("input.absorbed", {
-        "admission_ids": list(admission_ids), "message_uid": message_uid, "text": text})
+        "admission_ids": list(admission_ids), "message_uid": message_uid, "text": text, "display_kind": display_kind})
 
 
 def restore(agent, previous: dict | None) -> None:

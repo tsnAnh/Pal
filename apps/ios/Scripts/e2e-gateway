@@ -133,6 +133,8 @@ model:
 YAML
   if [ "$name" = "bot-alpha" ] && [ -z "$SEED" ]; then
     cat >>"$HOME_DIR/profiles/$name/config.yaml" <<YAML
+delegation:
+  gateway_mode: background
 mcp_servers:
   fixture-tools:
     command: "$PYTHON"

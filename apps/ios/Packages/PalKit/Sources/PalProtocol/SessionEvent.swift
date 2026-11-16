@@ -106,11 +106,12 @@ public struct MessageComplete: Codable, Sendable, Hashable {
     }
 }
 
-public struct InputAbsorbed: Codable, Sendable, Hashable {
+public struct InputAbsorbed: Codable, Sendable, Hashable, InboundRowWire {
     public var turnID: String?
     public var admissionIDs: [String]
     public var messageUID: String?
     public var text: String
+    public var displayKind: String?
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -118,6 +119,7 @@ public struct InputAbsorbed: Codable, Sendable, Hashable {
         admissionIDs = (try? container.decodeIfPresent([String].self, forKey: .admissionIDs)) ?? []
         messageUID = try? container.decodeIfPresent(String.self, forKey: .messageUID)
         text = (try? container.decodeIfPresent(String.self, forKey: .text)) ?? ""
+        displayKind = try? container.decodeIfPresent(String.self, forKey: .displayKind)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -125,6 +127,7 @@ public struct InputAbsorbed: Codable, Sendable, Hashable {
         case admissionIDs = "admission_ids"
         case messageUID = "message_uid"
         case text
+        case displayKind = "display_kind"
     }
 }
 

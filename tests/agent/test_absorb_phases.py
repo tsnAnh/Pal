@@ -87,7 +87,7 @@ def test_two_absorbs_before_a_drain_become_one_user_row_that_names_both_admissio
     assert row["display_kind"] == "steer" and row["display_metadata"] == {"admission_ids": ["adm_1", "adm_2"]}
     assert "first\nsecond" in row["content"] and row["message_uid"]
     assert agent.absorbed == [{"admission_ids": ["adm_1", "adm_2"], "message_uid": row["message_uid"],
-                               "text": "first\nsecond"}]
+                               "text": "first\nsecond", "display_kind": "steer"}]
 
 
 def test_a_plain_steer_without_an_admission_writes_a_row_and_announces_nothing():

@@ -69,6 +69,7 @@ class PendingAdmission(AdmissionReceipt):
     # A queued admission in transfer to the running turn (``prompt.steer_queued``): it reads ``started``
     # but goes back to its queue place if its text never reached that turn.
     steering: bool = False
+    display_kind: str | None = None
 
 
 @dataclass(frozen=True)

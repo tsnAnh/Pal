@@ -117,6 +117,7 @@ public struct Transcript: Sendable, Equatable {
     public init() {}
 
     static let absorbedPrefix = "absorbed:"
+    static let hiddenKind = "hidden"
 
     public var absorbedWithoutEcho: [TranscriptItem] {
         items.filter { $0.id.hasPrefix(Self.absorbedPrefix) }
@@ -189,11 +190,11 @@ public struct Transcript: Sendable, Equatable {
         absorbedItemIDs = []
         for admission in snapshot.pending where admission.status == .queued {
             if let inputID = admission.inputID { admissionInputs[admission.admissionID] = inputID }
-            guard let text = admission.text, !text.isEmpty else { continue }
+            guard let text = admission.text, !text.isEmpty, admission.displayKind != Self.hiddenKind else { continue }
             items.append(TranscriptItem(
                 id: Self.echoID(admission.inputID ?? admission.admissionID),
                 content: .user(text: text, delivery: .queued),
-                inbound: InboundKind.classify(text: text, displayKind: nil)
+                inbound: InboundKind.classify(text: text, of: admission)
             ))
         }
         for prompt in snapshot.prompts { addCard(prompt) }
@@ -340,13 +341,13 @@ public struct Transcript: Sendable, Equatable {
         let id = message.rowID.map { "row:\($0)" } ?? UUID().uuidString
         switch message.role {
         case "user":
-            guard message.displayKind != "hidden" else { return [] }
+            guard message.displayKind != hiddenKind else { return [] }
             let text = message.plainText
             return [TranscriptItem(
                 id: id,
                 content: .user(text: text, delivery: .sent),
                 timestamp: serverDate(message.timestamp),
-                inbound: InboundKind.classify(text: text, displayKind: message.displayKind),
+                inbound: InboundKind.classify(text: text, of: message),
                 uid: message.messageUID
             )]
         case "assistant":
@@ -504,7 +505,7 @@ public struct Transcript: Sendable, Equatable {
             items.append(TranscriptItem(
                 id: id,
                 content: .user(text: text, delivery: .sent),
-                inbound: InboundKind.classify(text: text, displayKind: nil),
+                inbound: InboundKind.classify(text: text, of: event),
                 uid: event.messageUID
             ))
             absorbedItemIDs.insert(id)
@@ -542,7 +543,7 @@ public struct Transcript: Sendable, Equatable {
     private mutating func materialize(_ admission: PendingAdmission) {
         if let inputID = admission.inputID { admissionInputs[admission.admissionID] = inputID }
         guard !absorbedAdmissions.contains(admission.admissionID) else { return }
-        guard let text = admission.text, !text.isEmpty else { return }
+        guard let text = admission.text, !text.isEmpty, admission.displayKind != Self.hiddenKind else { return }
         let id = Self.echoID(admission.inputID ?? admission.admissionID)
         if let index = items.firstIndex(where: { $0.id == id }) {
             if admission.status != .queued, case .user(let existing, _) = items[index].content {
@@ -554,7 +555,7 @@ public struct Transcript: Sendable, Equatable {
         items.append(TranscriptItem(
             id: id,
             content: .user(text: text, delivery: admission.status == .queued ? .queued : .sent),
-            inbound: InboundKind.classify(text: text, displayKind: nil)
+            inbound: InboundKind.classify(text: text, of: admission)
         ))
     }
 

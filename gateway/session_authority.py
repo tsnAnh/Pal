@@ -457,8 +457,10 @@ class SessionAuthority:
         if text is None:
             text = payload.get('native_text_v1', {}).get('event', {}).get('text', '')
         from gateway.session_queued_controls import queued_controls
+        from gateway.session_automation import pending_display_kind
         return PendingAdmission(**vars(self._receipt(row)), input_id=row['request_id'], text=text,
-                                controls=queued_controls(self, row), steering=row['outcome'] == STEERING)
+                                controls=queued_controls(self, row), steering=row['outcome'] == STEERING,
+                                display_kind=pending_display_kind(payload))
 
     def _publish_pending(self, ref):
         from gateway.session_retirement import restore_retired

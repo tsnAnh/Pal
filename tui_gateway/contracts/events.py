@@ -200,6 +200,7 @@ class InputAbsorbedPayload(Payload):
     admission_ids: list[str]
     message_uid: str
     text: str
+    display_kind: str | None = None
 
 
 event("input.absorbed", InputAbsorbedPayload,

@@ -137,6 +137,7 @@ class CanonicalPendingAdmission(AdmissionStatus):
     # until that turn settles it, but it returns to ``queued`` if its text never reached the turn, so a
     # client keeps it at its queued rank. Absent from an owner that predates it.
     steering: bool | None = None
+    display_kind: str | None = None
 
 
 class CanonicalPendingPrompt(Result):

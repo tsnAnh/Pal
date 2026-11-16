@@ -6290,6 +6290,7 @@ export interface CanonicalPendingAdmission {
   text: string
   controls?: ('steer' | 'replace')[] | null
   steering?: boolean | null
+  display_kind?: string | null
 }
 export interface CanonicalPendingPrompt {
   kind: 'approval' | 'clarify'
@@ -7359,6 +7360,7 @@ export interface InputAbsorbedPayload {
   admission_ids: string[]
   message_uid: string
   text: string
+  display_kind?: string | null
 }
 /** ``prompt_turn._complete_turn_payload`` / ``session_auto_continue._emit_terminal_turn_error`` / ``agent_callbacks._mirror_subagent_to_child`` (child watch mirror: ``text`` only) / ``compute_host_bridge`` (``text`` + ``status``). */
 export interface MessageCompletePayload {

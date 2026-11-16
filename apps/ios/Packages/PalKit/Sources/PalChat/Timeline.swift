@@ -374,7 +374,7 @@ struct Timeline: Sendable {
         var parts: [(TranscriptItem, [TimelineRef])] = []
         switch wire.role {
         case .user, .notice:
-            var inbound = InboundKind.classify(text: wire.text, displayKind: wire.displayKind)
+            var inbound = InboundKind.classify(text: wire.text, of: wire)
             if wire.role == .notice, inbound == .person { inbound = .systemNotification }
             parts.append((TranscriptItem(
                 id: wire.id, content: .user(text: wire.text, delivery: .sent), timestamp: date, inbound: inbound, uid: uid
