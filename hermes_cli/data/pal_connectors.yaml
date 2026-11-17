@@ -2,8 +2,8 @@ version: 1
 connectors:
 - id: airtable
   name: Airtable
-  icon: plugin_glyph
-  category: Other
+  icon: airtable
+  category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.airtable.com/mcp
   replaces_portal_slug: airtable
@@ -11,8 +11,8 @@ connectors:
   source: https://support.airtable.com/articles/9897799762-using-the-airtable-mcp-server
 - id: atlassian
   name: Atlassian
-  icon: plugin_glyph
-  category: Other
+  icon: atlassian
+  category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.atlassian.com/v1/mcp/authv2
   replaces_portal_slug: jira
@@ -21,23 +21,23 @@ connectors:
 - id: aws-knowledge
   name: Aws Knowledge
   icon: plugin_glyph
-  category: Other
+  category: Hosting and infrastructure
   method: none
   mcp_url: https://knowledge-mcp.global.api.aws
   verified: false
   source: https://awslabs.github.io/mcp/servers/aws-knowledge-mcp-server/
 - id: buildkite
   name: Buildkite
-  icon: plugin_glyph
-  category: Other
+  icon: buildkite
+  category: Developer tools
   method: mcp_oauth
   mcp_url: https://mcp.buildkite.com/mcp
   verified: true
   source: https://buildkite.com/docs/apis/mcp-server
 - id: calendly
   name: Calendly
-  icon: plugin_glyph
-  category: Other
+  icon: calendly
+  category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.calendly.com
   replaces_portal_slug: calendly
@@ -46,7 +46,7 @@ connectors:
 - id: canva
   name: Canva
   icon: plugin_glyph
-  category: Other
+  category: Design and web
   method: oauth_client
   mcp_url: https://api.canva.com/connect/v1/mcp
   replaces_portal_slug: canva_mcp
@@ -54,32 +54,32 @@ connectors:
   source: https://www.canva.dev/docs/apps/quickstart/
 - id: circleci
   name: Circleci
-  icon: plugin_glyph
-  category: Other
+  icon: circleci
+  category: Developer tools
   method: mcp_oauth
   mcp_url: https://mcp.circleci.com/v1/mcp
   verified: true
   source: https://circleci.com/docs/guides/toolkit/circleci-mcp-overview/
 - id: clickhouse
   name: ClickHouse
-  icon: plugin_glyph
-  category: Other
+  icon: clickhouse
+  category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.clickhouse.cloud/mcp
   verified: true
   source: https://clickhouse.com/docs/products/cloud/features/ai-ml/remote-mcp
 - id: clickup
   name: Clickup
-  icon: plugin_glyph
-  category: Other
+  icon: clickup
+  category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.clickup.com/mcp
   verified: true
   source: https://developer.clickup.com/docs/connect-an-ai-assistant-to-clickups-mcp-server
 - id: cloudflare
   name: Cloudflare
-  icon: plugin_glyph
-  category: Other
+  icon: cloudflare
+  category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.cloudflare.com/mcp?codemode=false
   replaces_portal_slug: cloudflare_mcp
@@ -87,8 +87,8 @@ connectors:
   source: https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/
 - id: cloudinary
   name: Cloudinary
-  icon: plugin_glyph
-  category: Other
+  icon: cloudinary
+  category: Design and web
   method: mcp_oauth
   mcp_url: https://asset-management.mcp.cloudinary.com/mcp
   verified: true
@@ -96,7 +96,7 @@ connectors:
 - id: comfy-cloud
   name: Comfy Cloud
   icon: plugin_glyph
-  category: Other
+  category: Design and web
   method: mcp_oauth
   mcp_url: https://cloud.comfy.org/mcp
   verified: true
@@ -104,7 +104,7 @@ connectors:
 - id: context7
   name: Context7
   icon: plugin_glyph
-  category: Other
+  category: Developer tools
   method: none
   mcp_url: https://mcp.context7.com/mcp
   verified: true
@@ -112,15 +112,15 @@ connectors:
 - id: craft
   name: Craft
   icon: plugin_glyph
-  category: Other
+  category: Docs and files
   method: mcp_oauth
   mcp_url: https://mcp.craft.do/my/mcp
   verified: false
   source: https://support.craft.do/hc/en-us/articles/29455875123101
 - id: datadog
   name: Datadog
-  icon: plugin_glyph
-  category: Other
+  icon: datadog
+  category: Monitoring and analytics
   method: mcp_oauth
   mcp_url: https://mcp.datadoghq.com/v1/mcp
   replaces_portal_slug: datadog_mcp
@@ -129,15 +129,15 @@ connectors:
 - id: deepwiki
   name: Deepwiki
   icon: plugin_glyph
-  category: Other
+  category: Developer tools
   method: none
   mcp_url: https://mcp.deepwiki.com/mcp
   verified: true
   source: https://docs.devin.ai/work-with-devin/deepwiki-mcp
 - id: dropbox
   name: Dropbox
-  icon: plugin_glyph
-  category: Other
+  icon: dropbox
+  category: Docs and files
   method: oauth_client
   mcp_url: https://mcp.dropbox.com/mcp
   replaces_portal_slug: dropbox
@@ -145,8 +145,8 @@ connectors:
   source: https://help.dropbox.com/integrations/connect-dropbox-mcp-server
 - id: figma
   name: Figma
-  icon: plugin_glyph
-  category: Other
+  icon: figma
+  category: Design and web
   method: oauth_client
   mcp_url: https://mcp.figma.com/mcp
   replaces_portal_slug: figma
@@ -155,23 +155,23 @@ connectors:
 - id: gamma
   name: Gamma
   icon: plugin_glyph
-  category: Other
+  category: Docs and files
   method: mcp_oauth
   mcp_url: https://mcp.gamma.app/mcp
   verified: true
   source: https://developers.gamma.app/docs/gamma-mcp-server
 - id: github
   name: Github
-  icon: plugin_glyph
-  category: Other
+  icon: github
+  category: Developer tools
   method: api_key
   mcp_url: https://api.githubcopilot.com/mcp/
   verified: true
   source: https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md
 - id: gitlab
   name: Gitlab
-  icon: plugin_glyph
-  category: Other
+  icon: gitlab
+  category: Developer tools
   method: mcp_oauth
   mcp_url: https://gitlab.com/api/v4/mcp
   verified: true
@@ -179,7 +179,7 @@ connectors:
 - id: google-workspace
   name: Google Workspace
   icon: plugin_glyph
-  category: Files and docs
+  category: Docs and files
   method: oauth_client
   oauth:
     authorization_url: https://accounts.google.com/o/oauth2/v2/auth
@@ -199,24 +199,24 @@ connectors:
   source: https://developers.google.com/identity/protocols/oauth2/web-server
 - id: grafana
   name: Grafana
-  icon: plugin_glyph
-  category: Other
+  icon: grafana
+  category: Monitoring and analytics
   method: mcp_oauth
   mcp_url: https://mcp.grafana.com/mcp
   verified: true
   source: https://grafana.com/docs/grafana-cloud/ai-tools/mcp-servers/cloud-mcp/
 - id: hugging_face
   name: Hugging Face
-  icon: plugin_glyph
-  category: Other
+  icon: hugging_face
+  category: Developer tools
   method: mcp_oauth
   mcp_url: https://huggingface.co/mcp
   verified: true
   source: https://huggingface.co/docs/hub/agents-mcp
 - id: intercom
   name: Intercom
-  icon: plugin_glyph
-  category: Other
+  icon: intercom
+  category: Sales and support
   method: mcp_oauth
   mcp_url: https://mcp.intercom.com/mcp
   replaces_portal_slug: intercom_mcp
@@ -224,8 +224,8 @@ connectors:
   source: https://developers.intercom.com/docs/guides/mcp
 - id: linear
   name: Linear
-  icon: plugin_glyph
-  category: Other
+  icon: linear
+  category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.linear.app/mcp
   replaces_portal_slug: linear
@@ -234,23 +234,23 @@ connectors:
 - id: microsoft-learn
   name: Microsoft Learn
   icon: plugin_glyph
-  category: Other
+  category: Developer tools
   method: none
   mcp_url: https://learn.microsoft.com/api/mcp
   verified: true
   source: https://learn.microsoft.com/en-us/training/support/mcp-get-started
 - id: mintlify
   name: Mintlify
-  icon: plugin_glyph
-  category: Other
+  icon: mintlify
+  category: Docs and files
   method: none
   mcp_url: https://mintlify.com/docs/mcp
   verified: true
   source: https://www.mintlify.com/docs/ai/model-context-protocol
 - id: miro
   name: Miro
-  icon: plugin_glyph
-  category: Other
+  icon: miro
+  category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.miro.com/
   verified: true
@@ -258,7 +258,7 @@ connectors:
 - id: monday
   name: Monday
   icon: plugin_glyph
-  category: Other
+  category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.monday.com/mcp
   verified: true
@@ -266,15 +266,15 @@ connectors:
 - id: motherduck
   name: Motherduck
   icon: plugin_glyph
-  category: Other
+  category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://api.motherduck.com/mcp
   verified: true
   source: https://motherduck.com/docs/key-tasks/ai-and-motherduck/mcp-setup/
 - id: neon
   name: Neon
-  icon: plugin_glyph
-  category: Other
+  icon: neon
+  category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.neon.tech/mcp
   replaces_portal_slug: neon_mcp
@@ -282,16 +282,16 @@ connectors:
   source: https://neon.com/docs/ai/neon-mcp-server
 - id: netlify
   name: Netlify
-  icon: plugin_glyph
-  category: Other
+  icon: netlify
+  category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://netlify-mcp.netlify.app/mcp
   verified: true
   source: https://docs.netlify.com/build/build-with-ai/agent-setup-guides/agent-setup-overview/
 - id: notion
   name: Notion
-  icon: plugin_glyph
-  category: Other
+  icon: notion
+  category: Work management
   method: mcp_oauth
   mcp_url: https://mcp.notion.com/mcp
   replaces_portal_slug: notion
@@ -299,16 +299,16 @@ connectors:
   source: https://developers.notion.com/guides/mcp/build-mcp-client
 - id: postman
   name: Postman
-  icon: plugin_glyph
-  category: Other
+  icon: postman
+  category: Developer tools
   method: mcp_oauth
   mcp_url: https://mcp.postman.com/minimal
   verified: true
   source: https://learning.postman.com/docs/reference/postman-api/postman-mcp-server/postman-mcp-remote-server/
 - id: prisma-postgres
   name: Prisma Postgres
-  icon: plugin_glyph
-  category: Other
+  icon: prisma-postgres
+  category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.prisma.io/mcp
   replaces_portal_slug: prisma
@@ -316,8 +316,8 @@ connectors:
   source: https://www.prisma.io/docs/postgres/integrations/mcp-server
 - id: railway
   name: Railway
-  icon: plugin_glyph
-  category: Other
+  icon: railway
+  category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.railway.com
   replaces_portal_slug: railway
@@ -326,15 +326,15 @@ connectors:
 - id: semgrep
   name: Semgrep
   icon: plugin_glyph
-  category: Other
+  category: Developer tools
   method: mcp_oauth
   mcp_url: https://mcp.semgrep.ai/mcp
   verified: false
   source: https://semgrep.dev/docs/mcp
 - id: sentry
   name: Sentry
-  icon: plugin_glyph
-  category: Other
+  icon: sentry
+  category: Monitoring and analytics
   method: mcp_oauth
   mcp_url: https://mcp.sentry.dev/mcp
   replaces_portal_slug: sentry_mcp
@@ -343,15 +343,15 @@ connectors:
 - id: slack
   name: Slack
   icon: plugin_glyph
-  category: Other
+  category: Communication
   method: oauth_client
   mcp_url: https://mcp.slack.com/mcp
   verified: true
   source: https://docs.slack.dev/ai/mcp-server
 - id: stripe
   name: Stripe
-  icon: plugin_glyph
-  category: Other
+  icon: stripe
+  category: Finance
   method: mcp_oauth
   mcp_url: https://mcp.stripe.com
   replaces_portal_slug: stripe_mcp
@@ -359,8 +359,8 @@ connectors:
   source: https://docs.stripe.com/mcp
 - id: supabase
   name: Supabase
-  icon: plugin_glyph
-  category: Other
+  icon: supabase
+  category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.supabase.com/mcp
   replaces_portal_slug: supabase
@@ -368,8 +368,8 @@ connectors:
   source: https://supabase.com/docs/guides/ai-tools/mcp
 - id: todoist
   name: Todoist
-  icon: plugin_glyph
-  category: Other
+  icon: todoist
+  category: Work management
   method: mcp_oauth
   mcp_url: https://ai.todoist.net/mcp
   replaces_portal_slug: todoist
@@ -378,22 +378,22 @@ connectors:
 - id: twilio-docs
   name: Twilio Docs
   icon: plugin_glyph
-  category: Other
+  category: Developer tools
   method: none
   mcp_url: https://mcp.twilio.com/docs
   verified: true
   source: https://www.twilio.com/docs/ai/mcp
 - id: unreal-engine
   name: Unreal Engine
-  icon: plugin_glyph
-  category: Other
+  icon: unreal-engine
+  category: Developer tools
   method: none
   mcp_url: http://127.0.0.1:8000/mcp
   verified: true
   source: https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor
 - id: upwork
   name: Upwork
-  icon: plugin_glyph
+  icon: upwork
   category: Other
   method: mcp_oauth
   mcp_url: https://mcp.upwork.com/mcp
@@ -401,8 +401,8 @@ connectors:
   source: https://www.upwork.com/ai/mcp
 - id: vercel
   name: Vercel
-  icon: plugin_glyph
-  category: Other
+  icon: vercel
+  category: Hosting and infrastructure
   method: mcp_oauth
   mcp_url: https://mcp.vercel.com
   replaces_portal_slug: vercel_mcp
@@ -410,15 +410,15 @@ connectors:
   source: https://vercel.com/docs/mcp
 - id: webflow
   name: Webflow
-  icon: plugin_glyph
-  category: Other
+  icon: webflow
+  category: Design and web
   method: mcp_oauth
   mcp_url: https://mcp.webflow.com/mcp
   verified: true
   source: https://developers.webflow.com/mcp/reference/getting-started
 - id: wolfram
   name: Wolfram
-  icon: plugin_glyph
+  icon: wolfram
   category: Other
   method: none
   mcp_url: https://agenttools.wolfram.com/mcp
@@ -426,8 +426,8 @@ connectors:
   source: https://www.wolfram.com/agent-tools/
 - id: wordpress-com
   name: Wordpress Com
-  icon: plugin_glyph
-  category: Other
+  icon: wordpress-com
+  category: Design and web
   method: mcp_oauth
   mcp_url: https://public-api.wordpress.com/wpcom/v2/mcp/v1
   verified: true

@@ -64,7 +64,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         let live = try await base.call("connectors.catalog", params)
         let kept = (live["connectors"]?.arrayValue ?? []).filter { progress[$0["slug"]?.stringValue ?? ""] == nil }
         let google: JSONValue = [
-            "slug": "google-workspace", "name": "Google Workspace", "category": "Files and docs", "icon": "plugin_glyph",
+            "slug": "google-workspace", "name": "Google Workspace", "category": "Docs and files", "icon": "plugin_glyph",
             "method": "oauth_client", "verified": true, "status": .string(status("google-workspace")), "notes": .string(Self.googleNotes),
         ]
         return ["connectors": .array(kept + [google])]

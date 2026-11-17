@@ -214,7 +214,8 @@ extension ConnectAppsSheet {
     @ViewBuilder
     func icon(for app: ConnectApp) -> some View {
         switch app.source {
-        case .catalog, .mcp, .custom, .googleWorkspace: PluginGlyphTile()
+        case .catalog: ConnectorLogoTile(app: app)
+        case .mcp, .custom, .googleWorkspace: PluginGlyphTile()
         }
     }
 }
