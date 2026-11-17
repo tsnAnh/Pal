@@ -190,7 +190,7 @@ def approver_present() -> bool:
 
 
 def _gate(policy: ActionPolicy, server_name: str, tool_name: str,
-          args: Optional[Mapping]) -> tuple[Optional[str], Optional[ActionGrant]]:
+          args: Optional[Mapping], allow_auto_approve: bool) -> tuple[Optional[str], Optional[ActionGrant]]:
     kind = policy.classify(tool_name)
     if kind == READ:
         return None, None
@@ -204,19 +204,19 @@ def _gate(policy: ActionPolicy, server_name: str, tool_name: str,
     args = dict(args or {})
     grant = ActionGrant(call_digest(server_name, tool_name, args))
     session_key = get_current_session_key(default="")
-    if session_key and auto_approve_enabled(session_key, server_name):
+    if allow_auto_approve and session_key and auto_approve_enabled(session_key, server_name):
         logger.info("MCP action auto-approved: server=%s tool=%s", server_name, tool_name)
         return None, grant
     refusal = _approve(server_name, tool_name, args)
     return (refusal, None) if refusal else (None, grant)
 
 
-def gate(policy: ActionPolicy, server_name: str, tool_name: str,
-         args: Optional[Mapping]) -> tuple[Optional[str], Optional[ActionGrant]]:
+def gate(policy: ActionPolicy, server_name: str, tool_name: str, args: Optional[Mapping], *,
+         allow_auto_approve: bool = True) -> tuple[Optional[str], Optional[ActionGrant]]:
     """``(error, None)`` blocks the call, ``(None, grant)`` lets one exact call through once, ``(None, None)``
     is a read. Any failure blocks."""
     try:
-        return _gate(policy, server_name, tool_name, args)
+        return _gate(policy, server_name, tool_name, args, allow_auto_approve)
     except Exception as exc:  # health: allow BLE001 -- fail closed on any error; only the exception type is logged so call arguments never reach a log
         logger.error("MCP action gate failed for %s/%s (%s); call blocked", server_name, tool_name,
                      type(exc).__name__)

@@ -33,6 +33,8 @@ _HERMES_CORE_TOOLS = [
     "computer_use",
     # Service-gated connector account status and authorization links.
     "manage_connections",
+    "slack_list_channels", "slack_list_users", "slack_read_channel", "slack_read_thread",
+    "slack_post_message", "slack_send_dm",
 ]
 
 # Webhook payloads are untrusted third-party content: no file/system execution.
@@ -125,6 +127,8 @@ TOOLSETS = {
     "memory": _ts("Persistent memory across sessions (personal notes + user profile)", ["memory"]),
     "context_engine": _ts("Runtime tools exposed by the active context engine"),
     "session_search": _ts("Search and recall past conversations with summarization", ["session_search"]),
+    "slack": _ts("This bot's own Slack workspace: channels it joined, its DMs, and approved posts",
+                 [t for t in _HERMES_CORE_TOOLS if t.startswith("slack_")]),
     "connections": _ts("Remote connector discovery, execution, and account authorization", ["manage_connections"]),
     "project": _ts("Desktop Projects — create/switch named workspaces (GUI sessions only)", ["desktop_project"]),
     "bot_room": _ts("Verified text-only Group Chat turn capabilities"),
