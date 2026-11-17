@@ -484,7 +484,8 @@ struct GoogleCatalogTests {
     }
 
     @Test func aFailingStatusCallHidesOnlyTheGoogleRow() async throws {
-        let hosted = reply(.object(["connectors": .array([.object(["slug": "slack", "name": "Slack", "category": "Communication", "method": "none", "status": "not_connected"])])]))
+        let slack: JSONValue = .object(["slug": "slack", "name": "Slack", "category": "Communication", "method": "none", "status": "not_connected"])
+        let hosted = reply(.object(["connectors": .array([slack])]))
         for failure in [gatewayError(4403), gatewayError(5321, "unreachable"), gatewayError(-32601)] {
             let rpc = CustomRPC([
                 "connectors.catalog": hosted, "mcp.catalog": reply(.object(["servers": .array([])])), "google_workspace.status": failure,
