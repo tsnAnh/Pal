@@ -65,10 +65,7 @@ final class BotChatE2ETests: E2ETestCase {
 
         send(app, "CLARIFY again")
         waitFor(app.descendants(matching: .any)["clarifyCard"], timeout: 60, "second clarify card")
-        app.buttons["clarifyOther"].hit()
-        waitFor(app.keyboards.firstMatch, timeout: 5, "Something else focuses the composer")
-        app.typeText("chocolate")
-        app.buttons["sendButton"].hit()
+        send(app, "chocolate")
         waitFor(bubbles(app, "assistantBubble", containing: "Got it, chocolate").firstMatch, timeout: 60, "composer answer completes the turn")
         waitFor(bubbles(app, "clarifyAnswered", containing: "chocolate").firstMatch, timeout: 10, "composer answer is shown on the answered card")
         XCTAssertEqual(bubbles(app, "userBubble", containing: "chocolate").count, 0, "answer is not a new chat message")

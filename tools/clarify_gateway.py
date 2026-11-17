@@ -282,25 +282,25 @@ def clear_session(session_key: str) -> int:
 
 def resolve_clarify_timeout(config: dict) -> int:
     """Clarify timeout (seconds): legacy ``clarify.timeout`` if explicitly set, else
-    ``agent.clarify_timeout``, else 90 — the single source of truth for every surface
-    (gateway, CLI, TUI). ``<= 0`` is kept verbatim (unlimited); non-numeric -> 90."""
+    ``agent.clarify_timeout``, else 0 (unlimited) — the single source of truth for every surface
+    (gateway, CLI, TUI). ``<= 0`` is kept verbatim (unlimited); non-numeric -> 0."""
     raw = (config.get("clarify") or {}).get("timeout")
     if raw is None:
-        raw = (config.get("agent") or {}).get("clarify_timeout", 90)
+        raw = (config.get("agent") or {}).get("clarify_timeout", 0)
     try:
         return int(raw)
     except (TypeError, ValueError):
-        return 90
+        return 0
 
 
 def get_clarify_timeout() -> int:
-    """Clarify timeout from config.yaml; 0/negative = unlimited. Default 90: an unanswered
-    question frees the turn quickly; a reply typed instead of an answer cancels it at once."""
+    """Clarify timeout from config.yaml; 0/negative = unlimited. Default 0: a question waits
+    until answered or dismissed; a reply typed instead of an answer cancels it at once."""
     try:
         from hermes_cli.config import load_config
         return resolve_clarify_timeout(load_config() or {})
     except Exception:
-        return 90
+        return 0
 
 
 def clarify_timeout_for(agent) -> int:
