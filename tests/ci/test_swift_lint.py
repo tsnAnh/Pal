@@ -64,7 +64,7 @@ def repo(tmp_path: Path, binary: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     _git(root, "init", "-q", "-b", "main")
     _git(root, "config", "user.email", "t@example.invalid")
     _git(root, "config", "user.name", "t")
-    for guard in sl.GUARDS:
+    for guard in (*sl.GUARDS, "scripts/ci/swift_fault_details_allowlist.txt"):
         _write(root, guard, (REPO / guard).read_text(encoding="utf-8"))
     _write(root, f"{sl.IOS}/{sl.CONFIG}", (REPO / sl.IOS / sl.CONFIG).read_text(encoding="utf-8"))
     _write(root, f"{sl.IOS}/App/Legacy.swift", BAD)

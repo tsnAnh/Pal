@@ -14,7 +14,7 @@ Hermes is a personal AI agent running one agent core across a CLI, a messaging g
 sessions (memory + skills), delegates to subagents, runs scheduled jobs, and drives a real terminal
 and browser. It is extended through **plugins and skills**, not by growing the core.
 
-Two invariants shape almost every design decision and every review:
+Two invariants shape every design and review:
 
 - **Per-conversation prompt caching is sacred.** Mutating past context, swapping toolsets,
   reloading memories or rebuilding the system prompt mid-conversation breaks the cached prefix and
@@ -58,7 +58,7 @@ useful, unreachable otherwise).
 
 ## Development Environment
 
-`source ./activate` (fish: `activate.fish`, PowerShell: `activate.ps1`) provisions the PM
+`source ./activate` (or `activate.fish`/`.ps1`) provisions the PM
 environment; pick an isolated `HERMES_HOME`/`HERMES_RUNTIME_DIR` first
 (`website/docs/reference/package-management.md#developer-workflow`). Tests need the separate test
 environment in `CONTRIBUTING.md`. **`python scripts/check`** runs every blocking lint check CI runs, with CI's pinned tools; `--install-hook pre-push` runs it
@@ -78,7 +78,7 @@ hermes-agent/
 ├── hermes_state.py       # SessionDB facade; hermes_state_*.py siblings
 ├── hermes_constants.py   # get_hermes_home(), display_hermes_home() — profile-aware paths
 ├── scripts/              # check, run_tests.sh, code_health/, ci/
-└── website/              # Docusaurus docs (developer-guide/ holds the long-form area docs)
+└── website/              # Docusaurus docs
 ```
 
 **User state:** `~/.hermes/config.yaml` (settings), `.env` (secrets only), `logs/` (`hermes logs`);
@@ -132,8 +132,8 @@ Every former god file is a **facade** (public entry points + the names other pac
   change-detectors or source-reading tests; host-specific behaviour is tested on that host with
   `@pytest.mark.platforms(...)`, never by faking `sys.platform`; tests never write to `~/.hermes/`
   (more: `tests/AGENTS.md`).
-
 - **Swift:** `python scripts/check --only swift-lint` before every push.
+- **App bug report** (failure, trace id): `hermes diag recent --minutes 30 --json` first.
 
 ## Routing Table — working in X → read X/AGENTS.md
 
