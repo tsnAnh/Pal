@@ -16,6 +16,8 @@ SLOW_DELAY = 0.25
 HOLD_SECONDS = 12
 CLARIFY_QUESTION = "Which flavor do you want?"
 CLARIFY_CHOICES = ["vanilla", "chocolate"]
+CLARIFY_SECOND_QUESTION = "Which size?"
+CLARIFY_SECOND_CHOICES = ["small", "large"]
 DM_PROMPT_PREFIX = "MESSAGE_AGENT "
 DM_BODY_MARKER = " :: "
 DM_STAMP_PREFIX = "Message from \U0001f916 "
@@ -250,6 +252,10 @@ def plan(body):
         return "final", clarify_reply(text_of(last.get("content"))), NORMAL_DELAY
     if "clarify" in names and last_role == "user" and NARRATED_CLARIFY_TRIGGER in last_user:
         return "clarify", {"preamble": COMMENTARY}, COMMENTARY_DELAY
+    if "clarify" in names and last_role == "user" and "CLARIFYMULTI" in last_user:
+        return "clarify", {"variant": "multi"}, 0
+    if "clarify" in names and last_role == "user" and "CLARIFYBATCH" in last_user:
+        return "clarify", {"variant": "batch"}, 0
     if "clarify" in names and last_role == "user" and "CLARIFY" in last_user:
         return "clarify", None, 0
     if names and last_role == "user" and "HOLD" in last_user:
@@ -333,8 +339,12 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def clarify_arguments(self):
-        return json.dumps({"questions": [{"question": CLARIFY_QUESTION, "choices": CLARIFY_CHOICES}]})
+    def clarify_arguments(self, content):
+        variant = content.get("variant") if isinstance(content, dict) else None
+        questions = [{"question": CLARIFY_QUESTION, "choices": CLARIFY_CHOICES, "multi_select": variant == "multi"}]
+        if variant == "batch":
+            questions.append({"question": CLARIFY_SECOND_QUESTION, "choices": CLARIFY_SECOND_CHOICES})
+        return json.dumps({"questions": questions})
 
     def scripted_call(self, call):
         return {"id": "call_stub_" + uuid.uuid4().hex[:8], "type": "function",
@@ -342,7 +352,7 @@ class Handler(BaseHTTPRequestHandler):
     def tool_call(self, kind, content):
         if kind == "iphone":
             return "call_stub_iphone", "iphone", json.dumps(content)
-        return "call_stub_clarify", "clarify", self.clarify_arguments()
+        return "call_stub_clarify", "clarify", self.clarify_arguments(content)
 
     def complete(self, kind, content):
         message = {"role": "assistant", "content": None}

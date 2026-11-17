@@ -5,11 +5,13 @@ import SwiftUI
 
 struct ClarifyCard: View {
     @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.focusComposer) private var focusComposer
     let prompt: PendingPrompt
     let answer: (String) -> Void
 
     @State private var selection: Set<Int> = []
+    @State private var typingOther = false
+    @State private var otherText = ""
+    @FocusState private var otherFocused: Bool
 
     private var isMulti: Bool { prompt.multiSelect == true }
     private var question: String { prompt.question ?? String(localized: "Question") }
@@ -26,13 +28,17 @@ struct ClarifyCard: View {
                 .accessibilityAddTraits(selection.contains(index) ? .isSelected : [])
                 .accessibilityIdentifier("clarifyChoice-\(index)")
             }
-            Button { focusComposer?() } label: {
-                ClarifyRow(letter: ClarifyRow.letter(prompt.choices.count), text: String(localized: "Something else"), style: .freeText)
+            Button { openOther() } label: {
+                ClarifyRow(letter: ClarifyRow.letter(prompt.choices.count), text: String(localized: "Something else"), style: typingOther ? .chosen : .freeText)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text(verbatim: "\(ClarifyRow.letter(prompt.choices.count)), \(String(localized: "Something else"))"))
             .accessibilityHint(Text("Type your own answer"))
+            .accessibilityAddTraits(typingOther ? .isSelected : [])
             .accessibilityIdentifier("clarifyOther")
+            if typingOther {
+                otherField
+            }
             if isMulti, !prompt.choices.isEmpty {
                 Button("Confirm and continue") { confirm() }
                     .buttonStyle(.glass(PalGlass.style(interactive: false, colorScheme: colorScheme)))
@@ -51,7 +57,46 @@ struct ClarifyCard: View {
         .accessibilityIdentifier("clarifyCard")
     }
 
+    private var trimmedOther: String { otherText.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    private var otherField: some View {
+        VStack(alignment: .trailing, spacing: 8) {
+            TextField("Type your answer", text: $otherText)
+                .textFieldStyle(.roundedBorder)
+                .focused($otherFocused)
+                .submitLabel(.send)
+                .onSubmit { sendOther() }
+                .onAppear { otherFocused = true }
+                .accessibilityIdentifier("clarifyOtherField")
+            HStack(spacing: 12) {
+                Button("Cancel") { closeOther() }
+                    .accessibilityIdentifier("clarifyOtherCancel")
+                Button("Send") { sendOther() }
+                    .buttonStyle(.glass(PalGlass.style(interactive: false, colorScheme: colorScheme)))
+                    .disabled(trimmedOther.isEmpty)
+                    .accessibilityIdentifier("clarifyOtherSend")
+            }
+        }
+        .padding(.top, 4)
+    }
+
+    private func openOther() {
+        typingOther = true
+    }
+
+    private func closeOther() {
+        typingOther = false
+        otherFocused = false
+    }
+
+    private func sendOther() {
+        let text = trimmedOther
+        guard !text.isEmpty else { return }
+        answer(text)
+    }
+
     private func tap(_ index: Int, _ choice: String) {
+        closeOther()
         if isMulti {
             if selection.contains(index) { selection.remove(index) } else { selection.insert(index) }
         } else {
