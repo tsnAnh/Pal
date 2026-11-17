@@ -140,7 +140,7 @@ struct PalCatalogConnectTests {
     @Test func anEntryThatNeedsSetupNeverReachesTheGateway() async {
         let rpc = CustomRPC([:])
         let acme = catalogEntry("acme", "Acme", "Developer", method: .oauthClient, status: .needsSetup, url: nil)
-        await #expect(throws: ConnectAppsError.unavailable) { try await customService(rpc).connect(app(acme)) }
+        await #expect(throws: ConnectAppsError.oauthClient(.needsSetup)) { try await customService(rpc).connect(app(acme)) }
         #expect(rpc.methods().isEmpty)
     }
 

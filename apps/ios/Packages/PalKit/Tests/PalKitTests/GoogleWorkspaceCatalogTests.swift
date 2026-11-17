@@ -33,28 +33,18 @@ struct GoogleCatalogTests {
         #expect(ConnectCatalog.make(catalog: [], mcp: []).apps.isEmpty)
     }
 
-    @Test func loadAddsTheRowWithoutAProfileOnTheCall() async throws {
+    @Test func loadTakesTheGoogleRowFromTheCatalogAndNeverAsksTheLegacyStatus() async throws {
+        let google: JSONValue = [
+            "slug": "google-workspace", "name": "Google Workspace", "category": "Files and docs", "method": "oauth_client", "status": "connected",
+        ]
         let rpc = CustomRPC([
-            "connectors.catalog": googleReply(.object(["connectors": .array([])])),
+            "connectors.catalog": googleReply(.object(["connectors": .array([google])])),
             "mcp.catalog": googleReply(.object(["servers": .array([])])),
-            "google_workspace.status": googleReply(googleSignedInStatus),
         ])
         let loaded = try await customService(rpc, profile: "bot-1").load()
-        #expect(loaded.apps.map(\.id) == ["google:workspace"])
+        #expect(loaded.apps.map(\.id) == ["connector:google-workspace"])
         #expect(loaded.apps.first?.state == .connected)
-        #expect(rpc.params("google_workspace.status") == [.object([:])])
-    }
-
-    @Test func aFailingStatusCallHidesOnlyTheGoogleRow() async throws {
-        let slack: JSONValue = .object(["slug": "slack", "name": "Slack", "category": "Communication", "method": "none", "status": "not_connected"])
-        let hosted = googleReply(.object(["connectors": .array([slack])]))
-        for failure in [gatewayError(4403), gatewayError(5321, "unreachable"), gatewayError(-32601)] {
-            let rpc = CustomRPC([
-                "connectors.catalog": hosted, "mcp.catalog": googleReply(.object(["servers": .array([])])), "google_workspace.status": failure,
-            ])
-            let loaded = try await customService(rpc).load()
-            #expect(loaded.apps.map(\.id) == ["connector:slack"])
-        }
+        #expect(!rpc.methods().contains("google_workspace.status"))
     }
 
     @Test func signingOutFromYourPluginsRemovesOnlyTheToken() async throws {
