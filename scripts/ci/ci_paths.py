@@ -43,6 +43,7 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "blob-size": (("*", True),),
     "swift-brand": (("apps/ios/*.swift", True),),
     "swift-nav-chrome": (("apps/ios/*.swift", True),),
+    "swift-lint": (("apps/ios/*.swift", True), ("apps/ios/.swiftlint*", True)),
     "tooling-tests": _OUTSIDE_IOS,
 }
 
@@ -51,7 +52,7 @@ JOB_CHECKS: dict[str, tuple[str, ...]] = {
     "python": ALL_CHECKS,
     "tooling-tests": ("tooling-tests",),
     "ios-guards": ("shebangs", "no-tmp", "agents-md", "case-collisions", "profile-archives",
-                   "blob-size", "swift-brand", "swift-nav-chrome"),
+                   "blob-size", "swift-brand", "swift-nav-chrome", "swift-lint"),
     "swift": (),
     "faker-kit": (),
 }
