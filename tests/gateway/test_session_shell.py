@@ -68,8 +68,9 @@ async def test_shell_exec_refusal_names_a_sandboxed_terminal_backend(tmp_path, m
                                               'params': {'session_id': 's', 'command': 'echo ran'}})
 
         refused = await call()
-        assert refused['error']['data'] == {'reason': 'unsupported_terminal_backend',
-                                            'field': 'terminal.backend', 'detail': backend}, refused
+        data = {k: v for k, v in refused['error']['data'].items() if k not in ('trace', 'gateway_version')}
+        assert data == {'reason': 'unsupported_terminal_backend',
+                        'field': 'terminal.backend', 'detail': backend}, refused
         terminal['TERMINAL_ENV'] = 'local'
         ran = await call()
         assert ran.get('result', {}).get('stdout', '').strip() == 'ran', ran

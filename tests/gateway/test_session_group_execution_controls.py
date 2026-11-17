@@ -10,6 +10,10 @@ from hermes_state import SessionDB
 from hermes_state_runtime import RuntimeStoreError
 
 
+def _without_trace(data):
+    return {k: v for k, v in data.items() if k not in ('trace', 'gateway_version')}
+
+
 class RoomService:
     def __init__(self, path, owner):
         self.db_path = path
@@ -196,9 +200,9 @@ def test_send_refusals_say_only_a_refusal_before_commit_admitted_nothing(tmp_pat
 
         async def probe():
             refused = await send('too-long', 'x' * 65_537)
-            assert refused['error']['data'] == {'reason': 'invalid_params', 'admitted': False}
+            assert _without_trace(refused['error']['data']) == {'reason': 'invalid_params', 'admitted': False}
             ended = await send('after-end', 'Ended elsewhere', room_id='ended')
-            assert ended['error']['data'] == {'reason': 'invalid_params', 'admitted': False}
+            assert _without_trace(ended['error']['data']) == {'reason': 'invalid_params', 'admitted': False}
 
             def cannot_prepare(binding):
                 raise hosted_rooms.HostedRoomError('Group Chat storage is full on this host.')
@@ -215,11 +219,12 @@ def test_send_refusals_say_only_a_refusal_before_commit_admitted_nothing(tmp_pat
             assert event['payload']['text'] == 'Stored'
             if stored_case == 'conflict':
                 conflict = await send('stored', 'Different')
-                assert conflict['error']['data'] == {'reason': 'invalid_params'}
+                assert _without_trace(conflict['error']['data']) == {'reason': 'invalid_params'}
 
             monkeypatch.setattr(service.runtime, 'status', lambda: {'running': True, 'stopping': True})
             undriven = await send('no-driver', 'Later')
-            assert undriven['error']['data'] == {'reason': 'runtime_coordination_required', 'admitted': False}
+            assert _without_trace(undriven['error']['data']) == {
+                'reason': 'runtime_coordination_required', 'admitted': False}
             stopped = await connection.dispatch({'id': 1, 'method': 'groups.stop', 'params': {'room_id': 'owned'}})
-            assert stopped['error']['data'] == {'reason': 'runtime_coordination_required'}
+            assert _without_trace(stopped['error']['data']) == {'reason': 'runtime_coordination_required'}
         asyncio.run(probe())
