@@ -259,6 +259,42 @@ method(
 )
 
 
+class LegacyConnectorSource(WireEnum):
+    portal = "portal"
+    composio = "composio"
+    unknown = "unknown"
+
+
+class LegacyConnectorState(WireEnum):
+    needs_reconnect = "needs_reconnect"
+    needs_setup = "needs_setup"
+    unmapped = "unmapped"
+
+
+class LegacyConnectorRow(Result):
+    catalog_id: str | None
+    name: str
+    legacy_slug: str
+    legacy_source: LegacyConnectorSource
+    method: str | None
+    state: LegacyConnectorState
+    last_seen: float | None
+
+
+class ConnectorsLegacyResult(Result):
+    source_readable: bool
+    items: list[LegacyConnectorRow]
+
+
+method(
+    "connectors.legacy",
+    params=ProfileParams,
+    result=ConnectorsLegacyResult,
+    doc="Services the scoped profile connected through the Nous Portal or Composio that are not connected "
+        "directly yet, read from local records only.",
+)
+
+
 class ConnectorAccountStatus(WireEnum):
     pending = "pending"
     active = "active"

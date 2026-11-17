@@ -1051,6 +1051,24 @@
       }
     },
     {
+      "name": "connectors.legacy",
+      "summary": "Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectorsLegacyResult"
+        }
+      }
+    },
+    {
       "name": "connectors.list",
       "summary": "Connector catalog + connection state for one session or profile account owner.",
       "params": [
@@ -20988,6 +21006,28 @@
         "title": "ConnectorsConnectResult",
         "type": "object"
       },
+      "ConnectorsLegacyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "source_readable": {
+            "title": "Source Readable",
+            "type": "boolean"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LegacyConnectorRow"
+            },
+            "title": "Items",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source_readable",
+          "items"
+        ],
+        "title": "ConnectorsLegacyResult",
+        "type": "object"
+      },
       "ConnectorsListParams": {
         "additionalProperties": false,
         "properties": {
@@ -30799,6 +30839,18 @@
             ],
             "default": null,
             "title": "Task Counts"
+          },
+          "unavailable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unavailable"
           }
         },
         "required": [
@@ -30826,11 +30878,16 @@
             },
             "title": "Boards",
             "type": "array"
+          },
+          "boards_seen": {
+            "title": "Boards Seen",
+            "type": "integer"
           }
         },
         "required": [
           "gateway_id",
-          "boards"
+          "boards",
+          "boards_seen"
         ],
         "title": "KanbanBoardsListResult",
         "type": "object"
@@ -33078,6 +33135,87 @@
           "human"
         ],
         "title": "LeaseHolder",
+        "type": "string"
+      },
+      "LegacyConnectorRow": {
+        "additionalProperties": false,
+        "properties": {
+          "catalog_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Id"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "legacy_slug": {
+            "title": "Legacy Slug",
+            "type": "string"
+          },
+          "legacy_source": {
+            "$ref": "#/components/schemas/LegacyConnectorSource"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "state": {
+            "$ref": "#/components/schemas/LegacyConnectorState"
+          },
+          "last_seen": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen"
+          }
+        },
+        "required": [
+          "catalog_id",
+          "name",
+          "legacy_slug",
+          "legacy_source",
+          "method",
+          "state",
+          "last_seen"
+        ],
+        "title": "LegacyConnectorRow",
+        "type": "object"
+      },
+      "LegacyConnectorSource": {
+        "enum": [
+          "portal",
+          "composio",
+          "unknown"
+        ],
+        "title": "LegacyConnectorSource",
+        "type": "string"
+      },
+      "LegacyConnectorState": {
+        "enum": [
+          "needs_reconnect",
+          "needs_setup",
+          "unmapped"
+        ],
+        "title": "LegacyConnectorState",
         "type": "string"
       },
       "LegacyPluginRow": {
@@ -65405,6 +65543,24 @@
       }
     },
     {
+      "name": "connectors.legacy",
+      "summary": "Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectorsLegacyResult"
+        }
+      }
+    },
+    {
       "name": "connectors.list",
       "summary": "Connector catalog + connection state for one session or profile account owner.",
       "params": [
@@ -66108,7 +66264,7 @@
     },
     {
       "name": "kanban.boards.list",
-      "summary": "Boards with a readable database on this gateway (never creates one). Native owner only.",
+      "summary": "Boards on this gateway, each marked ``unavailable`` when its database cannot be read (never creates one). Native owner only.",
       "params": [
         {
           "name": "params",

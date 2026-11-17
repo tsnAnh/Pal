@@ -1762,6 +1762,21 @@ export interface OAuthClientRemoveResult {
   slug: string
   removed: boolean
 }
+export interface ConnectorsLegacyResult {
+  source_readable: boolean
+  items: LegacyConnectorRow[]
+}
+export interface LegacyConnectorRow {
+  catalog_id: string | null
+  name: string
+  legacy_slug: string
+  legacy_source: LegacyConnectorSource
+  method: string | null
+  state: LegacyConnectorState
+  last_seen: number | null
+}
+export type LegacyConnectorSource = 'portal' | 'composio' | 'unknown'
+export type LegacyConnectorState = 'needs_reconnect' | 'needs_setup' | 'unmapped'
 export interface ConnectorAccountsParams {
   profile?: string | null
   connector?: string | null
@@ -7205,6 +7220,7 @@ export interface KanbanReadParams {
 export interface KanbanBoardsListResult {
   gateway_id: string
   boards: KanbanBoard[]
+  boards_seen: number
 }
 export interface KanbanBoard {
   scope: KanbanScope
@@ -7217,6 +7233,7 @@ export interface KanbanBoard {
   project_id?: string | null
   created_at?: number | null
   task_counts?: Record<string, number> | null
+  unavailable?: string | null
 }
 export interface KanbanScope {
   gateway_id: string
@@ -8327,6 +8344,8 @@ export interface RpcMethods {
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
+  /** Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only. */
+  'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
   /** Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog. */
@@ -8984,6 +9003,7 @@ export const RPC_METHODS = [
   'connectors.accounts.rename',
   'connectors.catalog',
   'connectors.connect',
+  'connectors.legacy',
   'connectors.list',
   'connectors.oauth_client.connect',
   'connectors.oauth_client.remove',
@@ -9359,6 +9379,8 @@ export interface CanonicalRpcMethods {
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
+  /** Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only. */
+  'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
   /** The current snapshot of one open session or account operation. */
@@ -9433,7 +9455,7 @@ export interface CanonicalRpcMethods {
   'image.attach_bytes': { params: ImageAttachBytesParams; result: CanonicalAttachedImageResult }
   /** One coherent read of a board's cards and the event cursor taken at the same commit. */
   'kanban.board.snapshot': { params: KanbanSnapshotParams; result: KanbanSnapshotResult }
-  /** Boards with a readable database on this gateway (never creates one). Native owner only. */
+  /** Boards on this gateway, each marked ``unavailable`` when its database cannot be read (never creates one). Native owner only. */
   'kanban.boards.list': { params: KanbanReadParams; result: KanbanBoardsListResult }
   /** One card: lifecycle, execution, CI acceptance, outcome verification and evidence, kept separate. */
   'kanban.card.get': { params: KanbanCardParams; result: KanbanCardResult }
@@ -9632,6 +9654,7 @@ export const CANONICAL_RPC_METHODS = [
   'connectors.accounts.remove',
   'connectors.catalog',
   'connectors.connect',
+  'connectors.legacy',
   'connectors.list',
   'connectors.operation.status',
   'connectors.operation.wake',

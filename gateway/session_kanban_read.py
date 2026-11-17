@@ -70,7 +70,7 @@ def _board(connection, params):
 async def list_boards(connection, ref, params):
     gateway_id = _gateway(connection, params)
     boards = await asyncio.to_thread(read.list_boards, gateway_id)
-    return wire.KanbanBoardsListResult.model_validate({'gateway_id': gateway_id, 'boards': boards}).model_dump(mode='json')
+    return wire.KanbanBoardsListResult.model_validate({'gateway_id': gateway_id, 'boards': boards, 'boards_seen': len(boards)}).model_dump(mode='json')
 
 
 def _guarded(slug, model, work, absent):

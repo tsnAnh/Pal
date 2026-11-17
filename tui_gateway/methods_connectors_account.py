@@ -152,6 +152,39 @@ def _(rid, params):
     return _oauth_client_call(OAuthClientSlugParams, lambda rpc, request: rpc.remove(request.slug))(rid, params)
 
 
+@method("connectors.legacy")
+@_profile_scoped
+def _(rid, _params):
+    from hermes_cli import mcp_catalog
+    from hermes_cli.pal_connectors import load_pal_connectors
+    from tools.connectors.catalog import _display
+    from tools.connectors.legacy import legacy_records
+    from tui_gateway.contracts.connectors import ConnectorCatalogStatus, ConnectorsLegacyResult, LegacyConnectorRow
+
+    records = legacy_records(mcp_catalog.installed_servers())
+    by_slug = {}
+    for entry in load_pal_connectors():
+        by_slug.setdefault(entry.id, entry)
+        if entry.replaces_portal_slug:
+            by_slug[entry.replaces_portal_slug] = entry
+    items = []
+    for record in records:
+        entry = by_slug.get(record.slug)
+        status = _catalog_status(entry) if entry else None
+        through_composio = record.source == "composio" and entry is not None and record.slug == entry.id
+        if status is ConnectorCatalogStatus.connected and not through_composio:
+            continue
+        state = ("unmapped" if entry is None else
+                 "needs_setup" if status is ConnectorCatalogStatus.needs_setup else "needs_reconnect")
+        items.append(LegacyConnectorRow(
+            catalog_id=entry.id if entry else None, name=entry.name if entry else _display(record.slug),
+            legacy_slug=record.slug, legacy_source=record.source, method=entry.method.value if entry else None,
+            state=state, last_seen=record.last_seen,
+        ))
+    result = ConnectorsLegacyResult(source_readable=bool(records), items=items)
+    return _ok(rid, result.model_dump(mode="json"))
+
+
 @method("connectors.accounts")
 @_profile_scoped
 @_account_method(

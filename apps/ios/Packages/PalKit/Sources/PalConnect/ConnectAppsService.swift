@@ -99,6 +99,11 @@ public struct ConnectAppsService: Sendable {
         )
     }
 
+    public func legacyConnections() async throws -> LegacyConnectionsResult {
+        let value = try await call("connectors.legacy")
+        do { return try value.decoded(as: LegacyConnectionsResult.self) } catch { throw ConnectAppsError.failed }
+    }
+
     private func attempt<T: Sendable>(_ work: () async throws -> T) async -> T? {
         do { return try await work() } catch {
             diagnostics.info("connect", "catalog read failed: \(Diagnostics.describe(error))")

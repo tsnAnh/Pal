@@ -1,6 +1,6 @@
 import Foundation
 import PalAuth
-import PalConnect
+@testable import PalConnect
 import PalProtocol
 import PalTransport
 import Synchronization

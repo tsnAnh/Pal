@@ -113,13 +113,13 @@ def scope(gateway_id: str, slug: str) -> dict:
     return {"gateway_id": gateway_id, "board": slug, "board_id": board_id(gateway_id, slug)}
 
 
-def board_row(gateway_id: str, meta: dict, counts: Optional[dict]) -> dict:
+def board_row(gateway_id: str, meta: dict, counts: Optional[dict], unavailable: Optional[str] = None) -> dict:
     return {
         "scope": scope(gateway_id, meta["slug"]), "name": meta.get("name") or meta["slug"],
         "description": meta.get("description") or "", "icon": meta.get("icon") or "",
         "color": meta.get("color") or "", "archived": bool(meta.get("archived")),
         "dispatch_mode": meta.get("dispatch_mode") or "workers", "project_id": meta.get("project_id"),
-        "created_at": meta.get("created_at"), "task_counts": counts,
+        "created_at": meta.get("created_at"), "task_counts": counts, "unavailable": unavailable,
     }
 
 
@@ -138,8 +138,10 @@ def list_boards(gateway_id: str) -> list[dict]:
         try:
             with open_board(slug) as (conn, fresh, _generation_id):
                 rows.append(board_row(gateway_id, fresh, status_counts(conn)))
-        except BoardUnavailable:
-            continue
+        except BoardUnavailable as exc:
+            rows.append(board_row(gateway_id, meta, None, exc.state))
+        except sqlite3.Error:
+            rows.append(board_row(gateway_id, meta, None, "unreadable"))
     return rows
 
 

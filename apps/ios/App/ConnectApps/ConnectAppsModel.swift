@@ -108,6 +108,7 @@ final class ConnectAppsModel {
     let devices: DeviceConnectorsModel
     let profile: String?
     let service: ConnectAppsService
+    let legacy: LegacyConnectionsModel
     let capabilitiesService: CapabilitiesService
     private let skillsService: SkillsCatalogService
     private let bots: [CustomConnectorBot]
@@ -126,10 +127,12 @@ final class ConnectAppsModel {
         devices = DeviceConnectorsModel(pool: pool, profile: profile, surfaces: connection.surfaces)
         self.bots = bots
         self.currentBot = currentBot
-        service = ConnectAppsService(
+        let connectService = ConnectAppsService(
             rpc: OAuthClientScript.wrap(ConnectionRPC(model: connection)), profile: profile, browser: OAuthClientScript.browser(browser),
             systemBrowser: SystemBrowserAuthorization(), nativeSignIn: UpworkSignIn.native(connection: connection), diagnostics: .osLog()
         )
+        service = connectService
+        legacy = LegacyConnectionsModel(service: connectService, profile: profile)
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
         capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
         surfaces = connection.surfaces
@@ -164,6 +167,7 @@ final class ConnectAppsModel {
 
     func start() async {
         Task { await devices.start() }
+        Task { await legacy.load() }
         await reload()
         await loadCapabilities()
     }
