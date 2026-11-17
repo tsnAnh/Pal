@@ -84,24 +84,17 @@ def test_entries_without_a_guide_keep_the_old_shape(root, public_url):
     assert row["setup_guide"] is None and row["setup_progress"] is None
 
 
-def test_slack_guide_carries_the_manifest_with_the_loopback_redirect(root, public_url):
-    app = _row("slack")["setup_guide"]["steps"][0]
-    manifest = json.loads(app["copies"][0]["value"])
-    assert manifest["oauth_config"]["redirect_urls"] == ["http://localhost:27890/callback"]
-    assert "chat:write" in manifest["oauth_config"]["scopes"]["user"]
-
-
 def test_progress_resumes_per_instance(root, public_url, provider):
     provider["handler"] = lambda _r: httpx.Response(400, json={"error": "invalid_grant"})
     assert _row("google-workspace")["setup_progress"] == {"step_id": "console", "saved": []}
-    assert _row("slack")["setup_progress"] == {"step_id": "app", "saved": []}
+    assert _row("figma")["setup_progress"] == {"step_id": "app", "saved": []}
     assert _row("github")["setup_progress"] == {"step_id": "token_page", "saved": []}
 
     _ok("connectors.oauth_client.save", slug="google-workspace", client_id_item=_item(GOOGLE_ID),
         client_secret_item=_item(SECRET))
     assert _row("google-workspace")["setup_progress"] == {"step_id": "client", "saved": ["client_id", "client_secret"]}
     assert _row("google-workspace", "home")["setup_progress"]["saved"] == ["client_id", "client_secret"]
-    assert _row("slack")["setup_progress"]["step_id"] == "app"
+    assert _row("figma")["setup_progress"]["step_id"] == "app"
 
     public_url["url"] = None
     assert _row("google-workspace")["setup_progress"]["step_id"] == "address"
@@ -121,10 +114,10 @@ def test_check_accepts_and_the_secret_never_leaks(root, public_url, provider, ca
 
 
 def test_check_rejection_is_a_result_not_an_rpc_error(root, public_url, provider):
-    provider["handler"] = lambda _r: httpx.Response(200, json={"ok": False, "error": "bad_client_secret"})
+    provider["handler"] = lambda _r: httpx.Response(401, json={})
 
-    result = _ok("connectors.setup.check", slug="slack",
-                 values={"client_id": _item("1.2"), "client_secret": _item(SECRET)})
+    result = _ok("connectors.setup.check", slug="canva",
+                 values={"client_id": _item("OC-fake"), "client_secret": _item(SECRET)})
 
     assert result["ok"] is False and result["reason"] == "INVALID_CLIENT" and result["message"]
 
@@ -154,25 +147,25 @@ def test_check_rpc_errors(root, public_url, provider):
     assert provider["seen"] == []
 
 
-def test_slack_connects_through_the_preregistered_mcp_path_like_asana(root, public_url, monkeypatch):
+def test_figma_connects_through_the_preregistered_mcp_path(root, public_url, monkeypatch):
     started = {}
 
     def fake_start(home, name, cfg, client_redirect_uri=None):
         started.update(name=name, cfg=cfg)
-        return {"session_id": "s1", "auth_url": "https://slack.com/oauth/v2_user/authorize?x=1", "flow": "pkce"}
+        return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 
     monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", fake_start)
-    assert _row("slack")["status"] == "needs_setup"
-    saved = _ok("connectors.oauth_client.save", slug="slack", client_id_item=_item("1.2"),
+    assert _row("figma")["status"] == "needs_setup"
+    saved = _ok("connectors.oauth_client.save", slug="figma", client_id_item=_item("1.2"),
                 client_secret_item=_item(SECRET))
     assert saved["redirect_url"] == "http://localhost:27890/callback"
-    assert _row("slack")["setup_progress"] == {"step_id": "client", "saved": ["client_id", "client_secret"]}
+    assert _row("figma")["setup_progress"] == {"step_id": "client", "saved": ["client_id", "client_secret"]}
 
-    assert _ok("connectors.oauth_client.connect", slug="slack")["session_id"] == "s1"
-    assert started["name"] == "slack" and started["cfg"]["url"] == "https://mcp.slack.com/mcp"
+    assert _ok("connectors.oauth_client.connect", slug="figma")["session_id"] == "s1"
+    assert started["name"] == "figma" and started["cfg"]["url"] == "https://mcp.figma.com/mcp"
     assert started["cfg"]["oauth"]["client_id"] == "1.2" and started["cfg"]["oauth"]["redirect_port"] == 27890
     config = (root / "profiles" / "work" / "config.yaml").read_text()
-    assert SECRET not in config and "SLACK_CLIENT_SECRET" in config
+    assert SECRET not in config and "FIGMA_CLIENT_SECRET" in config
 
 
 def test_every_guide_check_has_its_fields_declared():
@@ -237,7 +230,7 @@ def test_google_console_step_carries_the_rejected_address_fallback(root, public_
     assert "Desktop app" in fallback["body"] and "own domain" in fallback["body"]
     assert fallback["links"] and all(link["url"].startswith("https://") for link in fallback["links"])
     assert all(s["fallback"] is None for sid, s in steps.items() if sid != "console")
-    assert _row("slack")["setup_guide"]["steps"][0]["fallback"] is None
+    assert _row("figma")["setup_guide"]["steps"][0]["fallback"] is None
 
 
 def test_canva_guide_copies_the_gateway_redirect_and_scopes(root, public_url):

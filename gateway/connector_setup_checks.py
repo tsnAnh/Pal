@@ -12,7 +12,6 @@ logger = logging.getLogger(__name__)
 TIMEOUT_SECONDS = 10.0
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GITHUB_USER_URL = "https://api.github.com/user"
-SLACK_USER_TOKEN_URL = "https://slack.com/api/oauth.v2.user.access"
 CANVA_TOKEN_URL = "https://api.canva.com/rest/v1/oauth/token"
 
 default_transport: httpx.BaseTransport | None = None
@@ -20,7 +19,6 @@ default_transport: httpx.BaseTransport | None = None
 FIELDS = {
     "google_client": ("client_id", "client_secret"),
     "github_token": ("token",),
-    "slack_client": ("client_id", "client_secret"),
     "canva_client": ("client_id", "client_secret"),
 }
 
@@ -75,18 +73,6 @@ def _github(client: httpx.Client, values: dict[str, str], _redirect_url: str | N
     return UNAVAILABLE
 
 
-def _slack(client: httpx.Client, values: dict[str, str], _redirect_url: str | None) -> CheckOutcome:
-    response = client.post(SLACK_USER_TOKEN_URL, data={
-        "client_id": values["client_id"], "client_secret": values["client_secret"],
-        "code": secrets.token_urlsafe(24)})
-    error = _json_object(response).get("error")
-    if error == "invalid_code":
-        return ACCEPTED
-    if error in ("invalid_client_id", "bad_client_secret"):
-        return INVALID_CLIENT
-    return UNAVAILABLE
-
-
 def _canva(client: httpx.Client, values: dict[str, str], redirect_url: str | None) -> CheckOutcome:
     if not redirect_url:
         return NEEDS_PUBLIC_URL
@@ -101,7 +87,7 @@ def _canva(client: httpx.Client, values: dict[str, str], redirect_url: str | Non
     return UNAVAILABLE
 
 
-_CHECKS = {"google_client": _google, "github_token": _github, "slack_client": _slack, "canva_client": _canva}
+_CHECKS = {"google_client": _google, "github_token": _github, "canva_client": _canva}
 
 
 def run_check(kind: str, values: dict[str, str], *, redirect_url: str | None = None,

@@ -13,10 +13,8 @@ enum OAuthClientScript {
     static let ipAddressArgument = "-hermes-test-oauth-client-ip-address"
     static let state = "scripted-state"
     static let session = "scripted-session"
-    static let slackSession = "scripted-session-slack"
     static let loopbackAuthorize = [
         "asana": ("https://app.asana.com/-/oauth_authorize", OAuthClientScript.session),
-        "slack": ("https://slack.com/oauth/v2_user/authorize", OAuthClientScript.slackSession),
         "figma": ("https://www.figma.com/oauth", "scripted-session-figma"),
         "dropbox": ("https://www.dropbox.com/oauth2/authorize", "scripted-session-dropbox"),
         "canva": ("https://www.canva.com/api/oauth/authorize", "scripted-session-canva"),
@@ -50,7 +48,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private let publicAddress: Bool
     private let ipAddress: Bool
     private var progress: [String: Progress] = [
-        "asana": Progress(), "google-workspace": Progress(), "github": Progress(), "slack": Progress(), "figma": Progress(),
+        "asana": Progress(), "google-workspace": Progress(), "github": Progress(), "figma": Progress(),
         "dropbox": Progress(), "canva": Progress(),
     ]
     private var items = 0
@@ -134,7 +132,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
             "mcp_url": "https://mcp.asana.com/v2/mcp", "status": .string(status("asana")),
         ]
         let guided = ["figma", "dropbox", "canva"].map(mcpClientRow)
-        return ["connectors": .array(kept + [asana, googleRow(), githubRow(), slackRow()] + guided)]
+        return ["connectors": .array(kept + [asana, googleRow(), githubRow()] + guided)]
     }
 
     private func googleRow() -> JSONValue {
@@ -158,16 +156,6 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         ]
     }
 
-    private func slackRow() -> JSONValue {
-        let saved = progress["slack"]?.configured == true
-        return [
-            "slug": "slack", "name": "Slack", "category": "Other", "icon": "plugin_glyph", "method": "oauth_client", "verified": true,
-            "mcp_url": "https://mcp.slack.com/mcp", "status": .string(status("slack")),
-            "setup_guide": ScriptedSetupGuides.slack,
-            "setup_progress": ScriptedSetupGuides.progress(saved ? "client" : "app", saved: saved ? ["client_id", "client_secret"] : []),
-        ]
-    }
-
     private func mcpClientRow(_ slug: String) -> JSONValue {
         let saved = progress[slug]?.configured == true
         let guides = [
@@ -188,7 +176,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         guard let current = progress[slug] else { throw Self.failure(4041, "CONNECTOR_NOT_FOUND") }
         let loopback = OAuthClientScript.loopbackAuthorize[slug] != nil
         let consoles = [
-            "asana": "https://app.asana.com/0/my-apps", "slack": "https://api.slack.com/apps",
+            "asana": "https://app.asana.com/0/my-apps",
             "figma": "https://www.figma.com/developers/apps", "dropbox": "https://www.dropbox.com/developers/console/apps",
             "canva": "https://www.canva.com/developers/apps",
         ]

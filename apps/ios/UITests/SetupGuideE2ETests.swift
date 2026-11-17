@@ -160,29 +160,6 @@ final class SetupGuideE2ETests: ConnectAppsTestCase {
         shot(app, "setup-guide-github-connected")
     }
 
-    func test4SlackCreatesTheAppChecksTheClientAndConnects() throws {
-        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
-        let button = openGuide(app, name: "Slack", slug: "slack", action: "Set up")
-        expectStep(app, "app", "1 of 2")
-        XCTAssertTrue(element(app, "setupGuideCopy-0Value").label.contains("redirect_urls"), "the manifest is ready to copy")
-        element(app, "setupGuideLink-0").hit()
-        openedLink(app, prefix: "https://api.slack.com/apps")
-        next(app)
-        expectStep(app, "client", "2 of 2")
-        enter(app, "client_id", "fake-client-id")
-        enter(app, "client_secret", "rejected-secret-do-not-use")
-        submit(app).hit()
-        rejectOnce(app, code: "INVALID_CLIENT", shotName: "setup-guide-slack-rejected")
-        enter(app, "client_id", "fake-client-id")
-        enter(app, "client_secret", "fake-token-do-not-use")
-        submit(app).hit()
-        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
-        openedLink(app, prefix: "https://slack.com/")
-        returnLoopbackRedirect(app)
-        waitLabel(button, contains: "Remove", timeout: 45)
-        shot(app, "setup-guide-slack-connected")
-    }
-
     private func guideThroughClient(_ app: XCUIApplication, name: String, slug: String, page: String, authorize: String) {
         let button = openGuide(app, name: name, slug: slug, action: "Set up")
         expectStep(app, "app", "1 of 2")

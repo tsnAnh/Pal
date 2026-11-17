@@ -1766,7 +1766,7 @@ export interface SetupFieldRow {
   prefixes: string[]
   suffix?: string | null
 }
-export type SetupCheckKind = 'google_client' | 'github_token' | 'slack_client' | 'canva_client'
+export type SetupCheckKind = 'google_client' | 'github_token' | 'canva_client'
 export type SetupProblemKind = 'not_https' | 'ip_host'
 export interface SetupFallbackRow {
   label: string

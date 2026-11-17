@@ -23,7 +23,6 @@ def _json(status, body):
 
 
 GOOGLE = {"client_id": "fake.apps.googleusercontent.com", "client_secret": SECRET}
-SLACK = {"client_id": "123.456", "client_secret": SECRET}
 CANVA = {"client_id": "OC-fake", "client_secret": SECRET}
 
 
@@ -46,17 +45,6 @@ def test_google_client_needs_a_redirect_without_calling_google():
     seen = []
     outcome = checks.run_check("google_client", GOOGLE, transport=_transport(_json(400, {}), seen))
     assert outcome.reason == "needs_public_url" and seen == []
-
-
-@pytest.mark.parametrize("error,ok,reason", [
-    ("invalid_code", True, None),
-    ("invalid_client_id", False, "invalid_client"),
-    ("bad_client_secret", False, "invalid_client"),
-    ("ratelimited", False, "check_unavailable"),
-])
-def test_slack_client_reads_the_provider_error(error, ok, reason):
-    outcome = checks.run_check("slack_client", SLACK, transport=_transport(_json(200, {"ok": False, "error": error})))
-    assert (outcome.ok, outcome.reason) == (ok, reason)
 
 
 def test_github_token_accepts_and_names_the_account():
@@ -100,7 +88,7 @@ def test_canva_client_needs_a_redirect_without_calling_canva():
     assert outcome.reason == "needs_public_url" and seen == []
 
 
-@pytest.mark.parametrize("kind,values", [("google_client", GOOGLE), ("slack_client", SLACK), ("canva_client", CANVA),
+@pytest.mark.parametrize("kind,values", [("google_client", GOOGLE), ("canva_client", CANVA),
                                          ("github_token", {"token": SECRET})])
 def test_network_failure_is_unavailable_and_logs_no_secret(kind, values, caplog):
     caplog.set_level(logging.DEBUG)
@@ -116,6 +104,6 @@ def test_network_failure_is_unavailable_and_logs_no_secret(kind, values, caplog)
 
 
 def test_non_json_body_is_unavailable():
-    outcome = checks.run_check("slack_client", SLACK,
+    outcome = checks.run_check("canva_client", CANVA, redirect_url="https://pal.example.ts.net/webapp/mcp-oauth/callback",
                                transport=_transport(lambda _r: httpx.Response(200, text="<html>")))
     assert outcome.reason == "check_unavailable"

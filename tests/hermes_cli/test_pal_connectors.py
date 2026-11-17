@@ -38,11 +38,10 @@ def test_invalid_catalog_is_refused(tmp_path, body):
 
 def test_setup_guides_parse_with_ordered_steps_and_valid_shapes():
     guided = {e.id: e for e in load_pal_connectors() if e.setup}
-    assert {"google-workspace", "github", "slack"} <= set(guided)
+    assert {"google-workspace", "github"} <= set(guided)
     for entry in guided.values():
         assert len({s.id for s in entry.setup.steps}) == len(entry.setup.steps)
         assert all(s.fields for s in entry.setup.steps if s.kind == "paste")
-    assert guided["slack"].method is ConnectionMethod.OAUTH_CLIENT and guided["slack"].mcp_url
     for slug in ("figma", "dropbox"):
         assert guided[slug].method is ConnectionMethod.OAUTH_CLIENT and guided[slug].mcp_url and guided[slug].oauth
         assert all(s.check is None for s in guided[slug].setup.steps)

@@ -34,7 +34,6 @@ GOOGLE_IDENTITY_SCOPES = ("openid", "email")
 
 CONSOLE_URLS = {
     "asana": "https://app.asana.com/0/my-apps",
-    "slack": "https://api.slack.com/apps",
     GOOGLE_PROVIDER: "https://console.cloud.google.com/apis/credentials",
 }
 

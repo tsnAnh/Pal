@@ -102,7 +102,7 @@ def _https(value: object, field: str, cid: str) -> str:
 
 
 STEP_KINDS = ("public_url", "open_page", "paste")
-STEP_CHECKS = ("google_client", "github_token", "slack_client", "canva_client")
+STEP_CHECKS = ("google_client", "github_token", "canva_client")
 
 
 def _text(raw: object, key: str, where: str) -> str:

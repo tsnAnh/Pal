@@ -277,10 +277,10 @@ struct SetupCheckTests {
     @Test func eachFailureReasonHasPlainProductText() {
         let reasons = ["INVALID_TOKEN", "INVALID_CLIENT", "CHECK_UNAVAILABLE"]
         for reason in reasons {
-            let text = SetupCheckResult(slug: "x", ok: false, reason: reason).failure(appName: "Slack").reason
-            #expect(text.contains("Slack") && !text.contains(reason))
+            let text = SetupCheckResult(slug: "x", ok: false, reason: reason).failure(appName: "Figma").reason
+            #expect(text.contains("Figma") && !text.contains(reason))
         }
-        let fallback = SetupCheckResult(slug: "x", ok: false, reason: nil, message: "Try later").failure(appName: "Slack")
+        let fallback = SetupCheckResult(slug: "x", ok: false, reason: nil, message: "Try later").failure(appName: "Figma")
         #expect(fallback.code == "CHECK_FAILED" && fallback.reason == "Try later")
     }
 }

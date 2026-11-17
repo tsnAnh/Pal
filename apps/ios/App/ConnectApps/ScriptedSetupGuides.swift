@@ -83,21 +83,6 @@ enum ScriptedSetupGuides {
         ],
     ]
 
-    static let slack: JSONValue = [
-        "steps": [
-            step(
-                "app", "open_page", "Create a Slack app", body: "Create the app from a manifest and install it to your workspace.",
-                links: [link("Open Slack apps", "https://api.slack.com/apps?new_app=1")],
-                copies: [["label": "App manifest", "value": "{\"oauth_config\": {\"redirect_urls\": [\"http://localhost:27890/callback\"]}}"]]
-            ),
-            step(
-                "client", "paste", "Paste your client", body: "Paste the client ID and secret Slack shows.",
-                fields: [field("client_id", "Client ID", secret: false), field("client_secret", "Client secret", secret: true)],
-                check: "slack_client"
-            ),
-        ],
-    ]
-
     private static let clientFields = [
         field("client_id", "Client ID", secret: false), field("client_secret", "Client secret", secret: true),
     ]
