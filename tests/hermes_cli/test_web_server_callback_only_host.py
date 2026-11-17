@@ -103,8 +103,22 @@ def test_no_public_address_changes_nothing(gateway):
 def test_the_webapp_on_keeps_its_own_trusted_hosts_and_adds_no_callback_mode(gateway):
     gateway["value"] = WebappSettings(enabled=True, public_url=f"https://{PUBLIC}")
     assert _refused(*_call("/webapp/mcp-oauth/callback", PUBLIC))
-    app.state.trusted_public_hosts = frozenset({PUBLIC})
+    app.state.trusted_public_hosts = boundary.public_url_hosts(f"https://{PUBLIC}")
     assert not _refused(*_call("/api/health", PUBLIC))
+
+
+@pytest.mark.parametrize("path", OAUTH_CALLBACK_PATHS)
+def test_the_webapp_listener_the_proxy_points_at_answers_each_callback(gateway, path):
+    gateway["value"] = WebappSettings(enabled=True, public_url=f"https://{PUBLIC}")
+    app.state.trusted_public_hosts = boundary.public_url_hosts(f"https://{PUBLIC}")
+    assert not _refused(*_call(path, PUBLIC))
+    assert _refused(*_call(path, "evil.example.com"))
+
+
+@pytest.mark.parametrize("path", OAUTH_CALLBACK_PATHS)
+def test_the_dashboard_process_is_never_a_callback_host(gateway, monkeypatch, path):
+    monkeypatch.setattr(app.state, "gateway_runner", None)
+    assert _refused(*_call(path, PUBLIC))
 
 
 def test_a_listener_that_is_not_the_gateways_never_opens_callback_mode(gateway, monkeypatch):
