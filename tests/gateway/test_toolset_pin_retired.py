@@ -1,6 +1,5 @@
-"""Pinning a bot's toolsets (profiles.configure enabled_toolsets) is reachable only by a grant that may
-control that bot: another bot's ticket, a read-only grant and a worker connection are refused, and the
-pin is untouched."""
+"""profiles.configure ``enabled_toolsets`` is retired: another bot's ticket, a read-only grant and a worker
+connection are still refused, and a full owner grant writes no pin."""
 
 import pytest
 import pytest_asyncio
@@ -32,8 +31,9 @@ async def test_read_only_and_worker_grants_cannot_pin_toolsets(bots, capabilitie
 
 
 @pytest.mark.asyncio
-async def test_a_full_owner_grant_pins_the_toolsets_in_that_bots_config_only(bots):
-    pinned = await call(bots.connect(capabilities=FULL), 'profiles.configure', PIN)
-    assert 'error' not in pinned, pinned
-    assert config_of(get_profile_dir('beta'))['platform_toolsets']['cli'] == ['web']
-    assert 'platform_toolsets' not in config_of(get_profile_dir('alpha'))
+async def test_a_full_owner_grant_writes_no_toolset_pin(bots):
+    before = config_of(get_profile_dir('beta'))
+    response = await call(bots.connect(capabilities=FULL), 'profiles.configure', PIN)
+    assert 'error' not in response, response
+    assert config_of(get_profile_dir('beta')) == before
+    assert 'platform_toolsets' not in config_of(get_profile_dir('beta'))

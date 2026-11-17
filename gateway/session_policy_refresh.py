@@ -64,7 +64,7 @@ def _settings(policy, config, live, picked):
     if 'toolsets' not in request and policy.editor_mcp_json is None:
         keys.append('disabled_toolsets')
         _follow(config, live, 'platform_toolsets')
-        toolsets = tuple(sorted(_resolve_toolsets({}, live, policy.source, policy.safe_mode, policy.coding_posture)))
+        toolsets = tuple(sorted(_resolve_toolsets({}, live, policy.source, policy.safe_mode, policy.coding_posture, bot=True)))
     for key in keys:
         _follow(agent, live_agent, key)
     if agent or 'agent' in config:
@@ -113,7 +113,7 @@ def _mcp_servers(policy, config, live, toolsets, secrets, replaced):
         pick = [name for name in pick if not isinstance(name, str) or server(name) not in picked - enabled]
     try:
         selected = _resolve_toolsets({} if pick is None else {'toolsets': pick},
-                                     json.loads(json.dumps(live)), policy.source, policy.safe_mode, policy.coding_posture)
+                                     json.loads(json.dumps(live)), policy.source, policy.safe_mode, policy.coding_posture, bot=True)
     except RuntimeStoreError:
         return toolsets  # the rest of the launch pick no longer validates against the profile: keep the frozen servers
     # A picked server config removed keeps a disabled stub in the stored section, so every later refresh

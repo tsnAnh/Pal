@@ -12,7 +12,7 @@ pytest_plugins = ('tests.gateway.device_tools_harness',)
 
 
 def facts(home, kind=SessionKind.DESKTOP, **over):
-    base = dict(kind=kind, picked_toolsets=False, safe_mode=False, disabled_toolsets=frozenset(), profile_home=Path(home))
+    base = dict(kind=kind, safe_mode=False, disabled_toolsets=frozenset(), profile_home=Path(home))
     return SessionFacts(**{**base, **over})
 
 
@@ -26,7 +26,6 @@ def test_only_the_granted_kinds_get_the_tools_and_only_with_a_registered_device(
 
 def test_every_exclusion_names_its_reason_and_wins_over_a_registered_device(tmp_path):
     switch_mac(tmp_path, True)
-    assert decide_grant(facts(tmp_path, picked_toolsets=True)).reason is GrantReason.EXPLICIT_PICK
     assert decide_grant(facts(tmp_path, safe_mode=True)).reason is GrantReason.SAFE_MODE
     assert decide_grant(facts(tmp_path, disabled_toolsets=frozenset({'iphone'}))).reason is GrantReason.DISABLED_BY_CONFIG
 
@@ -67,9 +66,9 @@ async def test_a_desktop_chat_that_started_without_a_device_gets_the_tools_on_th
 @pytest.mark.asyncio
 async def test_an_ineligible_chat_is_cached_negative_and_never_flips(tmp_path, monkeypatch):
     store, authority, owner, made = await sessions(
-        tmp_path, monkeypatch, {'picked': dict(source='gui', toolsets=['web'])}, False)
+        tmp_path, monkeypatch, {'unattended': dict(source='tui')}, False)
     try:
-        policy, session_id = made['picked']
+        policy, session_id = made['unattended']
         assert offered(authority, policy, session_id) == set()
         assert authority.sessions[session_id].iphone_toolset is False
         for home in (tmp_path / 'home', tmp_path / authority.profile_id):
