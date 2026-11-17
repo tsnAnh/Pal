@@ -7,70 +7,6 @@ import PalTransport
 import Synchronization
 import Testing
 
-private let authLink = "https://accounts.google.com/o/oauth2/v2/auth?client_id=abc&state=xyz"
-
-private func reply(_ value: JSONValue) -> CustomRPC.Reply { { _ in value } }
-
-private func gatewayError(_ code: Int, _ dataCode: String? = nil, message: String = "failed") -> CustomRPC.Reply {
-    { _ in
-        throw GatewayTransportError.rpc(RPCError(code: code, message: message, data: dataCode.map { .object(["code": .string($0)]) }))
-    }
-}
-
-private func statusJSON(
-    _ state: String, email: String? = nil, services: [String] = [], write: [String] = [], reason: String? = nil,
-    extra: [String: JSONValue] = [:]
-) -> JSONValue {
-    var object: [String: JSONValue] = [
-        "state": .string(state),
-        "services": .array(services.map { .string($0) }),
-        "write_services": .array(write.map { .string($0) }),
-    ]
-    if let email { object["email"] = .string(email) }
-    if let reason { object["reauth_reason"] = .string(reason) }
-    for (key, value) in extra { object[key] = value }
-    return .object(object)
-}
-
-private func startReply(flow: String = "flow-1", url: String = authLink) -> JSONValue {
-    .object(["flow_id": .string(flow), "auth_url": .string(url), "expires_in": .int(600)])
-}
-
-private func finishReply(_ state: String, code: String? = nil, message: String? = nil, status: JSONValue? = nil) -> JSONValue {
-    var object: [String: JSONValue] = ["state": .string(state)]
-    if let code { object["code"] = .string(code) }
-    if let message { object["message"] = .string(message) }
-    if let status { object["status"] = status }
-    return .object(object)
-}
-
-private func service(_ rpc: any ConnectRPC, diagnostics: Diagnostics = .silent) -> GoogleWorkspaceService {
-    GoogleWorkspaceService(rpc: rpc, diagnostics: diagnostics)
-}
-
-private final class ReplyQueue: Sendable {
-    private let items: Mutex<[JSONValue]>
-
-    init(_ items: [JSONValue]) { self.items = Mutex(items) }
-
-    func next() -> JSONValue { items.withLock { $0.isEmpty ? finishReply("failed") : $0.removeFirst() } }
-}
-
-private func started(_ rpc: any ConnectRPC, diagnostics: Diagnostics = .silent) async throws -> GoogleSignInSession {
-    try await service(rpc, diagnostics: diagnostics).beginSignIn(GoogleScopeSelection())
-}
-
-private func rendered(_ values: Any...) -> String {
-    values.map { value in
-        var dumped = ""
-        dump(value, to: &dumped)
-        return "\(String(describing: value))\n\(String(reflecting: value))\n\(dumped)"
-    }
-    .joined(separator: "\n")
-}
-
-private let signedInStatus = statusJSON("signed_in", email: "owner@example.com", services: ["gmail", "drive"], write: ["drive"])
-
 @Suite("Google Workspace status")
 struct GoogleWorkspaceStatusTests {
     @Test func decodesEveryStateOfTheContract() throws {
@@ -78,12 +14,12 @@ struct GoogleWorkspaceStatusTests {
             ("not_configured", .notConfigured), ("needs_sign_in", .needsSignIn), ("signed_in", .signedIn), ("reauth_needed", .reauthNeeded),
         ]
         for (raw, expected) in cases {
-            #expect(try statusJSON(raw).decoded(as: GoogleWorkspaceStatus.self).state == expected)
+            #expect(try googleStatusJSON(raw).decoded(as: GoogleWorkspaceStatus.self).state == expected)
         }
     }
 
     @Test func readsEmailServicesAndWriteServicesInStableOrder() throws {
-        let status = try statusJSON("signed_in", email: " owner@example.com ", services: ["docs", "gmail", "gmail"], write: ["docs"])
+        let status = try googleStatusJSON("signed_in", email: " owner@example.com ", services: ["docs", "gmail", "gmail"], write: ["docs"])
             .decoded(as: GoogleWorkspaceStatus.self)
         #expect(status.email == "owner@example.com")
         #expect(status.services == [.gmail, .docs])
@@ -95,7 +31,7 @@ struct GoogleWorkspaceStatusTests {
             ("token_missing", .tokenMissing), ("token_unreadable", .tokenUnreadable), ("revoked", .revoked), ("client_rejected", .clientRejected),
         ]
         for (raw, reason) in expected {
-            let status = try statusJSON("reauth_needed", reason: raw).decoded(as: GoogleWorkspaceStatus.self)
+            let status = try googleStatusJSON("reauth_needed", reason: raw).decoded(as: GoogleWorkspaceStatus.self)
             #expect(status.reauthReason == reason)
         }
         for reason in GoogleReauthReason.allCases {
@@ -107,7 +43,7 @@ struct GoogleWorkspaceStatusTests {
     }
 
     @Test func unknownServicesAndReasonsDoNotCrashDecoding() throws {
-        let status = try statusJSON("reauth_needed", services: ["gmail", "photos", "keep"], write: ["photos"], reason: "something_new")
+        let status = try googleStatusJSON("reauth_needed", services: ["gmail", "photos", "keep"], write: ["photos"], reason: "something_new")
             .decoded(as: GoogleWorkspaceStatus.self)
         #expect(status.services == [.gmail])
         #expect(status.writeServices.isEmpty)
@@ -115,18 +51,18 @@ struct GoogleWorkspaceStatusTests {
     }
 
     @Test func anUnknownStateIsAFailureNotACrash() async {
-        let rpc = CustomRPC(["google_workspace.status": reply(statusJSON("brand_new_state"))])
-        await #expect(throws: GoogleWorkspaceError.failed) { try await service(rpc).status() }
+        let rpc = CustomRPC(["google_workspace.status": googleReply(googleStatusJSON("brand_new_state"))])
+        await #expect(throws: GoogleWorkspaceError.failed) { try await googleService(rpc).status() }
     }
 
     @Test func extraKeysNeverReachTheModel() throws {
         let canary = "CANARY-" + UUID().uuidString
-        let status = try statusJSON(
+        let status = try googleStatusJSON(
             "signed_in", email: "owner@example.com", services: ["gmail"],
             extra: ["client_secret": .string(canary), "access_token": .string(canary), "refresh_token": .string(canary), "path": .string("/home/" + canary)]
         ).decoded(as: GoogleWorkspaceStatus.self)
         let card = GoogleWorkspaceCardState.resolve(status: status, signingIn: false, failure: nil)
-        #expect(!rendered(status, card).contains(canary))
+        #expect(!googleRendered(status, card).contains(canary))
     }
 }
 
@@ -215,10 +151,13 @@ struct GoogleCardStateTests {
 @Suite("Google Workspace service")
 struct GoogleWorkspaceServiceTests {
     @Test func statusAndVerifyAreHostLevelWithNoProfile() async throws {
-        let rpc = CustomRPC(["google_workspace.status": reply(signedInStatus), "google_workspace.verify": reply(statusJSON("needs_sign_in"))])
-        let status = try await service(rpc).status()
+        let rpc = CustomRPC([
+            "google_workspace.status": googleReply(googleSignedInStatus),
+            "google_workspace.verify": googleReply(googleStatusJSON("needs_sign_in")),
+        ])
+        let status = try await googleService(rpc).status()
         #expect(status.state == .signedIn)
-        #expect(try await service(rpc).verify().state == .needsSignIn)
+        #expect(try await googleService(rpc).verify().state == .needsSignIn)
         #expect(rpc.params("google_workspace.status") == [.object([:])])
         #expect(rpc.params("google_workspace.verify") == [.object([:])])
     }
@@ -231,18 +170,18 @@ struct GoogleWorkspaceServiceTests {
         ]
         for (code, dataCode, expected) in cases {
             let rpc = CustomRPC(["google_workspace.status": gatewayError(code, dataCode)])
-            await #expect(throws: expected) { try await service(rpc).status() }
+            await #expect(throws: expected) { try await googleService(rpc).status() }
         }
     }
 
     @Test func aDroppedConnectionIsAPlainFailure() async {
         let rpc = CustomRPC(["google_workspace.verify": { _ in throw GatewayTransportError.timedOut }])
-        await #expect(throws: GoogleWorkspaceError.failed) { try await service(rpc).verify() }
+        await #expect(throws: GoogleWorkspaceError.failed) { try await googleService(rpc).verify() }
     }
 
     @Test func setClientSendsBothValuesOnce() async throws {
-        let rpc = CustomRPC(["google_workspace.client.set": reply(statusJSON("needs_sign_in"))])
-        let status = try await service(rpc).setClient(clientID: SecretString("id-1"), clientSecret: SecretString("secret-1"))
+        let rpc = CustomRPC(["google_workspace.client.set": googleReply(googleStatusJSON("needs_sign_in"))])
+        let status = try await googleService(rpc).setClient(clientID: SecretString("id-1"), clientSecret: SecretString("secret-1"))
         #expect(status.state == .needsSignIn)
         #expect(rpc.methods() == ["google_workspace.client.set"])
         #expect(rpc.params("google_workspace.client.set") == [.object(["client_id": "id-1", "client_secret": "secret-1"])])
@@ -251,10 +190,10 @@ struct GoogleWorkspaceServiceTests {
     @Test func setClientRefusesAnEmptyValueWithoutCalling() async {
         let rpc = CustomRPC([:])
         await #expect(throws: GoogleWorkspaceError.invalidClient) {
-            try await service(rpc).setClient(clientID: SecretString(""), clientSecret: SecretString("secret"))
+            try await googleService(rpc).setClient(clientID: SecretString(""), clientSecret: SecretString("secret"))
         }
         await #expect(throws: GoogleWorkspaceError.invalidClient) {
-            try await service(rpc).setClient(clientID: SecretString("id"), clientSecret: SecretString(""))
+            try await googleService(rpc).setClient(clientID: SecretString("id"), clientSecret: SecretString(""))
         }
         #expect(rpc.methods().isEmpty)
     }
@@ -262,526 +201,21 @@ struct GoogleWorkspaceServiceTests {
     @Test func aRejectedClientIsReportedPlainly() async {
         let rpc = CustomRPC(["google_workspace.client.set": gatewayError(4101, "not_desktop_client")])
         await #expect(throws: GoogleWorkspaceError.notDesktopClient) {
-            try await service(rpc).setClient(clientID: SecretString("id"), clientSecret: SecretString("secret"))
+            try await googleService(rpc).setClient(clientID: SecretString("id"), clientSecret: SecretString("secret"))
         }
     }
 
     @Test func signOutRemovesOnlyTheTokenByDefault() async throws {
-        let rpc = CustomRPC(["google_workspace.signout": reply(statusJSON("needs_sign_in"))])
-        _ = try await service(rpc).signOut()
+        let rpc = CustomRPC(["google_workspace.signout": googleReply(googleStatusJSON("needs_sign_in"))])
+        _ = try await googleService(rpc).signOut()
         #expect(rpc.methods() == ["google_workspace.signout"])
         #expect(rpc.params("google_workspace.signout") == [.object(["remove_setup": .bool(false)])])
     }
 
     @Test func removeSetupIsExplicit() async throws {
-        let rpc = CustomRPC(["google_workspace.signout": reply(statusJSON("not_configured"))])
-        let status = try await service(rpc).signOut(removeSetup: true)
+        let rpc = CustomRPC(["google_workspace.signout": googleReply(googleStatusJSON("not_configured"))])
+        let status = try await googleService(rpc).signOut(removeSetup: true)
         #expect(status.state == .notConfigured)
         #expect(rpc.params("google_workspace.signout") == [.object(["remove_setup": .bool(true)])])
-    }
-}
-
-@Suite("Google sign-in flow")
-struct GoogleSignInFlowTests {
-    private func gateway(finish: [JSONValue]) -> CustomRPC {
-        let queue = ReplyQueue(finish)
-        return CustomRPC([
-            "google_workspace.signin.start": reply(startReply()),
-            "google_workspace.signin.finish": { _ in queue.next() },
-            "google_workspace.signin.cancel": reply(.object(["ok": true])),
-            "google_workspace.status": reply(signedInStatus),
-        ])
-    }
-
-    @Test func startSendsTheTickedServices() async throws {
-        let rpc = gateway(finish: [])
-        var selection = GoogleScopeSelection()
-        selection.setRead(.contacts, false)
-        selection.setWrite(.gmail, true)
-        let session = try await service(rpc).beginSignIn(selection)
-        #expect(session.authURL.absoluteString == authLink)
-        let params = try #require(rpc.params("google_workspace.signin.start").first)
-        #expect(params["services"]?.arrayValue?.count == 5)
-        #expect(params["write_services"] == .array([.string("gmail")]))
-        #expect(params["profile"] == nil)
-    }
-
-    @Test func anEmptySelectionNeverCallsTheGateway() async {
-        let rpc = gateway(finish: [])
-        var selection = GoogleScopeSelection()
-        for service in GoogleService.allCases { selection.setRead(service, false) }
-        await #expect(throws: GoogleWorkspaceError.invalidServices) { try await service(rpc).beginSignIn(selection) }
-        #expect(rpc.methods().isEmpty)
-    }
-
-    @Test func refusesLinksThatAreNotHttpsGoogle() async {
-        for url in ["http://accounts.google.com/o/oauth2/v2/auth", "https://evil.example.com/o/oauth2/v2/auth", "https://google.com.evil.example/auth", "https://accounts.google.com@evil.example/auth", "javascript:alert(1)"] {
-            let rpc = CustomRPC([
-                "google_workspace.signin.start": reply(startReply(url: url)),
-                "google_workspace.signin.cancel": reply(.object(["ok": true])),
-            ])
-            await #expect(throws: GoogleWorkspaceError.failed) { try await started(rpc) }
-            #expect(rpc.methods() == ["google_workspace.signin.start", "google_workspace.signin.cancel"])
-        }
-    }
-
-    @Test func aMissingFlowIDIsAFailure() async {
-        let rpc = CustomRPC(["google_workspace.signin.start": reply(.object(["auth_url": .string(authLink)]))])
-        await #expect(throws: GoogleWorkspaceError.failed) { try await started(rpc) }
-    }
-
-    @Test func retryKeepsTheFlowOpenAndSignedInClosesIt() async throws {
-        let rpc = gateway(finish: [finishReply("retry", code: "bad_paste", message: "Paste the whole address."), finishReply("signed_in", status: signedInStatus)])
-        let session = try await started(rpc)
-        #expect(await session.submit("first") == .tryAgain("Paste the whole address."))
-        guard case .signedIn(let status) = await session.submit("second") else {
-            Issue.record("expected signed in")
-            return
-        }
-        #expect(status.email == "owner@example.com")
-        #expect(status.writeServices == [.drive])
-        let calls = rpc.methods().count
-        guard case .failed = await session.submit("third") else {
-            Issue.record("a closed flow must refuse")
-            return
-        }
-        #expect(rpc.methods().count == calls)
-        await session.cancel()
-        #expect(rpc.methods().count == calls)
-        #expect(rpc.methods().filter { $0 == "google_workspace.signin.finish" }.count == 2)
-    }
-
-    @Test func eachSubmitSendsThePasteOnceWithTheFlow() async throws {
-        let rpc = gateway(finish: [finishReply("retry"), finishReply("denied", code: "denied", message: "Access was declined.")])
-        let session = try await started(rpc)
-        _ = await session.submit("http://127.0.0.1:1/?code=A")
-        _ = await session.submit("http://127.0.0.1:1/?code=B")
-        let sent = rpc.params("google_workspace.signin.finish")
-        #expect(sent.map { $0["flow_id"]?.stringValue } == ["flow-1", "flow-1"])
-        #expect(sent.map { $0["pasted"]?.stringValue } == ["http://127.0.0.1:1/?code=A", "http://127.0.0.1:1/?code=B"])
-    }
-
-    @Test func deniedAndFailedCloseTheFlow() async throws {
-        let denied = gateway(finish: [finishReply("denied", code: "denied", message: "Access was declined.")])
-        let deniedSession = try await started(denied)
-        #expect(await deniedSession.submit("x") == .denied("Access was declined."))
-        guard case .failed = await deniedSession.submit("y") else {
-            Issue.record("denied flow must be closed")
-            return
-        }
-        #expect(denied.params("google_workspace.signin.finish").count == 1)
-
-        let failed = gateway(finish: [finishReply("failed", code: "expired")])
-        let failedSession = try await started(failed)
-        guard case .failed(let reason) = await failedSession.submit("x") else {
-            Issue.record("expected failure")
-            return
-        }
-        #expect(reason == GoogleWorkspaceError.failed.reason)
-        #expect(failed.params("google_workspace.signin.finish").count == 1)
-    }
-
-    @Test func signedInWithoutAnEmbeddedStatusReadsIt() async throws {
-        let rpc = gateway(finish: [finishReply("signed_in")])
-        let session = try await started(rpc)
-        guard case .signedIn(let status) = await session.submit("x") else {
-            Issue.record("expected signed in")
-            return
-        }
-        #expect(status.state == .signedIn)
-        #expect(rpc.methods().last == "google_workspace.status")
-    }
-
-    @Test func aTransportFailureClosesTheFlowAndCancelsIt() async throws {
-        let rpc = CustomRPC([
-            "google_workspace.signin.start": reply(startReply()),
-            "google_workspace.signin.finish": gatewayError(5321, "unreachable"),
-            "google_workspace.signin.cancel": reply(.object(["ok": true])),
-        ])
-        let session = try await started(rpc)
-        #expect(await session.submit("x") == .failed(GoogleWorkspaceError.unreachable.reason))
-        #expect(rpc.methods().filter { $0 == "google_workspace.signin.cancel" }.count == 1)
-        _ = await session.submit("again")
-        #expect(rpc.methods().filter { $0 == "google_workspace.signin.finish" }.count == 1)
-    }
-
-    @Test func cancelIsIdempotentAndCallsTheGatewayOnce() async throws {
-        let rpc = gateway(finish: [])
-        let session = try await started(rpc)
-        await session.cancel()
-        await session.cancel()
-        #expect(rpc.methods().filter { $0 == "google_workspace.signin.cancel" }.count == 1)
-        #expect(rpc.params("google_workspace.signin.cancel") == [.object(["flow_id": "flow-1"])])
-        guard case .failed = await session.submit("x") else {
-            Issue.record("a cancelled flow must refuse")
-            return
-        }
-        #expect(rpc.methods().filter { $0 == "google_workspace.signin.finish" }.isEmpty)
-    }
-
-    @Test func aSecondSubmitWhileOneIsRunningIsRefused() async throws {
-        let inner = gateway(finish: [finishReply("signed_in", status: signedInStatus)])
-        let session = try await started(SlowFinish(inner: inner))
-        let first = Task { await session.submit("slow") }
-        try await Task.sleep(for: .milliseconds(50))
-        guard case .failed = await session.submit("fast") else {
-            Issue.record("single flight")
-            return
-        }
-        guard case .signedIn = await first.value else {
-            Issue.record("the first submit must finish")
-            return
-        }
-        #expect(inner.params("google_workspace.signin.finish").count == 1)
-    }
-}
-
-private struct SlowFinish: ConnectRPC {
-    let inner: CustomRPC
-
-    func call(_ method: String, _ params: JSONValue) async throws -> JSONValue {
-        if method == "google_workspace.signin.finish" { try await Task.sleep(for: .milliseconds(250)) }
-        return try await inner.call(method, params)
-    }
-}
-
-@Suite("Google Workspace in Connected apps")
-struct GoogleCatalogTests {
-    private func catalog(_ status: GoogleWorkspaceStatus?) -> ConnectCatalog {
-        ConnectCatalog.make(catalog: [], mcp: [], google: status)
-    }
-
-    @Test func rowStateFollowsTheStatus() throws {
-        let expectations: [(GoogleWorkspaceStatus.State, ConnectAppState)] = [
-            (.signedIn, .connected), (.reauthNeeded, .needsAuthorization), (.needsSignIn, .disconnected), (.notConfigured, .disconnected),
-        ]
-        for (state, expected) in expectations {
-            let app = try #require(catalog(GoogleWorkspaceStatus(state: state, reauthReason: .revoked)).apps.first)
-            #expect(app.id == "google:workspace")
-            #expect(app.name == "Google Workspace")
-            #expect(app.source == .googleWorkspace)
-            #expect(app.category == "Files and docs")
-            #expect(app.state == expected)
-            #expect((app.authReason != nil) == (state == .reauthNeeded))
-        }
-    }
-
-    @Test func noStatusMeansNoRow() {
-        #expect(catalog(nil).apps.isEmpty)
-        #expect(ConnectCatalog.make(catalog: [], mcp: []).apps.isEmpty)
-    }
-
-    @Test func loadAddsTheRowWithoutAProfileOnTheCall() async throws {
-        let rpc = CustomRPC([
-            "connectors.catalog": reply(.object(["connectors": .array([])])),
-            "mcp.catalog": reply(.object(["servers": .array([])])),
-            "google_workspace.status": reply(signedInStatus),
-        ])
-        let loaded = try await customService(rpc, profile: "bot-1").load()
-        #expect(loaded.apps.map(\.id) == ["google:workspace"])
-        #expect(loaded.apps.first?.state == .connected)
-        #expect(rpc.params("google_workspace.status") == [.object([:])])
-    }
-
-    @Test func aFailingStatusCallHidesOnlyTheGoogleRow() async throws {
-        let slack: JSONValue = .object(["slug": "slack", "name": "Slack", "category": "Communication", "method": "none", "status": "not_connected"])
-        let hosted = reply(.object(["connectors": .array([slack])]))
-        for failure in [gatewayError(4403), gatewayError(5321, "unreachable"), gatewayError(-32601)] {
-            let rpc = CustomRPC([
-                "connectors.catalog": hosted, "mcp.catalog": reply(.object(["servers": .array([])])), "google_workspace.status": failure,
-            ])
-            let loaded = try await customService(rpc).load()
-            #expect(loaded.apps.map(\.id) == ["connector:slack"])
-        }
-    }
-
-    @Test func signingOutFromYourPluginsRemovesOnlyTheToken() async throws {
-        let rpc = CustomRPC(["google_workspace.signout": reply(statusJSON("needs_sign_in"))])
-        let app = try #require(catalog(GoogleWorkspaceStatus(state: .signedIn)).apps.first)
-        try await customService(rpc).disconnect(app)
-        #expect(rpc.params("google_workspace.signout") == [.object(["remove_setup": .bool(false)])])
-    }
-}
-
-private struct GatedItem: ServiceSuggestion, Equatable {
-    let requiredService: ServiceKind?
-}
-
-@Suite("Google Workspace as a connected service")
-struct GoogleConnectedServiceTests {
-    private func services(_ state: GoogleWorkspaceStatus.State?) -> ConnectedServices {
-        ConnectedServices(catalog: ConnectCatalog.make(catalog: [], mcp: [], google: state.map { GoogleWorkspaceStatus(state: $0) }))
-    }
-
-    @Test func onlyASignedInAccountCounts() {
-        #expect(services(.signedIn).isConnected(.google))
-        let others: [GoogleWorkspaceStatus.State?] = [.reauthNeeded, .needsSignIn, .notConfigured, nil]
-        for state in others { #expect(!services(state).isConnected(.google)) }
-        #expect(!ConnectedServices.unknown.isConnected(.google))
-    }
-
-    @Test func aGoogleGatedSuggestionIsHiddenUnlessConnected() {
-        let item = GatedItem(requiredService: .google)
-        #expect(services(.signedIn).visible([item]) == [item])
-        #expect(services(.reauthNeeded).visible([item]).isEmpty)
-        #expect(ConnectedServices.unknown.visible([item]).isEmpty)
-        #expect(ConnectedServices(connected: [.google]).isConnected(.google))
-        #expect(ServiceKind.google.connectorSlug == "google-workspace")
-    }
-}
-
-@Suite("Google Workspace secrets stay out of everything")
-struct GoogleCanaryTests {
-    @Test func aPastedValueAndClientSecretNeverReachLogsOrDescriptions() async throws {
-        let pasted = "http://127.0.0.1:55555/?code=CANARY-PASTE-" + UUID().uuidString
-        let secret = "CANARY-SECRET-" + UUID().uuidString
-        let clientID = "CANARY-ID-" + UUID().uuidString
-        let canaries = [pasted, secret, clientID]
-        let recorder = DiagnosticRecorder()
-        let outcomes = ReplyQueue([
-            finishReply("retry", code: "bad_paste", message: "Paste the whole address."),
-            finishReply("failed", code: "expired", message: "The sign-in expired. Start again."),
-        ])
-        let rpc = CustomRPC([
-            "google_workspace.signin.start": reply(startReply()),
-            "google_workspace.signin.finish": { _ in outcomes.next() },
-            "google_workspace.signin.cancel": reply(.object(["ok": true])),
-            "google_workspace.client.set": { params in
-                throw GatewayTransportError.rpc(RPCError(code: 4101, message: "bad \(params)", data: .object(["code": "invalid_client", "echo": .string("\(params)")])))
-            },
-        ])
-        let google = service(rpc, diagnostics: recorder.diagnostics)
-        let session = try await google.beginSignIn(GoogleScopeSelection())
-        var seen = [String]()
-        seen.append("\(await session.submit(pasted))")
-        seen.append("\(await session.submit(pasted))")
-        seen.append("\(await session.submit(pasted))")
-        do {
-            _ = try await google.setClient(clientID: SecretString(clientID), clientSecret: SecretString(secret))
-        } catch {
-            seen.append("\(error)")
-            seen.append(rendered(error))
-        }
-        seen.append(rendered(session, google, SecretString(secret), SecretString(clientID)))
-        seen.append(recorder.transcript)
-        for canary in canaries {
-            for text in seen { #expect(!text.contains(canary)) }
-        }
-        #expect(!recorder.events.isEmpty)
-    }
-
-    @Test func aTransportFailureOnFinishLogsOnlyStaticText() async throws {
-        let pasted = "CANARY-PASTE-" + UUID().uuidString
-        let recorder = DiagnosticRecorder()
-        let rpc = CustomRPC([
-            "google_workspace.signin.start": reply(startReply()),
-            "google_workspace.signin.finish": { params in
-                throw GatewayTransportError.rpc(RPCError(code: 5321, message: "failed \(params)", data: .object(["code": "failed", "reason": .string(pasted)])))
-            },
-            "google_workspace.signin.cancel": reply(.object(["ok": true])),
-        ])
-        let session = try await started(rpc, diagnostics: recorder.diagnostics)
-        let outcome = await session.submit(pasted)
-        #expect(!"\(outcome)".contains(pasted))
-        #expect(!recorder.transcript.contains(pasted))
-        #expect(!recorder.transcript.contains("flow-1"))
-        #expect(!recorder.transcript.contains("client_id"))
-    }
-
-    @Test func aDeniedStatusCarriesNoCredentialsAndNoRowLeaks() async throws {
-        let canary = "CANARY-TOKEN-" + UUID().uuidString
-        let leaky = statusJSON(
-            "signed_in", email: "owner@example.com", services: ["gmail"],
-            extra: ["client_secret": .string(canary), "access_token": .string(canary), "token": .object(["refresh_token": .string(canary)])]
-        )
-        let recorder = DiagnosticRecorder()
-        let status = try await service(CustomRPC(["google_workspace.status": reply(leaky)]), diagnostics: recorder.diagnostics).status()
-        let card = GoogleWorkspaceCardState.resolve(status: status, signingIn: false, failure: nil)
-        let row = try #require(ConnectCatalog.make(catalog: [], mcp: [], google: status).apps.first)
-        #expect(!rendered(status, card, row).contains(canary))
-
-        let denied = CustomRPC([
-            "connectors.catalog": reply(.object(["connectors": .array([])])),
-            "mcp.catalog": reply(.object(["servers": .array([])])),
-            "google_workspace.status": { _ in
-                throw GatewayTransportError.rpc(RPCError(code: 4403, message: "secondary profile " + canary, data: .object(["token": .string(canary)])))
-            },
-        ])
-        let loaded = try await ConnectAppsService(
-            rpc: denied, profile: nil, browser: IdleBrowser(), diagnostics: recorder.diagnostics
-        ).load()
-        #expect(loaded.apps.isEmpty)
-        #expect(!rendered(loaded).contains(canary))
-        #expect(!recorder.transcript.contains(canary))
-        await #expect(throws: GoogleWorkspaceError.ownerOnly) { try await service(denied).status() }
-    }
-}
-
-private final class RouteLog: Sendable {
-    private let entries = Mutex<[String]>([])
-    var all: [String] { entries.withLock { $0 } }
-    func note(_ entry: String) { entries.withLock { $0.append(entry) } }
-}
-
-private func fakeRoute(_ name: String, _ log: RouteLog, submit: ServicePasteOutcome = .signedIn) -> ServicePasteSignIn {
-    ServicePasteSignIn(
-        begin: { service in log.note("\(name).begin:\(service)"); return nil },
-        submit: { service, _ in log.note("\(name).submit:\(service)"); return submit },
-        cancel: { service in log.note("\(name).cancel:\(service)") },
-        reopen: { service in log.note("\(name).reopen:\(service)") }
-    )
-}
-
-private func googleRequired(
-    _ reason: String, service: String = GoogleWorkspaceCatalog.serviceID, requestID: String = "g1"
-) -> GatewayEvent {
-    GatewayEvent(type: "auth.required", payload: .object([
-        "request_id": .string(requestID), "service": .string(service), "service_name": "Google Workspace", "bot": "atlas",
-        "bots": ["atlas"], "reason": .string(reason), "flow": "oauth_paste", "expires_in": 300, "signin_on": "owner_app",
-    ]))
-}
-
-@MainActor
-@Suite("Google Workspace typed re-sign-in")
-struct GoogleTypedReauthTests {
-    private let account = GoogleWorkspaceStatus(state: .signedIn, email: "a@b.co", services: [.gmail], writeServices: [])
-
-    @Test func theTypedEventMapsToTheNeedsReauthState() throws {
-        let expectations: [(ServiceSignInReason, GoogleReauthReason)] = [
-            (.missing, .tokenMissing), (.expired, .tokenUnreadable), (.revoked, .revoked), (.unknown, .unknown),
-        ]
-        for (wire, expected) in expectations {
-            let event = AuthRequiredEvent(
-                requestID: "g1", service: GoogleWorkspaceCatalog.serviceID, serviceName: "Google Workspace", bot: "atlas",
-                bots: ["atlas"], reason: wire, flow: .oauthPaste, signinOn: "owner_app"
-            )
-            #expect(event.requiresAppSignIn)
-            #expect(GoogleReauthReason(signIn: wire) == expected)
-            let card = GoogleWorkspaceCardState.resolve(status: account, signingIn: false, failure: nil, authRequired: event.reason)
-            #expect(card == .needsReauth(expected))
-            let listed = try #require(ConnectCatalog.make(catalog: [], mcp: [], google: account).apps.first)
-            let row = listed.applyingGoogleAuthRequired(event.reason)
-            #expect(row.state == .needsAuthorization)
-            #expect(row.authReason == expected.plainReason)
-        }
-    }
-
-    @Test func theOrderIsSigningInThenFailureThenAuthRequiredThenStatus() {
-        typealias Card = GoogleWorkspaceCardState
-        #expect(Card.resolve(status: account, signingIn: true, failure: "Nope.", authRequired: .revoked) == .signingIn)
-        #expect(Card.resolve(status: account, signingIn: false, failure: "Nope.", authRequired: .revoked) == .failed("Nope."))
-        #expect(Card.resolve(status: nil, signingIn: false, failure: nil, authRequired: .missing) == .needsReauth(.tokenMissing))
-        #expect(Card.resolve(status: account, signingIn: false, failure: nil, authRequired: nil) == .signedIn(email: "a@b.co", services: [.gmail], writeServices: []))
-        #expect(Card.resolve(status: account, signingIn: false, failure: nil) == Card.resolve(status: account, signingIn: false, failure: nil, authRequired: nil))
-    }
-
-    @Test func onlyTheGoogleRowTakesTheOverlay() throws {
-        let google = try #require(ConnectCatalog.make(catalog: [], mcp: [], google: account).apps.first)
-        #expect(google.applyingGoogleAuthRequired(nil) == google)
-        let other = ConnectApp(
-            id: "connector:slack", name: "Slack", summary: "", category: "Communication",
-            source: .catalog(PalCatalogEntry(slug: "slack", name: "Slack", method: .mcpOAuth)), state: .connected
-        )
-        #expect(other.applyingGoogleAuthRequired(.revoked) == other)
-    }
-
-    @Test func aPendingDialogForGoogleIsTheReasonAndASignedInOneClearsIt() {
-        let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in }, dismissDelay: .seconds(60))
-        #expect(center.pendingReason(for: GoogleWorkspaceCatalog.serviceID) == nil)
-        center.receive(googleRequired("revoked"))
-        #expect(center.pendingReason(for: GoogleWorkspaceCatalog.serviceID) == .revoked)
-        #expect(center.pendingReason(for: "github") == nil)
-        center.receive(GatewayEvent(type: "auth.resolved", payload: ["request_id": "g1", "outcome": "signed_in"]))
-        #expect(center.pendingReason(for: GoogleWorkspaceCatalog.serviceID) == nil)
-        let cleared = GoogleWorkspaceCardState.resolve(status: account, signingIn: false, failure: nil, authRequired: center.pendingReason(for: GoogleWorkspaceCatalog.serviceID))
-        #expect(cleared.isSignedIn)
-    }
-
-    @Test func aDeclinedDialogStopsHoldingTheRowInReauth() async {
-        let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in }, dismissDelay: .seconds(60))
-        center.receive(googleRequired("expired"))
-        #expect(center.pendingReason(for: GoogleWorkspaceCatalog.serviceID) == .expired)
-        await center.notNow()
-        #expect(center.pendingReason(for: GoogleWorkspaceCatalog.serviceID) == nil)
-    }
-
-    @Test func theSignInStartsFromTheCurrentGrant() {
-        let granted = GoogleWorkspaceStatus(state: .signedIn, services: [.gmail, .drive], writeServices: [.drive, .contacts, .docs])
-        let selection = GoogleScopeSelection(granted: granted)
-        #expect(selection.read == [.gmail, .drive])
-        #expect(selection.write == [.drive])
-        let reauth = GoogleScopeSelection(granted: GoogleWorkspaceStatus(state: .reauthNeeded, services: [.calendar], writeServices: [.calendar]))
-        #expect(reauth.read == [.calendar] && reauth.write == [.calendar])
-        let fresh = GoogleScopeSelection()
-        for status in [nil, GoogleWorkspaceStatus(state: .needsSignIn, services: [.gmail]), GoogleWorkspaceStatus(state: .reauthNeeded)] {
-            #expect(GoogleScopeSelection(granted: status) == fresh)
-        }
-        #expect(fresh.write.isEmpty)
-    }
-
-    @Test func theRouteForGoogleNeverTouchesTheOtherRoute() async {
-        let log = RouteLog()
-        let route = ServicePasteSignIn.routing(
-            [GoogleWorkspaceCatalog.serviceID: fakeRoute("google", log)], fallback: fakeRoute("upwork", log, submit: .failed("Start again."))
-        )
-        let google = GoogleWorkspaceCatalog.serviceID
-        _ = await route.begin(google)
-        #expect(await route.submit(google, "x") == .signedIn)
-        route.reopen(google)
-        await route.cancel(google)
-        #expect(log.all == ["google.begin:\(google)", "google.submit:\(google)", "google.reopen:\(google)", "google.cancel:\(google)"])
-        _ = await route.begin("mcp:upwork")
-        #expect(await route.submit("mcp:upwork", "x") == .failed("Start again."))
-        #expect(log.all.suffix(2) == ["upwork.begin:mcp:upwork", "upwork.submit:mcp:upwork"])
-        #expect(!log.all.dropLast(2).contains { $0.hasPrefix("upwork") })
-    }
-
-    @Test func aMacWithANativeRouteStillSignsGoogleInByPasting() async {
-        let log = RouteLog()
-        let center = ServiceSignInCenter(
-            call: { _, _ in [:] }, openBrowser: { _ in }, nativeSignIn: { _ in .failed("native") },
-            pasteSignIn: .routing([GoogleWorkspaceCatalog.serviceID: fakeRoute("google", log)], fallback: fakeRoute("upwork", log)),
-            pasteOnlyServices: [GoogleWorkspaceCatalog.serviceID], dismissDelay: .seconds(60)
-        )
-        center.receive(googleRequired("missing"))
-        #expect(center.current?.automaticSignInAvailable == false)
-        #expect(center.current?.canSignIn == true)
-        await center.signIn()
-        #expect(center.current?.phase == .pasteAddress(nil))
-        await center.submitAddress("http://127.0.0.1:1/?code=c&state=s")
-        #expect(center.current?.phase == .signedIn)
-        #expect(log.all == ["google.begin:google:workspace", "google.submit:google:workspace"])
-        center.receive(googleRequired("missing", service: "mcp:upwork", requestID: "u1"))
-        #expect(center.dialogs.last?.automaticSignInAvailable == true)
-    }
-
-    @Test func aPastedAddressNeverReachesTheDialogOrTheLogs() async throws {
-        let pasted = "http://127.0.0.1:55555/?code=CANARY-PASTE-" + UUID().uuidString
-        let recorder = DiagnosticRecorder()
-        let rpc = CustomRPC([
-            "google_workspace.signin.start": reply(startReply()),
-            "google_workspace.signin.finish": reply(finishReply("failed", code: "expired", message: "The sign-in expired. Start again.")),
-            "google_workspace.signin.cancel": reply(.object(["ok": true])),
-        ])
-        let session = try await started(rpc, diagnostics: recorder.diagnostics)
-        let route = ServicePasteSignIn(
-            begin: { _ in nil },
-            submit: { _, text in
-                switch await session.submit(text) {
-                case .signedIn: .signedIn
-                case .tryAgain(let note): .tryAgain(note)
-                case .denied(let reason), .failed(let reason): .failed(reason)
-                }
-            },
-            cancel: { _ in },
-            reopen: { _ in }
-        )
-        let center = ServiceSignInCenter(call: { _, _ in [:] }, openBrowser: { _ in }, pasteSignIn: route, dismissDelay: .seconds(60))
-        center.receive(googleRequired("revoked"))
-        await center.signIn()
-        await center.submitAddress(pasted)
-        #expect(center.current?.phase == .failed("The sign-in expired. Start again."))
-        #expect(!rendered(center.dialogs, center.lastResolution as Any).contains(pasted))
-        #expect(!recorder.transcript.contains(pasted))
     }
 }

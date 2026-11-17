@@ -82,40 +82,40 @@ final class ConnectAppsModel {
     }
 
     private(set) var phase: Phase = .loading
-    private(set) var capabilitiesPhase: CapabilitiesPhase = .hidden
+    var capabilitiesPhase: CapabilitiesPhase = .hidden
     private(set) var catalog = ConnectCatalog()
-    private(set) var busy: Set<String> = []
+    var busy: Set<String> = []
     var selection = ConnectChip.all
     var query = ""
     var page: Page = .catalog
     var notice: ConnectNotice?
     var credentialPrompt: CredentialPrompt?
     var keyRequest: CapabilityKeyRequest?
-    private(set) var keyState: SecretEntryState = .idle
+    var keyState: SecretEntryState = .idle
     var disconnectTarget: ConnectDisconnectTarget?
     var showsSkills = false
     var upworkApp: ConnectApp?
     var googleApp: ConnectApp?
     let google: GoogleWorkspaceModel
-    private(set) var pasteSession: (any McpPasteSigning)?
+    var pasteSession: (any McpPasteSigning)?
     var pastingApp: ConnectApp?
-    private var pasteTargetID = UpworkConnector.service
-    private(set) var pasteState: SecretEntryState = .idle
-    private(set) var failures: [String: String] = [:]
+    var pasteTargetID = UpworkConnector.service
+    var pasteState: SecretEntryState = .idle
+    var failures: [String: String] = [:]
     private(set) var mode: Mode = .list
 
     let botName: String
     let devices: DeviceConnectorsModel
-    private let profile: String?
-    private let service: ConnectAppsService
-    private let capabilitiesService: CapabilitiesService
+    let profile: String?
+    let service: ConnectAppsService
+    let capabilitiesService: CapabilitiesService
     private let skillsService: SkillsCatalogService
     private let bots: [CustomConnectorBot]
     private let currentBot: String?
-    private let diagnostics = Diagnostics.osLog()
-    private let surfaces: SurfaceCache
+    let diagnostics = Diagnostics.osLog()
+    let surfaces: SurfaceCache
     private var catalogKey: SurfaceKey { .screen("connect-catalog", bot: profile ?? "") }
-    private var capabilitiesKey: SurfaceKey { .screen("connect-capabilities", bot: profile ?? "") }
+    var capabilitiesKey: SurfaceKey { .screen("connect-capabilities", bot: profile ?? "") }
 
     init(
         connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser,
@@ -168,51 +168,7 @@ final class ConnectAppsModel {
         await loadCapabilities()
     }
 
-    func loadCapabilities() async {
-        guard let profile else { return }
-        if case .ready = capabilitiesPhase {} else { capabilitiesPhase = .loading }
-        do {
-            let rows = try await capabilitiesService.status(profile: profile)
-            capabilitiesPhase = .ready(rows)
-            surfaces.remember(rows, capabilitiesKey)
-        } catch is CancellationError {
-            return
-        } catch {
-            diagnostics.info("capabilities", "status failed: \(Diagnostics.describe(error))")
-            if case .ready = capabilitiesPhase {} else { capabilitiesPhase = .failed }
-        }
-    }
-
     func makeSkillsModel() -> SkillsCatalogModel { SkillsCatalogModel(service: skillsService, profile: profile, surfaces: surfaces) }
-
-    var canSetKeys: Bool { profile != nil }
-
-    func beginKeyEntry(_ row: CapabilityRow, keyName: String) {
-        guard canSetKeys, row.settableKeys.contains(keyName) else { return }
-        keyState = .idle
-        keyRequest = CapabilityKeyRequest(capability: row.label, keyName: keyName)
-    }
-
-    func cancelKeyEntry() {
-        keyRequest = nil
-        keyState = .idle
-    }
-
-    func submitKey(_ value: String) async {
-        guard let request = keyRequest, let profile, keyState.acceptsInput else { return }
-        keyState = .submitting
-        do {
-            let rows = try await capabilitiesService.setKey(request.keyName, to: SecretString(value), profile: profile)
-            capabilitiesPhase = .ready(rows)
-            surfaces.remember(rows, capabilitiesKey)
-            cancelKeyEntry()
-        } catch is CancellationError {
-            keyState = .idle
-        } catch {
-            diagnostics.info("capabilities", "set key failed: \(Diagnostics.describe(error))")
-            keyState = .failure(String(localized: "Couldn't save the key. Check it and try again."))
-        }
-    }
 
     func stop() async {
         await customConnector?.discard()
@@ -230,83 +186,6 @@ final class ConnectAppsModel {
 
     func cardState(_ app: ConnectApp) -> ConnectorCardState {
         return .resolve(ConnectorCardInput(app: app, isBusy: busy.contains(app.id), failureReason: failures[app.id]))
-    }
-
-    var isPastingAddress: Bool { pasteSession != nil }
-
-    func beginPaste(_ app: ConnectApp) async {
-        guard pasteSession == nil else { return }
-        busy.insert(app.id)
-        failures[app.id] = nil
-        defer { busy.remove(app.id) }
-        do {
-            let session = try await service.beginUpworkPaste(app)
-            guard ExternalLink.open(session.authorizeURL) else {
-                await session.cancel()
-                failures[app.id] = McpOAuthError.browserUnavailable.reason
-                return
-            }
-            pasteSession = session
-            pasteTargetID = app.id
-            pasteState = .idle
-        } catch let error as ConnectAppsError {
-            handle(error, app: app)
-        } catch {
-            fail(app, "Couldn't connect \(app.name). Try again.")
-        }
-        await reload()
-    }
-
-    func submitPastedAddress(_ value: String) async {
-        guard let session = pasteSession, pasteState.acceptsInput else { return }
-        pasteState = .submitting
-        switch await session.submit(value) {
-        case .signedIn:
-            pasteSession = nil
-            pastingApp = nil
-            pasteState = .idle
-        case .tryAgain(let note):
-            pasteState = .failure(note)
-        case .failed(let reason):
-            pasteSession = nil
-            pastingApp = nil
-            pasteState = .idle
-            failures[pasteTargetID] = reason
-        }
-        await reload()
-    }
-
-    func reopenPasteSignIn() {
-        if let url = pasteSession?.authorizeURL { ExternalLink.open(url) }
-    }
-
-    func cancelPaste() async {
-        guard let session = pasteSession else { return }
-        pasteSession = nil
-        pastingApp = nil
-        pasteState = .idle
-        await session.cancel()
-        await reload()
-    }
-
-    private func beginOtherPaste(_ app: ConnectApp) async {
-        guard pasteSession == nil else { return }
-        do {
-            let session = try await service.beginMcpPaste(app)
-            guard ExternalLink.open(session.authorizeURL) else {
-                await session.cancel()
-                failures[app.id] = McpOAuthError.browserUnavailable.reason
-                return
-            }
-            pasteSession = session
-            pasteTargetID = app.id
-            pasteState = .idle
-            pastingApp = app
-        } catch let error as ConnectAppsError {
-            handle(error, app: app)
-        } catch {
-            fail(app, "Couldn't connect \(app.name). Try again.")
-        }
     }
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
@@ -382,7 +261,7 @@ final class ConnectAppsModel {
         }
     }
 
-    private func handle(_ error: ConnectAppsError, app: ConnectApp) {
+    func handle(_ error: ConnectAppsError, app: ConnectApp) {
         switch error {
         case .cancelled:
             if app.requiresAppSignIn { failures[app.id] = McpOAuthError.cancelled.reason }
@@ -392,7 +271,7 @@ final class ConnectAppsModel {
         }
     }
 
-    private func fail(_ app: ConnectApp, _ message: String) {
+    func fail(_ app: ConnectApp, _ message: String) {
         if app.requiresAppSignIn {
             failures[app.id] = message
         } else {
@@ -400,7 +279,7 @@ final class ConnectAppsModel {
         }
     }
 
-    private func report(_ message: String) {
+    func report(_ message: String) {
         notice = ConnectNotice(title: "Connect apps", message: message)
     }
 }
