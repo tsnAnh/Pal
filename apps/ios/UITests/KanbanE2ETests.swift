@@ -49,4 +49,34 @@ final class KanbanE2ETests: E2ETestCase {
         XCTAssertFalse(app.staticTexts["Key: PAL-1"].exists, "machine lines are not shown while collapsed")
         screenShot("kanban-card-detail")
     }
+
+    func testBoardShowsTitleAssigneeAvatarAndPullRequestChip() throws {
+        try control("kanban-seed")
+        let app = launch()
+        signInIfNeeded(app)
+
+        let entry = app.buttons["kanbanButton"]
+        waitFor(entry, timeout: 20, "work boards button")
+        XCTAssertEqual(entry.label, "Pal Kanban", "the entry is labelled Pal Kanban")
+        entry.hit()
+        let boardRow = any(app, "kanbanBoard-ops")
+        waitFor(boardRow, timeout: 20, "the seeded board in the boards list")
+        boardRow.hit()
+
+        let heading = any(app, "kanbanTitle")
+        waitFor(heading, timeout: 20, "board header")
+        XCTAssertEqual(heading.label, "Pal Kanban", "the board header reads Pal Kanban")
+        show(app, column: "done")
+        let merged = any(app, "kanbanColumn-done").buttons
+            .matching(NSPredicate(format: "label CONTAINS %@", "Publish the docs")).firstMatch
+        waitFor(merged, timeout: 20, "the merged card in Done")
+        XCTAssertTrue(merged.label.contains("bot-alpha"), "the card names its assignee")
+        XCTAssertTrue(merged.label.contains("Pull request #42, Merged"), "the card carries the merged PR chip")
+        screenShot("kanban-glass-board")
+
+        merged.hit()
+        waitFor(any(app, "kanbanAssignee-bot-alpha"), timeout: 20, "the detail shows the avatar assignee")
+        waitFor(any(app, "kanbanPullRequest"), timeout: 10, "the detail shows the PR chip with its state")
+        screenShot("kanban-glass-card-detail")
+    }
 }

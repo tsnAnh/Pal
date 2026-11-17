@@ -67,7 +67,7 @@ struct KanbanBoardView: View {
                 ContentUnavailableView("No cards yet", systemImage: "rectangle.split.3x1", description: Text("Cards on this board appear here."))
                     .accessibilityIdentifier("kanbanBoardEmpty")
             } else {
-                KanbanFilterBar(filter: $filter, layout: layout)
+                KanbanFilterBar(filter: $filter, layout: layout, boardName: cache?.board?.name ?? board, compact: !showsColumns)
                 if layout.matchingCards == 0 {
                     noMatches
                 } else {
@@ -106,19 +106,13 @@ struct KanbanBoardView: View {
         .accessibilityIdentifier("kanbanNoMatches")
     }
 
-    private func columns(_ layout: KanbanBoardLayout) -> some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            arrangement(layout, now: context.date)
-        }
-    }
-
     @ViewBuilder
-    private func arrangement(_ layout: KanbanBoardLayout, now: Date) -> some View {
+    private func columns(_ layout: KanbanBoardLayout) -> some View {
         if showsColumns {
-            wide(layout, now: now)
+            wide(layout)
         } else {
             #if os(iOS)
-            pager(layout, now: now)
+            pager(layout)
             #endif
         }
     }
@@ -127,16 +121,18 @@ struct KanbanBoardView: View {
         if showsColumns { selected = taskID } else { openCard(taskID) }
     }
 
-    private func wide(_ layout: KanbanBoardLayout, now: Date) -> some View {
+    private func wide(_ layout: KanbanBoardLayout) -> some View {
         HStack(spacing: 0) {
             GeometryReader { proxy in
                 let inset = PalMetrics.screenMargin
                 let gaps = CGFloat(max(layout.columns.count - 1, 0)) * 10
                 let fit = (proxy.size.width - inset * 2 - gaps) / CGFloat(max(layout.columns.count, 1))
                 ScrollView(.horizontal) {
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(layout.columns) { column in
-                            KanbanColumnView(layout: column, now: now, selected: selected, width: max(fit, 220), open: select)
+                    GlassEffectContainer(spacing: 10) {
+                        HStack(alignment: .top, spacing: 10) {
+                            ForEach(layout.columns) { column in
+                                KanbanColumnView(layout: column, selected: selected, width: max(fit, 220), open: select)
+                            }
                         }
                     }
                     .padding(.horizontal, inset)
@@ -157,7 +153,7 @@ struct KanbanBoardView: View {
     }
 
     #if os(iOS)
-    private func pager(_ layout: KanbanBoardLayout, now: Date) -> some View {
+    private func pager(_ layout: KanbanBoardLayout) -> some View {
         let current = Binding<KanbanColumn>(
             get: { layout.columns.contains { $0.column == pagerColumn } ? pagerColumn : .backlog },
             set: { pagerColumn = $0 }
@@ -170,7 +166,7 @@ struct KanbanBoardView: View {
             )
             TabView(selection: current) {
                 ForEach(layout.columns) { column in
-                    KanbanColumnView(layout: column, now: now, selected: nil, width: nil, open: select)
+                    KanbanColumnView(layout: column, selected: nil, width: nil, open: select)
                         .padding(.horizontal, PalMetrics.screenMargin)
                         .padding(.bottom, 8)
                         .tag(column.column)

@@ -37,6 +37,17 @@ def seed(home, repo):
         kb.block_task(conn, blocked, reason="waiting on credentials")
         finished = kb.create_task(conn, title="Publish the docs", assignee=BOT, board=BOARD)
         kb.complete_task(conn, finished, summary="published")
+        record_merged_pr(conn, finished)
+
+
+def record_merged_pr(conn, task_id):
+    from hermes_cli.kanban_outcomes_store import ensure_schema
+    ensure_schema(conn)
+    conn.execute(
+        "INSERT INTO task_evidence (task_id, run_id, kind, digest, payload, producer_profile, source, observed_at)"
+        " VALUES (?, 0, 'pr_merged', 'e2e', ?, ?, 'github', 1)",
+        (task_id, '{"pr_url": "https://github.com/example/app/pull/42"}', BOT))
+    conn.commit()
 
 
 def advance(home, repo):

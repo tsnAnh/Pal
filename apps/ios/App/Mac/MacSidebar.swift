@@ -434,8 +434,8 @@ private struct MacSidebarFooter: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
-                .help(String(localized: "Work boards"))
-                .accessibilityLabel(Text("Work boards"))
+                .help(String(localized: "Pal Kanban"))
+                .accessibilityLabel(Text("Pal Kanban"))
                 .accessibilityIdentifier("kanbanButton")
             }
         }
@@ -491,8 +491,8 @@ private struct MacRail: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help(String(localized: "Work boards"))
-                        .accessibilityLabel(Text("Work boards"))
+                        .help(String(localized: "Pal Kanban"))
+                        .accessibilityLabel(Text("Pal Kanban"))
                         .accessibilityIdentifier("kanbanButton")
                     }
                 }

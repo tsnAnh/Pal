@@ -16,6 +16,8 @@ struct KanbanCardView: View {
     let openCard: (String) -> Void
     let back: () -> Void
 
+    @Environment(\.kanbanRoster) private var roster
+
     private var detail: KanbanCardDetail? { store.session.detail(board: board, taskID: taskID) }
     private var load: KanbanLoad { store.cardLoad(board: board, taskID: taskID) }
     private var title: String {
@@ -140,7 +142,7 @@ struct KanbanCardView: View {
         return section("Lifecycle", identifier: "kanbanLifecycle") {
             SettingsRow.value("Status", value: KanbanPresentation.statusTitle(state.status), accessibilityIdentifier: "kanbanLifecycleStatus")
             if let assignee = state.assignee, !assignee.isEmpty {
-                SettingsRow.value("Assignee", value: assignee, accessibilityIdentifier: "kanbanLifecycleAssignee")
+                SettingsRow.value("Assignee", value: roster.names.name(for: assignee) ?? assignee, accessibilityIdentifier: "kanbanLifecycleAssignee")
             }
             if let kind = state.blockKind, !kind.isEmpty {
                 SettingsRow.value("Blocked by", value: kind, accessibilityIdentifier: "kanbanLifecycleBlock")
@@ -196,7 +198,7 @@ struct KanbanCardView: View {
 
     private func runSubtitle(_ run: KanbanRun) -> String? {
         var parts: [String] = []
-        if let profile = run.profile, !profile.isEmpty { parts.append(profile) }
+        if let profile = roster.names.name(for: run.profile) { parts.append(profile) }
         if let executor = run.executor, !executor.isEmpty { parts.append(executor) }
         if let session = run.executorSession, !session.isEmpty { parts.append("session \(session)") }
         if let outcome = run.outcome, !outcome.isEmpty { parts.append(outcome) }
@@ -274,7 +276,7 @@ struct KanbanCardView: View {
 
     private func evidenceSubtitle(_ item: KanbanEvidence) -> String? {
         var parts: [String] = []
-        if !item.producerProfile.isEmpty { parts.append(item.producerProfile) }
+        if let producer = roster.names.name(for: item.producerProfile) { parts.append(producer) }
         if let session = item.producerSession { parts.append("session \(session)") }
         if let runID = item.runID { parts.append("run \(runID)") }
         if let time = KanbanTime.text(item.observedAt) { parts.append(time) }

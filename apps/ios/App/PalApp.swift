@@ -335,7 +335,7 @@ struct RootView: View {
                 .serviceSignInDialogHost()
             }
             .fullCover(isPresented: kanbanPresented) {
-                KanbanSurface(connection: model) { router.dismissSheet() }
+                KanbanSurface(connection: model, roster: roster) { router.dismissSheet() }
             }
             .fullCover(isPresented: $router.isSearching) {
                 SearchHost(roster: roster, router: router)

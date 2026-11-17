@@ -35,7 +35,7 @@ struct MacModalHost: View {
                         MacShortcutsSheet()
                     }
                 } else if router.sheet == .kanban {
-                    KanbanSurface(connection: connection, close: { router.dismissSheet() })
+                    KanbanSurface(connection: connection, roster: roster, close: { router.dismissSheet() })
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(PalTokens.content)
                         .accessibilityElement(children: .contain)

@@ -11,7 +11,7 @@ struct KanbanBoardsView: View {
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
-        KanbanPage(title: "Boards", identifier: "kanbanBoards", back: nil, close: close) {
+        KanbanPage(title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoards", back: nil, close: close) {
             content
         }
         .task(id: scenePhase == .active) {
