@@ -20,7 +20,7 @@ struct MacConnectApps: View {
         _model = State(initialValue: model)
     }
 
-    private var onCatalog: Bool { model.page == .catalog }
+    var onCatalog: Bool { model.page == .catalog }
 
     var body: some View {
         Group {
