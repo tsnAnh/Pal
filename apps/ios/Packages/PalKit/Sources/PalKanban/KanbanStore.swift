@@ -69,6 +69,7 @@ public final class KanbanStore {
 
     public private(set) var session = KanbanSession()
     public private(set) var boardsLoad: KanbanLoad = .idle
+    public private(set) var boardsCode: String?
     public private(set) var boardLoads: [String: KanbanLoad] = [:]
     public private(set) var cardLoads: [String: KanbanLoad] = [:]
     public private(set) var settledGenerations: [String: Int] = [:]
@@ -126,13 +127,15 @@ public final class KanbanStore {
                 let list = try await service.boards(gatewayID: session.gatewayID)
                 absorb(gatewayID: list.gatewayID)
                 session.setBoards(list.boards)
-                boardsLoad = .ready
+                boardsCode = list.boards.isEmpty && !list.isVerifiedEmpty ? "boards_unverified" : nil
+                boardsLoad = boardsCode == nil ? .ready : .failed
                 return
             } catch KanbanFailure.gatewayMismatch where attempt == 0 {
                 drop()
             } catch is CancellationError {
                 return
             } catch {
+                boardsCode = String(describing: KanbanFailure.classify(error))
                 boardsLoad = KanbanLoad.from(KanbanFailure.classify(error))
                 return
             }

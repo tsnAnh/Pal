@@ -18,7 +18,14 @@ struct KanbanBoardsView: View {
 
     var body: some View {
         Group {
-            if let board = selected {
+            if let board = selected, let unreadable = boards.first(where: { $0.scope.board == board && $0.unavailable != nil }) {
+                KanbanPage(
+                    title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoardUnavailable", back: nil, close: close, scrolls: false,
+                    picker: KanbanBoardPicker(boards: boards, selected: $selected)
+                ) {
+                    KanbanStatusView(copy: .unreadableBoard(unreadable)) { Task { await store.loadBoards() } }
+                }
+            } else if let board = selected {
                 KanbanBoardView(
                     store: store, board: board, openCard: { openCard(board, $0) }, close: close,
                     picker: KanbanBoardChoice.showsPicker(boards: slugs) ? KanbanBoardPicker(boards: boards, selected: $selected) : nil
@@ -60,7 +67,7 @@ struct KanbanBoardsView: View {
         case .idle, .loading:
             KanbanBoardSkeleton(wide: KanbanBoardsView.wide)
         case .failed, .unreachable:
-            FailureCard(message: (store.boardsLoad == .unreachable ? KanbanLoad.unreachable : KanbanLoad.failed).message ?? "", identifier: "kanbanBoardsFailure") {
+            KanbanStatusView(copy: .boardsFailure(store.boardsLoad, code: store.boardsCode)) {
                 Task { await store.loadBoards() }
             }
         case .ready:
@@ -123,6 +130,7 @@ struct KanbanBoardPicker: View {
         if !board.description.isEmpty { parts.append(board.description) }
         if board.dispatchMode == "external" { parts.append("Coordinator-owned") }
         if board.archived { parts.append("Archived") }
+        if board.unavailable != nil { parts.append("Can't be read") }
         if let counts = board.taskCounts {
             let sum = counts.values.reduce(0, +)
             parts.append(sum == 1 ? "1 card" : "\(sum) cards")
