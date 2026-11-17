@@ -42,7 +42,6 @@ struct KanbanSurface: View {
                 }
         }
         .tint(.primary)
-        .hermesThemeWithoutBotTint()
         .environment(\.kanbanRoster, kanbanRoster)
         .task(id: target) {
             guard let board = target.followedBoard else { return }

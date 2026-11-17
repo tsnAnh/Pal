@@ -51,7 +51,8 @@ PINS = {
 IOS = "apps/ios"
 CONFIG = ".swiftlint.yml"
 BASELINE = ".swiftlint-baseline.json"
-GUARDS = ("scripts/ci/check_swift_brand.py", "scripts/ci/check_swift_nav_chrome.py")
+GUARDS = ("scripts/ci/check_swift_brand.py", "scripts/ci/check_swift_nav_chrome.py",
+          "scripts/ci/check_swift_bot_tint.py")
 FIX = "python scripts/ci/swift_lint.py --fetch"
 
 

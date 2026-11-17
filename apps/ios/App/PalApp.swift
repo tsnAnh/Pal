@@ -76,7 +76,7 @@ struct PalApp: App {
                 .overlay(alignment: .topLeading) { ExternalLinkProbe() }
                 .devicePermissionAlert(consent)
                 .serviceSignInDialog(signIn) { roster.displayName(forProfile: $0) }
-                .hermesTheme(mode: appearance.mode, botAccent: roster.accentBot?.accent)
+                .hermesTheme(mode: appearance.mode)
                 .environment(appearance)
                 .environment(signIn)
                 .environment(autoApprove)

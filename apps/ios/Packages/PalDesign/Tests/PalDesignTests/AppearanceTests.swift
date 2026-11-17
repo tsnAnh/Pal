@@ -36,45 +36,31 @@ struct AppearanceTests {
     func colorSchemeMapping() {
         #expect(AppearanceMode.followSystem.preferredColorScheme == nil)
         #expect(AppearanceMode.light.preferredColorScheme == .light)
-        for mode in [AppearanceMode.dark, .black, .botColor] {
+        for mode in [AppearanceMode.dark, .black] {
             #expect(mode.preferredColorScheme == .dark)
         }
     }
 
     @Test("follow-system picks the palette of the system scheme")
     func followSystemPalette() {
-        #expect(AppearanceMode.followSystem.palette(systemScheme: .dark, botAccent: nil) == PalPalette.measuredDark)
-        #expect(AppearanceMode.followSystem.palette(systemScheme: .light, botAccent: nil) == PalPalette.derivedLight)
+        #expect(AppearanceMode.followSystem.palette(systemScheme: .dark) == PalPalette.measuredDark)
+        #expect(AppearanceMode.followSystem.palette(systemScheme: .light) == PalPalette.derivedLight)
     }
 
-    @Test("the five modes give five distinct canvases when a bot accent exists")
-    func distinctCanvases() throws {
-        let accent = try #require(RGB(hexString: "#8b5cf6"))
+    @Test("the explicit modes give distinct canvases")
+    func distinctCanvases() {
         let canvases = Set(AppearanceMode.allCases.filter { $0 != .followSystem }.map {
-            $0.palette(systemScheme: .dark, botAccent: accent).canvas
+            $0.palette(systemScheme: .dark).canvas
         })
-        #expect(canvases.count == 4)
-        #expect(AppearanceMode.black.palette(systemScheme: .dark, botAccent: nil).canvas.hex == 0x000000)
+        #expect(canvases.count == 3)
+        #expect(AppearanceMode.black.palette(systemScheme: .dark).canvas.hex == 0x000000)
     }
 
-    @Test("bot color tints surfaces toward the accent hue and leaves text alone")
-    func botColorTint() throws {
-        let accent = try #require(RGB(hexString: "#f43f5e"))
-        let tinted = AppearanceMode.botColor.palette(systemScheme: .dark, botAccent: accent)
-        let plain = PalPalette.measuredDark
-        #expect(tinted.canvas != plain.canvas)
-        #expect(tinted.groupedCard != plain.groupedCard)
-        let tintedHue = tinted.groupedCard.hueSaturationBrightness
-        let accentHue = accent.hueSaturationBrightness
-        #expect(abs(tintedHue.hue - accentHue.hue) < 0.02)
-        #expect(tintedHue.saturation > 0.05)
-        #expect(tinted.textPrimary == plain.textPrimary)
-        #expect(tinted.accentBlue == plain.accentBlue)
-    }
-
-    @Test("bot color without an accent is the dark palette")
-    func botColorWithoutAccent() {
-        #expect(AppearanceMode.botColor.palette(systemScheme: .dark, botAccent: nil) == PalPalette.measuredDark)
+    @Test("an install that stored the removed bot color mode follows the system")
+    func removedBotColorMigrates() {
+        let defaults = isolatedDefaults()
+        defaults.set("botColor", forKey: AppearanceStore.defaultsKey)
+        #expect(AppearanceStore(defaults: defaults).mode == .followSystem)
     }
 
     @Test("hex parsing round-trips and rejects malformed input")

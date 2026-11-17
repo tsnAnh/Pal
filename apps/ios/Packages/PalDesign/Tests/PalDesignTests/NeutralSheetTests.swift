@@ -4,25 +4,16 @@ import Testing
 
 @Suite("Neutral sheet chrome")
 struct NeutralSheetTests {
-    @Test("a red bot accent leaves no tint once a surface drops the bot tint", arguments: AppearanceMode.allCases)
-    func withoutBotTintIsNeutral(mode: AppearanceMode) throws {
-        let red = try #require(RGB(hexString: "#f43f5e"))
-        let tinted = PalTheme(mode: mode, palette: mode.palette(systemScheme: .dark, botAccent: red))
-        let neutral = tinted.withoutBotTint(systemScheme: .dark)
-        #expect(neutral.mode == mode)
-        #expect(neutral.palette == mode.palette(systemScheme: .dark, botAccent: nil))
-        if mode == .botColor {
-            #expect(tinted.palette.sheetBackground != neutral.palette.sheetBackground)
-            #expect(neutral.palette.sheetBackground == PalPalette.measuredDark.sheetBackground)
-            #expect(neutral.palette.chipFill == PalPalette.measuredDark.chipFill)
+    @Test(
+        "every mode paints window, sidebar, chat, list and sheet backgrounds from a neutral palette",
+        arguments: AppearanceMode.allCases, [ColorScheme.dark, .light]
+    )
+    func backgroundsAreNeutral(mode: AppearanceMode, scheme: ColorScheme) {
+        let palette = PalTheme(mode: mode, palette: mode.palette(systemScheme: scheme)).palette
+        #expect([PalPalette.measuredDark, .derivedLight, .derivedBlack].contains(palette))
+        for surface in [palette.canvas, palette.sheetBackground, palette.groupedCard, palette.chipFill, palette.pillFill] {
+            #expect(surface.hueSaturationBrightness.saturation < 0.1)
         }
-    }
-
-    @Test("state colours survive the bot tint, so blocked and failing chips keep their red")
-    func stateColoursAreNotTintTokens() throws {
-        let red = try #require(RGB(hexString: "#f43f5e"))
-        let tinted = PalPalette.measuredDark.tinted(toward: red)
-        #expect(tinted.destructive == PalPalette.measuredDark.destructive)
     }
 
     @Test("the toolbar row is exactly as tall as the close control, with the title and trailing on that row")
