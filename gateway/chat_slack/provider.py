@@ -90,6 +90,7 @@ def bot_manifest(projection: IdentityProjection, redirect_url: str | None, descr
 
 class SlackProvider(ChatProvider):
     provider_id = "slack"
+    allowed_users_env = "SLACK_ALLOWED_USERS"
 
     def __init__(self, *, redirect_url: str | None = None, vault: VaultStore | None = None,
                  api: SlackApi | None = None, records: SlackRecords | None = None,
@@ -224,6 +225,14 @@ class SlackProvider(ChatProvider):
 
     def authorizing_user(self, installation: Installation) -> str:
         return self._record_for(installation)[1].get("authorizing_user", "")
+
+    def authorizing_identity(self, installation: Installation) -> str | None:
+        return self.authorizing_user(installation)
+
+    def adapter_env(self, installation: Installation) -> dict[str, str]:
+        record = self._record_for(installation)[1]
+        return {"SLACK_BOT_TOKEN": self._secret(record["bot_token_item_id"]),
+                "SLACK_APP_TOKEN": self._secret(record["app_token_item_id"])}
 
     def _secret(self, item_id: str) -> str:
         return str(self.vault.resolve_secret(item_id).get("api_key") or "")

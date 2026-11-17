@@ -11,6 +11,7 @@ from pydantic import Field
 
 from .base import Params, Payload, Result, WireEnum
 from .common import ProfileParams
+from .registry import event, method
 
 
 class CapabilityMode(WireEnum):
@@ -127,6 +128,7 @@ class SetupState(Result):
     manual_steps_done: list[ProviderCapability] = Field(default_factory=list)
     resume_step: SetupStep | None = None
     next_action: NextAction
+    fallback_action: NextAction | None = None
     error: SetupError | None = None
     updated_at: float
 
@@ -199,6 +201,7 @@ class ChatInstallAdvanceParams(ChatInstallParams):
 
 class ChatSpaceJoinParams(ChatInstallParams):
     space_id: str = Field(min_length=1)
+    hello: bool = False
 
 
 class ChatProviderListResult(Result):
@@ -226,6 +229,26 @@ class ChatBindingListResult(Result):
 class ChatInstallChangedPayload(Payload):
     state: SetupState
 
+
+method("chat.provider.list", params=ProfileParams, result=ChatProviderListResult,
+       doc="Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only.")
+method("chat.install.status", params=ChatInstallParams, result=ChatInstallStatusResult,
+       doc="Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it.")
+method("chat.install.begin", params=ChatInstallParams, result=ChatInstallStatusResult,
+       doc="Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL.")
+method("chat.install.advance", params=ChatInstallAdvanceParams, result=ChatInstallStatusResult,
+       doc="Send one setup event with the revision the client last saw. stale_revision when another client moved first; "
+           "invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token.")
+method("chat.spaces.list", params=ChatInstallParams, result=ChatSpacesListResult,
+       doc="Channels the installed bot can see, with whether it has joined.")
+method("chat.space.join", params=ChatSpaceJoinParams, result=ChatSpaceJoinResult,
+       doc="Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live.")
+method("chat.binding.list", params=ChatInstallParams, result=ChatBindingListResult,
+       doc="Channels this bot is bound to and whether it is live in each.")
+method("chat.install.revoke", params=ChatInstallParams, result=ChatInstallStatusResult,
+       doc="Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall.")
+event("chat.install.changed", ChatInstallChangedPayload,
+      doc="A chat setup state moved, or a binding went live or not live. Exactly one per setup revision.")
 
 WIRE_MODELS: tuple[type[Params | Result | Payload], ...] = (
     ChatProviderParams, ChatInstallParams, ChatInstallAdvanceParams, ChatSpaceJoinParams,

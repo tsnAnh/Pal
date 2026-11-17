@@ -15,6 +15,14 @@ VERBS = {
     'bot_mode.about_you.get': Verb('session:read'),
     'bot_mode.about_you.set': Verb('session:control'),
     'memory.import': Verb('session:control'),
+    'chat.provider.list': Verb('session:read'),
+    'chat.install.status': Verb('session:read'),
+    'chat.spaces.list': Verb('session:read'),
+    'chat.binding.list': Verb('session:read'),
+    'chat.install.begin': Verb('session:control'),
+    'chat.install.advance': Verb('session:control'),
+    'chat.space.join': Verb('session:control'),
+    'chat.install.revoke': Verb('session:control'),
 }
 
 

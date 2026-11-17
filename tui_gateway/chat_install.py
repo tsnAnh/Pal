@@ -59,8 +59,12 @@ class SpaceJoin:
     next_action: NextAction
 
 
+REDIRECT_PATH = "/webapp/chat-install/callback"
+
+
 class ChatProvider(abc.ABC):
     provider_id: str
+    allowed_users_env: str | None = None
 
     def _missing(self, operation: str) -> ProviderNotImplemented:
         return ProviderNotImplemented(self.provider_id, operation)
@@ -85,6 +89,15 @@ class ChatProvider(abc.ABC):
 
     def revoke(self, installation: Installation) -> None:
         raise self._missing("revoke")
+
+    def authorizing_identity(self, installation: Installation) -> str | None:
+        return None
+
+    def adapter_env(self, installation: Installation) -> dict[str, str]:
+        raise self._missing("adapter_env")
+
+    def adopt_token(self, state: SetupState, vault_item_id: str) -> Installation:
+        raise self._missing("adopt_token")
 
 
 SETUP_CAPABILITIES = (
@@ -207,7 +220,8 @@ def advance(state: SetupState, event: SetupEvent, caps: Capabilities, now: float
         merged = merged.model_copy(update={"step": _after_app(caps, merged.manual_steps_done)})
     link = event.authorize_link if event.authorize_link else (state.next_action.link if state.next_action.kind is NextActionKind.open_link else None)
     action = _action_for(merged.step, _pending_manual(caps, merged.manual_steps_done), link, merged.error)
-    return merged.model_copy(update={"next_action": action, "revision": state.revision + 1, "updated_at": now})
+    fallback = NextAction(kind=NextActionKind.paste_credential, action_id="bot_token") if merged.step is SetupStep.needs_allow else None
+    return merged.model_copy(update={"next_action": action, "fallback_action": fallback, "revision": state.revision + 1, "updated_at": now})
 
 
 def needs_app_creation(state: SetupState) -> bool:

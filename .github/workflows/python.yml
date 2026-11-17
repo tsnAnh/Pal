@@ -13,8 +13,52 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      python: ${{ steps.paths.outputs.python }}
+      tooling_tests: ${{ steps.paths.outputs.tooling_tests }}
+      ios_guards: ${{ steps.paths.outputs.ios_guards }}
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Select jobs from the changed paths (scripts/ci/ci_paths.py)
+        id: paths
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 scripts/ci/ci_paths.py --base "$BASE" | tee -a "$GITHUB_OUTPUT"
+
+  ios-guards:
+    name: ios-guards
+    needs: changes
+    if: needs.changes.outputs.ios_guards == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Guards that read apps/ios (python scripts/check --only)
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          base_args=()
+          if [ -n "$BASE" ] && [ "$BASE" != 0000000000000000000000000000000000000000 ]; then
+            base_args=(--base "$BASE")
+          fi
+          python3 scripts/check --only "$(python3 scripts/ci/ci_paths.py --checks ios-guards)" "${base_args[@]}"
+
   python:
     name: python
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -42,6 +86,7 @@ jobs:
       # (undocumented config keys, /reach) and test_prompt_surface (stale snapshot), and
       # test_code_health_identity, which exceeded its 300 s file timeout on a 4-vCPU sandbox.
       - name: Tests (tests/ci, tests/scripts)
+        if: needs.changes.outputs.tooling_tests == 'true'
         run: >-
           scripts/run_tests.sh tests/ci tests/scripts --
           --deselect=tests/ci/test_docs_drift.py::test_no_new_undocumented_config_keys_or_slash_commands
@@ -51,3 +96,17 @@ jobs:
           OPENROUTER_API_KEY: ""
           OPENAI_API_KEY: ""
           NOUS_API_KEY: ""
+
+  ci:
+    name: ci
+    needs: [changes, ios-guards, python]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail when a selected job failed or was cancelled
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "needed jobs: $RESULTS"
+          case " $RESULTS " in *" failure "*|*" cancelled "*) exit 1 ;; esac

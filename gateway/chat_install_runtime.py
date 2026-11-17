@@ -1,0 +1,42 @@
+from __future__ import annotations
+
+from gateway.chat_install_service import ChatInstallService
+from gateway.chat_install_store import ChatInstallStore
+from tui_gateway.chat_install import REDIRECT_PATH
+
+
+class MessagingAdapterControl:
+    @staticmethod
+    def _scope_name(profile: str) -> str | None:
+        return None if profile in ("", "default") else profile
+
+    def apply_env(self, profile: str, platform_id: str, env: dict[str, str], clear: list[str]) -> None:
+        from hermes_cli.web_routers import messaging
+        entry = messaging._require_platform(platform_id)
+        with messaging._profile_scope(self._scope_name(profile)):
+            messaging._apply_platform_update(platform_id, entry, messaging._env_value_rules(platform_id),
+                                             env, clear, bool(env))
+
+    def reload(self, profile: str) -> None:
+        from tui_gateway.methods_messaging_slack import _slack_reload
+        _slack_reload(self._scope_name(profile))
+
+
+def public_url_for(home) -> str | None:
+    from gateway.webapp_listener import webapp_settings
+    return webapp_settings(home).public_url or None
+
+
+def redirect_url_for(home) -> str | None:
+    public_url = public_url_for(home)
+    if not (public_url or "").startswith("https://"):
+        return None
+    return public_url.rstrip("/") + REDIRECT_PATH
+
+
+def build_service(home) -> ChatInstallService:
+    from tui_gateway.chat_providers import provider_for
+    return ChatInstallService(
+        store=ChatInstallStore(home),
+        provider_for=lambda provider_id: provider_for(provider_id, redirect_url=redirect_url_for(home)),
+        control=MessagingAdapterControl(), public_url=lambda: public_url_for(home))

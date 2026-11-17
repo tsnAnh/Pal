@@ -30,6 +30,8 @@ BRIDGED = (
     "mcp.servers.oauth.start", "mcp.servers.oauth.poll", "mcp.servers.oauth.cancel", "mcp.servers.oauth.callback",
     "vault.list", "vault.sources", "vault.add", "vault.update", "vault.remove", "vault.unlock", "vault.lock",
     "skills.manage",
+    "chat.provider.list", "chat.install.status", "chat.install.begin", "chat.install.advance",
+    "chat.spaces.list", "chat.space.join", "chat.binding.list", "chat.install.revoke",
 )
 
 HANDLER_VALIDATED = frozenset({"connection.respond"})

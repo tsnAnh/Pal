@@ -807,6 +807,120 @@ export interface CapabilitySetKeyResult {
   is_set: boolean
   capabilities: CapabilityRow[]
 }
+export interface ChatProviderListResult {
+  providers: Capabilities[]
+}
+export interface Capabilities {
+  provider_id: string
+  requires_config_credential: boolean
+  creates_app: boolean
+  capabilities: tui_gateway_contracts_chat_provider_CapabilityEntry[]
+  identity_policy: IdentityPolicy
+}
+export interface tui_gateway_contracts_chat_provider_CapabilityEntry {
+  capability: ProviderCapability
+  mode: CapabilityMode
+}
+export type ProviderCapability = 'set_icon' | 'app_level_credential' | 'gateway_redirect' | 'unattended_refresh' | 'join_public_space' | 'join_private_space'
+export type CapabilityMode = 'automatic' | 'guided' | 'unsupported'
+export interface IdentityPolicy {
+  app_name_max: number
+  display_name_max: number
+  username_max: number
+  avatar_max_bytes: number
+  avatar_min_px: number
+}
+export interface ChatInstallParams {
+  profile?: string | null
+  provider_id: string
+  workspace?: string
+}
+export interface ChatInstallStatusResult {
+  state: SetupState
+  installation?: Installation | null
+}
+export interface SetupState {
+  bot: string
+  provider_id: string
+  workspace: string
+  step: SetupStep
+  revision: number
+  app_id?: string | null
+  installation_id?: string | null
+  manual_steps_done?: ProviderCapability[]
+  resume_step?: SetupStep | null
+  next_action: NextAction
+  fallback_action?: NextAction | null
+  error?: SetupError | null
+  updated_at: number
+}
+export type SetupStep = 'not_started' | 'needs_credential' | 'creating_app' | 'needs_manual_step' | 'needs_allow' | 'installing' | 'ready' | 'error' | 'revoked'
+export interface NextAction {
+  kind: NextActionKind
+  action_id: string
+  link?: string | null
+  copy_text?: string | null
+}
+export type NextActionKind = 'none' | 'paste_credential' | 'open_link' | 'copy_text' | 'button'
+export interface SetupError {
+  code: SetupErrorCode
+  fix: FixAction
+}
+export type SetupErrorCode = 'credential_rejected' | 'credential_expired' | 'app_create_failed' | 'allow_denied' | 'install_failed' | 'provider_unreachable'
+export type FixAction = 'reenter_credential' | 'retry' | 'restart_allow'
+export interface Installation {
+  id: string
+  provider_id: string
+  bot: string
+  workspace_id: string
+  workspace_name: string
+  status: InstallationStatus
+  created_at: number
+  updated_at: number
+  vault_item_ids: string[]
+}
+export type InstallationStatus = 'active' | 'needs_reauth' | 'revoked'
+export interface ChatInstallAdvanceParams {
+  profile?: string | null
+  provider_id: string
+  workspace?: string
+  event: SetupEventKind
+  expected_revision: number
+  manual_step?: ProviderCapability | null
+  vault_item_id?: string | null
+}
+export type SetupEventKind = 'begin' | 'credential_saved' | 'app_created' | 'manual_step_done' | 'allow_granted' | 'installed' | 'failed' | 'retry' | 'revoked'
+export interface ChatSpacesListResult {
+  spaces: SpaceRef[]
+}
+export interface SpaceRef {
+  id: string
+  name: string
+  kind: SpaceKind
+  joined: boolean
+}
+export type SpaceKind = 'public' | 'private' | 'direct'
+export interface ChatSpaceJoinParams {
+  profile?: string | null
+  provider_id: string
+  workspace?: string
+  space_id: string
+  hello?: boolean
+}
+export interface ChatSpaceJoinResult {
+  outcome: SpaceJoinOutcome
+  next_action: NextAction
+}
+export type SpaceJoinOutcome = 'joined' | 'already_joined' | 'needs_invite'
+export interface ChatBindingListResult {
+  bindings: Binding[]
+}
+export interface Binding {
+  bot: string
+  space_id: string
+  installation_id: string
+  live: boolean
+}
 /** ``key`` selects one getter from ``_CONFIG_GETTERS``; ``cwd`` feeds the ``project`` getter, ``session_id`` lets ``reasoning`` / ``fast`` answer with the session's live pin. */
 export interface ConfigGetParams {
   profile?: string | null
@@ -2986,7 +3100,7 @@ export interface ProfilesDescribeResult {
   soul?: string
   model: ProfileModelPin
   fallback_providers?: FallbackModel[]
-  skills?: CapabilityEntry[]
+  skills?: tui_gateway_contracts_profiles_vault_complete_foreign_subagents_CapabilityEntry[]
   toolsets?: ToolsetEntry[]
   toolsets_pinned?: boolean
   mcp_servers?: McpServerEntry[]
@@ -3000,7 +3114,7 @@ export interface FallbackModel {
   provider: string
   model: string
 }
-export interface CapabilityEntry {
+export interface tui_gateway_contracts_profiles_vault_complete_foreign_subagents_CapabilityEntry {
   name: string
   enabled?: boolean
 }
@@ -7438,6 +7552,9 @@ export interface DisplayInstallSudoParams {
   session_id: string
   profile_key: string
 }
+export interface ChatInstallChangedPayload {
+  state: SetupState
+}
 /** ``methods_connectors._connection_update``: one target transition (``target``/``from``/``to``/ ``actor``) or the settlement (none of those), with the full snapshot. */
 export interface ConnectionUpdatePayload {
   op_id: string
@@ -8070,6 +8187,22 @@ export interface RpcMethods {
   'capabilities.set_key': { params: CapabilitySetKeyParams; result: CapabilitySetKeyResult }
   /** Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
+  /** Channels this bot is bound to and whether it is live in each. */
+  'chat.binding.list': { params: ChatInstallParams; result: ChatBindingListResult }
+  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. */
+  'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
+  /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
+  'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall. */
+  'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
+  'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only. */
+  'chat.provider.list': { params: ProfileParams; result: ChatProviderListResult }
+  /** Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live. */
+  'chat.space.join': { params: ChatSpaceJoinParams; result: ChatSpaceJoinResult }
+  /** Channels the installed bot can see, with whether it has joined. */
+  'chat.spaces.list': { params: ChatInstallParams; result: ChatSpacesListResult }
   /** Lock one answer of a batch clarify request (editable until every question is locked). */
   'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }
   /** Run ``hermes <argv>`` non-interactively and capture its output; ``blocked`` explains a refusal. */
@@ -8724,6 +8857,14 @@ export const RPC_METHODS = [
   'browser.manage',
   'capabilities.set_key',
   'capabilities.status',
+  'chat.binding.list',
+  'chat.install.advance',
+  'chat.install.begin',
+  'chat.install.revoke',
+  'chat.install.status',
+  'chat.provider.list',
+  'chat.space.join',
+  'chat.spaces.list',
   'clarify.lock',
   'cli.exec',
   'client.capabilities',
@@ -9073,6 +9214,22 @@ export interface CanonicalRpcMethods {
   'bot_relay.stop': { params: CanonicalBotStopParams; result: CanonicalBotStopResult }
   /** Which of the five bot capabilities (web, deep search, YouTube, maps, the bot's own browser) are usable for one bot, with the reason and the key name or setting when not. Read-only; never carries a key value. */
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
+  /** Channels this bot is bound to and whether it is live in each. */
+  'chat.binding.list': { params: ChatInstallParams; result: ChatBindingListResult }
+  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. */
+  'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
+  /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
+  'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall. */
+  'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
+  'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only. */
+  'chat.provider.list': { params: ProfileParams; result: ChatProviderListResult }
+  /** Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live. */
+  'chat.space.join': { params: ChatSpaceJoinParams; result: ChatSpaceJoinResult }
+  /** Channels the installed bot can see, with whether it has joined. */
+  'chat.spaces.list': { params: ChatInstallParams; result: ChatSpacesListResult }
   /** Lock one answer of the owner's batch clarify request (editable until every question is locked); only a viewer attached to that session with session:respond may lock. */
   'clarify.lock': { params: ClarifyLockParams; result: ClarifyLockResult }
   /** Generation-fenced answer to a pending clarify prompt (empty answer = skipped). */
@@ -9342,6 +9499,14 @@ export const CANONICAL_RPC_METHODS = [
   'bot_relay.settle',
   'bot_relay.stop',
   'capabilities.status',
+  'chat.binding.list',
+  'chat.install.advance',
+  'chat.install.begin',
+  'chat.install.revoke',
+  'chat.install.status',
+  'chat.provider.list',
+  'chat.space.join',
+  'chat.spaces.list',
   'clarify.lock',
   'clarify.respond',
   'client.attention',
@@ -9561,6 +9726,8 @@ export interface BackendGatewayEventMap {
   'browser.progress': BrowserProgressPayload
   /** A /btw side question was answered. */
   'btw.complete': SideAgentCompletePayload
+  /** A chat setup state moved, or a binding went live or not live. Exactly one per setup revision. */
+  'chat.install.changed': ChatInstallChangedPayload
   /** A connection operation opened on this session; the desktop renders its card. */
   'connection.request': ConnectionRequestPayload
   /** One transition or the settlement of an open connection operation. */
@@ -9727,6 +9894,7 @@ export const GATEWAY_EVENT_TYPES = [
   'bot_threads.changed',
   'browser.progress',
   'btw.complete',
+  'chat.install.changed',
   'connection.request',
   'connection.update',
   'cron.changed',

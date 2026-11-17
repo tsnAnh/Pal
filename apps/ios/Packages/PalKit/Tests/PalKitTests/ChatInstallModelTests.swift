@@ -1,0 +1,249 @@
+import Foundation
+import PalBotProfile
+import PalProtocol
+import Testing
+
+private let filler = String(repeating: "FAKE", count: 4)
+private let fakeSecret = ["xoxe", "xoxp", "1", filler].joined(separator: ".").replacingOccurrences(of: "xoxp.1.", with: "xoxp-1-")
+private let fakeRefresh = ["xoxe", "1", filler].joined(separator: "-")
+private let fakeAppKey = ["xapp", "1", filler].joined(separator: "-")
+
+private func decode<T: Decodable>(_ type: T.Type, _ object: Any) throws -> T {
+    try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: object))
+}
+
+private func provider(guided: [String] = ["set_icon", "app_level_credential"], credential: Bool = true) throws -> ChatCapabilitiesWire {
+    try decode(ChatCapabilitiesWire.self, [
+        "provider_id": "slack", "requires_config_credential": credential, "creates_app": true,
+        "capabilities": guided.map { ["capability": $0, "mode": "guided"] } + [["capability": "join_public_space", "mode": "automatic"]],
+        "identity_policy": ["app_name_max": 35, "display_name_max": 35, "username_max": 21, "avatar_max_bytes": 1_000_000, "avatar_min_px": 512],
+    ])
+}
+
+private func state(
+    _ step: String, _ revision: Int, action: [String: Any?] = [:], done: [String] = [], error: [String: String]? = nil, bot: String = "pal"
+) throws -> ChatSetupStateWire {
+    try decode(ChatSetupStateWire.self, stateJSON(step, revision, action: action, done: done, error: error, bot: bot))
+}
+
+private func changed(
+    _ step: String, _ revision: Int, action: [String: Any?] = [:], bot: String = "pal"
+) throws -> ChatInstallChangedPayload {
+    try decode(ChatInstallChangedPayload.self, ["state": stateJSON(step, revision, action: action, bot: bot)])
+}
+
+private func stateJSON(
+    _ step: String, _ revision: Int, action: [String: Any?] = [:], done: [String] = [], error: [String: String]? = nil, bot: String = "pal"
+) -> [String: Any] {
+    let next: [String: Any] = [
+        "kind": action["kind"] as? String ?? "none", "action_id": action["action_id"] as? String ?? "none",
+        "link": (action["link"] ?? nil) ?? NSNull(), "copy_text": (action["copy_text"] ?? nil) ?? NSNull(),
+    ]
+    return [
+        "bot": bot, "provider_id": "slack", "workspace": "T1", "step": step, "revision": revision,
+        "app_id": NSNull(), "installation_id": NSNull(), "manual_steps_done": done, "resume_step": NSNull(),
+        "next_action": next, "error": error ?? NSNull(), "updated_at": 1_700_000_000.0,
+    ]
+}
+
+private actor FakeChatInstallClient: ChatInstallClient {
+    var capabilities: [ChatCapabilitiesWire]
+    var current: ChatInstallStatusResult
+    var unsupported = false
+    var calls: [String] = []
+    var advances: [ChatInstallAdvance] = []
+    var stored: [String: String] = [:]
+    var spaceList: [ChatSpaceRefWire] = []
+    var bound: [ChatBindingWire] = []
+
+    init(_ capabilities: [ChatCapabilitiesWire], _ state: ChatSetupStateWire) {
+        self.capabilities = capabilities
+        var result = try! decode(ChatInstallStatusResult.self, ["state": stateJSON("not_started", 0)])
+        result.state = state
+        current = result
+    }
+
+    func set(_ state: ChatSetupStateWire) { current.state = state }
+    func setSpaces(_ spaces: [ChatSpaceRefWire], _ bindings: [ChatBindingWire]) { spaceList = spaces; bound = bindings }
+    func markUnsupported() { unsupported = true }
+
+    func providers() async throws -> [ChatCapabilitiesWire] {
+        calls.append("providers")
+        if unsupported { throw ChatInstallClientError.unsupported }
+        return capabilities
+    }
+    func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult { calls.append("status"); return current }
+    func begin(_ scope: ChatInstallScope) async throws { calls.append("begin") }
+    func advance(_ scope: ChatInstallScope, _ advance: ChatInstallAdvance) async throws { calls.append("advance"); advances.append(advance) }
+    func spaces(_ scope: ChatInstallScope) async throws -> [ChatSpaceRefWire] { calls.append("spaces"); return spaceList }
+    func join(_ scope: ChatInstallScope, spaceId: String) async throws -> ChatSpaceJoinResult {
+        calls.append("join")
+        return try decode(ChatSpaceJoinResult.self, [
+            "outcome": "needs_invite",
+            "next_action": ["kind": "copy_text", "action_id": "invite", "copy_text": "/invite @pal", "link": "https://app.slack.com/client/T1/\(spaceId)"],
+        ])
+    }
+    func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire] { calls.append("bindings"); return bound }
+    func revoke(_ scope: ChatInstallScope) async throws { calls.append("revoke") }
+    func storeSecret(label: String, value: String) async throws -> String {
+        let id = "vault-\(stored.count + 1)"
+        stored[id] = value
+        return id
+    }
+}
+
+@MainActor
+@Suite("Chat install model")
+struct ChatInstallModelTests {
+    static let wireFixture = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fixtures/chat-provider/wire.json")
+
+    private func model(_ initial: ChatSetupStateWire, caps: ChatCapabilitiesWire? = nil) async throws -> (ChatInstallModel, FakeChatInstallClient) {
+        let client = FakeChatInstallClient([try caps ?? provider()], initial)
+        let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
+        await model.load()
+        return (model, client)
+    }
+
+    @Test func eachStepMapsToItsScreenAndPrimaryAction() async throws {
+        let allow = "https://slack.com/oauth/v2/authorize?client_id=1"
+        let cases: [(ChatSetupStateWire, ChatInstallScreen, ChatInstallAction?)] = [
+            (try state("not_started", 0), .intro(again: false), .begin),
+            (try state("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"]), .credential, .saveCredential),
+            (try state("creating_app", 2), .setup(task: nil), nil),
+            (try state("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]), .setup(task: .setIcon), .markDone(.setIcon)),
+            (try state("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow", "link": allow]), .allow(URL(string: allow)), .openAllow(URL(string: allow)!)),
+            (try state("installing", 6), .setup(task: nil), nil),
+            (try state("ready", 7), .ready, nil),
+            (try state("revoked", 8), .intro(again: true), .begin),
+            (try state("error", 4, action: ["kind": "button", "action_id": "retry"], error: ["code": "app_create_failed", "fix": "retry"]),
+             .error(.appCreateFailed, fix: .retry), .fix(.retry)),
+        ]
+        for (snapshot, screen, action) in cases {
+            let (model, _) = try await model(snapshot)
+            #expect(model.screen == screen, "\(snapshot.step)")
+            #expect(model.primaryAction == action, "\(snapshot.step)")
+        }
+    }
+
+    @Test func pythonFixtureReadyStateLandsOnReady() async throws {
+        struct Shape: Decodable { var ChatInstallStatusResult: PalProtocol.ChatInstallStatusResult; var ChatProviderListResult: PalProtocol.ChatProviderListResult }
+        let shapes = try JSONDecoder().decode([String: Shape].self, from: Data(contentsOf: Self.wireFixture))
+        for (id, shape) in shapes {
+            let client = FakeChatInstallClient(shape.ChatProviderListResult.providers, shape.ChatInstallStatusResult.state)
+            let model = ChatInstallModel(botName: "pal", preferredProvider: id, client: client)
+            await model.load()
+            #expect(model.screen == .ready, "\(id)")
+            #expect(model.secondaryActions == [.disconnect])
+        }
+    }
+
+    @Test func eventsApplyByRevisionDroppingStaleAndDuplicateAndRereadingOnGap() async throws {
+        let (model, client) = try await model(try state("creating_app", 2))
+        await model.receive(try changed("needs_credential", 1))
+        await model.receive(try changed("needs_allow", 2))
+        #expect(model.state?.step == .creatingApp)
+        await model.receive(try changed("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]))
+        #expect(model.screen == .setup(task: .setIcon))
+        let statusReads = await client.calls.filter { $0 == "status" }.count
+        await client.set(try state("needs_allow", 6, action: ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/a"]))
+        await model.receive(try changed("installing", 7))
+        #expect(await client.calls.filter { $0 == "status" }.count == statusReads + 1)
+        #expect(model.state?.revision == 6)
+        await model.receive(try changed("ready", 4, bot: "other"))
+        #expect(model.state?.revision == 6)
+    }
+
+    @Test func resumeFromAnotherDeviceSnapshotLandsOnSameStep() async throws {
+        let midFlow = try state("needs_manual_step", 4, action: ["kind": "button", "action_id": "app_level_credential"], done: ["set_icon"])
+        let (mac, _) = try await model(midFlow)
+        let (phone, _) = try await model(midFlow)
+        #expect(mac.screen == phone.screen)
+        #expect(phone.screen == .setup(task: .appLevelCredential))
+        let items = phone.checklist
+        #expect(items.map(\.status) == [.done, .done, .done, .active, .pending, .pending])
+    }
+
+    @Test func errorShowsItsFixAndFixSendsRetry() async throws {
+        let failed = try state("error", 3, action: ["kind": "button", "action_id": "reenter_credential"], error: ["code": "credential_expired", "fix": "reenter_credential"])
+        let (model, client) = try await model(failed)
+        #expect(model.primaryAction == .fix(.reenterCredential))
+        await client.set(try state("needs_credential", 4, action: ["kind": "paste_credential", "action_id": "config_credential"]))
+        await model.fix()
+        #expect(await client.advances.map(\.event) == [.retry])
+        #expect(await client.advances.first?.expectedRevision == 3)
+        #expect(model.screen == .credential)
+    }
+
+    @Test func secondBotInSameWorkspaceSkipsCredential() async throws {
+        let (model, client) = try await model(try state("not_started", 0))
+        await client.set(try state("creating_app", 1))
+        await model.begin()
+        #expect(model.screen == .setup(task: nil))
+        #expect(model.checklist.first?.kind == .workspace)
+        #expect(model.checklist.first?.status == .done)
+        #expect(await client.stored.isEmpty)
+    }
+
+    @Test func credentialGoesToVaultAndOnlyTheVaultIdCrossesTheWire() async throws {
+        let (model, client) = try await model(try state("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"]))
+        await client.set(try state("creating_app", 2))
+        await model.saveCredential(access: fakeSecret, refresh: fakeRefresh)
+        let stored = await client.stored
+        #expect(Set(stored.values) == [fakeSecret, fakeRefresh])
+        let advance = try #require(await client.advances.first)
+        #expect(advance.event == .credentialSaved)
+        #expect(advance.vaultItemId.flatMap { stored[$0] } == fakeSecret)
+        let visible = [String(reflecting: model.snapshot as Any), String(reflecting: model.screen), String(reflecting: model.checklist),
+                       String(reflecting: advance), String(reflecting: model.notice as Any)].joined()
+        #expect(!visible.contains("FAKE"))
+    }
+
+    @Test func appLevelKeyIsStoredAndStepAdvances() async throws {
+        let (model, client) = try await model(try state("needs_manual_step", 4, action: ["kind": "button", "action_id": "app_level_credential"], done: ["set_icon"]))
+        await model.markDone(.appLevelCredential, secret: fakeAppKey)
+        let advance = try #require(await client.advances.first)
+        #expect(advance.manualStep == .appLevelCredential)
+        #expect(advance.vaultItemId != nil)
+        #expect(!String(reflecting: advance).contains("FAKE"))
+    }
+
+    @Test func privateChannelGetsInviteGuidanceAndGoesLive() async throws {
+        let (model, client) = try await model(try state("ready", 7))
+        let spaces = try decode([ChatSpaceRefWire].self, [
+            ["id": "C1", "name": "general", "kind": "public", "joined": false],
+            ["id": "G1", "name": "plans", "kind": "private", "joined": false],
+        ])
+        await client.setSpaces(spaces, [])
+        await model.refreshSpaces()
+        #expect(model.spaces.map(\.status) == [.available, .needsInvite])
+        await model.join("G1")
+        #expect(model.spaces.last?.invite?.copyText == "/invite @pal")
+        let live = try decode([ChatBindingWire].self, [["bot": "pal", "space_id": "G1", "installation_id": "i1", "live": true]])
+        await client.setSpaces(spaces, live)
+        await model.refreshSpaces()
+        #expect(model.spaces.last?.status == .live)
+        #expect(model.spaces.last?.invite == nil)
+    }
+
+    @Test func gatewayWithoutChatInstallIsUnsupported() async throws {
+        let client = FakeChatInstallClient([try provider()], try state("not_started", 0))
+        await client.markUnsupported()
+        let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
+        await model.load()
+        #expect(model.screen == .unsupported)
+    }
+
+    @Test func credentialShapesAndIdentityPreview() throws {
+        #expect(ChatCredentialKind.classify(" \(fakeSecret)\n") == .configAccess)
+        #expect(ChatCredentialKind.classify(fakeRefresh) == .configRefresh)
+        #expect(ChatCredentialKind.classify(fakeAppKey) == .appLevel)
+        #expect(ChatCredentialKind.classify("hello world xoxe-") == nil)
+        let preview = ChatIdentityPreview(name: "Pal the Very Helpful Assistant Bot!", policy: try provider().identityPolicy)
+        #expect(preview.displayName == "Pal the Very Helpful Assistant Bot!")
+        #expect(preview.username == "pal-the-very-helpful")
+        #expect(preview.username.count <= 21)
+    }
+}
