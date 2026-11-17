@@ -76,7 +76,7 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
 
     func providers() async throws -> [ChatCapabilitiesWire] {
         if ProcessInfo.processInfo.arguments.contains(Self.failArgument) { throw ChatInstallClientError.failed(.forbidden) }
-        [try decode(ChatCapabilitiesWire.self, [
+        return [try decode(ChatCapabilitiesWire.self, [
             "provider_id": "slack", "requires_config_credential": true, "creates_app": true,
             "capabilities": [
                 ["capability": "set_icon", "mode": "guided"], ["capability": "app_level_credential", "mode": "guided"],
