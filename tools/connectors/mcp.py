@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from hermes_constants import hermes_home_key
 from tools.connectors.contract import Actor, SettleReason, TargetState
-from tools.connectors.gateway.config import operation_session_key
+from tools.connectors.live import operation_session_key
 from tools.connectors.operation import ConnectionOperation, DetachedOperation, IllegalTransition, Target
 from tools.connectors.run import Kind, run_operation
 from tools.connectors.targets import hosted_names, misrouted_to_mcp_error
