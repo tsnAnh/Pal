@@ -12,6 +12,8 @@ enum OAuthClientScript {
     static let mcpRedirect = "https://pal.example.test/webapp/mcp-oauth/callback"
     static let ipAddressArgument = "-hermes-test-oauth-client-ip-address"
     static let state = "scripted-state"
+    static let addressSuggestion = "https://pal.example.test"
+    static let offlineAddressHost = "offline.example.test"
     static let loopbackAuthorize = [
         "figma": ("https://www.figma.com/oauth", "scripted-session-figma"),
         "dropbox": ("https://www.dropbox.com/oauth2/authorize", "scripted-session-dropbox"),
@@ -43,8 +45,9 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         + "while the app is in Testing. Publish and verify the app in Google Cloud Console to remove both limits."
 
     private let base: any ConnectRPC
-    private let publicAddress: Bool
     private let ipAddress: Bool
+    private var address: String?
+    private var addressSaved = false
     private var progress: [String: Progress] = [
         "google-workspace": Progress(), "github": Progress(), "figma": Progress(),
         "dropbox": Progress(), "canva": Progress(),
@@ -54,7 +57,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
 
     init(base: any ConnectRPC, publicAddress: Bool, ipAddress: Bool = false) {
         self.base = base
-        self.publicAddress = publicAddress
+        address = publicAddress ? OAuthClientScript.addressSuggestion : nil
         self.ipAddress = ipAddress
     }
 
@@ -67,6 +70,9 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         case "connectors.oauth_client.connect": return try connect(slug)
         case "connectors.oauth_client.remove": return remove(slug, removeClient: params["remove_client"]?.boolValue == true)
         case "connectors.setup.check": return try check(slug, params)
+        case "webapp.public_url.get": return addressState()
+        case "webapp.public_url.set": return try setAddress(params)
+        case "webapp.public_url.check": return checkAddress()
         default: return try await auxiliary(method, params)
         }
     }
@@ -131,7 +137,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
 
     private func googleRow() -> JSONValue {
         let saved = progress["google-workspace"]?.configured == true
-        let step = publicAddress && !ipAddress ? (saved ? "client" : "console") : "address"
+        let step = address != nil && !ipAddress ? (saved ? "client" : "console") : "address"
         return [
             "slug": "google-workspace", "name": "Google Workspace", "category": "Docs and files", "icon": "plugin_glyph",
             "method": "oauth_client", "verified": true, "status": .string(status("google-workspace")), "notes": .string(Self.googleNotes),
@@ -153,9 +159,9 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private func mcpClientRow(_ slug: String) -> JSONValue {
         let saved = progress[slug]?.configured == true
         let guides = [
-            "figma": ("Figma", ScriptedSetupGuides.figma(publicAddress: publicAddress)),
-            "dropbox": ("Dropbox", ScriptedSetupGuides.dropbox(publicAddress: publicAddress)),
-            "canva": ("Canva", ScriptedSetupGuides.canva(publicAddress: publicAddress)),
+            "figma": ("Figma", ScriptedSetupGuides.figma(publicAddress: address != nil)),
+            "dropbox": ("Dropbox", ScriptedSetupGuides.dropbox(publicAddress: address != nil)),
+            "canva": ("Canva", ScriptedSetupGuides.canva(publicAddress: address != nil)),
         ]
         let (name, guide) = guides[slug] ?? (slug, .null)
         let category = slug == "dropbox" ? "Docs and files" : "Design and web"
@@ -175,7 +181,8 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
             "canva": "https://www.canva.com/developers/apps",
         ]
         let console = consoles[slug] ?? "https://console.cloud.google.com/apis/credentials"
-        let redirect = loopback ? OAuthClientScript.loopbackRedirect : (publicAddress ? OAuthClientScript.googleRedirect : nil)
+        let mcp = addressSaved ? address.map { "\($0)/webapp/mcp-oauth/callback" } : nil
+        let redirect = loopback ? (mcp ?? OAuthClientScript.loopbackRedirect) : address.map { "\($0)/webapp/google-install/callback" }
         return [
             "slug": .string(slug), "configured": .bool(current.configured),
             "console_url": "https://console.cloud.google.com/apis/credentials",
@@ -192,20 +199,53 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private func connect(_ slug: String) throws -> JSONValue {
         guard let current = progress[slug], current.configured else { throw Self.failure(4090, "NEEDS_SETUP") }
         if let (authorize, session) = OAuthClientScript.loopbackAuthorize[slug] {
+            guard !addressSaved else { return gatewayConnect(slug) }
             let redirect = OAuthClientScript.loopbackRedirect.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
             let link = "\(authorize)?response_type=code&state=\(OAuthClientScript.state)&redirect_uri=\(redirect)"
             return ["slug": .string(slug), "auth_url": .string(link), "session_id": .string(session)]
         }
-        guard publicAddress else { throw Self.failure(4412, "NEEDS_PUBLIC_URL") }
-        Task { await self.finishGoogleSignIn() }
+        guard address != nil else { throw Self.failure(4412, "NEEDS_PUBLIC_URL") }
+        Task { await self.finishSignIn("google-workspace") }
         return [
             "slug": "google-workspace", "auth_url": .string("https://accounts.google.com/o/oauth2/v2/auth?state=\(OAuthClientScript.state)"),
         ]
     }
 
-    private func finishGoogleSignIn() async {
+    private func gatewayConnect(_ slug: String) -> JSONValue {
+        Task { await self.finishSignIn(slug) }
+        let link = "\(OAuthClientScript.loopbackAuthorize[slug]?.0 ?? "")?state=\(OAuthClientScript.state)"
+        return ["slug": .string(slug), "auth_url": .string(link), "session_id": .string("scripted-gateway-\(slug)")]
+    }
+
+    private func finishSignIn(_ slug: String) async {
         try? await Task.sleep(for: .milliseconds(1500))
-        progress["google-workspace"]?.connected = true
+        progress[slug]?.connected = true
+    }
+
+    private func addressState() -> JSONValue {
+        [
+            "url": address.map(JSONValue.string) ?? JSONValue.null, "routes_enabled": false,
+            "suggestion": .string(OAuthClientScript.addressSuggestion),
+        ]
+    }
+
+    private func setAddress(_ params: JSONValue) throws -> JSONValue {
+        switch PublicAddress.evaluate(params["url"]?.stringValue ?? "") {
+        case .clear: address = nil
+        case .address(let url): address = url
+        case .refused(let problem):
+            throw GatewayTransportError.rpc(
+                RPCError(code: 4000, message: "invalid_params", data: ["reason": "invalid_params", "field": "url", "problem": .string(problem.rawValue)])
+            )
+        }
+        addressSaved = true
+        return addressState()
+    }
+
+    private func checkAddress() -> JSONValue {
+        guard let address else { return ["outcome": "no_address", "url": JSONValue.null] }
+        let outcome = address.hasSuffix(OAuthClientScript.offlineAddressHost) ? "not_served" : "reachable"
+        return ["outcome": .string(outcome), "url": .string(address)]
     }
 
     private func remove(_ slug: String, removeClient: Bool) -> JSONValue {

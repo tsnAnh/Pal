@@ -33,6 +33,7 @@ BRIDGED = (
     "chat.provider.list", "chat.install.status", "chat.install.begin", "chat.install.advance",
     "chat.spaces.list", "chat.space.join", "chat.binding.list", "chat.install.revoke", "chat.install.update_identity",
     "diag.recent", "diag.report",
+    "webapp.public_url.get", "webapp.public_url.set", "webapp.public_url.check",
 )
 
 HANDLER_VALIDATED = frozenset({"connection.respond"})

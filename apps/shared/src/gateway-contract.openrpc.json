@@ -6379,6 +6379,60 @@
       }
     },
     {
+      "name": "webapp.public_url.check",
+      "summary": "Owner only. One request from the gateway to <public_url>/webapp/mcp-oauth/callback with a state nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service, not_served (the gateway answers but does not serve this address) or no_address.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/PublicUrlGetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/PublicUrlCheckResult"
+        }
+      }
+    },
+    {
+      "name": "webapp.public_url.get",
+      "summary": "Owner only. The gateway's saved public https address (webapp.public_url), whether the Webapp routes that serve the sign-in callbacks are enabled, and a read-only suggestion from the tailnet (null when the Tailscale CLI is absent or fails).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/PublicUrlGetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/PublicUrlState"
+        }
+      }
+    },
+    {
+      "name": "webapp.public_url.set",
+      "summary": "Owner only. Save the address: https only, a host name (never an IP), no userinfo, path beyond /, query or fragment, at most 255 characters; stored lower-cased without a trailing slash. An empty url clears it. A refusal carries data.problem. The gateway reads the address when it starts.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/PublicUrlSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/PublicUrlState"
+        }
+      }
+    },
+    {
       "name": "webhook.routes.add",
       "summary": "Create a route. Give secret or generate_secret, not both; a generated secret is returned once. The gateway loads the route on its next request, no restart. 4101 invalid, 4409 name taken, 5321 data.code webhook_disabled. 4403 secondary profile.",
       "params": [
@@ -47631,6 +47685,100 @@
         "title": "ProviderUsageWindow",
         "type": "object"
       },
+      "PublicUrlCheckOutcome": {
+        "enum": [
+          "reachable",
+          "not_reachable",
+          "wrong_service",
+          "not_served",
+          "no_address"
+        ],
+        "title": "PublicUrlCheckOutcome",
+        "type": "string"
+      },
+      "PublicUrlCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/PublicUrlCheckOutcome"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "PublicUrlCheckResult",
+        "type": "object"
+      },
+      "PublicUrlGetParams": {
+        "additionalProperties": false,
+        "properties": {},
+        "title": "PublicUrlGetParams",
+        "type": "object"
+      },
+      "PublicUrlSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "PublicUrlSetParams",
+        "type": "object"
+      },
+      "PublicUrlState": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Url"
+          },
+          "routes_enabled": {
+            "title": "Routes Enabled",
+            "type": "boolean"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Suggestion"
+          }
+        },
+        "required": [
+          "routes_enabled"
+        ],
+        "title": "PublicUrlState",
+        "type": "object"
+      },
       "PushRegisterParams": {
         "additionalProperties": false,
         "properties": {
@@ -68184,6 +68332,60 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/VaultUpdateResult"
+        }
+      }
+    },
+    {
+      "name": "webapp.public_url.check",
+      "summary": "Owner only. One request from the gateway to <public_url>/webapp/mcp-oauth/callback with a state nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service, not_served (the gateway answers but does not serve this address) or no_address.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/PublicUrlGetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/PublicUrlCheckResult"
+        }
+      }
+    },
+    {
+      "name": "webapp.public_url.get",
+      "summary": "Owner only. The gateway's saved public https address (webapp.public_url), whether the Webapp routes that serve the sign-in callbacks are enabled, and a read-only suggestion from the tailnet (null when the Tailscale CLI is absent or fails).",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/PublicUrlGetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/PublicUrlState"
+        }
+      }
+    },
+    {
+      "name": "webapp.public_url.set",
+      "summary": "Owner only. Save the address: https only, a host name (never an IP), no userinfo, path beyond /, query or fragment, at most 255 characters; stored lower-cased without a trailing slash. An empty url clears it. A refusal carries data.problem. The gateway reads the address when it starts.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/PublicUrlSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/PublicUrlState"
         }
       }
     },

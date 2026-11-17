@@ -120,18 +120,14 @@ final class SetupGuideE2ETests: ConnectAppsTestCase {
         shot(app, "setup-guide-google-connected")
     }
 
-    func test2GoogleWithoutAPublicAddressShowsTheGuidedStatus() throws {
+    func test2GoogleWithoutAPublicAddressOpensTheAddressStep() throws {
         let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client", "-hermes-test-oauth-client-no-public-address"])
         _ = openGuide(app, name: "Google Workspace", slug: "google-workspace", action: "Set up")
-        let title = app.staticTexts["Public address needed"]
-        waitFor(title, timeout: 20, "status title")
-        let primary = element(app, "setupGuidePrimary")
-        waitFor(primary, timeout: 10, "try again action")
-        XCTAssertGreaterThan(primary.frame.minY, title.frame.maxY, "the action is below the text")
+        expectStep(app, "address", "1 of 4")
+        waitFor(element(app, "setupAddressField"), timeout: 20, "address field")
+        XCTAssertFalse(element(app, "setupGuideAddressValue").exists, "no saved address to copy")
         XCTAssertFalse(element(app, "setupGuideCopy-0Value").exists, "no redirect URI without a public address")
-        element(app, "setupGuideDetails").hit()
-        waitFor(element(app, "setupGuideCopyDetails"), timeout: 10, "copy button")
-        XCTAssertEqual(element(app, "setupGuideReasonCode").label, "NEEDS_PUBLIC_URL", "details name the reason code")
+        XCTAssertFalse(element(app, "setupAddressSave").isEnabled, "Save waits for an address")
         shot(app, "setup-guide-needs-public-address")
     }
 

@@ -26,6 +26,9 @@ VERBS = {
     'chat.install.update_identity': Verb('session:control', owner_scoped=True),
     'diag.recent': Verb('session:read', owner_scoped=True),
     'diag.report': Verb('session:control', owner_scoped=True),
+    'webapp.public_url.get': Verb('session:read', owner_scoped=True),
+    'webapp.public_url.set': Verb('session:control', owner_scoped=True),
+    'webapp.public_url.check': Verb('session:control', owner_scoped=True),
 }
 
 

@@ -21,6 +21,7 @@ final class SetupGuideModel: Identifiable {
     private(set) var phase: Phase
     private(set) var index: Int
     private(set) var publicAddress: String?
+    let address: PublicAddressModel
     var confirmsReplace = false
     var confirmsRemove = false
 
@@ -38,6 +39,7 @@ final class SetupGuideModel: Identifiable {
         self.entry = entry
         self.guide = guide
         self.service = service
+        address = PublicAddressModel(service: service)
         self.connectAgain = connectAgain
         self.finished = finished
         self.removed = removed
@@ -70,7 +72,8 @@ final class SetupGuideModel: Identifiable {
             let setup = try await service.oauthClientSetup(slug: entry.slug)
             publicAddress = setup.redirectURL.flatMap(Self.origin)
             if guide.needsPublicAddress, setup.redirectURL == nil, addressProblem == nil {
-                phase = .problem(OAuthClientProblem(.needsPublicURL, retry: .setup))
+                index = guide.index(of: guide.addressStep?.id)
+                phase = .steps
             } else {
                 phase = setup.configured && !editing ? .saved : .steps
             }
@@ -85,6 +88,11 @@ final class SetupGuideModel: Identifiable {
 
     func advance() async {
         if isLastStep { await finished() } else { index += 1 }
+    }
+
+    func saveAddress() async {
+        guard await address.save() else { return }
+        await load(editing: true, resume: false)
     }
 
     func replaceClient() {
@@ -165,7 +173,7 @@ final class SetupGuideModel: Identifiable {
     }
 
     private static func origin(of address: String) -> String? {
-        guard var parts = URLComponents(string: address), parts.host != nil else { return nil }
+        guard var parts = URLComponents(string: address), parts.host != nil, parts.scheme?.lowercased() == "https" else { return nil }
         parts.path = ""
         parts.query = nil
         parts.fragment = nil
