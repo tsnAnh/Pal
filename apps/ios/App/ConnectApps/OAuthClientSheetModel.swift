@@ -57,13 +57,14 @@ final class OAuthClientSheetModel: Identifiable {
     private let finished: () async -> Void
     private let connectAgain: () -> Void
 
-    var id: String { app.id }
+    let id: String
 
     init(
         app: ConnectApp, entry: PalCatalogEntry, service: ConnectAppsService, problem: OAuthClientProblem?,
         connectAgain: @escaping () -> Void, finished: @escaping () async -> Void
     ) {
         self.app = app
+        id = app.id
         self.entry = entry
         self.service = service
         self.connectAgain = connectAgain
