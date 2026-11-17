@@ -84,3 +84,57 @@ def test_planted_example_fails_the_cli(tmp_path: Path) -> None:
 
 def test_real_apps_ios_tree_is_clean() -> None:
     assert cnc.scan(REPO / "apps" / "ios") == []
+
+
+PRE_FIX_MAC_TOOLBAR = '''
+    var body: some View {
+        #if os(macOS)
+        scrolling
+            .navigationTitle(title)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(role: .close, action: close)
+                }
+            }
+        #else
+        SheetChrome(title: title, onLeading: close) { scrolling }
+        #endif
+    }
+'''
+
+PRE_FIX_MAC_OVERLAY = '''
+        ZStack {
+            KanbanSurface(close: close)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(PalTokens.content)
+        }
+        .ignoresSafeArea(.container, edges: .top)
+'''
+
+
+def test_mac_window_toolbar_item_fails(tmp_path: Path) -> None:
+    found = cnc.scan(_tree(tmp_path, {"App/Kanban/Page.swift": PRE_FIX_MAC_TOOLBAR}))
+    assert [f.split(": ", 1)[0] for f in found] == ["App/Kanban/Page.swift:5", "App/Kanban/Page.swift:7"]
+
+
+def test_ios_toolbar_and_in_content_mac_header_pass(tmp_path: Path) -> None:
+    ios_only = PRE_FIX_MAC_TOOLBAR.replace("#if os(macOS)", "#if os(iOS)")
+    mac_header = "#if os(macOS)\nSheetChrome(title: title, onLeading: close) { scrolling }\n#endif\n"
+    assert cnc.scan(_tree(tmp_path, {"App/A.swift": ios_only, "App/B.swift": mac_header})) == []
+
+
+def test_mac_dir_file_counts_as_macos(tmp_path: Path) -> None:
+    found = cnc.scan(_tree(tmp_path, {"App/Mac/Pane.swift": "Text(t).navigationTitle(t)\n"}))
+    assert len(found) == 1
+
+
+def test_full_window_overlay_without_title_bar_inset_fails(tmp_path: Path) -> None:
+    found = cnc.scan(_tree(tmp_path, {"App/Mac/Modals.swift": PRE_FIX_MAC_OVERLAY}))
+    assert [f.split(": ", 1)[1] for f in found] == ["full-window overlay without the MacMetrics.topBarHeight inset"]
+
+
+def test_full_window_overlay_with_title_bar_inset_passes(tmp_path: Path) -> None:
+    fixed = PRE_FIX_MAC_OVERLAY.replace(
+        ".background(PalTokens.content)", ".padding(.top, MacMetrics.topBarHeight)\n                .background(PalTokens.content)"
+    )
+    assert cnc.scan(_tree(tmp_path, {"App/Mac/Modals.swift": fixed})) == []

@@ -61,9 +61,9 @@ private struct BrowserSheet: View {
     var body: some View {
         NavigationStack {
             WebView(page)
-                .navigationTitle(page.title)
+                .navigationTitle(page.title) // nav-chrome: ok
                 .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
+                    ToolbarItem(placement: .confirmationAction) { // nav-chrome: ok
                         Button("Done") { dismiss() }
                             .accessibilityIdentifier("browserDone")
                     }
