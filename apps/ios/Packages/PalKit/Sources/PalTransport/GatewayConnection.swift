@@ -70,7 +70,6 @@ public struct GatewayDialOptions: Sendable {
         self.requestTimeout = requestTimeout
         self.frameTap = frameTap
         self.faults = faults
-        self.faults = faults
     }
 }
 
