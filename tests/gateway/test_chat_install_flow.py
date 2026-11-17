@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from gateway import chat_install_runtime
 from gateway.chat_install_store import ChatInstallStore
 from hermes_cli.web_routers import chat_install as route
-from tests.gateway.chat_install_harness import HTTPS, RecordingControl, db_bytes, forbidden_in, nonce_of, register_fakes
+from tests.gateway.chat_install_harness import HTTPS, RecordingControl, db_bytes, forbidden_in, nonce_of, register_fakes, walk_json
 from tests.tui_gateway.contracts.chat_provider_fakes import FAKE_TOKEN, AuthorizeOnlyFake, CredentialAppFake
 from tui_gateway import chat_install as ci
 from tui_gateway import server
@@ -94,7 +94,7 @@ def test_full_flow_reaches_ready_and_restricts_the_bot_to_the_owner(env, provide
     final = call("chat.install.status", provider_id=provider_id)
     assert state_of(final).step is wire.SetupStep.ready and state_of(final).fallback_action is None
     installation = wire.Installation.model_validate(final["result"]["installation"])
-    assert installation.owner_user_id == "U_OWNER"
+    assert "U_OWNER" not in walk_json(final) and ChatInstallStore(env.home).owner_id(installation.id) == "U_OWNER"
     assert env.control.applied == [(BOT, provider_id, {"FAKE_BOT_TOKEN": FAKE_TOKEN, "FAKE_ALLOWED_USERS": "U_OWNER"}, [])]
     assert env.control.reloads == [BOT]
     nonce = nonce_of(state.next_action.link)
@@ -180,8 +180,7 @@ def test_provider_failure_becomes_install_failed_with_no_provider_text(env, capl
 
 def test_installation_without_owner_never_reaches_ready(env):
     provider = env.providers["fake-authorize"]
-    original = provider.complete_install
-    provider.complete_install = lambda state, code: original(state, code).model_copy(update={"owner_user_id": None})
+    provider.authorizing_identity = lambda installation: None
     state = drive_to_allow("fake-authorize")
     allow(env, state)
     failed = state_of(call("chat.install.status", provider_id="fake-authorize"))

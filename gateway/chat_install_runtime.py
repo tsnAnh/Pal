@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from gateway.chat_install_service import ChatInstallService
 from gateway.chat_install_store import ChatInstallStore
+from tui_gateway.chat_install import REDIRECT_PATH
 
 
 class MessagingAdapterControl:
@@ -26,8 +27,16 @@ def public_url_for(home) -> str | None:
     return webapp_settings(home).public_url or None
 
 
+def redirect_url_for(home) -> str | None:
+    public_url = public_url_for(home)
+    if not (public_url or "").startswith("https://"):
+        return None
+    return public_url.rstrip("/") + REDIRECT_PATH
+
+
 def build_service(home) -> ChatInstallService:
     from tui_gateway.chat_providers import provider_for
     return ChatInstallService(
-        store=ChatInstallStore(home), provider_for=provider_for, control=MessagingAdapterControl(),
-        public_url=lambda: public_url_for(home))
+        store=ChatInstallStore(home),
+        provider_for=lambda provider_id: provider_for(provider_id, redirect_url=redirect_url_for(home)),
+        control=MessagingAdapterControl(), public_url=lambda: public_url_for(home))

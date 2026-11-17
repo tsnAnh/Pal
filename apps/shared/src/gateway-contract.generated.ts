@@ -878,7 +878,6 @@ export interface Installation {
   created_at: number
   updated_at: number
   vault_item_ids: string[]
-  owner_user_id?: string | null
 }
 export type InstallationStatus = 'active' | 'needs_reauth' | 'revoked'
 export interface ChatInstallAdvanceParams {

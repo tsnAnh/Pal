@@ -73,8 +73,7 @@ def _chat_target(params: dict) -> tuple[str, str]:
 @_profile_scoped
 def _(rid, params: dict) -> dict:
     def call(service, bot):
-        from tui_gateway.chat_providers import registered_providers
-        return {"providers": [p.capabilities().model_dump(mode="json") for p in registered_providers()]}
+        return {"providers": [c.model_dump(mode="json") for c in service.provider_capabilities()]}
     return _chat_run(rid, params, call)
 
 

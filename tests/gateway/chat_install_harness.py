@@ -30,8 +30,12 @@ def nonce_of(link: str) -> str:
     return parse_qs(urlsplit(link).query)["state"][0]
 
 
+def _factory(provider):
+    return lambda **deps: provider
+
+
 def register_fakes(monkeypatch, *providers) -> None:
-    monkeypatch.setattr(chat_providers, "_PROVIDERS", {p.provider_id: p for p in providers})
+    monkeypatch.setattr(chat_providers, "PROVIDER_FACTORIES", {p.provider_id: _factory(p) for p in providers})
 
 
 def forbidden_in(text: str, nonces: list[str] = ()) -> list[str]:

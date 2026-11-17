@@ -53,6 +53,7 @@ CREATE TABLE IF NOT EXISTS installations (
     workspace TEXT NOT NULL,
     installation_json TEXT NOT NULL,
     env_keys_json TEXT NOT NULL DEFAULT '[]',
+    owner_id TEXT NOT NULL,
     welcome_sent_at REAL
 );
 CREATE INDEX IF NOT EXISTS installations_lookup ON installations(provider_id, workspace, bot);
@@ -202,14 +203,19 @@ class ChatInstallStore:
             return None
         return row["bot"], row["provider_id"], row["workspace"]
 
-    def save_installation(self, installation: Installation, env_keys: list[str]) -> None:
+    def save_installation(self, installation: Installation, env_keys: list[str], owner_id: str) -> None:
         with self._write() as conn:
             conn.execute(
-                "INSERT INTO installations (id, bot, provider_id, workspace, installation_json, env_keys_json) "
-                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET installation_json=excluded.installation_json, "
-                "env_keys_json=excluded.env_keys_json",
+                "INSERT INTO installations (id, bot, provider_id, workspace, installation_json, env_keys_json, owner_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET installation_json=excluded.installation_json, "
+                "env_keys_json=excluded.env_keys_json, owner_id=excluded.owner_id",
                 (installation.id, installation.bot, installation.provider_id, installation.workspace_id,
-                 installation.model_dump_json(), json.dumps(sorted(env_keys))))
+                 installation.model_dump_json(), json.dumps(sorted(env_keys)), owner_id))
+
+    def owner_id(self, installation_id: str) -> str | None:
+        with self._read() as conn:
+            row = conn.execute("SELECT owner_id FROM installations WHERE id=?", (installation_id,)).fetchone()
+        return row["owner_id"] if row else None
 
     def installation(self, installation_id: str) -> Installation | None:
         with self._read() as conn:

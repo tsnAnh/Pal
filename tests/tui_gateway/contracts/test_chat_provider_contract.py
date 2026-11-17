@@ -189,11 +189,12 @@ def test_abstract_provider_raises_typed_not_implemented():
         "adapter_env": lambda: bare.adapter_env(install),
         "adopt_token": lambda: bare.adopt_token(state, "vault-item"),
     }
-    assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env"}
+    assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env", "authorizing_identity"}
     for operation, call in calls.items():
         with pytest.raises(ci.ProviderNotImplemented) as info:
             call()
         assert (info.value.provider_id, info.value.operation) == ("bare", operation)
+    assert bare.authorizing_identity(install) is None
 
 
 def test_slack_policy_records_known_limits_and_unverified_defaults():

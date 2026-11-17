@@ -67,7 +67,6 @@ class _FakeBase(ChatProvider):
             id=install_id, provider_id=self.provider_id, bot=state.bot, workspace_id=state.workspace,
             workspace_name=f"Workspace {state.workspace}", status=InstallationStatus.active,
             created_at=FIXED_NOW, updated_at=FIXED_NOW, vault_item_ids=[f"vault-{install_id}-bot"],
-            owner_user_id="U_OWNER",
         ))
         return self.installs[install_id]
 
@@ -76,6 +75,9 @@ class _FakeBase(ChatProvider):
 
     def adopt_token(self, state: SetupState, vault_item_id: str) -> Installation:
         return self._install(state)
+
+    def authorizing_identity(self, installation: Installation) -> str | None:
+        return "U_OWNER"
 
     def adapter_env(self, installation: Installation) -> dict[str, str]:
         return {"FAKE_BOT_TOKEN": FAKE_TOKEN}

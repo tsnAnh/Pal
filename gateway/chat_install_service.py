@@ -22,9 +22,10 @@ from tui_gateway.chat_install import (
     needs_app_creation,
     setup_key,
 )
-from tui_gateway.chat_providers import UnknownProvider
+from tui_gateway.chat_providers import UnknownProvider, registered_provider_ids
 from tui_gateway.contracts.chat_provider import (
     Binding,
+    Capabilities,
     ChatRpcErrorReason,
     Installation,
     NextAction,
@@ -50,8 +51,15 @@ class AdapterControl(Protocol):
     def reload(self, profile: str) -> None: ...
 
 
+class GatewayReason(Enum):
+    owner_only = "owner_only"
+    needs_public_url = "needs_public_url"
+    invalid_event = "invalid_event"
+    provider_failed = "provider_failed"
+
+
 class ChatServiceError(Exception):
-    def __init__(self, reason: ChatRpcErrorReason, state: SetupState | None = None, fix: NextAction | None = None):
+    def __init__(self, reason: ChatRpcErrorReason | GatewayReason, state: SetupState | None = None, fix: NextAction | None = None):
         super().__init__(reason.value)
         self.reason, self.state, self.fix = reason, state, fix
 
@@ -132,6 +140,9 @@ class ChatInstallService:
             state = self._finish(provider, state)
         return state
 
+    def provider_capabilities(self) -> list[Capabilities]:
+        return [self._provider(provider_id).capabilities() for provider_id in registered_provider_ids()]
+
     def status(self, bot: str, provider_id: str, workspace: str) -> tuple[SetupState, Installation | None]:
         self._provider(provider_id)
         state = self._current(bot, provider_id, workspace)
@@ -148,7 +159,7 @@ class ChatInstallService:
         if state.step is SetupStep.ready:
             return state, self._installation_of(state)
         if not (self.public_url() or "").startswith("https://"):
-            raise ChatServiceError(ChatRpcErrorReason.needs_public_url, state, SET_PUBLIC_URL_ACTION)
+            raise ChatServiceError(GatewayReason.needs_public_url, state, SET_PUBLIC_URL_ACTION)
         try:
             state = self._apply(provider, state, SetupEvent(kind=SetupEventKind.begin))
             if state.step is SetupStep.needs_allow and state.next_action.link:
@@ -170,7 +181,7 @@ class ChatInstallService:
         if event is SetupEventKind.revoked:
             return self.revoke(bot, provider_id, workspace)
         if event not in CLIENT_EVENTS:
-            raise ChatServiceError(ChatRpcErrorReason.invalid_event, state)
+            raise ChatServiceError(GatewayReason.invalid_event, state)
         try:
             if event is SetupEventKind.allow_granted:
                 new = self._adopt(provider, state, vault_item_id)
@@ -179,7 +190,7 @@ class ChatInstallService:
         except StaleRevision:
             raise ChatServiceError(ChatRpcErrorReason.stale_revision, self._current(bot, provider_id, workspace)) from None
         if new is state:
-            raise ChatServiceError(ChatRpcErrorReason.invalid_event, state)
+            raise ChatServiceError(GatewayReason.invalid_event, state)
         return new, self._installation_of(new)
 
     def _client_event(self, provider, state, event, manual_step, vault_item_id) -> SetupState:
@@ -204,11 +215,12 @@ class ChatInstallService:
         return self._complete(provider, state, installation)
 
     def _complete(self, provider: ChatProvider, state: SetupState, installation: Installation) -> SetupState:
-        if not installation.owner_user_id:
-            return self._fail(provider, state, SetupErrorCode.install_failed)
         try:
+            owner = provider.authorizing_identity(installation)
+            if not owner:
+                return self._fail(provider, state, SetupErrorCode.install_failed)
             env_keys = [*provider.adapter_env(installation), *([provider.allowed_users_env] if provider.allowed_users_env else [])]
-            self.store.save_installation(installation, env_keys)
+            self.store.save_installation(installation, env_keys, owner)
         except StaleRevision:
             raise
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
@@ -219,12 +231,13 @@ class ChatInstallService:
 
     def _finish(self, provider: ChatProvider, state: SetupState) -> SetupState:
         installation = self.store.installation(state.installation_id) if state.installation_id else None
-        if installation is None or not installation.owner_user_id:
+        owner = self.store.owner_id(installation.id) if installation else None
+        if installation is None or not owner:
             return self._fail(provider, state, SetupErrorCode.install_failed)
         try:
             env = dict(provider.adapter_env(installation))
             if provider.allowed_users_env:
-                env[provider.allowed_users_env] = installation.owner_user_id
+                env[provider.allowed_users_env] = owner
             self.control.apply_env(state.bot, provider.provider_id, env, [])
             self.control.reload(state.bot)
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
@@ -276,7 +289,7 @@ class ChatInstallService:
             raise ChatServiceError(ChatRpcErrorReason.not_implemented, state) from None
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
             logger.warning("chat provider call failed provider=%s error=%s", state.provider_id, type(exc).__name__)
-            raise ChatServiceError(ChatRpcErrorReason.provider_failed, state) from None
+            raise ChatServiceError(GatewayReason.provider_failed, state) from None
 
     def spaces(self, bot: str, provider_id: str, workspace: str) -> list[SpaceRef]:
         provider, state, installation = self._installed(bot, provider_id, workspace)
@@ -304,7 +317,7 @@ class ChatInstallService:
                 self.control.reload(bot)
             except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
                 logger.warning("chat install adapter stop failed provider=%s error=%s", provider_id, type(exc).__name__)
-                raise ChatServiceError(ChatRpcErrorReason.provider_failed, state) from None
+                raise ChatServiceError(GatewayReason.provider_failed, state) from None
             self.store.delete_bindings(installation.id)
             self.store.mark_revoked(installation.id, self.clock())
         try:
@@ -337,8 +350,9 @@ def bot_left(store: ChatInstallStore, bot: str, provider_id: str, workspace_id: 
     return BindingChange(installation, store.set_live(installation.id, space_id, False), False)
 
 
-def pending_welcome(store: ChatInstallStore, bot: str, provider_id: str, workspace_id: str) -> Installation | None:
+def pending_welcome(store: ChatInstallStore, bot: str, provider_id: str, workspace_id: str) -> tuple[Installation, str] | None:
     installation = store.installation_for_workspace(provider_id, workspace_id, bot)
-    if installation is None or not installation.owner_user_id or not store.claim_welcome(installation.id):
+    owner = store.owner_id(installation.id) if installation else None
+    if installation is None or not owner or not store.claim_welcome(installation.id):
         return None
-    return installation
+    return installation, owner

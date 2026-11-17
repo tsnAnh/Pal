@@ -38,9 +38,8 @@ def store(home):
     store = ChatInstallStore(home)
     installation = wire.Installation(
         id=INSTALL_ID, provider_id="slack", bot="default", workspace_id=TEAM, workspace_name="Team",
-        status=wire.InstallationStatus.active, created_at=1.0, updated_at=1.0, vault_item_ids=["v"],
-        owner_user_id=OWNER)
-    store.save_installation(installation, ["SLACK_BOT_TOKEN", "SLACK_ALLOWED_USERS"])
+        status=wire.InstallationStatus.active, created_at=1.0, updated_at=1.0, vault_item_ids=["v"])
+    store.save_installation(installation, ["SLACK_BOT_TOKEN", "SLACK_ALLOWED_USERS"], OWNER)
     state = initial_state("default", "slack", "", 1.0).model_copy(
         update={"step": wire.SetupStep.ready, "revision": 1, "installation_id": INSTALL_ID})
     store.save(state, 0)

@@ -69,11 +69,12 @@ async def send_install_welcomes(adapter: Any) -> None:
     from gateway.chat_install_service import pending_welcome
     store, bot = _store(), _bot(adapter)
     for team_id in list(getattr(adapter, "_team_clients", {})):
-        installation = pending_welcome(store, bot, _PROVIDER_ID, team_id)
-        if installation is None:
+        pending = pending_welcome(store, bot, _PROVIDER_ID, team_id)
+        if pending is None:
             continue
+        installation, owner = pending
         text = f"Hi, I'm {_display_name(bot)}. Message me here, or mention me in a channel I'm in."
-        if not await _post(adapter, installation.owner_user_id, text, team_id):
+        if not await _post(adapter, owner, text, team_id):
             store.release_welcome(installation.id)
 
 

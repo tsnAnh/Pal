@@ -90,6 +90,9 @@ class ChatProvider(abc.ABC):
     def revoke(self, installation: Installation) -> None:
         raise self._missing("revoke")
 
+    def authorizing_identity(self, installation: Installation) -> str | None:
+        return None
+
     def adapter_env(self, installation: Installation) -> dict[str, str]:
         raise self._missing("adapter_env")
 
