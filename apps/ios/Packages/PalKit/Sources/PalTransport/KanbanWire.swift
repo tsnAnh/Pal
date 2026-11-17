@@ -165,20 +165,6 @@ public enum KanbanContractKind: Sendable, Hashable, Codable {
     }
 }
 
-public enum KanbanVerification: Sendable, Hashable, Codable {
-    case independent
-    case attested
-    case unknown(String)
-
-    public init(wire: String) {
-        switch wire {
-        case "independent": self = .independent
-        case "attested": self = .attested
-        default: self = .unknown(wire)
-        }
-    }
-}
-
 public enum KanbanOutcomeState: Sendable, Hashable, Codable {
     case verified
     case refused
@@ -255,10 +241,14 @@ public struct KanbanBoard: Sendable, Hashable, Identifiable, Codable {
     public let projectID: String?
     public let createdAt: Int?
     public let taskCounts: [String: Int]?
+    public let unavailable: String?
 
     public var id: String { scope.boardID }
 
-    public init(scope: KanbanScope, name: String, description: String = "", archived: Bool = false, dispatchMode: String = "workers", projectID: String? = nil, createdAt: Int? = nil, taskCounts: [String: Int]? = nil) {
+    public init(
+        scope: KanbanScope, name: String, description: String = "", archived: Bool = false, dispatchMode: String = "workers",
+        projectID: String? = nil, createdAt: Int? = nil, taskCounts: [String: Int]? = nil, unavailable: String? = nil
+    ) {
         self.scope = scope
         self.name = name
         self.description = description
@@ -267,10 +257,12 @@ public struct KanbanBoard: Sendable, Hashable, Identifiable, Codable {
         self.projectID = projectID
         self.createdAt = createdAt
         self.taskCounts = taskCounts
+        self.unavailable = unavailable
     }
 
     public init?(_ json: JSONValue) {
         guard let scope = KanbanScope(json["scope"]) else { return nil }
+        unavailable = Field.string(json, "unavailable").flatMap { $0.isEmpty ? nil : $0 }
         self.scope = scope
         let name = Field.string(json, "name") ?? ""
         self.name = name.isEmpty ? scope.board : name
@@ -357,16 +349,24 @@ public struct KanbanPrerequisite: Sendable, Hashable, Codable {
 public struct KanbanBoardsList: Sendable, Equatable {
     public let gatewayID: String
     public let boards: [KanbanBoard]
+    public let boardsSeen: Int?
 
-    public init(gatewayID: String, boards: [KanbanBoard]) {
+    public var isVerifiedEmpty: Bool { boards.isEmpty && boardsSeen == 0 }
+
+    public init(gatewayID: String, boards: [KanbanBoard], boardsSeen: Int? = nil) {
         self.gatewayID = gatewayID
         self.boards = boards
+        self.boardsSeen = boardsSeen
     }
 
     public init?(_ json: JSONValue) {
         guard let gatewayID = Field.string(json, "gateway_id"), !gatewayID.isEmpty else { return nil }
+        let rows = Field.list(json, "boards")
+        let boards = rows.compactMap(KanbanBoard.init)
+        guard boards.count == rows.count else { return nil }
         self.gatewayID = gatewayID
-        boards = Field.list(json, "boards").compactMap(KanbanBoard.init)
+        self.boards = boards
+        boardsSeen = Field.integer(json, "boards_seen")
     }
 }
 

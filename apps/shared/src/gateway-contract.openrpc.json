@@ -30715,6 +30715,18 @@
             ],
             "default": null,
             "title": "Task Counts"
+          },
+          "unavailable": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unavailable"
           }
         },
         "required": [
@@ -30742,11 +30754,16 @@
             },
             "title": "Boards",
             "type": "array"
+          },
+          "boards_seen": {
+            "title": "Boards Seen",
+            "type": "integer"
           }
         },
         "required": [
           "gateway_id",
-          "boards"
+          "boards",
+          "boards_seen"
         ],
         "title": "KanbanBoardsListResult",
         "type": "object"
@@ -65833,7 +65850,7 @@
     },
     {
       "name": "kanban.boards.list",
-      "summary": "Boards with a readable database on this gateway (never creates one). Native owner only.",
+      "summary": "Boards on this gateway, each marked ``unavailable`` when its database cannot be read (never creates one). Native owner only.",
       "params": [
         {
           "name": "params",

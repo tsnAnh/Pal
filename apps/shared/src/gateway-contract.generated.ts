@@ -7174,6 +7174,7 @@ export interface KanbanReadParams {
 export interface KanbanBoardsListResult {
   gateway_id: string
   boards: KanbanBoard[]
+  boards_seen: number
 }
 export interface KanbanBoard {
   scope: KanbanScope
@@ -7186,6 +7187,7 @@ export interface KanbanBoard {
   project_id?: string | null
   created_at?: number | null
   task_counts?: Record<string, number> | null
+  unavailable?: string | null
 }
 export interface KanbanScope {
   gateway_id: string
@@ -9390,7 +9392,7 @@ export interface CanonicalRpcMethods {
   'image.attach_bytes': { params: ImageAttachBytesParams; result: CanonicalAttachedImageResult }
   /** One coherent read of a board's cards and the event cursor taken at the same commit. */
   'kanban.board.snapshot': { params: KanbanSnapshotParams; result: KanbanSnapshotResult }
-  /** Boards with a readable database on this gateway (never creates one). Native owner only. */
+  /** Boards on this gateway, each marked ``unavailable`` when its database cannot be read (never creates one). Native owner only. */
   'kanban.boards.list': { params: KanbanReadParams; result: KanbanBoardsListResult }
   /** One card: lifecycle, execution, CI acceptance, outcome verification and evidence, kept separate. */
   'kanban.card.get': { params: KanbanCardParams; result: KanbanCardResult }
