@@ -97,3 +97,31 @@ def test_an_oauth_entry_with_a_rejected_token_needs_reconnect_and_a_disabled_one
     (work_home / "config.yaml").write_text(yaml.safe_dump(config))
 
     assert _rows()[entry.id]["status"] == "not_connected"
+
+
+def test_a_catalog_connect_by_url_keeps_the_manifest_action_gate(work_home):
+    upwork, other = ENTRIES["upwork"], _first(ConnectionMethod.NONE)
+    _ok("mcp.servers.add", name=upwork.id, config={"url": upwork.mcp_url, "transport": "http"})
+    _ok("mcp.servers.add", name=other.id, config={"url": other.mcp_url, "transport": "http"})
+    servers = yaml.safe_load((work_home / "config.yaml").read_text())["mcp_servers"]
+
+    assert servers["upwork"]["action_policy"]["read_tools"] and "signin_on" not in servers["upwork"]
+    assert "action_policy" not in servers[other.id]
+
+
+def test_reconnecting_an_earlier_owner_app_server_drops_the_sign_in_key_no_catalog_entry_declares(
+        work_home, monkeypatch):
+    upwork = ENTRIES["upwork"]
+    (work_home / "config.yaml").write_text(yaml.safe_dump({"mcp_servers": {"upwork": {
+        "url": upwork.mcp_url, "auth": "oauth", "signin_on": "owner_app", "enabled": True}}}))
+    started = {}
+
+    def start_flow(_home, name, cfg, **_kwargs):
+        started[name] = cfg
+        return {"session_id": "s1", "auth_url": "https://auth.example/authorize", "flow": "pkce"}
+
+    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", start_flow)
+    _ok("mcp.servers.oauth.start", name="upwork", client_redirect_uri="http://127.0.0.1:50123/callback")
+
+    saved = yaml.safe_load((work_home / "config.yaml").read_text())["mcp_servers"]["upwork"]
+    assert "signin_on" not in started["upwork"] and "signin_on" not in saved and saved["url"] == upwork.mcp_url

@@ -27,8 +27,7 @@ class SigninFlow(Protocol):
 
 
 CONNECT_APP_SOURCES = {
-    "hosted": "connector:<slug> -> oauth through the connector portal (CONNECTION_REQUIRED / CONNECTION_EXPIRED)",
-    "mcp": "mcp:<server> -> oauth, api_key or header from the server config (manifest auth.type for catalog presets)",
+    "catalog": "connector:<slug> -> mcp_oauth (loopback relay or pasted address), api_key bearer token, or the owner's oauth_client, per the catalog method",
     "googleWorkspace": "google_workspace.* -> owner pastes the final address after the Google consent page; PKCE verifier stays on the gateway",
     "custom": "custom connector -> HTTP header values entered in the app's connector form, no sign-in flow",
 }

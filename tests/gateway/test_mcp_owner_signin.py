@@ -19,7 +19,8 @@ from tests.gateway.test_auth_prompts import _in_home, _required, _wait_for
 from tools import auth_required
 from tools.registry import tool_error
 
-pytest_plugins = ('tests.gateway.device_tools_harness',)
+pytest_plugins = ('tests.gateway.device_tools_harness', 'tests.gateway.owner_app_catalog')
+pytestmark = pytest.mark.usefixtures('owner_app_upwork')
 
 ACCESS, REFRESH = 'at-canary-5c1e90ab77d2', 'rt-canary-1b84e0d6f9a3'
 HANDOVER = {

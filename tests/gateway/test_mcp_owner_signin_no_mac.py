@@ -28,7 +28,8 @@ from tools import approval, auth_required, mcp_action_gate
 from tools.approval_context import reset_current_session_key, set_current_session_key
 from tools.mcp_oauth import HermesTokenStorage
 
-pytest_plugins = ('tests.gateway.device_tools_harness', 'tests.tools.test_mcp_action_gate')
+pytest_plugins = ('tests.gateway.device_tools_harness', 'tests.tools.test_mcp_action_gate', 'tests.gateway.owner_app_catalog')
+pytestmark = pytest.mark.usefixtures('owner_app_upwork')
 
 HANDOVER = {
     'service': 'mcp:upwork', 'client_id': 'client-abc', 'redirect_uri': 'http://127.0.0.1:53682/callback',

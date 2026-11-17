@@ -21,7 +21,7 @@ def _parse(tmp_path, body):
 def test_the_manifest_policy_reaches_the_installed_server_block_unchanged():
     entry = mcp_catalog.get_entry("upwork")
     cfg = mcp_catalog._build_server_config(entry, None)
-    assert cfg["url"] == "https://mcp.upwork.com/mcp" and cfg["auth"] == "oauth" and cfg["signin_on"] == "owner_app"
+    assert cfg["url"] == "https://mcp.upwork.com/mcp" and cfg["auth"] == "oauth"
     policy = mcp_action_gate.policy_from_config(cfg)
     assert policy.read_tools == frozenset(entry.action_policy.read_tools)
     assert "upwork.com" in policy.refused_message

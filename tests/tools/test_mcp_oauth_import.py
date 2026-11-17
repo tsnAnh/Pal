@@ -20,6 +20,9 @@ from hermes_constants import reset_hermes_home_override, set_hermes_home_overrid
 from tools import mcp_oauth_import as imp
 from tools.mcp_oauth import HermesTokenStorage
 
+pytest_plugins = ("tests.gateway.owner_app_catalog",)
+pytestmark = pytest.mark.usefixtures("owner_app_upwork")
+
 ACCESS, REFRESH = "at-canary-5c1e90ab77d2", "rt-canary-1b84e0d6f9a3"
 URL = "https://mcp.upwork.com/mcp"
 TOKEN_ENDPOINT = "https://auth.upwork.example/oauth2/token"

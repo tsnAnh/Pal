@@ -10,7 +10,6 @@ transport:
 
 auth:
   type: oauth
-  signin_on: owner_app
 
 # The tool names below are the naming-convention guess (the server could not be reached when this was
 # written). A wrong read name only makes a read ask for approval; it can never let a write run.

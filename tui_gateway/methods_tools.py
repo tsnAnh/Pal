@@ -1536,6 +1536,10 @@ def _(rid, params: dict) -> dict:
                     cmd_args=list(server_config.get("args") or []), server_config=server_config)
             except ValueError:
                 return _err(rid, 4063, f"Unknown MCP catalog entry or preset: {preset}")
+    if entry is None and "action_policy" not in server_config:
+        declared = catalog.get_entry(name)
+        if declared is not None and declared.action_policy is not None and declared.transport.url == server_config.get("url"):
+            server_config["action_policy"] = catalog._build_server_config(declared, install_dir=None)["action_policy"]
     if not server_config.get("url") and not server_config.get("command"):
         return _err(rid, 4063, "config must specify a 'url' (http) or 'command' (stdio), or a valid 'preset'")
     helpers = _tools_mod("tui_gateway.mcp_rpc_helpers")
@@ -1657,6 +1661,11 @@ def _(rid, params: dict) -> dict:
         if err:
             return err
         cfg = dict(servers[name])
+        if cfg.get("signin_on"):
+            declared = _tools_mod("hermes_cli.mcp_catalog").get_entry(name)
+            if declared is None or not declared.auth.signin_on:
+                del cfg["signin_on"]
+                _tools_mod("hermes_cli.mcp_config")._save_mcp_server(name, {k: v for k, v in servers[name].items() if k != "signin_on"})
         if not cfg.get("url"):
             return _err(rid, 4001, "stdio servers authenticate via env keys, not OAuth")
         if cfg.get("headers") and cfg.get("auth") != "oauth":

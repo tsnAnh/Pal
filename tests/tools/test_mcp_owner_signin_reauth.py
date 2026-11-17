@@ -23,7 +23,8 @@ from tools.mcp_oauth import HermesTokenStorage, OwnerSigninRequired
 REASON = "Sign in again: Upwork stopped accepting the saved sign-in"
 ROTATED = "rt-rotated-9e41d27a"
 
-pytest_plugins = ("tests.tools.test_mcp_action_gate",)
+pytest_plugins = ("tests.tools.test_mcp_action_gate", "tests.gateway.owner_app_catalog")
+pytestmark = pytest.mark.usefixtures("owner_app_upwork")
 
 
 @pytest.fixture(autouse=True)

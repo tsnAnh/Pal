@@ -14,7 +14,6 @@ class ConnectionMethod(str, Enum):
     MCP_OAUTH = "mcp_oauth"
     OAUTH_CLIENT = "oauth_client"
     API_KEY = "api_key"
-    NATIVE = "native"
     NONE = "none"
 
 
