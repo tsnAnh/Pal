@@ -31,7 +31,7 @@ BRIDGED = (
     "vault.list", "vault.sources", "vault.add", "vault.update", "vault.remove", "vault.unlock", "vault.lock",
     "skills.manage",
     "chat.provider.list", "chat.install.status", "chat.install.begin", "chat.install.advance",
-    "chat.spaces.list", "chat.space.join", "chat.binding.list", "chat.install.revoke",
+    "chat.spaces.list", "chat.space.join", "chat.binding.list", "chat.install.revoke", "chat.install.update_identity",
 )
 
 HANDLER_VALIDATED = frozenset({"connection.respond"})

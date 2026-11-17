@@ -5524,6 +5524,7 @@ export interface McpCatalogEntry {
   installed: boolean
   enabled: boolean
   requires: string[]
+  setup?: string
   transport: string
   needs_auth_reason?: string | null
 }
@@ -9243,6 +9244,8 @@ export interface CanonicalRpcMethods {
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
   'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Send the bot's current name and display name to the chat app, and its picture when the provider can set it. needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only. */
+  'chat.install.update_identity': { params: ChatInstallParams; result: ChatIdentityUpdateResult }
   /** Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only. */
   'chat.provider.list': { params: ProfileParams; result: ChatProviderListResult }
   /** Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live. */
@@ -9523,6 +9526,7 @@ export const CANONICAL_RPC_METHODS = [
   'chat.install.begin',
   'chat.install.revoke',
   'chat.install.status',
+  'chat.install.update_identity',
   'chat.provider.list',
   'chat.space.join',
   'chat.spaces.list',
