@@ -10,13 +10,9 @@ let package = Package(
     products: [
         .library(name: "PalDesign", targets: ["PalDesign"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/swhitty/SwiftDraw.git", .upToNextMinor(from: "0.29.0")),
-    ],
     targets: [
         .target(
             name: "PalDesign",
-            dependencies: [.product(name: "SwiftDraw", package: "SwiftDraw")],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),
