@@ -140,6 +140,7 @@ extension MacConnectApps {
     var selectedSection: some View {
         switch model.selection {
         case ConnectChip.all:
+            legacySection
             deviceSection(model.devices.thisDevice)
             ForEach(model.catalog.categories, id: \.self) { category in
                 section(title: category, identifier: "connectAppsSection-\(category)", viewAll: { model.selection = category }, content: {

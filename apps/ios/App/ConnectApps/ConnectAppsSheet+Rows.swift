@@ -44,6 +44,7 @@ extension ConnectAppsSheet {
 
     @ViewBuilder
     var allSections: some View {
+        legacySection
         deviceSection(model.devices.thisDevice)
         ForEach(model.catalog.categories, id: \.self) { category in
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }

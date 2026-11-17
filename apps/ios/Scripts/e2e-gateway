@@ -144,6 +144,12 @@ YAML
   fi
 done
 
+for legacy_home in "$HOME_DIR" "$HOME_DIR"/profiles/*; do
+  [ -d "$legacy_home" ] || continue
+  mkdir -p "$legacy_home/cache/connectors/portal/earlier"
+  printf '{"fetched_at": 1760000000}\n' >"$legacy_home/cache/connectors/portal/earlier/context7.json"
+done
+
 GATEWAY_ENV=(HERMES_HOME="$HOME_DIR")
 if [ "$SEED" = "parity" ]; then
   GATEWAY_ENV+=(PYTHONPATH="$IOS_DIR/Tools/seed-parity/gateway-doubles" IOS_E2E_PROVIDER_USAGE_URL="${STUB_URL%/v1}")
