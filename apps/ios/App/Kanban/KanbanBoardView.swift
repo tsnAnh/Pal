@@ -18,6 +18,8 @@ struct KanbanBoardView: View {
     #endif
 
     private var cache: KanbanBoardCache? { store.session.cache(board) }
+    private var rows: [KanbanCardRow]? { store.visibleRows(board: board) }
+    private var title: String { store.boardName(board) ?? String(localized: "Loading board") }
     private var load: KanbanLoad { store.load(of: board) }
 
     private var showsColumns: Bool {
@@ -29,7 +31,7 @@ struct KanbanBoardView: View {
     }
 
     var body: some View {
-        KanbanPage(title: cache?.board?.name ?? board, identifier: "kanbanBoard", back: back, close: close, scrolls: cache == nil) {
+        KanbanPage(title: title, identifier: "kanbanBoard", back: back, close: close, scrolls: rows == nil) {
             content
         }
         .refreshable { await store.refreshSnapshot(board: board) }
@@ -38,12 +40,12 @@ struct KanbanBoardView: View {
 
     @ViewBuilder
     private var content: some View {
-        if cache != nil {
-            loaded
+        if let rows {
+            loaded(rows)
         } else {
             switch load {
             case .idle, .loading, .ready:
-                LoadingRow(title: String(localized: "Loading cards"), identifier: "kanbanBoardLoading")
+                KanbanBoardSkeleton(wide: showsColumns)
             case .failed, .unreachable:
                 failure
             default:
@@ -58,8 +60,7 @@ struct KanbanBoardView: View {
         }
     }
 
-    private var loaded: some View {
-        let rows = KanbanBoardLayout.rows(session: store.session, board: board)
+    private func loaded(_ rows: [KanbanCardRow]) -> some View {
         let layout = KanbanBoardLayout(rows: rows, filter: filter)
         return VStack(spacing: 0) {
             notice
@@ -67,7 +68,7 @@ struct KanbanBoardView: View {
                 ContentUnavailableView("No cards yet", systemImage: "rectangle.split.3x1", description: Text("Cards on this board appear here."))
                     .accessibilityIdentifier("kanbanBoardEmpty")
             } else {
-                KanbanFilterBar(filter: $filter, layout: layout, boardName: cache?.board?.name ?? board, compact: !showsColumns)
+                KanbanFilterBar(filter: $filter, layout: layout, boardName: title, compact: !showsColumns)
                 if layout.matchingCards == 0 {
                     noMatches
                 } else {
@@ -176,4 +177,37 @@ struct KanbanBoardView: View {
         }
     }
     #endif
+}
+
+private struct KanbanBoardSkeleton: View {
+    let wide: Bool
+
+    var body: some View {
+        Group {
+            if wide {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(0..<4, id: \.self) { _ in column }
+                }
+            } else {
+                column
+            }
+        }
+        .padding(.horizontal, PalMetrics.screenMargin)
+        .padding(.top, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Loading cards"))
+        .accessibilityIdentifier("kanbanBoardLoading")
+    }
+
+    private var column: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            RoundedRectangle(cornerRadius: 6).frame(width: 90, height: 14)
+            ForEach(0..<3, id: \.self) { _ in
+                RoundedRectangle(cornerRadius: 14).frame(height: 76)
+            }
+        }
+        .foregroundStyle(PalTokens.textSecondary.opacity(0.12))
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
 }

@@ -30,7 +30,7 @@ public enum KanbanReadState: Sendable, Hashable {
     }
 }
 
-public enum KanbanCardStatus: Sendable, Hashable {
+public enum KanbanCardStatus: Sendable, Hashable, Codable {
     case triage
     case todo
     case scheduled
@@ -76,7 +76,7 @@ public enum KanbanCardStatus: Sendable, Hashable {
     }
 }
 
-public enum KanbanEventKind: Sendable, Hashable {
+public enum KanbanEventKind: Sendable, Hashable, Codable {
     case claimed
     case evidenceRecorded
     case outcomeVerified
@@ -113,7 +113,7 @@ public enum KanbanEventKind: Sendable, Hashable {
     }
 }
 
-public enum KanbanEvidenceKind: Sendable, Hashable {
+public enum KanbanEvidenceKind: Sendable, Hashable, Codable {
     case executionRef
     case prPublished
     case prMerged
@@ -147,7 +147,7 @@ public enum KanbanEvidenceKind: Sendable, Hashable {
     }
 }
 
-public enum KanbanContractKind: Sendable, Hashable {
+public enum KanbanContractKind: Sendable, Hashable, Codable {
     case mergedPR
     case builtArtifact
     case installedApp
@@ -165,7 +165,7 @@ public enum KanbanContractKind: Sendable, Hashable {
     }
 }
 
-public enum KanbanVerification: Sendable, Hashable {
+public enum KanbanVerification: Sendable, Hashable, Codable {
     case independent
     case attested
     case unknown(String)
@@ -179,7 +179,7 @@ public enum KanbanVerification: Sendable, Hashable {
     }
 }
 
-public enum KanbanOutcomeState: Sendable, Hashable {
+public enum KanbanOutcomeState: Sendable, Hashable, Codable {
     case verified
     case refused
     case notGoverned
@@ -195,7 +195,7 @@ public enum KanbanOutcomeState: Sendable, Hashable {
     }
 }
 
-public enum KanbanCiState: Sendable, Hashable {
+public enum KanbanCiState: Sendable, Hashable, Codable {
     case accepted
     case rejected
     case unknown(String)
@@ -209,7 +209,7 @@ public enum KanbanCiState: Sendable, Hashable {
     }
 }
 
-public enum KanbanProofKind: Sendable, Hashable {
+public enum KanbanProofKind: Sendable, Hashable, Codable {
     case prAcceptance
     case outcomeVerified
     case outcomeRefused
@@ -225,7 +225,7 @@ public enum KanbanProofKind: Sendable, Hashable {
     }
 }
 
-public struct KanbanScope: Sendable, Hashable {
+public struct KanbanScope: Sendable, Hashable, Codable {
     public let gatewayID: String
     public let board: String
     public let boardID: String
@@ -246,7 +246,7 @@ public struct KanbanScope: Sendable, Hashable {
     }
 }
 
-public struct KanbanBoard: Sendable, Hashable, Identifiable {
+public struct KanbanBoard: Sendable, Hashable, Identifiable, Codable {
     public let scope: KanbanScope
     public let name: String
     public let description: String
@@ -291,7 +291,7 @@ public struct KanbanBoard: Sendable, Hashable, Identifiable {
     }
 }
 
-public struct KanbanCard: Sendable, Hashable, Identifiable {
+public struct KanbanCard: Sendable, Hashable, Identifiable, Codable {
     public let cardID: String
     public let taskID: String
     public let title: String
@@ -338,7 +338,7 @@ public struct KanbanCard: Sendable, Hashable, Identifiable {
     }
 }
 
-public struct KanbanPrerequisite: Sendable, Hashable {
+public struct KanbanPrerequisite: Sendable, Hashable, Codable {
     public let taskID: String
     public let requiresTaskID: String
 
@@ -404,7 +404,7 @@ public struct KanbanSnapshotPage: Sendable, Equatable {
     }
 }
 
-public struct KanbanRun: Sendable, Hashable, Identifiable {
+public struct KanbanRun: Sendable, Hashable, Identifiable, Codable {
     public let runID: Int
     public let profile: String?
     public let executor: String?
@@ -435,7 +435,7 @@ public struct KanbanRun: Sendable, Hashable, Identifiable {
     }
 }
 
-public struct KanbanExecution: Sendable, Hashable {
+public struct KanbanExecution: Sendable, Hashable, Codable {
     public let currentRunID: Int?
     public let runs: [KanbanRun]
 
@@ -450,7 +450,7 @@ public struct KanbanExecution: Sendable, Hashable {
     }
 }
 
-public struct KanbanLifecycle: Sendable, Hashable {
+public struct KanbanLifecycle: Sendable, Hashable, Codable {
     public let status: KanbanCardStatus
     public let assignee: String?
     public let blockKind: String?
@@ -477,7 +477,7 @@ public struct KanbanLifecycle: Sendable, Hashable {
     }
 }
 
-public struct KanbanOutcomeContract: Sendable, Hashable {
+public struct KanbanOutcomeContract: Sendable, Hashable, Codable {
     public let kind: KanbanContractKind
     public let repo: String?
     public let name: String?
@@ -492,7 +492,7 @@ public struct KanbanOutcomeContract: Sendable, Hashable {
     }
 }
 
-public struct KanbanCiAcceptance: Sendable, Hashable {
+public struct KanbanCiAcceptance: Sendable, Hashable, Codable {
     public let state: KanbanCiState
     public let classification: String?
     public let runID: Int?
@@ -522,7 +522,7 @@ public struct KanbanCiAcceptance: Sendable, Hashable {
     }
 }
 
-public struct KanbanOutcomeVerification: Sendable, Hashable {
+public struct KanbanOutcomeVerification: Sendable, Hashable, Codable {
     public let state: KanbanOutcomeState
     public let verification: KanbanVerification?
     public let runID: Int?
@@ -552,7 +552,7 @@ public struct KanbanOutcomeVerification: Sendable, Hashable {
     }
 }
 
-public struct KanbanProofHistory: Sendable, Hashable {
+public struct KanbanProofHistory: Sendable, Hashable, Codable {
     public let kind: KanbanProofKind
     public let state: String
     public let verification: KanbanVerification?
@@ -570,7 +570,7 @@ public struct KanbanProofHistory: Sendable, Hashable {
     }
 }
 
-public struct KanbanEvidence: Sendable, Hashable, Identifiable {
+public struct KanbanEvidence: Sendable, Hashable, Identifiable, Codable {
     public let evidenceID: Int
     public let runID: Int?
     public let kind: KanbanEvidenceKind
@@ -607,7 +607,7 @@ public struct KanbanEvidence: Sendable, Hashable, Identifiable {
     }
 }
 
-public struct KanbanCardDetail: Sendable, Hashable {
+public struct KanbanCardDetail: Sendable, Hashable, Codable {
     public let card: KanbanCard
     public let body: String?
     public let result: String?
@@ -670,7 +670,7 @@ public struct KanbanEvidenceResult: Sendable, Equatable {
     }
 }
 
-public struct KanbanEvent: Sendable, Hashable, Identifiable {
+public struct KanbanEvent: Sendable, Hashable, Identifiable, Codable {
     public let eventID: Int
     public let cardID: String
     public let taskID: String
