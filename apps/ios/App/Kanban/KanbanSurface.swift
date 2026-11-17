@@ -17,12 +17,14 @@ extension KanbanStore {
 struct KanbanSurface: View {
     @State private var store: KanbanStore
     @State private var path: [KanbanRoute] = []
+    let roster: RosterModel
     let close: (() -> Void)?
 
     @Environment(\.scenePhase) private var scenePhase
 
-    init(connection: ConnectionModel, close: (() -> Void)?) {
+    init(connection: ConnectionModel, roster: RosterModel, close: (() -> Void)?) {
         _store = State(initialValue: KanbanStore.live(connection: connection))
+        self.roster = roster
         self.close = close
     }
 
@@ -44,10 +46,18 @@ struct KanbanSurface: View {
                 }
         }
         .tint(.primary)
+        .environment(\.kanbanRoster, kanbanRoster)
         .task(id: target) {
             guard let board = target.followedBoard else { return }
             await store.poll(board: board)
         }
+    }
+
+    private var kanbanRoster: KanbanRoster {
+        KanbanRoster(
+            names: KanbanBots(displayNames: Dictionary(roster.bots.map { ($0.name, $0.displayName) }, uniquingKeysWith: { first, _ in first })),
+            specs: Dictionary(roster.bots.map { ($0.name, $0.spec) }, uniquingKeysWith: { first, _ in first })
+        )
     }
 
     @ViewBuilder

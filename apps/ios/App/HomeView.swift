@@ -59,7 +59,7 @@ struct HomeView: View {
                     Button { router.presentKanban() } label: {
                         Image(systemName: "rectangle.split.3x1")
                     }
-                    .accessibilityLabel(Text("Work boards"))
+                    .accessibilityLabel(Text("Pal Kanban"))
                     .accessibilityIdentifier("kanbanButton")
                     .tint(.primary)
                 }

@@ -2,6 +2,7 @@ import Foundation
 import PalTransport
 
 public enum KanbanPresentation {
+    public static let surfaceTitle = String(localized: "Pal Kanban")
     public static let verifiedIndependently = "Independently verified"
     public static let attested = "Attested by the producer (not independently verified)"
     public static let unknown = "Unknown"
