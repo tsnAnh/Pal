@@ -809,6 +809,7 @@ from hermes_cli.web_routers import (
     delegation as _delegation_routes,
     webapp_access as _webapp_access_routes,
     ui_preferences as _ui_preferences_routes,
+    chat_install as _chat_install_routes,
     gateway_connections as _gateway_connections_routes,
     gateway_connections_reach as _gateway_connections_reach_routes,
     webapp_relay_proxy as _webapp_relay_proxy_routes,
@@ -860,6 +861,7 @@ app.include_router(_shared_metrics_routes.router)
 app.include_router(_delegation_routes.router)
 app.include_router(_webapp_access_routes.router, dependencies=[_Depends(_route_on("web_access"))])
 app.include_router(_ui_preferences_routes.router, dependencies=[_Depends(_route_on("ui_preferences"))])
+app.include_router(_chat_install_routes.router)
 app.include_router(_gateway_connections_routes.router, dependencies=[_Depends(_route_on("gateway_connections"))])
 app.include_router(_gateway_connections_reach_routes.router, dependencies=[_Depends(_route_on("gateway_connections"))])
 

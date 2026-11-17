@@ -7,6 +7,7 @@ from . import (
     bot_settings,
     bot_teach,
     capabilities,
+    chat_provider,
     common,
     config_free_tier_control,
     connectors,

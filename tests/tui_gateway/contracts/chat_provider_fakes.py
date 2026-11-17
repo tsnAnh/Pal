@@ -46,6 +46,7 @@ class MemorySetupStore:
 
 class _FakeBase(ChatProvider):
     caps: Capabilities
+    allowed_users_env = "FAKE_ALLOWED_USERS"
 
     def __init__(self) -> None:
         self.apps_created: list[str] = []
@@ -60,7 +61,7 @@ class _FakeBase(ChatProvider):
         self.apps_created.append(app_id)
         return AppCreated(app_id=app_id, authorize_link=f"https://{self.provider_id}.invalid/allow/{app_id}")
 
-    def complete_install(self, state: SetupState, authorization_code: str) -> Installation:
+    def _install(self, state: SetupState) -> Installation:
         install_id = f"{self.provider_id}-install-{state.bot}-{state.workspace}"
         self.installs.setdefault(install_id, Installation(
             id=install_id, provider_id=self.provider_id, bot=state.bot, workspace_id=state.workspace,
@@ -68,6 +69,18 @@ class _FakeBase(ChatProvider):
             created_at=FIXED_NOW, updated_at=FIXED_NOW, vault_item_ids=[f"vault-{install_id}-bot"],
         ))
         return self.installs[install_id]
+
+    def complete_install(self, state: SetupState, authorization_code: str) -> Installation:
+        return self._install(state)
+
+    def adopt_token(self, state: SetupState, vault_item_id: str) -> Installation:
+        return self._install(state)
+
+    def authorizing_identity(self, installation: Installation) -> str | None:
+        return "U_OWNER"
+
+    def adapter_env(self, installation: Installation) -> dict[str, str]:
+        return {"FAKE_BOT_TOKEN": FAKE_TOKEN}
 
     def identity_projection(self, source: BotIdentitySource) -> IdentityProjection:
         policy = self.caps.identity_policy

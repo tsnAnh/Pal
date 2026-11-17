@@ -105,6 +105,15 @@ def test_revoke_then_reinstall_reuses_app_id():
     assert gw.provider.apps_created == [first.app_id]
 
 
+def test_paste_fallback_offered_only_while_waiting_for_allow(gateway):
+    for kind in SCRIPT:
+        state = gateway.send("pal", "w1", kind)
+        if state.step is wire.SetupStep.needs_allow:
+            assert state.fallback_action == wire.NextAction(kind=wire.NextActionKind.paste_credential, action_id="bot_token")
+        else:
+            assert state.fallback_action is None
+
+
 def test_stale_writer_is_rejected():
     gw = Gateway(AuthorizeOnlyFake(), MemorySetupStore())
     old = gw.state("pal", "w1")
@@ -177,12 +186,15 @@ def test_abstract_provider_raises_typed_not_implemented():
         "list_spaces": lambda: bare.list_spaces(install),
         "join_space": lambda: bare.join_space(install, "s"),
         "revoke": lambda: bare.revoke(install),
+        "adapter_env": lambda: bare.adapter_env(install),
+        "adopt_token": lambda: bare.adopt_token(state, "vault-item"),
     }
-    assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id"}
+    assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env", "authorizing_identity"}
     for operation, call in calls.items():
         with pytest.raises(ci.ProviderNotImplemented) as info:
             call()
         assert (info.value.provider_id, info.value.operation) == ("bare", operation)
+    assert bare.authorizing_identity(install) is None
 
 
 def test_slack_policy_records_known_limits_and_unverified_defaults():
