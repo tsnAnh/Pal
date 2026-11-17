@@ -68,6 +68,11 @@ def callback_only_hosts() -> frozenset[str]:
     return hosts
 
 
+def forget_callback_hosts() -> None:
+    global _callback_hosts_cache
+    _callback_hosts_cache = (-_CALLBACK_HOSTS_TTL_SECONDS, frozenset())
+
+
 def is_callback_only_request(scope: dict, state) -> bool:
     """A gateway-listener request for one exact OAuth callback route on the host ``webapp.public_url``
     names while the Webapp is off. Matches the decoded path exactly (no trailing slash, no ``..``, no

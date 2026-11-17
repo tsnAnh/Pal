@@ -133,9 +133,9 @@ def test_check_reaches_pals_own_callback_with_one_request():
     assert len(seen) == 1 and seen[0].startswith("https://pal.example.com/webapp/mcp-oauth/callback?")
 
 
-def test_check_tells_a_gateway_that_does_not_serve_the_address():
+def test_check_calls_a_host_header_refusal_another_service():
     fetch, _ = _responder(400, '{"detail":"Invalid Host header. Dashboard requests must use the bound hostname"}')
-    assert pa.check("https://pal.example.com", fetch) is Outcome.not_served
+    assert pa.check("https://pal.example.com", fetch) is Outcome.wrong_service
 
 
 @pytest.mark.parametrize("status, body", [(200, "<html>welcome to nginx</html>"), (404, "nope"),
@@ -159,3 +159,13 @@ def test_check_without_an_address_makes_no_request():
 
 def test_the_real_fetch_reports_a_closed_port_as_not_reachable():
     assert pa.check("https://127.0.0.1:1") is Outcome.not_reachable
+
+
+def test_a_saved_address_reaches_the_running_listener_at_once():
+    from hermes_cli.web_server_boundary import callback_only_hosts
+    home = get_hermes_home()
+    assert callback_only_hosts() == frozenset()
+    pa.save(home, "https://pal.example.com")
+    assert callback_only_hosts() == frozenset({"pal.example.com"})
+    pa.save(home, "")
+    assert callback_only_hosts() == frozenset()

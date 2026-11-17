@@ -19,7 +19,6 @@ class PublicUrlCheckOutcome(WireEnum):
     reachable = "reachable"
     not_reachable = "not_reachable"
     wrong_service = "wrong_service"
-    not_served = "not_served"
     no_address = "no_address"
 
 
@@ -49,8 +48,8 @@ method("webapp.public_url.get", params=PublicUrlGetParams, result=PublicUrlState
 method("webapp.public_url.set", params=PublicUrlSetParams, result=PublicUrlState,
        doc="Owner only. Save the address: https only, a host name (never an IP), no userinfo, path beyond /, "
            "query or fragment, at most 255 characters; stored lower-cased without a trailing slash. An empty "
-           "url clears it. A refusal carries data.problem. The gateway reads the address when it starts.")
+           "url clears it. A refusal carries data.problem. A running gateway applies it within seconds.")
 method("webapp.public_url.check", params=PublicUrlGetParams, result=PublicUrlCheckResult,
        doc="Owner only. One request from the gateway to <public_url>/webapp/mcp-oauth/callback with a state "
-           "nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service, "
-           "not_served (the gateway answers but does not serve this address) or no_address.")
+           "nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service or "
+           "no_address.")
