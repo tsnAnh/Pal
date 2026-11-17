@@ -45,7 +45,7 @@ connectors:
   source: https://developer.calendly.com/calendly-mcp-server
 - id: canva
   name: Canva
-  icon: plugin_glyph
+  icon: canva
   category: Design and web
   method: oauth_client
   mcp_url: https://api.canva.com/connect/v1/mcp
@@ -95,7 +95,7 @@ connectors:
   source: https://cloudinary.com/documentation/cloudinary_llm_mcp
 - id: comfy-cloud
   name: Comfy Cloud
-  icon: plugin_glyph
+  icon: comfy-cloud
   category: Design and web
   method: mcp_oauth
   mcp_url: https://cloud.comfy.org/mcp

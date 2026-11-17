@@ -14,20 +14,18 @@ OTHER_ALLOWED = {
     "wolfram": "computation engine; no category in the list fits",
 }
 LOGO_FALLBACK = {
-    "aws-knowledge": "not in Simple Icons",
-    "canva": "not in Simple Icons",
-    "comfy-cloud": "not in Simple Icons",
-    "context7": "not in Simple Icons",
-    "craft": "not in Simple Icons",
-    "deepwiki": "not in Simple Icons",
-    "gamma": "not in Simple Icons",
-    "google-workspace": "not in Simple Icons",
-    "microsoft-learn": "not in Simple Icons",
-    "monday": "not in Simple Icons",
-    "motherduck": "not in Simple Icons",
-    "semgrep": "not in Simple Icons",
-    "slack": "not in Simple Icons",
-    "twilio-docs": "not in Simple Icons",
+    "aws-knowledge": "AWS marks need AWS written permission or a partner licence",
+    "context7": "Upstash kit states no logo terms",
+    "craft": "Craft kit forbids implying a relationship and grants no integration-listing right",
+    "deepwiki": "no DeepWiki kit or terms",
+    "gamma": "kit and terms return 403",
+    "google-workspace": "Google requires an approved permission request",
+    "microsoft-learn": "Microsoft logos require a licence",
+    "monday": "press kit has PNG only and no integration terms",
+    "motherduck": "no brand kit or terms",
+    "semgrep": "no brand kit or terms",
+    "slack": "Slack terms require a written licence for the logo",
+    "twilio-docs": "Twilio logos need express written permission",
 }
 
 
