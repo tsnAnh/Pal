@@ -401,6 +401,7 @@ class McpCatalogEntry(Result):
     installed: bool
     enabled: bool
     requires: list[str]
+    setup: str = ""
     transport: str
     needs_auth_reason: str | None = None
 

@@ -36,20 +36,14 @@ struct ChatInstallView<Advanced: View>: View {
     }
 
     var body: some View {
-        Group {
-            if model.screen == .unsupported {
-                advanced()
-            } else {
-                wizard
+        wizard
+            .task {
+                await model.load()
+                for await payload in events() { await model.receive(payload) }
             }
-        }
-        .task {
-            await model.load()
-            for await payload in events() { await model.receive(payload) }
-        }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refresh() } }
-        }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await model.refresh() } }
+            }
     }
 
     private var wizard: some View {
@@ -83,10 +77,8 @@ struct ChatInstallView<Advanced: View>: View {
         switch model.screen {
         case .loading:
             DelayedReveal { ProgressView().frame(maxWidth: .infinity).accessibilityIdentifier("chatInstallLoading") }
-        case .unavailable:
-            header(String(localized: "Pal can't reach Slack setup right now"), String(localized: "Check your connection, then try again."))
-        case .unsupported:
-            EmptyView()
+        case .unavailable, .unsupported, .error:
+            status
         case .providers:
             providers
         case .intro(let again):
@@ -102,9 +94,6 @@ struct ChatInstallView<Advanced: View>: View {
             owner
         case .ready:
             ready
-        case .error(let code, _):
-            header(String(localized: "Setup stopped"), errorText(code))
-                .accessibilityIdentifier("chatInstallError")
         }
     }
 
@@ -132,10 +121,7 @@ struct ChatInstallView<Advanced: View>: View {
                 String(localized: "Click Allow in Slack, then pick the channels \(displayName) joins."),
             ], identifier: "chatInstallIntroSteps")
             preview
-            NavigationLink { advanced() } label: {
-                Text("Advanced: paste tokens").hermesText(.rowSubtitle)
-            }
-            .accessibilityIdentifier("chatInstallAdvanced")
+            advancedLink
         }
     }
 
@@ -368,7 +354,7 @@ struct ChatInstallView<Advanced: View>: View {
 
     @ViewBuilder
     private var primary: some View {
-        if let action = model.primaryAction {
+        if let action = model.primaryAction, !model.isStatusScreen {
             PillButton(primaryTitle(action), kind: .accent, size: .large, isBusy: model.isWorking, accessibilityIdentifier: "chatInstallPrimary") {
                 perform(action)
             }
@@ -502,15 +488,23 @@ struct ChatInstallView<Advanced: View>: View {
         }
     }
 
-    private func errorText(_ code: ChatSetupErrorCode) -> String {
-        switch code {
-        case .credentialRejected: String(localized: "Slack didn't accept that setup code. Copy a fresh one and paste it again.")
-        case .credentialExpired: String(localized: "The setup code has expired. Copy a new one from Slack.")
-        case .appCreateFailed: String(localized: "Pal couldn't create \(displayName)'s Slack app. Try again in a moment.")
-        case .allowDenied: String(localized: "Slack didn't get your Allow. Open Slack again and click Allow.")
-        case .installFailed: String(localized: "Pal couldn't finish adding \(displayName). Try again in a moment.")
-        case .providerUnreachable, .unknown: String(localized: "Pal couldn't reach Slack. Check your connection, then try again.")
+    @ViewBuilder
+    private var status: some View {
+        if let copy = ChatStatusCopy(model: model, displayName: displayName) {
+            ChatInstallStatus(
+                copy: copy, primaryTitle: model.primaryAction.map(primaryTitle), isBusy: model.isWorking,
+                perform: { if let action = model.primaryAction { perform(action) } },
+                secondary: { if model.screen == .unsupported { advancedLink } }
+            )
+            .containerRelativeFrame(.vertical) { length, _ in length - 36 }
         }
+    }
+
+    private var advancedLink: some View {
+        NavigationLink { advanced() } label: {
+            Text("Advanced: paste tokens").hermesText(.rowSubtitle)
+        }
+        .accessibilityIdentifier("chatInstallAdvanced")
     }
 
     private func noticeText(_ notice: ChatInstallNotice) -> String {

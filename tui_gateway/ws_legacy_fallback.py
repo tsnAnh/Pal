@@ -158,10 +158,13 @@ def _answer_inline(server: Any, req: dict, transport: Any) -> dict:
         server.reset_transport(token)
 
 
-def dispatch_legacy(server: Any, req: dict, transport: Any, actor: Any, *, inline: bool = False) -> dict | None:
+def dispatch_legacy(server: Any, req: dict, transport: Any, actor: Any, *, inline: bool = False,
+                    host_owner: bool = False) -> dict | None:
     """Run ``server.dispatch`` with the ticket's profile home bound (call from a worker thread;
     the pool path copies this context, so long handlers see it too). ``inline`` answers every
-    handler in the return value, for a caller that owns the reply frame."""
+    handler in the return value, for a caller that owns the reply frame. ``host_owner`` marks a
+    host-scoped grant that reached a sibling profile: it scopes to that profile like a ticket but is
+    still the owner, so owner-only handlers must not see it as a bot's ticket."""
     try:
         home = _foreign_profile_home(server, getattr(actor, "profile_id", None))
     except OSError:
@@ -190,7 +193,7 @@ def dispatch_legacy(server: Any, req: dict, transport: Any, actor: Any, *, inlin
             return req
         if target:
             scope = server._session_profile_runtime_scope({"profile_home": target})
-    token = _connection_profile_home.set(home)
+    token = _connection_profile_home.set(None if host_owner else home)
     try:
         with scope:
             return _answer_inline(server, req, transport) if inline else server.dispatch(req, transport)

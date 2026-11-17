@@ -33,6 +33,7 @@ class Verb:
     install_wide: bool = False
     named: tuple[str, ...] = ()
     guard: Callable[[dict], None] | None = None
+    owner_scoped: bool = False
 
 
 def administers_install(connection) -> bool:
@@ -53,12 +54,12 @@ def _require_reach(connection, verb, params):
             raise RuntimeStoreError('profile_mismatch', field=key)
 
 
-async def call(connection, method, params):
+async def call(connection, method, params, *, host_owner=False):
     from tui_gateway import server
     from tui_gateway.ws_legacy_fallback import dispatch_legacy
     request = {'jsonrpc': '2.0', 'id': method, 'method': method, 'params': dict(params)}
     reply = await asyncio.to_thread(dispatch_legacy, server, request, connection.transport, connection.actor,
-                                    inline=True)
+                                    inline=True, host_owner=host_owner)
     if not isinstance(reply, dict):
         raise RuntimeStoreError('internal_error')
     if isinstance(reply.get('error'), dict):
@@ -74,7 +75,7 @@ async def serve(connection, method, verb, _ref, params):
     if verb.guard is not None:
         verb.guard(params)
     _require_reach(connection, verb, params)
-    return await call(connection, method, params)
+    return await call(connection, method, params, host_owner=verb.owner_scoped and connection.host_scoped)
 
 
 def bridged(connection, verbs):
