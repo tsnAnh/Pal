@@ -255,11 +255,6 @@ struct RootView: View {
                 model: BotModelsModel(client: bots.services.models(name), profile: name, surfaces: bots.services.surfaces),
                 displayName: roster.bot(named: name)?.displayName ?? name
             )
-        case .botTools(let name):
-            BotToolsetsView(
-                model: BotToolsetsModel(client: bots.services.toolsets(name)),
-                displayName: roster.bot(named: name)?.displayName ?? name
-            )
         case .botKeys(let name):
             let displayName = roster.bot(named: name)?.displayName ?? name
             BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name, surfaces: bots.services.surfaces), displayName: displayName)
