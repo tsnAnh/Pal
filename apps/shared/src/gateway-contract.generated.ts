@@ -1724,7 +1724,13 @@ export interface ConnectorCatalogRow {
   description: string
   category: string
   logo_url?: string | null
+  icon?: string | null
+  method?: string | null
+  verified?: boolean | null
+  mcp_url?: string | null
+  status?: ConnectorCatalogStatus | null
 }
+export type ConnectorCatalogStatus = 'connected' | 'needs_reconnect' | 'not_connected' | 'needs_setup'
 export interface ConnectorAccountsParams {
   profile?: string | null
   connector?: string | null
@@ -8253,7 +8259,7 @@ export interface RpcMethods {
   'connectors.accounts.remove': { params: ConnectorAccountsRemoveParams; result: ConnectorAccountsRemoveResult }
   /** Name or rename one hosted connector account owned by the scoped member. */
   'connectors.accounts.rename': { params: ConnectorAccountsRenameParams; result: ConnectorAccountRow }
-  /** The hosted connector catalog available to the scoped member. */
+  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. */
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
@@ -9265,7 +9271,7 @@ export interface CanonicalRpcMethods {
   'connectors.accounts': { params: ConnectorAccountsParams; result: ConnectorAccountsResult }
   /** Remove one hosted connector account owned by the scoped member. */
   'connectors.accounts.remove': { params: ConnectorAccountsRemoveParams; result: ConnectorAccountsRemoveResult }
-  /** The hosted connector catalog available to the scoped member. */
+  /** The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. */
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }

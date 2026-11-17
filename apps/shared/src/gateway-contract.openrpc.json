@@ -1016,7 +1016,7 @@
     },
     {
       "name": "connectors.catalog",
-      "summary": "The hosted connector catalog available to the scoped member.",
+      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile.",
       "params": [
         {
           "name": "params",
@@ -19836,6 +19836,65 @@
             ],
             "default": null,
             "title": "Logo Url"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Icon"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Method"
+          },
+          "verified": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Verified"
+          },
+          "mcp_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Mcp Url"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorCatalogStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "required": [
@@ -19846,6 +19905,16 @@
         ],
         "title": "ConnectorCatalogRow",
         "type": "object"
+      },
+      "ConnectorCatalogStatus": {
+        "enum": [
+          "connected",
+          "needs_reconnect",
+          "not_connected",
+          "needs_setup"
+        ],
+        "title": "ConnectorCatalogStatus",
+        "type": "string"
       },
       "ConnectorChange": {
         "additionalProperties": false,
@@ -64771,7 +64840,7 @@
     },
     {
       "name": "connectors.catalog",
-      "summary": "The hosted connector catalog available to the scoped member.",
+      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile.",
       "params": [
         {
           "name": "params",

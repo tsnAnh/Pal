@@ -75,19 +75,36 @@ def _(rid, request):
 
 @method("connectors.catalog")
 @_profile_scoped
-@_account_method(
-    creates_guest=False,
-    unavailable=ConnectorErrorReason.catalog_unavailable,
-    unavailable_message="Connector catalog is unavailable.",
-)
 def _(rid, _params):
-    from tools.connectors.portal.client import PortalConnectorClient
-    from tools.managed_tool_gateway import read_nous_access_token
+    from hermes_cli.pal_connectors import load_pal_connectors
     from tui_gateway.contracts.connectors import ConnectorsCatalogResult
 
-    client = PortalConnectorClient()
-    catalog = client.catalog() if read_nous_access_token() else client.public_catalog()
-    return _ok(rid, ConnectorsCatalogResult.model_validate(catalog, from_attributes=True).model_dump(mode="json"))
+    rows = [_catalog_row(entry) for entry in load_pal_connectors()]
+    return _ok(rid, ConnectorsCatalogResult(connectors=rows).model_dump(mode="json"))
+
+
+def _catalog_row(entry):
+    from tui_gateway.contracts.connectors import ConnectorCatalogRow
+
+    return ConnectorCatalogRow(
+        slug=entry.id, name=entry.name, description="", category=entry.category, icon=entry.icon,
+        method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, status=_catalog_status(entry),
+    )
+
+
+def _catalog_status(entry):
+    from hermes_cli import mcp_catalog
+    from hermes_cli.pal_connectors import ConnectionMethod
+    from tools.mcp_oauth import pending_reauth_reason
+    from tui_gateway.contracts.connectors import ConnectorCatalogStatus
+
+    if entry.method is ConnectionMethod.OAUTH_CLIENT:
+        return ConnectorCatalogStatus.needs_setup
+    if not mcp_catalog.is_enabled(entry.id):
+        return ConnectorCatalogStatus.not_connected
+    if pending_reauth_reason(entry.id):
+        return ConnectorCatalogStatus.needs_reconnect
+    return ConnectorCatalogStatus.connected
 
 
 @method("connectors.accounts")

@@ -2,8 +2,8 @@
 
 Contracts, for a user with no Nous identity (the fake account service in
 ``tests.hermes_cli.anon_portal``, Hermes' real RPC handlers and CLI):
-- opening the page (list, catalog, accounts) creates no identity; the catalog comes from the Portal's
-  public route, asked once and without a bearer, and rules are refused rather than invented
+- opening the page (list, catalog, accounts) creates no identity; the catalog is Pal-owned and never
+  asks the Portal, and rules are refused rather than invented
 - ``hermes connectors list`` and the agent's ``manage_connections`` status each create exactly one
   identity and make the gateway list call, as before
 - the first connect creates one identity, arms the connector sign-in offer, and the page then reads
@@ -94,13 +94,13 @@ def _result(method: str, params: dict | None = None) -> dict:
     return response["result"]
 
 
-def test_opening_the_page_creates_no_identity_and_reads_the_public_catalog(portal, connector_portal, gateway):
+def test_opening_the_page_creates_no_identity_and_reads_the_pal_catalog(portal, connector_portal, gateway):
     assert _result("connectors.list", ACCOUNT) == {"available": True, "connectors": []}
-    assert [row["slug"] for row in _result("connectors.catalog")["connectors"]] == ["notion"]
+    assert "notion" in [row["slug"] for row in _result("connectors.catalog")["connectors"]]
     assert _result("connectors.accounts") == {"accounts": []}
     assert _call("connectors.policy.get")["error"]["code"] == 4032
 
-    assert connector_portal == [("/api/v1/connectors/catalog/public", False)]
+    assert connector_portal == []
     assert portal.creates() == 0 and gateway == []
 
 
@@ -132,7 +132,7 @@ def test_first_connect_creates_one_identity_then_the_page_reads_signed_in(
 
     assert _result("connectors.list", ACCOUNT)["connectors"][0]["connector"] == "notion"
     _result("connectors.catalog")
-    assert connector_portal == [("/api/v1/connectors/catalog", True)]
+    assert connector_portal == []
     assert portal.creates() == 1
 
 
