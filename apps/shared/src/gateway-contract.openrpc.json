@@ -34400,6 +34400,17 @@
             "default": null,
             "title": "Auth Url"
           },
+          "redirect": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/McpOauthRedirect"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "tools": {
             "anyOf": [
               {
@@ -34430,6 +34441,15 @@
           "error"
         ],
         "title": "McpOauthPollStatus",
+        "type": "string"
+      },
+      "McpOauthRedirect": {
+        "enum": [
+          "app",
+          "gateway",
+          "loopback"
+        ],
+        "title": "McpOauthRedirect",
         "type": "string"
       },
       "McpOauthStartParams": {
@@ -34463,6 +34483,18 @@
             ],
             "default": null,
             "title": "Client Redirect Uri"
+          },
+          "fallback_redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fallback Redirect Uri"
           },
           "client_id": {
             "anyOf": [
@@ -34501,13 +34533,34 @@
           "flow": {
             "title": "Flow",
             "type": "string"
+          },
+          "redirect": {
+            "$ref": "#/components/schemas/McpOauthRedirect"
+          },
+          "redirect_uri": {
+            "title": "Redirect Uri",
+            "type": "string"
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Notice"
           }
         },
         "required": [
           "ok",
           "session_id",
           "auth_url",
-          "flow"
+          "flow",
+          "redirect",
+          "redirect_uri"
         ],
         "title": "McpOauthStartResult",
         "type": "object"

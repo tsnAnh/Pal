@@ -5,9 +5,10 @@ import logging
 from gateway.chat_install_service import ChatInstallService
 from gateway.chat_install_store import ChatInstallStore
 from gateway.oauth_client_setup import GOOGLE_REDIRECT_PATH
+from tools.connectors.mcp_oauth_redirect import GATEWAY_CALLBACK_PATH as MCP_OAUTH_REDIRECT_PATH
 from tui_gateway.chat_install import REDIRECT_PATH
 
-_REDACTED_PATHS = (REDIRECT_PATH, GOOGLE_REDIRECT_PATH)
+_REDACTED_PATHS = (REDIRECT_PATH, GOOGLE_REDIRECT_PATH, MCP_OAUTH_REDIRECT_PATH)
 
 
 class RedactInstallCallbackQuery(logging.Filter):
