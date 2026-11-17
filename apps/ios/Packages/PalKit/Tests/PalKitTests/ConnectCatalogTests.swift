@@ -13,8 +13,6 @@ private let catalogEntries = [
     catalogEntry("figma", "Figma", "Design and media", method: .mcpOAuth),
     catalogEntry("odd", "Odd", "Zebra"),
     catalogEntry("bare", "Bare", ""),
-    catalogEntry("upwork", "Upwork", "Sales and support", method: .native, url: nil),
-    catalogEntry("google-workspace", "Google Workspace", "Files and docs", method: .native, url: nil),
     catalogEntry("acme", "Acme", "Developer", method: .oauthClient, status: .needsSetup, url: nil),
 ]
 
@@ -28,12 +26,6 @@ struct ConnectCatalogTests {
     @Test func aConnectorWithoutACategoryLandsInOther() {
         let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: [])
         #expect(catalog.apps.first { $0.name == "Bare" }?.category == ConnectCatalog.otherCategory)
-    }
-
-    @Test func nativeRowsAndTheGoogleRowAreNotListedFromTheCatalog() {
-        let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: [])
-        #expect(!catalog.apps.map(\.id).contains("connector:upwork"))
-        #expect(!catalog.apps.map(\.id).contains("connector:google-workspace"))
     }
 
     @Test func theStatusDecidesTheRowState() {
@@ -116,6 +108,7 @@ struct ConnectCatalogTests {
             ],
             ["slug": "c", "name": "C", "category": "Developer", "method": "telepathy", "status": "not_connected"],
             ["slug": "d", "name": "D", "category": "Developer", "method": "api_key", "status": "maybe"],
+            ["slug": "e", "name": "E", "category": "Developer", "method": "native", "status": "not_connected"],
         ]
         let entries = rows.arrayValue!.compactMap { try? $0.decoded(as: PalCatalogEntry.self) }
         #expect(entries.map(\.slug) == ["a", "b"])
@@ -189,70 +182,11 @@ struct ConnectAppsServiceTests {
         await #expect(throws: ConnectAppsError.unavailable) { try await service(ScriptedRPC([:])).load() }
     }
 
-    @Test func aPresetThatNeedsAKeyAsksForItBeforeTouchingTheGateway() async {
-        let rpc = ScriptedRPC([:])
-        let app = ConnectApp(
-            id: "mcp:acme", name: "Acme", summary: "", category: "Other",
-            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected
-        )
-        await #expect(throws: ConnectAppsError.credentialsRequired(["ACME_KEY"])) { try await service(rpc).connect(app) }
-        #expect(rpc.methods().isEmpty)
-    }
-
-    @Test func aProvidedKeyIsStoredThroughTheKeyVerbAndNeverEchoedElsewhere() async throws {
-        let rpc = ScriptedRPC([
-            "mcp.servers.add": { _ in ["ok": true] },
-            "mcp.servers.set_api_key": { _ in ["ok": true] },
-        ])
-        let app = ConnectApp(
-            id: "mcp:acme", name: "Acme", summary: "", category: "Other",
-            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected
-        )
-        try await service(rpc).connect(app, credentials: ["ACME_KEY": "s3cret-value"])
-        #expect(rpc.methods() == ["mcp.servers.add", "mcp.servers.set_api_key"])
-        #expect(rpc.params("mcp.servers.set_api_key").first?["env_var"]?.stringValue == "ACME_KEY")
-        #expect(rpc.params("mcp.servers.add").map { "\($0)" }.joined().contains("s3cret-value") == false)
-    }
-
-    @Test func aFailedKeyWriteRemovesTheHalfInstalledServer() async {
-        let rpc = ScriptedRPC([
-            "mcp.servers.add": { _ in ["ok": true] },
-            "mcp.servers.set_api_key": { _ in throw GatewayTransportError.rpc(RPCError(code: 4001, message: "bad")) },
-            "mcp.servers.remove": { _ in ["ok": true, "removed": true] },
-        ])
-        let app = ConnectApp(
-            id: "mcp:acme", name: "Acme", summary: "", category: "Other",
-            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected
-        )
-        await #expect(throws: (any Error).self) { try await service(rpc).connect(app, credentials: ["ACME_KEY": "v"]) }
-        #expect(rpc.methods().last == "mcp.servers.remove")
-    }
-
-    @Test func disconnectingAPresetRemovesItsServer() async throws {
-        let rpc = ScriptedRPC(["mcp.servers.remove": { _ in ["ok": true, "removed": true] }])
-        let app = ConnectApp(id: "mcp:linear", name: "Linear", summary: "", category: "Other", source: .mcp(name: "linear", requires: []), state: .connected)
-        try await service(rpc).disconnect(app)
-        #expect(rpc.params("mcp.servers.remove").first?["name"]?.stringValue == "linear")
-    }
-
-    @Test func updatingTheTokenOfAnAddedServerKeepsTheServerEvenWhenTheWriteFails() async {
-        let rpc = ScriptedRPC([
-            "mcp.servers.add": { _ in throw GatewayTransportError.rpc(RPCError(code: 4090, message: "exists")) },
-            "mcp.servers.set_api_key": { _ in throw GatewayTransportError.rpc(RPCError(code: 4001, message: "bad")) },
-        ])
-        let app = ConnectApp(
-            id: "mcp:github", name: "Github", summary: "", category: "Other",
-            source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
-        )
-        await #expect(throws: (any Error).self) { try await service(rpc).connect(app, credentials: ["MCP_GITHUB_API_KEY": "v"]) }
-        #expect(!rpc.methods().contains("mcp.servers.remove"))
-    }
-
     @Test func aRefusedTokenIsReportedAfterTheServerTestsIt() async {
         let rpc = ScriptedRPC(["mcp.servers.test": { _ in ["ok": false, "reason": "auth_refused", "tools": []] }])
         let app = ConnectApp(
-            id: "mcp:github", name: "Github", summary: "", category: "Other",
-            source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
+            id: "connector:github", name: "Github", summary: "", category: "Other",
+            source: .catalog(catalogEntry("github", "Github", "Other", method: .apiKey)), state: .connected
         )
         #expect(await service(rpc).tokenFailure(app) == .authRefused)
     }

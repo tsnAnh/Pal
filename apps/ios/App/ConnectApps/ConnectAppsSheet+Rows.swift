@@ -166,25 +166,7 @@ extension ConnectAppsSheet {
         }
     }
 
-    func upworkRow(_ app: ConnectApp) -> some View {
-        let state = model.cardState(app)
-        return ConnectAppRow(
-            title: app.name, summary: UpworkCardText.summary(state, fallback: app.summary), accessibilityIdentifier: "connectApp-\(app.id)",
-            isBusy: state == .connecting, status: ConnectAppStatus(app.state).row, inset: Self.cardInset,
-            trailing: ConnectRowAction(UpworkCardText.actionTitle(state), kind: state.isReconnect ? .accent : .neutral) { model.upworkApp = app }
-        ) { icon(for: app) }
-    }
-
-    @ViewBuilder
     func appRow(_ app: ConnectApp) -> some View {
-        if app.requiresAppSignIn {
-            upworkRow(app)
-        } else {
-            plainRow(app)
-        }
-    }
-
-    func plainRow(_ app: ConnectApp) -> some View {
         let action: ConnectRowAction? = if case .custom = app.source {
             ConnectRowAction("Manage") { model.manage(app) }
         } else if app.oauthClientEntry != nil {
@@ -214,7 +196,7 @@ extension ConnectAppsSheet {
     @ViewBuilder
     func icon(for app: ConnectApp) -> some View {
         switch app.source {
-        case .catalog, .mcp, .custom, .googleWorkspace: PluginGlyphTile()
+        case .catalog, .custom, .googleWorkspace: PluginGlyphTile()
         }
     }
 }

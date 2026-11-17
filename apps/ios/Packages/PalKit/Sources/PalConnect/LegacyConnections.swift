@@ -74,20 +74,19 @@ public struct LegacyConnectionsResult: Decodable, Sendable, Equatable {
 
 public enum LegacyReconnectRoute: Sendable, Equatable {
     case connect(appID: String)
-    case signIn(appID: String)
     case needsSetup
     case noDirectOption
 
     public var actionTitle: String? {
         switch self {
-        case .connect, .signIn: String(localized: "Reconnect")
+        case .connect: String(localized: "Reconnect")
         case .needsSetup, .noDirectOption: nil
         }
     }
 
     public var appID: String? {
         switch self {
-        case .connect(let id), .signIn(let id): id
+        case .connect(let id): id
         case .needsSetup, .noDirectOption: nil
         }
     }
@@ -109,7 +108,7 @@ public enum LegacyReconnectText {
         case .unknown: String(localized: "You connected this earlier.")
         }
         let next = switch route {
-        case .connect, .signIn: String(localized: "Reconnect it once to keep using it.")
+        case .connect: String(localized: "Reconnect it once to keep using it.")
         case .needsSetup: String(localized: "Needs setup on your Pal before it can connect.")
         case .noDirectOption: String(localized: "No direct option yet.")
         }
@@ -121,7 +120,6 @@ public enum LegacyReconnect {
     private enum Handling {
         case catalogConnect
         case needsSetup
-        case nativeSignIn
     }
 
     private static let handling: [PalCatalogEntry.Method: Handling] = [
@@ -129,7 +127,6 @@ public enum LegacyReconnect {
         .mcpOAuth: .catalogConnect,
         .apiKey: .catalogConnect,
         .oauthClient: .needsSetup,
-        .native: .nativeSignIn,
     ]
 
     public static func rows(_ result: LegacyConnectionsResult, catalog: ConnectCatalog, dismissed: Set<String>) -> [LegacyReconnectRow] {
@@ -145,14 +142,13 @@ public enum LegacyReconnect {
         switch kind {
         case .needsSetup: return .needsSetup
         case .catalogConnect: return app(for: item, in: catalog).map { .connect(appID: $0.id) } ?? .noDirectOption
-        case .nativeSignIn: return app(for: item, in: catalog).map { .signIn(appID: $0.id) } ?? .noDirectOption
         }
     }
 
     private static func app(for item: LegacyConnectorItem, in catalog: ConnectCatalog) -> ConnectApp? {
         guard let slug = item.catalogID else { return nil }
         let ids = slug == ServiceKind.google.connectorSlug
-            ? [GoogleWorkspaceCatalog.appID, "connector:\(slug)"] : ["connector:\(slug)", "mcp:\(slug)"]
+            ? [GoogleWorkspaceCatalog.appID, "connector:\(slug)"] : ["connector:\(slug)"]
         return catalog.apps.first { ids.contains($0.id) }
     }
 }

@@ -53,10 +53,6 @@ struct ConnectAppsSheet: View {
             SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
                 .macSheetFrame()
         }
-        .sheet(item: $model.upworkApp) { app in
-            UpworkConnectionSheet(model: model, app: app)
-                .macSheetFrame()
-        }
         .sheet(item: $model.oauthClientSheet) { sheet in
             OAuthClientSheet(model: sheet)
                 .macSheetFrame()

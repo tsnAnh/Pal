@@ -6,8 +6,6 @@ extension ConnectAppsModel {
         switch row.route {
         case .connect:
             await connect(app)
-        case .signIn:
-            if app.requiresAppSignIn { upworkApp = app }
         case .needsSetup, .noDirectOption:
             break
         }

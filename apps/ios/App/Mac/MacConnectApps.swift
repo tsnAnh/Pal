@@ -57,10 +57,6 @@ struct MacConnectApps: View {
         } message: { target in
             Text(disconnectMessage(target))
         }
-        .sheet(item: $model.upworkApp) { app in
-            UpworkConnectionSheet(model: model, app: app)
-                .macSheetFrame()
-        }
         .sheet(item: $model.oauthClientSheet) { sheet in
             OAuthClientSheet(model: sheet)
                 .macSheetFrame()
@@ -180,9 +176,7 @@ struct MacConnectApps: View {
 
     func appRow(_ app: ConnectApp) -> some View {
         let state = model.cardState(app)
-        let action: MacRowAction? = if app.requiresAppSignIn {
-            MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state.isReconnect) { model.upworkApp = app }
-        } else if app.oauthClientEntry != nil {
+        let action: MacRowAction? = if app.oauthClientEntry != nil {
             MacRowAction(title: OAuthClientCardText.actionTitle(app.state), prominent: OAuthClientCardText.prominent(app.state)) {
                 model.oauthClientAction(app)
             }
@@ -202,21 +196,16 @@ struct MacConnectApps: View {
             }
         }
         return tileRow(
-            title: app.name, summary: summary(for: app, state: state),
+            title: app.name, summary: OtherConnectorCardText.summary(state, fallback: app.summary),
             identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id),
             status: ConnectAppStatus(app.state).row
         ) { icon(for: app) }
     }
 
-    private func summary(for app: ConnectApp, state: ConnectorCardState) -> String {
-        if app.requiresAppSignIn { return UpworkCardText.summary(state, fallback: app.summary) }
-        return OtherConnectorCardText.summary(state, fallback: app.summary)
-    }
-
     @ViewBuilder
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
-        case .catalog, .mcp, .custom, .googleWorkspace: MacAppTile()
+        case .catalog, .custom, .googleWorkspace: MacAppTile()
         }
     }
 

@@ -47,11 +47,7 @@ struct PalApp: App {
         let signIn = ServiceSignInCenter(
             call: { method, params in try await model.rpc(method, params) },
             openBrowser: { _ = ExternalLink.open($0) },
-            nativeSignIn: UpworkSignIn.serviceHandler(connection: model),
-            pasteSignIn: .routing(
-                [GoogleWorkspaceCatalog.serviceID: GoogleSignIn.servicePasteRoute(connection: model)],
-                fallback: UpworkSignIn.servicePasteRoute(connection: model)
-            ),
+            pasteSignIn: GoogleSignIn.servicePasteRoute(connection: model),
             pasteOnlyServices: [GoogleWorkspaceCatalog.serviceID]
         )
         _signIn = State(initialValue: signIn)
@@ -224,42 +220,11 @@ struct RootView: View {
             LibraryView(model: LibraryModel(botName: name, services: bots.services))
         case .routines(let name):
             RoutinesView(model: RoutinesModel(botName: name, services: bots.services))
-        case .computer(let name):
-            let bot = roster.bot(named: name)
-            ComputerView(
-                model: ComputerModel(
-                    botName: name,
-                    service: bots.services.computer,
-                    openStream: bots.services.openDisplayStream
-                ),
-                teach: bots.teach(for: name, displayName: bot?.displayName ?? name),
-                title: bot?.displayName ?? name,
-                spec: bot?.spec
-            )
-        case .slack(let name):
-            SlackEntryView(
-                botName: name,
-                displayName: roster.bot(named: name)?.displayName ?? name,
-                spec: roster.bot(named: name)?.spec,
-                services: bots.services,
-                source: ChatInstallSource.make(botName: name, connection: model)
-            )
-        case .telegram(let name):
-            TelegramView(model: TelegramModel(
-                botName: name,
-                displayName: roster.bot(named: name)?.displayName ?? name,
-                services: bots.services
-            ))
-        case .botModel(let name):
-            BotModelView(
-                model: BotModelsModel(client: bots.services.models(name), profile: name, surfaces: bots.services.surfaces),
-                displayName: roster.bot(named: name)?.displayName ?? name
-            )
-        case .botTools(let name):
-            BotToolsetsView(
-                model: BotToolsetsModel(client: bots.services.toolsets(name)),
-                displayName: roster.bot(named: name)?.displayName ?? name
-            )
+        case .computer(let name): computerDestination(name)
+        case .slack(let name): slackDestination(name)
+        case .telegram(let name): telegramDestination(name)
+        case .botModel(let name): botModelDestination(name)
+        case .botTools(let name): botToolsDestination(name)
         case .botKeys(let name):
             let displayName = roster.bot(named: name)?.displayName ?? name
             BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name, surfaces: bots.services.surfaces), displayName: displayName)
@@ -273,6 +238,41 @@ struct RootView: View {
                 services: bots.services
             ))
         }
+    }
+
+    private func computerDestination(_ name: String) -> some View {
+        let bot = roster.bot(named: name)
+        return ComputerView(
+            model: ComputerModel(botName: name, service: bots.services.computer, openStream: bots.services.openDisplayStream),
+            teach: bots.teach(for: name, displayName: bot?.displayName ?? name),
+            title: bot?.displayName ?? name,
+            spec: bot?.spec
+        )
+    }
+
+    private func slackDestination(_ name: String) -> some View {
+        SlackEntryView(
+            botName: name,
+            displayName: roster.bot(named: name)?.displayName ?? name,
+            spec: roster.bot(named: name)?.spec,
+            services: bots.services,
+            source: ChatInstallSource.make(botName: name, connection: model)
+        )
+    }
+
+    private func telegramDestination(_ name: String) -> some View {
+        TelegramView(model: TelegramModel(botName: name, displayName: roster.bot(named: name)?.displayName ?? name, services: bots.services))
+    }
+
+    private func botModelDestination(_ name: String) -> some View {
+        BotModelView(
+            model: BotModelsModel(client: bots.services.models(name), profile: name, surfaces: bots.services.surfaces),
+            displayName: roster.bot(named: name)?.displayName ?? name
+        )
+    }
+
+    private func botToolsDestination(_ name: String) -> some View {
+        BotToolsetsView(model: BotToolsetsModel(client: bots.services.toolsets(name)), displayName: roster.bot(named: name)?.displayName ?? name)
     }
 
     var body: some View {

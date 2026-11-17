@@ -45,13 +45,17 @@ public enum McpSignInFailure: Sendable, Equatable, CaseIterable {
     }
 }
 
+public enum McpPasteOutcome: Sendable, Equatable {
+    case signedIn
+    case tryAgain(String)
+    case failed(String)
+}
+
 public protocol McpPasteSigning: Sendable {
     var authorizeURL: URL { get }
     func submit(_ pasted: String) async -> McpPasteOutcome
     func cancel() async
 }
-
-extension McpPasteSession: McpPasteSigning {}
 
 public final class McpGatewayPasteSession: McpPasteSigning, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {
     public let authorizeURL: URL
@@ -166,18 +170,9 @@ extension ConnectAppsService {
     }
 
     public func beginMcpPaste(_ app: ConnectApp) async throws -> any McpPasteSigning {
-        let name: String
-        let adding: Bool
-        switch app.source {
-        case .mcp(let preset, let requires) where requires.isEmpty && !app.requiresAppSignIn:
-            name = preset
-            adding = app.state == .disconnected
-            if adding { _ = try await call("mcp.servers.add", ["name": .string(name), "preset": .string(name)]) }
-        case .catalog(let entry) where entry.method == .mcpOAuth:
-            name = entry.slug
-            adding = try await addCatalogServer(entry)
-        default: throw ConnectAppsError.failed
-        }
+        guard case .catalog(let entry) = app.source, entry.method == .mcpOAuth else { throw ConnectAppsError.failed }
+        let name = entry.slug
+        let adding = try await addCatalogServer(entry)
         let service = self
         let rollback: (@Sendable () async -> Void)? = adding ? { @Sendable in _ = try? await service.call("mcp.servers.remove", ["name": .string(name)]) } : nil
         do {

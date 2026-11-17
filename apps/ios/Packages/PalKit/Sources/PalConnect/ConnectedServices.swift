@@ -23,7 +23,6 @@ public struct ConnectedServices: Sendable, Equatable {
                 guard app.isConnected else { return nil }
                 switch app.source {
                 case .catalog(let entry): return entry.slug
-                case .mcp(let name, _): return name
                 case .custom: return nil
                 case .googleWorkspace: return ServiceKind.google.connectorSlug
                 }

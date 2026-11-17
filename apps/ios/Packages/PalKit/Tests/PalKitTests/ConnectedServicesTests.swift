@@ -1,5 +1,6 @@
 import Foundation
 import PalConnect
+import Synchronization
 import Testing
 
 private struct Item: ServiceSuggestion, Equatable {
@@ -41,6 +42,25 @@ struct ConnectedServicesTests {
     @Test func slackSuggestionShowsWhenSlackIsConnected() {
         let services = ConnectedServices(catalog: catalog(slackState: .connected))
         #expect(services.visible([slackItem]) == [slackItem])
+    }
+
+    @Test(arguments: [(PalCatalogEntry.Status.connected, true), (.needsReconnect, false), (.notConnected, false)])
+    func upworkIsConnectedExactlyWhenItsCatalogRowIs(status: PalCatalogEntry.Status, connected: Bool) {
+        let row = PalCatalogEntry(slug: "upwork", name: "Upwork", category: "Sales and support", method: .mcpOAuth, status: status)
+        let services = ConnectedServices(catalog: ConnectCatalog.make(catalog: [row], mcp: []))
+        #expect(services.isConnected(.upwork) == connected)
+    }
+
+    @MainActor
+    @Test func autoApproveAddressesTheServerByItsCatalogName() async {
+        let seen = Mutex<String?>(nil)
+        let approve = ActionAutoApprove { _, params in
+            seen.withLock { $0 = params?["server"]?.stringValue }
+            return ["enabled": false, "eligible": true]
+        }
+        await approve.load(sessionID: "s1")
+        #expect(seen.withLock { $0 } == "upwork")
+        #expect(ActionAutoApprove.server == ServiceKind.upwork.connectorSlug)
     }
 
     @Test func suggestionsWithoutAServiceAlwaysShow() {

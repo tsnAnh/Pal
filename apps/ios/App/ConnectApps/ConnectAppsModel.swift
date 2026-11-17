@@ -94,12 +94,11 @@ final class ConnectAppsModel {
     var keyState: SecretEntryState = .idle
     var disconnectTarget: ConnectDisconnectTarget?
     var showsSkills = false
-    var upworkApp: ConnectApp?
     var oauthClientSheet: OAuthClientSheetModel?
     let google: GoogleWorkspaceModel
     var pasteSession: (any McpPasteSigning)?
     var pastingApp: ConnectApp?
-    var pasteTargetID = UpworkConnector.service
+    var pasteTargetID = ""
     var pasteState: SecretEntryState = .idle
     var failures: [String: String] = [:]
     private(set) var mode: Mode = .list
@@ -129,7 +128,7 @@ final class ConnectAppsModel {
         self.currentBot = currentBot
         let connectService = ConnectAppsService(
             rpc: OAuthClientScript.wrap(ConnectionRPC(model: connection)), profile: profile, browser: OAuthClientScript.browser(browser),
-            systemBrowser: SystemBrowserAuthorization(), nativeSignIn: UpworkSignIn.native(connection: connection), diagnostics: .osLog()
+            systemBrowser: SystemBrowserAuthorization(), diagnostics: .osLog()
         )
         service = connectService
         legacy = LegacyConnectionsModel(service: connectService, profile: profile)
@@ -215,20 +214,11 @@ final class ConnectAppsModel {
     }
 
     private func usesPasteSignIn(_ app: ConnectApp) -> Bool {
-        let requires: [String]
-        switch app.source {
-        case .mcp(_, let needed) where !app.requiresAppSignIn: requires = needed
-        case .catalog(let entry) where entry.method == .mcpOAuth: requires = []
-        default: return false
-        }
-        return McpConnectRoute.decide(requires: requires, platform: ConnectorPlatform.current) == .pasteAddress
+        guard case .catalog(let entry) = app.source, entry.method == .mcpOAuth else { return false }
+        return McpConnectRoute.decide(requires: [], platform: ConnectorPlatform.current) == .pasteAddress
     }
 
     func manageAccounts(_ app: ConnectApp) {
-        if app.requiresAppSignIn {
-            upworkApp = app
-            return
-        }
         disconnectTarget = .app(app)
     }
 
@@ -267,8 +257,7 @@ final class ConnectAppsModel {
 
     func handle(_ error: ConnectAppsError, app: ConnectApp) {
         switch error {
-        case .cancelled:
-            if app.requiresAppSignIn { failures[app.id] = McpOAuthError.cancelled.reason }
+        case .cancelled: break
         case .signInFailed(let reason): failures[app.id] = reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
         case .unavailable, .failed, .faulted, .oauthClient: fail(app, "Couldn't connect \(app.name). Try again.")
@@ -276,11 +265,7 @@ final class ConnectAppsModel {
     }
 
     func fail(_ app: ConnectApp, _ message: String) {
-        if app.requiresAppSignIn {
-            failures[app.id] = message
-        } else {
-            report(message)
-        }
+        report(message)
     }
 
     func report(_ message: String) {

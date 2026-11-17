@@ -1,6 +1,7 @@
 import Foundation
 import PalConnect
 import PalProtocol
+import PalTransport
 import Testing
 
 private let authURL = "https://auth.example.com/authorize?response_type=code&state=st-1&redirect_uri=http%3A%2F%2F127.0.0.1%3A50123%2Fcallback"
@@ -8,14 +9,17 @@ private let redirect = "http://127.0.0.1:50123/callback"
 
 private func preset(state: ConnectAppState = .disconnected) -> ConnectApp {
     ConnectApp(
-        id: "mcp:notion", name: "Notion", summary: "", category: "Other",
-        source: .mcp(name: "notion", requires: []), state: state
+        id: "connector:notion", name: "Notion", summary: "", category: "Other",
+        source: .catalog(catalogEntry("notion", "Notion", "Other", method: .mcpOAuth, url: "https://mcp.notion.com/mcp")), state: state
     )
 }
 
-private func gateway(poll: JSONValue = ["status": "approved"], callback: JSONValue = ["ok": true], url: String = authURL) -> CustomRPC {
+private func gateway(
+    poll: JSONValue = ["status": "approved"], callback: JSONValue = ["ok": true], url: String = authURL,
+    add: @escaping CustomRPC.Reply = { _ in ["ok": true] }
+) -> CustomRPC {
     CustomRPC([
-        "mcp.servers.add": { _ in ["ok": true] },
+        "mcp.servers.add": add,
         "mcp.servers.remove": { _ in ["ok": true] },
         "mcp.servers.oauth.start": { _ in ["session_id": "s1", "auth_url": .string(url)] },
         "mcp.servers.oauth.callback": { _ in callback },
@@ -148,12 +152,11 @@ struct McpGatewayPasteSessionTests {
     }
 
     @Test func aReconnectKeepsTheServerWhenItIsCancelled() async throws {
-        let rpc = gateway()
+        let rpc = gateway(add: { _ in throw GatewayTransportError.rpc(RPCError(code: 4090, message: "exists")) })
         let session = try await customService(rpc).beginMcpPaste(preset(state: .needsAuthorization))
         await session.cancel()
         #expect(rpc.methods().contains("mcp.servers.oauth.cancel"))
         #expect(!rpc.methods().contains("mcp.servers.remove"))
-        #expect(!rpc.methods().contains("mcp.servers.add"))
     }
 
     @Test func startRefusedByTheProviderIsTypedAndRollsBack() async {

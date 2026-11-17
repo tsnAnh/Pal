@@ -52,18 +52,15 @@ public struct ConnectAppsService: Sendable {
     let systemBrowser: any AuthorizationBrowser
     let timing: ConnectAppsTiming
     let diagnostics: Diagnostics
-    let nativeSignIn: McpNativeSignIn?
 
     public init(
         rpc: any ConnectRPC,
         profile: String?,
         browser: any AuthorizationBrowser,
         systemBrowser: any AuthorizationBrowser = UnavailableAuthorizationBrowser(),
-        nativeSignIn: McpNativeSignIn? = nil,
         timing: ConnectAppsTiming = .standard,
         diagnostics: Diagnostics = .silent
     ) {
-        self.nativeSignIn = nativeSignIn
         self.rpc = rpc
         self.profile = profile
         self.browser = browser
@@ -127,8 +124,6 @@ public struct ConnectAppsService: Sendable {
     public func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async throws {
         switch app.source {
         case .catalog(let entry): try await connectCatalog(entry, credentials: credentials)
-        case .mcp where app.requiresAppSignIn: try await connectUpwork(app)
-        case .mcp(let name, let requires): try await connectMcp(name: name, requires: requires, credentials: credentials)
         case .custom(let info):
             do { _ = try await testCustomConnector(name: info.name) } catch { throw ConnectAppsError.failed }
         case .googleWorkspace: throw ConnectAppsError.unavailable
@@ -139,7 +134,6 @@ public struct ConnectAppsService: Sendable {
         switch app.source {
         case .catalog(let entry) where entry.method == .oauthClient: try await removeOAuthClientSignIn(slug: entry.slug)
         case .catalog(let entry): _ = try await call("mcp.servers.remove", ["name": .string(entry.slug)])
-        case .mcp(let name, _): _ = try await call("mcp.servers.remove", ["name": .string(name)])
         case .custom(let info): _ = try await call("mcp.servers.remove", ["name": .string(info.name)])
         case .googleWorkspace:
             do { _ = try await GoogleWorkspaceService(rpc: rpc, diagnostics: diagnostics).signOut() } catch { throw ConnectAppsError.failed }
@@ -160,7 +154,6 @@ public struct ConnectAppsService: Sendable {
         case .apiKey:
             guard let token = credentials["token"], !token.isEmpty else { throw ConnectAppsError.credentialsRequired(["token"]) }
             try await storeCatalogToken(entry, token: token)
-        case .native: throw ConnectAppsError.unavailable
         case .oauthClient: try await connectOAuthClient(entry)
         }
     }
@@ -183,39 +176,9 @@ public struct ConnectAppsService: Sendable {
         _ = try await call("mcp.servers.update", ["name": .string(entry.slug), "auth": "bearer", "bearer_token": .string(token)])
     }
 
-    private func connectMcp(name: String, requires: [String], credentials: [String: String]) async throws {
-        let missing = requires.filter { credentials[$0]?.isEmpty != false }
-        guard missing.isEmpty else { throw ConnectAppsError.credentialsRequired(missing) }
-        let alreadyAdded: Bool
-        do {
-            _ = try await rawCall("mcp.servers.add", ["name": .string(name), "preset": .string(name)])
-            alreadyAdded = false
-        } catch let error as GatewayTransportError {
-            guard !requires.isEmpty, case .rpc(let rpc) = error, rpc.code == 4090 else { throw Self.map(error, method: "mcp.servers.add") }
-            alreadyAdded = true
-        }
-        do {
-            if requires.isEmpty {
-                try await authorizeMcp(name: name, browser: browser)
-            } else {
-                for key in requires {
-                    _ = try await call("mcp.servers.set_api_key", ["name": .string(name), "value": .string(credentials[key] ?? ""), "env_var": .string(key)])
-                }
-            }
-        } catch {
-            if !alreadyAdded { _ = try? await call("mcp.servers.remove", ["name": .string(name)]) }
-            throw error
-        }
-    }
-
     public func tokenFailure(_ app: ConnectApp) async -> ConnectorFailure? {
-        let name: String
-        switch app.source {
-        case .mcp(let preset, let requires) where !requires.isEmpty: name = preset
-        case .catalog(let entry) where entry.method == .apiKey: name = entry.slug
-        default: return nil
-        }
-        do { _ = try await testCustomConnector(name: name) } catch { return ConnectorFailure.from(error) }
+        guard case .catalog(let entry) = app.source, entry.method == .apiKey else { return nil }
+        do { _ = try await testCustomConnector(name: entry.slug) } catch { return ConnectorFailure.from(error) }
         return nil
     }
 

@@ -79,8 +79,7 @@ struct LegacyConnectionsTests {
         let oauth = catalogEntry("slack", "Slack", "Communication", method: .mcpOAuth)
         let key = catalogEntry("github", "GitHub", "Developer", method: .apiKey)
         let client = catalogEntry("acme", "Acme", "Developer", method: .oauthClient, status: .needsSetup, url: nil)
-        let google = catalogEntry("google-workspace", "Google Workspace", "Files and docs", method: .native, url: nil)
-        let catalog = legacyCatalog(wiki, oauth, key, client, google)
+        let catalog = legacyCatalog(wiki, oauth, key, client)
         func route(_ slug: String, _ method: PalCatalogEntry.Method) -> LegacyReconnectRoute {
             LegacyReconnect.route(for: legacyItem(slug, catalogID: slug, method: method), in: catalog)
         }
@@ -89,7 +88,6 @@ struct LegacyConnectionsTests {
         #expect(route("github", .apiKey) == .connect(appID: "connector:github"))
         #expect(route("acme", .oauthClient) == .needsSetup)
         #expect(route("missing", .none) == .noDirectOption)
-        #expect(route("mystery", .native) == .noDirectOption)
     }
 
     @Test func aConnectedOAuthClientGoogleRowHidesTheLegacyGoogleRow() {
@@ -97,13 +95,6 @@ struct LegacyConnectionsTests {
         let result = LegacyConnectionsResult(sourceReadable: true, items: [item])
         let google = catalogEntry("google-workspace", "Google Workspace", "Files and docs", method: .oauthClient, status: .connected, url: nil)
         #expect(LegacyReconnect.rows(result, catalog: legacyCatalog(google), dismissed: []).isEmpty)
-    }
-
-    @Test func nativeGoogleRoutesToItsSignInWhenTheCatalogHasIt() {
-        let google = catalogEntry("google-workspace", "Google Workspace", "Files and docs", method: .native, url: nil)
-        let catalog = ConnectCatalog.make(catalog: [google], mcp: [], google: GoogleWorkspaceStatus(state: .needsSignIn))
-        let item = legacyItem("google-workspace", catalogID: "google-workspace", method: .native)
-        #expect(LegacyReconnect.route(for: item, in: catalog) == .signIn(appID: GoogleWorkspaceCatalog.appID))
     }
 
     @Test func theSummaryNamesTheOldSource() {

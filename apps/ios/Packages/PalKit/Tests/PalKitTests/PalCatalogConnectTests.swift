@@ -45,6 +45,24 @@ private func oauthGateway(add: CustomRPC.Reply? = nil, poll: JSONValue = ["statu
     ])
 }
 
+private func loopbackOnlyGateway() -> CustomRPC {
+    CustomRPC([
+        "mcp.servers.add": { _ in ["ok": true] },
+        "mcp.servers.remove": { _ in ["ok": true] },
+        "mcp.servers.oauth.start": { params in
+            let redirect = params["client_redirect_uri"]?.stringValue ?? ""
+            guard redirect.range(of: #"^http://127\.0\.0\.1:\d+/callback$"#, options: .regularExpression) != nil else {
+                throw GatewayTransportError.rpc(RPCError(code: 5000, message: "redirect_uri is not registered"))
+            }
+            let encoded = redirect.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            return ["session_id": "s1", "auth_url": .string("https://auth.example.com/authorize?response_type=code&state=st-1&redirect_uri=\(encoded)")]
+        },
+        "mcp.servers.oauth.callback": { _ in ["ok": true] },
+        "mcp.servers.oauth.poll": { _ in ["status": "approved"] },
+        "mcp.servers.oauth.cancel": { _ in ["ok": true] },
+    ])
+}
+
 @Suite("Pal catalog connect routing")
 struct PalCatalogConnectTests {
     private func app(_ entry: PalCatalogEntry) -> ConnectApp {
@@ -82,6 +100,27 @@ struct PalCatalogConnectTests {
         #expect(rpc.params("mcp.servers.add").first?["config"]?["url"]?.stringValue == "https://mcp.notion.com/mcp")
         let relayed = try #require(rpc.params("mcp.servers.oauth.callback").first)
         #expect(relayed["name"]?.stringValue == "notion" && relayed["code"]?.stringValue == "abc" && relayed["state"]?.stringValue == "st-1")
+    }
+
+    @Test func aRegistrationThatRefusesEveryRedirectButLoopbackSignsInByLoopbackOnMacAndByPasteOnIPhoneAndIPad() async throws {
+        let upwork = catalogEntry("upwork", "Upwork", "Sales and support", method: .mcpOAuth, url: "https://mcp.upwork.com/mcp")
+        #expect(McpConnectRoute.decide(requires: [], platform: .mac) == .loopback)
+        let mac = loopbackOnlyGateway()
+        let timing = ConnectAppsTiming(pollInterval: .milliseconds(5), pollAttempts: 3)
+        try await ConnectAppsService(rpc: mac, profile: nil, browser: CatalogRedirectBrowser(code: "abc"), timing: timing).connect(app(upwork))
+        let added = try #require(mac.params("mcp.servers.add").first)
+        #expect(added["name"]?.stringValue == "upwork" && added["config"]?["url"]?.stringValue == "https://mcp.upwork.com/mcp")
+        #expect(mac.params("mcp.servers.oauth.start").first?["client_redirect_uri"]?.stringValue?.hasPrefix("http://127.0.0.1:") == true)
+        #expect(mac.params("mcp.servers.oauth.callback").first?["name"]?.stringValue == "upwork")
+        #expect(mac.methods().last == "mcp.servers.oauth.poll")
+        for platform in [ConnectorPlatform.iPhone, .iPad] {
+            #expect(McpConnectRoute.decide(requires: [], platform: platform) == .pasteAddress)
+            let phone = loopbackOnlyGateway()
+            let session = try await customService(phone).beginMcpPaste(app(upwork))
+            #expect(await session.submit("http://127.0.0.1:50123/callback?code=abc&state=st-1") == .signedIn)
+            #expect(phone.params("mcp.servers.add").first?["name"]?.stringValue == "upwork")
+            #expect(phone.methods().last == "mcp.servers.oauth.poll")
+        }
     }
 
     @Test func anOAuthEntryThatFailsToSignInIsRemovedAgain() async {

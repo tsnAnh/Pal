@@ -6,7 +6,6 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         case mcpOAuth = "mcp_oauth"
         case none
         case apiKey = "api_key"
-        case native
         case oauthClient = "oauth_client"
     }
 
@@ -126,7 +125,6 @@ public enum ConnectAppState: Sendable, Equatable {
 
 public enum ConnectAppSource: Sendable, Hashable {
     case catalog(PalCatalogEntry)
-    case mcp(name: String, requires: [String])
     case custom(CustomConnectorInfo)
     case googleWorkspace
 }
@@ -159,7 +157,6 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
 
     public var requiresToken: Bool {
         switch source {
-        case .mcp(_, let requires): !requires.isEmpty
         case .catalog(let entry): entry.method == .apiKey
         case .custom, .googleWorkspace: false
         }
@@ -234,7 +231,7 @@ public struct ConnectCatalog: Sendable, Equatable {
         servers: [McpServerEntry] = [], google: GoogleWorkspaceStatus? = nil
     ) -> ConnectCatalog {
         let catalogSlugs = Set(catalog.map(\.slug))
-        var apps = catalog.filter { $0.method != .native }.map { entry in
+        var apps = catalog.map { entry in
             ConnectApp(
                 id: "connector:\(entry.slug)", name: entry.name, summary: summary(for: entry),
                 category: entry.category.isEmpty ? otherCategory : entry.category,

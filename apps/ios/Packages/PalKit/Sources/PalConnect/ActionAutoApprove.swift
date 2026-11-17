@@ -5,7 +5,7 @@ import PalProtocol
 @MainActor
 @Observable
 public final class ActionAutoApprove {
-    public static let server = UpworkConnector.service
+    public static let server = ServiceKind.upwork.connectorSlug
     public static let getMethod = "mcp.actions.auto_approve.get"
     public static let setMethod = "mcp.actions.auto_approve.set"
 
