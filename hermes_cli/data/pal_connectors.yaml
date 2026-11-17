@@ -260,6 +260,8 @@ connectors:
   - https://www.googleapis.com/auth/contacts.readonly
   - https://www.googleapis.com/auth/spreadsheets
   - https://www.googleapis.com/auth/documents
+  notes: Google lets only the test users you added sign in until it verifies your app, and their sign-in lasts
+    7 days while the app is in Testing. Publish and verify the app in Google Cloud Console to remove both limits.
   verified: true
   source: https://developers.google.com/identity/protocols/oauth2/web-server
 - id: grafana

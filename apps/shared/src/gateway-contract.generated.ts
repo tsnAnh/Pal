@@ -1729,8 +1729,39 @@ export interface ConnectorCatalogRow {
   verified?: boolean | null
   mcp_url?: string | null
   status?: ConnectorCatalogStatus | null
+  notes?: string | null
 }
 export type ConnectorCatalogStatus = 'connected' | 'needs_reconnect' | 'not_connected' | 'needs_setup'
+export interface OAuthClientSlugParams {
+  profile?: string | null
+  slug: string
+}
+export interface OAuthClientSetupResult {
+  slug: string
+  configured: boolean
+  console_url: string
+  redirect_url: string | null
+}
+export interface OAuthClientSaveParams {
+  profile?: string | null
+  slug: string
+  client_id_item: string
+  client_secret_item: string
+}
+export interface OAuthClientConnectParams {
+  profile?: string | null
+  slug: string
+  client_redirect_uri?: string | null
+}
+export interface OAuthClientConnectResult {
+  slug: string
+  auth_url: string
+  session_id: string | null
+}
+export interface OAuthClientRemoveResult {
+  slug: string
+  removed: boolean
+}
 export interface ConnectorAccountsParams {
   profile?: string | null
   connector?: string | null
@@ -8144,7 +8175,7 @@ export interface ReachOfferPayload {
   body: string
   session_id?: string | null
 }
-export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN'
+export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN' | 'NEEDS_SETUP' | 'NEEDS_PUBLIC_URL' | 'INVALID_CLIENT' | 'CLIENT_UNREADABLE' | 'CONNECT_FAILED'
 
 // ── Client→server methods ──
 export interface RpcMethods {
@@ -8266,6 +8297,14 @@ export interface RpcMethods {
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
+  /** Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog. */
+  'connectors.oauth_client.connect': { params: OAuthClientConnectParams; result: OAuthClientConnectResult }
+  /** Remove the scoped profile's sign-in. The owner's saved OAuth client stays. */
+  'connectors.oauth_client.remove': { params: OAuthClientSlugParams; result: OAuthClientRemoveResult }
+  /** Owner only. Save the OAuth client once for every profile and device: both values are Vault item ids the app wrote with vault.add. */
+  'connectors.oauth_client.save': { params: OAuthClientSaveParams; result: OAuthClientSetupResult }
+  /** Whether the owner's OAuth client for an oauth_client catalog entry is saved, the console page to register it on and the redirect URL to register; redirect_url is null until the gateway has a public https address. */
+  'connectors.oauth_client.setup': { params: OAuthClientSlugParams; result: OAuthClientSetupResult }
   /** The current snapshot of one open session or account operation. */
   'connectors.operation.status': { params: ConnectionOperationParams; result: ConnectionOperationStatus }
   /** The browser leg came back (hermes://connections/done): read the accounts now, not at the next tick. */
@@ -8910,6 +8949,10 @@ export const RPC_METHODS = [
   'connectors.catalog',
   'connectors.connect',
   'connectors.list',
+  'connectors.oauth_client.connect',
+  'connectors.oauth_client.remove',
+  'connectors.oauth_client.save',
+  'connectors.oauth_client.setup',
   'connectors.operation.status',
   'connectors.operation.wake',
   'connectors.policy.get',

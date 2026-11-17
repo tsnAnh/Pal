@@ -49,6 +49,8 @@ _GATE_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/webapp/gateway-connections/oauth/callback",
     # A chat provider's Allow redirect: its one-use state is the credential (gateway/chat_install_service.py).
     "/webapp/chat-install/callback",
+    # Google's sign-in redirect: its one-use state is the credential (gateway/oauth_client_setup.py).
+    "/webapp/google-install/callback",
     "/assets/", "/dashboard-plugins/", "/favicon.ico", "/ds-assets/", "/fonts/", "/fonts-terminal/")
 
 # Page icons, matched exactly. Browsers fetch them without cookies (the Webapp's page icon and
