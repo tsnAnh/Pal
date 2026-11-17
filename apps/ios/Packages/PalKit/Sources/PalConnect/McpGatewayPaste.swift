@@ -142,10 +142,10 @@ extension ConnectAppsService {
         do {
             started = try await rawCall("mcp.servers.oauth.start", params)
         } catch let error as GatewayTransportError {
-            if case .rpc(let rpc) = error, ConnectAppsService.map(error) != .signInRequired {
+            if case .rpc(let rpc) = error {
                 throw ConnectAppsError.signInFailed(McpSignInFailure.classify(rpc.message).reason)
             }
-            throw ConnectAppsService.map(error)
+            throw ConnectAppsError.failed
         }
         guard let flow = started["session_id"]?.stringValue, let link = started["auth_url"]?.stringValue.flatMap(URL.init(string:)),
               link.scheme?.lowercased() == "https" || link.scheme?.lowercased() == "http"
@@ -166,10 +166,17 @@ extension ConnectAppsService {
     }
 
     public func beginMcpPaste(_ app: ConnectApp) async throws -> any McpPasteSigning {
-        guard case .mcp(let name, let requires) = app.source, requires.isEmpty, !app.requiresAppSignIn else { throw ConnectAppsError.failed }
-        let adding = app.state == .disconnected
-        if adding {
-            _ = try await call("mcp.servers.add", ["name": .string(name), "preset": .string(name)])
+        let name: String
+        let adding: Bool
+        switch app.source {
+        case .mcp(let preset, let requires) where requires.isEmpty && !app.requiresAppSignIn:
+            name = preset
+            adding = app.state == .disconnected
+            if adding { _ = try await call("mcp.servers.add", ["name": .string(name), "preset": .string(name)]) }
+        case .catalog(let entry) where entry.method == .mcpOAuth:
+            name = entry.slug
+            adding = try await addCatalogServer(entry)
+        default: throw ConnectAppsError.failed
         }
         let service = self
         let rollback: (@Sendable () async -> Void)? = adding ? { @Sendable in _ = try? await service.call("mcp.servers.remove", ["name": .string(name)]) } : nil

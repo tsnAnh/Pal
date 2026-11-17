@@ -7,6 +7,7 @@ class ConnectAppsTestCase: E2ETestCase {
     func launchConnectApps() -> XCUIApplication {
         let app = launch(extraArguments: [
             "-hermes-open-connect-apps",
+            "-hermes-record-external-links",
             "-\(AppearanceStore.defaultsKey)", AppearanceMode.dark.rawValue,
         ])
         if !sheet(app).waitForExistence(timeout: 25) { signInIfNeeded(app) }
@@ -30,6 +31,15 @@ class ConnectAppsTestCase: E2ETestCase {
     func waitForCatalog(_ app: XCUIApplication, timeout: TimeInterval = 40) {
         let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "connectApp-"))
         waitFor(rows.firstMatch, timeout: timeout, "catalog loaded")
+    }
+
+    func waitUntil(_ timeout: TimeInterval, _ message: String, file: StaticString = #filePath, line: UInt = #line, _ condition: () -> Bool) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if condition() { return }
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        XCTFail(message, file: file, line: line)
     }
 
     func closeSheet(_ app: XCUIApplication) {
@@ -132,6 +142,73 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         if keyboard.exists { XCTAssertLessThanOrEqual(add.frame.maxY, keyboard.frame.minY, "add button not under the keyboard") }
         add.tap()
         waitFor(app.buttons["customConnectorBackButton"], timeout: 10, "custom connector form opens")
+    }
+
+    private func search(_ app: XCUIApplication, _ text: String) {
+        let field = app.descendants(matching: .any)["connectAppsSearch"]
+        for _ in 0..<20 where !field.isHittable { app.swipeDown() }
+        field.hit()
+        field.typeText(text)
+    }
+
+    private func action(_ app: XCUIApplication, _ slug: String) -> XCUIElement {
+        app.buttons["connectApp-connector:\(slug)-action"]
+    }
+
+    func test3AnAppWithNoSignInConnectsDirectlyAndDisconnects() throws {
+        let app = launchConnectApps()
+        waitForCatalog(app)
+        search(app, "Deepwiki")
+        let connect = action(app, "deepwiki")
+        waitFor(connect, timeout: 30, "Deepwiki action")
+        XCTAssertEqual(connect.label, "Connect")
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
+        connect.hit()
+        waitLabel(connect, contains: "Manage")
+        shot(app, "connect-apps-direct-connected")
+        connect.hit()
+        let disconnect = app.buttons["Disconnect"]
+        waitFor(disconnect, timeout: 10, "disconnect confirmation")
+        disconnect.hit()
+        waitLabel(connect, contains: "Connect")
+    }
+
+    func test4AnAppThatNeedsSetupOffersNoDeadEndAction() throws {
+        let app = launchConnectApps()
+        waitForCatalog(app)
+        search(app, "Asana")
+        let row = app.descendants(matching: .any)["connectApp-connector:asana"]
+        waitFor(row, timeout: 30, "Asana row")
+        XCTAssertTrue(app.staticTexts["Needs setup on your Pal before it can connect."].exists)
+        XCTAssertFalse(action(app, "asana").exists, "no action on a row that needs setup")
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
+    }
+
+    func test5AnOAuthAppStartsSignInThroughTheSystemBrowserAndLeavesNothingBehindWhenCancelled() throws {
+        #if os(macOS)
+        throw XCTSkip("Mac signs in through ASWebAuthenticationSession, which a UI test cannot drive")
+        #else
+        let app = launchConnectApps()
+        waitForCatalog(app)
+        search(app, "Notion")
+        let connect = action(app, "notion")
+        waitFor(connect, timeout: 30, "Notion action")
+        XCTAssertEqual(connect.label, "Connect")
+        connect.hit()
+        let paste = app.descendants(matching: .any)["otherConnectorPaste"]
+        let notice = app.alerts.firstMatch
+        waitUntil(60, "paste sign-in or a plain failure") { paste.exists || notice.exists }
+        if paste.exists {
+            let opened = app.descendants(matching: .any)["externalLinkProbe"]
+            waitUntil(10, "sign-in page handed to the system browser") { opened.label.hasPrefix("https://") }
+            app.buttons["otherConnectorPasteCancel"].hit()
+            waitGone(paste, timeout: 15, "paste sheet closes")
+        } else {
+            notice.buttons.firstMatch.tap()
+        }
+        waitLabel(connect, contains: "Connect")
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
+        #endif
     }
 
     func test2TheBotReadsTodaysEventsWithNoSwitch() async throws {

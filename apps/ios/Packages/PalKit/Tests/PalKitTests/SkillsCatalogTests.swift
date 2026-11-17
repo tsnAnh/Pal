@@ -390,11 +390,6 @@ struct SkillsErrorMappingTests {
         #expect(invalid == .invalidRequest)
     }
 
-    @Test func aMissingNousSignInMapsToSignIn() async {
-        let result = await failure(gatewayFailure(5000, reason: "needs_nous_auth")) { try await $0.install("a/b") }
-        #expect(result == .signInRequired)
-    }
-
     @Test func transportAndUnknownFailuresAreUnavailable() async {
         let timedOut = await failure({ _ in throw GatewayTransportError.timedOut }) { try await $0.install("a/b") }
         let unknown = await failure(gatewayFailure(-32601)) { try await $0.update(name: nil) }
@@ -403,7 +398,7 @@ struct SkillsErrorMappingTests {
     }
 
     @Test func userMessagesLeakNoInternals() {
-        let all: [SkillsCatalogError] = [.signInRequired, .installBlocked, .installFailed, .updateFailed, .uninstallFailed, .notFound, .invalidRequest, .unavailable]
+        let all: [SkillsCatalogError] = [.installBlocked, .installFailed, .updateFailed, .uninstallFailed, .notFound, .invalidRequest, .unavailable]
         for error in all {
             let text = error.userMessage.lowercased()
             #expect(!text.isEmpty)

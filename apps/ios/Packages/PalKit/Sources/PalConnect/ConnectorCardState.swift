@@ -71,7 +71,7 @@ extension ConnectorCardState {
             return .connected
         case .needsAuthorization:
             return .reconnect(reason: cleaned(input.authReason))
-        case .disconnected:
+        case .disconnected, .needsSetup:
             if let reason = input.failureReason, !reason.isEmpty { return .failed(reason) }
             return .connect
         }

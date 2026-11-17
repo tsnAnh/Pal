@@ -57,10 +57,6 @@ struct MacConnectApps: View {
         } message: { target in
             Text(disconnectMessage(target))
         }
-        .sheet(item: $model.accountsModel) { accounts in
-            ConnectorAccountsView(model: accounts)
-                .macSheetFrame()
-        }
         .sheet(item: $model.upworkApp) { app in
             UpworkConnectionSheet(model: model, app: app)
                 .macSheetFrame()
@@ -180,8 +176,8 @@ struct MacConnectApps: View {
 
     private var stackedIcons: some View {
         HStack(spacing: -3) {
-            ForEach(Array(model.connectedApps.prefix(4).enumerated()), id: \.element.id) { index, app in
-                MacAppTile(url: app.iconURL, size: 16, radius: 4, glyphSize: 8)
+            ForEach(Array(model.connectedApps.prefix(4).enumerated()), id: \.element.id) { index, _ in
+                MacAppTile(size: 16, radius: 4, glyphSize: 8)
                     .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(PalTokens.elevated, lineWidth: 1))
                     .zIndex(Double(-index))
             }
@@ -296,7 +292,7 @@ struct MacConnectApps: View {
             section(title: String(localized: "Skills"), identifier: "connectAppsSection-skills", viewAll: nil) {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
                     ForEach(skills) { skill in
-                        tileRow(title: skill.name, summary: skill.category, identifier: "skill-\(skill.id)", trailing: nil, busy: false) { MacAppTile(url: nil) }
+                        tileRow(title: skill.name, summary: skill.category, identifier: "skill-\(skill.id)", trailing: nil, busy: false) { MacAppTile() }
                     }
                 }
             }
@@ -435,7 +431,7 @@ struct MacConnectApps: View {
 
     private func appRow(_ app: ConnectApp) -> some View {
         let state = model.cardState(app)
-        let action: MacRowAction = if app.requiresAppSignIn {
+        let action: MacRowAction? = if app.requiresAppSignIn {
             MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state.isReconnect) { model.upworkApp = app }
         } else if app.source == .googleWorkspace {
             MacRowAction(
@@ -446,9 +442,15 @@ struct MacConnectApps: View {
             MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
         } else {
             switch app.state {
-        case .disconnected: MacRowAction(title: OtherConnectorCardText.connectTitle(state), prominent: false) { Task { await model.connect(app) } }
-        case .needsAuthorization: MacRowAction(title: String(localized: "Authorize"), prominent: true) { Task { await model.connect(app) } }
-        case .connected: MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manageAccounts(app) }
+            case .disconnected: MacRowAction(title: OtherConnectorCardText.connectTitle(state), prominent: false) { Task { await model.connect(app) } }
+            case .needsAuthorization: MacRowAction(title: String(localized: "Authorize"), prominent: true) { Task { await model.connect(app) } }
+            case .needsSetup: nil
+            case .connected:
+                if app.requiresToken {
+                    MacRowAction(title: String(localized: "Update token"), prominent: false) { Task { await model.connect(app) } }
+                } else {
+                    MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manageAccounts(app) }
+                }
             }
         }
         return tileRow(
@@ -467,8 +469,7 @@ struct MacConnectApps: View {
     @ViewBuilder
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
-        case .hosted: MacAppTile(url: app.iconURL)
-        case .mcp, .custom, .googleWorkspace: MacAppTile(url: nil)
+        case .catalog, .mcp, .custom, .googleWorkspace: MacAppTile()
         }
     }
 
@@ -563,27 +564,15 @@ private struct MacCapabilityRow: View {
 }
 
 private struct MacAppTile: View {
-    let url: URL?
     var size: CGFloat = 38
     var radius: CGFloat = 10
     var glyphSize: CGFloat = 16
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        Group {
-            if let url {
-                RemoteLogo(url: url) { logo in
-                    logo.padding(size * 0.18).background(.white)
-                } placeholder: {
-                    glyph
-                }
-            } else {
-                glyph
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(shape)
-        .accessibilityHidden(true)
+        glyph
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .accessibilityHidden(true)
     }
 
     private var glyph: some View {

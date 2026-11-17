@@ -15,10 +15,6 @@ struct ConnectionRPC: ConnectRPC {
     func call(_ method: String, _ params: JSONValue) async throws -> JSONValue {
         try await model.rpc(method, params)
     }
-
-    var sendsAccountSource: Bool {
-        get async { await RuntimeDescription.supports(ConnectAppsService.accountSourceCapability, advertised: model.negotiatedRuntime) }
-    }
 }
 
 struct ConnectNotice: Identifiable {
@@ -98,7 +94,6 @@ final class ConnectAppsModel {
     private(set) var keyState: SecretEntryState = .idle
     var disconnectTarget: ConnectDisconnectTarget?
     var showsSkills = false
-    var accountsModel: ConnectorAccountsModel?
     var upworkApp: ConnectApp?
     var googleApp: ConnectApp?
     let google: GoogleWorkspaceModel
@@ -318,8 +313,7 @@ final class ConnectAppsModel {
         busy.insert(app.id)
         failures[app.id] = nil
         defer { busy.remove(app.id) }
-        if case .mcp(_, let requires) = app.source, !app.requiresAppSignIn,
-           McpConnectRoute.decide(requires: requires, platform: ConnectorPlatform.current) == .pasteAddress {
+        if usesPasteSignIn(app) {
             await beginOtherPaste(app)
             await reload()
             return
@@ -337,16 +331,22 @@ final class ConnectAppsModel {
         await reload()
     }
 
+    private func usesPasteSignIn(_ app: ConnectApp) -> Bool {
+        let requires: [String]
+        switch app.source {
+        case .mcp(_, let needed) where !app.requiresAppSignIn: requires = needed
+        case .catalog(let entry) where entry.method == .mcpOAuth: requires = []
+        default: return false
+        }
+        return McpConnectRoute.decide(requires: requires, platform: ConnectorPlatform.current) == .pasteAddress
+    }
+
     func manageAccounts(_ app: ConnectApp) {
         if app.requiresAppSignIn {
             upworkApp = app
             return
         }
-        guard case .hosted(let slug) = app.source else { return }
-        accountsModel = ConnectorAccountsModel(
-            app: app, slug: slug, botName: botName, service: service, surfaces: surfaces,
-            changed: { [weak self] in await self?.reload() }
-        )
+        disconnectTarget = .app(app)
     }
 
     func addCustomConnector() {
@@ -388,7 +388,6 @@ final class ConnectAppsModel {
             if app.requiresAppSignIn { failures[app.id] = McpOAuthError.cancelled.reason }
         case .signInFailed(let reason): failures[app.id] = reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
-        case .signInRequired: fail(app, "Connecting \(app.name) needs you to sign in to Nous Portal on your Pal first.")
         case .unavailable, .failed: fail(app, "Couldn't connect \(app.name). Try again.")
         }
     }

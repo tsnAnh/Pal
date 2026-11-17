@@ -53,10 +53,6 @@ struct ConnectAppsSheet: View {
             SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
                 .macSheetFrame()
         }
-        .sheet(item: $model.accountsModel) { accounts in
-            ConnectorAccountsView(model: accounts)
-                .macSheetFrame()
-        }
         .sheet(item: $model.upworkApp) { app in
             UpworkConnectionSheet(model: model, app: app)
                 .macSheetFrame()
@@ -303,9 +299,6 @@ struct ConnectAppsSheet: View {
                         isBusy: model.busy.contains(app.id), status: ConnectAppStatus(app.state).row, inset: Self.cardInset,
                         trailing: ConnectRowAction("Disconnect") { model.disconnectTarget = .app(app) }
                     ) { icon(for: app) }
-                    .contextMenu {
-                        if case .hosted = app.source { Button("Accounts") { model.manageAccounts(app) } }
-                    }
                 }
             }
         }
@@ -341,18 +334,19 @@ struct ConnectAppsSheet: View {
     }
 
     private func plainRow(_ app: ConnectApp) -> some View {
-        let action: ConnectRowAction = if case .custom = app.source {
+        let action: ConnectRowAction? = if case .custom = app.source {
             ConnectRowAction("Manage") { model.manage(app) }
         } else {
             switch app.state {
-        case .disconnected: ConnectRowAction(OtherConnectorCardText.connectTitle(model.cardState(app))) { Task { await model.connect(app) } }
-        case .needsAuthorization: ConnectRowAction("Authorize", kind: .accent) { Task { await model.connect(app) } }
-        case .connected:
-            if case .mcp(_, let requires) = app.source, !requires.isEmpty {
-                ConnectRowAction("Update token") { Task { await model.connect(app) } }
-            } else {
-                ConnectRowAction("Manage") { model.manageAccounts(app) }
-            }
+            case .disconnected: ConnectRowAction(OtherConnectorCardText.connectTitle(model.cardState(app))) { Task { await model.connect(app) } }
+            case .needsAuthorization: ConnectRowAction("Authorize", kind: .accent) { Task { await model.connect(app) } }
+            case .needsSetup: nil
+            case .connected:
+                if app.requiresToken {
+                    ConnectRowAction("Update token") { Task { await model.connect(app) } }
+                } else {
+                    ConnectRowAction("Manage") { model.manageAccounts(app) }
+                }
             }
         }
         return ConnectAppRow(
@@ -365,8 +359,7 @@ struct ConnectAppsSheet: View {
     @ViewBuilder
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
-        case .hosted: RemoteLogoTile(url: app.iconURL)
-        case .mcp, .custom, .googleWorkspace: PluginGlyphTile()
+        case .catalog, .mcp, .custom, .googleWorkspace: PluginGlyphTile()
         }
     }
 }

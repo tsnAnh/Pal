@@ -448,7 +448,7 @@ private struct SlowFinish: ConnectRPC {
 @Suite("Google Workspace in Connected apps")
 struct GoogleCatalogTests {
     private func catalog(_ status: GoogleWorkspaceStatus?) -> ConnectCatalog {
-        ConnectCatalog.make(hosted: [], states: [], mcp: [], google: status)
+        ConnectCatalog.make(catalog: [], mcp: [], google: status)
     }
 
     @Test func rowStateFollowsTheStatus() throws {
@@ -468,7 +468,7 @@ struct GoogleCatalogTests {
 
     @Test func noStatusMeansNoRow() {
         #expect(catalog(nil).apps.isEmpty)
-        #expect(ConnectCatalog.make(hosted: [], states: [], mcp: []).apps.isEmpty)
+        #expect(ConnectCatalog.make(catalog: [], mcp: []).apps.isEmpty)
     }
 
     @Test func loadAddsTheRowWithoutAProfileOnTheCall() async throws {
@@ -484,7 +484,7 @@ struct GoogleCatalogTests {
     }
 
     @Test func aFailingStatusCallHidesOnlyTheGoogleRow() async throws {
-        let hosted = reply(.object(["connectors": .array([.object(["slug": "slack", "name": "Slack", "description": "", "category": "Communication"])])]))
+        let hosted = reply(.object(["connectors": .array([.object(["slug": "slack", "name": "Slack", "category": "Communication", "method": "none", "status": "not_connected"])])]))
         for failure in [gatewayError(4403), gatewayError(5321, "unreachable"), gatewayError(-32601)] {
             let rpc = CustomRPC([
                 "connectors.catalog": hosted, "mcp.catalog": reply(.object(["servers": .array([])])), "google_workspace.status": failure,
@@ -509,7 +509,7 @@ private struct GatedItem: ServiceSuggestion, Equatable {
 @Suite("Google Workspace as a connected service")
 struct GoogleConnectedServiceTests {
     private func services(_ state: GoogleWorkspaceStatus.State?) -> ConnectedServices {
-        ConnectedServices(catalog: ConnectCatalog.make(hosted: [], states: [], mcp: [], google: state.map { GoogleWorkspaceStatus(state: $0) }))
+        ConnectedServices(catalog: ConnectCatalog.make(catalog: [], mcp: [], google: state.map { GoogleWorkspaceStatus(state: $0) }))
     }
 
     @Test func onlyASignedInAccountCounts() {
@@ -596,7 +596,7 @@ struct GoogleCanaryTests {
         let recorder = DiagnosticRecorder()
         let status = try await service(CustomRPC(["google_workspace.status": reply(leaky)]), diagnostics: recorder.diagnostics).status()
         let card = GoogleWorkspaceCardState.resolve(status: status, signingIn: false, failure: nil)
-        let row = try #require(ConnectCatalog.make(hosted: [], states: [], mcp: [], google: status).apps.first)
+        let row = try #require(ConnectCatalog.make(catalog: [], mcp: [], google: status).apps.first)
         #expect(!rendered(status, card, row).contains(canary))
 
         let denied = CustomRPC([
@@ -658,7 +658,7 @@ struct GoogleTypedReauthTests {
             #expect(GoogleReauthReason(signIn: wire) == expected)
             let card = GoogleWorkspaceCardState.resolve(status: account, signingIn: false, failure: nil, authRequired: event.reason)
             #expect(card == .needsReauth(expected))
-            let listed = try #require(ConnectCatalog.make(hosted: [], states: [], mcp: [], google: account).apps.first)
+            let listed = try #require(ConnectCatalog.make(catalog: [], mcp: [], google: account).apps.first)
             let row = listed.applyingGoogleAuthRequired(event.reason)
             #expect(row.state == .needsAuthorization)
             #expect(row.authReason == expected.plainReason)
@@ -675,11 +675,11 @@ struct GoogleTypedReauthTests {
     }
 
     @Test func onlyTheGoogleRowTakesTheOverlay() throws {
-        let google = try #require(ConnectCatalog.make(hosted: [], states: [], mcp: [], google: account).apps.first)
+        let google = try #require(ConnectCatalog.make(catalog: [], mcp: [], google: account).apps.first)
         #expect(google.applyingGoogleAuthRequired(nil) == google)
         let other = ConnectApp(
-            id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil,
-            source: .hosted(slug: "slack"), state: .connected
+            id: "connector:slack", name: "Slack", summary: "", category: "Communication",
+            source: .catalog(PalCatalogEntry(slug: "slack", name: "Slack", method: .mcpOAuth)), state: .connected
         )
         #expect(other.applyingGoogleAuthRequired(.revoked) == other)
     }

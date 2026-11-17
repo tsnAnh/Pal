@@ -8,14 +8,13 @@ private struct Item: ServiceSuggestion, Equatable {
 }
 
 private func catalog(slackState: ConnectAppState?) -> ConnectCatalog {
-    let hosted = [HostedConnectorEntry(slug: "slack", name: "Slack", description: "", category: "Communication")]
-    let states: [HostedConnectorState]
-    switch slackState {
-    case .connected?: states = [HostedConnectorState(connector: "slack", connected: true, connectionStatus: "active")]
-    case .needsAuthorization?: states = [HostedConnectorState(connector: "slack", connected: true, connectionStatus: "expired")]
-    default: states = []
+    let status: PalCatalogEntry.Status = switch slackState {
+    case .connected?: .connected
+    case .needsAuthorization?: .needsReconnect
+    default: .notConnected
     }
-    return ConnectCatalog.make(hosted: hosted, states: states, mcp: [])
+    let slack = PalCatalogEntry(slug: "slack", name: "Slack", category: "Communication", method: .mcpOAuth, status: status)
+    return ConnectCatalog.make(catalog: [slack], mcp: [])
 }
 
 @Suite("Connected services")

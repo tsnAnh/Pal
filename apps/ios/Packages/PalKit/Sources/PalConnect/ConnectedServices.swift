@@ -22,7 +22,7 @@ public struct ConnectedServices: Sendable, Equatable {
             Set(catalog.apps.compactMap { app -> String? in
                 guard app.isConnected else { return nil }
                 switch app.source {
-                case .hosted(let slug): return slug
+                case .catalog(let entry): return entry.slug
                 case .mcp(let name, _): return name
                 case .custom: return nil
                 case .googleWorkspace: return ServiceKind.google.connectorSlug
