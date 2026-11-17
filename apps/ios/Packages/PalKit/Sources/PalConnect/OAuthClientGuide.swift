@@ -1,15 +1,10 @@
 import Foundation
 
 public enum OAuthClientGuide {
+    static let guidedSlugs: Set<String> = ["google-workspace"]
+
     public static func steps(slug: String, appName: String) -> [String] {
         switch slug {
-        case "asana":
-            [
-                String(localized: "Open the Asana developer console and create an MCP app."),
-                String(localized: "Set the OAuth redirect URL to exactly the address below."),
-                String(localized: "Under Manage distribution, allow your workspaces."),
-                String(localized: "Copy the app's client ID and client secret into the fields below."),
-            ]
         case "google-workspace":
             [
                 String(localized: "Open Google Cloud Console, then go to APIs & Services > Credentials."),
@@ -29,7 +24,6 @@ public enum OAuthClientGuide {
 
     public static func consoleTitle(slug: String, appName: String) -> String {
         switch slug {
-        case "asana": String(localized: "Open Asana developer console")
         case "google-workspace": String(localized: "Open Google Cloud Console")
         default: String(localized: "Open \(appName) developer console")
         }

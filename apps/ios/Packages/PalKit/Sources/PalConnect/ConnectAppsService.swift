@@ -161,11 +161,7 @@ public struct ConnectAppsService: Sendable {
             guard let token = credentials["token"], !token.isEmpty else { throw ConnectAppsError.credentialsRequired(["token"]) }
             try await storeCatalogToken(entry, token: token)
         case .native: throw ConnectAppsError.unavailable
-        case .oauthClient:
-            if case .paste(let session) = try await connectOAuthClient(entry, route: .loopback) {
-                await session.cancel()
-                throw ConnectAppsError.unavailable
-            }
+        case .oauthClient: try await connectOAuthClient(entry)
         }
     }
 
@@ -223,24 +219,15 @@ public struct ConnectAppsService: Sendable {
         return nil
     }
 
-    func startLoopback(port: UInt16? = nil, host: String = "127.0.0.1") async throws -> LoopbackRedirectListener {
+    func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil) async throws {
+        let listener: LoopbackRedirectListener
         do {
-            return try await LoopbackRedirectListener.start(fixedPort: port, redirectHost: host, diagnostics: diagnostics)
+            listener = try await LoopbackRedirectListener.start(diagnostics: diagnostics)
         } catch {
             throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)
         }
-    }
-
-    func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil) async throws {
-        let listener = try await startLoopback()
         defer { listener.cancel() }
         let (flow, link) = try await startOAuth(name: name, redirectURI: listener.redirectURI, clientID: clientID)
-        try await completeLoopback(name: name, flow: flow, link: link, listener: listener, browser: browser)
-    }
-
-    func completeLoopback(
-        name: String, flow: String, link: URL, listener: LoopbackRedirectListener, browser: any AuthorizationBrowser
-    ) async throws {
         let parameters: [String: String]
         do {
             parameters = try await Self.awaitRedirect(listener: listener, browser: browser, url: link)

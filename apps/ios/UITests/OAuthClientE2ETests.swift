@@ -32,43 +32,6 @@ final class OAuthClientE2ETests: ConnectAppsTestCase {
         waitUntil(30, "sign-in page handed to the system browser") { opened.label.hasPrefix(prefix) }
     }
 
-    func test6AsanaGoesFromNeedsSetupToConnectedAndBack() throws {
-        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
-        waitForCatalog(app)
-        search(app, "Asana")
-        let button = action(app, "asana")
-        waitFor(button, timeout: 30, "Asana action")
-        XCTAssertEqual(button.label, "Set up")
-        button.hit()
-        enterClient(app, redirect: "http://localhost:27890/callback")
-        waitLabel(button, contains: "Connect")
-        button.hit()
-        openedLink(app, prefix: "https://app.asana.com/")
-        let state = "state=scripted-state"
-        #if os(macOS)
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:27890/callback?code=fake-token-do-not-use&\(state)")!)
-        request.setValue("localhost:27890", forHTTPHeaderField: "Host")
-        let returned = expectation(description: "redirect delivered")
-        URLSession.shared.dataTask(with: request) { _, _, _ in returned.fulfill() }.resume()
-        wait(for: [returned], timeout: 15)
-        #else
-        let paste = element(app, "otherConnectorPaste")
-        waitFor(paste, timeout: 20, "paste sheet")
-        let field = element(app, "other-paste-field")
-        field.hit()
-        field.typeText("http://localhost:27890/callback?code=fake-token-do-not-use&\(state)")
-        element(app, "other-paste-submit").hit()
-        waitGone(paste, timeout: 20, "paste sheet closes")
-        #endif
-        waitLabel(button, contains: "Remove")
-        shot(app, "oauth-client-asana-connected")
-        button.hit()
-        let confirm = app.buttons["Disconnect"]
-        waitFor(confirm, timeout: 10, "remove confirmation")
-        confirm.hit()
-        waitLabel(button, contains: "Connect")
-    }
-
     func test7GoogleGoesFromNeedsSetupToConnectedThroughTheGatewayPage() throws {
         let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
         waitForCatalog(app)

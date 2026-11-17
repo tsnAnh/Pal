@@ -46,30 +46,10 @@ extension ConnectAppsModel {
         busy.insert(app.id)
         defer { busy.remove(app.id) }
         do {
-            let route = McpConnectRoute.decide(requires: [], platform: ConnectorPlatform.current)
-            if case .paste(let session) = try await service.connectOAuthClient(entry, route: route) {
-                await presentOAuthClientPaste(session, app: app)
-            }
+            try await service.connectOAuthClient(entry)
         } catch {
             if (error as? ConnectAppsError) != .cancelled { presentOAuthClient(app, problem: OAuthClientProblem(connecting: error)) }
         }
         await reload()
-    }
-
-    private func presentOAuthClientPaste(_ session: any McpPasteSigning, app: ConnectApp) async {
-        guard pasteSession == nil else {
-            await session.cancel()
-            return
-        }
-        guard ExternalLink.open(session.authorizeURL) else {
-            await session.cancel()
-            let unavailable = ConnectAppsError.signInFailed(McpOAuthError.browserUnavailable.reason)
-            presentOAuthClient(app, problem: OAuthClientProblem(unavailable, retry: .connect))
-            return
-        }
-        pasteSession = session
-        pasteTargetID = app.id
-        pasteState = .idle
-        pastingApp = app
     }
 }
