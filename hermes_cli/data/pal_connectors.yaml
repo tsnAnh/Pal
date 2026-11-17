@@ -66,6 +66,12 @@ connectors:
   source: https://www.canva.dev/docs/apps/quickstart/
   setup:
     steps:
+    - id: address
+      kind: public_url
+      title: Your Pal's web address
+      body: Canva sends you back to your Pal after you sign in, so your Pal needs a public https address. Use the
+        address you already reach your Pal at, such as your Tailscale address. Without one, sign-in returns to this
+        device only, and Canva may refuse that for your app.
     - id: app
       kind: open_page
       title: Create a Canva app
@@ -186,6 +192,12 @@ connectors:
   source: https://help.dropbox.com/integrations/connect-dropbox-mcp-server
   setup:
     steps:
+    - id: address
+      kind: public_url
+      title: Your Pal's web address
+      body: Dropbox sends you back to your Pal after you sign in, so your Pal needs a public https address. Use the
+        address you already reach your Pal at, such as your Tailscale address. Without one, sign-in returns to this
+        device only, and Dropbox may refuse that for your app.
     - id: app
       kind: open_page
       title: Create a Dropbox app
@@ -223,6 +235,12 @@ connectors:
   source: https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/
   setup:
     steps:
+    - id: address
+      kind: public_url
+      title: Your Pal's web address
+      body: Figma sends you back to your Pal after you sign in, so your Pal needs a public https address. Use the
+        address you already reach your Pal at, such as your Tailscale address. Without one, sign-in returns to this
+        device only, and Figma may refuse that for your app.
     - id: app
       kind: open_page
       title: Create a Figma app

@@ -239,12 +239,12 @@ def test_google_console_step_carries_the_rejected_address_fallback(root, public_
 
 
 def test_canva_guide_copies_the_gateway_redirect_and_scopes(root, public_url):
-    app = _row("canva")["setup_guide"]["steps"][0]
+    app = _row("canva")["setup_guide"]["steps"][1]
     assert app["copies"][0] == {"label": "Redirect URL", "value": f"{PUBLIC_URL}/webapp/mcp-oauth/callback"}
     assert "profile:read" in app["copies"][1]["value"]
-    assert _row("canva")["setup_guide"]["steps"][1]["check"] == "canva_client"
+    assert _row("canva")["setup_guide"]["steps"][2]["check"] == "canva_client"
     public_url["url"] = None
-    assert [c["label"] for c in _row("canva")["setup_guide"]["steps"][0]["copies"]] == ["Scopes"]
+    assert [c["label"] for c in _row("canva")["setup_guide"]["steps"][1]["copies"]] == ["Scopes"]
 
 
 def test_canva_check_sends_the_public_redirect_and_never_leaks_the_secret(root, public_url, provider, caplog):
