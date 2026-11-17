@@ -68,7 +68,6 @@ const en: BotsMessages = {
     remoteCapabilitiesHint:
       'Remote capabilities require a newer desktop. Model and SOUL changes remain staged until you save.',
     skillsEnabled: (enabled, total) => `Skills (${enabled}/${total} enabled)`,
-    toolsetsEnabled: (enabled, total) => `Toolsets (${enabled}/${total} enabled — unchecking all restores the default)`,
     mcpServers: 'MCP servers',
     providerCustom: 'Provider (Custom)',
     modelCustom: 'Model (Custom)',
@@ -86,7 +85,6 @@ const en: BotsMessages = {
     general: 'General',
     capabilities: 'Capabilities',
     skills: 'Skills',
-    tools: 'Tools',
     cloneFrom: 'Clone from profile',
     freshProfile: 'Fresh profile (bundled skills)',
     inheritedModel: 'inherited from launch profile',
@@ -104,7 +102,6 @@ const en: BotsMessages = {
     newerDesktop: 'Skills need a newer Hermes Desktop.',
     newerGateway: 'Capability catalog needs a newer gateway (restart it after updating Hermes).',
     emptySkillsHint: '“Create empty” is checked — no bundled skills will be installed.',
-    defaultToolsHint: 'Leaving all (or none) checked keeps the default toolset behavior.',
     catalog: 'catalog',
     catalogInstalled: 'catalog · installed',
     mcpHint:
@@ -239,7 +236,7 @@ const en: BotsMessages = {
     createFirstHint: 'Open the Bots pane and hit “New bot”.',
     createFailed: 'Could not create the profile yet',
     advanced: 'Advanced',
-    advancedHint: 'Advanced — model, skills, toolsets, SOUL.md',
+    advancedHint: 'Advanced — model, skills, SOUL.md',
     advancedFailed: 'Advanced configuration failed',
     sendWithoutAsking: 'Send without asking',
     sendWithoutAskingHint:
@@ -538,7 +535,6 @@ const ja: BotsMessages = {
     remoteCapabilitiesHint:
       'リモート機能には新しいデスクトップアプリが必要です。モデルと SOUL の変更は保存するまで適用されません。',
     skillsEnabled: (enabled, total) => `スキル（${enabled}/${total} 有効）`,
-    toolsetsEnabled: (enabled, total) => `ツールセット（${enabled}/${total} 有効 — すべて解除すると既定値に戻ります）`,
     mcpServers: 'MCP サーバー',
     providerCustom: 'プロバイダー（カスタム）',
     modelCustom: 'モデル（カスタム）',
@@ -557,7 +553,6 @@ const ja: BotsMessages = {
     general: '一般',
     capabilities: '機能',
     skills: 'スキル',
-    tools: 'ツール',
     cloneFrom: '複製元のプロファイル',
     freshProfile: '新規プロファイル（同梱スキル）',
     inheritedModel: '起動時のプロファイルから継承',
@@ -576,7 +571,6 @@ const ja: BotsMessages = {
     newerDesktop: 'スキルには新しい Hermes Desktop が必要です。',
     newerGateway: '機能カタログには新しいゲートウェイが必要です（Hermes 更新後に再起動してください）。',
     emptySkillsHint: '「空のプロファイルを作成」が選択されているため、同梱スキルはインストールされません。',
-    defaultToolsHint: 'すべて選択するか、何も選択しない場合は、既定のツールセット動作を維持します。',
     catalog: 'カタログ',
     catalogInstalled: 'カタログ · インストール済み',
     mcpHint:
@@ -710,7 +704,7 @@ const ja: BotsMessages = {
     createFirstHint: 'ボットパネルを開いて「新しいボット」を押してください。',
     createFailed: 'プロファイルをまだ作成できませんでした',
     advanced: '詳細設定',
-    advancedHint: '詳細設定 — モデル、スキル、ツールセット、SOUL.md',
+    advancedHint: '詳細設定 — モデル、スキル、SOUL.md',
     advancedFailed: '詳細設定に失敗しました',
     sendWithoutAsking: '確認なしで送信',
     sendWithoutAskingHint:
@@ -1011,7 +1005,6 @@ const zh: BotsMessages = {
     editSoul: 'SOUL.md（人格 + 智能体消息协议）',
     remoteCapabilitiesHint: '远程功能需要更新桌面应用。模型和 SOUL 的更改会在保存后生效。',
     skillsEnabled: (enabled, total) => `技能（已启用 ${enabled}/${total}）`,
-    toolsetsEnabled: (enabled, total) => `工具集（已启用 ${enabled}/${total} — 全部取消勾选可恢复默认值）`,
     mcpServers: 'MCP 服务器',
     providerCustom: '提供商（自定义）',
     modelCustom: '模型（自定义）',
@@ -1029,7 +1022,6 @@ const zh: BotsMessages = {
     general: '常规',
     capabilities: '能力',
     skills: '技能',
-    tools: '工具',
     cloneFrom: '从配置档案克隆',
     freshProfile: '新配置档案（内置技能）',
     inheritedModel: '继承启动时的配置档案',
@@ -1046,7 +1038,6 @@ const zh: BotsMessages = {
     newerDesktop: '技能功能需要更新的 Hermes Desktop。',
     newerGateway: '能力目录需要更新的网关（更新 Hermes 后请重启网关）。',
     emptySkillsHint: '已勾选“创建空配置”，不会安装内置技能。',
-    defaultToolsHint: '全部勾选或全部不选将保留默认工具集行为。',
     catalog: '目录',
     catalogInstalled: '目录 · 已安装',
     mcpHint:
@@ -1174,7 +1165,7 @@ const zh: BotsMessages = {
     createFirstHint: '打开机器人面板，点击“新建机器人”。',
     createFailed: '暂时无法创建配置档案',
     advanced: '高级',
-    advancedHint: '高级 — 模型、技能、工具集、SOUL.md',
+    advancedHint: '高级 — 模型、技能、SOUL.md',
     advancedFailed: '高级配置失败',
     sendWithoutAsking: '无需确认直接发送',
     sendWithoutAskingHint:
@@ -1468,7 +1459,6 @@ const zhHant: BotsMessages = {
     editSoul: 'SOUL.md（人格 + 智慧代理訊息協定）',
     remoteCapabilitiesHint: '遠端功能需要更新桌面應用程式。模型和 SOUL 的變更會在儲存後生效。',
     skillsEnabled: (enabled, total) => `技能（已啟用 ${enabled}/${total}）`,
-    toolsetsEnabled: (enabled, total) => `工具集（已啟用 ${enabled}/${total} — 全部取消勾選可還原預設值）`,
     mcpServers: 'MCP 伺服器',
     providerCustom: '供應商（自訂）',
     modelCustom: '模型（自訂）',
@@ -1486,7 +1476,6 @@ const zhHant: BotsMessages = {
     general: '一般',
     capabilities: '功能',
     skills: '技能',
-    tools: '工具',
     cloneFrom: '從設定檔複製',
     freshProfile: '新設定檔（內建技能）',
     inheritedModel: '繼承啟動時的設定檔',
@@ -1503,7 +1492,6 @@ const zhHant: BotsMessages = {
     newerDesktop: '技能功能需要更新的 Hermes Desktop。',
     newerGateway: '功能目錄需要更新的閘道（更新 Hermes 後請重新啟動閘道）。',
     emptySkillsHint: '已勾選「建立空白設定」，不會安裝內建技能。',
-    defaultToolsHint: '全部勾選或全部不選將保留預設工具集行為。',
     catalog: '目錄',
     catalogInstalled: '目錄 · 已安裝',
     mcpHint:
@@ -1631,7 +1619,7 @@ const zhHant: BotsMessages = {
     createFirstHint: '開啟機器人面板，點「新增機器人」。',
     createFailed: '暫時無法建立設定檔',
     advanced: '進階',
-    advancedHint: '進階 — 模型、技能、工具集、SOUL.md',
+    advancedHint: '進階 — 模型、技能、SOUL.md',
     advancedFailed: '進階設定失敗',
     sendWithoutAsking: '無需確認直接傳送',
     sendWithoutAskingHint:

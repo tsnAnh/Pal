@@ -32,7 +32,6 @@ export type BotsMessages = {
     editSoul: string
     remoteCapabilitiesHint: string
     skillsEnabled: (enabled: number, total: number) => string
-    toolsetsEnabled: (enabled: number, total: number) => string
     mcpServers: string
     providerCustom: string
     modelCustom: string
@@ -50,7 +49,6 @@ export type BotsMessages = {
     general: string
     capabilities: string
     skills: string
-    tools: string
     cloneFrom: string
     freshProfile: string
     inheritedModel: string
@@ -66,7 +64,6 @@ export type BotsMessages = {
     newerDesktop: string
     newerGateway: string
     emptySkillsHint: string
-    defaultToolsHint: string
     catalog: string
     catalogInstalled: string
     mcpHint: string

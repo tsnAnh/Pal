@@ -67,7 +67,6 @@ vi.mock('@hermes/plugin-sdk', async () => {
     CapabilitiesView: undefined,
     surfaceModelSwitchConfirm: confirmMock,
     Textarea: () => null,
-    ToolsetConfigPanel: undefined,
     useQuery: vi.fn(() => ({ data: undefined, error: null, isLoading: false })),
     useValue: vi.fn()
   }

@@ -1,5 +1,5 @@
 /**
- * The advanced profile editor: skills, toolsets, MCP servers, model and SOUL,
+ * The advanced profile editor: skills, MCP servers, model and SOUL,
  * backed by `profiles.describe` / `profiles.configure`.
  *
  * The optional-SDK feature detects live here because this is the surface that
@@ -36,7 +36,7 @@ import type { RosterRow } from './types'
 // Keep optional exports feature-detected; test harnesses may strip the SDK namespace.
 // The Partial is the point: both are guarded at every use site because an older
 // build (or a stripped harness namespace) simply doesn't export them.
-const { ConnectorsTab, ToolsetConfigPanel }: Partial<Pick<typeof sdk, 'ConnectorsTab' | 'ToolsetConfigPanel'>> = sdk
+const { ConnectorsTab }: Partial<Pick<typeof sdk, 'ConnectorsTab'>> = sdk
 export const CapabilitiesView = typeof sdk === 'undefined' ? undefined : sdk.CapabilitiesView
 // TRUE only on builds whose CapabilitiesView routes `fixedConnection` to the pinned
 // registry connection's backend. Older builds export CapabilitiesView WITHOUT the
@@ -45,13 +45,13 @@ export const CapabilitiesView = typeof sdk === 'undefined' ? undefined : sdk.Cap
 // so those builds keep the staged checklists for remote targets.
 export const capabilitiesViewRoutesConnections = Boolean(CapabilitiesView && CapabilitiesView.supportsFixedConnection)
 
-// ── advanced profile config (skills / toolsets / model / SOUL) ──────────────
+// ── advanced profile config (skills / model / SOUL) ──────────────
 //
-// Shared by Edit Profile and New Bot (edit mode only for skills/toolsets —
+// Shared by Edit Profile and New Bot (edit mode only for skills —
 // a not-yet-created profile has nothing installed to toggle). Backed by
 // profiles.describe / profiles.configure; feature-detects older gateways.
 
-/** One toggleable capability row. Skills, toolsets, and MCP servers all
+/** One toggleable capability row. Skills and MCP servers both
  *  arrive from `profiles.describe` / `mcp.catalog` in this shape and run
  *  through the same toggle handlers, so they share one entry type. */
 export interface CapabilityEntry {
@@ -103,7 +103,6 @@ export interface ProfileDescribeResponse {
   model?: { default?: string; provider?: string }
   skills?: CapabilityEntry[]
   soul?: string
-  toolsets?: CapabilityEntry[]
 }
 /** `mcp.catalog` — the bundled, installable MCP menu. */
 export interface McpCatalogResponse {
@@ -116,14 +115,12 @@ interface AdvancedConfigState {
   dirtyModel: boolean
   dirtySkills: boolean
   dirtySoul: boolean
-  dirtyToolsets: boolean
   loaded: boolean
   mcp: CapabilityEntry[]
   model: string
   provider: string
   skills: CapabilityEntry[]
   soul: string
-  toolsets: CapabilityEntry[]
   voice: VoiceDraft
 }
 interface AdvancedProfileConfigProps {
@@ -164,7 +161,6 @@ export function AdvancedProfileConfig({ bot, state, setState }: AdvancedProfileC
           model: res.model?.default || '',
           soul: res.soul || '',
           skills: res.skills || [],
-          toolsets: res.toolsets || [],
           mcp: [
             ...configured.map(m => ({
               ...m,
@@ -216,20 +212,6 @@ export function AdvancedProfileConfig({ bot, state, setState }: AdvancedProfileC
       )
     }))
 
-  const toggleToolset = (name: string, enabled: boolean) =>
-    setState(prev => ({
-      ...prev,
-      dirtyToolsets: true,
-      toolsets: prev.toolsets.map(t =>
-        t.name === name
-          ? {
-              ...t,
-              enabled
-            }
-          : t
-      )
-    }))
-
   const toggleMcp = (name: string, enabled: boolean) =>
     setState(prev => ({
       ...prev,
@@ -245,7 +227,6 @@ export function AdvancedProfileConfig({ bot, state, setState }: AdvancedProfileC
     }))
 
   const enabledSkills = state.skills.filter(s => s.enabled).length
-  const enabledToolsets = state.toolsets.filter(t => t.enabled).length
   const mcpList = state.mcp || []
 
   // Newer desktop builds export the WHOLE core Capabilities surface
@@ -401,39 +382,6 @@ export function AdvancedProfileConfig({ bot, state, setState }: AdvancedProfileC
           />
         </div>
       )}
-      {labeled(
-        b.editor.toolsetsEnabled(enabledToolsets, state.toolsets.length),
-        <div className="rounded-md border border-(--ui-stroke-secondary) p-2">
-          <div
-            className="overflow-y-auto overscroll-contain"
-            style={{
-              maxHeight: 320
-            }}
-          >
-            <div className="grid gap-1.5">
-              {state.toolsets.map(tset => (
-                <div className="rounded-md border border-(--ui-stroke-secondary) p-2" key={tset.name}>
-                  <label className="flex items-center gap-2 text-xs font-medium text-(--ui-text-secondary)">
-                    <Checkbox
-                      checked={!!tset.enabled}
-                      onCheckedChange={value => toggleToolset(tset.name, Boolean(value))}
-                    />
-                    <span>{tset.name}</span>
-                  </label>
-                  {/* The REAL per-toolset config (env vars / API keys / model */
-                  /* picker / post-setup), scoped to THIS bot's profile, when */
-                  /* the desktop build exposes it. Older builds: just the toggle. */}
-                  {ToolsetConfigPanel ? (
-                    <div className="mt-1.5 border-t border-(--ui-stroke-secondary) pt-1.5">
-                      <ToolsetConfigPanel profile={backendScope} toolset={tset.name} />
-                    </div>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
       {connectAppsSupported ? (
         <div className="flex justify-end">
           <Button onClick={() => openConnectApps(bot)} size="xs" type="button" variant="secondary">
@@ -526,13 +474,11 @@ export function emptyAdvancedState(): AdvancedConfigState {
     model: '',
     soul: '',
     skills: [],
-    toolsets: [],
     mcp: [],
     voice: emptyVoiceDraft(),
     dirtyModel: false,
     dirtySoul: false,
     dirtySkills: false,
-    dirtyToolsets: false,
     dirtyMcp: false
   }
 }
@@ -544,7 +490,6 @@ export function emptyAdvancedState(): AdvancedConfigState {
 export type ProfileConfigurePayload = {
   disabled_skills?: string[]
   enabled_mcp_servers?: string[]
-  enabled_toolsets?: string[]
   model?: string
   name: string
   provider?: string
@@ -594,13 +539,6 @@ export async function applyAdvancedConfig(bot: RosterRow, state: AdvancedConfigS
 
   if (state.dirtySkills) {
     payload.disabled_skills = state.skills.filter(s => !s.enabled).map(s => s.name)
-  }
-
-  if (state.dirtyToolsets) {
-    const all = state.toolsets.length
-    const enabled = state.toolsets.filter(t => t.enabled)
-    // All enabled (or none) = clear the pin; otherwise pin the checked set.
-    payload.enabled_toolsets = enabled.length === all || enabled.length === 0 ? [] : enabled.map(t => t.name)
   }
 
   if (state.dirtyMcp) {

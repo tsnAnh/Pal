@@ -1,7 +1,7 @@
 /**
  * The bot editor's Advanced section renders the REAL core Capabilities
  * surfaces — CapabilitiesView (installed skills + hub installs + detail),
- * ToolsetConfigPanel (per-toolset env/keys/model/post-setup) and ConnectorsTab
+ * ConnectorsTab
  * (per-server enable + OAuth + API keys) — pinned to the bot's own profile,
  * instead of bare checkbox stand-ins.
  *
@@ -33,7 +33,7 @@ interface StubProps {
 
 /** The optional SDK exports, swapped per test to model each desktop build. */
 const sdk = vi.hoisted(() => {
-  const seen: Record<string, StubProps[]> = { ConnectorsTab: [], CapabilitiesView: [], ToolsetConfigPanel: [] }
+  const seen: Record<string, StubProps[]> = { ConnectorsTab: [], CapabilitiesView: [] }
 
   const spy = (name: string) => {
     const Stub = (props: StubProps) => {
@@ -77,7 +77,7 @@ vi.mock('@hermes/plugin-sdk', async importOriginal => {
     usePluginI18n: () => translateBots
   }
 
-  for (const name of ['ConnectorsTab', 'CapabilitiesView', 'ToolsetConfigPanel']) {
+  for (const name of ['ConnectorsTab', 'CapabilitiesView']) {
     Object.defineProperty(mocked, name, { configurable: true, enumerable: true, get: () => sdk.exports[name] })
   }
 
@@ -111,14 +111,12 @@ const advancedState: {
   dirtyModel: boolean
   dirtySkills: boolean
   dirtySoul: boolean
-  dirtyToolsets: boolean
   loaded: boolean
   mcp: CapabilityEntry[]
   model: string
   provider: string
   skills: CapabilityEntry[]
   soul: string
-  toolsets: CapabilityEntry[]
   voice: { language: null; languageKey: null; voice: null; voiceKey: null }
 } = {
   voice: { language: null, languageKey: null, voice: null, voiceKey: null },
@@ -126,14 +124,12 @@ const advancedState: {
   dirtyModel: false,
   dirtySkills: false,
   dirtySoul: false,
-  dirtyToolsets: false,
   loaded: true,
   mcp: [{ enabled: false, fromCatalog: true, installed: false, name: 'remote-mcp', requires: ['TOKEN'] }],
   model: '',
   provider: '',
   skills: [],
-  soul: '',
-  toolsets: []
+  soul: ''
 }
 
 function withQueryClient(children: ReactNode) {
@@ -183,8 +179,7 @@ afterEach(() => {
 describe('a build whose CapabilitiesView cannot route connections', () => {
   const oldBuild = () => ({
     ConnectorsTab: sdk.spy('ConnectorsTab'),
-    CapabilitiesView: sdk.spy('CapabilitiesView'),
-    ToolsetConfigPanel: sdk.spy('ToolsetConfigPanel')
+    CapabilitiesView: sdk.spy('CapabilitiesView')
   })
 
   it('fails closed for a REMOTE bot \u2014 staged model + SOUL only', async () => {
@@ -195,7 +190,6 @@ describe('a build whose CapabilitiesView cannot route connections', () => {
     expect(screen.getByText(/Remote capabilities require a newer desktop/)).toBeTruthy()
     expect(sdk.seen.CapabilitiesView).toHaveLength(0)
     expect(sdk.seen.ConnectorsTab).toHaveLength(0)
-    expect(sdk.seen.ToolsetConfigPanel).toHaveLength(0)
     expect(screen.queryByText('Skills Hub')).toBeNull()
     expect(screen.queryByRole('button', { name: /Set up/ })).toBeNull()
     // Model + SOUL still edit, and stay staged until the user saves.
@@ -211,17 +205,12 @@ describe('a build whose CapabilitiesView cannot route connections', () => {
 
   it('keeps the LOCAL capability surfaces, each scoped to the bot profile', async () => {
     await renderEditor(oldBuild(), localBot, {
-      skills: [{ enabled: true, name: 'staged-skill' }],
-      toolsets: [{ enabled: true, name: 'local-tools' }]
+      skills: [{ enabled: true, name: 'staged-skill' }]
     })
 
     // The staged checklist and the hub search section both survive here.
     expect(screen.getByText('staged-skill')).toBeTruthy()
     expect(screen.getByText(translateBots('tools.skillsHub'))).toBeTruthy()
-    expect(sdk.seen.ToolsetConfigPanel[0]).toEqual({
-      profile: { connectionId: 'local', profile: 'default' },
-      toolset: 'local-tools'
-    })
     expect(sdk.seen.ConnectorsTab[0]).toEqual({
       gateway: 'ambient-gateway',
       profile: { connectionId: 'local', profile: 'default' }
@@ -261,7 +250,7 @@ describe('a connection-aware CapabilitiesView', () => {
 })
 
 describe('a build with no Capabilities exports at all', () => {
-  const bareBuild = { ConnectorsTab: undefined, CapabilitiesView: undefined, ToolsetConfigPanel: undefined }
+  const bareBuild = { ConnectorsTab: undefined, CapabilitiesView: undefined }
 
   it('keeps the checkbox MCP list with its inline setup button', async () => {
     await renderEditor(bareBuild, localBot)
