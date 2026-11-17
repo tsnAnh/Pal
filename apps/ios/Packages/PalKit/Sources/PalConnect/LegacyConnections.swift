@@ -162,7 +162,7 @@ public protocol LegacyDismissals: Sendable {
     func dismiss(_ legacySlug: String, profile: String?)
 }
 
-public struct UserDefaultsLegacyDismissals: LegacyDismissals {
+public struct UserDefaultsLegacyDismissals: LegacyDismissals, @unchecked Sendable {
     private let defaults: UserDefaults
 
     public init(defaults: UserDefaults = .standard) {
