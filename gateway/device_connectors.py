@@ -110,7 +110,7 @@ def register_device(home: Path, device_id: str, label: str, *, kind: str = "ios"
         devices = _load(home)
         known = devices.get(device_id)
         record = known if isinstance(known, dict) else {"connectors": {}, "registered_at": stamp}
-        record.update(label=label, kind=kind, last_seen_at=stamp)
+        record.update(label=label, kind="mac" if record.get("kind") == "mac" else kind, last_seen_at=stamp)
         devices[device_id] = record
         for stale in sorted(devices, key=lambda key: devices[key].get("last_seen_at", 0))[: max(0, len(devices) - MAX_DEVICES)]:
             devices.pop(stale)
