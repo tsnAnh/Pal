@@ -13,6 +13,7 @@ struct ConnectAppsSheet: View {
     @Environment(\.scenePhase) private var scenePhase
 
     private static let rowsPerSectionInAll = 4
+    private static let cardInset: CGFloat = 14
 
     init(model: ConnectAppsModel, close: @escaping () -> Void) {
         _model = State(initialValue: model)
@@ -116,28 +117,35 @@ struct ConnectAppsSheet: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         if onCatalog { catalogContent } else { yourPluginsContent }
+                        PillButton("Add a custom connector", size: .large, accessibilityIdentifier: "addCustomConnectorButton") {
+                            model.addCustomConnector()
+                        }
+                        .padding(.top, 32)
+                        .padding(.horizontal, PalMetrics.screenMargin)
                     }
                     .padding(.bottom, 24)
                 }
                 .scrollIndicators(.automatic)
                 .scrollDismissesKeyboard(.interactively)
                 .safeAreaBar(edge: .bottom) {
-                    VStack(spacing: 10) {
-                        if onCatalog {
-                            FloatingSearchBar(
-                                text: $model.query,
-                                prompt: "Search across apps and skills",
-                                accessibilityLabel: "Search across apps and skills",
-                                accessibilityIdentifier: "connectAppsSearch"
-                            )
-                        }
-                        PillButton("Add a custom connector", size: .large, accessibilityIdentifier: "addCustomConnectorButton") {
-                            model.addCustomConnector()
-                        }
+                    if onCatalog {
+                        FloatingSearchBar(
+                            text: $model.query,
+                            prompt: "Search across apps and skills",
+                            accessibilityLabel: "Search across apps and skills",
+                            accessibilityIdentifier: "connectAppsSearch"
+                        )
                     }
                 }
             }
         )
+    }
+
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 0) { content() }
+            .padding(.vertical, 2)
+            .kanbanGlass(RoundedRectangle(cornerRadius: PalMetrics.tileRadius, style: .continuous))
+            .padding(.horizontal, PalMetrics.screenMargin)
     }
 
     private func disconnectMessage(_ target: ConnectDisconnectTarget) -> String {
@@ -176,7 +184,7 @@ struct ConnectAppsSheet: View {
         case ConnectChip.all: allSections
         case let category:
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSectionTitle")
-            ForEach(model.catalog.apps(in: category)) { appRow($0) }
+            card { ForEach(model.catalog.apps(in: category)) { appRow($0) } }
         }
     }
 
@@ -185,7 +193,7 @@ struct ConnectAppsSheet: View {
         deviceSection(model.devices.thisDevice)
         ForEach(model.catalog.categories, id: \.self) { category in
             ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
-            ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) }
+            card { ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) } }
         }
         SkillsCatalogEntry { model.showsSkills = true }
         capabilitiesSection
@@ -194,14 +202,14 @@ struct ConnectAppsSheet: View {
     @ViewBuilder
     private func deviceSection(_ section: DeviceSection) -> some View {
         ConnectSectionHeader(section.title, accessibilityIdentifier: "connectAppsSection-device-\(section.id)")
-        ForEach(section.rows) { deviceRow($0) }
+        if !section.rows.isEmpty { card { ForEach(section.rows) { deviceRow($0) } } }
     }
 
     private func deviceRow(_ row: DeviceConnectorRow) -> some View {
         let look = DeviceRowPresentation(row: row)
         return ConnectAppRow(
             title: row.entry.title, summary: look.summary, accessibilityIdentifier: "deviceConnector-\(row.id.rawValue)",
-            isBusy: model.devices.busy.contains(row.id), trailing: deviceAction(look, row.id)
+            isBusy: model.devices.busy.contains(row.id), inset: Self.cardInset, trailing: deviceAction(look, row.id)
         ) { DeviceTile(connector: row.id) }
     }
 
@@ -234,7 +242,7 @@ struct ConnectAppsSheet: View {
         case .ready(let rows):
             if !rows.isEmpty {
                 ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
-                VStack(spacing: 0) {
+                card {
                     ForEach(rows) { row in CapabilityListRow(row: row, onSetKey: model.canSetKeys ? { model.beginKeyEntry(row, keyName: $0) } : nil) }
                 }
                 .accessibilityElement(children: .contain)
@@ -253,11 +261,16 @@ struct ConnectAppsSheet: View {
                 .padding(.top, 60)
                 .accessibilityIdentifier("connectAppsNoMatches")
         }
-        ForEach(apps) { appRow($0) }
+        if !apps.isEmpty {
+            card { ForEach(apps) { appRow($0) } }
+                .padding(.top, 12)
+        }
         if !skills.isEmpty {
             ConnectSectionHeader("Skills", accessibilityIdentifier: "connectAppsSection-skills")
-            ForEach(skills) { skill in
-                ConnectAppRow(title: skill.name, summary: skill.category, accessibilityIdentifier: "skill-\(skill.id)", trailing: nil) { PluginGlyphTile() }
+            card {
+                ForEach(skills) { skill in
+                    ConnectAppRow(title: skill.name, summary: skill.category, accessibilityIdentifier: "skill-\(skill.id)", inset: Self.cardInset, trailing: nil) { PluginGlyphTile() }
+                }
             }
         }
     }
@@ -283,14 +296,16 @@ struct ConnectAppsSheet: View {
         }
         if !apps.isEmpty {
             ConnectSectionHeader("Apps", accessibilityIdentifier: "yourPluginsSection-apps")
-            ForEach(apps) { app in
-                ConnectAppRow(
-                    title: app.name, summary: app.summary, accessibilityIdentifier: "yourPlugin-\(app.id)",
-                    isBusy: model.busy.contains(app.id),
-                    trailing: ConnectRowAction("Disconnect") { model.disconnectTarget = .app(app) }
-                ) { icon(for: app) }
-                .contextMenu {
-                    if case .hosted = app.source { Button("Accounts") { model.manageAccounts(app) } }
+            card {
+                ForEach(apps) { app in
+                    ConnectAppRow(
+                        title: app.name, summary: app.summary, accessibilityIdentifier: "yourPlugin-\(app.id)",
+                        isBusy: model.busy.contains(app.id), status: ConnectAppStatus(app.state).row, inset: Self.cardInset,
+                        trailing: ConnectRowAction("Disconnect") { model.disconnectTarget = .app(app) }
+                    ) { icon(for: app) }
+                    .contextMenu {
+                        if case .hosted = app.source { Button("Accounts") { model.manageAccounts(app) } }
+                    }
                 }
             }
         }
@@ -300,7 +315,7 @@ struct ConnectAppsSheet: View {
         let state = model.cardState(app)
         return ConnectAppRow(
             title: app.name, summary: UpworkCardText.summary(state, fallback: app.summary), accessibilityIdentifier: "connectApp-\(app.id)",
-            isBusy: state == .connecting,
+            isBusy: state == .connecting, status: ConnectAppStatus(app.state).row, inset: Self.cardInset,
             trailing: ConnectRowAction(UpworkCardText.actionTitle(state), kind: state.isReconnect ? .accent : .neutral) { model.upworkApp = app }
         ) { icon(for: app) }
     }
@@ -309,7 +324,7 @@ struct ConnectAppsSheet: View {
         let app = model.googleRow(listed)
         return ConnectAppRow(
             title: app.name, summary: GoogleWorkspaceText.summary(app), accessibilityIdentifier: "connectApp-\(app.id)",
-            isBusy: model.google.isSigningIn,
+            isBusy: model.google.isSigningIn, status: ConnectAppStatus(app.state).row, inset: Self.cardInset,
             trailing: ConnectRowAction(GoogleWorkspaceText.actionTitle(app.state), kind: app.state == .needsAuthorization ? .accent : .neutral) { model.googleApp = app }
         ) { icon(for: app) }
     }
@@ -343,7 +358,7 @@ struct ConnectAppsSheet: View {
         return ConnectAppRow(
             title: app.name, summary: OtherConnectorCardText.summary(model.cardState(app), fallback: app.summary),
             accessibilityIdentifier: "connectApp-\(app.id)",
-            isBusy: model.busy.contains(app.id), trailing: action
+            isBusy: model.busy.contains(app.id), status: ConnectAppStatus(app.state).row, inset: Self.cardInset, trailing: action
         ) { icon(for: app) }
     }
 
@@ -352,6 +367,16 @@ struct ConnectAppsSheet: View {
         switch app.source {
         case .hosted: RemoteLogoTile(url: app.iconURL)
         case .mcp, .custom, .googleWorkspace: PluginGlyphTile()
+        }
+    }
+}
+
+extension ConnectAppStatus {
+    var row: ConnectRowStatus {
+        switch self {
+        case .connected: ConnectRowStatus(title, tone: .positive)
+        case .needsSignIn: ConnectRowStatus(title, tone: .attention)
+        case .notConnected: ConnectRowStatus(title, tone: .neutral)
         }
     }
 }
@@ -449,7 +474,7 @@ private struct CapabilityListRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
+        .padding(.horizontal, 14)
         .padding(.vertical, ConnectRowMetrics.verticalPadding)
         .accessibilityElement(children: onSetKey == nil ? .combine : .contain)
         .accessibilityLabel(Text(row.accessibilitySummary))

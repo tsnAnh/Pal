@@ -114,19 +114,19 @@ struct MacConnectApps: View {
                 chips.padding(.top, 11.5)
             }
             ScrollView {
-                VStack(alignment: .leading, spacing: 30) {
+                VStack(alignment: .leading, spacing: 24) {
                     if onCatalog { catalogContent } else { yourPluginsContent }
+                    Button("Add a custom connector") { model.addCustomConnector() }
+                        .buttonStyle(.palPill)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 8)
+                        .accessibilityIdentifier("addCustomConnectorButton")
                 }
                 .padding(.horizontal, 29)
                 .padding(.top, onCatalog ? 25.5 : 20)
                 .padding(.bottom, 28)
             }
             .scrollIndicators(.never)
-            Button("Add a custom connector") { model.addCustomConnector() }
-                .buttonStyle(.palPill)
-                .padding(.horizontal, 29)
-                .padding(.vertical, 14)
-                .accessibilityIdentifier("addCustomConnectorButton")
         }
     }
 
@@ -320,7 +320,7 @@ struct MacConnectApps: View {
                         tileRow(
                             title: app.name, summary: app.summary, identifier: "yourPlugin-\(app.id)",
                             trailing: MacRowAction(title: String(localized: "Disconnect"), prominent: false) { model.disconnectTarget = .app(app) },
-                            busy: model.busy.contains(app.id)
+                            busy: model.busy.contains(app.id), status: ConnectAppStatus(app.state).row
                         ) { icon(for: app) }
                     }
                 }
@@ -329,11 +329,11 @@ struct MacConnectApps: View {
     }
 
     private func section<Body: View>(title: String, identifier: String, viewAll: (() -> Void)?, @ViewBuilder content: () -> Body) -> some View {
-        VStack(alignment: .leading, spacing: 13) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(PalTokens.textPrimary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(PalTokens.textSecondary)
                     .accessibilityAddTraits(.isHeader)
                     .accessibilityIdentifier(identifier)
                 Spacer()
@@ -346,6 +346,9 @@ struct MacConnectApps: View {
                 }
             }
             content()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 4)
+                .kanbanGlass(RoundedRectangle(cornerRadius: PalMetrics.tileRadius, style: .continuous))
         }
     }
 
@@ -450,7 +453,8 @@ struct MacConnectApps: View {
         }
         return tileRow(
             title: app.name, summary: summary(for: app, state: state),
-            identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id)
+            identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id),
+            status: ConnectAppStatus(app.source == .googleWorkspace ? model.googleRow(app).state : app.state).row
         ) { icon(for: app) }
     }
 
@@ -469,15 +473,18 @@ struct MacConnectApps: View {
     }
 
     private func tileRow<Icon: View>(
-        title: String, summary: String, identifier: String, trailing: MacRowAction?, busy: Bool,
+        title: String, summary: String, identifier: String, trailing: MacRowAction?, busy: Bool, status: ConnectRowStatus? = nil,
         @ViewBuilder icon: () -> Icon
     ) -> some View {
         HStack(spacing: 8) {
             icon()
-            Text(title)
-                .font(.system(size: 12))
-                .foregroundStyle(PalTokens.textPrimary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12))
+                    .foregroundStyle(PalTokens.textPrimary)
+                    .lineLimit(1)
+                if let status { ConnectStatusChip(status) }
+            }
             Spacer(minLength: 8)
             if busy {
                 ProgressView().controlSize(.small)

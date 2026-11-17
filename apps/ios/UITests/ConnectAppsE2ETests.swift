@@ -104,6 +104,36 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         shot(app, "connect-apps-capabilities")
     }
 
+    func test1cAddCustomConnectorSitsAfterTheLastSection() throws {
+        let app = launchConnectApps()
+        waitForCatalog(app)
+        let add = app.buttons["addCustomConnectorButton"]
+        XCTAssertFalse(add.exists && add.isHittable, "add button is not pinned on screen above a long list")
+        for _ in 0..<20 where !(add.exists && add.isHittable) { app.swipeUp() }
+        XCTAssertTrue(add.isHittable, "scrolling to the end reveals the add button")
+        shot(app, "connect-apps-add-at-end")
+
+        let search = app.descendants(matching: .any)["connectAppsSearch"]
+        for _ in 0..<20 where !search.isHittable { app.swipeDown() }
+        search.tap()
+        search.typeText("zzzz no such app")
+        let noMatches = app.descendants(matching: .any)["connectAppsNoMatches"]
+        waitFor(noMatches, timeout: 10, "no matches")
+        waitFor(add, timeout: 5, "add button on a short list")
+        XCTAssertTrue(add.isHittable, "add button reachable on a short list with the keyboard open")
+        XCTAssertLessThan(add.frame.minY - noMatches.frame.maxY, 120, "add button sits right after the last section")
+        let keyboard = app.keyboards.firstMatch
+        if keyboard.exists { XCTAssertLessThanOrEqual(add.frame.maxY, keyboard.frame.minY, "add button not under the keyboard") }
+
+        app.buttons["connectAppsSearch-clear"].tap()
+        search.tap()
+        for _ in 0..<20 where !(add.exists && add.isHittable) { app.swipeUp() }
+        XCTAssertTrue(add.isHittable, "long list scrolls to the add button with search focused")
+        if keyboard.exists { XCTAssertLessThanOrEqual(add.frame.maxY, keyboard.frame.minY, "add button not under the keyboard") }
+        add.tap()
+        waitFor(app.buttons["customConnectorBackButton"], timeout: 10, "custom connector form opens")
+    }
+
     func test2TheBotReadsTodaysEventsWithNoSwitch() async throws {
         let store = EKEventStore()
         let granted = try await store.requestFullAccessToEvents()
