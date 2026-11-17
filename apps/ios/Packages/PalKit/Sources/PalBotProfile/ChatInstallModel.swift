@@ -148,7 +148,7 @@ public final class ChatInstallModel {
     public private(set) var isWorking = false
     public private(set) var notice: ChatInstallNotice?
     public private(set) var identityUpdate: ChatIdentityUpdateResult?
-    public private(set) var loadFailure: ChatFailureReason?
+    public private(set) var loadError: ChatInstallClientError?
     private var unsupported = false
     private var invites: [String: ChatNextActionWire] = [:]
 
@@ -245,7 +245,7 @@ public final class ChatInstallModel {
     }
 
     public func load() async {
-        loadFailure = nil
+        loadError = nil
         do {
             providers = try await client.providers()
             if provider == nil, let pick = providers.first(where: { $0.providerId == preferredProvider }) ?? (providers.count == 1 ? providers.first : nil) {
@@ -257,7 +257,7 @@ public final class ChatInstallModel {
         } catch is CancellationError {
             return
         } catch {
-            loadFailure = ChatInstallClientError(error).reason
+            loadError = ChatInstallClientError(error)
             return
         }
         await refresh()
@@ -273,10 +273,10 @@ public final class ChatInstallModel {
         guard let scope else { return }
         do {
             adopt(try await client.status(scope))
-            loadFailure = nil
+            loadError = nil
         } catch is CancellationError {
         } catch {
-            if snapshot == nil { loadFailure = ChatInstallClientError(error).reason } else { notice = .offline }
+            if snapshot == nil { loadError = ChatInstallClientError(error) } else { notice = .offline }
         }
         if state?.step == .ready { await refreshSpaces() }
     }

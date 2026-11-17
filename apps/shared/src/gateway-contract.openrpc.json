@@ -1285,6 +1285,42 @@
       }
     },
     {
+      "name": "diag.recent",
+      "summary": "Recent failed RPCs from the gateway's failure ledger, newest first: method, code, reason, device, app build, gateway version, trace and time. minutes is clamped to 1..10080 and limit to 1..200. Owner only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DiagRecentParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DiagRecentResult"
+        }
+      }
+    },
+    {
+      "name": "diag.report",
+      "summary": "Record a failure the gateway could not see (transport: offline or timed out; decode: an unreadable response) under the app's trace id, with the calling device. method must be a registered method. Owner only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DiagReportParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DiagReportResult"
+        }
+      }
+    },
+    {
       "name": "diagnostics.share_nous",
       "summary": "Upload a force-redacted debug bundle to Nous-internal diagnostics storage.",
       "params": [
@@ -23213,6 +23249,202 @@
           "devices"
         ],
         "title": "DevicesListResult",
+        "type": "object"
+      },
+      "DiagFault": {
+        "additionalProperties": false,
+        "properties": {
+          "ts": {
+            "title": "Ts",
+            "type": "number"
+          },
+          "trace": {
+            "title": "Trace",
+            "type": "string"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Code"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "device_kind": {
+            "title": "Device Kind",
+            "type": "string"
+          },
+          "device_name": {
+            "title": "Device Name",
+            "type": "string"
+          },
+          "app_build": {
+            "title": "App Build",
+            "type": "string"
+          },
+          "gateway_version": {
+            "title": "Gateway Version",
+            "type": "string"
+          },
+          "params_shape": {
+            "title": "Params Shape",
+            "type": "string"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ts",
+          "trace",
+          "method",
+          "reason",
+          "device_kind",
+          "device_name",
+          "app_build",
+          "gateway_version",
+          "params_shape",
+          "scope",
+          "source"
+        ],
+        "title": "DiagFault",
+        "type": "object"
+      },
+      "DiagRecentParams": {
+        "additionalProperties": false,
+        "properties": {
+          "minutes": {
+            "default": 10,
+            "title": "Minutes",
+            "type": "integer"
+          },
+          "limit": {
+            "default": 50,
+            "title": "Limit",
+            "type": "integer"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Method"
+          }
+        },
+        "title": "DiagRecentParams",
+        "type": "object"
+      },
+      "DiagRecentResult": {
+        "additionalProperties": false,
+        "properties": {
+          "faults": {
+            "items": {
+              "$ref": "#/components/schemas/DiagFault"
+            },
+            "title": "Faults",
+            "type": "array"
+          }
+        },
+        "required": [
+          "faults"
+        ],
+        "title": "DiagRecentResult",
+        "type": "object"
+      },
+      "DiagReportParams": {
+        "additionalProperties": false,
+        "properties": {
+          "trace": {
+            "pattern": "^[a-z0-9]{1,16}$",
+            "title": "Trace",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "transport",
+              "decode"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "reason": {
+            "enum": [
+              "forbidden",
+              "owner_only",
+              "invalid_params",
+              "not_implemented",
+              "not_found",
+              "timeout",
+              "internal",
+              "decode",
+              "offline"
+            ],
+            "title": "Reason",
+            "type": "string"
+          },
+          "method": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Method",
+            "type": "string"
+          },
+          "code": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Code"
+          }
+        },
+        "required": [
+          "trace",
+          "source",
+          "reason",
+          "method"
+        ],
+        "title": "DiagReportParams",
+        "type": "object"
+      },
+      "DiagReportResult": {
+        "additionalProperties": false,
+        "properties": {
+          "recorded": {
+            "title": "Recorded",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "recorded"
+        ],
+        "title": "DiagReportResult",
         "type": "object"
       },
       "DiagnosticsShareNousParams": {
@@ -65475,6 +65707,42 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/DevicesListResult"
+        }
+      }
+    },
+    {
+      "name": "diag.recent",
+      "summary": "Recent failed RPCs from the gateway's failure ledger, newest first: method, code, reason, device, app build, gateway version, trace and time. minutes is clamped to 1..10080 and limit to 1..200. Owner only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DiagRecentParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DiagRecentResult"
+        }
+      }
+    },
+    {
+      "name": "diag.report",
+      "summary": "Record a failure the gateway could not see (transport: offline or timed out; decode: an unreadable response) under the app's trace id, with the calling device. method must be a registered method. Owner only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DiagReportParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DiagReportResult"
         }
       }
     },

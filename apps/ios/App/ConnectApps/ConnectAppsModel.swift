@@ -267,7 +267,7 @@ final class ConnectAppsModel {
             if app.requiresAppSignIn { failures[app.id] = McpOAuthError.cancelled.reason }
         case .signInFailed(let reason): failures[app.id] = reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
-        case .unavailable, .failed, .oauthClient: fail(app, "Couldn't connect \(app.name). Try again.")
+        case .unavailable, .failed, .faulted, .oauthClient: fail(app, "Couldn't connect \(app.name). Try again.")
         }
     }
 

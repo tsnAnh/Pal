@@ -1,3 +1,4 @@
+import re
 """Which local bots a Desktop group may seat, on a default install with no ``hosted_rooms`` key.
 
 Regression for #139002: Desktop -> Bots -> New Group Chat refused every multi-bot group with a bare
@@ -22,6 +23,10 @@ import pytest
 
 from tests.gateway.test_session_authorities_multiplex import _reserve_homes
 from tests.waiting import wait_until
+
+
+def _without_trace(data):
+    return {k: v for k, v in data.items() if k not in ('trace', 'gateway_version')}
 
 
 @contextmanager
@@ -209,7 +214,7 @@ def test_a_bot_this_gateway_does_not_serve_is_refused_by_name(tmp_path, monkeypa
         # A connection bound to one profile never reaches a sibling, so it cannot seat one either.
         bound = _desktop(runner, call, scope='profile')('default', 'groups.create', room_id='bound', name='Crew',
                                                        members=_members('default', 'alpha'))
-        assert bound['error']['data'] == {
+        assert _without_trace(bound['error']['data']) == {
             'reason': 'permission_denied', 'field': 'members',
             'detail': "member 1 profile 'alpha': only a host-scoped connection seats a served profile "
                       "without an entry"}, bound
@@ -232,7 +237,7 @@ def test_single_profile_gateway_seats_only_itself_and_configured_profiles(tmp_pa
     with _gateway(tmp_path, monkeypatch, served=(), unserved=('beta',), multiplex=False) as (runner, homes, call):
         desktop = _desktop(runner, call)
         refused = desktop('default', 'groups.create', room_id='crew', name='Crew', members=_members('default', 'beta'))
-        assert refused['error']['data'] == {
+        assert _without_trace(refused['error']['data']) == {
             'reason': 'invalid_params', 'field': 'members',
             'detail': "member 1 profile 'beta' is not local to this gateway"}, refused
         # A profile another local gateway owns still joins through its explicit destination entry,
@@ -262,7 +267,8 @@ def test_a_bad_hosted_rooms_entry_refuses_only_the_member_naming_it(tmp_path, mo
             return request('default', 'groups.create', room_id=room_id, name='Crew', members=_members(*profiles))
 
         def ignored():
-            return [r.getMessage() for r in caplog.records if r.name == 'gateway.session_hosted_members']
+            return [re.sub(r'^trace=[a-z0-9]+ ', '', r.getMessage()) for r in caplog.records
+                    if r.name == 'gateway.session_hosted_members']
         # A room that seats helper while its entry names a home of its own.
         config.write_text(json.dumps({'hosted_rooms': {'profiles': {'helper': str(tmp_path.resolve())}}}))
         assert 'result' in create(desktop, 'kept', 'default', 'beta', 'helper')
@@ -276,10 +282,10 @@ def test_a_bad_hosted_rooms_entry_refuses_only_the_member_naming_it(tmp_path, mo
             # Desktop seats a served bot at its served home, whatever its entry says.
             assert 'result' in create(desktop, f'served-{attempt}', 'default', 'alpha')
             # A profile-bound connection seats it only through its entry, which must agree.
-            assert create(bound, f'moved-{attempt}', 'default', 'alpha')['error']['data'] == {
+            assert _without_trace(create(bound, f'moved-{attempt}', 'default', 'alpha')['error']['data']) == {
                 'reason': 'permission_denied', 'field': 'hosted_rooms.profiles.alpha',
                 'detail': "member 1 profile 'alpha': this gateway serves that profile from another home"}
-            assert create(desktop, f'alias-{attempt}', 'default', 'helper')['error']['data'] == {
+            assert _without_trace(create(desktop, f'alias-{attempt}', 'default', 'helper')['error']['data']) == {
                 'reason': 'invalid_params', 'field': 'hosted_rooms.profiles.helper',
                 'detail': "member 1 profile 'helper': names the home already seated as 'beta'"}
         # Each ignored entry is logged once, however often the roster is read.
@@ -307,7 +313,7 @@ def test_a_bad_hosted_rooms_entry_refuses_only_the_member_naming_it(tmp_path, mo
         config.write_text(json.dumps({'hosted_rooms': {'profiles': ['helper']}}))
         assert 'result' in desktop('default', 'profiles.list', include_sessions=False)
         assert 'result' in create(desktop, 'listed', 'default', 'beta')
-        assert create(desktop, 'ghost', 'default', 'ghost')['error']['data'] == {
+        assert _without_trace(create(desktop, 'ghost', 'default', 'ghost')['error']['data']) == {
             'reason': 'invalid_params', 'field': 'members',
             'detail': "member 1 profile 'ghost' is not local to this gateway"}
         assert ignored()[-1] == 'Ignoring hosted_rooms.profiles for profile=default: must map profile names to profile homes'
@@ -320,7 +326,7 @@ def test_a_linked_profile_is_refused_by_name_until_groups_support_it(tmp_path, m
         desktop = _desktop(runner, call)
         refused = desktop('default', 'groups.create', room_id='linked', name='Crew',
                           members=_members('default', 'linked'))
-        assert refused['error']['data'] == {
+        assert _without_trace(refused['error']['data']) == {
             'reason': 'invalid_params', 'field': 'members',
             'detail': "member 1 profile 'linked': a linked profile home is not supported in groups yet"}, refused
         # Its home never answers to another name: default still seats the rest.

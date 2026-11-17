@@ -29,6 +29,9 @@ def test_pool_handler_failure_is_logged_with_traceback(monkeypatch, caplog):
         assert server.dispatch({"id": "r1", "method": "test.pool_failure"}, transport) is None
         reply = transport.frames.get(timeout=10)
 
-    assert reply["error"] == {"code": -32000, "message": "handler error: store unavailable"}
+    error = dict(reply["error"])
+    data = error.pop("data")
+    assert error == {"code": -32000, "message": "handler error: store unavailable"}
+    assert {k: v for k, v in data.items() if k not in ("trace", "gateway_version")} == {"reason": "internal"}
     record = next(r for r in caplog.records if "test.pool_failure" in r.getMessage())
     assert record.exc_info is not None and "store unavailable" in str(record.exc_info[1])

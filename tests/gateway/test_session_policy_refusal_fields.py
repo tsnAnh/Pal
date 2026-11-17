@@ -16,6 +16,10 @@ from hermes_state_runtime import RuntimeStoreError
 _CFG = {'platform_toolsets': {'cli': ['terminal']}}
 
 
+def _without_trace(data):
+    return {k: v for k, v in data.items() if k not in ('trace', 'gateway_version')}
+
+
 def _refusal(params, cfg=None, **kwargs):
     """The ``RuntimeStoreError`` a real ``build_policy`` raises for *params*."""
     with pytest.raises(RuntimeStoreError) as caught:
@@ -143,7 +147,7 @@ async def test_the_frame_carries_the_field_and_the_gateway_logs_it(tmp_path, cap
         with caplog.at_level('WARNING', logger='gateway.session_controls'):
             reply = await connection.dispatch({'id': 7, 'method': 'session.policy_probe', 'params': {}})
         assert reply['error']['message'] == 'invalid_params'
-        assert reply['error']['data'] == {'reason': 'invalid_params', 'field': 'toolsets', 'detail': detail}
+        assert _without_trace(reply['error']['data']) == {'reason': 'invalid_params', 'field': 'toolsets', 'detail': detail}
         logged = [record.getMessage() for record in caplog.records]
         assert any('field=toolsets' in line and 'session.policy_probe' in line and 'profile=test' in line
                    for line in logged), logged
@@ -174,7 +178,7 @@ async def test_a_bare_refusal_does_not_warn(tmp_path, caplog):
         connection = Connection(authority, object(), {'user_id': 'human'})
         with caplog.at_level('DEBUG', logger='gateway.session_controls'):
             reply = await connection.dispatch({'id': 8, 'method': 'session.unnamed_probe', 'params': {}})
-        assert reply['error']['data'] == {'reason': 'permission_denied'}
+        assert _without_trace(reply['error']['data']) == {'reason': 'permission_denied'}
         levels = {record.levelname for record in caplog.records}
         assert 'WARNING' not in levels, [r.getMessage() for r in caplog.records]
         assert 'DEBUG' in levels

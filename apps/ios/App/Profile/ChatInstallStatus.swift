@@ -9,11 +9,12 @@ struct ChatStatusCopy {
     let title: String
     let reason: String
     let code: String
+    let fault: GatewayFault?
 
     var details: String {
         let info = Bundle.main.infoDictionary
         let version = [info?["CFBundleShortVersionString"], info?["CFBundleVersion"]].compactMap { $0 as? String }.joined(separator: " ")
-        return "code: \(code)\napp: \(version)"
+        return "\(fault?.detailsLine ?? "code: \(code)")\napp: \(version)"
     }
 
     init(symbol: String, title: String, reason: String, code: String) {
@@ -21,11 +22,13 @@ struct ChatStatusCopy {
         self.title = title
         self.reason = reason
         self.code = code
+        fault = nil
     }
 
     init?(model: ChatInstallModel, displayName: String) {
         guard let code = model.statusCode else { return nil }
         self.code = code
+        fault = model.screen == .unavailable ? model.loadFault : nil
         switch model.screen {
         case .unsupported:
             symbol = "arrow.down.circle"
@@ -101,11 +104,20 @@ struct ChatInstallStatus<Secondary: View>: View {
     private var details: some View {
         DisclosureGroup(String(localized: "Details"), isExpanded: $showsDetails) {
             HStack(spacing: 12) {
-                Text(copy.code)
-                    .hermesText(.rowSubtitle)
-                    .foregroundStyle(Color(theme.palette.textSecondary))
-                    .textSelection(.enabled)
-                    .accessibilityIdentifier("\(identifierPrefix)ReasonCode")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(copy.code)
+                        .hermesText(.rowSubtitle)
+                        .foregroundStyle(Color(theme.palette.textSecondary))
+                        .textSelection(.enabled)
+                        .accessibilityIdentifier("\(identifierPrefix)ReasonCode")
+                    if let fault = copy.fault {
+                        Text(fault.detailsLine)
+                            .hermesText(.rowSubtitle)
+                            .foregroundStyle(Color(theme.palette.textSecondary))
+                            .textSelection(.enabled)
+                            .accessibilityIdentifier("\(identifierPrefix)FaultLine")
+                    }
+                }
                 Spacer(minLength: 0)
                 Button(String(localized: "Copy")) { Pasteboard.string = copy.details }
                     .buttonStyle(.pill())

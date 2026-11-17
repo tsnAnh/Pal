@@ -12,6 +12,7 @@ from . import (
     config_free_tier_control,
     connectors,
     connectors_operation,
+    diag,
     display,
     events,
     gateway_service,

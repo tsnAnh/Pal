@@ -1779,9 +1779,9 @@ def test_dispatch_runs_short_handlers_inline(server):
     """Non-long handlers return their response synchronously from dispatch()."""
     server._methods["fast.ping"] = lambda rid, params: server._ok(rid, {"pong": True})
 
-    resp = server.dispatch({"id": "r1", "method": "fast.ping", "params": {}})
+    resp = server.dispatch({"id": "r1", "method": "fast.ping", "params": {}, "trace": "r1"})
 
-    assert resp == {"jsonrpc": "2.0", "id": "r1", "result": {"pong": True}}
+    assert resp == {"jsonrpc": "2.0", "id": "r1", "result": {"pong": True}, "trace": "r1"}
 
 
 @pytest.mark.parametrize(
