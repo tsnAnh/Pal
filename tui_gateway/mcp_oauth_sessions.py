@@ -199,6 +199,14 @@ def start_flow(
     return _publish(rec, url_timeout)
 
 
+def start_gateway_flow(hermes_home: str, server_name: str, cfg: dict, redirect_uri: str) -> dict[str, Any]:
+    """Begin a flow whose vendor-registered redirect is the gateway's https callback (a preregistered client
+    cannot be retried on another redirect); the session returns through ``deliver_gateway_callback``."""
+    _gc_and_check_capacity(server_name, hermes_home)
+    rec = _launch(hermes_home, server_name, cfg, False, KIND_GATEWAY, redirect_uri)
+    return _publish(rec, 30.0)
+
+
 def deliver_gateway_callback(
     state: str, *, code: Optional[str], error: Optional[str] = None, iss: Optional[str] = None) -> bool:
     """Hand the https callback route's redirect to the flow that minted ``state``. A state works once and

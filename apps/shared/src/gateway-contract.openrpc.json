@@ -1088,12 +1088,12 @@
     },
     {
       "name": "connectors.oauth_client.connect",
-      "summary": "Start the scoped profile's sign-in: the provider redirects to the gateway and the app polls connectors.catalog.",
+      "summary": "Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/OAuthClientSlugParams"
+            "$ref": "#/components/schemas/OAuthClientConnectParams"
           }
         }
       ],
@@ -1106,12 +1106,12 @@
     },
     {
       "name": "connectors.oauth_client.remove",
-      "summary": "Remove the scoped profile's sign-in. The owner's saved OAuth client stays.",
+      "summary": "Remove the scoped profile's sign-in. The owner's saved OAuth client stays unless remove_client is true; then, owner only, the saved client record and its Vault items are deleted too.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/OAuthClientSlugParams"
+            "$ref": "#/components/schemas/OAuthClientRemoveParams"
           }
         }
       ],
@@ -1227,6 +1227,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ConnectorPolicySetResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.setup.check",
+      "summary": "Owner only. Test a guided-setup paste step with one call to the provider. values maps each field id to the Vault item id the app wrote with vault.add. A provider rejection is ok false with a reason, never an RPC error; the secret is never returned or logged.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ConnectorSetupCheckParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ConnectorSetupCheckResult"
         }
       }
     },
@@ -20033,6 +20051,28 @@
             ],
             "default": null,
             "title": "Notes"
+          },
+          "setup_guide": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupGuide"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "setup_progress": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupProgress"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
         "required": [
@@ -20078,6 +20118,42 @@
         ],
         "title": "ConnectorChange",
         "type": "object"
+      },
+      "ConnectorErrorReason": {
+        "type": "string",
+        "enum": [
+          "INVALID_PARAMS",
+          "NOT_OWNER",
+          "UNSUPPORTED_RUNTIME",
+          "CONNECTOR_REQUEST_FAILED",
+          "INVALID_CONNECTOR_RESPONSE",
+          "UNKNOWN_TARGET",
+          "LINK_STILL_VALID",
+          "REISSUE_REFUSED",
+          "UNKNOWN_OPERATION",
+          "INVALID_ANSWER",
+          "NEEDS_NOUS_AUTH",
+          "CONNECTOR_NOT_FOUND",
+          "TOOLS_UNAVAILABLE",
+          "CONNECTORS_UNAVAILABLE",
+          "CATALOG_UNAVAILABLE",
+          "ACCOUNTS_UNAVAILABLE",
+          "CONNECTION_NOT_FOUND",
+          "POLICY_UNAVAILABLE",
+          "POLICY_CONFLICT",
+          "FORBIDDEN_SCOPE",
+          "ORG_REQUIRED",
+          "ORG_ACCESS_DENIED",
+          "INVALID_POLICY",
+          "ALIAS_TAKEN",
+          "NEEDS_SETUP",
+          "NEEDS_PUBLIC_URL",
+          "INVALID_CLIENT",
+          "CLIENT_UNREADABLE",
+          "CONNECT_FAILED",
+          "INVALID_TOKEN",
+          "CHECK_UNAVAILABLE"
+        ]
       },
       "ConnectorPolicyAllowBody": {
         "additionalProperties": false,
@@ -20667,6 +20743,94 @@
           "gateway_disabled_tools"
         ],
         "title": "ConnectorRow",
+        "type": "object"
+      },
+      "ConnectorSetupCheckParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "values": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Values",
+            "type": "object"
+          }
+        },
+        "required": [
+          "slug",
+          "values"
+        ],
+        "title": "ConnectorSetupCheckParams",
+        "type": "object"
+      },
+      "ConnectorSetupCheckResult": {
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorErrorReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Message"
+          },
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Account"
+          }
+        },
+        "required": [
+          "slug",
+          "ok"
+        ],
+        "title": "ConnectorSetupCheckResult",
         "type": "object"
       },
       "ConnectorToolFacet": {
@@ -38078,6 +38242,44 @@
         "title": "NotificationShowPayload",
         "type": "object"
       },
+      "OAuthClientConnectParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "client_redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Redirect Uri"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "OAuthClientConnectParams",
+        "type": "object"
+      },
       "OAuthClientConnectResult": {
         "additionalProperties": false,
         "properties": {
@@ -38088,13 +38290,56 @@
           "auth_url": {
             "title": "Auth Url",
             "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
           }
         },
         "required": [
           "slug",
-          "auth_url"
+          "auth_url",
+          "session_id"
         ],
         "title": "OAuthClientConnectResult",
+        "type": "object"
+      },
+      "OAuthClientRemoveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "remove_client": {
+            "default": false,
+            "title": "Remove Client",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "OAuthClientRemoveParams",
         "type": "object"
       },
       "OAuthClientRemoveResult": {
@@ -55074,6 +55319,15 @@
         "title": "SetupBuildAnswer",
         "type": "object"
       },
+      "SetupCheckKind": {
+        "enum": [
+          "google_client",
+          "github_token",
+          "canva_client"
+        ],
+        "title": "SetupCheckKind",
+        "type": "string"
+      },
       "SetupConnectorsAnswer": {
         "additionalProperties": false,
         "properties": {
@@ -55113,6 +55367,25 @@
           "suggested"
         ],
         "title": "SetupConnectorsCard",
+        "type": "object"
+      },
+      "SetupCopyRow": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "title": "SetupCopyRow",
         "type": "object"
       },
       "SetupError": {
@@ -55160,6 +55433,94 @@
         "title": "SetupEventKind",
         "type": "string"
       },
+      "SetupFallbackRow": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/SetupLinkRow"
+            },
+            "title": "Links",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "body",
+          "links"
+        ],
+        "title": "SetupFallbackRow",
+        "type": "object"
+      },
+      "SetupFieldRow": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "secret": {
+            "title": "Secret",
+            "type": "boolean"
+          },
+          "prefixes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Prefixes",
+            "type": "array"
+          },
+          "suffix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Suffix"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "secret",
+          "prefixes"
+        ],
+        "title": "SetupFieldRow",
+        "type": "object"
+      },
+      "SetupGuide": {
+        "additionalProperties": false,
+        "properties": {
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/SetupStepRow"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "title": "SetupGuide",
+        "type": "object"
+      },
       "SetupLayoutAnswer": {
         "additionalProperties": false,
         "properties": {
@@ -55172,6 +55533,25 @@
           "layout"
         ],
         "title": "SetupLayoutAnswer",
+        "type": "object"
+      },
+      "SetupLinkRow": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "url"
+        ],
+        "title": "SetupLinkRow",
         "type": "object"
       },
       "SetupNameAnswer": {
@@ -55287,6 +55667,36 @@
           "plugins"
         ],
         "title": "SetupPluginsCard",
+        "type": "object"
+      },
+      "SetupProblemKind": {
+        "enum": [
+          "not_https",
+          "ip_host"
+        ],
+        "title": "SetupProblemKind",
+        "type": "string"
+      },
+      "SetupProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "step_id": {
+            "title": "Step Id",
+            "type": "string"
+          },
+          "saved": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Saved",
+            "type": "array"
+          }
+        },
+        "required": [
+          "step_id",
+          "saved"
+        ],
+        "title": "SetupProgress",
         "type": "object"
       },
       "SetupReadyPayload": {
@@ -55779,6 +56189,112 @@
         ],
         "title": "SetupStep",
         "type": "string"
+      },
+      "SetupStepKind": {
+        "enum": [
+          "public_url",
+          "open_page",
+          "paste"
+        ],
+        "title": "SetupStepKind",
+        "type": "string"
+      },
+      "SetupStepRow": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SetupStepKind"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/SetupLinkRow"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "copies": {
+            "items": {
+              "$ref": "#/components/schemas/SetupCopyRow"
+            },
+            "title": "Copies",
+            "type": "array"
+          },
+          "fields": {
+            "items": {
+              "$ref": "#/components/schemas/SetupFieldRow"
+            },
+            "title": "Fields",
+            "type": "array"
+          },
+          "check": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupCheckKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupProblemKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "problem_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Problem Host"
+          },
+          "fallback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupFallbackRow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "body",
+          "links",
+          "copies",
+          "fields"
+        ],
+        "title": "SetupStepRow",
+        "type": "object"
       },
       "SetupThemeAnswer": {
         "additionalProperties": false,
@@ -64787,40 +65303,6 @@
         ],
         "title": "CapabilityEntry",
         "type": "object"
-      },
-      "ConnectorErrorReason": {
-        "type": "string",
-        "enum": [
-          "INVALID_PARAMS",
-          "NOT_OWNER",
-          "UNSUPPORTED_RUNTIME",
-          "CONNECTOR_REQUEST_FAILED",
-          "INVALID_CONNECTOR_RESPONSE",
-          "UNKNOWN_TARGET",
-          "LINK_STILL_VALID",
-          "REISSUE_REFUSED",
-          "UNKNOWN_OPERATION",
-          "INVALID_ANSWER",
-          "NEEDS_NOUS_AUTH",
-          "CONNECTOR_NOT_FOUND",
-          "TOOLS_UNAVAILABLE",
-          "CONNECTORS_UNAVAILABLE",
-          "CATALOG_UNAVAILABLE",
-          "ACCOUNTS_UNAVAILABLE",
-          "CONNECTION_NOT_FOUND",
-          "POLICY_UNAVAILABLE",
-          "POLICY_CONFLICT",
-          "FORBIDDEN_SCOPE",
-          "ORG_REQUIRED",
-          "ORG_ACCESS_DENIED",
-          "INVALID_POLICY",
-          "ALIAS_TAKEN",
-          "NEEDS_SETUP",
-          "NEEDS_PUBLIC_URL",
-          "INVALID_CLIENT",
-          "CLIENT_UNREADABLE",
-          "CONNECT_FAILED"
-        ]
       }
     }
   },

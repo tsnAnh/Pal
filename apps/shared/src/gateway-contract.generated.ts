@@ -1730,8 +1730,53 @@ export interface ConnectorCatalogRow {
   mcp_url?: string | null
   status?: ConnectorCatalogStatus | null
   notes?: string | null
+  setup_guide?: SetupGuide | null
+  setup_progress?: SetupProgress | null
 }
 export type ConnectorCatalogStatus = 'connected' | 'needs_reconnect' | 'not_connected' | 'needs_setup'
+export interface SetupGuide {
+  steps: SetupStepRow[]
+}
+export interface SetupStepRow {
+  id: string
+  kind: SetupStepKind
+  title: string
+  body: string
+  links: SetupLinkRow[]
+  copies: SetupCopyRow[]
+  fields: SetupFieldRow[]
+  check?: SetupCheckKind | null
+  problem?: SetupProblemKind | null
+  problem_host?: string | null
+  fallback?: SetupFallbackRow | null
+}
+export type SetupStepKind = 'public_url' | 'open_page' | 'paste'
+export interface SetupLinkRow {
+  label: string
+  url: string
+}
+export interface SetupCopyRow {
+  label: string
+  value: string
+}
+export interface SetupFieldRow {
+  id: string
+  label: string
+  secret: boolean
+  prefixes: string[]
+  suffix?: string | null
+}
+export type SetupCheckKind = 'google_client' | 'github_token' | 'canva_client'
+export type SetupProblemKind = 'not_https' | 'ip_host'
+export interface SetupFallbackRow {
+  label: string
+  body: string
+  links: SetupLinkRow[]
+}
+export interface SetupProgress {
+  step_id: string
+  saved: string[]
+}
 export interface OAuthClientSlugParams {
   profile?: string | null
   slug: string
@@ -1748,14 +1793,38 @@ export interface OAuthClientSaveParams {
   client_id_item: string
   client_secret_item: string
 }
+export interface OAuthClientConnectParams {
+  profile?: string | null
+  slug: string
+  client_redirect_uri?: string | null
+}
 export interface OAuthClientConnectResult {
   slug: string
   auth_url: string
+  session_id: string | null
+}
+export interface OAuthClientRemoveParams {
+  profile?: string | null
+  slug: string
+  remove_client?: boolean
 }
 export interface OAuthClientRemoveResult {
   slug: string
   removed: boolean
 }
+export interface ConnectorSetupCheckParams {
+  profile?: string | null
+  slug: string
+  values: Record<string, string>
+}
+export interface ConnectorSetupCheckResult {
+  slug: string
+  ok: boolean
+  reason?: ConnectorErrorReason | null
+  message?: string | null
+  account?: string | null
+}
+export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN' | 'NEEDS_SETUP' | 'NEEDS_PUBLIC_URL' | 'INVALID_CLIENT' | 'CLIENT_UNREADABLE' | 'CONNECT_FAILED' | 'INVALID_TOKEN' | 'CHECK_UNAVAILABLE'
 export interface ConnectorsLegacyResult {
   source_readable: boolean
   items: LegacyConnectorRow[]
@@ -8224,7 +8293,7 @@ export interface ReachOfferPayload {
   body: string
   session_id?: string | null
 }
-export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN' | 'NEEDS_SETUP' | 'NEEDS_PUBLIC_URL' | 'INVALID_CLIENT' | 'CLIENT_UNREADABLE' | 'CONNECT_FAILED'
+export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN' | 'NEEDS_SETUP' | 'NEEDS_PUBLIC_URL' | 'INVALID_CLIENT' | 'CLIENT_UNREADABLE' | 'CONNECT_FAILED' | 'INVALID_TOKEN' | 'CHECK_UNAVAILABLE'
 
 // ── Client→server methods ──
 export interface RpcMethods {
@@ -8348,10 +8417,10 @@ export interface RpcMethods {
   'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
-  /** Start the scoped profile's sign-in: the provider redirects to the gateway and the app polls connectors.catalog. */
-  'connectors.oauth_client.connect': { params: OAuthClientSlugParams; result: OAuthClientConnectResult }
-  /** Remove the scoped profile's sign-in. The owner's saved OAuth client stays. */
-  'connectors.oauth_client.remove': { params: OAuthClientSlugParams; result: OAuthClientRemoveResult }
+  /** Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog. */
+  'connectors.oauth_client.connect': { params: OAuthClientConnectParams; result: OAuthClientConnectResult }
+  /** Remove the scoped profile's sign-in. The owner's saved OAuth client stays unless remove_client is true; then, owner only, the saved client record and its Vault items are deleted too. */
+  'connectors.oauth_client.remove': { params: OAuthClientRemoveParams; result: OAuthClientRemoveResult }
   /** Owner only. Save the OAuth client once for every profile and device: both values are Vault item ids the app wrote with vault.add. */
   'connectors.oauth_client.save': { params: OAuthClientSaveParams; result: OAuthClientSetupResult }
   /** Whether the owner's OAuth client for an oauth_client catalog entry is saved, the console page to register it on and the redirect URL to register; redirect_url is null until the gateway has a public https address. */
@@ -8364,6 +8433,8 @@ export interface RpcMethods {
   'connectors.policy.get': { params: ProfileParams; result: ConnectorPolicyGetResult }
   /** Apply one scoped member connector or tool-list policy change. */
   'connectors.policy.set': { params: ConnectorPolicySetParams; result: ConnectorPolicySetResult }
+  /** Owner only. Test a guided-setup paste step with one call to the provider. values maps each field id to the Vault item id the app wrote with vault.add. A provider rejection is ok false with a reason, never an RPC error; the secret is never returned or logged. */
+  'connectors.setup.check': { params: ConnectorSetupCheckParams; result: ConnectorSetupCheckResult }
   /** The scoped profile's cached or current tool list for one connector. */
   'connectors.tools': { params: ConnectorToolsParams; result: ConnectorToolsResult }
   /** List/add/remove/pause/resume/run cron jobs, read run history, preview a schedule and manage a routine's webhook trigger in the (optionally profile-scoped) cron store. */
@@ -9013,6 +9084,7 @@ export const RPC_METHODS = [
   'connectors.operation.wake',
   'connectors.policy.get',
   'connectors.policy.set',
+  'connectors.setup.check',
   'connectors.tools',
   'cron.manage',
   'delegation.pause',

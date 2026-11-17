@@ -4,6 +4,7 @@ import base64
 import contextlib
 import hashlib
 import hmac
+import ipaddress
 import logging
 import os
 import secrets
@@ -14,9 +15,10 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from gateway.device_registry import install_root
+from tools.connectors.mcp_oauth_redirect import GATEWAY_CALLBACK_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,8 @@ NONCE_TTL_SECONDS = 600.0
 HTTP_TIMEOUT_SECONDS = 15.0
 GOOGLE_REDIRECT_PATH = "/webapp/google-install/callback"
 GOOGLE_PROVIDER = "google-workspace"
+MCP_REDIRECT_PORT = 27890
+MCP_REDIRECT_URL = f"http://localhost:{MCP_REDIRECT_PORT}/callback"
 GOOGLE_TOKEN_FILE = "google_token.json"
 GOOGLE_IDENTITY_SCOPES = ("openid", "email")
 
@@ -150,6 +154,14 @@ class OAuthClientStore:
             return None
         return ClientRecord(row["provider_id"], row["vault_home"], row["client_id_item"], row["client_secret_item"])
 
+    def delete_client(self, provider_id: str) -> ClientRecord | None:
+        with self._write() as conn:
+            row = conn.execute("SELECT * FROM clients WHERE provider_id=?", (provider_id,)).fetchone()
+            conn.execute("DELETE FROM clients WHERE provider_id=?", (provider_id,))
+        if row is None:
+            return None
+        return ClientRecord(row["provider_id"], row["vault_home"], row["client_id_item"], row["client_secret_item"])
+
     def connection(self, provider_id: str, profile_home: str) -> tuple[ConnectionStatus, str | None] | None:
         with self._read() as conn:
             row = conn.execute("SELECT status, token_item FROM connections WHERE provider_id=? AND profile_home=?",
@@ -223,10 +235,43 @@ def save_client(store: OAuthClientStore, provider_id: str, vault_home, client_id
                 vault.remove_item(item)
 
 
-def google_redirect_url(public_url: str | None) -> str | None:
+def remove_client(store: OAuthClientStore, provider_id: str) -> bool:
+    record = store.delete_client(provider_id)
+    if record is None:
+        return False
+    vault = vault_for(record.vault_home)
+    for item in {record.client_id_item, record.client_secret_item}:
+        with contextlib.suppress(Exception):
+            vault.remove_item(item)
+    return True
+
+
+def _https_redirect(public_url: str | None, path: str) -> str | None:
     if not (public_url or "").startswith("https://"):
         return None
-    return public_url.rstrip("/") + GOOGLE_REDIRECT_PATH
+    return public_url.rstrip("/") + path
+
+
+def google_redirect_url(public_url: str | None) -> str | None:
+    return _https_redirect(public_url, GOOGLE_REDIRECT_PATH)
+
+
+def mcp_redirect_url(public_url: str | None) -> str | None:
+    return _https_redirect(public_url, GATEWAY_CALLBACK_PATH)
+
+
+def address_problem(public_url: str | None) -> tuple[str, str] | None:
+    raw = (public_url or "").strip()
+    if not raw:
+        return None
+    parts = urlsplit(raw)
+    host = parts.hostname or ""
+    if parts.scheme != "https":
+        return "not_https", host
+    with contextlib.suppress(ValueError):
+        ipaddress.ip_address(host)
+        return "ip_host", host
+    return None
 
 
 def _challenge(verifier: str) -> str:
@@ -329,6 +374,28 @@ def google_remove(store: OAuthClientStore, profile_home) -> None:
 def google_status(store: OAuthClientStore, profile_home) -> ConnectionStatus | None:
     row = store.connection(GOOGLE_PROVIDER, profile_key(profile_home))
     return row[0] if row else None
+
+
+def preregistered_mcp_entries() -> dict:
+    from hermes_cli.pal_connectors import ConnectionMethod, load_pal_connectors
+    return {e.id: e for e in load_pal_connectors() if e.method is ConnectionMethod.OAUTH_CLIENT and e.mcp_url}
+
+
+def mcp_secret_env(provider_id: str) -> str:
+    return provider_id.upper().replace("-", "_") + "_CLIENT_SECRET"
+
+
+def mcp_server_config(provider_id: str, client_id: str, gateway_redirect: str | None = None) -> dict:
+    entry = preregistered_mcp_entries()[provider_id]
+    oauth = {"client_id": client_id, "client_secret": f"${{{mcp_secret_env(provider_id)}}}"}
+    oauth.update({"redirect_uri": gateway_redirect} if gateway_redirect
+                 else {"redirect_host": "localhost", "redirect_port": MCP_REDIRECT_PORT})
+    return {"url": entry.mcp_url, "transport": "http", "auth": "oauth", "oauth": oauth}
+
+
+def console_url(provider_id: str) -> str:
+    from hermes_cli.pal_connectors import load_pal_connectors
+    return CONSOLE_URLS.get(provider_id) or next(e.source for e in load_pal_connectors() if e.id == provider_id)
 
 
 def build_store(home=None) -> OAuthClientStore:

@@ -25,6 +25,52 @@ class OAuthEndpoints:
 
 
 @dataclass(frozen=True)
+class SetupLink:
+    label: str
+    url: str
+
+
+@dataclass(frozen=True)
+class SetupCopy:
+    label: str
+    value: str
+
+
+@dataclass(frozen=True)
+class SetupField:
+    id: str
+    label: str
+    secret: bool
+    prefixes: tuple[str, ...] = ()
+    suffix: str | None = None
+
+
+@dataclass(frozen=True)
+class SetupFallback:
+    label: str
+    body: str
+    links: tuple[SetupLink, ...] = ()
+
+
+@dataclass(frozen=True)
+class SetupStep:
+    id: str
+    kind: str
+    title: str
+    body: str
+    links: tuple[SetupLink, ...] = ()
+    copies: tuple[SetupCopy, ...] = ()
+    fields: tuple[SetupField, ...] = ()
+    check: str | None = None
+    fallback: SetupFallback | None = None
+
+
+@dataclass(frozen=True)
+class SetupGuide:
+    steps: tuple[SetupStep, ...]
+
+
+@dataclass(frozen=True)
 class PalConnector:
     id: str
     name: str
@@ -38,6 +84,7 @@ class PalConnector:
     scopes: tuple[str, ...] = ()
     replaces_portal_slug: str | None = None
     notes: str | None = None
+    setup: SetupGuide | None = None
 
 
 class PalCatalogError(ValueError):
@@ -45,13 +92,78 @@ class PalCatalogError(ValueError):
 
 
 _REQUIRED = ("id", "name", "icon", "category", "method", "verified", "source")
-_OPTIONAL = ("mcp_url", "oauth", "scopes", "replaces_portal_slug", "notes")
+_OPTIONAL = ("mcp_url", "oauth", "scopes", "replaces_portal_slug", "notes", "setup")
 
 
 def _https(value: object, field: str, cid: str) -> str:
     if not isinstance(value, str) or urlparse(value).scheme not in ("https", "http") or not urlparse(value).netloc:
         raise PalCatalogError(f"{cid}: {field} must be an absolute URL")
     return value
+
+
+STEP_KINDS = ("public_url", "open_page", "paste")
+STEP_CHECKS = ("google_client", "github_token", "canva_client")
+
+
+def _text(raw: object, key: str, where: str) -> str:
+    if not isinstance(raw, dict) or not isinstance(raw.get(key), str) or not raw[key].strip():
+        raise PalCatalogError(f"{where}: {key} must be a non-empty string")
+    return raw[key]
+
+
+def _items(raw: dict, key: str, where: str) -> list:
+    items = raw.get(key, [])
+    if not isinstance(items, list):
+        raise PalCatalogError(f"{where}: {key} must be a list")
+    return items
+
+
+def _parse_fallback(raw: object, cid: str, where: str) -> SetupFallback | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) - {"label", "body", "links"}:
+        raise PalCatalogError(f"{where}: fallback needs label, body and optional links")
+    return SetupFallback(
+        _text(raw, "label", where), _text(raw, "body", where),
+        tuple(SetupLink(_text(l, "label", where), _https(l.get("url"), "link", cid)) for l in _items(raw, "links", where)))
+
+
+def _parse_step(raw: object, cid: str) -> SetupStep:
+    where = f"{cid}: setup step {raw.get('id') if isinstance(raw, dict) else '?'}"
+    if not isinstance(raw, dict):
+        raise PalCatalogError(f"{where} must be a mapping")
+    unknown = sorted(set(raw) - {"id", "kind", "title", "body", "links", "copies", "fields", "check", "fallback"})
+    if unknown:
+        raise PalCatalogError(f"{where}: unknown {unknown}")
+    kind = _text(raw, "kind", where)
+    if kind not in STEP_KINDS:
+        raise PalCatalogError(f"{where}: unknown kind {kind!r}")
+    check = raw.get("check")
+    if check is not None and check not in STEP_CHECKS:
+        raise PalCatalogError(f"{where}: unknown check {check!r}")
+    fields = tuple(
+        SetupField(_text(f, "id", where), _text(f, "label", where), f.get("secret") is True,
+                   tuple(f.get("prefixes") or ()), f.get("suffix"))
+        for f in _items(raw, "fields", where))
+    if (kind == "paste") != bool(fields):
+        raise PalCatalogError(f"{where}: only paste steps carry fields, and paste steps need them")
+    if check and kind != "paste":
+        raise PalCatalogError(f"{where}: check belongs to a paste step")
+    return SetupStep(
+        id=_text(raw, "id", where), kind=kind, title=_text(raw, "title", where), body=_text(raw, "body", where),
+        links=tuple(SetupLink(_text(l, "label", where), _https(l.get("url"), "link", cid))
+                    for l in _items(raw, "links", where)),
+        copies=tuple(SetupCopy(_text(c, "label", where), _text(c, "value", where)) for c in _items(raw, "copies", where)),
+        fields=fields, check=check, fallback=_parse_fallback(raw.get("fallback"), cid, where))
+
+
+def _parse_setup(raw: object, cid: str) -> SetupGuide:
+    if not isinstance(raw, dict) or set(raw) != {"steps"} or not isinstance(raw["steps"], list) or not raw["steps"]:
+        raise PalCatalogError(f"{cid}: setup needs exactly a non-empty steps list")
+    steps = tuple(_parse_step(s, cid) for s in raw["steps"])
+    if len({s.id for s in steps}) != len(steps):
+        raise PalCatalogError(f"{cid}: duplicate setup step id")
+    return SetupGuide(steps)
 
 
 def _parse_entry(raw: object) -> PalConnector:
@@ -86,6 +198,7 @@ def _parse_entry(raw: object) -> PalConnector:
         id=raw["id"], name=raw["name"], icon=raw["icon"], category=raw["category"], method=method,
         verified=raw["verified"], source=_https(raw["source"], "source", cid), mcp_url=mcp_url, oauth=oauth,
         scopes=tuple(scopes), replaces_portal_slug=raw.get("replaces_portal_slug"), notes=raw.get("notes"),
+        setup=_parse_setup(raw["setup"], cid) if raw.get("setup") is not None else None,
     )
 
 
