@@ -71,13 +71,32 @@ public final class KanbanStore {
     public private(set) var boardsLoad: KanbanLoad = .idle
     public private(set) var boardLoads: [String: KanbanLoad] = [:]
     public private(set) var cardLoads: [String: KanbanLoad] = [:]
+    public private(set) var settledGenerations: [String: Int] = [:]
 
     @ObservationIgnored private let service: KanbanService
+    @ObservationIgnored private let disk: KanbanDiskCache?
     @ObservationIgnored private let sleep: Sleep
+    @ObservationIgnored private var restored: Set<String> = []
 
-    public init(service: KanbanService, sleep: @escaping Sleep = { try await Task.sleep(for: $0) }) {
+    public init(service: KanbanService, disk: KanbanDiskCache? = nil, sleep: @escaping Sleep = { try await Task.sleep(for: $0) }) {
         self.service = service
+        self.disk = disk
         self.sleep = sleep
+    }
+
+    public func visibleRows(board: String) -> [KanbanCardRow]? {
+        KanbanReadiness.rows(session: session, board: board, settledGeneration: settledGenerations[board])
+    }
+
+    public func boardName(_ board: String) -> String? {
+        KanbanReadiness.boardName(session: session, board: board)
+    }
+
+    public func restore(board: String) async {
+        guard let disk, session.cache(board) == nil, restored.insert(board).inserted else { return }
+        guard let saved = await disk.load(board: board), session.cache(board) == nil else { return }
+        session.restore(saved, board: board)
+        if let generation = session.cache(board)?.generation { settledGenerations[board] = generation }
     }
 
     public func load(of board: String) -> KanbanLoad {
@@ -113,12 +132,14 @@ public final class KanbanStore {
     }
 
     public func refreshSnapshot(board: String) async {
+        await restore(board: board)
         if session.cache(board) == nil { boardLoads[board] = .loading }
         var restarts = 0
         while restarts <= Self.maxSnapshotRestarts {
             switch await snapshotPass(board: board) {
             case .published:
                 boardLoads[board] = .ready
+                persist(board)
                 return
             case .restart:
                 restarts += 1
@@ -130,13 +151,18 @@ public final class KanbanStore {
         boardLoads[board] = .failed
     }
 
-    public func loadCard(board: String, taskID: String, retryAfterDrop: Bool = true) async {
+    public func loadCard(board: String, taskID: String) async {
+        await fetchCard(board: board, taskID: taskID)
+        persist(board)
+    }
+
+    private func fetchCard(board: String, taskID: String, retryAfterDrop: Bool = true) async {
         let slot = "\(board)/\(taskID)"
         if session.detail(board: board, taskID: taskID) == nil { cardLoads[slot] = .loading }
         do {
             let result = try await service.card(board: board, taskID: taskID, gatewayID: session.gatewayID)
             if absorb(gatewayID: result.scope.gatewayID) {
-                if retryAfterDrop { await loadCard(board: board, taskID: taskID, retryAfterDrop: false) }
+                if retryAfterDrop { await fetchCard(board: board, taskID: taskID, retryAfterDrop: false) }
                 return
             }
             switch result.state {
@@ -147,17 +173,17 @@ public final class KanbanStore {
                 session.removeCard(board: board, taskID: taskID)
                 cardLoads[slot] = .cardAbsent
             case .boardAbsent:
-                session.removeBoard(board)
+                forget(board)
                 boardLoads[board] = .boardAbsent
             case .boardArchived:
-                session.removeBoard(board)
+                forget(board)
                 boardLoads[board] = .boardArchived
             default:
                 cardLoads[slot] = .failed
             }
         } catch KanbanFailure.gatewayMismatch {
             drop()
-            if retryAfterDrop { await loadCard(board: board, taskID: taskID, retryAfterDrop: false) }
+            if retryAfterDrop { await fetchCard(board: board, taskID: taskID, retryAfterDrop: false) }
         } catch is CancellationError {
             return
         } catch {
@@ -166,14 +192,20 @@ public final class KanbanStore {
     }
 
     public func prefetchDetails(board: String) async {
+        guard let generation = session.cache(board)?.generation else { return }
         let missing = (session.cache(board)?.sortedCards ?? []).filter { session.detail(board: board, taskID: $0.taskID) == nil }
-        for card in missing.prefix(Self.maxPrefetchedCards) {
-            if Task.isCancelled { return }
-            await loadCard(board: board, taskID: card.taskID)
+        await withTaskGroup(of: Void.self) { group in
+            for card in missing.prefix(Self.maxPrefetchedCards) {
+                group.addTask { await self.fetchCard(board: board, taskID: card.taskID) }
+            }
         }
+        if Task.isCancelled { return }
+        if session.cache(board)?.generation == generation { settledGenerations[board] = generation }
+        if !missing.isEmpty { persist(board) }
     }
 
     public func pollOnce(board: String) async -> KanbanPollStep {
+        await restore(board: board)
         guard let cache = session.cache(board), let cursor = cache.cursor else {
             await refreshSnapshot(board: board)
             switch boardLoads[board] ?? .idle {
@@ -271,10 +303,10 @@ public final class KanbanStore {
     private func stopped(for state: KanbanReadState, board: String) -> Pass {
         switch state {
         case .boardAbsent:
-            session.removeBoard(board)
+            forget(board)
             return .stopped(.boardAbsent)
         case .boardArchived:
-            session.removeBoard(board)
+            forget(board)
             return .stopped(.boardArchived)
         default:
             return .stopped(.failed)
@@ -292,11 +324,11 @@ public final class KanbanStore {
             await refreshSnapshot(board: board)
             return .wait
         case .boardAbsent:
-            session.removeBoard(board)
+            forget(board)
             boardLoads[board] = .boardAbsent
             return .wait
         case .boardArchived:
-            session.removeBoard(board)
+            forget(board)
             boardLoads[board] = .boardArchived
             return .wait
         case .present, .unknown:
@@ -310,7 +342,18 @@ public final class KanbanStore {
             await refreshSnapshot(board: board)
             return
         }
-        for taskID in taskIDs { await loadCard(board: board, taskID: taskID) }
+        for taskID in taskIDs { await fetchCard(board: board, taskID: taskID) }
+        persist(board)
+    }
+
+    private func persist(_ board: String) {
+        disk?.save(session, board: board)
+    }
+
+    private func forget(_ board: String) {
+        session.removeBoard(board)
+        settledGenerations[board] = nil
+        disk?.remove(board: board)
     }
 
     @discardableResult
@@ -328,5 +371,6 @@ public final class KanbanStore {
     private func clearLoads() {
         boardLoads = [:]
         cardLoads = [:]
+        settledGenerations = [:]
     }
 }

@@ -10,7 +10,10 @@ enum KanbanRoute: Hashable {
 
 extension KanbanStore {
     static func live(connection: ConnectionModel) -> KanbanStore {
-        KanbanStore(service: KanbanService(gateway: KanbanGateway { method, params in try await connection.rpc(method, params) }))
+        KanbanStore(
+            service: KanbanService(gateway: KanbanGateway { method, params in try await connection.rpc(method, params) }),
+            disk: KanbanDiskCache(store: connection.cache, account: connection.accountKey)
+        )
     }
 }
 

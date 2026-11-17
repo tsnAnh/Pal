@@ -21,7 +21,7 @@ public struct KanbanCardKey: Sendable, Hashable {
     }
 }
 
-public struct KanbanBoardCache: Sendable, Equatable {
+public struct KanbanBoardCache: Sendable, Equatable, Codable {
     public var board: KanbanBoard?
     public var cards: [String: KanbanCard]
     public var prerequisites: Set<KanbanPrerequisite>
@@ -127,13 +127,35 @@ public struct KanbanSession: Sendable, Equatable {
     public mutating func publish(_ staging: KanbanSnapshotStaging, cursor: String, board: String) {
         guard let gatewayID = staging.gatewayID, gatewayID == self.gatewayID else { return }
         let key = KanbanBoardKey(gatewayID: gatewayID, board: board)
-        let generation = (caches[key]?.generation ?? 0) + 1
+        let held = caches[key]
+        let unchanged = held.map { $0.board == staging.board && $0.cards == staging.cards && $0.prerequisites == staging.prerequisites } ?? false
+        let generation = (held?.generation ?? 0) + (unchanged ? 0 : 1)
         caches[key] = KanbanBoardCache(
             board: staging.board, cards: staging.cards, prerequisites: staging.prerequisites,
             cursor: cursor, highWater: 0, generation: generation, events: []
         )
         let tasks = Set(staging.cards.values.map(\.taskID))
         details = details.filter { $0.key.board != key || tasks.contains($0.key.taskID) }
+    }
+
+    public mutating func restore(_ saved: KanbanSavedBoard, board: String) {
+        guard gatewayID == nil || gatewayID == saved.gatewayID else { return }
+        gatewayID = saved.gatewayID
+        let key = KanbanBoardKey(gatewayID: saved.gatewayID, board: board)
+        guard caches[key] == nil else { return }
+        caches[key] = saved.cache
+        for detail in saved.details {
+            details[KanbanCardKey(board: key, taskID: detail.card.taskID)] = detail
+        }
+    }
+
+    public func saved(_ board: String, at date: Date) -> KanbanSavedBoard? {
+        guard let key = boardKey(board), let cache = caches[key] else { return nil }
+        let held = cache.sortedCards.compactMap { details[KanbanCardKey(board: key, taskID: $0.taskID)] }
+        return KanbanSavedBoard(
+            schema: KanbanSavedBoard.currentSchema, savedAt: date, gatewayID: key.gatewayID,
+            cache: cache, details: Array(held.prefix(KanbanSavedBoard.maxDetails))
+        )
     }
 
     public mutating func removeBoard(_ board: String) {
