@@ -5,6 +5,7 @@ import PalProtocol
 actor ScriptedChatInstallGateway: ChatInstallClient {
     static let shared = ScriptedChatInstallGateway()
     static let resetArgument = "-hermes-test-chat-install-reset"
+    static let failArgument = "-hermes-test-chat-install-fail"
     static let allowLink = "https://slack.com/oauth/v2/authorize?client_id=scripted"
     private static let defaultsKey = "scriptedChatInstall"
 
@@ -74,6 +75,7 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
     }
 
     func providers() async throws -> [ChatCapabilitiesWire] {
+        if ProcessInfo.processInfo.arguments.contains(Self.failArgument) { throw ChatInstallClientError.failed(.forbidden) }
         [try decode(ChatCapabilitiesWire.self, [
             "provider_id": "slack", "requires_config_credential": true, "creates_app": true,
             "capabilities": [
@@ -116,12 +118,12 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
             move("creating_app")
             moveLater("needs_manual_step")
         case ("needs_manual_step", .manualStepDone):
-            guard let step = advance.manualStep?.rawValue else { throw ChatInstallClientError.failed }
-            if step == "app_level_credential", advance.vaultItemId == nil { throw ChatInstallClientError.failed }
+            guard let step = advance.manualStep?.rawValue else { throw ChatInstallClientError.failed(.gateway) }
+            if step == "app_level_credential", advance.vaultItemId == nil { throw ChatInstallClientError.failed(.gateway) }
             let remaining = ["set_icon", "app_level_credential"].filter { !snapshot.done.contains($0) && $0 != step }
             move(remaining.isEmpty ? "needs_allow" : "needs_manual_step", done: step)
         default:
-            throw ChatInstallClientError.failed
+            throw ChatInstallClientError.failed(.gateway)
         }
     }
 

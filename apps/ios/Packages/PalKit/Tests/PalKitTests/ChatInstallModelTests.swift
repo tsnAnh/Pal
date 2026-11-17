@@ -1,6 +1,7 @@
 import Foundation
 import PalBotProfile
 import PalProtocol
+import PalTransport
 import Testing
 
 private let filler = String(repeating: "FAKE", count: 4)
@@ -12,7 +13,7 @@ private func decode<T: Decodable>(_ type: T.Type, _ object: Any) throws -> T {
     try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: object))
 }
 
-private func provider(guided: [String] = ["set_icon", "app_level_credential"], credential: Bool = true) throws -> ChatCapabilitiesWire {
+func chatProvider(guided: [String] = ["set_icon", "app_level_credential"], credential: Bool = true) throws -> ChatCapabilitiesWire {
     try decode(ChatCapabilitiesWire.self, [
         "provider_id": "slack", "requires_config_credential": credential, "creates_app": true,
         "capabilities": guided.map { ["capability": $0, "mode": "guided"] } + [["capability": "join_public_space", "mode": "automatic"]],
@@ -20,7 +21,7 @@ private func provider(guided: [String] = ["set_icon", "app_level_credential"], c
     ])
 }
 
-private func state(
+func chatState(
     _ step: String, _ revision: Int, action: [String: Any?] = [:], done: [String] = [], error: [String: String]? = nil, bot: String = "pal",
     fallback: [String: Any]? = nil
 ) throws -> ChatSetupStateWire {
@@ -48,10 +49,11 @@ private func stateJSON(
     ]
 }
 
-private actor FakeChatInstallClient: ChatInstallClient {
+actor FakeChatInstallClient: ChatInstallClient {
     var capabilities: [ChatCapabilitiesWire]
     var current: ChatInstallStatusResult
     var unsupported = false
+    var providersError: ChatInstallClientError?
     var calls: [String] = []
     var advances: [ChatInstallAdvance] = []
     var stored: [String: String] = [:]
@@ -70,11 +72,13 @@ private actor FakeChatInstallClient: ChatInstallClient {
     func set(_ state: ChatSetupStateWire) { current.state = state }
     func setSpaces(_ spaces: [ChatSpaceRefWire], _ bindings: [ChatBindingWire]) { spaceList = spaces; bound = bindings }
     func markUnsupported() { unsupported = true }
+    func failProviders(_ error: ChatInstallClientError) { providersError = error }
     func setIdentity(_ result: ChatIdentityUpdateResult?, error: ChatInstallClientError? = nil) { identityResult = result; identityError = error }
 
     func providers() async throws -> [ChatCapabilitiesWire] {
         calls.append("providers")
         if unsupported { throw ChatInstallClientError.unsupported }
+        if let providersError { throw providersError }
         return capabilities
     }
     func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult { calls.append("status"); return current }
@@ -111,7 +115,7 @@ struct ChatInstallModelTests {
         .appendingPathComponent("Fixtures/chat-provider/wire.json")
 
     private func model(_ initial: ChatSetupStateWire, caps: ChatCapabilitiesWire? = nil) async throws -> (ChatInstallModel, FakeChatInstallClient) {
-        let client = FakeChatInstallClient([try caps ?? provider()], initial)
+        let client = FakeChatInstallClient([try caps ?? chatProvider()], initial)
         let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
         await model.load()
         return (model, client)
@@ -120,15 +124,15 @@ struct ChatInstallModelTests {
     @Test func eachStepMapsToItsScreenAndPrimaryAction() async throws {
         let allow = "https://slack.com/oauth/v2/authorize?client_id=1"
         let cases: [(ChatSetupStateWire, ChatInstallScreen, ChatInstallAction?)] = [
-            (try state("not_started", 0), .intro(again: false), .begin),
-            (try state("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"]), .credential, .saveCredential),
-            (try state("creating_app", 2), .setup(task: nil), nil),
-            (try state("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]), .setup(task: .setIcon), .markDone(.setIcon)),
-            (try state("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow", "link": allow]), .allow(URL(string: allow)), .openAllow(URL(string: allow)!)),
-            (try state("installing", 6), .setup(task: nil), nil),
-            (try state("ready", 7), .ready, nil),
-            (try state("revoked", 8), .intro(again: true), .begin),
-            (try state("error", 4, action: ["kind": "button", "action_id": "retry"], error: ["code": "app_create_failed", "fix": "retry"]),
+            (try chatState("not_started", 0), .intro(again: false), .begin),
+            (try chatState("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"]), .credential, .saveCredential),
+            (try chatState("creating_app", 2), .setup(task: nil), nil),
+            (try chatState("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]), .setup(task: .setIcon), .markDone(.setIcon)),
+            (try chatState("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow", "link": allow]), .allow(URL(string: allow)), .openAllow(URL(string: allow)!)),
+            (try chatState("installing", 6), .setup(task: nil), nil),
+            (try chatState("ready", 7), .ready, nil),
+            (try chatState("revoked", 8), .intro(again: true), .begin),
+            (try chatState("error", 4, action: ["kind": "button", "action_id": "retry"], error: ["code": "app_create_failed", "fix": "retry"]),
              .error(.appCreateFailed, fix: .retry), .fix(.retry)),
         ]
         for (snapshot, screen, action) in cases {
@@ -151,14 +155,14 @@ struct ChatInstallModelTests {
     }
 
     @Test func eventsApplyByRevisionDroppingStaleAndDuplicateAndRereadingOnGap() async throws {
-        let (model, client) = try await model(try state("creating_app", 2))
+        let (model, client) = try await model(try chatState("creating_app", 2))
         await model.receive(try changed("needs_credential", 1))
         await model.receive(try changed("needs_allow", 2))
         #expect(model.state?.step == .creatingApp)
         await model.receive(try changed("needs_manual_step", 3, action: ["kind": "button", "action_id": "set_icon"]))
         #expect(model.screen == .setup(task: .setIcon))
         let statusReads = await client.calls.filter { $0 == "status" }.count
-        await client.set(try state("needs_allow", 6, action: ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/a"]))
+        await client.set(try chatState("needs_allow", 6, action: ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/a"]))
         await model.receive(try changed("installing", 7))
         #expect(await client.calls.filter { $0 == "status" }.count == statusReads + 1)
         #expect(model.state?.revision == 6)
@@ -167,7 +171,7 @@ struct ChatInstallModelTests {
     }
 
     @Test func resumeFromAnotherDeviceSnapshotLandsOnSameStep() async throws {
-        let midFlow = try state("needs_manual_step", 4, action: ["kind": "button", "action_id": "app_level_credential"], done: ["set_icon"])
+        let midFlow = try chatState("needs_manual_step", 4, action: ["kind": "button", "action_id": "app_level_credential"], done: ["set_icon"])
         let (mac, _) = try await model(midFlow)
         let (phone, _) = try await model(midFlow)
         #expect(mac.screen == phone.screen)
@@ -177,10 +181,10 @@ struct ChatInstallModelTests {
     }
 
     @Test func errorShowsItsFixAndFixSendsRetry() async throws {
-        let failed = try state("error", 3, action: ["kind": "button", "action_id": "reenter_credential"], error: ["code": "credential_expired", "fix": "reenter_credential"])
+        let failed = try chatState("error", 3, action: ["kind": "button", "action_id": "reenter_credential"], error: ["code": "credential_expired", "fix": "reenter_credential"])
         let (model, client) = try await model(failed)
         #expect(model.primaryAction == .fix(.reenterCredential))
-        await client.set(try state("needs_credential", 4, action: ["kind": "paste_credential", "action_id": "config_credential"]))
+        await client.set(try chatState("needs_credential", 4, action: ["kind": "paste_credential", "action_id": "config_credential"]))
         await model.fix()
         #expect(await client.advances.map(\.event) == [.retry])
         #expect(await client.advances.first?.expectedRevision == 3)
@@ -188,8 +192,8 @@ struct ChatInstallModelTests {
     }
 
     @Test func secondBotInSameWorkspaceSkipsCredential() async throws {
-        let (model, client) = try await model(try state("not_started", 0))
-        await client.set(try state("creating_app", 1))
+        let (model, client) = try await model(try chatState("not_started", 0))
+        await client.set(try chatState("creating_app", 1))
         await model.begin()
         #expect(model.screen == .setup(task: nil))
         #expect(model.checklist.first?.kind == .workspace)
@@ -198,8 +202,8 @@ struct ChatInstallModelTests {
     }
 
     @Test func credentialGoesToVaultAndOnlyTheVaultIdCrossesTheWire() async throws {
-        let (model, client) = try await model(try state("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"]))
-        await client.set(try state("creating_app", 2))
+        let (model, client) = try await model(try chatState("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"]))
+        await client.set(try chatState("creating_app", 2))
         await model.saveCredential(access: fakeSecret, refresh: fakeRefresh)
         let stored = await client.stored
         #expect(Set(stored.values) == [fakeSecret, fakeRefresh])
@@ -212,7 +216,7 @@ struct ChatInstallModelTests {
     }
 
     @Test func refreshTokenIdIsSentWithCredentialSavedAndOmittedWithoutRefresh() async throws {
-        let needs = try state("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"])
+        let needs = try chatState("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"])
         let (model, client) = try await model(needs)
         await model.saveCredential(access: fakeSecret, refresh: fakeRefresh)
         let stored = await client.stored
@@ -229,7 +233,7 @@ struct ChatInstallModelTests {
     }
 
     @Test func ownerStepShowsOwnerScreenAndConfirmSendsTrimmedMemberId() async throws {
-        let (model, client) = try await model(try state("needs_owner", 6, action: ["kind": "enter_text", "action_id": "owner_member_id"]))
+        let (model, client) = try await model(try chatState("needs_owner", 6, action: ["kind": "enter_text", "action_id": "owner_member_id"]))
         #expect(model.screen == .owner)
         #expect(model.primaryAction == .confirmOwner)
         #expect(model.checklist.first { $0.status == .active }?.kind == .allow)
@@ -243,7 +247,7 @@ struct ChatInstallModelTests {
     }
 
     @Test func confirmOwnerIsIgnoredOutsideNeedsOwner() async throws {
-        let (model, client) = try await model(try state("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow"]))
+        let (model, client) = try await model(try chatState("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow"]))
         await model.confirmOwner("UFAKE0000")
         #expect(await client.advances.isEmpty)
     }
@@ -251,7 +255,7 @@ struct ChatInstallModelTests {
     @Test func botTokenIsAdoptedOnlyWhenTheGatewayOffersTheFallback() async throws {
         let fallback: [String: Any] = ["kind": "paste_credential", "action_id": "bot_token"]
         let allow: [String: Any?] = ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/a"]
-        let (model, client) = try await model(try state("needs_allow", 5, action: allow, fallback: fallback))
+        let (model, client) = try await model(try chatState("needs_allow", 5, action: allow, fallback: fallback))
         #expect(model.offersBotToken)
         await model.adoptBotToken("  fake-token-do-not-use ")
         let stored = await client.stored
@@ -259,12 +263,12 @@ struct ChatInstallModelTests {
         #expect(advance.event == .allowGranted)
         #expect(advance.vaultItemId.flatMap { stored[$0] } == "fake-token-do-not-use")
         #expect(!String(reflecting: advance).contains("fake-token-do-not-use"))
-        let (plain, plainClient) = try await self.model(try state("needs_allow", 5, action: allow))
+        let (plain, plainClient) = try await self.model(try chatState("needs_allow", 5, action: allow))
         #expect(!plain.offersBotToken)
         await plain.adoptBotToken("fake-token-do-not-use")
         #expect(await plainClient.advances.isEmpty)
         #expect(await plainClient.stored.isEmpty)
-        let (wrongStep, wrongClient) = try await self.model(try state("ready", 7, fallback: fallback))
+        let (wrongStep, wrongClient) = try await self.model(try chatState("ready", 7, fallback: fallback))
         await wrongStep.adoptBotToken("fake-token-do-not-use")
         #expect(await wrongClient.advances.isEmpty)
     }
@@ -275,20 +279,20 @@ struct ChatInstallModelTests {
             "identity": ["app_name": "Pal", "display_name": "Pal", "username": "pal", "avatar_ref": NSNull(), "avatar_bytes": NSNull()],
             "next_action": ["kind": "button", "action_id": "set_icon", "link": "https://api.slack.com/apps/A1/general", "copy_text": NSNull()],
         ])
-        let (model, client) = try await model(try state("ready", 7))
+        let (model, client) = try await model(try chatState("ready", 7))
         await client.setIdentity(manual)
         await model.updateIdentity()
         #expect(model.identityUpdate?.outcome == .needsManualAvatar)
         #expect(model.identityUpdate?.nextAction.actionId == "set_icon")
         #expect(model.notice == nil)
-        let (early, earlyClient) = try await self.model(try state("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow"]))
+        let (early, earlyClient) = try await self.model(try chatState("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow"]))
         await early.updateIdentity()
         #expect(early.identityUpdate == nil)
         #expect(!(await earlyClient.calls.contains("updateIdentity")))
     }
 
     @Test func identityUpdateFailureShowsANoticeAndUnsupportedIsNotSaved() async throws {
-        let (model, client) = try await model(try state("ready", 7))
+        let (model, client) = try await model(try chatState("ready", 7))
         await client.setIdentity(nil, error: .unsupported)
         await model.updateIdentity()
         #expect(model.notice == .notSaved)
@@ -299,7 +303,7 @@ struct ChatInstallModelTests {
     }
 
     @Test func appLevelKeyIsStoredAndStepAdvances() async throws {
-        let (model, client) = try await model(try state("needs_manual_step", 4, action: ["kind": "button", "action_id": "app_level_credential"], done: ["set_icon"]))
+        let (model, client) = try await model(try chatState("needs_manual_step", 4, action: ["kind": "button", "action_id": "app_level_credential"], done: ["set_icon"]))
         await model.markDone(.appLevelCredential, secret: fakeAppKey)
         let advance = try #require(await client.advances.first)
         #expect(advance.manualStep == .appLevelCredential)
@@ -308,7 +312,7 @@ struct ChatInstallModelTests {
     }
 
     @Test func privateChannelGetsInviteGuidanceAndGoesLive() async throws {
-        let (model, client) = try await model(try state("ready", 7))
+        let (model, client) = try await model(try chatState("ready", 7))
         let spaces = try decode([ChatSpaceRefWire].self, [
             ["id": "C1", "name": "general", "kind": "public", "joined": false],
             ["id": "G1", "name": "plans", "kind": "private", "joined": false],
@@ -326,7 +330,7 @@ struct ChatInstallModelTests {
     }
 
     @Test func gatewayWithoutChatInstallIsUnsupported() async throws {
-        let client = FakeChatInstallClient([try provider()], try state("not_started", 0))
+        let client = FakeChatInstallClient([try chatProvider()], try chatState("not_started", 0))
         await client.markUnsupported()
         let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
         await model.load()
@@ -338,7 +342,7 @@ struct ChatInstallModelTests {
         #expect(ChatCredentialKind.classify(fakeRefresh) == .configRefresh)
         #expect(ChatCredentialKind.classify(fakeAppKey) == .appLevel)
         #expect(ChatCredentialKind.classify("hello world xoxe-") == nil)
-        let preview = ChatIdentityPreview(name: "Pal the Very Helpful Assistant Bot!", policy: try provider().identityPolicy)
+        let preview = ChatIdentityPreview(name: "Pal the Very Helpful Assistant Bot!", policy: try chatProvider().identityPolicy)
         #expect(preview.displayName == "Pal the Very Helpful Assistant Bot!")
         #expect(preview.username == "pal-the-very-helpful")
         #expect(preview.username.count <= 21)

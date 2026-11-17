@@ -33,13 +33,6 @@ public struct ChatInstallScope: Sendable, Hashable {
     }
 }
 
-public enum ChatInstallClientError: Error, Sendable, Equatable {
-    case unsupported
-    case staleRevision
-    case offline
-    case failed
-}
-
 public protocol ChatInstallClient: Sendable {
     func providers() async throws -> [ChatCapabilitiesWire]
     func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult
@@ -155,7 +148,7 @@ public final class ChatInstallModel {
     public private(set) var isWorking = false
     public private(set) var notice: ChatInstallNotice?
     public private(set) var identityUpdate: ChatIdentityUpdateResult?
-    private var loadFailed = false
+    public private(set) var loadFailure: ChatFailureReason?
     private var unsupported = false
     private var invites: [String: ChatNextActionWire] = [:]
 
@@ -174,10 +167,10 @@ public final class ChatInstallModel {
     public var screen: ChatInstallScreen {
         if unsupported { return .unsupported }
         guard provider != nil else {
-            if loadFailed { return .unavailable }
+            if loadFailure != nil { return .unavailable }
             return providers.isEmpty ? .loading : .providers
         }
-        guard let state else { return loadFailed ? .unavailable : .loading }
+        guard let state else { return loadFailure != nil ? .unavailable : .loading }
         switch state.step {
         case .notStarted: return .intro(again: false)
         case .revoked: return .intro(again: true)
@@ -252,7 +245,7 @@ public final class ChatInstallModel {
     }
 
     public func load() async {
-        loadFailed = false
+        loadFailure = nil
         do {
             providers = try await client.providers()
             if provider == nil, let pick = providers.first(where: { $0.providerId == preferredProvider }) ?? (providers.count == 1 ? providers.first : nil) {
@@ -264,7 +257,7 @@ public final class ChatInstallModel {
         } catch is CancellationError {
             return
         } catch {
-            loadFailed = true
+            loadFailure = ChatInstallClientError(error).reason
             return
         }
         await refresh()
@@ -280,10 +273,10 @@ public final class ChatInstallModel {
         guard let scope else { return }
         do {
             adopt(try await client.status(scope))
-            loadFailed = false
+            loadFailure = nil
         } catch is CancellationError {
         } catch {
-            if snapshot == nil { loadFailed = true } else { notice = .offline }
+            if snapshot == nil { loadFailure = ChatInstallClientError(error).reason } else { notice = .offline }
         }
         if state?.step == .ready { await refreshSpaces() }
     }
@@ -342,7 +335,7 @@ public final class ChatInstallModel {
         do {
             identityUpdate = try await client.updateIdentity(scope)
         } catch is CancellationError {
-        } catch ChatInstallClientError.offline {
+        } catch let error as ChatInstallClientError where error.isUnreachable {
             notice = .offline
         } catch {
             notice = .notSaved
@@ -456,7 +449,7 @@ public final class ChatInstallModel {
         } catch is CancellationError {
             return
         } catch ChatInstallClientError.staleRevision {
-        } catch ChatInstallClientError.offline {
+        } catch let error as ChatInstallClientError where error.isUnreachable {
             notice = .offline
         } catch {
             notice = .notSaved

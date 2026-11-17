@@ -57,19 +57,13 @@ struct GatewayChatInstallClient: ChatInstallClient {
             return try await call(method, .object(params))
         } catch is CancellationError {
             throw CancellationError()
-        } catch GatewayTransportError.rpc(let rpc) {
-            if rpc.code == -32601 || rpc.reasonCode == ChatRpcErrorReason.notImplemented.rawValue { throw ChatInstallClientError.unsupported }
-            if rpc.reasonCode == ChatRpcErrorReason.staleRevision.rawValue { throw ChatInstallClientError.staleRevision }
-            throw ChatInstallClientError.failed
-        } catch GatewayTransportError.timedOut, GatewayTransportError.closed(_) {
-            throw ChatInstallClientError.offline
         } catch {
-            throw ChatInstallClientError.failed
+            throw ChatInstallClientError(error)
         }
     }
 
     private func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue) throws -> T {
-        do { return try value.decoded(as: type) } catch { throw ChatInstallClientError.failed }
+        do { return try value.decoded(as: type) } catch { throw ChatInstallClientError.failed(.decode) }
     }
 
     func providers() async throws -> [ChatCapabilitiesWire] {
@@ -121,7 +115,7 @@ struct GatewayChatInstallClient: ChatInstallClient {
         } catch SettingsFailure.offline {
             throw ChatInstallClientError.offline
         } catch {
-            throw ChatInstallClientError.failed
+            throw ChatInstallClientError.failed(.gateway)
         }
     }
 }
