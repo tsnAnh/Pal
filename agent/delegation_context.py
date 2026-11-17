@@ -93,6 +93,17 @@ def explicit_board_intent_is_pinned() -> bool:
     return bool((os.environ.get("HERMES_KANBAN_TASK") or "").strip())
 
 
+def kanban_show_reachable(valid_tool_names, enabled_toolsets, disabled_toolsets) -> bool:
+    """``kanban_show`` is in the session's tools[] or deferred behind the tool_search bridge."""
+    if "kanban_show" in valid_tool_names:
+        return True
+    import model_tools
+    from tools.tool_search import scoped_deferrable_names
+    return "kanban_show" in scoped_deferrable_names(model_tools.get_tool_definitions(
+        enabled_toolsets=enabled_toolsets, disabled_toolsets=disabled_toolsets,
+        quiet_mode=True, skip_tool_search_assembly=True) or [])
+
+
 def owned_kanban_task() -> str:
     """The board task this execution OWNS: ``HERMES_KANBAN_TASK`` for the dispatcher-owned
     worker, ``""`` otherwise. Tool access is not worker identity — a profile can expose the

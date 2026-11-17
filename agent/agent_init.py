@@ -1022,14 +1022,10 @@ def _load_tools(agent, enabled_toolsets, disabled_toolsets):
     # Kanban guidance is session-static for the dispatcher-owned worker only. Profiles may
     # expose kanban_show interactively, and children/cron runs inherit the env var, without
     # owning a task.
-    from agent.delegation_context import owned_kanban_task
+    from agent.delegation_context import kanban_show_reachable, owned_kanban_task
     from agent.prompt_builder import KANBAN_GUIDANCE
-    from tools.tool_search import scoped_deferrable_names
     agent._kanban_worker_guidance = (
-        KANBAN_GUIDANCE if owned_kanban_task() and (
-            "kanban_show" in agent.valid_tool_names or "kanban_show" in scoped_deferrable_names(
-                model_tools.get_tool_definitions(enabled_toolsets=enabled_toolsets, disabled_toolsets=disabled_toolsets,
-                                                 quiet_mode=True, skip_tool_search_assembly=True) or [])) else ""
+        KANBAN_GUIDANCE if owned_kanban_task() and kanban_show_reachable(agent.valid_tool_names, enabled_toolsets, disabled_toolsets) else ""
     )
     if agent.quiet_mode:
         return
