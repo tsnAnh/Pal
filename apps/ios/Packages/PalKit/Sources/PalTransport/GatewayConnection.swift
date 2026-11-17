@@ -58,15 +58,19 @@ public struct GatewayDialOptions: Sendable {
     public var readyTimeout: Duration
     public var requestTimeout: Duration
     public var frameTap: FrameTap?
+    public var faults: FaultStore?
 
     public init(
         readyTimeout: Duration = .seconds(15),
         requestTimeout: Duration = .seconds(30),
-        frameTap: FrameTap? = nil
+        frameTap: FrameTap? = nil,
+        faults: FaultStore? = nil
     ) {
         self.readyTimeout = readyTimeout
         self.requestTimeout = requestTimeout
         self.frameTap = frameTap
+        self.faults = faults
+        self.faults = faults
     }
 }
 
@@ -132,6 +136,7 @@ public actor GatewayConnection {
     private let eventContinuation: AsyncStream<GatewayEvent>.Continuation
     private let requestContinuation: AsyncStream<RPCRequest>.Continuation
     private let frameTap: FrameTap?
+    private let faults: FaultStore?
     private let session: URLSession
     private let task: URLSessionWebSocketTask
     private let observer: SocketObserver
@@ -151,7 +156,8 @@ public actor GatewayConnection {
         observer: SocketObserver,
         diagnostics: Diagnostics,
         requestTimeout: Duration,
-        frameTap: FrameTap?
+        frameTap: FrameTap?,
+        faults: FaultStore?
     ) {
         (events, eventContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         (serverRequests, requestContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -183,7 +189,8 @@ public actor GatewayConnection {
             observer: observer,
             diagnostics: diagnostics,
             requestTimeout: options.requestTimeout,
-            frameTap: options.frameTap
+            frameTap: options.frameTap,
+            faults: options.faults
         )
         diagnostics.info("ws", "dialing \(Diagnostics.describe(url))")
         task.resume()
@@ -203,12 +210,35 @@ public actor GatewayConnection {
     }
 
     public func call(_ method: String, params: JSONValue? = nil, timeout: Duration? = nil) async throws -> JSONValue {
+        let trace = TraceID.random()
+        do {
+            return try await send(method, params: params, timeout: timeout, trace: trace)
+        } catch let error as GatewayTransportError {
+            if let faults, method != Self.reportMethod, let fault = Self.fault(error, method: method, trace: trace) {
+                await faults.record(fault)
+            }
+            throw error
+        }
+    }
+
+    public static let reportMethod = "diag.report"
+
+    static func fault(_ error: GatewayTransportError, method: String, trace: TraceID) -> GatewayFault? {
+        switch error {
+        case .rpc(let rpc): GatewayFault(rpc, method: method)
+        case .timedOut: .transport("timeout", method: method, trace: trace)
+        case .closed: .transport("offline", method: method, trace: trace)
+        default: nil
+        }
+    }
+
+    private func send(_ method: String, params: JSONValue?, timeout: Duration?, trace: TraceID) async throws -> JSONValue {
         if let closeReason { throw GatewayTransportError.closed(closeReason) }
         let id = nextID
         nextID += 1
         let frame: String
         do {
-            let data = try RPCCodec.encode(RPCRequest(id: .int(id), method: method, params: params, trace: .random()))
+            let data = try RPCCodec.encode(RPCRequest(id: .int(id), method: method, params: params, trace: trace))
             frame = String(decoding: data, as: UTF8.self)
         } catch {
             throw GatewayTransportError.encoding

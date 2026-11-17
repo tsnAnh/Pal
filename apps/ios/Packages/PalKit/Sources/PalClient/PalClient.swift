@@ -110,6 +110,9 @@ public struct PalClient: Sendable {
             await connection.close()
             throw error
         }
+        if let faults = dialOptions.faults {
+            Task { await FaultReporter.flush(faults) { try await connection.call($0, params: $1, timeout: .seconds(10)) } }
+        }
         let done = clock.now
         diagnostics.info(
             "launch",
