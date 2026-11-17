@@ -136,7 +136,7 @@ struct ConnectCatalogTests {
 
     @Test(arguments: [
         ("mcp_oauth", PalCatalogEntry.Method.mcpOAuth), ("none", .none), ("api_key", .apiKey), ("native", .native),
-        ("oauth_client", .oauthClient), ("telepathy", .unsupported("telepathy")),
+        ("oauth_client", .oauthClient), ("bot_app", .botApp), ("telepathy", .unsupported("telepathy")),
     ])
     func everyMethodDecodesAndAnUnknownOneIsKeptAsUnsupported(raw: String, expected: PalCatalogEntry.Method) throws {
         let row: JSONValue = ["slug": "x", "name": "X", "category": "Developer", "method": .string(raw), "status": "not_connected"]

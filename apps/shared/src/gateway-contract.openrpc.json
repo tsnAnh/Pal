@@ -1016,7 +1016,7 @@
     },
     {
       "name": "connectors.catalog",
-      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile.",
+      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
       "params": [
         {
           "name": "params",
@@ -65511,7 +65511,7 @@
     },
     {
       "name": "connectors.catalog",
-      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile.",
+      "summary": "The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
       "params": [
         {
           "name": "params",

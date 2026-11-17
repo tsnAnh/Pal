@@ -160,7 +160,7 @@ public struct ConnectAppsService: Sendable {
         case .apiKey:
             guard let token = credentials["token"], !token.isEmpty else { throw ConnectAppsError.credentialsRequired(["token"]) }
             try await storeCatalogToken(entry, token: token)
-        case .native, .unsupported: throw ConnectAppsError.unavailable
+        case .native, .botApp, .unsupported: throw ConnectAppsError.unavailable
         case .oauthClient: try await connectOAuthClient(entry)
         }
     }

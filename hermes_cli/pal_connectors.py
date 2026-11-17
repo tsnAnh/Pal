@@ -13,6 +13,7 @@ CATALOG_PATH = Path(__file__).parent / "data" / "pal_connectors.yaml"
 class ConnectionMethod(str, Enum):
     MCP_OAUTH = "mcp_oauth"
     OAUTH_CLIENT = "oauth_client"
+    BOT_APP = "bot_app"
     API_KEY = "api_key"
     NATIVE = "native"
     NONE = "none"

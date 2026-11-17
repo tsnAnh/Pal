@@ -61,9 +61,13 @@ def test_catalog_lists_every_pal_entry_with_its_method_and_nothing_connected(wor
 
 
 def test_owner_registered_oauth_clients_need_setup(work_home):
-    rows = _rows()
+    assert _rows()["google-workspace"]["status"] == "needs_setup"
 
-    assert rows["slack"]["status"] == rows["google-workspace"]["status"] == "needs_setup"
+
+def test_slack_is_a_per_bot_app_that_never_reads_connected_from_the_catalog(work_home):
+    row = _rows()["slack"]
+
+    assert (row["method"], row["mcp_url"], row["status"]) == ("bot_app", None, "not_connected")
 
 
 def test_a_no_auth_entry_added_through_the_mcp_path_shows_connected(work_home):

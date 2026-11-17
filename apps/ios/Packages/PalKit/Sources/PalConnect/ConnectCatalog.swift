@@ -8,10 +8,12 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         case apiKey
         case native
         case oauthClient
+        case botApp
         case unsupported(String)
 
         private static let known: [String: Method] = [
             "mcp_oauth": .mcpOAuth, "none": .none, "api_key": .apiKey, "native": .native, "oauth_client": .oauthClient,
+            "bot_app": .botApp,
         ]
 
         public init(from decoder: any Decoder) throws {

@@ -344,8 +344,7 @@ connectors:
   name: Slack
   icon: plugin_glyph
   category: Communication
-  method: oauth_client
-  mcp_url: https://mcp.slack.com/mcp
+  method: bot_app
   verified: true
   source: https://docs.slack.dev/ai/mcp-server
 - id: stripe
