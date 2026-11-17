@@ -499,6 +499,7 @@ class ToolRegistry:
         self._plugin_module_scopes: dict[str, set[Optional[str]]] = {}
         self._toolset_checks: dict[str, Callable] = {}
         self._toolset_aliases: dict[str, str] = {}
+        self._withdrawn: dict[str, str] = {}
         # MCP refresh mutates while other threads read: serialize writes, snapshot reads.
         self._lock = threading.RLock()
         # Bumped on every mutation; get_tool_definitions memoizes against it.
@@ -803,6 +804,7 @@ class ToolRegistry:
                 description=description or schema.get("description", ""), emoji=emoji,
                 max_result_size_chars=max_result_size_chars, execution_timeout=execution_timeout,
                 dynamic_schema_overrides=dynamic_schema_overrides)
+            self._withdrawn.pop(name, None)
             # Availability is derived per-tool (_toolset_has_exposable_tools), so this map no
             # longer gates a toolset; it still feeds get_toolset_requirements ->
             # TOOLSET_REQUIREMENTS["check_fn"], which banner.py reads (presence only,
@@ -810,6 +812,10 @@ class ToolRegistry:
             if scope is None and check_fn and toolset not in self._toolset_checks:
                 self._toolset_checks[toolset] = check_fn
             self._generation += 1
+
+    def withdraw(self, name: str, message: str) -> None:
+        with self._lock:
+            self._withdrawn[name] = message
 
     def deregister(self, name: str, *, scope: Optional[str] = None) -> None:
         """Remove a tool; drops the toolset check/aliases if it was the last in its toolset.
@@ -975,6 +981,8 @@ class ToolRegistry:
         results normalized, every exception returned as ``{"error": ...}``."""
         entry = self.get_entry(name, scope=scope)
         if not entry:
+            if withdrawn := self._withdrawn.get(name):
+                return tool_error(withdrawn, withdrawn=True, retryable=False)
             return tool_error(f"Unknown tool: {name}")
         try:
             # Plugin contract (plugins/AGENTS.md): optional context kwargs (task_id, session_id, user_task,

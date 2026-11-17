@@ -127,12 +127,12 @@ def auth_required_error(server_name: str) -> str | None:
 
 
 _failure_lock = threading.Lock()
-_failures: dict[tuple[str, str], tuple[str, float]] = {}
+_failures: dict[tuple[str, str], tuple[str, float, bool]] = {}
 
 
 def note_failure(home: Path | str, name: str, error: BaseException | str) -> None:
     with _failure_lock:
-        _failures[_auth_key(home, name)] = (str(error), time.monotonic())
+        _failures[_auth_key(home, name)] = (str(error), time.monotonic(), isinstance(error, DeviceUnreachableError))
 
 
 def clear_failure(home: Path | str, name: str) -> None:
@@ -140,13 +140,21 @@ def clear_failure(home: Path | str, name: str) -> None:
         _failures.pop(_auth_key(home, name), None)
 
 
-def recent_failure_note(server_name: str) -> str:
+def _recent_failure(server_name: str) -> tuple[str, float, bool] | None:
     from hermes_constants import get_hermes_home
     with _failure_lock:
         entry = _failures.get(_auth_key(get_hermes_home(), server_name))
-    if entry is None or time.monotonic() - entry[1] > RECENT_FAILURE_SECONDS:
-        return ""
-    return f" ({entry[0]})"
+    return None if entry is None or time.monotonic() - entry[1] > RECENT_FAILURE_SECONDS else entry
+
+
+def recent_failure_note(server_name: str) -> str:
+    entry = _recent_failure(server_name)
+    return f" ({entry[0]})" if entry else ""
+
+
+def device_offline(server_name: str) -> bool:
+    entry = _recent_failure(server_name)
+    return entry is not None and entry[2]
 
 
 class DeviceChannel:

@@ -540,7 +540,10 @@ def _bump_server_error(server_name: str, *, application: bool = False) -> None:
     """Count a failure; at the threshold (re)stamp the breaker-open time. Keyed by the calling
     scope's connection so one profile's failing server never opens another profile's breaker.
     *application*: the call completed and the payload was an error (transport is fine)."""
+    from tools.mcp_tool_device import device_offline
     from tools.mcp_tool_scope import _resolve_server_key
+    if device_offline(server_name):
+        return
     key = _resolve_server_key(server_name)
     n = _server_error_counts.get(key, 0) + 1
     _server_error_counts[key] = n
