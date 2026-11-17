@@ -19,6 +19,7 @@ logger = logging.getLogger("tools.mcp_tool")
 
 # Stateless (2026-07-28) servers reject a legacy ``initialize`` with this or plain method-not-found.
 _JSONRPC_UNSUPPORTED_PROTOCOL_VERSION = -32022
+_JSONRPC_CONNECTION_CLOSED, _JSONRPC_REQUEST_TIMEOUT = -32000, -32001
 
 
 def _jsonrpc_matches(exc: BaseException, codes: tuple, markers: tuple, code=None) -> bool:
@@ -166,6 +167,16 @@ def _auth_error_detail(exc: BaseException) -> str:
     root = _unwrap_exception_group(exc)
     text = str(root).strip() if isinstance(root, OAuthRegistrationError) else ""
     return f" {_sanitize_error(text)}" if text else ""
+
+
+def _is_server_answer(exc: BaseException) -> bool:
+    """True when the server answered the call with a JSON-RPC error (tool not found, invalid params, internal
+    error): proof the transport works. The SDK also raises -32000/-32001 locally for a closed stream or a
+    request timeout; those are transport failures."""
+    root = _unwrap_exception_group(exc)
+    code = getattr(getattr(root, "error", None), "code", None)
+    return (isinstance(code, int) and code not in (_JSONRPC_CONNECTION_CLOSED, _JSONRPC_REQUEST_TIMEOUT)
+            and not _is_session_expired_error(root))
 
 
 def _mcp_call_failed_message(exc: BaseException) -> str:

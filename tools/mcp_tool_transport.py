@@ -691,6 +691,10 @@ class MCPServerTransportMixin:
                 self._list_cache_meta = {}
                 self._tools = await _core._paginate_full_list(
                     self.session.list_tools, "tools", self.name, cache_meta_out=self._list_cache_meta)
+        if self._registered_tool_names and getattr(self, "_editor_frozen_manifest", None) is None:
+            async with self._refresh_lock:
+                self._apply_tool_list(self._tools)
+            return
         self._register_discovered_tools_if_needed()
 
     def _register_discovered_tools_if_needed(self) -> None:
