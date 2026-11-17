@@ -1750,7 +1750,7 @@ export interface SetupStepRow {
   problem_host?: string | null
   fallback?: SetupFallbackRow | null
 }
-export type SetupStepKind = 'public_url' | 'open_page' | 'paste'
+export type SetupStepKind = 'public_url' | 'open_page' | 'paste' | 'server_picker' | 'access'
 export interface SetupLinkRow {
   label: string
   url: string
@@ -1766,7 +1766,7 @@ export interface SetupFieldRow {
   prefixes: string[]
   suffix?: string | null
 }
-export type SetupCheckKind = 'google_client' | 'github_token' | 'canva_client'
+export type SetupCheckKind = 'google_client' | 'github_token' | 'canva_client' | 'discord_bot'
 export type SetupProblemKind = 'not_https' | 'ip_host'
 export interface SetupFallbackRow {
   label: string
@@ -1811,6 +1811,33 @@ export interface OAuthClientRemoveParams {
 export interface OAuthClientRemoveResult {
   slug: string
   removed: boolean
+}
+export interface DiscordTokenParams {
+  profile?: string | null
+  item: string
+}
+export interface DiscordBotResult {
+  bot_name: string
+  application_id: string
+}
+export interface DiscordGuildsResult {
+  guilds: DiscordGuildRow[]
+  allowed: string[]
+  read_only: boolean
+}
+export interface DiscordGuildRow {
+  id: string
+  name: string
+}
+export interface DiscordSaveParams {
+  profile?: string | null
+  guild_ids: string[]
+  read_only: boolean
+}
+export interface DiscordSaveResult {
+  tools: number
+  read_only: boolean
+  guild_ids: string[]
 }
 export interface ConnectorSetupCheckParams {
   profile?: string | null
@@ -8426,6 +8453,12 @@ export interface RpcMethods {
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
+  /** Owner only. The servers the saved bot is in, read live from Discord, with the saved allow-list and read-only choice. */
+  'connectors.discord.guilds': { params: ProfileParams; result: DiscordGuildsResult }
+  /** Owner only. Save the Discord stdio server with DISCORD_ALLOWED_GUILDS from guild_ids (at least one, each a server the bot is in) and DISCORD_MCP_READ_ONLY from read_only, then run the MCP handshake. A failed handshake restores the previous server config and is an error; a live server restarts with the new env. */
+  'connectors.discord.save': { params: DiscordSaveParams; result: DiscordSaveResult }
+  /** Owner only. Check the bot token in Vault item item with Discord and save it to the profile's .env as DISCORD_TOKEN. Returns the bot's name and application id only, never the token. */
+  'connectors.discord.token': { params: DiscordTokenParams; result: DiscordBotResult }
   /** Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only. */
   'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
@@ -9093,6 +9126,9 @@ export const RPC_METHODS = [
   'connectors.accounts.rename',
   'connectors.catalog',
   'connectors.connect',
+  'connectors.discord.guilds',
+  'connectors.discord.save',
+  'connectors.discord.token',
   'connectors.legacy',
   'connectors.list',
   'connectors.oauth_client.connect',

@@ -170,6 +170,43 @@ def _(rid, params):
         return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
 
 
+def _discord_call(params_model, action):
+    def handler(rid, params):
+        from pydantic import ValidationError
+        from tui_gateway import discord_connector as discord
+        try:
+            request = params_model.model_validate(params)
+        except ValidationError:
+            return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "Discord parameters are invalid.")
+        try:
+            return _ok(rid, action(discord, request).model_dump(mode="json"))
+        except discord.DiscordRpcError as exc:
+            return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
+    return handler
+
+
+@method("connectors.discord.token")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.connectors import DiscordTokenParams
+    return _discord_call(DiscordTokenParams, lambda discord, request: discord.save_token(request.item))(rid, params)
+
+
+@method("connectors.discord.guilds")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.common import ProfileParams
+    return _discord_call(ProfileParams, lambda discord, _request: discord.guilds())(rid, params)
+
+
+@method("connectors.discord.save")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.connectors import DiscordSaveParams
+    return _discord_call(DiscordSaveParams, lambda discord, request: discord.save(request.guild_ids, request.read_only))(
+        rid, params)
+
+
 @method("connectors.legacy")
 @_profile_scoped
 def _(rid, _params):

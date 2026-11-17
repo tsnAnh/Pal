@@ -348,6 +348,63 @@ class ConnectorSetupCheckResult(Result):
     account: str | None = None
 
 
+class DiscordTokenParams(ProfileParams):
+    item: str
+
+
+class DiscordBotResult(Result):
+    bot_name: str
+    application_id: str
+
+
+class DiscordGuildRow(Result):
+    id: str
+    name: str
+
+
+class DiscordGuildsResult(Result):
+    guilds: list[DiscordGuildRow]
+    allowed: list[str]
+    read_only: bool
+
+
+class DiscordSaveParams(ProfileParams):
+    guild_ids: list[str]
+    read_only: bool
+
+
+class DiscordSaveResult(Result):
+    tools: int
+    read_only: bool
+    guild_ids: list[str]
+
+
+method(
+    "connectors.discord.token",
+    params=DiscordTokenParams,
+    result=DiscordBotResult,
+    doc="Owner only. Check the bot token in Vault item item with Discord and save it to the profile's .env as "
+        "DISCORD_TOKEN. Returns the bot's name and application id only, never the token.",
+)
+
+method(
+    "connectors.discord.guilds",
+    params=ProfileParams,
+    result=DiscordGuildsResult,
+    doc="Owner only. The servers the saved bot is in, read live from Discord, with the saved allow-list and "
+        "read-only choice.",
+)
+
+method(
+    "connectors.discord.save",
+    params=DiscordSaveParams,
+    result=DiscordSaveResult,
+    doc="Owner only. Save the Discord stdio server with DISCORD_ALLOWED_GUILDS from guild_ids (at least one, each "
+        "a server the bot is in) and DISCORD_MCP_READ_ONLY from read_only, then run the MCP handshake. A failed "
+        "handshake restores the previous server config and is an error; a live server restarts with the new env.",
+)
+
+
 method(
     "connectors.setup.check",
     params=ConnectorSetupCheckParams,
