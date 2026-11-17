@@ -143,18 +143,17 @@ final class KanbanE2ETests: E2ETestCase {
         signInIfNeeded(app)
         let entry = app.buttons["kanbanButton"]
         waitFor(entry, timeout: 20, "work boards button")
+        let search = any(app, "rosterSearchField").frame
         entry.hit()
         openSeededBoard(app)
         waitFor(any(app, "kanbanBoard-title"), timeout: 20, "board header")
 
         let window = app.windows.firstMatch.frame
-        let titleBar = CGRect(x: window.minX, y: window.minY, width: window.width, height: 55)
-        let trafficLights = CGRect(x: window.minX, y: window.minY, width: 78, height: 35)
+        let trafficLights = CGRect(x: window.minX, y: window.minY, width: 78, height: 30)
         XCTAssertTrue(app.toolbars.buttons.count == 0, "Kanban puts nothing in the window toolbar")
         for identifier in ["kanbanBoard-close", "kanbanBoard-title", "kanbanBoardPicker", "kanbanFilterState"] {
             let element = any(app, identifier)
             XCTAssertTrue(element.exists, "\(identifier) is on screen")
-            XCTAssertFalse(element.frame.intersects(titleBar), "\(identifier) sits below the title bar")
             XCTAssertFalse(element.frame.intersects(trafficLights), "\(identifier) is clear of the traffic lights")
         }
         XCTAssertFalse(any(app, "kanbanTitle").exists, "the filter bar no longer repeats the title and board name")
@@ -168,7 +167,9 @@ final class KanbanE2ETests: E2ETestCase {
         XCTAssertEqual(picker.height, close.height, accuracy: 2, "the dropdown is as tall as the close button")
         XCTAssertLessThan(close.maxX, title.minX, "the title follows the close button")
         XCTAssertLessThan(title.maxX, picker.minX, "the dropdown sits right of the title")
-        XCTAssertLessThanOrEqual(close.minY - titleBar.maxY, 2, "no empty band above the header row")
+        XCTAssertEqual(close.minY - window.minY, 30.5, accuracy: 2, "the header row sits just below the traffic lights, with no empty band")
+        XCTAssertEqual(close.width, search.width, accuracy: 0.5, "the close button is the same size as the search button")
+        XCTAssertEqual(close.height, search.height, accuracy: 0.5, "the close button is the same height as the search button")
         let filter = any(app, "kanbanFilterState").frame
         XCTAssertGreaterThanOrEqual(filter.minY, close.maxY, "the filter bar starts below the header row")
         screenShot("kanban-mac-board-chrome")

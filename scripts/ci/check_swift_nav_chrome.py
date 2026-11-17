@@ -14,7 +14,7 @@ the content, so two more shapes put controls under them: a window toolbar item o
 navigation title in macOS code (``ToolbarItem(`` or ``.navigationTitle(``), and a
 full-window overlay in a view that ignores the top safe area
 (``.frame(maxWidth: .infinity, maxHeight: .infinity)`` then ``.background(``)
-without the shell's ``MacMetrics.topBarHeight`` inset. Text matching sees these
+without the shell's ``MacMetrics.topBarHeight`` or ``MacMetrics.trafficLightCenter`` inset. Text matching sees these
 shapes only; it cannot see where a control is drawn at run time.
 
 Run: python scripts/ci/check_swift_nav_chrome.py [apps_ios_root]
@@ -92,7 +92,7 @@ def mac_chrome_violations(path: Path, source: str) -> list[str]:
             if not follow.strip().startswith("."):
                 break
             chain.append(follow)
-        if any(".background(" in c for c in chain) and not any("topBarHeight" in c for c in chain):
+        if any(".background(" in c for c in chain) and not any("topBarHeight" in c or "trafficLightCenter" in c for c in chain):
             found.append(f"{path}:{i + 1}: full-window overlay without the MacMetrics.topBarHeight inset")
     return found
 
