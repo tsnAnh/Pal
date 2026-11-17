@@ -62,26 +62,6 @@ struct ConnectorCardStateTests {
         #expect(!ConnectorPlatform.iPad.returnsAutomatically)
     }
 
-    @Test func theCatalogReadsTheReasonFromTheStatusTheGatewayGives() throws {
-        let decoded = try JSONDecoder().decode(
-            McpPresetEntry.self,
-            from: Data(#"{"name":"upwork","description":"","installed":true,"enabled":true,"needs_auth_reason":"\#(rejectedSignIn)"}"#.utf8)
-        )
-        let catalog = ConnectCatalog.make(catalog: [], mcp: [decoded])
-        let app = try #require(catalog.apps.first)
-        #expect(app.state == .needsAuthorization)
-        #expect(app.authReason == rejectedSignIn)
-        #expect(ConnectorCardState.resolve(ConnectorCardInput(app: app)) == .reconnect(reason: rejectedSignIn))
-        #expect(!ConnectedServices(catalog: catalog).isConnected(.upwork))
-    }
-
-    @Test func aBlankReasonLeavesTheAppConnected() {
-        let healthy = McpPresetEntry(name: "upwork", description: "", installed: true, enabled: true, needsAuthReason: nil)
-        let blank = McpPresetEntry(name: "upwork", description: "", installed: true, enabled: true, needsAuthReason: "  ")
-        #expect(ConnectCatalog.make(catalog: [], mcp: [healthy]).apps.first?.state == .connected)
-        #expect(ConnectCatalog.make(catalog: [], mcp: [blank]).apps.first?.state == .connected)
-    }
-
     @Test func onlyTheUpworkPresetUsesTheAppSignIn() {
         #expect(upwork(.connected).requiresAppSignIn)
         let other = ConnectApp(id: "mcp:x", name: "X", summary: "", category: "", source: .mcp(name: "x", requires: []), state: .connected)
@@ -91,9 +71,9 @@ struct ConnectorCardStateTests {
 
 @Suite("Upwork as a connected service")
 struct UpworkConnectedServiceTests {
-    @Test func countsAsConnectedWhenThePresetIsInstalledAndEnabled() {
-        let on = ConnectCatalog.make(catalog: [], mcp: [McpPresetEntry(name: "upwork", description: "", installed: true, enabled: true)])
-        let off = ConnectCatalog.make(catalog: [], mcp: [McpPresetEntry(name: "upwork", description: "")])
+    @Test func countsAsConnectedWhenItsAppIsConnected() {
+        let on = ConnectCatalog(apps: [upwork(.connected)])
+        let off = ConnectCatalog(apps: [upwork(.disconnected)])
         #expect(ConnectedServices(catalog: on).isConnected(.upwork))
         #expect(!ConnectedServices(catalog: off).isConnected(.upwork))
         #expect(!ConnectedServices.unknown.isConnected(.upwork))

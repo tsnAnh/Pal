@@ -1088,12 +1088,12 @@
     },
     {
       "name": "connectors.oauth_client.connect",
-      "summary": "Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog.",
+      "summary": "Start the scoped profile's sign-in: the provider redirects to the gateway and the app polls connectors.catalog.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/OAuthClientConnectParams"
+            "$ref": "#/components/schemas/OAuthClientSlugParams"
           }
         }
       ],
@@ -38078,44 +38078,6 @@
         "title": "NotificationShowPayload",
         "type": "object"
       },
-      "OAuthClientConnectParams": {
-        "additionalProperties": false,
-        "properties": {
-          "profile": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Profile"
-          },
-          "slug": {
-            "title": "Slug",
-            "type": "string"
-          },
-          "client_redirect_uri": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Client Redirect Uri"
-          }
-        },
-        "required": [
-          "slug"
-        ],
-        "title": "OAuthClientConnectParams",
-        "type": "object"
-      },
       "OAuthClientConnectResult": {
         "additionalProperties": false,
         "properties": {
@@ -38126,23 +38088,11 @@
           "auth_url": {
             "title": "Auth Url",
             "type": "string"
-          },
-          "session_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Session Id"
           }
         },
         "required": [
           "slug",
-          "auth_url",
-          "session_id"
+          "auth_url"
         ],
         "title": "OAuthClientConnectResult",
         "type": "object"

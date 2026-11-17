@@ -161,11 +161,7 @@ public struct ConnectAppsService: Sendable {
             guard let token = credentials["token"], !token.isEmpty else { throw ConnectAppsError.credentialsRequired(["token"]) }
             try await storeCatalogToken(entry, token: token)
         case .native: throw ConnectAppsError.unavailable
-        case .oauthClient:
-            if case .paste(let session) = try await connectOAuthClient(entry, route: .loopback) {
-                await session.cancel()
-                throw ConnectAppsError.unavailable
-            }
+        case .oauthClient: try await connectOAuthClient(entry)
         }
     }
 
@@ -223,9 +219,9 @@ public struct ConnectAppsService: Sendable {
         return nil
     }
 
-    func startLoopback(port: UInt16? = nil, host: String = "127.0.0.1") async throws -> LoopbackRedirectListener {
+    func startLoopback() async throws -> LoopbackRedirectListener {
         do {
-            return try await LoopbackRedirectListener.start(fixedPort: port, redirectHost: host, diagnostics: diagnostics)
+            return try await LoopbackRedirectListener.start(diagnostics: diagnostics)
         } catch {
             throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)
         }

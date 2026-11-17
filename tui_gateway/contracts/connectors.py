@@ -204,10 +204,6 @@ class OAuthClientSaveParams(OAuthClientSlugParams):
     client_secret_item: str
 
 
-class OAuthClientConnectParams(OAuthClientSlugParams):
-    client_redirect_uri: str | None = None
-
-
 class OAuthClientSetupResult(Result):
     slug: str
     configured: bool
@@ -218,7 +214,6 @@ class OAuthClientSetupResult(Result):
 class OAuthClientConnectResult(Result):
     slug: str
     auth_url: str
-    session_id: str | None
 
 
 class OAuthClientRemoveResult(Result):
@@ -244,11 +239,9 @@ method(
 
 method(
     "connectors.oauth_client.connect",
-    params=OAuthClientConnectParams,
+    params=OAuthClientSlugParams,
     result=OAuthClientConnectResult,
-    doc="Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through "
-        "mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the "
-        "gateway and the app polls connectors.catalog.",
+    doc="Start the scoped profile's sign-in: the provider redirects to the gateway and the app polls connectors.catalog.",
 )
 
 method(

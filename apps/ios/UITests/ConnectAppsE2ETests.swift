@@ -173,16 +173,15 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         waitLabel(connect, contains: "Connect")
     }
 
-    func test4AnAppThatNeedsSetupOffersTheSetUpSheetWithNoPortalCopy() throws {
+    func test4AnAppThatNeedsSetupOnTheGatewayShowsItsStatusWithNoAction() throws {
         let app = launchConnectApps()
         waitForCatalog(app)
-        search(app, "Asana")
-        let row = app.descendants(matching: .any)["connectApp-connector:asana"]
-        waitFor(row, timeout: 30, "Asana row")
+        search(app, "Slack")
+        let row = app.descendants(matching: .any)["connectApp-connector:slack"]
+        waitFor(row, timeout: 30, "Slack row")
+        XCTAssertTrue(app.staticTexts["Needs setup on your Pal before it can connect."].exists, "the row says it needs setup")
+        XCTAssertFalse(action(app, "slack").exists, "no action the gateway would reject")
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
-        let setUp = action(app, "asana")
-        waitFor(setUp, timeout: 10, "Asana set up action")
-        XCTAssertEqual(setUp.label, "Set up")
     }
 
     func test5AnOAuthAppStartsSignInThroughTheSystemBrowserAndLeavesNothingBehindWhenCancelled() throws {

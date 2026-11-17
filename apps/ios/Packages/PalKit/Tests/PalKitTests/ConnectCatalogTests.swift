@@ -21,7 +21,7 @@ private let catalogEntries = [
 @Suite("Connect catalog")
 struct ConnectCatalogTests {
     @Test func categoriesComeFromTheCatalogInReadingOrderWithUnknownOnesLastBeforeOther() {
-        let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: [McpPresetEntry(name: "algolia", description: "Search")])
+        let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: [])
         #expect(catalog.categories == ["Communication", "Design and media", "Developer", "Zebra", "Other"])
     }
 
@@ -54,37 +54,39 @@ struct ConnectCatalogTests {
         #expect(ConnectAppStatus(.needsSetup) == .notConnected)
     }
 
-    @Test func aPresetOrServerBackedByACatalogEntryIsShownOnceAsTheCatalogRow() {
+    @Test func onlyCatalogRowsAndTheOwnersCustomServersAreListed() {
         let mcp = [
             McpPresetEntry(name: "slack", description: "preset slack", connectorSlug: nil, installed: true, enabled: true),
             McpPresetEntry(name: "gmail-preset", description: "", connectorSlug: "gmail"),
             McpPresetEntry(name: "linear", description: "Issues", connectorSlug: nil),
             McpPresetEntry(name: "upwork", description: "Upwork", connectorSlug: "upwork"),
         ]
-        let servers = [McpServerEntry(name: "figma", url: "https://mcp.figma.example/mcp"), McpServerEntry(name: "mine", url: "https://mine.example/mcp")]
+        let servers = [
+            McpServerEntry(name: "figma", url: "https://mcp.figma.example/mcp"), McpServerEntry(name: "mine", url: "https://mine.example/mcp"),
+            McpServerEntry(name: "linear", url: "https://mcp.linear.example/mcp"),
+        ]
         let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: mcp, servers: servers)
         #expect(catalog.apps.filter { $0.name == "Slack" }.count == 1)
-        #expect(catalog.apps.filter { $0.name == "Figma" }.count == 1)
         #expect(catalog.apps.first { $0.name == "Slack" }?.source == .catalog(catalogEntries[0]))
         let ids = catalog.apps.map(\.id)
-        #expect(ids.contains("mcp:linear") && ids.contains("mcp:upwork") && ids.contains("custom:mine"))
-        #expect(!ids.contains("mcp:slack") && !ids.contains("mcp:gmail-preset") && !ids.contains("custom:figma"))
+        #expect(!ids.contains { $0.hasPrefix("mcp:") })
+        #expect(ids.contains("custom:mine"))
+        #expect(!ids.contains("custom:figma") && !ids.contains("custom:linear"))
     }
 
-    @Test func aStandalonePresetIsConnectedOnlyWhenInstalledAndEnabled() {
-        let mcp = [
-            McpPresetEntry(name: "on", description: "", installed: true, enabled: true),
-            McpPresetEntry(name: "paused", description: "", installed: true, enabled: false),
-            McpPresetEntry(name: "fresh", description: ""),
-        ]
-        let catalog = ConnectCatalog.make(catalog: [], mcp: mcp)
-        #expect(catalog.apps.filter(\.isConnected).map(\.name) == ["On"])
+    @Test func aPresetOutsideTheCatalogNeverBecomesARow() {
+        let presets = [McpPresetEntry(name: "hugging_face", description: "", installed: true, enabled: true), McpPresetEntry(name: "algolia", description: "")]
+        #expect(ConnectCatalog.make(catalog: [], mcp: presets).apps.isEmpty)
     }
 
-    @Test func presetSlugsBecomeReadableNames() {
-        let presets = [McpPresetEntry(name: "hugging_face", description: ""), McpPresetEntry(name: "aws-knowledge", description: "")]
-        let catalog = ConnectCatalog.make(catalog: [], mcp: presets)
-        #expect(Set(catalog.apps.map(\.name)) == ["Hugging Face", "Aws Knowledge"])
+    @Test func anUnverifiedRowSaysItMayNotConnectUnlessASetupSummaryApplies() {
+        let unverified = PalCatalogEntry(slug: "craft", name: "Craft", method: .none, verified: false)
+        let needsSetup = PalCatalogEntry(slug: "slack", name: "Slack", method: .oauthClient, verified: false, status: .needsSetup)
+        let verified = catalogEntry("deepwiki", "DeepWiki", "Developer")
+        let apps = ConnectCatalog.make(catalog: [unverified, needsSetup, verified], mcp: []).apps
+        #expect(apps.first { $0.name == "Craft" }?.summary == "Not verified: may not connect")
+        #expect(apps.first { $0.name == "Slack" }?.summary == "Needs setup on your Pal before it can connect.")
+        #expect(apps.first { $0.name == "DeepWiki" }?.summary == "")
     }
 
     @Test func searchMatchesNameIgnoringCaseAndDiacritics() {
@@ -171,7 +173,7 @@ struct ConnectAppsServiceTests {
             "mcp.catalog": { _ in ["servers": [["name": "linear", "description": "Issues", "installed": false, "enabled": false, "requires": [], "transport": "x"]]] },
         ])
         let catalog = try await service(rpc, profile: "alpha").load()
-        #expect(catalog.apps.map(\.name) == ["Linear", "Slack"])
+        #expect(catalog.apps.map(\.name) == ["Slack"])
         #expect(catalog.connectedApps.map(\.name) == ["Slack"])
         #expect(rpc.params("connectors.catalog").first?["profile"]?.stringValue == "alpha")
         #expect(Set(rpc.methods()).isDisjoint(with: forbidden))
@@ -180,7 +182,7 @@ struct ConnectAppsServiceTests {
     @Test func oneFailedSourceDoesNotHideTheOthers() async throws {
         let rpc = ScriptedRPC(["mcp.catalog": { _ in ["servers": [["name": "linear", "description": "", "installed": false, "enabled": false, "requires": [], "transport": "x"]]] }])
         let catalog = try await service(rpc).load()
-        #expect(catalog.apps.map(\.id) == ["mcp:linear"])
+        #expect(catalog.apps.isEmpty)
     }
 
     @Test func everySourceFailingIsUnavailable() async {
@@ -231,16 +233,6 @@ struct ConnectAppsServiceTests {
         let app = ConnectApp(id: "mcp:linear", name: "Linear", summary: "", category: "Other", source: .mcp(name: "linear", requires: []), state: .connected)
         try await service(rpc).disconnect(app)
         #expect(rpc.params("mcp.servers.remove").first?["name"]?.stringValue == "linear")
-    }
-
-    @Test func aTokenConnectorCardCarriesItsSetupTextAndAsksForTheKey() throws {
-        let row: JSONValue = ["name": "github", "description": "Read-only GitHub", "requires": ["MCP_GITHUB_API_KEY"], "setup": "Read-only. Contents, Issues."]
-        let preset = try row.decoded(as: McpPresetEntry.self)
-        let catalog = ConnectCatalog.make(catalog: [], mcp: [preset])
-        let app = try #require(catalog.apps.first)
-        #expect(app.setup == "Read-only. Contents, Issues.")
-        #expect(app.source == .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]))
-        #expect(app.state == .disconnected)
     }
 
     @Test func updatingTheTokenOfAnAddedServerKeepsTheServerEvenWhenTheWriteFails() async {
