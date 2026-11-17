@@ -24,6 +24,11 @@ final class SetupGuideModel: Identifiable {
     let address: PublicAddressModel
     var confirmsReplace = false
     var confirmsRemove = false
+    var confirmsWrite = false
+    private(set) var servers: DiscordServers?
+    private(set) var botName: String?
+    var selectedGuilds: Set<String> = []
+    private(set) var readOnly = true
 
     private let service: ConnectAppsService
     private let finished: () async -> Void
@@ -54,6 +59,8 @@ final class SetupGuideModel: Identifiable {
     var showsBack: Bool { phase == .steps && index > 0 }
 
     var isLastStep: Bool { index >= guide.steps.count - 1 }
+
+    var canAdvance: Bool { step.kind != .serverPicker || !selectedGuilds.isEmpty }
 
     var addressProblem: SetupProblem? { guide.addressStep?.problem }
 
@@ -126,10 +133,51 @@ final class SetupGuideModel: Identifiable {
                 phase = .problem(OAuthClientProblem(code: failure.code, reason: failure.reason, retry: .setup))
                 return
             }
+            if entry.method == .botTokenStdio {
+                botName = try await service.saveDiscordToken(verification)
+                await refresh(resume: true)
+                phase = .steps
+                return
+            }
             if let failure = try await store(verification, token: values["token"]) {
                 phase = .problem(OAuthClientProblem(code: "INVALID_TOKEN", reason: failure, retry: .setup))
                 return
             }
+            await finished()
+        } catch {
+            phase = .problem(problem(for: error))
+        }
+    }
+
+    func loadServers() async {
+        guard step.kind == .serverPicker || step.kind == .access, servers == nil else { return }
+        do {
+            let loaded = try await service.discordServers()
+            servers = loaded
+            selectedGuilds = Set(loaded.allowed).intersection(loaded.guilds.map(\.id))
+            readOnly = loaded.readOnly
+        } catch {
+            phase = .problem(problem(for: error))
+        }
+    }
+
+    func toggleGuild(_ id: String) {
+        if selectedGuilds.contains(id) { selectedGuilds.remove(id) } else { selectedGuilds.insert(id) }
+    }
+
+    func setReadOnly(_ on: Bool) {
+        if on { readOnly = true } else { confirmsWrite = true }
+    }
+
+    func confirmWrite() {
+        readOnly = false
+    }
+
+    func saveAccess() async {
+        guard phase == .steps, step.kind == .access, !selectedGuilds.isEmpty else { return }
+        phase = .working
+        do {
+            try await service.saveDiscord(guildIDs: Array(selectedGuilds), readOnly: readOnly)
             await finished()
         } catch {
             phase = .problem(problem(for: error))

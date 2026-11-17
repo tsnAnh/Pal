@@ -9,11 +9,12 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         case native
         case oauthClient
         case botApp
+        case botTokenStdio
         case unsupported(String)
 
         private static let known: [String: Method] = [
             "mcp_oauth": .mcpOAuth, "none": .none, "api_key": .apiKey, "native": .native, "oauth_client": .oauthClient,
-            "bot_app": .botApp,
+            "bot_app": .botApp, "bot_token_stdio": .botTokenStdio,
         ]
 
         public init(from decoder: any Decoder) throws {
@@ -190,7 +191,7 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
     public var requiresToken: Bool {
         switch source {
         case .mcp(_, let requires): !requires.isEmpty
-        case .catalog(let entry): entry.method == .apiKey
+        case .catalog(let entry): entry.method == .apiKey || entry.method == .botTokenStdio
         case .custom, .googleWorkspace: false
         }
     }
