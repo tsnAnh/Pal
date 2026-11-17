@@ -18,7 +18,7 @@ LOGO_FALLBACK = {
     "context7": "Upstash kit states no logo terms",
     "craft": "Craft kit forbids implying a relationship and grants no integration-listing right",
     "deepwiki": "no DeepWiki kit or terms",
-    "discord": "Discord brand terms not yet reviewed for an integration listing",
+    "discord": "brand terms not reviewed",
     "gamma": "kit and terms return 403",
     "google-workspace": "Google requires an approved permission request",
     "microsoft-learn": "Microsoft logos require a licence",
