@@ -191,7 +191,7 @@ struct ConnectAppsServiceTests {
         let rpc = ScriptedRPC([:])
         let app = ConnectApp(
             id: "mcp:acme", name: "Acme", summary: "", category: "Other",
-            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected)
+            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected
         )
         await #expect(throws: ConnectAppsError.credentialsRequired(["ACME_KEY"])) { try await service(rpc).connect(app) }
         #expect(rpc.methods().isEmpty)
@@ -204,7 +204,7 @@ struct ConnectAppsServiceTests {
         ])
         let app = ConnectApp(
             id: "mcp:acme", name: "Acme", summary: "", category: "Other",
-            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected)
+            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected
         )
         try await service(rpc).connect(app, credentials: ["ACME_KEY": "s3cret-value"])
         #expect(rpc.methods() == ["mcp.servers.add", "mcp.servers.set_api_key"])
@@ -220,7 +220,7 @@ struct ConnectAppsServiceTests {
         ])
         let app = ConnectApp(
             id: "mcp:acme", name: "Acme", summary: "", category: "Other",
-            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected)
+            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected
         )
         await #expect(throws: (any Error).self) { try await service(rpc).connect(app, credentials: ["ACME_KEY": "v"]) }
         #expect(rpc.methods().last == "mcp.servers.remove")
@@ -250,7 +250,7 @@ struct ConnectAppsServiceTests {
         ])
         let app = ConnectApp(
             id: "mcp:github", name: "Github", summary: "", category: "Other",
-            source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected)
+            source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
         )
         await #expect(throws: (any Error).self) { try await service(rpc).connect(app, credentials: ["MCP_GITHUB_API_KEY": "v"]) }
         #expect(!rpc.methods().contains("mcp.servers.remove"))
@@ -260,7 +260,7 @@ struct ConnectAppsServiceTests {
         let rpc = ScriptedRPC(["mcp.servers.test": { _ in ["ok": false, "reason": "auth_refused", "tools": []] }])
         let app = ConnectApp(
             id: "mcp:github", name: "Github", summary: "", category: "Other",
-            source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected)
+            source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
         )
         #expect(await service(rpc).tokenFailure(app) == .authRefused)
     }
