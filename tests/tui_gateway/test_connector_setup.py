@@ -80,7 +80,7 @@ def test_unresolvable_copy_is_omitted_without_a_public_address(root, public_url)
 
 
 def test_entries_without_a_guide_keep_the_old_shape(root, public_url):
-    row = _row("asana")
+    row = _row("slack")
     assert row["setup_guide"] is None and row["setup_progress"] is None
 
 
@@ -141,7 +141,7 @@ def test_network_failure_reports_check_unavailable(root, public_url, provider, c
 
 
 def test_check_rpc_errors(root, public_url, provider):
-    assert _call("connectors.setup.check", slug="asana", values={})["error"]["data"]["reason"] == "CONNECTOR_NOT_FOUND"
+    assert _call("connectors.setup.check", slug="slack", values={})["error"]["data"]["reason"] == "CONNECTOR_NOT_FOUND"
     assert _call("connectors.setup.check", slug="github", values={"token": "missing"})["error"]["data"]["reason"] == "CLIENT_UNREADABLE"
     assert _call("connectors.setup.check", slug="github", values={})["error"]["data"]["reason"] == "INVALID_PARAMS"
     assert provider["seen"] == []

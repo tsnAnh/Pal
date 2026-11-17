@@ -12,7 +12,7 @@ from tui_gateway import server
 
 OWNER_SECRET = "fake-token-do-not-use"
 GOOGLE_CLIENT_ID = "fake-client.apps.googleusercontent.com"
-ASANA_CLIENT_ID = "fake-asana-client"
+FIGMA_CLIENT_ID = "fake-figma-client"
 PUBLIC_URL = "https://pal.example.ts.net"
 
 
@@ -178,33 +178,33 @@ def test_remove_deletes_the_profile_sign_in_and_keeps_the_owner_client(root, pub
     assert _ok("connectors.oauth_client.setup", slug="google-workspace")["configured"] is True
 
 
-def test_asana_connects_through_the_mcp_path_with_the_owner_client(root, public_url, monkeypatch, caplog):
+def test_figma_connects_through_the_mcp_path_with_the_owner_client(root, public_url, monkeypatch, caplog):
     caplog.set_level(logging.DEBUG)
     started = {}
 
     def fake_start(home, name, cfg, client_redirect_uri=None):
         started.update(name=name, cfg=cfg)
-        return {"session_id": "s1", "auth_url": "https://app.asana.com/-/oauth_authorize?x=1", "flow": "pkce"}
+        return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 
     monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", fake_start)
-    assert _status("asana") == "needs_setup"
-    _save("asana", ASANA_CLIENT_ID)
-    assert _status("asana") == "not_connected"
+    assert _status("figma") == "needs_setup"
+    _save("figma", FIGMA_CLIENT_ID)
+    assert _status("figma") == "not_connected"
 
-    result = _ok("connectors.oauth_client.connect", slug="asana")
+    result = _ok("connectors.oauth_client.connect", slug="figma")
 
     assert result["session_id"] == "s1"
-    assert started["cfg"]["oauth"]["client_id"] == ASANA_CLIENT_ID
+    assert started["cfg"]["oauth"]["client_id"] == FIGMA_CLIENT_ID
     assert started["cfg"]["oauth"]["redirect_port"] == 27890
     config = (root / "profiles" / "work" / "config.yaml").read_text()
     assert OWNER_SECRET not in config
-    assert yaml.safe_load(config)["mcp_servers"]["asana"]["oauth"]["client_id"] == ASANA_CLIENT_ID
-    assert _status("asana") == "connected"
+    assert yaml.safe_load(config)["mcp_servers"]["figma"]["oauth"]["client_id"] == FIGMA_CLIENT_ID
+    assert _status("figma") == "connected"
     assert OWNER_SECRET not in _wire_and_logs(caplog, result)
 
-    _ok("connectors.oauth_client.remove", slug="asana")
-    assert _status("asana") == "not_connected"
-    assert _ok("connectors.oauth_client.setup", slug="asana")["configured"] is True
+    _ok("connectors.oauth_client.remove", slug="figma")
+    assert _status("figma") == "not_connected"
+    assert _ok("connectors.oauth_client.setup", slug="figma")["configured"] is True
 
 
 def _vault_ids(profile="work"):
@@ -212,18 +212,18 @@ def _vault_ids(profile="work"):
 
 
 def test_remove_client_deletes_the_saved_client_and_its_vault_items(root, public_url):
-    _save("asana", ASANA_CLIENT_ID)
-    record = setup_mod.build_store().client("asana")
+    _save("figma", FIGMA_CLIENT_ID)
+    record = setup_mod.build_store().client("figma")
     items = {record.client_id_item, record.client_secret_item}
     assert items <= _vault_ids()
 
-    result = _ok("connectors.oauth_client.remove", slug="asana", remove_client=True)
+    result = _ok("connectors.oauth_client.remove", slug="figma", remove_client=True)
 
     assert result["removed"] is True
-    assert _ok("connectors.oauth_client.setup", slug="asana")["configured"] is False
-    assert _status("asana") == "needs_setup"
+    assert _ok("connectors.oauth_client.setup", slug="figma")["configured"] is False
+    assert _status("figma") == "needs_setup"
     assert not items & _vault_ids()
-    assert _ok("connectors.oauth_client.remove", slug="asana", remove_client=True)["removed"] is False
+    assert _ok("connectors.oauth_client.remove", slug="figma", remove_client=True)["removed"] is False
 
 
 def test_remove_client_drops_the_google_sign_in_with_the_client(root, public_url, exchange, web):
@@ -239,12 +239,12 @@ def test_remove_client_drops_the_google_sign_in_with_the_client(root, public_url
 
 def test_remove_client_is_owner_only_and_the_default_keeps_the_client(root, public_url):
     from tui_gateway.ws_legacy_fallback import _connection_profile_home
-    _save("asana", ASANA_CLIENT_ID)
+    _save("figma", FIGMA_CLIENT_ID)
     token = _connection_profile_home.set(str(root / "profiles" / "home"))
     try:
-        response = _call("connectors.oauth_client.remove", "work", slug="asana", remove_client=True)
+        response = _call("connectors.oauth_client.remove", "work", slug="figma", remove_client=True)
         assert response["error"]["data"]["reason"] == "NOT_OWNER"
-        assert "error" not in _call("connectors.oauth_client.remove", "work", slug="asana")
+        assert "error" not in _call("connectors.oauth_client.remove", "work", slug="figma")
     finally:
         _connection_profile_home.reset(token)
-    assert _ok("connectors.oauth_client.setup", slug="asana")["configured"] is True
+    assert _ok("connectors.oauth_client.setup", slug="figma")["configured"] is True

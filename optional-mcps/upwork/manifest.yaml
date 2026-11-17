@@ -2,7 +2,7 @@ manifest_version: 1
 
 name: upwork
 description: Search Upwork jobs and freelancers, read proposals, contracts and messages, and send proposals or messages only after you approve each one.
-source: https://www.upwork.com
+source: https://www.upwork.com/ai/mcp
 
 transport:
   type: http

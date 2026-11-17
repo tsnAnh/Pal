@@ -7,14 +7,12 @@ import PalTransport
 enum OAuthClientScript {
     static let argument = "-hermes-test-oauth-client"
     static let withoutPublicAddressArgument = "-hermes-test-oauth-client-no-public-address"
-    static let asanaRedirect = "http://localhost:27890/callback"
+    static let loopbackRedirect = "http://localhost:27890/callback"
     static let googleRedirect = "https://pal.example.test/webapp/google-install/callback"
     static let mcpRedirect = "https://pal.example.test/webapp/mcp-oauth/callback"
     static let ipAddressArgument = "-hermes-test-oauth-client-ip-address"
     static let state = "scripted-state"
-    static let session = "scripted-session"
     static let loopbackAuthorize = [
-        "asana": ("https://app.asana.com/-/oauth_authorize", OAuthClientScript.session),
         "figma": ("https://www.figma.com/oauth", "scripted-session-figma"),
         "dropbox": ("https://www.dropbox.com/oauth2/authorize", "scripted-session-dropbox"),
         "canva": ("https://www.canva.com/api/oauth/authorize", "scripted-session-canva"),
@@ -48,7 +46,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private let publicAddress: Bool
     private let ipAddress: Bool
     private var progress: [String: Progress] = [
-        "asana": Progress(), "google-workspace": Progress(), "github": Progress(), "figma": Progress(),
+        "google-workspace": Progress(), "github": Progress(), "figma": Progress(),
         "dropbox": Progress(), "canva": Progress(),
     ]
     private var items = 0
@@ -127,12 +125,8 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private func catalog(_ params: JSONValue) async throws -> JSONValue {
         let live = try await base.call("connectors.catalog", params)
         let kept = (live["connectors"]?.arrayValue ?? []).filter { progress[$0["slug"]?.stringValue ?? ""] == nil }
-        let asana: JSONValue = [
-            "slug": "asana", "name": "Asana", "category": "Other", "icon": "plugin_glyph", "method": "oauth_client", "verified": true,
-            "mcp_url": "https://mcp.asana.com/v2/mcp", "status": .string(status("asana")),
-        ]
         let guided = ["figma", "dropbox", "canva"].map(mcpClientRow)
-        return ["connectors": .array(kept + [asana, googleRow(), githubRow()] + guided)]
+        return ["connectors": .array(kept + [googleRow(), githubRow()] + guided)]
     }
 
     private func googleRow() -> JSONValue {
@@ -176,14 +170,14 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         guard let current = progress[slug] else { throw Self.failure(4041, "CONNECTOR_NOT_FOUND") }
         let loopback = OAuthClientScript.loopbackAuthorize[slug] != nil
         let consoles = [
-            "asana": "https://app.asana.com/0/my-apps",
             "figma": "https://www.figma.com/developers/apps", "dropbox": "https://www.dropbox.com/developers/console/apps",
             "canva": "https://www.canva.com/developers/apps",
         ]
         let console = consoles[slug] ?? "https://console.cloud.google.com/apis/credentials"
-        let redirect = loopback ? OAuthClientScript.asanaRedirect : (publicAddress ? OAuthClientScript.googleRedirect : nil)
+        let redirect = loopback ? OAuthClientScript.loopbackRedirect : (publicAddress ? OAuthClientScript.googleRedirect : nil)
         return [
-            "slug": .string(slug), "configured": .bool(current.configured), "console_url": .string(console),
+            "slug": .string(slug), "configured": .bool(current.configured),
+            "console_url": "https://console.cloud.google.com/apis/credentials",
             "redirect_url": redirect.map(JSONValue.string) ?? JSONValue.null,
         ]
     }
@@ -197,7 +191,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private func connect(_ slug: String) throws -> JSONValue {
         guard let current = progress[slug], current.configured else { throw Self.failure(4090, "NEEDS_SETUP") }
         if let (authorize, session) = OAuthClientScript.loopbackAuthorize[slug] {
-            let redirect = OAuthClientScript.asanaRedirect.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+            let redirect = OAuthClientScript.loopbackRedirect.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
             let link = "\(authorize)?response_type=code&state=\(OAuthClientScript.state)&redirect_uri=\(redirect)"
             return ["slug": .string(slug), "auth_url": .string(link), "session_id": .string(session)]
         }
@@ -205,7 +199,6 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         Task { await self.finishGoogleSignIn() }
         return [
             "slug": "google-workspace", "auth_url": .string("https://accounts.google.com/o/oauth2/v2/auth?state=\(OAuthClientScript.state)"),
-            "session_id": .null,
         ]
     }
 

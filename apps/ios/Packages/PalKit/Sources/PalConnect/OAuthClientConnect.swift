@@ -87,7 +87,7 @@ private struct OAuthClientStart {
 
 extension ConnectApp {
     public var oauthClientEntry: PalCatalogEntry? {
-        if case .catalog(let entry) = source, entry.method == .oauthClient { entry } else { nil }
+        if case .catalog(let entry) = source, entry.hasGuidedSetup { entry } else { nil }
     }
 }
 

@@ -7,12 +7,16 @@ import Synchronization
 import Testing
 
 private let fakeSecret = "fake-token-do-not-use"
-private let asanaRedirect = "http://localhost:27890/callback"
+private let figmaRedirect = "http://localhost:27890/callback"
 private let googleRedirect = "https://pal.example.test/webapp/google-install/callback"
 private let consentTiming = ConnectAppsTiming(pollInterval: .milliseconds(5), pollAttempts: 3, consentAttempts: 6)
 
-private func asana(_ status: PalCatalogEntry.Status = .notConnected) -> PalCatalogEntry {
-    catalogEntry("asana", "Asana", "Other", method: .oauthClient, status: status, url: "https://mcp.asana.com/v2/mcp")
+private func figma(_ status: PalCatalogEntry.Status = .notConnected) -> PalCatalogEntry {
+    catalogEntry("figma", "Figma", "Other", method: .oauthClient, status: status, url: "https://mcp.figma.com/mcp")
+}
+
+private func slack(_ status: PalCatalogEntry.Status = .needsSetup) -> PalCatalogEntry {
+    catalogEntry("slack", "Slack", "Other", method: .oauthClient, status: status, url: "https://mcp.slack.com/mcp")
 }
 
 private func google(_ status: PalCatalogEntry.Status = .notConnected) -> PalCatalogEntry {
@@ -38,17 +42,17 @@ private func setupReply(_ slug: String, configured: Bool = true, redirect: Strin
     }
 }
 
-private func asanaConnectReply(_ params: JSONValue) -> JSONValue {
-    let encoded = (params["client_redirect_uri"]?.stringValue ?? asanaRedirect).addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
-    let link = "https://app.asana.com/-/oauth_authorize?response_type=code&state=st-1&redirect_uri=\(encoded)"
-    return ["slug": "asana", "auth_url": .string(link), "session_id": "s1"]
+private func figmaConnectReply(_ params: JSONValue) -> JSONValue {
+    let encoded = (params["client_redirect_uri"]?.stringValue ?? figmaRedirect).addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? ""
+    let link = "https://www.figma.com/oauth?response_type=code&state=st-1&redirect_uri=\(encoded)"
+    return ["slug": "figma", "auth_url": .string(link), "session_id": "s1"]
 }
 
-private func asanaGateway(callback: JSONValue = ["ok": true], poll: JSONValue = ["status": "approved"]) -> CustomRPC {
+private func figmaGateway(callback: JSONValue = ["ok": true], poll: JSONValue = ["status": "approved"]) -> CustomRPC {
     CustomRPC([
-        "connectors.oauth_client.setup": setupReply("asana", redirect: asanaRedirect),
-        "connectors.oauth_client.connect": asanaConnectReply,
-        "connectors.oauth_client.remove": { _ in ["slug": "asana", "removed": true] },
+        "connectors.oauth_client.setup": setupReply("figma", redirect: figmaRedirect),
+        "connectors.oauth_client.connect": figmaConnectReply,
+        "connectors.oauth_client.remove": { _ in ["slug": "figma", "removed": true] },
         "mcp.servers.oauth.callback": { _ in callback },
         "mcp.servers.oauth.poll": { _ in poll },
         "mcp.servers.oauth.cancel": { _ in ["ok": true] },
@@ -98,12 +102,12 @@ private func service(_ rpc: CustomRPC, profile: String? = nil, browser: any Auth
 @Suite("Owner OAuth client setup and save")
 struct OAuthClientSetupTests {
     @Test func setupReadsTheConsolePageAndTheRedirectUrlForTheScopedProfile() async throws {
-        let rpc = CustomRPC(["connectors.oauth_client.setup": setupReply("asana", configured: false, redirect: asanaRedirect)])
-        let setup = try await service(rpc, profile: "alpha").oauthClientSetup(slug: "asana")
+        let rpc = CustomRPC(["connectors.oauth_client.setup": setupReply("figma", configured: false, redirect: figmaRedirect)])
+        let setup = try await service(rpc, profile: "alpha").oauthClientSetup(slug: "figma")
         let console = URL(string: "https://console.example.test/apps")
-        #expect(setup == OAuthClientSetup(slug: "asana", configured: false, consoleURL: console, redirectURL: asanaRedirect))
+        #expect(setup == OAuthClientSetup(slug: "figma", configured: false, consoleURL: console, redirectURL: figmaRedirect))
         let sent = try #require(rpc.params("connectors.oauth_client.setup").first)
-        #expect(sent["slug"]?.stringValue == "asana" && sent["profile"]?.stringValue == "alpha")
+        #expect(sent["slug"]?.stringValue == "figma" && sent["profile"]?.stringValue == "alpha")
     }
 
     @Test func aGatewayWithoutAPublicAddressLeavesTheRedirectUrlEmpty() async throws {
@@ -115,9 +119,9 @@ struct OAuthClientSetupTests {
         let issued = CallCounter()
         let rpc = CustomRPC([
             "vault.add": { _ in ["id": .string("item-\(issued.next())")] },
-            "connectors.oauth_client.save": setupReply("asana", redirect: asanaRedirect),
+            "connectors.oauth_client.save": setupReply("figma", redirect: figmaRedirect),
         ])
-        let saved = try await service(rpc, profile: "alpha").saveOAuthClient(asana(.needsSetup), clientID: "fake-client-id", clientSecret: fakeSecret)
+        let saved = try await service(rpc, profile: "alpha").saveOAuthClient(figma(.needsSetup), clientID: "fake-client-id", clientSecret: fakeSecret)
         #expect(saved.configured)
         #expect(rpc.methods() == ["vault.add", "vault.add", "connectors.oauth_client.save"])
         let writes = rpc.params("vault.add")
@@ -125,7 +129,7 @@ struct OAuthClientSetupTests {
         #expect(writes.map { $0["secret"]?["api_key"]?.stringValue } == ["fake-client-id", fakeSecret])
         let save = try #require(rpc.params("connectors.oauth_client.save").first)
         #expect(save["client_id_item"]?.stringValue == "item-1" && save["client_secret_item"]?.stringValue == "item-2")
-        #expect(save["slug"]?.stringValue == "asana" && save["profile"]?.stringValue == "alpha")
+        #expect(save["slug"]?.stringValue == "figma" && save["profile"]?.stringValue == "alpha")
         let wire = try #require(String(bytes: try JSONEncoder().encode(save), encoding: .utf8))
         #expect(!wire.contains(fakeSecret) && !wire.contains("fake-client-id"))
     }
@@ -136,7 +140,7 @@ struct OAuthClientSetupTests {
             "connectors.oauth_client.save": rpcFailure(4000, reason: "INVALID_CLIENT"),
             "vault.remove": { _ in ["ok": true] },
         ])
-        let failure = await thrown { _ = try await service(rpc).saveOAuthClient(asana(.needsSetup), clientID: "bad", clientSecret: fakeSecret) }
+        let failure = await thrown { _ = try await service(rpc).saveOAuthClient(figma(.needsSetup), clientID: "bad", clientSecret: fakeSecret) }
         #expect(failure?.oauthClientFailure == .invalidClient)
         #expect(failure?.fault?.method == "connectors.oauth_client.save")
         #expect(rpc.methods() == ["vault.add", "vault.add", "connectors.oauth_client.save", "vault.remove", "vault.remove"])
@@ -148,7 +152,7 @@ struct OAuthClientSetupTests {
             "connectors.oauth_client.save": { _ in throw GatewayTransportError.timedOut },
         ])
         await #expect(throws: ConnectAppsError.oauthClient(.unreachable)) {
-            _ = try await service(rpc).saveOAuthClient(asana(.needsSetup), clientID: "id", clientSecret: fakeSecret)
+            _ = try await service(rpc).saveOAuthClient(figma(.needsSetup), clientID: "id", clientSecret: fakeSecret)
         }
         #expect(!rpc.methods().contains("vault.remove"))
     }
@@ -163,7 +167,7 @@ struct OAuthClientSetupTests {
             "vault.remove": { _ in ["ok": true] },
         ])
         await #expect(throws: ConnectAppsError.oauthClient(.saveFailed)) {
-            _ = try await service(rpc).saveOAuthClient(asana(.needsSetup), clientID: "id", clientSecret: fakeSecret)
+            _ = try await service(rpc).saveOAuthClient(figma(.needsSetup), clientID: "id", clientSecret: fakeSecret)
         }
         #expect(rpc.methods() == ["vault.add", "vault.add", "vault.remove"])
         #expect(rpc.params("vault.remove").first?["id"]?.stringValue == "item-1")
@@ -174,54 +178,56 @@ struct OAuthClientSetupTests {
 struct OAuthClientConnectTests {
     @Test func aRowThatNeedsSetupNeverReachesTheGateway() async {
         let rpc = CustomRPC([:])
-        await #expect(throws: ConnectAppsError.oauthClient(.needsSetup)) { try await service(rpc).connect(app(asana(.needsSetup))) }
+        for entry in [figma(.needsSetup), slack()] {
+            await #expect(throws: ConnectAppsError.oauthClient(.needsSetup)) { try await service(rpc).connect(app(entry)) }
+        }
         #expect(rpc.methods().isEmpty)
     }
 
-    @Test func asanaOnTheMacBindsLocalhostAndRelaysTheRedirectThroughTheMcpRelay() async throws {
-        let rpc = asanaGateway()
-        try await service(rpc, browser: LocalhostRedirectBrowser()).connect(app(asana()))
+    @Test func figmaOnTheMacBindsLocalhostAndRelaysTheRedirectThroughTheMcpRelay() async throws {
+        let rpc = figmaGateway()
+        try await service(rpc, browser: LocalhostRedirectBrowser()).connect(app(figma()))
         #expect(rpc.methods() == [
             "connectors.oauth_client.setup", "connectors.oauth_client.connect", "mcp.servers.oauth.callback", "mcp.servers.oauth.poll",
         ])
-        #expect(rpc.params("connectors.oauth_client.connect").first?["client_redirect_uri"]?.stringValue == asanaRedirect)
+        #expect(rpc.params("connectors.oauth_client.connect").first?["client_redirect_uri"]?.stringValue == figmaRedirect)
         let relayed = try #require(rpc.params("mcp.servers.oauth.callback").first)
-        #expect(relayed["name"]?.stringValue == "asana" && relayed["session_id"]?.stringValue == "s1")
+        #expect(relayed["name"]?.stringValue == "figma" && relayed["session_id"]?.stringValue == "s1")
         #expect(relayed["code"]?.stringValue == fakeSecret && relayed["state"]?.stringValue == "st-1")
         #expect(rpc.params("mcp.servers.oauth.poll").first?["session_id"]?.stringValue == "s1")
     }
 
-    @Test func asanaOnIPhoneReturnsAPasteSessionThatRelaysThePastedAddress() async throws {
-        let rpc = asanaGateway()
-        let outcome = try await service(rpc).connectOAuthClient(asana(.needsReconnect), route: .pasteAddress)
+    @Test func figmaOnIPhoneReturnsAPasteSessionThatRelaysThePastedAddress() async throws {
+        let rpc = figmaGateway()
+        let outcome = try await service(rpc).connectOAuthClient(figma(.needsReconnect), route: .pasteAddress)
         guard case .paste(let session) = outcome else { Issue.record("expected a paste session"); return }
-        #expect(session.authorizeURL.host() == "app.asana.com")
-        #expect(await session.submit("\(asanaRedirect)?code=\(fakeSecret)&state=st-1") == .signedIn)
+        #expect(session.authorizeURL.host() == "www.figma.com")
+        #expect(await session.submit("\(figmaRedirect)?code=\(fakeSecret)&state=st-1") == .signedIn)
         #expect(rpc.methods() == [
             "connectors.oauth_client.setup", "connectors.oauth_client.connect", "mcp.servers.oauth.callback", "mcp.servers.oauth.poll",
         ])
         let relayed = try #require(rpc.params("mcp.servers.oauth.callback").first)
-        #expect(relayed["name"]?.stringValue == "asana" && relayed["code"]?.stringValue == fakeSecret)
+        #expect(relayed["name"]?.stringValue == "figma" && relayed["code"]?.stringValue == fakeSecret)
     }
 
     @Test func aDeniedPasteSignInForAFreshRowRemovesTheSignInAgainButKeepsTheClient() async throws {
-        let rpc = asanaGateway(callback: ["ok": false, "error_message": "access_denied"])
-        guard case .paste(let session) = try await service(rpc).connectOAuthClient(asana(.notConnected), route: .pasteAddress) else {
+        let rpc = figmaGateway(callback: ["ok": false, "error_message": "access_denied"])
+        guard case .paste(let session) = try await service(rpc).connectOAuthClient(figma(.notConnected), route: .pasteAddress) else {
             Issue.record("expected a paste session")
             return
         }
-        #expect(await session.submit("\(asanaRedirect)?code=\(fakeSecret)&state=st-1") == .failed(McpSignInFailure.denied.reason))
+        #expect(await session.submit("\(figmaRedirect)?code=\(fakeSecret)&state=st-1") == .failed(McpSignInFailure.denied.reason))
         #expect(rpc.methods().suffix(2) == ["mcp.servers.oauth.cancel", "connectors.oauth_client.remove"])
         #expect(!rpc.methods().contains("connectors.oauth_client.save"))
     }
 
     @Test func aDeniedPasteSignInForAnExistingSignInKeepsIt() async throws {
-        let rpc = asanaGateway(callback: ["ok": false, "error_message": "access_denied"])
-        guard case .paste(let session) = try await service(rpc).connectOAuthClient(asana(.needsReconnect), route: .pasteAddress) else {
+        let rpc = figmaGateway(callback: ["ok": false, "error_message": "access_denied"])
+        guard case .paste(let session) = try await service(rpc).connectOAuthClient(figma(.needsReconnect), route: .pasteAddress) else {
             Issue.record("expected a paste session")
             return
         }
-        _ = await session.submit("\(asanaRedirect)?code=\(fakeSecret)&state=st-1")
+        _ = await session.submit("\(figmaRedirect)?code=\(fakeSecret)&state=st-1")
         #expect(!rpc.methods().contains("connectors.oauth_client.remove"))
     }
 
@@ -286,11 +292,11 @@ struct OAuthClientConnectTests {
 @Suite("Owner OAuth client remove and catalog rows")
 struct OAuthClientCatalogTests {
     @Test func removingARowCallsTheOwnerClientRemoveAndNothingElse() async throws {
-        let rpc = CustomRPC(["connectors.oauth_client.remove": { _ in ["slug": "asana", "removed": true] }])
-        try await service(rpc, profile: "alpha").disconnect(app(asana(.connected)))
+        let rpc = CustomRPC(["connectors.oauth_client.remove": { _ in ["slug": "figma", "removed": true] }])
+        try await service(rpc, profile: "alpha").disconnect(app(figma(.connected)))
         #expect(rpc.methods() == ["connectors.oauth_client.remove"])
         let sent = try #require(rpc.params("connectors.oauth_client.remove").first)
-        #expect(sent["slug"]?.stringValue == "asana" && sent["profile"]?.stringValue == "alpha")
+        #expect(sent["slug"]?.stringValue == "figma" && sent["profile"]?.stringValue == "alpha")
     }
 
     @Test func theGoogleCatalogRowReplacesTheNativeRowAndCarriesItsNotes() throws {
@@ -310,15 +316,22 @@ struct OAuthClientCatalogTests {
         let expectations: [(PalCatalogEntry.Status, ConnectAppState)] = [
             (.needsSetup, .needsSetup), (.notConnected, .disconnected), (.connected, .connected), (.needsReconnect, .needsAuthorization),
         ]
-        for (status, state) in expectations { #expect(app(asana(status)).state == state) }
+        for (status, state) in expectations { #expect(app(figma(status)).state == state) }
     }
 
     @Test func aRowThatNeedsSetupSaysSoInPlainWordsAndOtherRowsKeepTheirOwnCopy() {
         let acme = catalogEntry("acme", "Acme", "Developer", method: .mcpOAuth, status: .needsSetup)
-        let apps = ConnectCatalog.make(catalog: [asana(.needsSetup), acme], mcp: []).apps
-        #expect(apps.first { $0.id == "connector:asana" }?.summary == "Save your OAuth client once to connect.")
+        let apps = ConnectCatalog.make(catalog: [figma(.needsSetup), acme], mcp: []).apps
+        #expect(apps.first { $0.id == "connector:figma" }?.summary == "Save your OAuth client once to connect.")
         #expect(apps.first { $0.id == "connector:acme" }?.summary == "Needs setup on your Pal before it can connect.")
         #expect(app(catalogEntry("deepwiki", "DeepWiki", "Developer")).oauthClientEntry == nil)
+    }
+
+    @Test func aRowTheGatewayCannotSetUpOffersNoSetUpAction() {
+        let row = app(slack())
+        #expect(row.state == .needsSetup)
+        #expect(row.oauthClientEntry == nil)
+        #expect(ConnectCatalog.make(catalog: [slack()], mcp: []).apps.first?.summary == "Needs setup on your Pal before it can connect.")
     }
 
     @Test func aConnectedGoogleCatalogRowCountsAsTheConnectedGoogleService() {
@@ -329,17 +342,15 @@ struct OAuthClientCatalogTests {
 
     @Test func loadReadsTheCatalogWithoutTheLegacyGoogleStatusCall() async throws {
         let rpc = CustomRPC([
-            "connectors.catalog": { _ in ["connectors": [["slug": "asana", "name": "Asana", "method": "oauth_client", "status": "connected"]]] },
+            "connectors.catalog": { _ in ["connectors": [["slug": "figma", "name": "Figma", "method": "oauth_client", "status": "connected"]]] },
             "mcp.catalog": { _ in ["servers": []] },
         ])
         let loaded = try await service(rpc).load()
-        #expect(loaded.apps.map(\.id) == ["connector:asana"])
+        #expect(loaded.apps.map(\.id) == ["connector:figma"])
         #expect(!rpc.methods().contains("google_workspace.status"))
     }
 
-    @Test func theGuideNamesTheConsoleStepsForEachProvider() {
-        let asanaSteps = OAuthClientGuide.steps(slug: "asana", appName: "Asana").joined(separator: " ")
-        #expect(asanaSteps.contains("MCP app") && asanaSteps.contains("redirect URL") && asanaSteps.contains("Manage distribution"))
+    @Test func theGuideNamesTheConsoleStepsForGoogle() {
         let googleSteps = OAuthClientGuide.steps(slug: "google-workspace", appName: "Google Workspace").joined(separator: " ")
         #expect(googleSteps.contains("Web application") && googleSteps.contains("Authorized redirect URI") && googleSteps.contains("test user"))
     }

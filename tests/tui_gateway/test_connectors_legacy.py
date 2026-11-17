@@ -79,7 +79,9 @@ def test_portal_and_composio_records_map_to_catalog_entries_and_unknown_slugs_st
     assert items["jira"] == {"catalog_id": "atlassian", "name": "Atlassian", "legacy_slug": "jira",
                              "legacy_source": "portal", "method": "mcp_oauth", "state": "needs_reconnect",
                              "last_seen": 1700000000.0}
-    assert (items["asana"]["state"], items["asana"]["method"]) == ("needs_setup", "oauth_client")
+    assert items["asana"] == {"catalog_id": None, "name": "Asana", "legacy_slug": "asana",
+                              "legacy_source": "portal", "method": None, "state": "unmapped",
+                              "last_seen": 1700000100.0}
     assert items["mystery_app"] == {"catalog_id": None, "name": "Mystery App", "legacy_slug": "mystery_app",
                                     "legacy_source": "portal", "method": None, "state": "unmapped",
                                     "last_seen": 1700000200.0}
