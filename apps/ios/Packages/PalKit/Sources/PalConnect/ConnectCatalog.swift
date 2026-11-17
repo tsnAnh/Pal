@@ -86,7 +86,7 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
 
     var appState: ConnectAppState {
         guard method.isSupported else { return .needsSetup }
-        switch status {
+        return switch status {
         case .connected: .connected
         case .needsReconnect: .needsAuthorization
         case .needsSetup: .needsSetup
