@@ -17,12 +17,12 @@ struct ChatStatusCopy {
         return "\(fault?.detailsLine ?? "code: \(code)")\napp: \(version)"
     }
 
-    init(symbol: String, title: String, reason: String, code: String) {
+    init(symbol: String, title: String, reason: String, code: String, fault: GatewayFault? = nil) {
         self.symbol = symbol
         self.title = title
         self.reason = reason
         self.code = code
-        fault = nil
+        self.fault = fault
     }
 
     init?(model: ChatInstallModel, displayName: String) {

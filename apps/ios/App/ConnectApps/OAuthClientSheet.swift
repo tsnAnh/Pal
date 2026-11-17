@@ -45,16 +45,13 @@ private struct OAuthClientProblemView: View {
     }
 
     private var copy: ChatStatusCopy {
-        switch problem.code {
-        case OAuthClientFailure.needsPublicURL.rawValue:
-            ChatStatusCopy(symbol: "network", title: String(localized: "Public address needed"), reason: problem.reason, code: problem.code)
-        case OAuthClientFailure.notOwner.rawValue:
-            ChatStatusCopy(symbol: "lock", title: String(localized: "Owner only"), reason: problem.reason, code: problem.code)
-        case OAuthClientFailure.unreachable.rawValue:
-            ChatStatusCopy(symbol: "wifi.slash", title: String(localized: "Can't reach your Pal"), reason: problem.reason, code: problem.code)
-        default:
-            ChatStatusCopy(symbol: "exclamationmark.triangle", title: genericTitle, reason: problem.reason, code: problem.code)
+        let (symbol, title): (String, String) = switch problem.code {
+        case OAuthClientFailure.needsPublicURL.rawValue: ("network", String(localized: "Public address needed"))
+        case OAuthClientFailure.notOwner.rawValue: ("lock", String(localized: "Owner only"))
+        case OAuthClientFailure.unreachable.rawValue: ("wifi.slash", String(localized: "Can't reach your Pal"))
+        default: ("exclamationmark.triangle", genericTitle)
         }
+        return ChatStatusCopy(symbol: symbol, title: title, reason: problem.reason, code: problem.code, fault: problem.fault)
     }
 
     var body: some View {

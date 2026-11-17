@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import PalConnect
+import PalProtocol
 
 struct OAuthClientProblem: Equatable {
     enum Retry: Equatable {
@@ -11,20 +12,22 @@ struct OAuthClientProblem: Equatable {
     let code: String
     let reason: String
     let retry: Retry
+    let fault: GatewayFault?
 
-    init(code: String, reason: String, retry: Retry) {
+    init(code: String, reason: String, retry: Retry, fault: GatewayFault? = nil) {
         self.code = code
         self.reason = reason
         self.retry = retry
+        self.fault = fault
     }
 
-    init(_ failure: OAuthClientFailure, retry: Retry) {
-        self.init(code: failure.rawValue, reason: failure.reason, retry: retry)
+    init(_ failure: OAuthClientFailure, retry: Retry, fault: GatewayFault? = nil) {
+        self.init(code: failure.rawValue, reason: failure.reason, retry: retry, fault: fault)
     }
 
     init(_ error: any Error, retry: Retry) {
         switch error {
-        case ConnectAppsError.oauthClient(let failure): self.init(failure, retry: retry)
+        case ConnectAppsError.oauthClient(let failure, let fault): self.init(failure, retry: retry, fault: fault)
         case ConnectAppsError.signInFailed(let reason): self.init(code: "SIGN_IN_FAILED", reason: reason, retry: retry)
         default: self.init(.unreachable, retry: retry)
         }
@@ -32,7 +35,7 @@ struct OAuthClientProblem: Equatable {
 
     init(connecting error: any Error) {
         var retry = Retry.connect
-        if case ConnectAppsError.oauthClient(let failure) = error, [.needsSetup, .clientUnreadable, .invalidClient].contains(failure) {
+        if let failure = (error as? ConnectAppsError)?.oauthClientFailure, [.needsSetup, .clientUnreadable, .invalidClient].contains(failure) {
             retry = .setup
         }
         self.init(error, retry: retry)

@@ -35,10 +35,9 @@ public enum OAuthClientFailure: String, Sendable, Equatable, CaseIterable {
         }
     }
 
-    public static func from(_ error: any Error) -> OAuthClientFailure {
-        guard case GatewayTransportError.rpc(let rpc) = error else { return .unreachable }
-        if let known = rpc.data?["reason"]?.stringValue.flatMap({ OAuthClientFailure(rawValue: $0.uppercased()) }) { return known }
-        return rpc.code == publicURLRPCCode ? .needsPublicURL : .connectFailed
+    public static func classify(reason: String?, code: Int) -> OAuthClientFailure {
+        if let known = reason.flatMap({ OAuthClientFailure(rawValue: $0.uppercased()) }) { return known }
+        return code == publicURLRPCCode ? .needsPublicURL : .connectFailed
     }
 }
 
@@ -97,7 +96,9 @@ extension ConnectAppsService {
         do {
             return try await rawCall(method, params)
         } catch let error as GatewayTransportError {
-            throw ConnectAppsError.oauthClient(OAuthClientFailure.from(error))
+            guard case .rpc(let rpc) = error else { throw ConnectAppsError.oauthClient(.unreachable) }
+            let failure = OAuthClientFailure.classify(reason: rpc.data?["reason"]?.stringValue, code: rpc.code)
+            throw ConnectAppsError.oauthClient(failure, GatewayFault(rpc, method: method))
         }
     }
 
@@ -121,7 +122,7 @@ extension ConnectAppsService {
             )
             return try OAuthClientSetup(saved, slug: entry.slug)
         } catch {
-            if case ConnectAppsError.oauthClient(let failure) = error, failure.discardsSavedItems {
+            if let failure = (error as? ConnectAppsError)?.oauthClientFailure, failure.discardsSavedItems {
                 await discardVaultItems([idItem, secretItem])
             }
             throw error

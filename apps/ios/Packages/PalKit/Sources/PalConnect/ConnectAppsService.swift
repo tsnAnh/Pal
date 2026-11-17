@@ -13,12 +13,20 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     case cancelled
     case credentialsRequired([String])
     case signInFailed(String)
-    case oauthClient(OAuthClientFailure)
+    case oauthClient(OAuthClientFailure, GatewayFault? = nil)
     case failed
     case faulted(GatewayFault)
 
     public var fault: GatewayFault? {
-        if case .faulted(let fault) = self { return fault }
+        switch self {
+        case .faulted(let fault): fault
+        case .oauthClient(_, let fault): fault
+        default: nil
+        }
+    }
+
+    public var oauthClientFailure: OAuthClientFailure? {
+        if case .oauthClient(let failure, _) = self { return failure }
         return nil
     }
 }

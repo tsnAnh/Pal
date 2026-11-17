@@ -19,6 +19,10 @@ private func google(_ status: PalCatalogEntry.Status = .notConnected) -> PalCata
     catalogEntry("google-workspace", "Google Workspace", "Files and docs", method: .oauthClient, status: status, url: nil)
 }
 
+private func thrown(_ work: () async throws -> Void) async -> ConnectAppsError? {
+    do { try await work(); return nil } catch { return error as? ConnectAppsError }
+}
+
 private func app(_ entry: PalCatalogEntry) -> ConnectApp {
     ConnectApp(
         id: "connector:\(entry.slug)", name: entry.name, summary: "", category: entry.category, source: .catalog(entry), state: entry.appState
@@ -132,9 +136,9 @@ struct OAuthClientSetupTests {
             "connectors.oauth_client.save": rpcFailure(4000, reason: "INVALID_CLIENT"),
             "vault.remove": { _ in ["ok": true] },
         ])
-        await #expect(throws: ConnectAppsError.oauthClient(.invalidClient)) {
-            _ = try await service(rpc).saveOAuthClient(asana(.needsSetup), clientID: "bad", clientSecret: fakeSecret)
-        }
+        let failure = await thrown { _ = try await service(rpc).saveOAuthClient(asana(.needsSetup), clientID: "bad", clientSecret: fakeSecret) }
+        #expect(failure?.oauthClientFailure == .invalidClient)
+        #expect(failure?.fault?.method == "connectors.oauth_client.save")
         #expect(rpc.methods() == ["vault.add", "vault.add", "connectors.oauth_client.save", "vault.remove", "vault.remove"])
     }
 
@@ -261,7 +265,8 @@ struct OAuthClientConnectTests {
                 "connectors.oauth_client.connect": failure,
             ])
             let browser = RecordingBrowser()
-            await #expect(throws: ConnectAppsError.oauthClient(.needsPublicURL)) { try await service(rpc, browser: browser).connect(app(google())) }
+            let failure = await thrown { try await service(rpc, browser: browser).connect(app(google())) }
+            #expect(failure?.oauthClientFailure == .needsPublicURL)
             #expect(rpc.methods() == ["connectors.oauth_client.setup", "connectors.oauth_client.connect"])
             #expect(browser.presented.withLock { $0 }.isEmpty)
         }
@@ -269,12 +274,11 @@ struct OAuthClientConnectTests {
 
     @Test func everyGatewayReasonMapsToItsFailure() {
         for failure in OAuthClientFailure.allCases where failure != .unreachable {
-            let error = GatewayTransportError.rpc(RPCError(code: 4000, message: "x", data: ["reason": .string(failure.rawValue)]))
-            #expect(OAuthClientFailure.from(error) == failure)
+            #expect(OAuthClientFailure.classify(reason: failure.rawValue.lowercased(), code: 4000) == failure)
             #expect(!failure.reason.isEmpty)
         }
-        #expect(OAuthClientFailure.from(GatewayTransportError.rpc(RPCError(code: 5034, message: "x"))) == .connectFailed)
-        #expect(OAuthClientFailure.from(GatewayTransportError.timedOut) == .unreachable)
+        #expect(OAuthClientFailure.classify(reason: nil, code: 5034) == .connectFailed)
+        #expect(OAuthClientFailure.classify(reason: nil, code: 4412) == .needsPublicURL)
         #expect(OAuthClientFailure.needsPublicURL.reason == "Set this gateway's public address first.")
     }
 }
