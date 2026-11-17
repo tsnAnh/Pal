@@ -39,5 +39,18 @@
       "Bash(git reset --hard *)",
       "Bash(git clean *)"
     ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && python3 scripts/ci/swift_lint.py --stop-hook",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
   }
 }

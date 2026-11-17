@@ -117,8 +117,8 @@ _GUARDS = {
     "swift-nav-chrome": ["scripts/ci/check_swift_nav_chrome.py"],
 }
 # Guards that judge a diff, not a tree: they get the same base/head as the ratchet
-# (blob size).
-_DIFF_GUARDS = {"blob-size": ["scripts/ci/check_blob_size.py"]}
+# (blob size, and SwiftLint on the changed Swift files against its baseline).
+_DIFF_GUARDS = {"blob-size": ["scripts/ci/check_blob_size.py"], "swift-lint": ["scripts/ci/swift_lint.py"]}
 _CHECKS = (*_GUARDS, *_DIFF_GUARDS, "ruff", "health")
 
 
