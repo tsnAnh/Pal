@@ -3,6 +3,7 @@ import PalDesign
 import PalProtocol
 import SwiftUI
 
+@MainActor
 struct ChatStatusCopy {
     let symbol: String
     let title: String
