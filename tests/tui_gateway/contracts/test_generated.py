@@ -90,3 +90,10 @@ def test_catalog_covers_the_whole_wire():
     from tui_gateway.contracts import registry
 
     registry.assert_complete(server._methods, emitted_event_names(), sent_server_requests())
+
+
+def test_generated_ts_declares_each_exported_type_once(gen):
+    ts = gen.render_all()[REPO / "apps" / "shared" / "src" / "gateway-contract.generated.ts"]
+    names = re.findall(r"^export (?:type|interface) (\w+)\b", ts, re.MULTILINE)
+    duplicated = sorted({n for n in names if names.count(n) > 1})
+    assert not duplicated, f"duplicate exported type names in the generated contract: {duplicated}"
