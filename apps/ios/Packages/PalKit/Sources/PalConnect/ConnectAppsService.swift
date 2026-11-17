@@ -6,6 +6,11 @@ import PalTransport
 
 public protocol ConnectRPC: Sendable {
     func call(_ method: String, _ params: JSONValue) async throws -> JSONValue
+    var sendsAccountSource: Bool { get async }
+}
+
+public extension ConnectRPC {
+    var sendsAccountSource: Bool { false }
 }
 
 public enum ConnectAppsError: Error, Sendable, Equatable {
@@ -60,7 +65,11 @@ public struct ConnectAppsService: Sendable {
         self.init(rpc: rpc, profile: profile, browser: UnavailableAuthorizationBrowser())
     }
 
-    private static let account: JSONValue = ["type": "account"]
+    public static let accountSourceCapability = "connectors-account-source-v1"
+
+    private func account() async -> JSONValue {
+        await rpc.sendsAccountSource ? ["type": "account", "source": "ios"] : ["type": "account"]
+    }
 
     func rawCall(_ method: String, _ params: [String: JSONValue] = [:]) async throws -> JSONValue {
         var scoped = params
@@ -87,7 +96,7 @@ public struct ConnectAppsService: Sendable {
     public func load() async throws -> ConnectCatalog {
         async let hosted = attempt { try decodeList(await call("connectors.catalog"), key: "connectors", as: HostedConnectorEntry.self) }
         async let states = attempt {
-            try decodeList(await call("connectors.list", ["owner": Self.account]), key: "connectors", as: HostedConnectorState.self)
+            try decodeList(await call("connectors.list", ["owner": await account()]), key: "connectors", as: HostedConnectorState.self)
         }
         async let presets = attempt { try decodeList(await call("mcp.catalog"), key: "servers", as: McpPresetEntry.self) }
         async let skills = attempt { InstalledSkill.parse(try await call("skills.manage", ["action": "list"])) }
@@ -156,13 +165,13 @@ public struct ConnectAppsService: Sendable {
     }
 
     private func connectHosted(slug: String, reconnect: Bool) async throws {
-        let started = try await call("connectors.connect", ["owner": Self.account, "connectors": [.string(slug)], "reconnect": .bool(reconnect)])
+        let started = try await call("connectors.connect", ["owner": await account(), "connectors": [.string(slug)], "reconnect": .bool(reconnect)])
         guard let operation = try? started.decoded(as: Operation.self) else { throw ConnectAppsError.failed }
         if operation.allConnected { return }
         if let link = operation.targets.compactMap(\.connectURL).first.flatMap(URL.init(string:)), link.scheme?.lowercased() == "https" {
             do { try await browser.present(link) } catch is CancellationError { throw ConnectAppsError.cancelled } catch { throw ConnectAppsError.failed }
         }
-        let ids: [String: JSONValue] = ["owner": Self.account, "op_id": .string(operation.opID)]
+        let ids: [String: JSONValue] = ["owner": await account(), "op_id": .string(operation.opID)]
         _ = try? await call("connectors.operation.wake", ids)
         for _ in 0..<timing.pollAttempts {
             let status = try await call("connectors.operation.status", ids)

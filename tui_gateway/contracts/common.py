@@ -266,6 +266,7 @@ class SessionOwner(Params):
 
 class AccountOwner(Params):
     type: Literal["account"]
+    source: Literal["desktop", "ios"] = "desktop"
 
 
 ConnectorOwner = Annotated[SessionOwner | AccountOwner, Field(discriminator="type")]

@@ -102,8 +102,12 @@ private final class ScriptedRPC: ConnectRPC {
 
     private let replies: Mutex<[String: Reply]>
     private let log = Mutex<[(String, JSONValue)]>([])
+    let sendsAccountSource: Bool
 
-    init(_ replies: [String: Reply]) { self.replies = Mutex(replies) }
+    init(_ replies: [String: Reply], sendsAccountSource: Bool = false) {
+        self.replies = Mutex(replies)
+        self.sendsAccountSource = sendsAccountSource
+    }
 
     func call(_ method: String, _ params: JSONValue) async throws -> JSONValue {
         log.withLock { $0.append((method, params)) }
@@ -168,6 +172,21 @@ struct ConnectAppsServiceTests {
         let app = ConnectApp(id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil, source: .hosted(slug: "slack"), state: .disconnected)
         try await service(rpc).connect(app)
         #expect(rpc.methods() == ["connectors.connect", "connectors.operation.wake", "connectors.operation.status", "connectors.operation.status"])
+    }
+
+    @Test(arguments: [false, true])
+    func hostedConnectNamesPalAsTheOwnerOnlyWhenTheGatewayAdvertisesIt(advertised: Bool) async throws {
+        let rpc = ScriptedRPC([
+            "connectors.connect": { _ in ["op_id": "op1", "settled": false, "targets": [["state": "initiated"]]] },
+            "connectors.operation.wake": { _ in ["status": "ok"] },
+            "connectors.operation.status": { _ in ["op_id": "op1", "settled": true, "targets": [["state": "connected"]]] },
+        ], sendsAccountSource: advertised)
+        let app = ConnectApp(id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil, source: .hosted(slug: "slack"), state: .disconnected)
+        try await service(rpc).connect(app)
+        let owner: JSONValue = advertised ? ["type": "account", "source": "ios"] : ["type": "account"]
+        for method in ["connectors.connect", "connectors.operation.wake", "connectors.operation.status"] {
+            #expect(!rpc.params(method).isEmpty && rpc.params(method).allSatisfy { $0["owner"] == owner })
+        }
     }
 
     @Test func aFailedOperationIsAFailureNotASilentSuccess() async {
