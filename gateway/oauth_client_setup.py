@@ -25,14 +25,14 @@ NONCE_TTL_SECONDS = 600.0
 HTTP_TIMEOUT_SECONDS = 15.0
 GOOGLE_REDIRECT_PATH = "/webapp/google-install/callback"
 GOOGLE_PROVIDER = "google-workspace"
-ASANA_PROVIDER = "asana"
-ASANA_REDIRECT_URL = "http://localhost:27890/callback"
-ASANA_SECRET_ENV = "ASANA_CLIENT_SECRET"
+MCP_REDIRECT_PORT = 27890
+MCP_REDIRECT_URL = f"http://localhost:{MCP_REDIRECT_PORT}/callback"
 GOOGLE_TOKEN_FILE = "google_token.json"
 GOOGLE_IDENTITY_SCOPES = ("openid", "email")
 
 CONSOLE_URLS = {
-    ASANA_PROVIDER: "https://app.asana.com/0/my-apps",
+    "asana": "https://app.asana.com/0/my-apps",
+    "slack": "https://api.slack.com/apps",
     GOOGLE_PROVIDER: "https://console.cloud.google.com/apis/credentials",
 }
 
@@ -335,12 +335,25 @@ def google_status(store: OAuthClientStore, profile_home) -> ConnectionStatus | N
     return row[0] if row else None
 
 
-def asana_server_config(client_id: str) -> dict:
-    from hermes_cli.pal_connectors import load_pal_connectors
-    entry = next(e for e in load_pal_connectors() if e.id == ASANA_PROVIDER)
+def preregistered_mcp_entries() -> dict:
+    from hermes_cli.pal_connectors import ConnectionMethod, load_pal_connectors
+    return {e.id: e for e in load_pal_connectors() if e.method is ConnectionMethod.OAUTH_CLIENT and e.mcp_url}
+
+
+def mcp_secret_env(provider_id: str) -> str:
+    return provider_id.upper().replace("-", "_") + "_CLIENT_SECRET"
+
+
+def mcp_server_config(provider_id: str, client_id: str) -> dict:
+    entry = preregistered_mcp_entries()[provider_id]
     return {"url": entry.mcp_url, "transport": "http", "auth": "oauth",
-            "oauth": {"client_id": client_id, "client_secret": f"${{{ASANA_SECRET_ENV}}}",
-                      "redirect_host": "localhost", "redirect_port": 27890}}
+            "oauth": {"client_id": client_id, "client_secret": f"${{{mcp_secret_env(provider_id)}}}",
+                      "redirect_host": "localhost", "redirect_port": MCP_REDIRECT_PORT}}
+
+
+def console_url(provider_id: str) -> str:
+    from hermes_cli.pal_connectors import load_pal_connectors
+    return CONSOLE_URLS.get(provider_id) or next(e.source for e in load_pal_connectors() if e.id == provider_id)
 
 
 def build_store(home=None) -> OAuthClientStore:

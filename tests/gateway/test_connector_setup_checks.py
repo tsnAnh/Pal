@@ -1,0 +1,91 @@
+import logging
+
+import httpx
+import pytest
+
+from gateway import connector_setup_checks as checks
+
+SECRET = "fake-secret-do-not-use"
+
+
+def _transport(handler, seen=None):
+    def wrapped(request):
+        if seen is not None:
+            seen.append(request)
+        return handler(request)
+    return httpx.MockTransport(wrapped)
+
+
+def _json(status, body):
+    return lambda _request: httpx.Response(status, json=body)
+
+
+GOOGLE = {"client_id": "fake.apps.googleusercontent.com", "client_secret": SECRET}
+SLACK = {"client_id": "123.456", "client_secret": SECRET}
+
+
+@pytest.mark.parametrize("error,ok,reason", [
+    ("invalid_grant", True, None),
+    ("invalid_client", False, "invalid_client"),
+    ("unauthorized_client", False, "invalid_client"),
+    ("redirect_uri_mismatch", False, "check_unavailable"),
+])
+def test_google_client_reads_the_provider_error(error, ok, reason):
+    seen = []
+    outcome = checks.run_check("google_client", GOOGLE, redirect_url="https://pal.example/cb",
+                               transport=_transport(_json(400, {"error": error}), seen))
+    assert (outcome.ok, outcome.reason) == (ok, reason)
+    body = seen[0].content.decode()
+    assert "grant_type=authorization_code" in body and "redirect_uri=https%3A%2F%2Fpal.example%2Fcb" in body
+
+
+def test_google_client_needs_a_redirect_without_calling_google():
+    seen = []
+    outcome = checks.run_check("google_client", GOOGLE, transport=_transport(_json(400, {}), seen))
+    assert outcome.reason == "needs_public_url" and seen == []
+
+
+@pytest.mark.parametrize("error,ok,reason", [
+    ("invalid_code", True, None),
+    ("invalid_client_id", False, "invalid_client"),
+    ("bad_client_secret", False, "invalid_client"),
+    ("ratelimited", False, "check_unavailable"),
+])
+def test_slack_client_reads_the_provider_error(error, ok, reason):
+    outcome = checks.run_check("slack_client", SLACK, transport=_transport(_json(200, {"ok": False, "error": error})))
+    assert (outcome.ok, outcome.reason) == (ok, reason)
+
+
+def test_github_token_accepts_and_names_the_account():
+    seen = []
+    outcome = checks.run_check("github_token", {"token": SECRET},
+                               transport=_transport(_json(200, {"login": "octo"}), seen))
+    assert outcome.ok and outcome.account == "octo"
+    assert seen[0].headers["authorization"] == f"Bearer {SECRET}"
+
+
+@pytest.mark.parametrize("status,reason", [(401, "invalid_token"), (403, "invalid_token"), (502, "check_unavailable")])
+def test_github_token_rejections(status, reason):
+    outcome = checks.run_check("github_token", {"token": SECRET}, transport=_transport(_json(status, {})))
+    assert (outcome.ok, outcome.reason) == (False, reason)
+
+
+@pytest.mark.parametrize("kind,values", [("google_client", GOOGLE), ("slack_client", SLACK),
+                                         ("github_token", {"token": SECRET})])
+def test_network_failure_is_unavailable_and_logs_no_secret(kind, values, caplog):
+    caplog.set_level(logging.DEBUG)
+
+    def boom(request):
+        raise httpx.ConnectError(f"cannot reach {SECRET}", request=request)
+
+    outcome = checks.run_check(kind, values, redirect_url="https://pal.example/cb", transport=httpx.MockTransport(boom))
+
+    assert outcome.reason == "check_unavailable"
+    assert SECRET not in caplog.text and SECRET not in repr(outcome)
+    assert "ConnectError" in caplog.text
+
+
+def test_non_json_body_is_unavailable():
+    outcome = checks.run_check("slack_client", SLACK,
+                               transport=_transport(lambda _r: httpx.Response(200, text="<html>")))
+    assert outcome.reason == "check_unavailable"

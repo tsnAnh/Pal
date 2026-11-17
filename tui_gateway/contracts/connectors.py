@@ -46,6 +46,8 @@ class ConnectorErrorReason(WireEnum):
     invalid_client = "INVALID_CLIENT"
     client_unreadable = "CLIENT_UNREADABLE"
     connect_failed = "CONNECT_FAILED"
+    invalid_token = "INVALID_TOKEN"
+    check_unavailable = "CHECK_UNAVAILABLE"
 
 
 class ConnectorsListParams(ProfileParams):
@@ -165,6 +167,56 @@ class ConnectorCatalogStatus(WireEnum):
     needs_setup = "needs_setup"
 
 
+class SetupStepKind(WireEnum):
+    public_url = "public_url"
+    open_page = "open_page"
+    paste = "paste"
+
+
+class SetupCheckKind(WireEnum):
+    google_client = "google_client"
+    github_token = "github_token"
+    slack_client = "slack_client"
+
+
+class SetupLinkRow(Result):
+    label: str
+    url: str
+
+
+class SetupCopyRow(Result):
+    label: str
+    value: str
+
+
+class SetupFieldRow(Result):
+    id: str
+    label: str
+    secret: bool
+    prefixes: list[str]
+    suffix: str | None = None
+
+
+class SetupStepRow(Result):
+    id: str
+    kind: SetupStepKind
+    title: str
+    body: str
+    links: list[SetupLinkRow]
+    copies: list[SetupCopyRow]
+    fields: list[SetupFieldRow]
+    check: SetupCheckKind | None = None
+
+
+class SetupGuide(Result):
+    steps: list[SetupStepRow]
+
+
+class SetupProgress(Result):
+    step_id: str
+    saved: list[str]
+
+
 class ConnectorCatalogRow(Result):
     model_config = Result.model_config | {"from_attributes": True}
 
@@ -179,6 +231,8 @@ class ConnectorCatalogRow(Result):
     mcp_url: str | None = None
     status: ConnectorCatalogStatus | None = None
     notes: str | None = None
+    setup_guide: SetupGuide | None = None
+    setup_progress: SetupProgress | None = None
 
 
 class ConnectorsCatalogResult(Result):
@@ -256,6 +310,28 @@ method(
     params=OAuthClientSlugParams,
     result=OAuthClientRemoveResult,
     doc="Remove the scoped profile's sign-in. The owner's saved OAuth client stays.",
+)
+
+
+class ConnectorSetupCheckParams(OAuthClientSlugParams):
+    values: dict[str, str]
+
+
+class ConnectorSetupCheckResult(Result):
+    slug: str
+    ok: bool
+    reason: ConnectorErrorReason | None = None
+    message: str | None = None
+    account: str | None = None
+
+
+method(
+    "connectors.setup.check",
+    params=ConnectorSetupCheckParams,
+    result=ConnectorSetupCheckResult,
+    doc="Owner only. Test a guided-setup paste step with one call to the provider. values maps each field id to "
+        "the Vault item id the app wrote with vault.add. A provider rejection is ok false with a reason, never "
+        "an RPC error; the secret is never returned or logged.",
 )
 
 

@@ -86,10 +86,12 @@ def _(rid, _params):
 def _catalog_row(entry):
     from tui_gateway.contracts.connectors import ConnectorCatalogRow
 
+    from tui_gateway.connector_setup_guide import build_guide, derive_progress
+
     return ConnectorCatalogRow(
         slug=entry.id, name=entry.name, description="", category=entry.category, icon=entry.icon,
         method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, status=_catalog_status(entry),
-        notes=entry.notes,
+        notes=entry.notes, setup_guide=build_guide(entry), setup_progress=derive_progress(entry),
     )
 
 
@@ -150,6 +152,22 @@ def _(rid, params):
 def _(rid, params):
     from tui_gateway.contracts.connectors import OAuthClientSlugParams
     return _oauth_client_call(OAuthClientSlugParams, lambda rpc, request: rpc.remove(request.slug))(rid, params)
+
+
+@method("connectors.setup.check")
+@_profile_scoped
+def _(rid, params):
+    from pydantic import ValidationError
+    from tui_gateway.connector_setup_guide import SetupCheckRpcError, run_setup_check
+    from tui_gateway.contracts.connectors import ConnectorSetupCheckParams
+    try:
+        request = ConnectorSetupCheckParams.model_validate(params)
+    except ValidationError:
+        return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "slug and values are required.")
+    try:
+        return _ok(rid, run_setup_check(request).model_dump(mode="json"))
+    except SetupCheckRpcError as exc:
+        return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
 
 
 @method("connectors.legacy")

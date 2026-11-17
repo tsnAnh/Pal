@@ -227,6 +227,24 @@ connectors:
   mcp_url: https://api.githubcopilot.com/mcp/
   verified: false
   source: https://github.com/github/github-mcp-server
+  setup:
+    steps:
+    - id: token_page
+      kind: open_page
+      title: Create a GitHub token
+      body: 'Create a fine-grained token with these permissions: Repository access, Contents read, Issues read and write,
+        Pull requests read and write, Metadata read.'
+      links:
+      - {label: Open GitHub token page, url: "https://github.com/settings/personal-access-tokens/new"}
+      copies:
+      - {label: Token name, value: Pal}
+    - id: token
+      kind: paste
+      title: Paste your token
+      body: Paste the token GitHub shows once. Pal checks it with GitHub before saving.
+      fields:
+      - {id: token, label: Token, secret: true, prefixes: [github_pat_, ghp_]}
+      check: github_token
 - id: gitlab
   name: Gitlab
   icon: plugin_glyph
@@ -260,6 +278,43 @@ connectors:
   - https://www.googleapis.com/auth/contacts.readonly
   - https://www.googleapis.com/auth/spreadsheets
   - https://www.googleapis.com/auth/documents
+  setup:
+    steps:
+    - id: address
+      kind: public_url
+      title: Your Pal's web address
+      body: Google sends you back to your Pal after you sign in, so your Pal needs a public https address. Use the address
+        you already reach your Pal at, such as your Tailscale address.
+    - id: console
+      kind: open_page
+      title: Create a Google sign-in client
+      body: In Google Cloud, create an OAuth client ID of type Web application. Paste the redirect URI below into
+        its Authorized redirect URIs.
+      links:
+      - {label: Open Google Cloud credentials, url: "https://console.cloud.google.com/apis/credentials"}
+      copies:
+      - {label: Redirect URI, value: "{redirect_url}"}
+    - id: apis
+      kind: open_page
+      title: Turn on the Google services
+      body: Turn on each service Pal should use. Then add yourself as a test user on the OAuth consent screen. While the
+        app is in Testing mode, Google ends the sign-in after 7 days.
+      links:
+      - {label: Gmail, url: "https://console.cloud.google.com/apis/library/gmail.googleapis.com"}
+      - {label: Calendar, url: "https://console.cloud.google.com/apis/library/calendar-json.googleapis.com"}
+      - {label: Drive, url: "https://console.cloud.google.com/apis/library/drive.googleapis.com"}
+      - {label: People, url: "https://console.cloud.google.com/apis/library/people.googleapis.com"}
+      - {label: Sheets, url: "https://console.cloud.google.com/apis/library/sheets.googleapis.com"}
+      - {label: Docs, url: "https://console.cloud.google.com/apis/library/docs.googleapis.com"}
+      - {label: Consent screen, url: "https://console.cloud.google.com/apis/credentials/consent"}
+    - id: client
+      kind: paste
+      title: Paste your client
+      body: Copy the client ID and client secret Google shows and paste them here. Pal checks them with Google before saving.
+      fields:
+      - {id: client_id, label: Client ID, secret: false, suffix: .apps.googleusercontent.com}
+      - {id: client_secret, label: Client secret, secret: true}
+      check: google_client
   notes: Google lets only the test users you added sign in until it verifies your app, and their sign-in lasts
     7 days while the app is in Testing. Publish and verify the app in Google Cloud Console to remove both limits.
   verified: true
@@ -470,6 +525,114 @@ connectors:
   replaces_portal_slug: sentry_mcp
   verified: true
   source: https://docs.sentry.io/product/sentry-mcp/
+- id: slack
+  name: Slack
+  icon: plugin_glyph
+  category: Other
+  method: oauth_client
+  mcp_url: https://mcp.slack.com/mcp
+  oauth:
+    authorization_url: https://slack.com/oauth/v2_user/authorize
+    token_url: https://slack.com/api/oauth.v2.user.access
+  scopes:
+  - search:read.public
+  - search:read.private
+  - search:read.mpim
+  - search:read.im
+  - search:read.files
+  - search:read.users
+  - files:read
+  - files:write
+  - emoji:read
+  - chat:write
+  - channels:history
+  - groups:history
+  - mpim:history
+  - im:history
+  - reactions:write
+  - reactions:read
+  - channels:write
+  - groups:write
+  - im:write
+  - mpim:write
+  - channels:read
+  - groups:read
+  - mpim:read
+  - im:read
+  - canvases:read
+  - canvases:write
+  - users:read
+  - users:read.email
+  - lists:read
+  - lists:write
+  notes: Slack only lets internal apps use its MCP server, so Pal uses its own app in your workspace.
+  verified: true
+  source: https://docs.slack.dev/ai/mcp-server
+  setup:
+    steps:
+    - id: app
+      kind: open_page
+      title: Create a Slack app
+      body: In Slack, choose From a manifest, pick your workspace, paste the manifest below, create the app and install
+        it to your workspace.
+      links:
+      - {label: Open Slack apps, url: "https://api.slack.com/apps?new_app=1"}
+      copies:
+      - label: App manifest
+        value: |-
+          {
+            "display_information": {
+              "name": "Pal"
+            },
+            "oauth_config": {
+              "redirect_urls": [
+                "http://localhost:27890/callback"
+              ],
+              "scopes": {
+                "user": [
+                  "search:read.public",
+                  "search:read.private",
+                  "search:read.mpim",
+                  "search:read.im",
+                  "search:read.files",
+                  "search:read.users",
+                  "files:read",
+                  "files:write",
+                  "emoji:read",
+                  "chat:write",
+                  "channels:history",
+                  "groups:history",
+                  "mpim:history",
+                  "im:history",
+                  "reactions:write",
+                  "reactions:read",
+                  "channels:write",
+                  "groups:write",
+                  "im:write",
+                  "mpim:write",
+                  "channels:read",
+                  "groups:read",
+                  "mpim:read",
+                  "im:read",
+                  "canvases:read",
+                  "canvases:write",
+                  "users:read",
+                  "users:read.email",
+                  "lists:read",
+                  "lists:write"
+                ]
+              }
+            }
+          }
+    - id: client
+      kind: paste
+      title: Paste your app credentials
+      body: Open Basic Information in your Slack app and copy the client ID and client secret. Pal checks them with Slack
+        before saving.
+      fields:
+      - {id: client_id, label: Client ID, secret: false}
+      - {id: client_secret, label: Client secret, secret: true}
+      check: slack_client
 - id: square
   name: Square
   icon: plugin_glyph

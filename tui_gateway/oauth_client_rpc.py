@@ -13,7 +13,6 @@ from tui_gateway.contracts.connectors import (
 
 logger = logging.getLogger(__name__)
 
-PROVIDERS = frozenset({setup_mod.ASANA_PROVIDER, setup_mod.GOOGLE_PROVIDER})
 _REASONS = {
     "needs_setup": (4090, ConnectorErrorReason.needs_setup, "Set up this app on your Pal first."),
     "needs_public_url": (4412, ConnectorErrorReason.needs_public_url, "Set this gateway's public address first."),
@@ -43,19 +42,27 @@ def _public_url() -> str | None:
     return public_url_for(_home())
 
 
+def providers() -> frozenset[str]:
+    return frozenset({setup_mod.GOOGLE_PROVIDER, *setup_mod.preregistered_mcp_entries()})
+
+
 def _provider(slug: str) -> str:
-    if slug not in PROVIDERS:
+    if slug not in providers():
         raise OAuthClientRpcError(4041, ConnectorErrorReason.connector_not_found, "Connector not found.")
     return slug
+
+
+def redirect_url(provider: str) -> str | None:
+    if provider == setup_mod.GOOGLE_PROVIDER:
+        return setup_mod.google_redirect_url(_public_url())
+    return setup_mod.MCP_REDIRECT_URL
 
 
 def setup(slug: str) -> OAuthClientSetupResult:
     provider = _provider(slug)
     store = setup_mod.build_store()
-    redirect = (setup_mod.ASANA_REDIRECT_URL if provider == setup_mod.ASANA_PROVIDER
-                else setup_mod.google_redirect_url(_public_url()))
     return OAuthClientSetupResult(slug=provider, configured=store.client(provider) is not None,
-                                  console_url=setup_mod.CONSOLE_URLS[provider], redirect_url=redirect)
+                                  console_url=setup_mod.console_url(provider), redirect_url=redirect_url(provider))
 
 
 def save(request) -> OAuthClientSetupResult:
@@ -71,29 +78,28 @@ def save(request) -> OAuthClientSetupResult:
     return setup(provider)
 
 
-def _connect_asana(store, client_redirect_uri: str | None) -> OAuthClientConnectResult:
+def _connect_mcp(provider: str, store, client_redirect_uri: str | None) -> OAuthClientConnectResult:
     from tui_gateway import mcp_header_secrets as hs
     from tui_gateway import mcp_oauth_sessions
-    record = store.client(setup_mod.ASANA_PROVIDER)
+    record = store.client(provider)
     if record is None:
         _raise("needs_setup")
     client_id, client_secret = setup_mod.resolve_client(record)
-    cfg = setup_mod.asana_server_config(client_id)
-    if not hs.commit(setup_mod.ASANA_PROVIDER, cfg, {setup_mod.ASANA_SECRET_ENV: client_secret}, []):
+    cfg = setup_mod.mcp_server_config(provider, client_id)
+    if not hs.commit(provider, cfg, {setup_mod.mcp_secret_env(provider): client_secret}, []):
         _raise("connect_failed")
     live = {**cfg, "oauth": {**cfg["oauth"], "client_secret": client_secret}}
     home = str(_home().expanduser().resolve(strict=False))
-    result = mcp_oauth_sessions.start_flow(home, setup_mod.ASANA_PROVIDER, live, client_redirect_uri=client_redirect_uri)
-    return OAuthClientConnectResult(slug=setup_mod.ASANA_PROVIDER, auth_url=result["auth_url"],
-                                    session_id=result["session_id"])
+    result = mcp_oauth_sessions.start_flow(home, provider, live, client_redirect_uri=client_redirect_uri)
+    return OAuthClientConnectResult(slug=provider, auth_url=result["auth_url"], session_id=result["session_id"])
 
 
 def connect(request) -> OAuthClientConnectResult:
     provider = _provider(request.slug)
     store = setup_mod.build_store()
     try:
-        if provider == setup_mod.ASANA_PROVIDER:
-            return _connect_asana(store, request.client_redirect_uri)
+        if provider != setup_mod.GOOGLE_PROVIDER:
+            return _connect_mcp(provider, store, request.client_redirect_uri)
         link = setup_mod.google_begin(store, _home(), _public_url())
     except setup_mod.SetupError as exc:
         _raise(exc.reason)
@@ -107,11 +113,11 @@ def connect(request) -> OAuthClientConnectResult:
 
 def remove(slug: str) -> OAuthClientRemoveResult:
     provider = _provider(slug)
-    if provider == setup_mod.ASANA_PROVIDER:
+    if provider != setup_mod.GOOGLE_PROVIDER:
         from hermes_cli.config import remove_env_value
         from tui_gateway import mcp_header_secrets as hs
         removed = hs.remove_server(provider)
-        remove_env_value(setup_mod.ASANA_SECRET_ENV)
+        remove_env_value(setup_mod.mcp_secret_env(provider))
         return OAuthClientRemoveResult(slug=provider, removed=removed)
     setup_mod.google_remove(setup_mod.build_store(), _home())
     return OAuthClientRemoveResult(slug=provider, removed=True)
