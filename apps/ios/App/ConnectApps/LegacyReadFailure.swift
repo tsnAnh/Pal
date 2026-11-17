@@ -2,15 +2,6 @@ import PalConnect
 import PalDesign
 import SwiftUI
 
-extension ChatStatusCopy {
-    init(symbol: String, title: String, reason: String, code: String) {
-        self.symbol = symbol
-        self.title = title
-        self.reason = reason
-        self.code = code
-    }
-}
-
 struct LegacyReadFailure: View {
     let code: String
     let isBusy: Bool
