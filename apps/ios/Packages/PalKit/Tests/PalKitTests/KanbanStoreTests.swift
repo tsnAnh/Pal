@@ -13,8 +13,7 @@ final class KanbanScript: Sendable {
 
     enum Reply: Sendable {
         case result(JSONValue)
-        case failure(RPCError)
-        case unreachable
+        case failure(RPCError), unreachable
     }
 
     private let queues = Mutex<[String: [Reply]]>([:])
@@ -51,8 +50,7 @@ final class KanbanScript: Sendable {
             switch reply {
             case .result(let value)?: return value
             case .failure(let error)?: throw GatewayTransportError.rpc(error)
-            case .unreachable?: throw GatewayTransportError.timedOut
-            case nil: throw GatewayTransportError.timedOut
+            case nil, .unreachable?: throw GatewayTransportError.timedOut
             }
         }
     }

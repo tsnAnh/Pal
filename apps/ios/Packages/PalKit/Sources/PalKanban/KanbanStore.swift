@@ -309,7 +309,9 @@ public final class KanbanStore {
             return .stopped(KanbanLoad.from(KanbanFailure.classify(error)))
         }
     }
+}
 
+extension KanbanStore {
     private func stopped(for state: KanbanReadState, board: String) -> Pass {
         switch state {
         case .boardAbsent:
