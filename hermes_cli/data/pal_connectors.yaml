@@ -60,6 +60,14 @@ connectors:
   mcp_url: https://mcp.circleci.com/v1/mcp
   verified: true
   source: https://circleci.com/docs/guides/toolkit/circleci-mcp-overview/
+- id: clickhouse
+  name: ClickHouse
+  icon: plugin_glyph
+  category: Other
+  method: mcp_oauth
+  mcp_url: https://mcp.clickhouse.cloud/mcp
+  verified: true
+  source: https://clickhouse.com/docs/products/cloud/features/ai-ml/remote-mcp
 - id: clickup
   name: Clickup
   icon: plugin_glyph
@@ -231,6 +239,14 @@ connectors:
   mcp_url: https://learn.microsoft.com/api/mcp
   verified: true
   source: https://learn.microsoft.com/en-us/training/support/mcp-get-started
+- id: mintlify
+  name: Mintlify
+  icon: plugin_glyph
+  category: Other
+  method: none
+  mcp_url: https://mintlify.com/docs/mcp
+  verified: true
+  source: https://www.mintlify.com/docs/ai/model-context-protocol
 - id: miro
   name: Miro
   icon: plugin_glyph
@@ -255,13 +271,6 @@ connectors:
   mcp_url: https://api.motherduck.com/mcp
   verified: true
   source: https://motherduck.com/docs/key-tasks/ai-and-motherduck/mcp-setup/
-- id: n8n-official
-  name: N8n Official
-  icon: plugin_glyph
-  category: Other
-  method: mcp_oauth
-  verified: true
-  source: https://docs.n8n.io/connect/connect-to-n8n-mcp-server/
 - id: neon
   name: Neon
   icon: plugin_glyph
@@ -331,6 +340,14 @@ connectors:
   replaces_portal_slug: sentry_mcp
   verified: true
   source: https://docs.sentry.io/product/sentry-mcp/
+- id: slack
+  name: Slack
+  icon: plugin_glyph
+  category: Other
+  method: oauth_client
+  mcp_url: https://mcp.slack.com/mcp
+  verified: true
+  source: https://docs.slack.dev/ai/mcp-server
 - id: stripe
   name: Stripe
   icon: plugin_glyph

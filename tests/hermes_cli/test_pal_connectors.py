@@ -7,14 +7,17 @@ OWNER_PICKS = frozenset({
     "motherduck", "circleci", "buildkite", "postman", "semgrep", "context7", "deepwiki", "hugging_face",
     "aws-knowledge", "microsoft-learn", "twilio-docs", "unreal-engine", "wolfram",
     "sentry", "grafana", "datadog",
-    "linear", "atlassian", "clickup", "monday", "todoist", "notion", "airtable", "craft", "miro", "n8n-official",
+    "linear", "atlassian", "clickup", "monday", "todoist", "notion", "airtable", "craft", "miro",
     "google-workspace", "dropbox", "figma", "canva", "gamma", "cloudinary", "comfy-cloud", "webflow", "wordpress-com",
     "stripe", "intercom", "calendly",
+    "slack", "clickhouse", "mintlify",
 })
 
 
 def test_shipped_catalog_is_exactly_the_owner_picks():
-    assert {e.id for e in load_pal_connectors()} == OWNER_PICKS
+    ids = {e.id for e in load_pal_connectors()}
+    assert ids == OWNER_PICKS
+    assert len(ids) == 49 and "discord" not in ids
 
 
 def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():
@@ -23,7 +26,7 @@ def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():
     assert len(ids) == len(set(ids))
     assert all(e.source.startswith("https://") for e in entries if e.verified)
     assert {e.method for e in entries} <= set(ConnectionMethod)
-    assert all(e.mcp_url or e.oauth for e in entries if e.method is ConnectionMethod.MCP_OAUTH and e.id != "n8n-official")
+    assert all(e.mcp_url or e.oauth for e in entries if e.method is ConnectionMethod.MCP_OAUTH)
 
 
 def test_catalog_never_routes_through_portal_or_composio():
