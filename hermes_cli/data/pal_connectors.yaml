@@ -47,10 +47,10 @@ connectors:
   name: Canva
   icon: plugin_glyph
   category: Other
-  method: mcp_oauth
+  method: oauth_client
   mcp_url: https://api.canva.com/connect/v1/mcp
   replaces_portal_slug: canva_mcp
-  verified: false
+  verified: true
   source: https://www.canva.dev/docs/apps/quickstart/
 - id: circleci
   name: Circleci
@@ -391,6 +391,14 @@ connectors:
   mcp_url: http://127.0.0.1:8000/mcp
   verified: true
   source: https://dev.epicgames.com/documentation/unreal-engine/unreal-mcp-in-unreal-editor
+- id: upwork
+  name: Upwork
+  icon: plugin_glyph
+  category: Other
+  method: mcp_oauth
+  mcp_url: https://mcp.upwork.com/mcp
+  verified: false
+  source: https://www.upwork.com/ai/mcp
 - id: vercel
   name: Vercel
   icon: plugin_glyph
