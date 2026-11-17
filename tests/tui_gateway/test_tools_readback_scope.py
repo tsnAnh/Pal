@@ -14,17 +14,18 @@ import hermes_yaml as yaml
 import pytest
 
 from tui_gateway import server
-from tui_gateway.methods_profiles import _save_toolset_pin
+from hermes_cli.tools_config import _save_platform_tools
 
 LAUNCH_PIN = ["web", "browser", "terminal"]
 WORKER_PIN = ["file", "clarify"]
 
 
 def _pin(home, names):
-    """Write the pin the way ``profiles.configure`` does (its writer, into that home's config.yaml)."""
+    """Write the pin ``hermes tools`` writes into that home's config.yaml."""
     home.mkdir(parents=True, exist_ok=True)
-    _save_toolset_pin({}, names, save_config=lambda cfg: (home / "config.yaml").write_text(
-        yaml.safe_dump(cfg), encoding="utf-8"))
+    cfg: dict = {}
+    _save_platform_tools(cfg, "cli", set(names))
+    (home / "config.yaml").write_text(yaml.safe_dump(cfg), encoding="utf-8")
 
 
 @pytest.fixture

@@ -56,7 +56,7 @@ def test_a_project_file_written_mid_session_does_not_switch_toolsets(tmp_path):
     plain.mkdir()
     policy = create({'source': 'cli', 'cwd': str(plain), 'follow_profile_config': True}, FOCUS)
     (plain / 'pyproject.toml').write_text('[project]\nname = "late"\n')
-    assert policy.current_toolsets(FOCUS) == ('terminal',)
+    assert 'coding' not in policy.current_toolsets(FOCUS)
 
 
 def test_plugin_mcp_servers_stay_in_the_posture(project, monkeypatch):
@@ -128,4 +128,29 @@ def test_a_following_session_takes_a_profile_coding_context_change(project, tmp_
     authority = SimpleNamespace(db=SimpleNamespace(db_path=str(home / 'state.db')))
     assert policy.current_toolsets(policy.config(authority, secrets=False)) == ('coding',)
     (home / 'config.yaml').write_text(json.dumps({**config, 'agent': {'coding_context': 'off'}}))
-    assert policy.current_toolsets(policy.config(authority, secrets=False)) == ('terminal',)
+    assert 'coding' not in policy.current_toolsets(policy.config(authority, secrets=False))
+
+
+@pytest.mark.parametrize('params', [
+    {'source': 'cli', 'follow_profile_config': True},
+    {'source': 'ios'},
+])
+def test_a_stored_toolset_pin_no_longer_narrows_a_bot_and_is_left_on_disk(tmp_path, params):
+    pinned = {'platform_toolsets': {'cli': ['file', 'terminal']}}
+    stored = json.loads(json.dumps(pinned))
+    bot = create({**params, 'cwd': str(tmp_path)}, pinned)
+    unpinned = create({**params, 'cwd': str(tmp_path)}, {})
+    assert bot.toolsets == unpinned.toolsets
+    assert {'web', 'browser', 'memory'} <= set(bot.toolsets)
+    assert pinned == stored
+    assert bot.current_toolsets(pinned) == unpinned.toolsets if params.get('follow_profile_config') else True
+
+
+def test_a_cli_session_that_is_not_a_bot_still_honors_the_pin(tmp_path):
+    pinned = {'platform_toolsets': {'cli': ['file', 'terminal']}}
+    assert create({'source': 'cli', 'cwd': str(tmp_path)}, pinned).toolsets == ('file', 'terminal')
+
+
+def test_a_following_tui_session_still_honors_the_pin(tmp_path):
+    pinned = {'platform_toolsets': {'cli': ['file', 'terminal']}}
+    assert create({'source': 'tui', 'cwd': str(tmp_path), 'follow_profile_config': True}, pinned).toolsets == ('file', 'project', 'terminal')

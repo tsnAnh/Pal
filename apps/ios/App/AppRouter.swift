@@ -12,7 +12,6 @@ enum AppRoute: Hashable {
     case telegram(botName: String)
     case messagingSettings(botName: String)
     case botModel(botName: String)
-    case botTools(botName: String)
     case botKeys(botName: String)
     case botVault(botName: String)
     case computer(botName: String)

@@ -262,7 +262,7 @@ class LocalSessionPolicy:
             return self.toolsets
         # The workspace decision is the creation-time one: a project file the agent writes mid-session must
         # not switch this conversation's toolsets (prompt cache). Only a profile change (``focus`` off) does.
-        return tuple(sorted(_resolve_toolsets({}, config, self.source, self.safe_mode, self.coding_posture)))
+        return tuple(sorted(_resolve_toolsets({}, config, self.source, self.safe_mode, self.coding_posture, bot=True)))
 
     def current_reasoning_config(self, runner, session_key=None):
         """The next turn's reasoning: a typed session /reasoning (the messaging handler's override), else
@@ -469,7 +469,8 @@ def build_policy(params, config, *, private_secrets=None, profile_terminal=True,
     # pick wins anyway; skipping it here also spares the probe.
     named = workspace_posture and source != 'tool' and 'cwd' in params and 'toolsets' not in params
     coding_posture = named and _in_coding_workspace(config, source, cwd)
-    enabled = _resolve_toolsets(params, config, source, safe_mode, coding_posture, bypass=ignore_user_config)
+    enabled = _resolve_toolsets(params, config, source, safe_mode, coding_posture, bypass=ignore_user_config,
+                               bot=params.get('follow_profile_config') is True)
     terminal = build_profile_terminal_scope(get_hermes_home()) if profile_terminal else default_terminal_scope()
     # The client's launch folder is a path on THIS host: a remote or container backend keeps its own
     # configured cwd unless the user picked this folder for the session.
@@ -654,7 +655,7 @@ def _apply_launch_overrides(params, config):
         pin_reasoning_effort(config, params['reasoning'])
 
 
-def _resolve_toolsets(params, config, source, safe_mode, coding_posture=False, bypass=False):
+def _resolve_toolsets(params, config, source, safe_mode, coding_posture=False, bypass=False, bot=False):
     """Validate explicit toolsets and return the session's enabled toolset set. Without a pick, a
     *coding_posture* session runs ``focus_toolsets`` instead of the profile default while the profile
     stays on ``focus``; the gateway decides it, never the client."""
@@ -686,7 +687,11 @@ def _resolve_toolsets(params, config, source, safe_mode, coding_posture=False, b
     if explicit is None and coding_posture:
         from agent.coding_context import focus_toolsets
         posture = focus_toolsets(config)
-    enabled = set(posture) if posture is not None else _get_platform_tools(config, 'acp' if source == 'acp' else 'cli')
+    tools_config = config
+    if explicit is None and (source == 'ios' or (bot and source == 'cli')):
+        # Pins the retired Bot Tools picker stored in `platform_toolsets.cli` stay on disk but no longer narrow a bot.
+        tools_config = {**config, 'platform_toolsets': {k: v for k, v in (config.get('platform_toolsets') or {}).items() if k != 'cli'}}
+    enabled = set(posture) if posture is not None else _get_platform_tools(tools_config, 'acp' if source == 'acp' else 'cli')
     if explicit is not None:
         from toolsets import resolve_toolset
         requested = {t for name in explicit for t in resolve_toolset(name)}

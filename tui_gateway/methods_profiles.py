@@ -439,7 +439,7 @@ def _write_soul_locked(profile_dir, soul: str) -> None:
 def _(rid, params: dict) -> dict:
     """Editor Save: ``name`` plus any of ``ui_meta`` (+ ``ui_meta_expected_revisions``), ``soul``,
     ``description``, ``model`` + ``provider`` (+ ``confirm_expensive_model``), ``disabled_skills``,
-    ``enabled_toolsets``, ``enabled_mcp_servers``; sections are independent, ``applied`` reports each."""
+    ``enabled_mcp_servers`` (a legacy ``enabled_toolsets`` is accepted and ignored); sections are independent, ``applied`` reports each."""
     _name, profile_dir, err = _resolve_profile(rid, params)
     if err is not None:
         return err
@@ -455,7 +455,7 @@ def _(rid, params: dict) -> dict:
     confirm_message = _configure_model(profile_dir, params, applied)
     if isinstance(params.get("fallback_providers"), list):
         _configure_fallbacks(profile_dir, params["fallback_providers"], applied)
-    if any(isinstance(params.get(k), list) for k in ("disabled_skills", "enabled_toolsets", "enabled_mcp_servers")):
+    if any(isinstance(params.get(k), list) for k in ("disabled_skills", "enabled_mcp_servers")):
         _configure_cfg_sections(profile_dir, params, applied)
     # confirm_* is the shape config.set returns, so clients reuse one confirm handler.
     return _ok(rid, {"ok": all(applied.values()) if applied else True, "applied": applied,
@@ -803,19 +803,6 @@ def _clean_names(values) -> set:
     return {str(v).strip() for v in values if str(v).strip()}
 
 
-def _save_toolset_pin(cfg, enabled, save_config) -> None:
-    """Pin ``platform_toolsets.cli``: the key ``_load_enabled_toolsets`` reads and ``hermes tools`` writes.
-    An empty selection clears the pin so the platform default applies again."""
-    from hermes_cli.tools_config import _save_platform_tools
-
-    wanted = _clean_names(enabled)
-    if wanted:
-        _save_platform_tools(cfg, "cli", wanted)
-    elif isinstance(cfg.get("platform_toolsets"), dict):
-        cfg["platform_toolsets"].pop("cli", None)
-    save_config(cfg)
-
-
 def _mcp_entry_enabled(entry: dict) -> bool:
     """The runtime's ``enabled`` reader; a legacy ``disabled: true`` (what older editors wrote,
     migrated by config v46) still reads as off."""
@@ -848,8 +835,7 @@ def _save_mcp_toggles(cfg, enabled, launch_mcp, save_config) -> None:
 
 
 def _configure_cfg_sections(profile_dir, params, applied) -> None:
-    """Apply ``disabled_skills`` / ``enabled_toolsets`` / ``enabled_mcp_servers`` (replace
-    semantics; empty toolsets clears the pin). An undefined MCP server is copied from the LAUNCH
+    """Apply ``disabled_skills`` / ``enabled_mcp_servers`` (replace semantics). An undefined MCP server is copied from the LAUNCH
     catalog (unknown names skipped); credentials stay in .env/auth."""
     want_mcp = isinstance(params.get("enabled_mcp_servers"), list)
     launch_mcp = {}
@@ -869,9 +855,6 @@ def _configure_cfg_sections(profile_dir, params, applied) -> None:
                 cfg = load_config() or {}
             except Exception:
                 applied["skills"] = False
-        if isinstance(params.get("enabled_toolsets"), list):
-            applied["toolsets"] = _best_effort(lambda: _save_toolset_pin(cfg, params["enabled_toolsets"], save_config)) \
-                and _landed(cfg, ("platform_toolsets", "cli"))
         if want_mcp:
             mcp_cfg = load_config() or {}
             applied["mcp_servers"] = _best_effort(lambda: _save_mcp_toggles(

@@ -1,4 +1,3 @@
-import json
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -15,7 +14,6 @@ class SessionKind(Enum):
 class GrantReason(Enum):
     GRANTED = 'granted'
     KIND_NOT_ALLOWED = 'kind_not_allowed'
-    EXPLICIT_PICK = 'explicit_pick'
     SAFE_MODE = 'safe_mode'
     DISABLED_BY_CONFIG = 'disabled_by_config'
     NO_REGISTERED_DEVICE = 'no_registered_device'
@@ -24,7 +22,6 @@ class GrantReason(Enum):
 @dataclass(frozen=True, slots=True)
 class SessionFacts:
     kind: SessionKind
-    picked_toolsets: bool
     safe_mode: bool
     disabled_toolsets: frozenset[str]
     profile_home: Path
@@ -49,8 +46,6 @@ GRANTED_KINDS = frozenset({SessionKind.IOS, SessionKind.BOT_CHAT, SessionKind.CL
 def decide_grant(facts: SessionFacts) -> GrantDecision:
     if facts.kind not in GRANTED_KINDS:
         return GrantDecision(GrantReason.KIND_NOT_ALLOWED)
-    if facts.picked_toolsets:
-        return GrantDecision(GrantReason.EXPLICIT_PICK)
     if facts.safe_mode:
         return GrantDecision(GrantReason.SAFE_MODE)
     if 'iphone' in facts.disabled_toolsets:
@@ -101,7 +96,6 @@ def session_facts(authority, policy, config, session_id) -> SessionFacts:
     bot_chat = _bot_chat(authority, session_id)
     return SessionFacts(
         kind=_kind(bot_chat, policy),
-        picked_toolsets=not bot_chat and 'toolsets' in json.loads(policy.request_json),
         safe_mode=policy.safe_mode,
         disabled_toolsets=frozenset(parse_config_string_list((config.get('agent') or {}).get('disabled_toolsets'))),
         profile_home=Path(authority.profile_id))

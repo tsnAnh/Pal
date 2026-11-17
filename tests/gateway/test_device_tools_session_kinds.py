@@ -58,6 +58,12 @@ def switch_mac(home, registered):
     path.write_text(json.dumps(stored))
 
 
+PICKED = {
+    'gui_with_toolsets': dict(source='gui', toolsets=['web']),
+    'ios_with_toolsets': dict(source='ios', toolsets=['web']),
+    'cli_with_toolsets': dict(source='cli', toolsets=['web']),
+}
+
 KINDS = {
     'cli': dict(source='cli'),
     'bot_chat': dict(source='cli', title='Bot Chat', follow_profile_config=True),
@@ -66,11 +72,8 @@ KINDS = {
 }
 NOT_ENABLED = {
     'tui': dict(source='tui'),
-    'gui_with_picked_toolsets': dict(source='gui', toolsets=['web']),
-    'ios_with_picked_toolsets': dict(source='ios', toolsets=['web']),
     'oneshot': dict(source='oneshot'),
     'tool': dict(source='tool'),
-    'cli_with_picked_toolsets': dict(source='cli', toolsets=['web']),
 }
 
 
@@ -102,7 +105,7 @@ async def test_cli_bot_chat_ios_and_desktop_sessions_are_offered_the_device_tool
 
 
 @pytest.mark.asyncio
-async def test_unattended_and_picked_toolset_sessions_never_get_the_device_tools(tmp_path, monkeypatch):
+async def test_unattended_sessions_never_get_the_device_tools(tmp_path, monkeypatch):
     store, authority, owner, made = await sessions(tmp_path, monkeypatch, NOT_ENABLED, True)
     try:
         for name, (policy, session_id) in made.items():
@@ -111,6 +114,18 @@ async def test_unattended_and_picked_toolset_sessions_never_get_the_device_tools
         for source in ('cron', 'kanban', 'a2a'):
             stored = replace(policy, source=source, platform=source, request_json=json.dumps({'source': source}))
             assert not offered(authority, stored, session_id), source
+    finally:
+        await owner.close()
+        store.close_all_db_handles()
+
+
+@pytest.mark.asyncio
+async def test_a_request_policy_carrying_toolsets_is_ignored_by_the_device_grant(tmp_path, monkeypatch):
+    store, authority, owner, made = await sessions(tmp_path, monkeypatch, PICKED, True)
+    try:
+        for name, (policy, session_id) in made.items():
+            assert 'toolsets' in json.loads(policy.request_json), name
+            assert offered(authority, policy, session_id) == DEVICE_TOOLS, name
     finally:
         await owner.close()
         store.close_all_db_handles()
