@@ -29,7 +29,11 @@ value = fixture["rest"].get(endpoint)
 if value is None:
     sys.stderr.write("gh: Not Found (HTTP 404)\\n")
     sys.exit(1)
-print(json.dumps(value))
+if "--slurp" in argv:
+    sys.stderr.write("unknown flag: --slurp\\n")
+    sys.exit(1)
+pages = value if "--paginate" in argv else [value]
+print("\\n".join(json.dumps(page) for page in pages))
 """
 GH_NO_LOGIN = "#!/bin/sh\necho 'gh: authentication required' >&2\nexit 4\n"
 
