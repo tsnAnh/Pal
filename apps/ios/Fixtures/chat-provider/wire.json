@@ -1,0 +1,264 @@
+{
+  "fake-authorize": {
+    "ChatBindingListResult": {
+      "bindings": [
+        {
+          "bot": "pal",
+          "installation_id": "fake-authorize-install-pal-w1",
+          "live": true,
+          "space_id": "s-public"
+        }
+      ]
+    },
+    "ChatInstallChangedPayload": {
+      "state": {
+        "app_id": null,
+        "bot": "pal",
+        "error": null,
+        "installation_id": "fake-authorize-install-pal-w1",
+        "manual_steps_done": [],
+        "next_action": {
+          "action_id": "none",
+          "copy_text": null,
+          "kind": "none",
+          "link": null
+        },
+        "provider_id": "fake-authorize",
+        "resume_step": null,
+        "revision": 3,
+        "step": "ready",
+        "updated_at": 1700000000.0,
+        "workspace": "w1"
+      }
+    },
+    "ChatInstallStatusResult": {
+      "installation": {
+        "bot": "pal",
+        "created_at": 1700000000.0,
+        "id": "fake-authorize-install-pal-w1",
+        "provider_id": "fake-authorize",
+        "status": "active",
+        "updated_at": 1700000000.0,
+        "vault_item_ids": [
+          "vault-fake-authorize-install-pal-w1-bot"
+        ],
+        "workspace_id": "w1",
+        "workspace_name": "Workspace w1"
+      },
+      "state": {
+        "app_id": null,
+        "bot": "pal",
+        "error": null,
+        "installation_id": "fake-authorize-install-pal-w1",
+        "manual_steps_done": [],
+        "next_action": {
+          "action_id": "none",
+          "copy_text": null,
+          "kind": "none",
+          "link": null
+        },
+        "provider_id": "fake-authorize",
+        "resume_step": null,
+        "revision": 3,
+        "step": "ready",
+        "updated_at": 1700000000.0,
+        "workspace": "w1"
+      }
+    },
+    "ChatProviderListResult": {
+      "providers": [
+        {
+          "capabilities": [
+            {
+              "capability": "set_icon",
+              "mode": "unsupported"
+            },
+            {
+              "capability": "join_public_space",
+              "mode": "automatic"
+            }
+          ],
+          "creates_app": false,
+          "identity_policy": {
+            "app_name_max": 32,
+            "avatar_max_bytes": 256000,
+            "avatar_min_px": 128,
+            "display_name_max": 32,
+            "username_max": 32
+          },
+          "provider_id": "fake-authorize",
+          "requires_config_credential": false
+        }
+      ]
+    },
+    "ChatSpaceJoinResult": {
+      "next_action": {
+        "action_id": "invite",
+        "copy_text": "/invite @pal",
+        "kind": "copy_text",
+        "link": null
+      },
+      "outcome": "needs_invite"
+    },
+    "ChatSpacesListResult": {
+      "spaces": [
+        {
+          "id": "s-public",
+          "joined": false,
+          "kind": "public",
+          "name": "general"
+        },
+        {
+          "id": "s-private",
+          "joined": false,
+          "kind": "private",
+          "name": "secret-plans"
+        }
+      ]
+    },
+    "IdentityProjection": {
+      "app_name": "Pal the Very Helpful Assistant B",
+      "avatar_bytes": null,
+      "avatar_ref": "avatars/pal.png",
+      "display_name": "Pal the Very Helpful Assistant B",
+      "username": "pal-the-very-helpful-assistant-b"
+    }
+  },
+  "fake-credential": {
+    "ChatBindingListResult": {
+      "bindings": [
+        {
+          "bot": "pal",
+          "installation_id": "fake-credential-install-pal-w1",
+          "live": true,
+          "space_id": "s-public"
+        }
+      ]
+    },
+    "ChatInstallChangedPayload": {
+      "state": {
+        "app_id": "fake-credential-app-1",
+        "bot": "pal",
+        "error": null,
+        "installation_id": "fake-credential-install-pal-w1",
+        "manual_steps_done": [
+          "set_icon"
+        ],
+        "next_action": {
+          "action_id": "none",
+          "copy_text": null,
+          "kind": "none",
+          "link": null
+        },
+        "provider_id": "fake-credential",
+        "resume_step": null,
+        "revision": 6,
+        "step": "ready",
+        "updated_at": 1700000000.0,
+        "workspace": "w1"
+      }
+    },
+    "ChatInstallStatusResult": {
+      "installation": {
+        "bot": "pal",
+        "created_at": 1700000000.0,
+        "id": "fake-credential-install-pal-w1",
+        "provider_id": "fake-credential",
+        "status": "active",
+        "updated_at": 1700000000.0,
+        "vault_item_ids": [
+          "vault-fake-credential-install-pal-w1-bot"
+        ],
+        "workspace_id": "w1",
+        "workspace_name": "Workspace w1"
+      },
+      "state": {
+        "app_id": "fake-credential-app-1",
+        "bot": "pal",
+        "error": null,
+        "installation_id": "fake-credential-install-pal-w1",
+        "manual_steps_done": [
+          "set_icon"
+        ],
+        "next_action": {
+          "action_id": "none",
+          "copy_text": null,
+          "kind": "none",
+          "link": null
+        },
+        "provider_id": "fake-credential",
+        "resume_step": null,
+        "revision": 6,
+        "step": "ready",
+        "updated_at": 1700000000.0,
+        "workspace": "w1"
+      }
+    },
+    "ChatProviderListResult": {
+      "providers": [
+        {
+          "capabilities": [
+            {
+              "capability": "set_icon",
+              "mode": "guided"
+            },
+            {
+              "capability": "app_level_credential",
+              "mode": "automatic"
+            },
+            {
+              "capability": "gateway_redirect",
+              "mode": "automatic"
+            },
+            {
+              "capability": "join_private_space",
+              "mode": "guided"
+            }
+          ],
+          "creates_app": true,
+          "identity_policy": {
+            "app_name_max": 35,
+            "avatar_max_bytes": 1000000,
+            "avatar_min_px": 512,
+            "display_name_max": 80,
+            "username_max": 21
+          },
+          "provider_id": "fake-credential",
+          "requires_config_credential": true
+        }
+      ]
+    },
+    "ChatSpaceJoinResult": {
+      "next_action": {
+        "action_id": "invite",
+        "copy_text": "/invite @pal",
+        "kind": "copy_text",
+        "link": null
+      },
+      "outcome": "needs_invite"
+    },
+    "ChatSpacesListResult": {
+      "spaces": [
+        {
+          "id": "s-public",
+          "joined": false,
+          "kind": "public",
+          "name": "general"
+        },
+        {
+          "id": "s-private",
+          "joined": false,
+          "kind": "private",
+          "name": "secret-plans"
+        }
+      ]
+    },
+    "IdentityProjection": {
+      "app_name": "Pal the Very Helpful Assistant Bot!",
+      "avatar_bytes": null,
+      "avatar_ref": "avatars/pal.png",
+      "display_name": "Pal the Very Helpful Assistant Bot!",
+      "username": "pal-the-very-helpful-"
+    }
+  }
+}
