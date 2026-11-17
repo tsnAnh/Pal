@@ -19,7 +19,6 @@ const mocks = vi.hoisted(() => ({
         soul: 'My English persona',
         model: { provider: 'my-provider', default: 'my-model' },
         skills: [{ name: 'my-skill', enabled: true }],
-        toolsets: [{ name: 'my-tools', enabled: true }],
         mcp_servers: [{ name: 'my-mcp', enabled: true }]
       }
     }
@@ -44,7 +43,6 @@ vi.mock('@hermes/plugin-sdk', async importOriginal => {
     ...sdk,
     CapabilitiesView: undefined,
     ConnectorsTab: undefined,
-    ToolsetConfigPanel: undefined,
     host: { ...sdk.host, request: mocks.request, notify: mocks.notify }
   }
 })

@@ -123,7 +123,6 @@ interface CapabilityCatalog {
   mcp: CapabilityEntry[]
   skills: CapabilityEntry[]
   source: string
-  toolsets: CapabilityEntry[]
 }
 interface CreateAgentDialogProps {
   onClose: () => void
@@ -133,12 +132,12 @@ interface CreateAgentDialogProps {
   roster: RosterRow[]
 }
 
-type CapabilityPicks = Pick<ProfileConfigurePayload, 'disabled_skills' | 'enabled_mcp_servers' | 'enabled_toolsets'>
+type CapabilityPicks = Pick<ProfileConfigurePayload, 'disabled_skills' | 'enabled_mcp_servers'>
 
 /** The `profiles.configure` fields for the Advanced-tab picks the user changed. */
 function capabilityPayload(
   caps: CapabilityCatalog | null,
-  dirty: { mcp: boolean; skills: boolean; toolsets: boolean }
+  dirty: { mcp: boolean; skills: boolean }
 ): CapabilityPicks {
   const payload: CapabilityPicks = {}
 
@@ -148,11 +147,6 @@ function capabilityPayload(
 
   if (dirty.skills) {
     payload.disabled_skills = caps.skills.filter(s => !s.enabled).map(s => s.name)
-  }
-
-  if (dirty.toolsets) {
-    const en = caps.toolsets.filter(t => t.enabled)
-    payload.enabled_toolsets = en.length === caps.toolsets.length || en.length === 0 ? [] : en.map(t => t.name)
   }
 
   if (dirty.mcp) {
@@ -454,7 +448,7 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
   const [caps, setCaps] = useState<CapabilityCatalog | null>(null)
   const [capsFailed, setCapsFailed] = useState(false)
 
-  const [dirtyCaps, setDirtyCaps] = useState({ skills: false, toolsets: false, mcp: false })
+  const [dirtyCaps, setDirtyCaps] = useState({ skills: false, mcp: false })
 
   const [capFilter, setCapFilter] = useState('')
   const [busy, setBusy] = useState(false)
@@ -494,7 +488,6 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
     setCapsFailed(false)
     setDirtyCaps({
       skills: false,
-      toolsets: false,
       mcp: false
     })
     setCapFilter('')
@@ -539,7 +532,6 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
         setCaps({
           source: capSource,
           skills: res.skills || [],
-          toolsets: res.toolsets || [],
           mcp: [
             ...configured,
             ...catalog.map(s => ({
@@ -557,7 +549,7 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
       .catch(() => setCapsFailed(true))
   }
 
-  const toggleCap = (kind: 'mcp' | 'skills' | 'toolsets', name: string, enabled: boolean) => {
+  const toggleCap = (kind: 'mcp' | 'skills', name: string, enabled: boolean) => {
     setDirtyCaps(prev => ({
       ...prev,
       [kind === 'mcp' ? 'mcp' : kind]: true
@@ -945,8 +937,7 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
                     : [
                         { id: 'general', label: b.editor.general },
                         { id: 'skills', label: b.editor.skills },
-                        { id: 'toolsets', label: b.editor.tools },
-                        { id: 'mcp', label: 'MCP' }
+                                        { id: 'mcp', label: 'MCP' }
                       ]
                 }
                 value={advTab}
@@ -1080,24 +1071,6 @@ export function CreateAgentDialog({ open, onClose, onConfigureModel, roster }: C
                     />
                   </div>
                 )
-              ) : advTab === 'toolsets' ? (
-                <div className="grid gap-1.5">
-                  <div
-                    className="overflow-y-auto overscroll-contain"
-                    style={{
-                      maxHeight: 200
-                    }}
-                  >
-                    <CheckList
-                      columns={2}
-                      items={caps.toolsets}
-                      onToggle={(name, enabled) => toggleCap('toolsets', name, enabled)}
-                    />
-                  </div>
-                  <div className="text-[0.65rem] leading-4 text-(--ui-text-quaternary)">
-                    {b.editor.defaultToolsHint}
-                  </div>
-                </div>
               ) : caps.mcp.length === 0 ? (
                 <div className="px-2 py-3 text-center text-xs text-(--ui-text-tertiary)">{b.tools.noMcpServers}</div>
               ) : (

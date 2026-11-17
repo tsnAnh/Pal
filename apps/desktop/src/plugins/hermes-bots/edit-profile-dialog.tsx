@@ -163,7 +163,7 @@ export function EditProfileDialog({ bot, open, onClose }: EditProfileDialogProps
       }
     }
 
-    if (adv.loaded && (adv.dirtyModel || adv.dirtySoul || adv.dirtySkills || adv.dirtyToolsets || adv.dirtyMcp)) {
+    if (adv.loaded && (adv.dirtyModel || adv.dirtySoul || adv.dirtySkills || adv.dirtyMcp)) {
       try {
         const res = await applyAdvancedConfig(bot, adv)
         const failed = Object.entries(res?.applied || {}).filter(([, ok]) => !ok)
