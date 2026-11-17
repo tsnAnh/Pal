@@ -149,3 +149,8 @@ def test_a_stored_toolset_pin_no_longer_narrows_a_bot_and_is_left_on_disk(tmp_pa
 def test_a_cli_session_that_is_not_a_bot_still_honors_the_pin(tmp_path):
     pinned = {'platform_toolsets': {'cli': ['file', 'terminal']}}
     assert create({'source': 'cli', 'cwd': str(tmp_path)}, pinned).toolsets == ('file', 'terminal')
+
+
+def test_a_following_tui_session_still_honors_the_pin(tmp_path):
+    pinned = {'platform_toolsets': {'cli': ['file', 'terminal']}}
+    assert create({'source': 'tui', 'cwd': str(tmp_path), 'follow_profile_config': True}, pinned).toolsets == ('file', 'project', 'terminal')

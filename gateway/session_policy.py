@@ -688,7 +688,7 @@ def _resolve_toolsets(params, config, source, safe_mode, coding_posture=False, b
         from agent.coding_context import focus_toolsets
         posture = focus_toolsets(config)
     tools_config = config
-    if explicit is None and (bot or source == 'ios'):
+    if explicit is None and (source == 'ios' or (bot and source == 'cli')):
         # Pins the retired Bot Tools picker stored in `platform_toolsets.cli` stay on disk but no longer narrow a bot.
         tools_config = {**config, 'platform_toolsets': {k: v for k, v in (config.get('platform_toolsets') or {}).items() if k != 'cli'}}
     enabled = set(posture) if posture is not None else _get_platform_tools(tools_config, 'acp' if source == 'acp' else 'cli')
