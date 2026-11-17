@@ -136,7 +136,7 @@ public actor GatewayConnection {
     private let eventContinuation: AsyncStream<GatewayEvent>.Continuation
     private let requestContinuation: AsyncStream<RPCRequest>.Continuation
     private let frameTap: FrameTap?
-    private let faults: FaultStore?
+    let faults: FaultStore?
     private let session: URLSession
     private let task: URLSessionWebSocketTask
     private let observer: SocketObserver
@@ -209,30 +209,7 @@ public actor GatewayConnection {
         }
     }
 
-    public func call(_ method: String, params: JSONValue? = nil, timeout: Duration? = nil) async throws -> JSONValue {
-        let trace = TraceID.random()
-        do {
-            return try await send(method, params: params, timeout: timeout, trace: trace)
-        } catch let error as GatewayTransportError {
-            if let faults, method != Self.reportMethod, let fault = Self.fault(error, method: method, trace: trace) {
-                await faults.record(fault)
-            }
-            throw error
-        }
-    }
-
-    public static let reportMethod = "diag.report"
-
-    static func fault(_ error: GatewayTransportError, method: String, trace: TraceID) -> GatewayFault? {
-        switch error {
-        case .rpc(let rpc): GatewayFault(rpc, method: method)
-        case .timedOut: .transport("timeout", method: method, trace: trace)
-        case .closed: .transport("offline", method: method, trace: trace)
-        default: nil
-        }
-    }
-
-    private func send(_ method: String, params: JSONValue?, timeout: Duration?, trace: TraceID) async throws -> JSONValue {
+    func send(_ method: String, params: JSONValue?, timeout: Duration?, trace: TraceID) async throws -> JSONValue {
         if let closeReason { throw GatewayTransportError.closed(closeReason) }
         let id = nextID
         nextID += 1
@@ -264,11 +241,6 @@ public actor GatewayConnection {
 
     public nonisolated func recordNegotiatedRuntime(_ description: JSONValue) {
         negotiated.withLock { $0 = description }
-    }
-
-    public func ping() async throws {
-        let result = try await call("gateway.ping", timeout: .seconds(10))
-        guard result["ok"]?.boolValue == true else { throw GatewayTransportError.unexpectedFirstFrame }
     }
 
     public func respond(to id: RPCID, result: JSONValue) {

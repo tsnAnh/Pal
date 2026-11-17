@@ -284,7 +284,7 @@ final class ConnectionModel {
     }
 
     private func makeClient() -> PalClient {
-        PalClient(auth: auth, transport: transport, diagnostics: diagnostics, presence: presence)
+        PalClient(auth: auth, transport: transport, diagnostics: diagnostics, dialOptions: GatewayDialOptions(faults: .shared), presence: presence)
     }
 
     private func connect(reusingClient: Bool = false) async {

@@ -66,6 +66,7 @@ private struct SettingsDestination: View {
         case .appearance: AppearanceScreen(back: back)
         case .haptics: HapticsScreen(back: back)
         case .dataSharing: DataSharingScreen(hub: hub, back: back)
+        case .diagnostics: DiagnosticsScreen(back: back)
         }
     }
 }
@@ -226,6 +227,10 @@ struct SettingsRootView: View {
     private var feedbackCard: some View {
         GroupedCard(accessibilityIdentifier: "settingsFeedbackCard") {
             SettingsRow.navigate("Send Feedback", accessibilityIdentifier: "settingsFeedbackRow", action: { sharingFeedback = true })
+            SettingsRow.navigate(
+                DiagnosticsCopy.title, subtitle: DiagnosticsCopy.rowSubtitle, accessibilityIdentifier: "settingsDiagnosticsRow",
+                action: { open(.diagnostics) }
+            )
         }
     }
 

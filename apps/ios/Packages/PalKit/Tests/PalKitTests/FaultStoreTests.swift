@@ -87,7 +87,7 @@ struct FaultStoreTests {
         await connection.close()
         let records = await store.records()
         #expect(records.count == 1)
-        let disk = String(decoding: try Data(contentsOf: file), as: UTF8.self)
+        let disk = try #require(String(bytes: try Data(contentsOf: file), encoding: .utf8))
         #expect(!disk.contains("fake-token-do-not-use"))
         #expect(!FaultRecord.lines(records, appVersion: "1").contains("fake-token-do-not-use"))
         #expect(!(records.first?.copyText(appVersion: "1").contains("fake-token-do-not-use") ?? true))

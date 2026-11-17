@@ -14,6 +14,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
     case shortcuts
     case usage
     case updates
+    case diagnostics
 
     var id: Self { self }
 
@@ -28,6 +29,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .shortcuts: String(localized: "Keyboard Shortcuts")
         case .usage: String(localized: "Usage & Billing")
         case .updates: String(localized: "Updates")
+        case .diagnostics: DiagnosticsCopy.title
         }
     }
 
@@ -42,6 +44,7 @@ enum MacSettingsSection: String, CaseIterable, Identifiable {
         case .shortcuts: "keyboard"
         case .usage: "chart.bar"
         case .updates: "icloud.and.arrow.down"
+        case .diagnostics: "stethoscope"
         }
     }
 }
@@ -66,6 +69,7 @@ struct MacSettingsModal: View {
                 case .shortcuts: MacShortcutSettingsSection()
                 case .usage: MacUsageSection(hub: hub)
                 case .updates: MacUpdatesSection()
+                case .diagnostics: MacDiagnosticsSection()
                 }
             }
             .id(section)
