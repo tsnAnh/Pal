@@ -2,12 +2,26 @@ import Foundation
 import PalProtocol
 
 public struct PalCatalogEntry: Decodable, Sendable, Hashable {
-    public enum Method: String, Decodable, Sendable {
-        case mcpOAuth = "mcp_oauth"
+    public enum Method: Decodable, Sendable, Hashable {
+        case mcpOAuth
         case none
-        case apiKey = "api_key"
+        case apiKey
         case native
-        case oauthClient = "oauth_client"
+        case oauthClient
+        case unsupported(String)
+
+        private static let known: [String: Method] = [
+            "mcp_oauth": .mcpOAuth, "none": .none, "api_key": .apiKey, "native": .native, "oauth_client": .oauthClient,
+        ]
+
+        public init(from decoder: any Decoder) throws {
+            let raw = try decoder.singleValueContainer().decode(String.self)
+            self = Self.known[raw] ?? .unsupported(raw)
+        }
+
+        public var isSupported: Bool {
+            if case .unsupported = self { false } else { true }
+        }
     }
 
     public enum Status: String, Decodable, Sendable {
@@ -69,6 +83,7 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
     }
 
     var appState: ConnectAppState {
+        guard method.isSupported else { return .needsSetup }
         switch status {
         case .connected: .connected
         case .needsReconnect: .needsAuthorization
@@ -270,6 +285,7 @@ public struct ConnectCatalog: Sendable, Equatable {
     }
 
     private static func setupSummary(for entry: PalCatalogEntry) -> String {
+        if !entry.method.isSupported { return String(localized: "Needs a newer Pal") }
         if entry.hasGuidedSetup {
             if let notes = entry.notes { return notes }
             return entry.status == .needsSetup ? String(localized: "Save your OAuth client once to connect.") : ""
