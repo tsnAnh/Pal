@@ -85,10 +85,6 @@ public final class KanbanStore {
         self.sleep = sleep
     }
 
-    public func visibleRows(board: String) -> [KanbanCardRow]? {
-        KanbanReadiness.rows(session: session, board: board, settledGeneration: settledGenerations[board])
-    }
-
     public func boardName(_ board: String) -> String? {
         KanbanReadiness.boardName(session: session, board: board)
     }

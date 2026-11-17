@@ -165,20 +165,6 @@ public enum KanbanContractKind: Sendable, Hashable, Codable {
     }
 }
 
-public enum KanbanVerification: Sendable, Hashable, Codable {
-    case independent
-    case attested
-    case unknown(String)
-
-    public init(wire: String) {
-        switch wire {
-        case "independent": self = .independent
-        case "attested": self = .attested
-        default: self = .unknown(wire)
-        }
-    }
-}
-
 public enum KanbanOutcomeState: Sendable, Hashable, Codable {
     case verified
     case refused
