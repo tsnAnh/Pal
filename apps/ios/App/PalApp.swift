@@ -233,11 +233,13 @@ struct RootView: View {
                 spec: bot?.spec
             )
         case .slack(let name):
-            SlackView(model: SlackModel(
+            SlackEntryView(
                 botName: name,
                 displayName: roster.bot(named: name)?.displayName ?? name,
-                services: bots.services
-            ))
+                spec: roster.bot(named: name)?.spec,
+                services: bots.services,
+                source: ChatInstallSource.make(botName: name, connection: model)
+            )
         case .telegram(let name):
             TelegramView(model: TelegramModel(
                 botName: name,
