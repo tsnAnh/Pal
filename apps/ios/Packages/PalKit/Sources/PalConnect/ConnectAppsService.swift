@@ -20,6 +20,12 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     case credentialsRequired([String])
     case signInFailed(String)
     case failed
+    case faulted(GatewayFault)
+
+    public var fault: GatewayFault? {
+        if case .faulted(let fault) = self { return fault }
+        return nil
+    }
 }
 
 public struct ConnectAppsTiming: Sendable {
@@ -81,14 +87,15 @@ public struct ConnectAppsService: Sendable {
         do {
             return try await rawCall(method, params)
         } catch let error as GatewayTransportError {
-            throw Self.map(error)
+            throw Self.map(error, method: method)
         }
     }
 
-    static func map(_ error: GatewayTransportError) -> ConnectAppsError {
+    static func map(_ error: GatewayTransportError, method: String? = nil) -> ConnectAppsError {
         if case .rpc(let rpc) = error {
             let reason = rpc.data?["code"]?.stringValue ?? rpc.data?["reason"]?.stringValue ?? rpc.reasonCode
             if reason?.lowercased() == "needs_nous_auth" { return .signInRequired }
+            if let method { return .faulted(GatewayFault(rpc, method: method)) }
         }
         return .failed
     }
@@ -199,7 +206,7 @@ public struct ConnectAppsService: Sendable {
             _ = try await rawCall("mcp.servers.add", ["name": .string(name), "preset": .string(name)])
             alreadyAdded = false
         } catch let error as GatewayTransportError {
-            guard !requires.isEmpty, case .rpc(let rpc) = error, rpc.code == 4090 else { throw Self.map(error) }
+            guard !requires.isEmpty, case .rpc(let rpc) = error, rpc.code == 4090 else { throw Self.map(error, method: "mcp.servers.add") }
             alreadyAdded = true
         }
         do {

@@ -54,11 +54,13 @@ public struct RPCRequest: Sendable, Hashable {
     public var id: RPCID
     public var method: String
     public var params: JSONValue?
+    public var trace: TraceID?
 
-    public init(id: RPCID, method: String, params: JSONValue? = nil) {
+    public init(id: RPCID, method: String, params: JSONValue? = nil, trace: TraceID? = nil) {
         self.id = id
         self.method = method
         self.params = params
+        self.trace = trace
     }
 }
 
@@ -107,6 +109,7 @@ public enum RPCCodec {
             "id": try idValue(request.id),
         ]
         if let params = request.params { object["params"] = params }
+        if let trace = request.trace { object["trace"] = .string(trace.rawValue) }
         return try encoder.encode(JSONValue.object(object))
     }
 

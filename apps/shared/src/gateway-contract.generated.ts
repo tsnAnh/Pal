@@ -1840,6 +1840,38 @@ export interface ConnectorPolicySetResult {
   revision: string
   effective: ConnectorPolicyEffectiveUnrestricted | ConnectorPolicyEffectiveDenyAll | ConnectorPolicyEffectiveAllow | ConnectorPolicyEffectiveDeny
 }
+export interface DiagRecentParams {
+  minutes?: number
+  limit?: number
+  method?: string | null
+}
+export interface DiagRecentResult {
+  faults: DiagFault[]
+}
+export interface DiagFault {
+  ts: number
+  trace: string
+  method: string
+  code?: number | null
+  reason: string
+  device_kind: string
+  device_name: string
+  app_build: string
+  gateway_version: string
+  params_shape: string
+  scope: string
+  source: string
+}
+export interface DiagReportParams {
+  trace: string
+  source: 'transport' | 'decode'
+  reason: 'forbidden' | 'owner_only' | 'invalid_params' | 'not_implemented' | 'not_found' | 'timeout' | 'internal' | 'decode'
+  method: string
+  code?: number | null
+}
+export interface DiagReportResult {
+  recorded: boolean
+}
 /** ``tools/bot_desktop/runtime.py::DesktopStatus`` plus the lease and the profile it speaks for. Each bot has its own screen and its own Chrome, which runs on a copy of the machine's one master Chrome profile: refreshed from master when that Chrome starts, written back when it exits. ``profile_copy_synced_at`` is the last refresh or write-back (epoch seconds, null before the first). A screen in the bot's own Docker sandbox reports the same: its Chrome runs on the copy, mounted in. ``chrome`` is null when the screen runs in a sandbox that holds no copy (ssh, or a container several profiles share). ``shared_files_path`` is the one files folder every bot on this machine shares (``~``-relative; mounted at ``/bot-computer/files`` in a bot's Docker sandbox), null then too. */
 export interface DisplayStatus {
   profile: string
@@ -8276,6 +8308,10 @@ export interface RpcMethods {
   'delegation.pause': { params: DelegationPauseParams; result: DelegationPauseResult }
   /** Running subagent tree plus the spawn pause flag and limits. */
   'delegation.status': { params: ProfileParams; result: DelegationStatusResult }
+  /** Recent failed RPCs from the gateway's failure ledger, newest first: method, code, reason, device, app build, gateway version, trace and time. minutes is clamped to 1..10080 and limit to 1..200. Owner only. */
+  'diag.recent': { params: DiagRecentParams; result: DiagRecentResult }
+  /** Record a failure the gateway could not see (transport: offline or timed out; decode: an unreadable response) under the app's trace id, with the calling device. method must be a registered method. Owner only. */
+  'diag.report': { params: DiagReportParams; result: DiagReportResult }
   /** Upload a force-redacted debug bundle to Nous-internal diagnostics storage. */
   'diagnostics.share_nous': { params: DiagnosticsShareNousParams; result: DiagnosticsShareNousResult }
   /** Run the distro package install on the gateway host; progress streams as display.install.log/.done. */
@@ -8912,6 +8948,8 @@ export const RPC_METHODS = [
   'cron.manage',
   'delegation.pause',
   'delegation.status',
+  'diag.recent',
+  'diag.report',
   'diagnostics.share_nous',
   'display.install',
   'display.lease.acquire',
@@ -9306,6 +9344,10 @@ export interface CanonicalRpcMethods {
   'devices.forget': { params: DevicesForgetParams; result: DevicesForgetResult }
   /** Every device the user has connected on this install, newest first. online is live presence; last_seen_at survives restarts; push_enabled needs a registered token and a configured push provider. */
   'devices.list': { params: DevicesListParams; result: DevicesListResult }
+  /** Recent failed RPCs from the gateway's failure ledger, newest first: method, code, reason, device, app build, gateway version, trace and time. minutes is clamped to 1..10080 and limit to 1..200. Owner only. */
+  'diag.recent': { params: DiagRecentParams; result: DiagRecentResult }
+  /** Record a failure the gateway could not see (transport: offline or timed out; decode: an unreadable response) under the app's trace id, with the calling device. method must be a registered method. Owner only. */
+  'diag.report': { params: DiagReportParams; result: DiagReportResult }
   /** Take over: the human named by a viewer id this connection minted controls the screen. */
   'display.lease.acquire': { params: DisplayLeaseAcquireParams; result: DisplayLeaseResult }
   /** Hand back. Without a viewer id the release is refused while a human holds unless force. */
@@ -9558,6 +9600,8 @@ export const CANONICAL_RPC_METHODS = [
   'device_connectors.set',
   'devices.forget',
   'devices.list',
+  'diag.recent',
+  'diag.report',
   'display.lease.acquire',
   'display.lease.release',
   'display.lease.resolve',

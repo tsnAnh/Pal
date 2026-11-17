@@ -13,12 +13,16 @@ public struct DiagnosticEvent: Sendable, Equatable {
     public var level: DiagnosticLevel
     public var category: String
     public var message: String
+    public var trace: String?
 
-    public init(level: DiagnosticLevel, category: String, message: String) {
+    public init(level: DiagnosticLevel, category: String, message: String, trace: String? = nil) {
         self.level = level
         self.category = category
         self.message = message
+        self.trace = trace
     }
+
+    public var line: String { trace.map { "trace=\($0) \(message)" } ?? message }
 }
 
 public protocol DiagnosticSummarizing {
@@ -46,10 +50,10 @@ public struct Diagnostics: Sendable {
                 return created
             }
             switch event.level {
-            case .debug: logger.debug("\(event.message, privacy: .public)")
-            case .info: logger.info("\(event.message, privacy: .public)")
-            case .warning: logger.warning("\(event.message, privacy: .public)")
-            case .error: logger.error("\(event.message, privacy: .public)")
+            case .debug: logger.debug("\(event.line, privacy: .public)")
+            case .info: logger.info("\(event.line, privacy: .public)")
+            case .warning: logger.warning("\(event.line, privacy: .public)")
+            case .error: logger.error("\(event.line, privacy: .public)")
             }
         }
     }
@@ -61,8 +65,8 @@ public struct Diagnostics: Sendable {
         }
     }
 
-    public func log(_ level: DiagnosticLevel, _ category: String, _ message: String) {
-        sink(DiagnosticEvent(level: level, category: category, message: message))
+    public func log(_ level: DiagnosticLevel, _ category: String, _ message: String, trace: String? = nil) {
+        sink(DiagnosticEvent(level: level, category: category, message: message, trace: trace))
     }
 
     public func debug(_ category: String, _ message: String) { log(.debug, category, message) }

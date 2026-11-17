@@ -26,5 +26,7 @@ final class ChatInstallStatusE2ETests: BotProfileTestCase {
         details.hit()
         waitFor(element(app, "chatInstallCopyDetails"), timeout: 10, "copy button")
         XCTAssertEqual(element(app, "chatInstallReasonCode").label, "forbidden", "details name the reason code")
+        XCTAssertEqual(element(app, "chatInstallFaultLine").label, "owner_only, trace 7f3k2m9a, gateway 291aaa2b",
+                       "details name the gateway reason, the trace and the gateway version")
     }
 }

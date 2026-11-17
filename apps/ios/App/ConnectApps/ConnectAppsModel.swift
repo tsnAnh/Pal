@@ -389,7 +389,7 @@ final class ConnectAppsModel {
         case .signInFailed(let reason): failures[app.id] = reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
         case .signInRequired: fail(app, "Connecting \(app.name) needs you to sign in to Nous Portal on your Pal first.")
-        case .unavailable, .failed: fail(app, "Couldn't connect \(app.name). Try again.")
+        case .unavailable, .failed, .faulted: fail(app, "Couldn't connect \(app.name). Try again.")
         }
     }
 

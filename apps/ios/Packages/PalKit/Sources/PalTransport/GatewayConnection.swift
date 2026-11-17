@@ -208,7 +208,7 @@ public actor GatewayConnection {
         nextID += 1
         let frame: String
         do {
-            let data = try RPCCodec.encode(RPCRequest(id: .int(id), method: method, params: params))
+            let data = try RPCCodec.encode(RPCRequest(id: .int(id), method: method, params: params, trace: .random()))
             frame = String(decoding: data, as: UTF8.self)
         } catch {
             throw GatewayTransportError.encoding
@@ -301,6 +301,7 @@ public actor GatewayConnection {
         case .response(let response):
             guard case .int(let id)? = response.id, let continuation = pending.removeValue(forKey: id) else { return }
             if let error = response.error {
+                diagnostics.log(.debug, "ws", "rpc refused: \(error.diagnosticSummary)", trace: error.trace?.rawValue)
                 continuation.resume(throwing: GatewayTransportError.rpc(error))
             } else {
                 continuation.resume(returning: response.result ?? .null)

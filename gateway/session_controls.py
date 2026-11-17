@@ -317,6 +317,20 @@ class AuthorityConnection:
         return handlers
 
     async def dispatch(self, request):
+        from gateway import diag_trace
+        from gateway.session_server_requests import is_response_frame
+        if is_response_frame(request):
+            return await self._dispatch(request)
+        scope = 'host' if self.host_scoped else 'profile'
+        with diag_trace.bound(request) as trace:
+            try:
+                response = await self._dispatch(request)
+            except Exception:
+                trace.fail(request, transport=self.transport, scope=scope)
+                raise
+            return trace.settle(response, request, transport=self.transport, scope=scope)
+
+    async def _dispatch(self, request):
         from gateway.session_server_requests import is_response_frame
         if is_response_frame(request):
             # A viewer answering one of the owner's server→client requests (the sudo prompt): a

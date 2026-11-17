@@ -192,8 +192,9 @@ async def test_a_sqlite_failure_keeps_the_wire_error_and_logs_its_cause(tmp_path
         with caplog.at_level('WARNING', logger='gateway.session_controls'):
             reply = await connection.dispatch({'id': 9, 'method': 'session.storage_probe', 'params': {
                 'session_id': 'session-9'}})
-        assert reply['error'] == {
-            'code': 5001, 'message': 'storage_unavailable', 'data': {'reason': 'storage_unavailable'}}
+        data = reply['error'].pop('data')
+        assert reply['error'] == {'code': 5001, 'message': 'storage_unavailable'}
+        assert data['reason'] == 'storage_unavailable' and data['trace'] == reply['trace']
         assert any('session.storage_probe storage failure for profile=test session_id=' in record.getMessage()
                    and 'database is locked' in record.getMessage() for record in caplog.records)
         assert 'sqlite3.OperationalError: database is locked' in caplog.text

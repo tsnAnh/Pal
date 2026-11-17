@@ -58,20 +58,20 @@ struct GatewayChatInstallClient: ChatInstallClient {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
-            throw ChatInstallClientError(error)
+            throw ChatInstallClientError(error, method: method)
         }
     }
 
-    private func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue) throws -> T {
-        do { return try value.decoded(as: type) } catch { throw ChatInstallClientError.failed(.decode) }
+    private func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue, _ method: String) throws -> T {
+        do { return try value.decoded(as: type) } catch { throw ChatInstallClientError.decode(method: method) }
     }
 
     func providers() async throws -> [ChatCapabilitiesWire] {
-        try decode(ChatProviderListResult.self, await perform("chat.provider.list", nil)).providers
+        try decode(ChatProviderListResult.self, await perform("chat.provider.list", nil), "chat.provider.list").providers
     }
 
     func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult {
-        try decode(ChatInstallStatusResult.self, await perform("chat.install.status", scope))
+        try decode(ChatInstallStatusResult.self, await perform("chat.install.status", scope), "chat.install.status")
     }
 
     func begin(_ scope: ChatInstallScope) async throws {
@@ -90,15 +90,15 @@ struct GatewayChatInstallClient: ChatInstallClient {
     }
 
     func spaces(_ scope: ChatInstallScope) async throws -> [ChatSpaceRefWire] {
-        try decode(ChatSpacesListResult.self, await perform("chat.spaces.list", scope)).spaces
+        try decode(ChatSpacesListResult.self, await perform("chat.spaces.list", scope), "chat.spaces.list").spaces
     }
 
     func join(_ scope: ChatInstallScope, spaceId: String) async throws -> ChatSpaceJoinResult {
-        try decode(ChatSpaceJoinResult.self, await perform("chat.space.join", scope, ["space_id": .string(spaceId)]))
+        try decode(ChatSpaceJoinResult.self, await perform("chat.space.join", scope, ["space_id": .string(spaceId)]), "chat.space.join")
     }
 
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire] {
-        try decode(ChatBindingListResult.self, await perform("chat.binding.list", scope)).bindings
+        try decode(ChatBindingListResult.self, await perform("chat.binding.list", scope), "chat.binding.list").bindings
     }
 
     func revoke(_ scope: ChatInstallScope) async throws {
@@ -106,7 +106,7 @@ struct GatewayChatInstallClient: ChatInstallClient {
     }
 
     func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
-        try decode(ChatIdentityUpdateResult.self, await perform("chat.install.update_identity", scope))
+        try decode(ChatIdentityUpdateResult.self, await perform("chat.install.update_identity", scope), "chat.install.update_identity")
     }
 
     func storeSecret(label: String, value: String) async throws -> String {
