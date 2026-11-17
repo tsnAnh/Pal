@@ -16,7 +16,8 @@ final class KanbanE2ETests: E2ETestCase {
         waitFor(any(app, "kanbanBoard"), timeout: 20, "Kanban opens straight into a board")
         XCTAssertFalse(any(app, "kanbanBoards").exists, "no boards list in the flow")
         let picker = any(app, "kanbanBoardPicker")
-        guard picker.exists else { return }
+        waitFor(picker, timeout: 20, "the board dropdown shows even before a second board loads")
+        XCTAssertFalse((picker.value as? String ?? "").isEmpty, "the dropdown names the open board")
         picker.hit()
         let ops = app.buttons.matching(NSPredicate(format: "identifier == %@ OR label BEGINSWITH %@", "kanbanBoard-ops", "Ops")).firstMatch
         waitFor(ops, timeout: 10, "the seeded board in the board picker")
@@ -70,9 +71,14 @@ final class KanbanE2ETests: E2ETestCase {
         entry.hit()
         openSeededBoard(app)
 
-        let heading = any(app, "kanbanTitle")
+        #if os(macOS)
+        let heading = any(app, "kanbanBoard-title")
         waitFor(heading, timeout: 20, "board header")
         XCTAssertEqual(heading.label, "Pal Kanban", "the board header reads Pal Kanban")
+        #else
+        waitFor(app.navigationBars["Pal Kanban"], timeout: 20, "the board header reads Pal Kanban")
+        #endif
+        XCTAssertEqual(any(app, "kanbanBoardPicker").value as? String, "Ops", "the dropdown switched to the chosen board")
         show(app, column: "done")
         let merged = any(app, "kanbanColumn-done").buttons
             .matching(NSPredicate(format: "label CONTAINS %@", "Publish the docs")).firstMatch
@@ -139,18 +145,32 @@ final class KanbanE2ETests: E2ETestCase {
         waitFor(entry, timeout: 20, "work boards button")
         entry.hit()
         openSeededBoard(app)
-        waitFor(any(app, "kanbanTitle"), timeout: 20, "board filter bar")
+        waitFor(any(app, "kanbanBoard-title"), timeout: 20, "board header")
 
         let window = app.windows.firstMatch.frame
         let titleBar = CGRect(x: window.minX, y: window.minY, width: window.width, height: 55)
         let trafficLights = CGRect(x: window.minX, y: window.minY, width: 78, height: 35)
         XCTAssertTrue(app.toolbars.buttons.count == 0, "Kanban puts nothing in the window toolbar")
-        for identifier in ["kanbanBoard-close", "kanbanBoard-title", "kanbanBoardPicker", "kanbanTitle", "kanbanFilterState"] {
+        for identifier in ["kanbanBoard-close", "kanbanBoard-title", "kanbanBoardPicker", "kanbanFilterState"] {
             let element = any(app, identifier)
-            guard element.exists else { continue }
+            XCTAssertTrue(element.exists, "\(identifier) is on screen")
             XCTAssertFalse(element.frame.intersects(titleBar), "\(identifier) sits below the title bar")
             XCTAssertFalse(element.frame.intersects(trafficLights), "\(identifier) is clear of the traffic lights")
         }
+        XCTAssertFalse(any(app, "kanbanTitle").exists, "the filter bar no longer repeats the title and board name")
+
+        let close = any(app, "kanbanBoard-close").frame
+        let title = any(app, "kanbanBoard-title").frame
+        let picker = any(app, "kanbanBoardPicker").frame
+        for (name, frame) in [("title", title), ("dropdown", picker)] {
+            XCTAssertEqual(frame.midY, close.midY, accuracy: 2, "the \(name) shares the close button's row")
+        }
+        XCTAssertEqual(picker.height, close.height, accuracy: 2, "the dropdown is as tall as the close button")
+        XCTAssertLessThan(close.maxX, title.minX, "the title follows the close button")
+        XCTAssertLessThan(title.maxX, picker.minX, "the dropdown sits right of the title")
+        XCTAssertLessThanOrEqual(close.minY - titleBar.maxY, 2, "no empty band above the header row")
+        let filter = any(app, "kanbanFilterState").frame
+        XCTAssertGreaterThanOrEqual(filter.minY, close.maxY, "the filter bar starts below the header row")
         screenShot("kanban-mac-board-chrome")
     }
     #endif

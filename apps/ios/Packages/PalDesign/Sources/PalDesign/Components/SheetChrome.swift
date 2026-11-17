@@ -31,6 +31,17 @@ public enum SheetTitleAlignment: Sendable {
     case afterLeadingButton
 }
 
+public enum SheetHeaderStyle: Sendable {
+    case standard
+    case toolbarRow
+
+    public var topPadding: CGFloat { self == .standard ? PalMetrics.sheetHeaderTopPadding : 0 }
+    public var bottomGap: CGFloat { self == .standard ? PalMetrics.sheetHeaderBottomGap : 0 }
+    public var rowHeight: CGFloat? { self == .toolbarRow ? PalMetrics.sheetCloseControlSize : nil }
+    public var titleFollowsLeadingButton: Bool { self == .toolbarRow }
+    public var trailingFollowsTitle: Bool { self == .toolbarRow }
+}
+
 public enum SheetSurface: Sendable {
     case grouped
     case canvas
@@ -42,6 +53,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
     public let leading: SheetLeadingButton
     public let titleAlignment: SheetTitleAlignment
     public let surface: SheetSurface
+    public let headerStyle: SheetHeaderStyle
     public let accessibilityIdentifier: String
     public let leadingAccessibilityIdentifier: String?
     public let onLeading: () -> Void
@@ -55,6 +67,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         leading: SheetLeadingButton = .close,
         titleAlignment: SheetTitleAlignment = .centered,
         surface: SheetSurface = .grouped,
+        headerStyle: SheetHeaderStyle = .standard,
         accessibilityIdentifier: String,
         leadingAccessibilityIdentifier: String? = nil,
         onLeading: @escaping () -> Void,
@@ -65,6 +78,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         self.leading = leading
         self.titleAlignment = titleAlignment
         self.surface = surface
+        self.headerStyle = headerStyle
         self.accessibilityIdentifier = accessibilityIdentifier
         self.leadingAccessibilityIdentifier = leadingAccessibilityIdentifier
         self.onLeading = onLeading
@@ -140,9 +154,11 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
     }
     #endif
 
+    private var inlineTitle: Bool { titleAlignment == .afterLeadingButton || headerStyle.titleFollowsLeadingButton }
+
     private var header: some View {
         ZStack {
-            if let title, titleAlignment == .centered {
+            if let title, !inlineTitle {
                 titleText(title)
             }
             HStack(spacing: 0) {
@@ -154,16 +170,22 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
                 .buttonBorderShape(.circle)
                 .accessibilityLabel(Text(leading.accessibilityLabel))
                 .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-\(leading.identifierSuffix)")
-                if let title, titleAlignment == .afterLeadingButton {
+                if let title, inlineTitle {
                     titleText(title).padding(.leading, 16)
                 }
-                Spacer(minLength: 0)
-                trailing
+                if headerStyle.trailingFollowsTitle {
+                    trailing.padding(.leading, 12)
+                    Spacer(minLength: 0)
+                } else {
+                    Spacer(minLength: 0)
+                    trailing
+                }
             }
         }
+        .frame(height: headerStyle.rowHeight)
         .padding(.horizontal, PalMetrics.sheetHeaderHorizontalPadding)
-        .padding(.top, PalMetrics.sheetHeaderTopPadding)
-        .padding(.bottom, PalMetrics.sheetHeaderBottomGap)
+        .padding(.top, headerStyle.topPadding)
+        .padding(.bottom, headerStyle.bottomGap)
     }
 
     private func titleText(_ title: String) -> some View {
@@ -182,6 +204,7 @@ extension SheetChrome where Trailing == EmptyView {
         leading: SheetLeadingButton = .close,
         titleAlignment: SheetTitleAlignment = .centered,
         surface: SheetSurface = .grouped,
+        headerStyle: SheetHeaderStyle = .standard,
         accessibilityIdentifier: String,
         leadingAccessibilityIdentifier: String? = nil,
         onLeading: @escaping () -> Void,
@@ -192,6 +215,7 @@ extension SheetChrome where Trailing == EmptyView {
             leading: leading,
             titleAlignment: titleAlignment,
             surface: surface,
+            headerStyle: headerStyle,
             accessibilityIdentifier: accessibilityIdentifier,
             leadingAccessibilityIdentifier: leadingAccessibilityIdentifier,
             onLeading: onLeading,

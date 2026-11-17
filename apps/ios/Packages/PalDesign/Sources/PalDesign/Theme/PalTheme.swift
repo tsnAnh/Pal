@@ -10,6 +10,10 @@ public struct PalTheme: Equatable, Sendable {
         self.palette = palette
     }
 
+    public func withoutBotTint(systemScheme: ColorScheme) -> PalTheme {
+        PalTheme(mode: mode, palette: mode.palette(systemScheme: systemScheme, botAccent: nil))
+    }
+
     public static let `default` = PalTheme(mode: .dark, palette: .measuredDark)
 }
 
@@ -42,7 +46,20 @@ private struct PalThemeRoot: ViewModifier {
     }
 }
 
+private struct PalThemeWithoutBotTint: ViewModifier {
+    @Environment(\.hermesTheme) private var theme
+    @Environment(\.colorScheme) private var systemScheme
+
+    func body(content: Content) -> some View {
+        content.environment(\.hermesTheme, theme.withoutBotTint(systemScheme: systemScheme))
+    }
+}
+
 extension View {
+    public func hermesThemeWithoutBotTint() -> some View {
+        modifier(PalThemeWithoutBotTint())
+    }
+
     public func hermesTheme(mode: AppearanceMode, botAccent: BotAccent?) -> some View {
         modifier(PalThemeRoot(mode: mode, botAccent: botAccent))
     }

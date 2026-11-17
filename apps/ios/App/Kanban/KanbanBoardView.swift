@@ -19,7 +19,6 @@ struct KanbanBoardView: View {
 
     private var cache: KanbanBoardCache? { store.session.cache(board) }
     private var rows: [KanbanCardRow]? { store.visibleRows(board: board) }
-    private var title: String { store.boardName(board) ?? String(localized: "Loading board") }
     private var load: KanbanLoad { store.load(of: board) }
 
     private var showsColumns: Bool {
@@ -31,7 +30,7 @@ struct KanbanBoardView: View {
     }
 
     var body: some View {
-        KanbanPage(title: title, identifier: "kanbanBoard", back: nil, close: close, scrolls: rows == nil, picker: picker) {
+        KanbanPage(title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoard", back: nil, close: close, scrolls: rows == nil, picker: picker) {
             content
         }
         .refreshable { await store.refreshSnapshot(board: board) }
@@ -68,7 +67,7 @@ struct KanbanBoardView: View {
                 ContentUnavailableView("No cards yet", systemImage: "rectangle.split.3x1", description: Text("Cards on this board appear here."))
                     .accessibilityIdentifier("kanbanBoardEmpty")
             } else {
-                KanbanFilterBar(filter: $filter, layout: layout, boardName: title, compact: !showsColumns)
+                KanbanFilterBar(filter: $filter, layout: layout, compact: !showsColumns)
                 if layout.matchingCards == 0 {
                     noMatches
                 } else {
