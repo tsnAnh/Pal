@@ -84,7 +84,7 @@ struct MacConnectApps: View {
     private func customConnectorPanel(_ connector: CustomConnectorModel) -> some View {
         VStack(spacing: 0) {
             HStack {
-                Button { Task { await model.leaveCustomConnector() } } label: {
+                Button { Task { await model.leaveCustomConnector() } } label: { // nav-chrome: ok
                     Image(systemName: "chevron.left")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(PalTokens.textPrimary)
@@ -138,7 +138,7 @@ struct MacConnectApps: View {
                     .foregroundStyle(PalTokens.textPrimary)
                     .accessibilityAddTraits(.isHeader)
             } else {
-                Button { model.page = .catalog } label: {
+                Button { model.page = .catalog } label: { // nav-chrome: ok
                     HStack(spacing: 6) {
                         Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
                         Text("Your plugins").font(.system(size: 15, weight: .medium))

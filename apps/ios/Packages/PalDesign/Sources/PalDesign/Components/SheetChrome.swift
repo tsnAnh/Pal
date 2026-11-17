@@ -130,7 +130,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
                 .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-close")
                 .tint(.primary)
         case .back:
-            Button(action: onLeading) {
+            Button(action: onLeading) { // nav-chrome: ok
                 Image(systemName: "chevron.left")
             }
             .accessibilityLabel(Text(leading.accessibilityLabel))

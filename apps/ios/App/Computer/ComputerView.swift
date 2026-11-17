@@ -71,7 +71,7 @@ struct ComputerView: View {
     private var toolbar: some ToolbarContent {
         #if os(iOS)
         ToolbarItem(placement: .leadingBar) {
-            Button { dismiss() } label: { Image(systemName: "chevron.left") }
+            Button { dismiss() } label: { Image(systemName: "chevron.left") } // nav-chrome: ok
                 .accessibilityLabel(Text("Back"))
                 .accessibilityIdentifier("computerBackButton")
                 .tint(.primary)

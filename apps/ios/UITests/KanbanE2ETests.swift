@@ -79,4 +79,56 @@ final class KanbanE2ETests: E2ETestCase {
         waitFor(any(app, "kanbanPullRequest"), timeout: 10, "the detail shows the PR chip with its state")
         screenShot("kanban-glass-card-detail")
     }
+
+    private func systemBack(_ app: XCUIApplication) -> XCUIElement {
+        #if os(macOS)
+        app.toolbars.buttons.element(boundBy: 0)
+        #else
+        app.navigationBars.buttons.element(boundBy: 0)
+        #endif
+    }
+
+    private func assertOneWayOut(_ app: XCUIApplication, close: Bool, _ screen: String) {
+        for duplicate in ["kanbanBoards-back", "kanbanBoard-back", "kanbanCard-back", "kanbanBoard-close", "kanbanCard-close", "kanban-close"] {
+            XCTAssertFalse(any(app, duplicate).exists, "\(screen) has no \(duplicate)")
+        }
+        XCTAssertEqual(app.buttons.matching(identifier: "kanbanBoards-close").count, close ? 1 : 0, "\(screen) close count")
+        XCTAssertEqual(app.buttons.matching(NSPredicate(format: "label == 'Close'")).count, close ? 1 : 0, "\(screen) has \(close ? "one" : "no") close")
+    }
+
+    func testEachScreenHasOneSystemWayOut() throws {
+        try control("kanban-seed")
+        let app = launch()
+        signInIfNeeded(app)
+
+        let entry = app.buttons["kanbanButton"]
+        waitFor(entry, timeout: 20, "work boards button")
+        entry.hit()
+        let boardRow = any(app, "kanbanBoard-ops")
+        waitFor(boardRow, timeout: 20, "the seeded board in the boards list")
+        assertOneWayOut(app, close: true, "boards list")
+
+        boardRow.hit()
+        waitFor(any(app, "kanbanBoard"), timeout: 20, "board page")
+        assertOneWayOut(app, close: false, "board")
+        show(app, column: "ready")
+        let row = card(app, in: "ready")
+        waitFor(row, timeout: 20, "the card in Ready")
+
+        row.hit()
+        waitFor(any(app, "kanbanBody"), timeout: 20, "card detail")
+        assertOneWayOut(app, close: false, "card detail")
+
+        systemBack(app).hit()
+        waitFor(any(app, "kanbanBoard"), timeout: 20, "back from the card lands on the board")
+        XCTAssertFalse(any(app, "kanbanBody").exists, "the card detail is gone")
+
+        systemBack(app).hit()
+        waitFor(boardRow, timeout: 20, "back from the board lands on the boards list")
+        XCTAssertFalse(any(app, "kanbanBoard").exists, "the board is gone")
+
+        app.buttons["kanbanBoards-close"].hit()
+        waitFor(entry, timeout: 20, "close dismisses the Kanban surface")
+        XCTAssertFalse(any(app, "kanbanBoards").exists, "the boards list is gone")
+    }
 }
