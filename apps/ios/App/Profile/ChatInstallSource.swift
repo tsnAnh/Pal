@@ -63,7 +63,11 @@ struct GatewayChatInstallClient: ChatInstallClient {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, _ value: JSONValue, _ method: String) throws -> T {
-        do { return try value.decoded(as: type) } catch { throw ChatInstallClientError.decode(method: method) }
+        do { return try value.decoded(as: type) } catch {
+            let failure = ChatInstallClientError.decode(method: method)
+            if let fault = failure.fault { Task { await FaultStore.shared.record(fault) } }
+            throw failure
+        }
     }
 
     func providers() async throws -> [ChatCapabilitiesWire] {

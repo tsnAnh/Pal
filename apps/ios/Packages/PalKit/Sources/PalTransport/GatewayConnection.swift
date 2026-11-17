@@ -58,15 +58,18 @@ public struct GatewayDialOptions: Sendable {
     public var readyTimeout: Duration
     public var requestTimeout: Duration
     public var frameTap: FrameTap?
+    public var faults: FaultStore?
 
     public init(
         readyTimeout: Duration = .seconds(15),
         requestTimeout: Duration = .seconds(30),
-        frameTap: FrameTap? = nil
+        frameTap: FrameTap? = nil,
+        faults: FaultStore? = nil
     ) {
         self.readyTimeout = readyTimeout
         self.requestTimeout = requestTimeout
         self.frameTap = frameTap
+        self.faults = faults
     }
 }
 
@@ -132,6 +135,7 @@ public actor GatewayConnection {
     private let eventContinuation: AsyncStream<GatewayEvent>.Continuation
     private let requestContinuation: AsyncStream<RPCRequest>.Continuation
     private let frameTap: FrameTap?
+    let faults: FaultStore?
     private let session: URLSession
     private let task: URLSessionWebSocketTask
     private let observer: SocketObserver
@@ -151,7 +155,8 @@ public actor GatewayConnection {
         observer: SocketObserver,
         diagnostics: Diagnostics,
         requestTimeout: Duration,
-        frameTap: FrameTap?
+        frameTap: FrameTap?,
+        faults: FaultStore?
     ) {
         (events, eventContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
         (serverRequests, requestContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
@@ -161,6 +166,7 @@ public actor GatewayConnection {
         self.observer = observer
         self.diagnostics = diagnostics
         self.requestTimeout = requestTimeout
+        self.faults = faults
     }
 
     public static func dial(
@@ -183,7 +189,8 @@ public actor GatewayConnection {
             observer: observer,
             diagnostics: diagnostics,
             requestTimeout: options.requestTimeout,
-            frameTap: options.frameTap
+            frameTap: options.frameTap,
+            faults: options.faults
         )
         diagnostics.info("ws", "dialing \(Diagnostics.describe(url))")
         task.resume()
@@ -202,13 +209,13 @@ public actor GatewayConnection {
         }
     }
 
-    public func call(_ method: String, params: JSONValue? = nil, timeout: Duration? = nil) async throws -> JSONValue {
+    func send(_ method: String, params: JSONValue?, timeout: Duration?, trace: TraceID) async throws -> JSONValue {
         if let closeReason { throw GatewayTransportError.closed(closeReason) }
         let id = nextID
         nextID += 1
         let frame: String
         do {
-            let data = try RPCCodec.encode(RPCRequest(id: .int(id), method: method, params: params, trace: .random()))
+            let data = try RPCCodec.encode(RPCRequest(id: .int(id), method: method, params: params, trace: trace))
             frame = String(decoding: data, as: UTF8.self)
         } catch {
             throw GatewayTransportError.encoding
@@ -234,11 +241,6 @@ public actor GatewayConnection {
 
     public nonisolated func recordNegotiatedRuntime(_ description: JSONValue) {
         negotiated.withLock { $0 = description }
-    }
-
-    public func ping() async throws {
-        let result = try await call("gateway.ping", timeout: .seconds(10))
-        guard result["ok"]?.boolValue == true else { throw GatewayTransportError.unexpectedFirstFrame }
     }
 
     public func respond(to id: RPCID, result: JSONValue) {
