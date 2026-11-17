@@ -198,7 +198,8 @@ struct CustomConnectorServiceTests {
             McpServerEntry(name: "stdio-only", url: nil),
             McpServerEntry(name: "paused", url: "https://p.example.com/mcp", enabled: false),
         ]
-        let catalog = ConnectCatalog.make(hosted: [], states: [], mcp: [McpPresetEntry(name: "linear", description: "Issues", installed: true, enabled: true)], servers: servers)
+        let preset = McpPresetEntry(name: "linear", description: "Issues", installed: true, enabled: true)
+        let catalog = ConnectCatalog.make(catalog: [], mcp: [preset], servers: servers)
         let custom = catalog.apps.filter { if case .custom = $0.source { true } else { false } }
         #expect(custom.map(\.name) == ["notes", "paused"])
         #expect(custom.map(\.category) == [ConnectCatalog.customCategory, ConnectCatalog.customCategory])

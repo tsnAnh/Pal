@@ -1,0 +1,99 @@
+"""The Pal app's Connect Apps list: ``connectors.catalog`` serves the Pal-owned catalog with a per-profile
+status joined from the direct MCP connections, and each direct method connects through the existing
+``mcp.servers.*`` path. Nothing on that path may reach the Nous Portal.
+
+Real gateway handlers against a temp ``HERMES_HOME`` with a named profile; no network.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+import hermes_yaml as yaml
+from hermes_cli.pal_connectors import ConnectionMethod, load_pal_connectors
+from tui_gateway import server
+
+PROFILE = "work"
+ENTRIES = {entry.id: entry for entry in load_pal_connectors()}
+
+
+@pytest.fixture
+def work_home(tmp_path, monkeypatch):
+    root = tmp_path / "hermes_home"
+    (root / "profiles" / PROFILE).mkdir(parents=True)
+    monkeypatch.setenv("HERMES_HOME", str(root))
+    return root / "profiles" / PROFILE
+
+
+@pytest.fixture(autouse=True)
+def portal_forbidden(monkeypatch):
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("the Pal connect path reached the Nous Portal")
+
+    monkeypatch.setattr("tools.connectors.portal.client.PortalConnectorClient.__init__", refuse)
+    monkeypatch.setattr("tools.connectors.portal.client._default_transport", refuse)
+
+
+def _ok(method, **params):
+    response = server._methods[method](1, {"profile": PROFILE, **params})
+    assert "error" not in response, response
+    return response["result"]
+
+
+def _rows():
+    return {row["slug"]: row for row in _ok("connectors.catalog")["connectors"]}
+
+
+def _first(method):
+    return next(entry for entry in ENTRIES.values() if entry.method is method and entry.mcp_url)
+
+
+def test_catalog_lists_every_pal_entry_with_its_method_and_nothing_connected(work_home):
+    rows = _rows()
+
+    assert set(rows) == set(ENTRIES)
+    for cid, entry in ENTRIES.items():
+        row = rows[cid]
+        assert (row["name"], row["category"], row["method"], row["verified"], row["mcp_url"], row["icon"]) == (
+            entry.name, entry.category, entry.method.value, entry.verified, entry.mcp_url, entry.icon)
+    assert {row["status"] for cid, row in rows.items() if ENTRIES[cid].method is not ConnectionMethod.OAUTH_CLIENT} == {
+        "not_connected"}
+
+
+def test_owner_registered_oauth_clients_need_setup(work_home):
+    rows = _rows()
+
+    assert rows["asana"]["status"] == rows["google-workspace"]["status"] == "needs_setup"
+
+
+def test_a_no_auth_entry_added_through_the_mcp_path_shows_connected(work_home):
+    entry = _first(ConnectionMethod.NONE)
+
+    _ok("mcp.servers.add", name=entry.id, config={"url": entry.mcp_url, "transport": "http"})
+
+    assert _rows()[entry.id]["status"] == "connected"
+
+
+def test_an_api_key_entry_keeps_the_key_out_of_config_and_shows_connected(work_home):
+    entry = _first(ConnectionMethod.API_KEY)
+    key = "fake-key-for-test"
+
+    _ok("mcp.servers.add", name=entry.id, config={"url": entry.mcp_url, "transport": "http"}, bearer_token=key)
+
+    assert _rows()[entry.id]["status"] == "connected"
+    assert key not in (work_home / "config.yaml").read_text()
+
+
+def test_an_oauth_entry_with_a_rejected_token_needs_reconnect_and_a_disabled_one_is_not_connected(
+        work_home, monkeypatch):
+    entry = _first(ConnectionMethod.MCP_OAUTH)
+    _ok("mcp.servers.add", name=entry.id, config={"url": entry.mcp_url, "transport": "http"})
+    monkeypatch.setattr("tools.mcp_oauth.pending_reauth_reason", lambda name: "expired" if name == entry.id else None)
+
+    assert _rows()[entry.id]["status"] == "needs_reconnect"
+
+    config = yaml.safe_load((work_home / "config.yaml").read_text())
+    config["mcp_servers"][entry.id]["enabled"] = False
+    (work_home / "config.yaml").write_text(yaml.safe_dump(config))
+
+    assert _rows()[entry.id]["status"] == "not_connected"

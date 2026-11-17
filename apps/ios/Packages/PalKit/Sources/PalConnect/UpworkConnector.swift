@@ -164,7 +164,6 @@ extension ConnectAppsService {
         } catch let error as GatewayTransportError {
             guard case .rpc(let rpc) = error else { throw ConnectAppsError.signInFailed(McpOAuthError.gatewayUnavailable.reason) }
             if rpc.code == 4090 { return false }
-            if Self.map(error) == .signInRequired { throw ConnectAppsError.signInRequired }
             throw ConnectAppsError.signInFailed(McpOAuthError.serverAddFailed(McpOAuthSubmission.readable(rpc.message)).reason)
         }
     }

@@ -6,21 +6,21 @@ import PalProtocol
 import SwiftUI
 
 struct ConnectAppsSheet: View {
-    @State private var model: ConnectAppsModel
+    @State var model: ConnectAppsModel
     let close: () -> Void
 
-    @Environment(\.hermesTheme) private var theme
+    @Environment(\.hermesTheme) var theme
     @Environment(\.scenePhase) private var scenePhase
 
-    private static let rowsPerSectionInAll = 4
-    private static let cardInset: CGFloat = 14
+    static let rowsPerSectionInAll = 4
+    static let cardInset: CGFloat = 14
 
     init(model: ConnectAppsModel, close: @escaping () -> Void) {
         _model = State(initialValue: model)
         self.close = close
     }
 
-    private var onCatalog: Bool { model.page == .catalog }
+    var onCatalog: Bool { model.page == .catalog }
 
     var body: some View {
         Group {
@@ -51,10 +51,6 @@ struct ConnectAppsSheet: View {
         }
         .sheet(isPresented: $model.showsSkills) {
             SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
-                .macSheetFrame()
-        }
-        .sheet(item: $model.accountsModel) { accounts in
-            ConnectorAccountsView(model: accounts)
                 .macSheetFrame()
         }
         .sheet(item: $model.upworkApp) { app in
@@ -141,7 +137,7 @@ struct ConnectAppsSheet: View {
         )
     }
 
-    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack(spacing: 0) { content() }
             .padding(.vertical, 2)
             .kanbanGlass(RoundedRectangle(cornerRadius: PalMetrics.tileRadius, style: .continuous))
@@ -150,224 +146,6 @@ struct ConnectAppsSheet: View {
 
     private func disconnectMessage(_ target: ConnectDisconnectTarget) -> String {
         "\(model.botName) loses access to this app until you connect it again."
-    }
-
-    @ViewBuilder
-    private var catalogContent: some View {
-        if model.trimmedQuery.isEmpty {
-            FilterChipBar(
-                items: model.chips.map { FilterChipItem(id: $0, title: chipTitle($0)) },
-                selection: $model.selection,
-                accessibilityIdentifier: "connectAppsChips"
-            )
-        }
-        switch model.phase {
-        case .loading where model.catalog.apps.isEmpty:
-            DelayedProgressView().padding(.top, 60).accessibilityIdentifier("connectAppsLoading")
-        case .unavailable:
-            unavailable
-        default:
-            if !model.trimmedQuery.isEmpty { searchResults } else { selectedSection }
-        }
-    }
-
-    private func chipTitle(_ id: String) -> String {
-        switch id {
-        case ConnectChip.all: "All"
-        default: id
-        }
-    }
-
-    @ViewBuilder
-    private var selectedSection: some View {
-        switch model.selection {
-        case ConnectChip.all: allSections
-        case let category:
-            ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSectionTitle")
-            card { ForEach(model.catalog.apps(in: category)) { appRow($0) } }
-        }
-    }
-
-    @ViewBuilder
-    private var allSections: some View {
-        deviceSection(model.devices.thisDevice)
-        ForEach(model.catalog.categories, id: \.self) { category in
-            ConnectSectionHeader(category, accessibilityIdentifier: "connectAppsSection-\(category)") { model.selection = category }
-            card { ForEach(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)) { appRow($0) } }
-        }
-        SkillsCatalogEntry { model.showsSkills = true }
-        capabilitiesSection
-    }
-
-    @ViewBuilder
-    private func deviceSection(_ section: DeviceSection) -> some View {
-        ConnectSectionHeader(section.title, accessibilityIdentifier: "connectAppsSection-device-\(section.id)")
-        if !section.rows.isEmpty { card { ForEach(section.rows) { deviceRow($0) } } }
-    }
-
-    private func deviceRow(_ row: DeviceConnectorRow) -> some View {
-        let look = DeviceRowPresentation(row: row)
-        return ConnectAppRow(
-            title: row.entry.title, summary: look.summary, accessibilityIdentifier: "deviceConnector-\(row.id.rawValue)",
-            isBusy: model.devices.busy.contains(row.id), inset: Self.cardInset, trailing: deviceAction(look, row.id)
-        ) { DeviceTile(connector: row.id) }
-    }
-
-    private func deviceAction(_ look: DeviceRowPresentation, _ id: DeviceConnectorID) -> ConnectRowAction? {
-        guard let title = look.buttonTitle else { return nil }
-        switch look.action {
-        case .allow: return ConnectRowAction(title, kind: .accent) { Task { await model.devices.allow(id) } }
-        case .openSettings: return ConnectRowAction(title, kind: .accent) { model.devices.openSettings(for: id) }
-        case nil: return ConnectRowAction(title, kind: .dimmed) {}
-        }
-    }
-
-    @ViewBuilder
-    private var capabilitiesSection: some View {
-        switch model.capabilitiesPhase {
-        case .hidden:
-            EmptyView()
-        case .loading:
-            ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
-            DelayedProgressView().frame(maxWidth: .infinity).padding(.vertical, 12).accessibilityIdentifier("capabilitiesLoading")
-        case .failed:
-            ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
-            Text("Couldn't load capabilities")
-                .font(.system(size: ConnectRowMetrics.captionSize))
-                .foregroundStyle(Color(theme.palette.textSecondary))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
-                .padding(.vertical, 8)
-                .accessibilityIdentifier("capabilitiesError")
-        case .ready(let rows):
-            if !rows.isEmpty {
-                ConnectSectionHeader("Capabilities", accessibilityIdentifier: "capabilitiesTitle")
-                card {
-                    ForEach(rows) { row in CapabilityListRow(row: row, onSetKey: model.canSetKeys ? { model.beginKeyEntry(row, keyName: $0) } : nil) }
-                }
-                .accessibilityElement(children: .contain)
-                .accessibilityIdentifier("capabilitiesList")
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var searchResults: some View {
-        let apps = model.searchedApps
-        let skills = model.searchedSkills
-        if apps.isEmpty, skills.isEmpty {
-            Text("No matches")
-                .foregroundStyle(Color(theme.palette.textSecondary))
-                .padding(.top, 60)
-                .accessibilityIdentifier("connectAppsNoMatches")
-        }
-        if !apps.isEmpty {
-            card { ForEach(apps) { appRow($0) } }
-                .padding(.top, 12)
-        }
-        if !skills.isEmpty {
-            ConnectSectionHeader("Skills", accessibilityIdentifier: "connectAppsSection-skills")
-            card {
-                ForEach(skills) { skill in
-                    ConnectAppRow(title: skill.name, summary: skill.category, accessibilityIdentifier: "skill-\(skill.id)", inset: Self.cardInset, trailing: nil) { PluginGlyphTile() }
-                }
-            }
-        }
-    }
-
-    private var unavailable: some View {
-        VStack(spacing: 14) {
-            Text("Couldn't load apps")
-                .foregroundStyle(Color(theme.palette.textSecondary))
-            PillButton("Try again", accessibilityIdentifier: "connectAppsRetry") { Task { await model.reload() } }
-        }
-        .padding(.top, 60)
-        .accessibilityIdentifier("connectAppsUnavailable")
-    }
-
-    @ViewBuilder
-    private var yourPluginsContent: some View {
-        let apps = model.connectedApps
-        if apps.isEmpty {
-            Text("Nothing connected yet")
-                .foregroundStyle(Color(theme.palette.textSecondary))
-                .padding(.top, 60)
-                .accessibilityIdentifier("yourPluginsEmpty")
-        }
-        if !apps.isEmpty {
-            ConnectSectionHeader("Apps", accessibilityIdentifier: "yourPluginsSection-apps")
-            card {
-                ForEach(apps) { app in
-                    ConnectAppRow(
-                        title: app.name, summary: app.summary, accessibilityIdentifier: "yourPlugin-\(app.id)",
-                        isBusy: model.busy.contains(app.id), status: ConnectAppStatus(app.state).row, inset: Self.cardInset,
-                        trailing: ConnectRowAction("Disconnect") { model.disconnectTarget = .app(app) }
-                    ) { icon(for: app) }
-                    .contextMenu {
-                        if case .hosted = app.source { Button("Accounts") { model.manageAccounts(app) } }
-                    }
-                }
-            }
-        }
-    }
-
-    private func upworkRow(_ app: ConnectApp) -> some View {
-        let state = model.cardState(app)
-        return ConnectAppRow(
-            title: app.name, summary: UpworkCardText.summary(state, fallback: app.summary), accessibilityIdentifier: "connectApp-\(app.id)",
-            isBusy: state == .connecting, status: ConnectAppStatus(app.state).row, inset: Self.cardInset,
-            trailing: ConnectRowAction(UpworkCardText.actionTitle(state), kind: state.isReconnect ? .accent : .neutral) { model.upworkApp = app }
-        ) { icon(for: app) }
-    }
-
-    private func googleRow(_ listed: ConnectApp) -> some View {
-        let app = model.googleRow(listed)
-        return ConnectAppRow(
-            title: app.name, summary: GoogleWorkspaceText.summary(app), accessibilityIdentifier: "connectApp-\(app.id)",
-            isBusy: model.google.isSigningIn, status: ConnectAppStatus(app.state).row, inset: Self.cardInset,
-            trailing: ConnectRowAction(GoogleWorkspaceText.actionTitle(app.state), kind: app.state == .needsAuthorization ? .accent : .neutral) { model.googleApp = app }
-        ) { icon(for: app) }
-    }
-
-    @ViewBuilder
-    private func appRow(_ app: ConnectApp) -> some View {
-        if app.requiresAppSignIn {
-            upworkRow(app)
-        } else if app.source == .googleWorkspace {
-            googleRow(app)
-        } else {
-            plainRow(app)
-        }
-    }
-
-    private func plainRow(_ app: ConnectApp) -> some View {
-        let action: ConnectRowAction = if case .custom = app.source {
-            ConnectRowAction("Manage") { model.manage(app) }
-        } else {
-            switch app.state {
-        case .disconnected: ConnectRowAction(OtherConnectorCardText.connectTitle(model.cardState(app))) { Task { await model.connect(app) } }
-        case .needsAuthorization: ConnectRowAction("Authorize", kind: .accent) { Task { await model.connect(app) } }
-        case .connected:
-            if case .mcp(_, let requires) = app.source, !requires.isEmpty {
-                ConnectRowAction("Update token") { Task { await model.connect(app) } }
-            } else {
-                ConnectRowAction("Manage") { model.manageAccounts(app) }
-            }
-            }
-        }
-        return ConnectAppRow(
-            title: app.name, summary: OtherConnectorCardText.summary(model.cardState(app), fallback: app.summary),
-            accessibilityIdentifier: "connectApp-\(app.id)",
-            isBusy: model.busy.contains(app.id), status: ConnectAppStatus(app.state).row, inset: Self.cardInset, trailing: action
-        ) { icon(for: app) }
-    }
-
-    @ViewBuilder
-    private func icon(for app: ConnectApp) -> some View {
-        switch app.source {
-        case .hosted: RemoteLogoTile(url: app.iconURL)
-        case .mcp, .custom, .googleWorkspace: PluginGlyphTile()
-        }
     }
 }
 
@@ -427,11 +205,11 @@ struct CredentialSheet: View {
     }
 }
 
-private struct CapabilityListRow: View {
+struct CapabilityListRow: View {
     let row: CapabilityRow
     let onSetKey: ((String) -> Void)?
 
-    @Environment(\.hermesTheme) private var theme
+    @Environment(\.hermesTheme) var theme
 
     var body: some View {
         HStack(alignment: .top, spacing: ConnectRowMetrics.tileToTextGap) {

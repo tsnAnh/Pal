@@ -6,15 +6,9 @@ import PalTransport
 
 public protocol ConnectRPC: Sendable {
     func call(_ method: String, _ params: JSONValue) async throws -> JSONValue
-    var sendsAccountSource: Bool { get async }
-}
-
-public extension ConnectRPC {
-    var sendsAccountSource: Bool { false }
 }
 
 public enum ConnectAppsError: Error, Sendable, Equatable {
-    case signInRequired
     case unavailable
     case cancelled
     case credentialsRequired([String])
@@ -71,12 +65,6 @@ public struct ConnectAppsService: Sendable {
         self.init(rpc: rpc, profile: profile, browser: UnavailableAuthorizationBrowser())
     }
 
-    public static let accountSourceCapability = "connectors-account-source-v1"
-
-    private func account() async -> JSONValue {
-        await rpc.sendsAccountSource ? ["type": "account", "source": "ios"] : ["type": "account"]
-    }
-
     func rawCall(_ method: String, _ params: [String: JSONValue] = [:]) async throws -> JSONValue {
         var scoped = params
         if let profile { scoped["profile"] = .string(profile) }
@@ -92,26 +80,21 @@ public struct ConnectAppsService: Sendable {
     }
 
     static func map(_ error: GatewayTransportError, method: String? = nil) -> ConnectAppsError {
-        if case .rpc(let rpc) = error {
-            let reason = rpc.data?["code"]?.stringValue ?? rpc.data?["reason"]?.stringValue ?? rpc.reasonCode
-            if reason?.lowercased() == "needs_nous_auth" { return .signInRequired }
-            if let method { return .faulted(GatewayFault(rpc, method: method)) }
-        }
+        if case .rpc(let rpc) = error, let method { return .faulted(GatewayFault(rpc, method: method)) }
         return .failed
     }
 
     public func load() async throws -> ConnectCatalog {
-        async let hosted = attempt { try decodeList(await call("connectors.catalog"), key: "connectors", as: HostedConnectorEntry.self) }
-        async let states = attempt {
-            try decodeList(await call("connectors.list", ["owner": await account()]), key: "connectors", as: HostedConnectorState.self)
-        }
+        async let entries = attempt { try decodeList(await call("connectors.catalog"), key: "connectors", as: PalCatalogEntry.self) }
         async let presets = attempt { try decodeList(await call("mcp.catalog"), key: "servers", as: McpPresetEntry.self) }
         async let skills = attempt { InstalledSkill.parse(try await call("skills.manage", ["action": "list"])) }
         async let servers = attempt { try decodeList(await call("mcp.servers.list"), key: "servers", as: McpServerEntry.self) }
         async let google = attempt { try await GoogleWorkspaceService(rpc: rpc, diagnostics: diagnostics).status() }
-        let (hostedResult, statesResult, presetsResult, skillsResult, serversResult, googleResult) = await (hosted, states, presets, skills, servers, google)
-        if hostedResult == nil, presetsResult == nil { throw ConnectAppsError.unavailable }
-        return ConnectCatalog.make(hosted: hostedResult ?? [], states: statesResult ?? [], mcp: presetsResult ?? [], skills: skillsResult ?? [], servers: serversResult ?? [], google: googleResult)
+        let (entriesResult, presetsResult, skillsResult, serversResult, googleResult) = await (entries, presets, skills, servers, google)
+        if entriesResult == nil, presetsResult == nil { throw ConnectAppsError.unavailable }
+        return ConnectCatalog.make(
+            catalog: entriesResult ?? [], mcp: presetsResult ?? [], skills: skillsResult ?? [], servers: serversResult ?? [], google: googleResult
+        )
     }
 
     private func attempt<T: Sendable>(_ work: () async throws -> T) async -> T? {
@@ -128,7 +111,7 @@ public struct ConnectAppsService: Sendable {
 
     public func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async throws {
         switch app.source {
-        case .hosted(let slug): try await connectHosted(slug: slug, reconnect: app.state == .needsAuthorization)
+        case .catalog(let entry): try await connectCatalog(entry, credentials: credentials)
         case .mcp where app.requiresAppSignIn: try await connectUpwork(app)
         case .mcp(let name, let requires): try await connectMcp(name: name, requires: requires, credentials: credentials)
         case .custom(let info):
@@ -139,7 +122,7 @@ public struct ConnectAppsService: Sendable {
 
     public func disconnect(_ app: ConnectApp) async throws {
         switch app.source {
-        case .hosted(let slug): try await disconnectHosted(slug: slug)
+        case .catalog(let entry): _ = try await call("mcp.servers.remove", ["name": .string(entry.slug)])
         case .mcp(let name, _): _ = try await call("mcp.servers.remove", ["name": .string(name)])
         case .custom(let info): _ = try await call("mcp.servers.remove", ["name": .string(info.name)])
         case .googleWorkspace:
@@ -147,55 +130,40 @@ public struct ConnectAppsService: Sendable {
         }
     }
 
-    private struct Operation: Decodable {
-        struct Target: Decodable {
-            var state: String
-            var connectURL: String?
-
-            enum CodingKeys: String, CodingKey {
-                case state
-                case connectURL = "connect_url"
+    private func connectCatalog(_ entry: PalCatalogEntry, credentials: [String: String]) async throws {
+        switch entry.method {
+        case .none: _ = try await addCatalogServer(entry)
+        case .mcpOAuth:
+            let added = try await addCatalogServer(entry)
+            do {
+                try await authorizeMcp(name: entry.slug, browser: browser)
+            } catch {
+                if added { _ = try? await call("mcp.servers.remove", ["name": .string(entry.slug)]) }
+                throw error
             }
+        case .apiKey:
+            guard let token = credentials["token"], !token.isEmpty else { throw ConnectAppsError.credentialsRequired(["token"]) }
+            try await storeCatalogToken(entry, token: token)
+        case .native, .oauthClient: throw ConnectAppsError.unavailable
         }
-
-        var opID: String
-        var settled: Bool
-        var targets: [Target]
-
-        enum CodingKeys: String, CodingKey {
-            case opID = "op_id"
-            case settled, targets
-        }
-
-        var allConnected: Bool { !targets.isEmpty && targets.allSatisfy { $0.state == "connected" } }
-        var failed: Bool { targets.contains { ["failed", "expired"].contains($0.state) } }
     }
 
-    private func connectHosted(slug: String, reconnect: Bool) async throws {
-        let started = try await call("connectors.connect", ["owner": await account(), "connectors": [.string(slug)], "reconnect": .bool(reconnect)])
-        guard let operation = try? started.decoded(as: Operation.self) else { throw ConnectAppsError.failed }
-        if operation.allConnected { return }
-        if let link = operation.targets.compactMap(\.connectURL).first.flatMap(URL.init(string:)), link.scheme?.lowercased() == "https" {
-            do { try await browser.present(link) } catch is CancellationError { throw ConnectAppsError.cancelled } catch { throw ConnectAppsError.failed }
+    func addCatalogServer(_ entry: PalCatalogEntry, bearerToken: String? = nil) async throws -> Bool {
+        guard let url = entry.mcpURL else { throw ConnectAppsError.failed }
+        var params: [String: JSONValue] = ["name": .string(entry.slug), "config": ["url": .string(url.absoluteString), "transport": "http"]]
+        if let bearerToken { params["bearer_token"] = .string(bearerToken) }
+        do {
+            _ = try await rawCall("mcp.servers.add", params)
+            return true
+        } catch let error as GatewayTransportError {
+            guard case .rpc(let rpc) = error, rpc.code == 4090 else { throw ConnectAppsError.failed }
+            return false
         }
-        let ids: [String: JSONValue] = ["owner": await account(), "op_id": .string(operation.opID)]
-        _ = try? await call("connectors.operation.wake", ids)
-        for _ in 0..<timing.pollAttempts {
-            let status = try await call("connectors.operation.status", ids)
-            if let current = try? status.decoded(as: Operation.self) {
-                if current.allConnected { return }
-                if current.failed || current.settled { throw ConnectAppsError.failed }
-            }
-            try await Task.sleep(for: timing.pollInterval)
-        }
-        throw ConnectAppsError.failed
     }
 
-    private func disconnectHosted(slug: String) async throws {
-        let accounts = try await call("connectors.accounts", ["connector": .string(slug)])
-        let ids = (accounts["accounts"]?.arrayValue ?? []).compactMap { $0["connection_id"]?.stringValue }
-        guard !ids.isEmpty else { throw ConnectAppsError.failed }
-        for id in ids { _ = try await call("connectors.accounts.remove", ["connection_id": .string(id)]) }
+    private func storeCatalogToken(_ entry: PalCatalogEntry, token: String) async throws {
+        if try await addCatalogServer(entry, bearerToken: token) { return }
+        _ = try await call("mcp.servers.update", ["name": .string(entry.slug), "auth": "bearer", "bearer_token": .string(token)])
     }
 
     private func connectMcp(name: String, requires: [String], credentials: [String: String]) async throws {
@@ -224,7 +192,12 @@ public struct ConnectAppsService: Sendable {
     }
 
     public func tokenFailure(_ app: ConnectApp) async -> ConnectorFailure? {
-        guard case .mcp(let name, let requires) = app.source, !requires.isEmpty else { return nil }
+        let name: String
+        switch app.source {
+        case .mcp(let preset, let requires) where !requires.isEmpty: name = preset
+        case .catalog(let entry) where entry.method == .apiKey: name = entry.slug
+        default: return nil
+        }
         do { _ = try await testCustomConnector(name: name) } catch { return ConnectorFailure.from(error) }
         return nil
     }

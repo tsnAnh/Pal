@@ -9,7 +9,7 @@ private let rejectedSignIn = "Sign in again: Upwork stopped accepting the saved 
 
 private func upwork(_ state: ConnectAppState, reason: String? = nil) -> ConnectApp {
     ConnectApp(
-        id: "mcp:upwork", name: "Upwork", summary: "", category: "Other", iconURL: nil,
+        id: "mcp:upwork", name: "Upwork", summary: "", category: "Other",
         source: .mcp(name: "upwork", requires: []), state: state, authReason: reason
     )
 }
@@ -31,12 +31,12 @@ struct ConnectorCardStateTests {
 
     @Test func otherConnectorsKeepTheirOwnFlow() {
         let hosted = ConnectApp(
-            id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil,
-            source: .hosted(slug: "slack"), state: .disconnected
+            id: "connector:slack", name: "Slack", summary: "", category: "Communication",
+            source: .catalog(PalCatalogEntry(slug: "slack", name: "Slack", method: .mcpOAuth)), state: .disconnected
         )
         #expect(ConnectorCardState.resolve(ConnectorCardInput(app: hosted)) == .connect)
         let preset = ConnectApp(
-            id: "mcp:notion", name: "Notion", summary: "", category: "Other", iconURL: nil,
+            id: "mcp:notion", name: "Notion", summary: "", category: "Other",
             source: .mcp(name: "notion", requires: []), state: .needsAuthorization
         )
         #expect(ConnectorCardState.resolve(ConnectorCardInput(app: preset)) == .reconnect(reason: nil))
@@ -67,7 +67,7 @@ struct ConnectorCardStateTests {
             McpPresetEntry.self,
             from: Data(#"{"name":"upwork","description":"","installed":true,"enabled":true,"needs_auth_reason":"\#(rejectedSignIn)"}"#.utf8)
         )
-        let catalog = ConnectCatalog.make(hosted: [], states: [], mcp: [decoded])
+        let catalog = ConnectCatalog.make(catalog: [], mcp: [decoded])
         let app = try #require(catalog.apps.first)
         #expect(app.state == .needsAuthorization)
         #expect(app.authReason == rejectedSignIn)
@@ -78,13 +78,13 @@ struct ConnectorCardStateTests {
     @Test func aBlankReasonLeavesTheAppConnected() {
         let healthy = McpPresetEntry(name: "upwork", description: "", installed: true, enabled: true, needsAuthReason: nil)
         let blank = McpPresetEntry(name: "upwork", description: "", installed: true, enabled: true, needsAuthReason: "  ")
-        #expect(ConnectCatalog.make(hosted: [], states: [], mcp: [healthy]).apps.first?.state == .connected)
-        #expect(ConnectCatalog.make(hosted: [], states: [], mcp: [blank]).apps.first?.state == .connected)
+        #expect(ConnectCatalog.make(catalog: [], mcp: [healthy]).apps.first?.state == .connected)
+        #expect(ConnectCatalog.make(catalog: [], mcp: [blank]).apps.first?.state == .connected)
     }
 
     @Test func onlyTheUpworkPresetUsesTheAppSignIn() {
         #expect(upwork(.connected).requiresAppSignIn)
-        let other = ConnectApp(id: "mcp:x", name: "X", summary: "", category: "", iconURL: nil, source: .mcp(name: "x", requires: []), state: .connected)
+        let other = ConnectApp(id: "mcp:x", name: "X", summary: "", category: "", source: .mcp(name: "x", requires: []), state: .connected)
         #expect(!other.requiresAppSignIn)
     }
 }
@@ -92,8 +92,8 @@ struct ConnectorCardStateTests {
 @Suite("Upwork as a connected service")
 struct UpworkConnectedServiceTests {
     @Test func countsAsConnectedWhenThePresetIsInstalledAndEnabled() {
-        let on = ConnectCatalog.make(hosted: [], states: [], mcp: [McpPresetEntry(name: "upwork", description: "", installed: true, enabled: true)])
-        let off = ConnectCatalog.make(hosted: [], states: [], mcp: [McpPresetEntry(name: "upwork", description: "")])
+        let on = ConnectCatalog.make(catalog: [], mcp: [McpPresetEntry(name: "upwork", description: "", installed: true, enabled: true)])
+        let off = ConnectCatalog.make(catalog: [], mcp: [McpPresetEntry(name: "upwork", description: "")])
         #expect(ConnectedServices(catalog: on).isConnected(.upwork))
         #expect(!ConnectedServices(catalog: off).isConnected(.upwork))
         #expect(!ConnectedServices.unknown.isConnected(.upwork))

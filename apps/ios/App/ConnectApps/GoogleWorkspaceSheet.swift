@@ -14,7 +14,7 @@ enum GoogleWorkspaceText {
 
     static func actionTitle(_ state: ConnectAppState) -> String {
         switch state {
-        case .disconnected: String(localized: "Connect")
+        case .disconnected, .needsSetup: String(localized: "Connect")
         case .connected: String(localized: "Manage")
         case .needsAuthorization: String(localized: "Sign in again")
         }
