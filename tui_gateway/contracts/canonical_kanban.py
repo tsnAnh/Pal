@@ -28,6 +28,8 @@ class KanbanBoard(Result):
     created_at: int | None = None
     # Cards per lifecycle status; null for an archived board, whose database is not read.
     task_counts: dict[str, int] | None = None
+    # Why a board that exists on disk could not be read (``absent``, ``unreadable``); null when it was read or is archived.
+    unavailable: str | None = None
 
 
 class KanbanCard(Result):
@@ -63,10 +65,12 @@ class KanbanBoardParams(KanbanReadParams):
 class KanbanBoardsListResult(Result):
     gateway_id: str
     boards: list[KanbanBoard]
+    # Boards found in the store, readable or not: an empty ``boards`` is "no boards yet" only when this is 0.
+    boards_seen: int
 
 
 canonical_method("kanban.boards.list", params=KanbanReadParams, result=KanbanBoardsListResult,
-                 doc="Boards with a readable database on this gateway (never creates one). Native owner only.")
+                 doc="Boards on this gateway, each marked ``unavailable`` when its database cannot be read (never creates one). Native owner only.")
 
 
 class KanbanSnapshotParams(KanbanBoardParams):
