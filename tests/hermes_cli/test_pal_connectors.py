@@ -2,6 +2,20 @@ import pytest
 
 from hermes_cli.pal_connectors import ConnectionMethod, PalCatalogError, load_pal_connectors
 
+OWNER_PICKS = frozenset({
+    "github", "gitlab", "vercel", "netlify", "cloudflare", "railway", "supabase", "neon", "prisma-postgres",
+    "motherduck", "circleci", "buildkite", "postman", "semgrep", "context7", "deepwiki", "hugging_face",
+    "aws-knowledge", "microsoft-learn", "twilio-docs", "unreal-engine", "wolfram",
+    "sentry", "grafana", "datadog",
+    "linear", "atlassian", "clickup", "monday", "todoist", "notion", "airtable", "craft", "miro", "n8n-official",
+    "google-workspace", "dropbox", "figma", "canva", "gamma", "cloudinary", "comfy-cloud", "webflow", "wordpress-com",
+    "stripe", "intercom", "calendly",
+})
+
+
+def test_shipped_catalog_is_exactly_the_owner_picks():
+    assert {e.id for e in load_pal_connectors()} == OWNER_PICKS
+
 
 def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():
     entries = load_pal_connectors()
