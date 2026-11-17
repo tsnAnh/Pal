@@ -1,4 +1,5 @@
 import Foundation
+import PalBotProfile
 import PalConnect
 import PalDesign
 
@@ -75,5 +76,20 @@ extension ConnectAppsModel {
         pasteTargetID = app.id
         pasteState = .idle
         pastingApp = app
+    }
+}
+
+extension ConnectAppsModel {
+    var slackStatus: ConnectRowStatus {
+        ConnectRowStatus(slack.summary, tone: slack.needsReinstall ? .attention : slack.installedCount > 0 ? .positive : .neutral)
+    }
+
+    var slackActionTitle: String {
+        slack.installedCount > 0 ? String(localized: "Manage") : String(localized: "Set up")
+    }
+
+    func closeSlackPicker() {
+        showsSlackPicker = false
+        Task { await slack.load() }
     }
 }

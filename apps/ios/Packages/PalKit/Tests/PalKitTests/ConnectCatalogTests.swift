@@ -116,7 +116,7 @@ struct ConnectCatalogTests {
         #expect(catalog.matchingSkills("").isEmpty)
     }
 
-    @Test func theGatewayPayloadDecodesAndDropsRowsItDoesNotUnderstand() throws {
+    @Test func theGatewayPayloadDecodesAndDropsRowsWithAnUnreadableStatus() throws {
         let rows: JSONValue = [
             [
                 "slug": "a", "name": "A", "description": "", "category": "Developer", "icon": "plugin_glyph", "method": "mcp_oauth",
@@ -126,13 +126,40 @@ struct ConnectCatalogTests {
                 "slug": "b", "name": "B", "category": "Developer", "icon": "plugin_glyph", "method": "none",
                 "verified": false, "mcp_url": "http://insecure.example/mcp", "status": "not_connected",
             ],
-            ["slug": "c", "name": "C", "category": "Developer", "method": "telepathy", "status": "not_connected"],
             ["slug": "d", "name": "D", "category": "Developer", "method": "api_key", "status": "maybe"],
         ]
         let entries = rows.arrayValue!.compactMap { try? $0.decoded(as: PalCatalogEntry.self) }
         #expect(entries.map(\.slug) == ["a", "b"])
         #expect(entries[0].method == .mcpOAuth && entries[0].status == .needsReconnect && entries[0].mcpURL?.host == "a.example")
         #expect(entries[1].mcpURL == nil)
+    }
+
+    @Test(arguments: [
+        ("mcp_oauth", PalCatalogEntry.Method.mcpOAuth), ("none", .none), ("api_key", .apiKey), ("native", .native),
+        ("oauth_client", .oauthClient), ("bot_app", .botApp), ("telepathy", .unsupported("telepathy")),
+    ])
+    func everyMethodDecodesAndAnUnknownOneIsKeptAsUnsupported(raw: String, expected: PalCatalogEntry.Method) throws {
+        let row: JSONValue = ["slug": "x", "name": "X", "category": "Developer", "method": .string(raw), "status": "not_connected"]
+        #expect(try row.decoded(as: PalCatalogEntry.self).method == expected)
+    }
+
+    @Test func aCatalogWithAMethodThisBuildDoesNotKnowStillListsEveryEntry() throws {
+        let oldShape: JSONValue = [
+            ["slug": "a", "name": "A", "category": "Developer", "method": "oauth_client", "status": "needs_setup"],
+            ["slug": "b", "name": "B", "category": "Developer", "method": "mcp_oauth", "status": "not_connected"],
+        ]
+        let newShape: JSONValue = [
+            ["slug": "a", "name": "A", "category": "Developer", "method": "from_the_future", "status": "not_connected"],
+            ["slug": "b", "name": "B", "category": "Developer", "method": "mcp_oauth", "status": "not_connected"],
+        ]
+        for rows in [oldShape, newShape] {
+            let entries = try rows.arrayValue!.map { try $0.decoded(as: PalCatalogEntry.self) }
+            let apps = ConnectCatalog.make(catalog: entries, mcp: []).apps
+            #expect(apps.map(\.name) == ["A", "B"])
+        }
+        let future = try newShape.arrayValue![0].decoded(as: PalCatalogEntry.self)
+        let app = try #require(ConnectCatalog.make(catalog: [future], mcp: []).apps.first)
+        #expect(app.state == .needsSetup && app.summary == "Needs a newer Pal" && app.oauthClientEntry == nil)
     }
 }
 

@@ -29,6 +29,14 @@ def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():
     assert all(e.mcp_url or e.oauth for e in entries if e.method is ConnectionMethod.MCP_OAUTH)
 
 
+def test_a_bot_app_entry_needs_no_endpoint_and_slack_is_one():
+    entries = {e.id: e for e in load_pal_connectors()}
+
+    assert entries["slack"].method is ConnectionMethod.BOT_APP
+    assert entries["slack"].mcp_url is None and entries["slack"].oauth is None
+    assert entries["slack"].category == "Communication" and entries["slack"].icon == "plugin_glyph"
+
+
 def test_catalog_never_routes_through_portal_or_composio():
     for e in load_pal_connectors():
         for url in filter(None, (e.mcp_url, e.oauth and e.oauth.token_url, e.oauth and e.oauth.authorization_url)):

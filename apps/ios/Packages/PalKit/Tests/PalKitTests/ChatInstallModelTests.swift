@@ -61,6 +61,7 @@ actor FakeChatInstallClient: ChatInstallClient {
     var bound: [ChatBindingWire] = []
     var identityResult: ChatIdentityUpdateResult?
     var identityError: ChatInstallClientError?
+    var statusError: ChatInstallClientError?
 
     init(_ capabilities: [ChatCapabilitiesWire], _ state: ChatSetupStateWire) {
         self.capabilities = capabilities
@@ -72,6 +73,8 @@ actor FakeChatInstallClient: ChatInstallClient {
     func set(_ state: ChatSetupStateWire) { current.state = state }
     func setSpaces(_ spaces: [ChatSpaceRefWire], _ bindings: [ChatBindingWire]) { spaceList = spaces; bound = bindings }
     func markUnsupported() { unsupported = true }
+    func setInstallation(_ installation: ChatInstallationWire?) { current.installation = installation }
+    func failStatus(_ error: ChatInstallClientError) { statusError = error }
     func failProviders(_ error: ChatInstallClientError) { providersError = error }
     func setIdentity(_ result: ChatIdentityUpdateResult?, error: ChatInstallClientError? = nil) { identityResult = result; identityError = error }
 
@@ -81,7 +84,11 @@ actor FakeChatInstallClient: ChatInstallClient {
         if let providersError { throw providersError }
         return capabilities
     }
-    func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult { calls.append("status"); return current }
+    func status(_ scope: ChatInstallScope) async throws -> ChatInstallStatusResult {
+        calls.append("status")
+        if let statusError { throw statusError }
+        return current
+    }
     func begin(_ scope: ChatInstallScope) async throws { calls.append("begin") }
     func advance(_ scope: ChatInstallScope, _ advance: ChatInstallAdvance) async throws { calls.append("advance"); advances.append(advance) }
     func spaces(_ scope: ChatInstallScope) async throws -> [ChatSpaceRefWire] { calls.append("spaces"); return spaceList }

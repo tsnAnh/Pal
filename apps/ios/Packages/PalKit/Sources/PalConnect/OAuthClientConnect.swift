@@ -93,6 +93,10 @@ extension ConnectApp {
     public var oauthClientEntry: PalCatalogEntry? {
         if case .catalog(let entry) = source, entry.hasGuidedSetup { entry } else { nil }
     }
+
+    public var isBotApp: Bool {
+        if case .catalog(let entry) = source { entry.method == .botApp } else { false }
+    }
 }
 
 extension ConnectAppsService {

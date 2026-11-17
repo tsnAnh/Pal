@@ -61,6 +61,10 @@ struct MacConnectApps: View {
             UpworkConnectionSheet(model: model, app: app)
                 .macSheetFrame()
         }
+        .sheet(isPresented: $model.showsSlackPicker) {
+            SlackBotPicker(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
+                .macSheetFrame()
+        }
         .sheet(item: $model.oauthClientSheet) { sheet in
             OAuthClientSheet(model: sheet)
                 .macSheetFrame()
@@ -186,6 +190,8 @@ struct MacConnectApps: View {
         let state = model.cardState(app)
         let action: MacRowAction? = if app.requiresAppSignIn {
             MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state.isReconnect) { model.upworkApp = app }
+        } else if app.isBotApp {
+            MacRowAction(title: model.slackActionTitle, prominent: model.slack.installedCount == 0) { model.showsSlackPicker = true }
         } else if app.oauthClientEntry != nil {
             MacRowAction(title: OAuthClientCardText.actionTitle(app.state), prominent: OAuthClientCardText.prominent(app.state)) {
                 model.oauthClientAction(app)
@@ -208,7 +214,7 @@ struct MacConnectApps: View {
         return tileRow(
             title: app.name, summary: summary(for: app, state: state),
             identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id),
-            status: ConnectAppStatus(app.state).row
+            status: app.isBotApp ? model.slackStatus : ConnectAppStatus(app.state).row
         ) { icon(for: app) }
     }
 

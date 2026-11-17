@@ -187,6 +187,8 @@ extension ConnectAppsSheet {
     func plainRow(_ app: ConnectApp) -> some View {
         let action: ConnectRowAction? = if case .custom = app.source {
             ConnectRowAction("Manage") { model.manage(app) }
+        } else if app.isBotApp {
+            ConnectRowAction(model.slackActionTitle, kind: model.slack.installedCount > 0 ? .neutral : .accent) { model.showsSlackPicker = true }
         } else if app.oauthClientEntry != nil {
             ConnectRowAction(OAuthClientCardText.actionTitle(app.state), kind: OAuthClientCardText.prominent(app.state) ? .accent : .neutral) {
                 model.oauthClientAction(app)
@@ -207,7 +209,8 @@ extension ConnectAppsSheet {
         return ConnectAppRow(
             title: app.name, summary: OtherConnectorCardText.summary(model.cardState(app), fallback: app.summary),
             accessibilityIdentifier: "connectApp-\(app.id)",
-            isBusy: model.busy.contains(app.id), status: ConnectAppStatus(app.state).row, inset: Self.cardInset, trailing: action
+            isBusy: model.busy.contains(app.id), status: app.isBotApp ? model.slackStatus : ConnectAppStatus(app.state).row,
+            inset: Self.cardInset, trailing: action
         ) { icon(for: app) }
     }
 

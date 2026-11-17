@@ -129,6 +129,7 @@ public enum LegacyReconnect {
         .mcpOAuth: .catalogConnect,
         .apiKey: .catalogConnect,
         .oauthClient: .needsSetup,
+        .botApp: .needsSetup,
         .native: .nativeSignIn,
     ]
 

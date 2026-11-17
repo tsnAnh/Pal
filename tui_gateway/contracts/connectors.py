@@ -259,7 +259,8 @@ method(
     "connectors.catalog",
     params=ProfileParams,
     result=ConnectorsCatalogResult,
-    doc="The Pal-owned connector catalog with each entry's direct connection status for the scoped profile.",
+    doc="The Pal-owned connector catalog with each entry's direct connection status for the scoped profile. "
+        "A bot_app entry is set up per bot through the chat install verbs, so its status here is always not_connected.",
 )
 
 

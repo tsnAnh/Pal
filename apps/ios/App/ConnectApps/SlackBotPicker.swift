@@ -1,0 +1,82 @@
+import PalBotProfile
+import PalDesign
+import SwiftUI
+
+struct SlackWizardContext {
+    let bots: [CustomConnectorBot]
+    let connection: ConnectionModel
+    let services: BotsServices
+
+    @MainActor
+    init(bots: [CustomConnectorBot], connection: ConnectionModel) {
+        self.bots = bots
+        self.connection = connection
+        services = BotsServices(connection: connection)
+    }
+
+    @MainActor
+    func slackBots() -> [SlackBot] {
+        bots.map { bot in
+            SlackBot(name: bot.name, displayName: bot.displayName, client: ChatInstallSource.make(botName: bot.name, connection: connection).client)
+        }
+    }
+
+    @MainActor
+    func entry(for name: String) -> SlackEntryView? {
+        guard let bot = bots.first(where: { $0.name == name }) else { return nil }
+        return SlackEntryView(
+            botName: bot.name, displayName: bot.displayName, spec: bot.spec, services: services,
+            source: ChatInstallSource.make(botName: bot.name, connection: connection)
+        )
+    }
+}
+
+struct SlackBotPicker: View {
+    let model: SlackBotsModel
+    let wizard: SlackWizardContext
+    let close: () -> Void
+
+    @Environment(\.hermesTheme) private var theme
+
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationTitle(Text("Slack"))
+                .toolbarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button(role: .close, action: close) }
+                }
+        }
+        .task { await model.load() }
+        .accessibilityIdentifier("slackBotPicker")
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.phase {
+        case .loading:
+            DelayedReveal { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
+        case .failed(let error):
+            ChatInstallStatus(
+                copy: ChatStatusCopy(failure: error), primaryTitle: String(localized: "Try again"), isBusy: false,
+                perform: { Task { await model.load() } }, identifierPrefix: "slackPicker", secondary: { EmptyView() }
+            )
+        case .ready:
+            List(model.rows) { row in
+                NavigationLink {
+                    if let entry = wizard.entry(for: row.name) {
+                        entry.onDisappear { Task { await model.load() } }
+                    }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(row.displayName).hermesText(.rowTitle)
+                        Text(row.state.detail)
+                            .hermesText(.rowSubtitle)
+                            .foregroundStyle(Color(theme.palette.textSecondary))
+                    }
+                }
+                .accessibilityIdentifier("slackBot-\(row.name)")
+            }
+        }
+    }
+}

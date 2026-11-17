@@ -57,6 +57,10 @@ struct ConnectAppsSheet: View {
             UpworkConnectionSheet(model: model, app: app)
                 .macSheetFrame()
         }
+        .sheet(isPresented: $model.showsSlackPicker) {
+            SlackBotPicker(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
+                .macSheetFrame()
+        }
         .sheet(item: $model.oauthClientSheet) { sheet in
             OAuthClientSheet(model: sheet)
                 .macSheetFrame()
