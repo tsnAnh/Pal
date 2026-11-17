@@ -231,12 +231,13 @@ def render_ts() -> str:
         r.ensure(name_of[m])
 
     out = [HEADER, "/* eslint-disable */\n", "// ── Types ──\n"]
+    if "ConnectorErrorReason" not in r.emitted:
+        r.emitted["ConnectorErrorReason"] = (
+            "export type ConnectorErrorReason = "
+            + r.type_of({"enum": [member.value for member in ConnectorErrorReason]})
+            + "\n"
+        )
     out.extend(r.emitted.values())
-    out.append(
-        "export type ConnectorErrorReason = "
-        + r.type_of({"enum": [member.value for member in ConnectorErrorReason]})
-        + "\n"
-    )
 
     out.append("\n// ── Client→server methods ──\n")
     out.append("export interface RpcMethods {\n")
