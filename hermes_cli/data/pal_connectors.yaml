@@ -138,7 +138,7 @@ connectors:
   name: Dropbox
   icon: plugin_glyph
   category: Other
-  method: mcp_oauth
+  method: oauth_client
   mcp_url: https://mcp.dropbox.com/mcp
   replaces_portal_slug: dropbox
   verified: true
@@ -147,7 +147,7 @@ connectors:
   name: Figma
   icon: plugin_glyph
   category: Other
-  method: mcp_oauth
+  method: oauth_client
   mcp_url: https://mcp.figma.com/mcp
   replaces_portal_slug: figma
   verified: true

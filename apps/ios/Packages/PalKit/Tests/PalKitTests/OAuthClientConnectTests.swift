@@ -248,7 +248,9 @@ struct OAuthClientCatalogTests {
 
     @Test func loadReadsTheCatalogWithoutTheLegacyGoogleStatusCall() async throws {
         let rpc = CustomRPC([
-            "connectors.catalog": { _ in ["connectors": [["slug": "google-workspace", "name": "Google Workspace", "method": "oauth_client", "status": "connected"]]] },
+            "connectors.catalog": { _ in
+                ["connectors": [["slug": "google-workspace", "name": "Google Workspace", "method": "oauth_client", "status": "connected"]]]
+            },
             "mcp.catalog": { _ in ["servers": []] },
         ])
         let loaded = try await service(rpc).load()
