@@ -13,6 +13,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import snowballstemmer
 
+from toolsets import BUILTIN_TOOL_NAMES
+
 # Reserved bridge names: a user/plugin/MCP tool may not take them (registry override
 # protection rejects such registrations).
 TOOL_SEARCH_NAME = "tool_search"
@@ -298,6 +300,13 @@ def build_catalog_listing_with_form(
     header = ("Deferred tool catalog (call schemas via "
               f"`{TOOL_DESCRIBE_NAME}`, invoke via `{TOOL_CALL_NAME}`):")
 
+    def modes_for(mode: str, summarized: frozenset = frozenset()) -> dict[str, str]:
+        # Built-in tools are always names-only: the name is the whole signal and the
+        # eager/deferred split must not re-inflate the array.
+        return {lbl: "summary" if lbl in summarized
+                else "names" if all(n in BUILTIN_TOOL_NAMES for n, _ in groups[lbl]) else mode
+                for lbl in groups}
+
     def assemble_if_fits(modes: dict[str, str]) -> Optional[str]:
         # Headless one-tool lines go first, straight under the catalog header: placed between
         # groups they would read as members of the group above them.
@@ -321,7 +330,7 @@ def build_catalog_listing_with_form(
         return text if math.ceil(len(text) / CHARS_PER_TOKEN) <= max_tokens else None
 
     for mode in ("full", "names"):  # 1. everything full; 2. everything names-only
-        text = assemble_if_fits({lbl: mode for lbl in groups})
+        text = assemble_if_fits(modes_for(mode))
         if text is not None:
             return text, mode
     # 3. Collapse the LARGEST rendered groups first (deterministic: size then label); the servers
@@ -330,7 +339,7 @@ def build_catalog_listing_with_form(
     for lbl in sorted(groups, key=lambda lbl: (-len(render_group(lbl, "names")), lbl)):
         summarized.add(lbl)
         for rest in ("full", "names"):
-            text = assemble_if_fits({g: "summary" if g in summarized else rest for g in groups})
+            text = assemble_if_fits(modes_for(rest, frozenset(summarized)))
             if text is not None:
                 return text, "groups" if len(summarized) == len(groups) else "mixed"
     return None, "none"

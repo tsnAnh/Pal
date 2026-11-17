@@ -107,7 +107,6 @@ def _approve(env=None):
 def test_only_a_desktop_session_carries_the_tool():
     import model_tools
     import toolsets
-    from hermes_cli.config_defaults import DEFAULT_CONFIG
     from tools.tool_search import is_deferrable_tool_name
 
     # A config may name the toolset; `all` never brings it in.
@@ -118,8 +117,7 @@ def test_only_a_desktop_session_carries_the_tool():
     for platform in ("cli", "tui", "telegram", "cron", None):
         assert "manage_catalog" in toolsets.session_platform_tool_drops(platform), platform
     assert "manage_catalog" not in toolsets.session_platform_tool_drops("desktop")
-    # Behind tool_search by default, like the other desktop surface tools.
-    assert is_deferrable_tool_name("manage_catalog", frozenset(DEFAULT_CONFIG["tools"]["tool_search"]["defer"]))
+    assert is_deferrable_tool_name("manage_catalog")
 
 
 def _desktop_child_toolsets():

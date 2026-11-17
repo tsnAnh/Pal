@@ -229,9 +229,7 @@ def test_operator_can_still_turn_it_off(tmp_path, monkeypatch):
     )
 
 
-def test_tool_is_never_deferrable():
+def test_tool_is_deferrable():
     from tools.tool_search import is_deferrable_tool_name
 
-    # Core names short-circuit before the toolset check, so listing
-    # "connections" in _DIRECT_SURFACE_TOOLSETS would be redundant.
-    assert is_deferrable_tool_name("manage_connections") is False
+    assert is_deferrable_tool_name("manage_connections") is True

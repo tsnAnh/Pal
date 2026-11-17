@@ -41,23 +41,26 @@ def _td(name: str, description: str = "", properties: dict[str, Any] | None = No
 
 class TestConfigParsing:
 
-    def test_defer_default_is_the_registered_list_and_a_user_list_replaces_it(self, caplog):
-        """#116404: the curated deferral set lives in DEFAULT_CONFIG (so ``hermes config set``
-        recognizes the key); a user list replaces it wholesale, [] keeps every tool eager, and a
-        scalar is warned about (naming the expected shape) before falling back to the default."""
-        from hermes_cli.config_defaults import DEFAULT_CONFIG
-        from tools.tool_search import ToolSearchConfig, _DEFAULT_DEFERRED_TOOLS
+    def test_old_defer_key_is_ignored_and_logged_once(self, caplog, monkeypatch):
+        """An existing ``tools.tool_search.defer`` value (list, empty or scalar) loads without
+        error, changes nothing, and is mentioned once at INFO."""
+        from tools import tool_search
+        from tools.tool_search import ToolSearchConfig
 
-        configured = frozenset(DEFAULT_CONFIG["tools"]["tool_search"]["defer"])
-        assert isinstance(DEFAULT_CONFIG["tools"]["tool_search"]["defer"], list) and configured
-        assert _DEFAULT_DEFERRED_TOOLS == configured
-        assert ToolSearchConfig.from_raw(None).effective_defer_tools == configured
-        assert ToolSearchConfig.from_raw({"defer": ["terminal"]}).effective_defer_tools == {"terminal"}
-        assert ToolSearchConfig.from_raw({"defer": []}).effective_defer_tools == set()
+        monkeypatch.setattr(tool_search, "_defer_ignored_logged", False)
+        baseline = ToolSearchConfig.from_raw(None)
+        with caplog.at_level("INFO", logger="tools.tool_search"):
+            for old in (["terminal"], [], "todo_list"):
+                assert ToolSearchConfig.from_raw({"defer": old}) == baseline
+        notes = [r for r in caplog.records if "defer is ignored" in r.getMessage()]
+        assert len(notes) == 1 and notes[0].levelname == "INFO"
 
-        with caplog.at_level("WARNING", logger="tools.tool_search"):
-            assert ToolSearchConfig.from_raw({"defer": "todo_list"}).effective_defer_tools == configured
-        assert any(r.levelname == "WARNING" for r in caplog.records)
+    def test_old_config_file_with_defer_loads(self, tmp_path, monkeypatch):
+        from tools.tool_search import load_config
+
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        (tmp_path / "config.yaml").write_text("tools:\n  tool_search:\n    defer: [terminal, todo_list]\n")
+        assert load_config().enabled == "auto"
 
     def test_bool_true_maps_to_auto(self):
         from tools.tool_search import ToolSearchConfig
@@ -81,51 +84,61 @@ class TestConfigParsing:
 
 
 class TestClassification:
-    def test_core_tools_never_defer(self):
-        """The critical invariant from the OpenClaw report."""
-        from tools.tool_search import is_deferrable_tool_name
+    def test_eager_set_is_exactly_the_agreed_list(self):
+        """Fails when the always-sent tool set grows or shrinks silently."""
+        from tools.tool_search import BRIDGE_TOOL_NAMES, EAGER_TOOL_NAMES
+        assert EAGER_TOOL_NAMES | BRIDGE_TOOL_NAMES == {
+            "tool_search", "tool_describe", "tool_call", "terminal", "read_file", "write_file", "patch",
+            "search_files", "web_search", "web_extract", "clarify", "memory", "skills_list",
+            "skill_view", "execute_code"}
+        assert not EAGER_TOOL_NAMES & BRIDGE_TOOL_NAMES
+
+    def test_every_registered_tool_outside_the_eager_set_defers(self):
+        from tools.registry import discover_builtin_tools, registry
+        from tools.tool_search import BRIDGE_TOOL_NAMES, EAGER_TOOL_NAMES, is_deferrable_tool_name
         from toolsets import _HERMES_CORE_TOOLS
-        assert _HERMES_CORE_TOOLS
-        for core_name in _HERMES_CORE_TOOLS:
-            assert not is_deferrable_tool_name(core_name), (
-                f"Core tool '{core_name}' must NEVER be deferrable"
-            )
+
+        discover_builtin_tools()
+        for name in registry.get_tool_to_toolset_map():
+            expected = name not in EAGER_TOOL_NAMES and name not in BRIDGE_TOOL_NAMES
+            assert is_deferrable_tool_name(name) is expected, name
+        assert {"kanban_show", "slack_post_message", "browser_exec", "delegate_task",
+                "cronjob_manage", "manage_connections"} <= set(_HERMES_CORE_TOOLS)
 
     def test_bridge_tools_never_defer(self):
         from tools.tool_search import is_deferrable_tool_name, BRIDGE_TOOL_NAMES
         for name in BRIDGE_TOOL_NAMES:
             assert not is_deferrable_tool_name(name)
 
-    def test_gui_surface_tools_never_defer(self):
-        """Session-gated GUI tools stay direct and stay off the global core list."""
+    def test_gui_surface_tools_defer_and_stay_off_the_core_list(self):
+        """Session-gated GUI tools stay off the global core list; where the session carries them
+        they sit behind the bridge like every other non-eager tool."""
         from tools.registry import discover_builtin_tools, registry
-        from tools.tool_search import _DIRECT_SURFACE_TOOLSETS, is_deferrable_tool_name
+        from tools.tool_search import _GUI_SURFACE_TOOLSETS, is_deferrable_tool_name
         from toolsets import _HERMES_CORE_TOOLS
 
         discover_builtin_tools()
         surface = [n for n, ts in registry.get_tool_to_toolset_map().items()
-                   if ts in _DIRECT_SURFACE_TOOLSETS]
+                   if ts in _GUI_SURFACE_TOOLSETS]
         assert surface
         for name in surface:
-            assert not is_deferrable_tool_name(name), name
+            assert is_deferrable_tool_name(name), name
             assert name not in _HERMES_CORE_TOOLS
 
-
-    def test_defer_override_restores_legacy_direct_gui(self):
-        """tools.tool_search.defer: [] restores the everything-eager legacy:
-        GUI tools alone no longer activate the bridge."""
+    def test_gui_only_session_activates_the_bridge(self):
         from tools.registry import discover_builtin_tools
         from tools.tool_search import ToolSearchConfig, assemble_tool_defs
 
         discover_builtin_tools()
-        names = {"read_window_below", "set_theme", "project_list"}
+        names = {"read_window_below", "set_theme"}
         assembled = assemble_tool_defs(
             [_td(name, f"GUI {name}") for name in names],
             context_length=200_000,
-            config=ToolSearchConfig.from_raw({"enabled": "on", "defer": []}),
+            config=ToolSearchConfig.from_raw({"enabled": "on"}),
         )
-        assert not assembled.activated
-        assert {td["function"]["name"] for td in assembled.tool_defs} == names
+        assert assembled.activated and assembled.deferred_count == len(names)
+        assert {td["function"]["name"] for td in assembled.tool_defs} == {
+            "tool_search", "tool_describe", "tool_call"}
 
     def test_core_working_set_never_defers_even_with_mcp_active(self):
         """The bridge activates for MCP, but working-set core tools (terminal,

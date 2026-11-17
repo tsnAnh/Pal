@@ -1957,10 +1957,9 @@ DEFAULT_CONFIG = {
         "kernel_idle_timeout": 1800,
         "max_session_kernels": 4,
     },
-    # Tool Search replaces deferred tools in the model-facing array with the
-    # tool_search / tool_describe / tool_call bridges and surfaces them on demand.
-    # Working-set core tools stay eager, while the explicit ``defer`` list below
-    # may include cold, event-triggered built-ins as well as plugin/MCP tools.
+    # Tool Search replaces every tool outside the eager set (tools.tool_search.EAGER_TOOL_NAMES)
+    # in the model-facing array with the tool_search / tool_describe / tool_call bridges and
+    # surfaces them on demand.
     "tools": {
         "tool_search": {
             # Tiered: tier 0 (no deferred tools) = everything eager; tier 1 = bridge + a
@@ -1986,17 +1985,6 @@ DEFAULT_CONFIG = {
             # Absolute cap on the embedded listing in tokens (chars/4), regardless of context size.
             # Range 200..60000.
             "listing_max_tokens": 4000,
-            # Tools replaced by the bridge by default. This list intentionally includes cold,
-            # event-triggered built-ins; an explicit list replaces it wholesale and [] keeps every
-            # tool eager. The runtime fallback in tools/tool_search.py derives from this value.
-            "defer": [
-                "computer_use", "session_search", "image_generate",
-                "todo_list", "process_manage", "cronjob_manage", "browser_vault",
-                # Desktop GUI surface (desktop_ui, project and catalog toolsets)
-                "drive_preview", "gui_tour", "desktop_preview", "annotate_preview", "manage_catalog",
-                "show_tip", "desktop_project", "close_terminal",
-                "set_theme", "read_terminal", "read_window_below", "focus_pane",
-            ],
         },
         # Remote connector discovery/lifecycle through the Nous tool gateway.
         # The flag is the user's off switch; availability additionally requires
