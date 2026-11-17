@@ -278,6 +278,21 @@ struct ReachPresenceTests {
         #expect(kinds.withLock { $0 } == ["mac", "ios"])
     }
 
+    @Test func aMacWhoseHelloIsRefusedForAnotherReasonNeverDeclaresItselfIOS() async throws {
+        for refusal in [
+            RPCError(code: 4001, message: "storage_unavailable", data: ["reason": "storage_unavailable"]),
+            RPCError(code: 4001, message: "invalid_params", data: ["reason": "invalid_params", "field": "label"]),
+        ] {
+            let script = ReachGateway(helloReply: .failure(refusal))
+            let gateway = try await FakeGateway.start { method, params, connection in script.handle(method, params, connection) }
+            let mac = DeviceIdentity(deviceID: "0B7F3F2E-5A4B-4E5E-9D1C-1F2E3D4C5B6A", formFactor: .mac, appVersion: "1")
+            let connection = try await client(for: gateway, presence: ReachPresence(identity: mac)).connect(reach: .offerTarget)
+            #expect(script.calls("client.hello").map { $0.params?["kind"]?.stringValue } == ["mac"])
+            await connection.close()
+            gateway.stop()
+        }
+    }
+
     @Test func refusedHelloLeavesTheConnectionUsable() async throws {
         let refusal = RPCError(code: -32601, message: "unknown_method", data: ["reason": "unknown_method"])
         let script = ReachGateway(helloReply: .failure(refusal))

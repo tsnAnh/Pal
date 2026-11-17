@@ -133,7 +133,7 @@ def record_hello(root, *, device_id: str, kind: str, label: str, model: str, os_
         conn.execute(
             "INSERT INTO devices (device_id, kind, label, model, os, app_version, created_at, last_seen_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
-            "ON CONFLICT(device_id) DO UPDATE SET kind = excluded.kind, label = excluded.label, "
+            "ON CONFLICT(device_id) DO UPDATE SET kind = CASE devices.kind WHEN 'mac' THEN 'mac' ELSE excluded.kind END, label = excluded.label, "
             "model = excluded.model, os = excluded.os, app_version = excluded.app_version, "
             "last_seen_at = MAX(last_seen_at, excluded.last_seen_at)",
             (device_id, kind, label, model, os_name, app_version, now, now))

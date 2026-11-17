@@ -69,9 +69,16 @@ public actor ReachPresence {
                 return false
             } catch {
                 diagnostics.info("reach", "client.hello refused: \(Diagnostics.describe(error))")
+                guard Self.refusesKind(error) else { return false }
             }
         }
         return false
+    }
+
+    private static func refusesKind(_ error: any Error) -> Bool {
+        guard case GatewayTransportError.rpc(let refusal) = error,
+              (refusal.reasonCode ?? refusal.message) == "invalid_params" else { return false }
+        return refusal.data?["field"]?.stringValue.map { $0 == "kind" } ?? true
     }
 
     public func setPushRegistration(_ registration: PushRegistration?) async {
