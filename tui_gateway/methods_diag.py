@@ -1,6 +1,3 @@
-"""``diag.recent`` and ``diag.report``: read and add to the gateway's failure ledger. Owner connections only.
-Bodies are rebound onto server.py's globals (method_ctx.bind_module)."""
-
 import logging
 import sqlite3
 

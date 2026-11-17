@@ -23246,7 +23246,8 @@
               "not_found",
               "timeout",
               "internal",
-              "decode"
+              "decode",
+              "offline"
             ],
             "title": "Reason",
             "type": "string"

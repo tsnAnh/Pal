@@ -124,3 +124,14 @@ def test_retention_and_the_row_cap_prune_on_write(install, monkeypatch):
                                              reason='internal'))
     traces = [r['trace'] for r in diag_ledger.recent(minutes=10080, limit=200, now=now + 10)]
     assert traces == ['t4', 't3', 't2']
+
+
+@pytest.mark.asyncio
+async def test_a_fault_row_names_the_device_that_said_hello(bots):
+    phone = bots.connect('alpha')
+    hello = await call(phone, 'client.hello', {'kind': 'ios', 'device_id': 'diag-phone-01', 'label': 'Owner iPhone',
+                                               'app_version': '1.4 (88)'})
+    assert hello['result']['recorded'] is True, hello
+    await traced(phone, *REFUSED, trace='dev1')
+    [row] = [f for f in await recent(bots) if f['trace'] == 'dev1']
+    assert (row['device_kind'], row['device_name'], row['app_build']) == ('ios', 'Owner iPhone', '1.4 (88)')

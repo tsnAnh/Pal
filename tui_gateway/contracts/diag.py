@@ -1,9 +1,3 @@
-"""``diag.recent`` and ``diag.report``: the gateway's failure ledger (``gateway/diag_ledger.py``).
-
-Owner-only. A row holds codes, the trace id, the calling device and the param key names with their
-value types; never a param value, a token or provider text.
-"""
-
 from __future__ import annotations
 
 from typing import Literal

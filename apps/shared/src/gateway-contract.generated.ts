@@ -1865,7 +1865,7 @@ export interface DiagFault {
 export interface DiagReportParams {
   trace: string
   source: 'transport' | 'decode'
-  reason: 'forbidden' | 'owner_only' | 'invalid_params' | 'not_implemented' | 'not_found' | 'timeout' | 'internal' | 'decode'
+  reason: 'forbidden' | 'owner_only' | 'invalid_params' | 'not_implemented' | 'not_found' | 'timeout' | 'internal' | 'decode' | 'offline'
   method: string
   code?: number | null
 }
