@@ -141,11 +141,60 @@ public struct ConnectRowAction {
     }
 }
 
+public enum ConnectStatusTone: Sendable {
+    case positive
+    case attention
+    case neutral
+}
+
+public struct ConnectRowStatus: Sendable, Equatable {
+    public let title: String
+    public let tone: ConnectStatusTone
+
+    public init(_ title: String, tone: ConnectStatusTone) {
+        self.title = title
+        self.tone = tone
+    }
+}
+
+public struct ConnectStatusChip: View {
+    public let status: ConnectRowStatus
+
+    @Environment(\.hermesTheme) private var theme
+
+    public init(_ status: ConnectRowStatus) {
+        self.status = status
+    }
+
+    public var body: some View {
+        HStack(spacing: 4) {
+            Circle().fill(tint).frame(width: 5, height: 5)
+            Text(status.title).lineLimit(1)
+        }
+        .font(.system(size: 10.5, weight: .semibold))
+        .foregroundStyle(status.tone == .neutral ? PalTokens.textTertiary : tint)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 2.5)
+        .background(status.tone == .neutral ? PalTokens.chipFill : tint.opacity(0.14), in: Capsule())
+        .fixedSize()
+    }
+
+    private var tint: Color {
+        switch status.tone {
+        case .positive: .green
+        case .attention: Color(theme.palette.accentBlue)
+        case .neutral: PalTokens.textTertiary
+        }
+    }
+}
+
 public struct ConnectAppRow<Icon: View>: View {
     public let title: String
     public let summary: String
     public let accessibilityIdentifier: String
     public let isBusy: Bool
+    public let status: ConnectRowStatus?
+    public let inset: CGFloat
     public let trailing: ConnectRowAction?
     private let icon: Icon
 
@@ -156,6 +205,8 @@ public struct ConnectAppRow<Icon: View>: View {
         summary: String,
         accessibilityIdentifier: String,
         isBusy: Bool = false,
+        status: ConnectRowStatus? = nil,
+        inset: CGFloat = ConnectRowMetrics.horizontalMargin,
         trailing: ConnectRowAction?,
         @ViewBuilder icon: () -> Icon
     ) {
@@ -163,6 +214,8 @@ public struct ConnectAppRow<Icon: View>: View {
         self.summary = summary
         self.accessibilityIdentifier = accessibilityIdentifier
         self.isBusy = isBusy
+        self.status = status
+        self.inset = inset
         self.trailing = trailing
         self.icon = icon()
     }
@@ -171,10 +224,13 @@ public struct ConnectAppRow<Icon: View>: View {
         HStack(spacing: ConnectRowMetrics.tileToTextGap) {
             icon
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.system(size: ConnectRowMetrics.titleSize))
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: ConnectRowMetrics.titleSize))
+                        .foregroundStyle(Color(theme.palette.textPrimary))
+                        .lineLimit(1)
+                    if let status { ConnectStatusChip(status) }
+                }
                 if !summary.isEmpty {
                     Text(summary)
                         .font(.system(size: ConnectRowMetrics.subtitleSize))
@@ -198,7 +254,7 @@ public struct ConnectAppRow<Icon: View>: View {
                 .accessibilityIdentifier("\(accessibilityIdentifier)-action")
             }
         }
-        .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
+        .padding(.horizontal, inset)
         .padding(.vertical, ConnectRowMetrics.verticalPadding)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(accessibilityIdentifier)
@@ -233,18 +289,18 @@ public struct ConnectSectionHeader: View {
     private func label(showsChevron: Bool) -> some View {
         HStack(spacing: 8) {
             Text(title)
-                .font(.system(size: ConnectRowMetrics.sectionTitleSize))
-                .foregroundStyle(Color(theme.palette.textPrimary))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(PalTokens.textSecondary)
             if showsChevron {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(Color(theme.palette.textPrimary))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(PalTokens.textTertiary)
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, ConnectRowMetrics.horizontalMargin)
-        .padding(.top, 16)
-        .padding(.bottom, 6)
+        .padding(.top, 20)
+        .padding(.bottom, 8)
         .contentShape(Rectangle())
     }
 }
