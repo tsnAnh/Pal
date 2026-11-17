@@ -257,7 +257,7 @@ struct KanbanStoreTests {
         script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t2", gateway: "B")], cursor: "cB", gateway: "B"))
         #expect(await store.pollOnce(board: "ops") == .wait)
         let calls = script.calls("kanban.board.snapshot")
-        #expect(calls.last?.params.keys.contains("gateway_id") == false)
+        #expect(calls.dropFirst().first?.params.keys.contains("gateway_id") == false)
         #expect(store.session.gatewayID == "B")
         #expect(store.session.cache("ops")?.cards.values.map(\.taskID) == ["t2"])
     }

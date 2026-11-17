@@ -120,14 +120,14 @@ public final class KanbanStore {
         if boardsLoad != .ready { boardsLoad = .loading }
         for attempt in 0...1 {
             do {
-                let list = try await service.boards(gatewayID: session.gatewayID)
-                absorb(gatewayID: list.gatewayID)
+                let list = try await service.boards(gatewayID: session.requestGatewayID)
+                session.adopt(gatewayID: list.gatewayID)
                 session.setBoards(list.boards)
                 boardsCode = list.boards.isEmpty && !list.isVerifiedEmpty ? "boards_unverified" : nil
                 boardsLoad = boardsCode == nil ? .ready : .failed
                 return
             } catch KanbanFailure.gatewayMismatch where attempt == 0 {
-                drop()
+                session.release()
             } catch is CancellationError {
                 return
             } catch {
@@ -167,8 +167,8 @@ public final class KanbanStore {
         let slot = "\(board)/\(taskID)"
         if session.detail(board: board, taskID: taskID) == nil { cardLoads[slot] = .loading }
         do {
-            let result = try await service.card(board: board, taskID: taskID, gatewayID: session.gatewayID)
-            if absorb(gatewayID: result.scope.gatewayID) {
+            let result = try await service.card(board: board, taskID: taskID, gatewayID: session.requestGatewayID)
+            if session.adopt(gatewayID: result.scope.gatewayID) {
                 if retryAfterDrop { await fetchCard(board: board, taskID: taskID, retryAfterDrop: false) }
                 return
             }
@@ -189,7 +189,7 @@ public final class KanbanStore {
                 cardLoads[slot] = .failed
             }
         } catch KanbanFailure.gatewayMismatch {
-            drop()
+            session.release()
             if retryAfterDrop { await fetchCard(board: board, taskID: taskID, retryAfterDrop: false) }
         } catch is CancellationError {
             return
@@ -214,24 +214,18 @@ public final class KanbanStore {
     public func pollOnce(board: String) async -> KanbanPollStep {
         await restore(board: board)
         guard let cache = session.cache(board), let cursor = cache.cursor else {
-            await refreshSnapshot(board: board)
-            switch boardLoads[board] ?? .idle {
-            case .unsupported, .permissionDenied: return .stop
-            case .failed, .unreachable: return .backoff
-            default: return .wait
-            }
+            return await snapshotStep(board: board)
         }
         do {
-            let page = try await service.events(board: board, cursor: cursor, limit: Self.eventPageSize, gatewayID: session.gatewayID)
-            if absorb(gatewayID: page.scope.gatewayID) {
+            let page = try await service.events(board: board, cursor: cursor, limit: Self.eventPageSize, gatewayID: session.requestGatewayID)
+            if session.adopt(gatewayID: page.scope.gatewayID) {
                 await refreshSnapshot(board: board)
                 return .wait
             }
             return await handle(page, board: board, generation: cache.generation)
         } catch KanbanFailure.gatewayMismatch {
-            drop()
-            await refreshSnapshot(board: board)
-            return .wait
+            session.release()
+            return await snapshotStep(board: board)
         } catch is CancellationError {
             return .stop
         } catch {
@@ -248,6 +242,15 @@ public final class KanbanStore {
             default:
                 return .backoff
             }
+        }
+    }
+
+    private func snapshotStep(board: String) async -> KanbanPollStep {
+        await refreshSnapshot(board: board)
+        switch boardLoads[board] ?? .idle {
+        case .unsupported, .permissionDenied: return .stop
+        case .failed, .unreachable: return .backoff
+        default: return .wait
         }
     }
 
@@ -283,8 +286,8 @@ public final class KanbanStore {
         var token: String?
         do {
             while true {
-                let page = try await service.snapshot(board: board, gatewayID: session.gatewayID, limit: Self.pageSize, pageToken: token)
-                if absorb(gatewayID: page.scope.gatewayID) { return .restart }
+                let page = try await service.snapshot(board: board, gatewayID: session.requestGatewayID, limit: Self.pageSize, pageToken: token)
+                if session.adopt(gatewayID: page.scope.gatewayID) { return .restart }
                 switch staging.absorb(page, board: board) {
                 case .more(let next):
                     token = next
@@ -298,7 +301,7 @@ public final class KanbanStore {
                 }
             }
         } catch KanbanFailure.gatewayMismatch {
-            drop()
+            session.release()
             return .restart
         } catch is CancellationError {
             return .stopped(boardLoads[board] ?? .idle)
@@ -361,23 +364,5 @@ public final class KanbanStore {
         session.removeBoard(board)
         settledGenerations[board] = nil
         disk?.remove(board: board)
-    }
-
-    @discardableResult
-    private func absorb(gatewayID: String) -> Bool {
-        let dropped = session.adopt(gatewayID: gatewayID)
-        if dropped { clearLoads() }
-        return dropped
-    }
-
-    private func drop() {
-        session.dropAll()
-        clearLoads()
-    }
-
-    private func clearLoads() {
-        boardLoads = [:]
-        cardLoads = [:]
-        settledGenerations = [:]
     }
 }
