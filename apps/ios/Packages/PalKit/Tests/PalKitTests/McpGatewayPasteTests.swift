@@ -24,6 +24,11 @@ private func gateway(poll: JSONValue = ["status": "approved"], callback: JSONVal
     ])
 }
 
+func pasteSession(_ service: ConnectAppsService, _ app: ConnectApp) async throws -> any McpPasteSigning {
+    guard case .paste(let session) = try await service.signInMcp(app, platform: .iPhone) else { throw ConnectAppsError.failed }
+    return session
+}
+
 @Suite("Other connector sign-in route")
 struct McpConnectRouteTests {
     @Test func theRouteFollowsTheConnectorKindAndPlatform() {
@@ -64,7 +69,7 @@ struct McpSignInFailureTests {
 struct McpGatewayPasteSessionTests {
     @Test func aValidAddressIsRelayedOnceAndTheRowConnects() async throws {
         let rpc = gateway()
-        let session = try await customService(rpc).beginMcpPaste(preset())
+        let session = try await pasteSession(customService(rpc), preset())
         #expect(session.authorizeURL.absoluteString == authURL)
         let start = try #require(rpc.params("mcp.servers.oauth.start").first)
         #expect(start["client_redirect_uri"]?.stringValue?.hasPrefix("http://127.0.0.1:") == true)
@@ -85,7 +90,7 @@ struct McpGatewayPasteSessionTests {
     ])
     func everyAcceptedShapeCompletes(_ pasted: String) async throws {
         let rpc = gateway()
-        let session = try await customService(rpc).beginMcpPaste(preset())
+        let session = try await pasteSession(customService(rpc), preset())
         let outcome = await session.submit(pasted)
         #expect(outcome == .signedIn)
     }
@@ -102,7 +107,7 @@ struct McpGatewayPasteSessionTests {
     ])
     func badShapesKeepTheAttemptOpenAndRelayNothing(_ pasted: String) async throws {
         let rpc = gateway()
-        let session = try await customService(rpc).beginMcpPaste(preset())
+        let session = try await pasteSession(customService(rpc), preset())
         let outcome = await session.submit(pasted)
         guard case .tryAgain = outcome else {
             Issue.record("expected tryAgain, got \(outcome)")
@@ -114,7 +119,7 @@ struct McpGatewayPasteSessionTests {
 
     @Test func aWrongStateEndsTheAttemptAndRemovesAFreshlyAddedServer() async throws {
         let rpc = gateway()
-        let session = try await customService(rpc).beginMcpPaste(preset())
+        let session = try await pasteSession(customService(rpc), preset())
         let outcome = await session.submit("\(redirect)?code=abc&state=other")
         guard case .failed = outcome else {
             Issue.record("expected failed, got \(outcome)")
@@ -127,14 +132,14 @@ struct McpGatewayPasteSessionTests {
 
     @Test func aDeniedAddressFailsWithPlainWords() async throws {
         let rpc = gateway()
-        let session = try await customService(rpc).beginMcpPaste(preset())
+        let session = try await pasteSession(customService(rpc), preset())
         let outcome = await session.submit("\(redirect)?error=access_denied&state=st-1")
         #expect(outcome == .failed("Access was not granted."))
     }
 
     @Test func aProviderRefusalAfterTheRelayIsTyped() async throws {
         let rpc = gateway(poll: ["status": "error", "error_message": "invalid_grant: code expired"])
-        let session = try await customService(rpc).beginMcpPaste(preset())
+        let session = try await pasteSession(customService(rpc), preset())
         let outcome = await session.submit("\(redirect)?code=abc&state=st-1")
         #expect(outcome == .failed(McpSignInFailure.expired.reason))
         #expect(rpc.methods().last == "mcp.servers.remove")
@@ -142,14 +147,14 @@ struct McpGatewayPasteSessionTests {
 
     @Test func aGatewayRefusalOfTheRelayIsTyped() async throws {
         let rpc = gateway(callback: ["ok": false, "error_message": "state mismatch"])
-        let session = try await customService(rpc).beginMcpPaste(preset())
+        let session = try await pasteSession(customService(rpc), preset())
         let outcome = await session.submit("\(redirect)?code=abc&state=st-1")
         #expect(outcome == .failed(McpSignInFailure.expired.reason))
     }
 
     @Test func aReconnectKeepsTheServerWhenItIsCancelled() async throws {
         let rpc = gateway()
-        let session = try await customService(rpc).beginMcpPaste(preset(state: .needsAuthorization))
+        let session = try await pasteSession(customService(rpc), preset(state: .needsAuthorization))
         await session.cancel()
         #expect(rpc.methods().contains("mcp.servers.oauth.cancel"))
         #expect(!rpc.methods().contains("mcp.servers.remove"))
@@ -163,7 +168,7 @@ struct McpGatewayPasteSessionTests {
             "mcp.servers.oauth.start": rpcFailure(5000, message: "Dynamic client registration rejected"),
         ])
         do {
-            _ = try await customService(refusing).beginMcpPaste(preset())
+            _ = try await pasteSession(customService(refusing), preset())
             Issue.record("expected a failure")
         } catch {
             #expect(error as? ConnectAppsError == .signInFailed(McpSignInFailure.registrationRejected.reason))
@@ -174,7 +179,7 @@ struct McpGatewayPasteSessionTests {
     @Test func anAuthorizationLinkWithoutStateIsRefused() async {
         let rpc = gateway(url: "https://auth.example.com/authorize?response_type=code")
         do {
-            _ = try await customService(rpc).beginMcpPaste(preset())
+            _ = try await pasteSession(customService(rpc), preset())
             Issue.record("expected a failure")
         } catch {
             #expect(error as? ConnectAppsError == .signInFailed(McpSignInFailure.other.reason))
@@ -185,7 +190,7 @@ struct McpGatewayPasteSessionTests {
     @Test func thePastedValueNeverAppearsInDescriptions() async throws {
         let canary = "CANARY-\(UUID().uuidString)"
         let rpc = gateway()
-        let session = try await customService(rpc).beginMcpPaste(preset())
+        let session = try await pasteSession(customService(rpc), preset())
         _ = await session.submit("\(redirect)?code=\(canary)&state=st-1")
         #expect(!String(describing: session).contains(canary))
         #expect(!String(reflecting: session).contains(canary))

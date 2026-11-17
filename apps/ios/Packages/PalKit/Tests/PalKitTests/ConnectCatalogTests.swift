@@ -9,20 +9,32 @@ import Testing
 private let catalogEntries = [
     catalogEntry("slack", "Slack", "Communication", method: .mcpOAuth),
     catalogEntry("gmail", "Gmail", "Communication", method: .mcpOAuth),
-    catalogEntry("github", "GitHub", "Developer", method: .apiKey),
-    catalogEntry("figma", "Figma", "Design and media", method: .mcpOAuth),
+    catalogEntry("github", "GitHub", "Developer tools", method: .apiKey),
+    catalogEntry("figma", "Figma", "Design and web", method: .mcpOAuth),
     catalogEntry("odd", "Odd", "Zebra"),
     catalogEntry("bare", "Bare", ""),
     catalogEntry("upwork", "Upwork", "Sales and support", method: .native, url: nil),
     catalogEntry("google-workspace", "Google Workspace", "Files and docs", method: .native, url: nil),
-    catalogEntry("acme", "Acme", "Developer", method: .oauthClient, status: .needsSetup, url: nil),
+    catalogEntry("acme", "Acme", "Developer tools", method: .oauthClient, status: .needsSetup, url: nil),
 ]
 
 @Suite("Connect catalog")
 struct ConnectCatalogTests {
     @Test func categoriesComeFromTheCatalogInReadingOrderWithUnknownOnesLastBeforeOther() {
         let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: [])
-        #expect(catalog.categories == ["Communication", "Design and media", "Developer", "Zebra", "Other"])
+        #expect(catalog.categories == ["Developer tools", "Design and web", "Communication", "Zebra", "Other"])
+    }
+
+    @Test func everyShippedCategoryHasAFixedPlaceInTheList() {
+        let shipped = [
+            "Other", "Communication", "Finance", "Sales and support", "Design and web", "Docs and files", "Work management",
+            "Monitoring and analytics", "Hosting and infrastructure", "Developer tools",
+        ]
+        let catalog = ConnectCatalog.make(catalog: shipped.enumerated().map { catalogEntry("c\($0.offset)", "C\($0.offset)", $0.element) }, mcp: [])
+        #expect(catalog.categories == [
+            "Developer tools", "Hosting and infrastructure", "Monitoring and analytics", "Work management", "Docs and files",
+            "Design and web", "Sales and support", "Finance", "Communication", "Other",
+        ])
     }
 
     @Test func aConnectorWithoutACategoryLandsInOther() {

@@ -49,6 +49,8 @@ _GATE_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/webapp/gateway-connections/oauth/callback",
     # A chat provider's Allow redirect: its one-use state is the credential (gateway/chat_install_service.py).
     "/webapp/chat-install/callback",
+    # An MCP server's sign-in redirect for the Pal app: its one-use state is the credential (tui_gateway/mcp_oauth_sessions.py).
+    "/webapp/mcp-oauth/callback",
     # Google's sign-in redirect: its one-use state is the credential (gateway/oauth_client_setup.py).
     "/webapp/google-install/callback",
     "/assets/", "/dashboard-plugins/", "/favicon.ico", "/ds-assets/", "/fonts/", "/fonts-terminal/")

@@ -203,8 +203,8 @@ public struct ConnectCatalog: Sendable, Equatable {
     public static let otherCategory = "Other"
     public static let customCategory = "Custom"
     private static let preferredOrder = [
-        "Communication", "Work management", "Files and docs", "Design and media", "Developer",
-        "Data and monitoring", "Sales and support", "Commerce",
+        "Developer tools", "Hosting and infrastructure", "Monitoring and analytics", "Work management", "Docs and files",
+        "Design and web", "Sales and support", "Finance", "Communication",
     ]
 
     public var apps: [ConnectApp]
@@ -267,7 +267,7 @@ public struct ConnectCatalog: Sendable, Equatable {
             apps.append(
                 ConnectApp(
                     id: GoogleWorkspaceCatalog.appID, name: GoogleWorkspaceCatalog.name, summary: GoogleWorkspaceCatalog.summary,
-                    category: "Files and docs", source: .googleWorkspace, state: google.catalogState,
+                    category: "Docs and files", source: .googleWorkspace, state: google.catalogState,
                     authReason: google.state == .reauthNeeded ? (google.reauthReason ?? .unknown).plainReason : nil
                 )
             )

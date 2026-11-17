@@ -41,13 +41,13 @@ final class ParityConnectApps: ConnectAppsTestCase {
 
     func test08Design() throws {
         let app = readyCatalog()
-        tapChip(app, "Design and media")
+        tapChip(app, "Design and web")
         parityShot("08-connect-apps-design")
     }
 
     func test09Code() throws {
         let app = readyCatalog()
-        tapChip(app, "Developer")
+        tapChip(app, "Developer tools")
         parityShot("09-connect-apps-code")
     }
 

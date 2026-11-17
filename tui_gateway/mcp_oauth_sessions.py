@@ -6,17 +6,30 @@ owns flow registration, profile checks, polling, cancellation, and relayed callb
 
 from __future__ import annotations
 
+import hmac
 import secrets
 import threading
 import time
 from contextlib import suppress
 from typing import Any, Dict, Optional
+from urllib.parse import parse_qs, urlparse
 
 from tools.connectors.mcp_oauth import (
+    _pinned_loopback,
     _validate_client_redirect_uri,
     choose_callback_receiver,
     run_worker,
+    validate_loopback_redirect_uri,
 )
+from tools.connectors.mcp_oauth_redirect import (
+    APP_REDIRECT_URI,
+    KIND_APP,
+    KIND_GATEWAY,
+    KIND_LOOPBACK,
+    is_app_redirect,
+    is_registration_refusal,
+)
+from tui_gateway import mcp_oauth_redirects
 
 # session_id -> record wrapping the shared DashboardOAuthFlow bridge plus bookkeeping.
 _sessions: dict[str, dict[str, Any]] = {}
@@ -59,18 +72,7 @@ def finish_flow(session_id: str) -> None:
         _shutdown_listener(rec)
 
 
-def start_flow(
-    hermes_home: str, server_name: str, cfg: dict, *, reconnect_live: bool = False,
-    url_timeout: float = 30.0, client_redirect_uri: Optional[str] = None) -> dict[str, Any]:
-    """Begin an MCP OAuth flow and return ``{session_id, auth_url, flow}``; blocks up to
-    ``url_timeout`` for the authorization URL. With ``client_redirect_uri`` (invalid values
-    raise ``ValueError``) no gateway-side listener is bound."""
-    from tools.mcp_dashboard_oauth import DashboardOAuthFlow
-    from tools.mcp_oauth import signs_in_on_owner_app
-    if signs_in_on_owner_app(cfg):
-        raise RuntimeError(f"'{server_name}' signs in on your own computer, not on this host. Sign in from the Pal app on your phone, tablet or Mac.")
-    if client_redirect_uri is not None:
-        client_redirect_uri = _validate_client_redirect_uri(client_redirect_uri)
+def _gc_and_check_capacity(server_name: str, hermes_home: str) -> None:
     cutoff = time.time() - _SESSION_TTL_SECONDS  # opportunistic GC of expired sessions
     with _sessions_lock:
         for sid in [sid for sid, rec in _sessions.items() if rec["created_at"] < cutoff]:
@@ -82,19 +84,38 @@ def start_flow(
         if any(r["server_name"] == server_name and r["hermes_home"] == hermes_home for r in active):
             raise RuntimeError(f"MCP OAuth for '{server_name}' is already in progress")
 
+
+def _remember_approval(rec: dict[str, Any]) -> None:
+    if rec["flow"].snapshot().get("status") != "approved":
+        return
+    with suppress(Exception):
+        mcp_oauth_redirects.save_pref(rec["hermes_home"], rec["server_name"], kind=rec["redirect"])
+
+
+def _launch(
+    hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool, kind: str,
+    redirect_uri: Optional[str]) -> dict[str, Any]:
+    """Start one fresh flow on one redirect. ``redirect_uri`` None means the gateway-hosted loopback receiver."""
+    from tools.mcp_dashboard_oauth import DashboardOAuthFlow
     session_id = secrets.token_urlsafe(24)
     flow = DashboardOAuthFlow(
         flow_id=session_id, server_name=server_name, profile=None, hermes_home=hermes_home,
-        redirect_uri="", reconnect_live=reconnect_live)
-    httpd = choose_callback_receiver(flow, cfg, client_redirect_uri)
+        redirect_uri=redirect_uri if kind == KIND_GATEWAY else "", reconnect_live=reconnect_live)
+    httpd = None if kind == KIND_GATEWAY else choose_callback_receiver(flow, cfg, redirect_uri)
     rec = register_flow(flow, httpd=httpd)
+    rec["redirect"] = kind
     threading.Thread(
         target=run_worker, args=(hermes_home, server_name, dict(cfg), reconnect_live),
-        kwargs={"flow": flow, "on_done": lambda: _shutdown_listener(rec)},
+        kwargs={"flow": flow, "on_done": lambda: (_remember_approval(rec), _shutdown_listener(rec))},
         daemon=True, name=f"mcp-oauth-{server_name}").start()
+    return rec
+
+
+def _publish(rec: dict[str, Any], url_timeout: float) -> dict[str, Any]:
+    """Wait for the flow's authorization URL; a failure marks the flow errored and releases its listener."""
+    flow = rec["flow"]
     try:
         auth_url = None
-        # wait_for_authorization_url is async; run its wait synchronously.
         deadline = time.time() + url_timeout
         while time.time() < deadline:
             snap = flow.snapshot()
@@ -111,8 +132,99 @@ def start_flow(
         flow.mark_error(exception_message(exc))  # no-op when the worker already recorded the cause
         _shutdown_listener(rec)
         raise
-    # ``flow`` mirrors the provider-OAuth discriminator: open a URL then poll (no user_code).
-    return {"session_id": session_id, "auth_url": auth_url, "flow": "pkce"}
+    if rec["redirect"] == KIND_GATEWAY:
+        rec["gateway_state"] = parse_qs(urlparse(auth_url).query).get("state", [None])[0]
+    return {"session_id": flow.flow_id, "auth_url": auth_url, "flow": "pkce", "redirect": rec["redirect"],
+            "redirect_uri": flow.redirect_uri}
+
+
+def _retire(rec: dict[str, Any]) -> None:
+    """Drop a refused attempt once its worker has rolled back, so the next one owns the token files."""
+    flow = rec["flow"]
+    flow.mark_error("OAuth cancelled by user", cancelled=True)
+    _shutdown_listener(rec)
+    if not flow.wait_worker_done(10):
+        raise RuntimeError(f"MCP OAuth for '{rec['server_name']}' could not be restarted; try again shortly")
+    with _sessions_lock:
+        _sessions.pop(flow.flow_id, None)
+
+
+def _run_chain(
+    hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool, url_timeout: float,
+    fallback: Optional[str]) -> dict[str, Any]:
+    pref = mcp_oauth_redirects.load_pref(hermes_home, server_name)
+    gateway = mcp_oauth_redirects.gateway_redirect_uri(hermes_home)
+    uris = {KIND_APP: APP_REDIRECT_URI, KIND_GATEWAY: gateway, KIND_LOOPBACK: fallback}
+    notice = None
+    for kind in mcp_oauth_redirects.steps_from(pref.get("kind")):
+        if kind == KIND_GATEWAY and gateway is None:
+            notice = mcp_oauth_redirects.NOTICE
+            continue
+        rec = _launch(hermes_home, server_name, cfg, reconnect_live, kind, uris[kind])
+        try:
+            result = _publish(rec, url_timeout)
+        except Exception as exc:
+            if kind == KIND_LOOPBACK or not is_registration_refusal(str(exc)):
+                raise
+            _retire(rec)
+            continue
+        if notice and not pref.get("notice_shown"):
+            result["notice"] = notice
+            mcp_oauth_redirects.save_pref(hermes_home, server_name, notice_shown=True)
+        return result
+    raise RuntimeError("MCP OAuth could not start on any redirect")
+
+
+def start_flow(
+    hermes_home: str, server_name: str, cfg: dict, *, reconnect_live: bool = False,
+    url_timeout: float = 30.0, client_redirect_uri: Optional[str] = None,
+    fallback_redirect_uri: Optional[str] = None) -> dict[str, Any]:
+    """Begin an MCP OAuth flow and return ``{session_id, auth_url, flow, redirect, redirect_uri}`` (plus a
+    ``notice`` when the gateway has no https address); blocks up to ``url_timeout`` for the authorization
+    URL. With a loopback ``client_redirect_uri`` (invalid values raise ``ValueError``) no gateway-side
+    listener is bound. With the Pal app's redirect the chain app, gateway https, loopback runs, moving on
+    only when the server refuses the registered redirect; ``fallback_redirect_uri`` is the client-hosted
+    loopback for the last step."""
+    from tools.mcp_oauth import signs_in_on_owner_app
+    if signs_in_on_owner_app(cfg):
+        raise RuntimeError(f"'{server_name}' signs in on your own computer, not on this host. Sign in from the Pal app on your phone, tablet or Mac.")
+    if client_redirect_uri is not None:
+        client_redirect_uri = _validate_client_redirect_uri(client_redirect_uri)
+    if fallback_redirect_uri is not None:
+        fallback_redirect_uri = validate_loopback_redirect_uri(fallback_redirect_uri)
+    _gc_and_check_capacity(server_name, hermes_home)
+    if client_redirect_uri is not None and is_app_redirect(client_redirect_uri) and not _pinned_loopback(cfg):
+        return _run_chain(hermes_home, server_name, cfg, reconnect_live, url_timeout, fallback_redirect_uri)
+    rec = _launch(hermes_home, server_name, cfg, reconnect_live, KIND_LOOPBACK, client_redirect_uri)
+    return _publish(rec, url_timeout)
+
+
+def start_gateway_flow(hermes_home: str, server_name: str, cfg: dict, redirect_uri: str) -> dict[str, Any]:
+    """Begin a flow whose vendor-registered redirect is the gateway's https callback (a preregistered client
+    cannot be retried on another redirect); the session returns through ``deliver_gateway_callback``."""
+    _gc_and_check_capacity(server_name, hermes_home)
+    rec = _launch(hermes_home, server_name, cfg, False, KIND_GATEWAY, redirect_uri)
+    return _publish(rec, 30.0)
+
+
+def deliver_gateway_callback(
+    state: str, *, code: Optional[str], error: Optional[str] = None, iss: Optional[str] = None) -> bool:
+    """Hand the https callback route's redirect to the flow that minted ``state``. A state works once and
+    only while its session lives; True when delivered."""
+    cutoff = time.time() - _SESSION_TTL_SECONDS
+    match = None
+    with _sessions_lock:
+        for rec in _sessions.values():
+            expected = rec.get("gateway_state")
+            if expected and hmac.compare_digest(expected.encode(), state.encode()) and rec["created_at"] >= cutoff:
+                match, rec["gateway_state"] = rec, None
+    if match is None:
+        return False
+    try:
+        match["flow"].deliver_callback(code=code, state=state, error=error, iss=iss)
+    except ValueError:
+        return False
+    return True
 
 
 def _lookup(
@@ -144,7 +256,7 @@ def poll_flow(session_id: str, server_name: str) -> dict[str, Any]:
     status = raw if raw in ("approved", "error") else "pending"
     out: dict[str, Any] = {
         "session_id": session_id, "status": status, "error_message": snap.get("error"),
-        "auth_url": snap.get("authorization_url")}
+        "auth_url": snap.get("authorization_url"), "redirect": rec.get("redirect", KIND_LOOPBACK)}
     if status == "approved":
         out["tools"] = list(getattr(flow, "tools", []) or [])
     return out

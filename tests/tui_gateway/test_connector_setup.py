@@ -154,16 +154,21 @@ def test_figma_connects_through_the_preregistered_mcp_path(root, public_url, mon
         started.update(name=name, cfg=cfg)
         return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 
+    def fake_gateway(home, name, cfg, redirect_uri):
+        started.update(name=name, cfg=cfg, redirect_uri=redirect_uri)
+        return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
+
     monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", fake_start)
+    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_gateway_flow", fake_gateway)
     assert _row("figma")["status"] == "needs_setup"
     saved = _ok("connectors.oauth_client.save", slug="figma", client_id_item=_item("1.2"),
                 client_secret_item=_item(SECRET))
-    assert saved["redirect_url"] == "http://localhost:27890/callback"
+    assert saved["redirect_url"] == PUBLIC_URL + "/webapp/mcp-oauth/callback"
     assert _row("figma")["setup_progress"] == {"step_id": "client", "saved": ["client_id", "client_secret"]}
 
     assert _ok("connectors.oauth_client.connect", slug="figma")["session_id"] == "s1"
     assert started["name"] == "figma" and started["cfg"]["url"] == "https://mcp.figma.com/mcp"
-    assert started["cfg"]["oauth"]["client_id"] == "1.2" and started["cfg"]["oauth"]["redirect_port"] == 27890
+    assert started["cfg"]["oauth"]["client_id"] == "1.2" and started["redirect_uri"] == saved["redirect_url"]
     config = (root / "profiles" / "work" / "config.yaml").read_text()
     assert SECRET not in config and "FIGMA_CLIENT_SECRET" in config
 

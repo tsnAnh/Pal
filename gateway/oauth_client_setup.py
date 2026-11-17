@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
 from gateway.device_registry import install_root
+from tools.connectors.mcp_oauth_redirect import GATEWAY_CALLBACK_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,6 @@ NONCE_TTL_SECONDS = 600.0
 HTTP_TIMEOUT_SECONDS = 15.0
 GOOGLE_REDIRECT_PATH = "/webapp/google-install/callback"
 GOOGLE_PROVIDER = "google-workspace"
-MCP_OAUTH_REDIRECT_PATH = "/webapp/mcp-oauth/callback"
 MCP_REDIRECT_PORT = 27890
 MCP_REDIRECT_URL = f"http://localhost:{MCP_REDIRECT_PORT}/callback"
 GOOGLE_TOKEN_FILE = "google_token.json"
@@ -257,7 +257,7 @@ def google_redirect_url(public_url: str | None) -> str | None:
 
 
 def mcp_redirect_url(public_url: str | None) -> str | None:
-    return _https_redirect(public_url, MCP_OAUTH_REDIRECT_PATH)
+    return _https_redirect(public_url, GATEWAY_CALLBACK_PATH)
 
 
 def address_problem(public_url: str | None) -> tuple[str, str] | None:
@@ -385,11 +385,12 @@ def mcp_secret_env(provider_id: str) -> str:
     return provider_id.upper().replace("-", "_") + "_CLIENT_SECRET"
 
 
-def mcp_server_config(provider_id: str, client_id: str) -> dict:
+def mcp_server_config(provider_id: str, client_id: str, gateway_redirect: str | None = None) -> dict:
     entry = preregistered_mcp_entries()[provider_id]
-    return {"url": entry.mcp_url, "transport": "http", "auth": "oauth",
-            "oauth": {"client_id": client_id, "client_secret": f"${{{mcp_secret_env(provider_id)}}}",
-                      "redirect_host": "localhost", "redirect_port": MCP_REDIRECT_PORT}}
+    oauth = {"client_id": client_id, "client_secret": f"${{{mcp_secret_env(provider_id)}}}"}
+    oauth.update({"redirect_uri": gateway_redirect} if gateway_redirect
+                 else {"redirect_host": "localhost", "redirect_port": MCP_REDIRECT_PORT})
+    return {"url": entry.mcp_url, "transport": "http", "auth": "oauth", "oauth": oauth}
 
 
 def console_url(provider_id: str) -> str:

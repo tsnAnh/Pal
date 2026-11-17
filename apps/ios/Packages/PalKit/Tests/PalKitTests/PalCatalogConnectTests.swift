@@ -105,7 +105,7 @@ struct PalCatalogConnectTests {
     @Test func theIPhonePasteRouteAddsThenStartsSignInForACatalogEntry() async throws {
         let rpc = oauthGateway()
         let notion = catalogEntry("notion", "Notion", "Files and docs", method: .mcpOAuth, url: "https://mcp.notion.com/mcp")
-        let session = try await customService(rpc).beginMcpPaste(app(notion))
+        let session = try await pasteSession(customService(rpc), app(notion))
         #expect(await session.submit("http://127.0.0.1:50123/callback?code=abc&state=st-1") == .signedIn)
         #expect(rpc.methods() == ["mcp.servers.add", "mcp.servers.oauth.start", "mcp.servers.oauth.callback", "mcp.servers.oauth.poll"])
     }

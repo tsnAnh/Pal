@@ -5791,6 +5791,7 @@ export interface McpOauthStartParams {
   profile?: string | null
   name: string
   client_redirect_uri?: string | null
+  fallback_redirect_uri?: string | null
   client_id?: string | null
 }
 export interface McpOauthStartResult {
@@ -5798,7 +5799,11 @@ export interface McpOauthStartResult {
   session_id: string
   auth_url: string
   flow: string
+  redirect: McpOauthRedirect
+  redirect_uri: string
+  notice?: string | null
 }
+export type McpOauthRedirect = 'app' | 'gateway' | 'loopback'
 /** ``session_id`` is the OAuth flow id returned by ``oauth.start`` (not a gateway session). */
 export interface McpOauthFlowParams {
   profile?: string | null
@@ -5811,6 +5816,7 @@ export interface McpOauthPollResult {
   session_id?: string | null
   error_message?: string | null
   auth_url?: string | null
+  redirect?: McpOauthRedirect | null
   tools?: McpProbeTool[] | null
 }
 export type McpOauthPollStatus = 'pending' | 'approved' | 'error'

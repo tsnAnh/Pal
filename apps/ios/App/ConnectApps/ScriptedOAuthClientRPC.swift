@@ -133,7 +133,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         let saved = progress["google-workspace"]?.configured == true
         let step = publicAddress && !ipAddress ? (saved ? "client" : "console") : "address"
         return [
-            "slug": "google-workspace", "name": "Google Workspace", "category": "Files and docs", "icon": "plugin_glyph",
+            "slug": "google-workspace", "name": "Google Workspace", "category": "Docs and files", "icon": "plugin_glyph",
             "method": "oauth_client", "verified": true, "status": .string(status("google-workspace")), "notes": .string(Self.googleNotes),
             "setup_guide": ScriptedSetupGuides.google(addressProblem: ipAddress),
             "setup_progress": ScriptedSetupGuides.progress(step, saved: saved ? ["client_id", "client_secret"] : []),
@@ -143,7 +143,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private func githubRow() -> JSONValue {
         let saved = progress["github"]?.connected == true
         return [
-            "slug": "github", "name": "GitHub", "category": "Developer", "icon": "plugin_glyph", "method": "api_key", "verified": false,
+            "slug": "github", "name": "GitHub", "category": "Developer tools", "icon": "plugin_glyph", "method": "api_key", "verified": false,
             "mcp_url": "https://api.githubcopilot.com/mcp/", "status": .string(status("github")),
             "setup_guide": ScriptedSetupGuides.github,
             "setup_progress": ScriptedSetupGuides.progress(saved ? "token" : "token_page", saved: saved ? ["token"] : []),
@@ -158,8 +158,9 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
             "canva": ("Canva", ScriptedSetupGuides.canva(publicAddress: publicAddress)),
         ]
         let (name, guide) = guides[slug] ?? (slug, .null)
+        let category = slug == "dropbox" ? "Docs and files" : "Design and web"
         return [
-            "slug": .string(slug), "name": .string(name), "category": "Other", "icon": "plugin_glyph",
+            "slug": .string(slug), "name": .string(name), "category": .string(category), "icon": "plugin_glyph",
             "method": "oauth_client", "verified": true, "mcp_url": .string("https://mcp.\(slug).com/mcp"), "status": .string(status(slug)),
             "setup_guide": guide,
             "setup_progress": ScriptedSetupGuides.progress(saved ? "client" : "app", saved: saved ? ["client_id", "client_secret"] : []),

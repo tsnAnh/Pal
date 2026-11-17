@@ -67,6 +67,10 @@ public struct OAuthClientSetup: Sendable, Equatable {
         url.scheme?.lowercased() == "https" ? url : nil
     }
 
+    var usesGatewayRedirect: Bool {
+        slug != "google-workspace" && redirectURL.flatMap(URL.init(string:))?.scheme?.lowercased() == "https"
+    }
+
     var fixedLoopback: (host: String, port: UInt16)? {
         guard let text = redirectURL, let url = URL(string: text), url.scheme?.lowercased() == "http",
               let host = url.host(), LoopbackHost.isLoopback(host), let port = url.port, let fixed = UInt16(exactly: port)
@@ -161,6 +165,9 @@ extension ConnectAppsService {
         guard entry.status != .needsSetup else { throw ConnectAppsError.oauthClient(.needsSetup) }
         let setup = try await oauthClientSetup(slug: entry.slug)
         guard setup.configured else { throw ConnectAppsError.oauthClient(.needsSetup) }
+        if setup.usesGatewayRedirect {
+            return try await connectThroughGateway(entry)
+        }
         var listener: LoopbackRedirectListener?
         if let fixed = setup.fixedLoopback, route != .pasteAddress {
             listener = try await startLoopback(port: fixed.port, host: fixed.host)
@@ -177,6 +184,22 @@ extension ConnectAppsService {
             } else {
                 try await awaitOAuthClientConnected(slug: entry.slug, url: started.authURL)
             }
+            return .connected
+        } catch {
+            await undo?()
+            throw error
+        }
+    }
+
+    private func connectThroughGateway(_ entry: PalCatalogEntry) async throws -> OAuthClientConnectOutcome {
+        let started = try await startOAuthClient(entry.slug, redirect: nil)
+        guard let flow = started.sessionID else { throw ConnectAppsError.oauthClient(.connectFailed) }
+        let undo = entry.status == .notConnected ? signInRollback(entry.slug) : nil
+        do {
+            _ = try await authenticate(
+                McpOAuthStart(flow: flow, link: started.authURL, redirect: .gateway), name: entry.slug,
+                using: browser as? any CallbackAuthorizationBrowser)
+            try await awaitApproval(name: entry.slug, flow: flow)
             return .connected
         } catch {
             await undo?()

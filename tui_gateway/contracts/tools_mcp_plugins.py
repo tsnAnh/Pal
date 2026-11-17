@@ -602,7 +602,14 @@ class McpOauthStartParams(McpServerNameParams):
     ``mcp.servers.oauth.callback``."""
 
     client_redirect_uri: str | None = None
+    fallback_redirect_uri: str | None = None
     client_id: str | None = None
+
+
+class McpOauthRedirect(WireEnum):
+    app = "app"
+    gateway = "gateway"
+    loopback = "loopback"
 
 
 class McpOauthStartResult(Result):
@@ -610,6 +617,9 @@ class McpOauthStartResult(Result):
     session_id: str
     auth_url: str
     flow: str
+    redirect: McpOauthRedirect
+    redirect_uri: str
+    notice: str | None = None
 
 
 method("mcp.servers.oauth.start", params=McpOauthStartParams, result=McpOauthStartResult,
@@ -634,6 +644,7 @@ class McpOauthPollResult(Result):
     session_id: str | None = None
     error_message: str | None = None
     auth_url: str | None = None
+    redirect: McpOauthRedirect | None = None
     tools: list[McpProbeTool] | None = None
 
 

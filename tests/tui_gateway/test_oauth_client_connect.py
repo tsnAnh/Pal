@@ -186,7 +186,12 @@ def test_figma_connects_through_the_mcp_path_with_the_owner_client(root, public_
         started.update(name=name, cfg=cfg)
         return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
 
+    def fake_gateway(home, name, cfg, redirect_uri):
+        started.update(name=name, cfg=cfg, redirect_uri=redirect_uri)
+        return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
+
     monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", fake_start)
+    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_gateway_flow", fake_gateway)
     assert _status("figma") == "needs_setup"
     _save("figma", FIGMA_CLIENT_ID)
     assert _status("figma") == "not_connected"
@@ -195,7 +200,9 @@ def test_figma_connects_through_the_mcp_path_with_the_owner_client(root, public_
 
     assert result["session_id"] == "s1"
     assert started["cfg"]["oauth"]["client_id"] == FIGMA_CLIENT_ID
-    assert started["cfg"]["oauth"]["redirect_port"] == 27890
+    assert started["redirect_uri"] == PUBLIC_URL + "/webapp/mcp-oauth/callback"
+    assert started["cfg"]["oauth"]["redirect_uri"] == started["redirect_uri"]
+    assert "redirect_port" not in started["cfg"]["oauth"]
     config = (root / "profiles" / "work" / "config.yaml").read_text()
     assert OWNER_SECRET not in config
     assert yaml.safe_load(config)["mcp_servers"]["figma"]["oauth"]["client_id"] == FIGMA_CLIENT_ID
@@ -205,6 +212,21 @@ def test_figma_connects_through_the_mcp_path_with_the_owner_client(root, public_
     _ok("connectors.oauth_client.remove", slug="figma")
     assert _status("figma") == "not_connected"
     assert _ok("connectors.oauth_client.setup", slug="figma")["configured"] is True
+
+
+def test_figma_keeps_the_registered_loopback_without_a_public_https_address(root, public_url, monkeypatch):
+    started = {}
+
+    def fake_start(home, name, cfg, client_redirect_uri=None):
+        started.update(cfg=cfg)
+        return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
+
+    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", fake_start)
+    public_url["url"] = None
+    _save("figma", FIGMA_CLIENT_ID)
+    assert _ok("connectors.oauth_client.setup", slug="figma")["redirect_url"] == "http://localhost:27890/callback"
+    _ok("connectors.oauth_client.connect", slug="figma")
+    assert started["cfg"]["oauth"]["redirect_port"] == 27890 and "redirect_uri" not in started["cfg"]["oauth"]
 
 
 def _vault_ids(profile="work"):

@@ -22,7 +22,7 @@ struct GoogleCatalogTests {
             #expect(app.id == "google:workspace")
             #expect(app.name == "Google Workspace")
             #expect(app.source == .googleWorkspace)
-            #expect(app.category == "Files and docs")
+            #expect(app.category == "Docs and files")
             #expect(app.state == expected)
             #expect((app.authReason != nil) == (state == .reauthNeeded))
         }
@@ -35,7 +35,7 @@ struct GoogleCatalogTests {
 
     @Test func loadTakesTheGoogleRowFromTheCatalogAndNeverAsksTheLegacyStatus() async throws {
         let google: JSONValue = [
-            "slug": "google-workspace", "name": "Google Workspace", "category": "Files and docs", "method": "oauth_client", "status": "connected",
+            "slug": "google-workspace", "name": "Google Workspace", "category": "Docs and files", "method": "oauth_client", "status": "connected",
         ]
         let rpc = CustomRPC([
             "connectors.catalog": googleReply(.object(["connectors": .array([google])])),

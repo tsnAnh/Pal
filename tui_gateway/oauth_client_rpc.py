@@ -55,7 +55,7 @@ def _provider(slug: str) -> str:
 def redirect_url(provider: str) -> str | None:
     if provider == setup_mod.GOOGLE_PROVIDER:
         return setup_mod.google_redirect_url(_public_url())
-    return setup_mod.MCP_REDIRECT_URL
+    return setup_mod.mcp_redirect_url(_public_url()) or setup_mod.MCP_REDIRECT_URL
 
 
 def setup(slug: str) -> OAuthClientSetupResult:
@@ -85,12 +85,16 @@ def _connect_mcp(provider: str, store, client_redirect_uri: str | None) -> OAuth
     if record is None:
         _raise("needs_setup")
     client_id, client_secret = setup_mod.resolve_client(record)
-    cfg = setup_mod.mcp_server_config(provider, client_id)
+    home = str(_home().expanduser().resolve(strict=False))
+    gateway = None if client_redirect_uri else setup_mod.mcp_redirect_url(_public_url())
+    cfg = setup_mod.mcp_server_config(provider, client_id, gateway)
     if not hs.commit(provider, cfg, {setup_mod.mcp_secret_env(provider): client_secret}, []):
         _raise("connect_failed")
     live = {**cfg, "oauth": {**cfg["oauth"], "client_secret": client_secret}}
-    home = str(_home().expanduser().resolve(strict=False))
-    result = mcp_oauth_sessions.start_flow(home, provider, live, client_redirect_uri=client_redirect_uri)
+    if gateway:
+        result = mcp_oauth_sessions.start_gateway_flow(home, provider, live, gateway)
+    else:
+        result = mcp_oauth_sessions.start_flow(home, provider, live, client_redirect_uri=client_redirect_uri)
     return OAuthClientConnectResult(slug=provider, auth_url=result["auth_url"], session_id=result["session_id"])
 
 
