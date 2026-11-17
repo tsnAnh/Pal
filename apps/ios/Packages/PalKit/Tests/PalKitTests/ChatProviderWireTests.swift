@@ -16,6 +16,7 @@ struct ChatProviderWireTests {
         var ChatSpaceJoinResult: PalProtocol.ChatSpaceJoinResult
         var ChatBindingListResult: PalProtocol.ChatBindingListResult
         var ChatInstallChangedPayload: PalProtocol.ChatInstallChangedPayload
+        var ChatIdentityUpdateResult: PalProtocol.ChatIdentityUpdateResult
         var IdentityProjection: ChatIdentityProjectionWire
     }
 
@@ -29,6 +30,8 @@ struct ChatProviderWireTests {
             #expect(shape.ChatProviderListResult.providers.first?.providerId == provider)
             #expect(shape.ChatSpaceJoinResult.outcome == .needsInvite)
             #expect(shape.ChatInstallChangedPayload.state == shape.ChatInstallStatusResult.state)
+            #expect(shape.ChatIdentityUpdateResult.outcome == .needsManualAvatar)
+            #expect(shape.ChatIdentityUpdateResult.nextAction.actionId == "set_icon")
         }
         #expect(shapes["fake-credential"]?.ChatInstallStatusResult.state.appId != nil)
         #expect(shapes["fake-authorize"]?.ChatInstallStatusResult.state.appId == nil)

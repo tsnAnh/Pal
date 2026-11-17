@@ -584,7 +584,7 @@
     },
     {
       "name": "chat.install.advance",
-      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token.",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id.",
       "params": [
         {
           "name": "params",
@@ -651,6 +651,24 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.update_identity",
+      "summary": "Send the bot's current name and display name to the chat app, and its picture when the provider can set it. needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatIdentityUpdateResult"
         }
       }
     },
@@ -16543,6 +16561,27 @@
         "title": "ChatBindingListResult",
         "type": "object"
       },
+      "ChatIdentityUpdateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/IdentityUpdateOutcome"
+          },
+          "identity": {
+            "$ref": "#/components/schemas/IdentityProjection"
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/NextAction"
+          }
+        },
+        "required": [
+          "outcome",
+          "identity",
+          "next_action"
+        ],
+        "title": "ChatIdentityUpdateResult",
+        "type": "object"
+      },
       "ChatInstallAdvanceParams": {
         "additionalProperties": false,
         "properties": {
@@ -16598,6 +16637,30 @@
             ],
             "default": null,
             "title": "Vault Item Id"
+          },
+          "refresh_vault_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Refresh Vault Item Id"
+          },
+          "owner_member_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner Member Id"
           }
         },
         "required": [
@@ -29283,6 +29346,62 @@
         "title": "IdentityPolicy",
         "type": "object"
       },
+      "IdentityProjection": {
+        "additionalProperties": false,
+        "properties": {
+          "app_name": {
+            "title": "App Name",
+            "type": "string"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          },
+          "avatar_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Avatar Ref"
+          },
+          "avatar_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Avatar Bytes"
+          }
+        },
+        "required": [
+          "app_name",
+          "display_name",
+          "username"
+        ],
+        "title": "IdentityProjection",
+        "type": "object"
+      },
+      "IdentityUpdateOutcome": {
+        "enum": [
+          "updated",
+          "needs_manual_avatar"
+        ],
+        "title": "IdentityUpdateOutcome",
+        "type": "string"
+      },
       "ImageAttachBytesParams": {
         "additionalProperties": false,
         "description": "``content_base64`` (or the ``data`` alias) carries the bytes; ``filename`` / ``ext`` only hint\nthe extension \u2014 magic bytes decide.",
@@ -37261,6 +37380,7 @@
           "paste_credential",
           "open_link",
           "copy_text",
+          "enter_text",
           "button"
         ],
         "title": "NextActionKind",
@@ -54305,6 +54425,7 @@
           "app_created",
           "manual_step_done",
           "allow_granted",
+          "owner_confirmed",
           "installed",
           "failed",
           "retry",
@@ -54924,6 +55045,7 @@
           "creating_app",
           "needs_manual_step",
           "needs_allow",
+          "needs_owner",
           "installing",
           "ready",
           "error",
@@ -64352,7 +64474,7 @@
     },
     {
       "name": "chat.install.advance",
-      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token.",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id.",
       "params": [
         {
           "name": "params",

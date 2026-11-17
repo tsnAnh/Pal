@@ -8,6 +8,9 @@ struct ChatInstallView<Advanced: View>: View {
     @State private var access: String?
     @State private var refresh: String?
     @State private var appKey: String?
+    @State private var ownerId = ""
+    @State private var botToken = ""
+    @State private var showsBotToken = false
     @State private var avatarSaved = false
     @State private var confirmsDisconnect = false
     @State private var search = ""
@@ -95,6 +98,8 @@ struct ChatInstallView<Advanced: View>: View {
             if let task { manualTask(task) }
         case .allow:
             allow
+        case .owner:
+            owner
         case .ready:
             ready
         case .error(let code, _):
@@ -204,15 +209,7 @@ struct ChatInstallView<Advanced: View>: View {
             ForEach(model.secondaryActions, id: \.self) { action in secondary(action) }
             switch task {
             case .setIcon:
-                if let spec {
-                    PillButton(ChatAvatarExport.actionTitle, accessibilityIdentifier: "chatInstallSaveAvatar") {
-                        Task {
-                            guard let image = ChatAvatarExport.render(spec: spec, background: Color(theme.palette.sheetBackground)) else { return }
-                            avatarSaved = await ChatAvatarExport.deliver(image, name: displayName)
-                        }
-                    }
-                    if avatarSaved { caption(ChatAvatarExport.explanation, identifier: "chatInstallAvatarSaved") }
-                }
+                avatarExport
             case .appLevelCredential:
                 slot(String(localized: "App key"), filled: appKey != nil, identifier: "chatInstallAppKeySlot")
                 ChatCredentialPaste(accepts: [.appLevel], identifier: "chatInstallPasteAppKey") { _, token in appKey = token }
@@ -225,6 +222,19 @@ struct ChatInstallView<Advanced: View>: View {
         .accessibilityIdentifier("chatInstallTask-\(task.rawValue)")
     }
 
+    @ViewBuilder
+    private var avatarExport: some View {
+        if let spec {
+            PillButton(ChatAvatarExport.actionTitle, accessibilityIdentifier: "chatInstallSaveAvatar") {
+                Task {
+                    guard let image = ChatAvatarExport.render(spec: spec, background: Color(theme.palette.sheetBackground)) else { return }
+                    avatarSaved = await ChatAvatarExport.deliver(image, name: displayName)
+                }
+            }
+            if avatarSaved { caption(ChatAvatarExport.explanation, identifier: "chatInstallAvatarSaved") }
+        }
+    }
+
     private var allow: some View {
         VStack(alignment: .leading, spacing: 12) {
             checklist
@@ -233,6 +243,41 @@ struct ChatInstallView<Advanced: View>: View {
                 identifier: "chatInstallAllowBody"
             )
             ForEach(model.secondaryActions, id: \.self) { action in secondary(action) }
+            if model.offersBotToken { botTokenEntry }
+        }
+    }
+
+    private var botTokenEntry: some View {
+        DisclosureGroup(String(localized: "Paste a bot token instead"), isExpanded: $showsBotToken) {
+            VStack(alignment: .leading, spacing: 10) {
+                SecretField(String(localized: "Bot token"), prompt: String(localized: "xoxb-…"), text: $botToken, identifier: "chatInstallBotToken")
+                    .textFieldStyle(.roundedBorder)
+                PillButton(String(localized: "Use this token"), kind: .accent, accessibilityIdentifier: "chatInstallAdoptBotToken") {
+                    let token = botToken
+                    botToken = ""
+                    Task { await model.adoptBotToken(token) }
+                }
+                .disabled(botToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || model.isWorking)
+            }
+            .padding(.top, 8)
+        }
+        .hermesText(.rowTitle)
+        .foregroundStyle(Color(theme.palette.textPrimary))
+        .accessibilityIdentifier("chatInstallBotTokenDisclosure")
+    }
+
+    private var owner: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            checklist
+            header(String(localized: "Which Slack member are you?"), String(localized: "\(displayName) only answers you. Enter your Slack member ID so it knows who you are."))
+            TextField(String(localized: "Slack member ID"), text: $ownerId)
+                .textFieldStyle(.roundedBorder)
+                .autocorrectionDisabled()
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                #endif
+                .accessibilityIdentifier("chatInstallOwnerField")
+            caption(String(localized: "In Slack, open your profile, choose More, then Copy member ID"), identifier: "chatInstallOwnerHelp")
         }
     }
 
@@ -253,7 +298,32 @@ struct ChatInstallView<Advanced: View>: View {
             PillButton(String(localized: "Check again"), accessibilityIdentifier: "chatInstallRefreshChannels") {
                 Task { await model.refreshSpaces() }
             }
+            PillButton(String(localized: "Update name and picture"), isBusy: model.isWorking, accessibilityIdentifier: "chatInstallUpdateIdentity") {
+                Task { await model.updateIdentity() }
+            }
+            identityUpdateResult
             PillButton(String(localized: "Disconnect"), accessibilityIdentifier: "chatInstallDisconnect") { confirmsDisconnect = true }
+        }
+    }
+
+    @ViewBuilder
+    private var identityUpdateResult: some View {
+        if let update = model.identityUpdate {
+            switch update.outcome {
+            case .needsManualAvatar:
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(taskTitle(.setIcon)).hermesText(.rowTitle).foregroundStyle(Color(theme.palette.textPrimary))
+                        .accessibilityAddTraits(.isHeader)
+                    caption(taskBody(.setIcon), identifier: "chatInstallIdentityAvatarBody")
+                    if let link = update.nextAction.link.flatMap(URL.init(string:)) { secondary(.openLink(link)) }
+                    avatarExport
+                }
+                .padding(14)
+                .kanbanGlass(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityIdentifier("chatInstallIdentityAvatar")
+            case .updated, .unknown:
+                caption(String(localized: "\(displayName)'s name and picture are up to date in Slack."), identifier: "chatInstallIdentityUpdated")
+            }
         }
     }
 
@@ -311,6 +381,7 @@ struct ChatInstallView<Advanced: View>: View {
     private func canPerform(_ action: ChatInstallAction) -> Bool {
         switch action {
         case .saveCredential: access != nil && refresh != nil
+        case .confirmOwner: !ownerId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !model.isWorking
         case .markDone(.appLevelCredential): appKey != nil
         default: !model.isWorking
         }
@@ -330,7 +401,14 @@ struct ChatInstallView<Advanced: View>: View {
             let key = step == .appLevelCredential ? appKey : nil
             appKey = nil
             Task { await model.markDone(step, secret: key) }
-        case .openLink(let url), .openAllow(let url): ExternalLink.open(url)
+        case .confirmOwner:
+            let member = ownerId
+            ownerId = ""
+            Task { await model.confirmOwner(member) }
+        case .openLink(let url): ExternalLink.open(url)
+        case .openAllow(let url):
+            ChatInstallReturn.remember(bot: model.botName)
+            ExternalLink.open(url)
         case .copy(let text):
             Pasteboard.string = text
             copied = text
@@ -386,6 +464,7 @@ struct ChatInstallView<Advanced: View>: View {
         case .reload: String(localized: "Try again")
         case .begin: String(localized: "Create \(displayName) in Slack")
         case .saveCredential: String(localized: "Use these tokens")
+        case .confirmOwner: String(localized: "Save")
         case .markDone: String(localized: "Done")
         case .openAllow: String(localized: "Add to Slack")
         case .checkAgain: String(localized: "Check again")

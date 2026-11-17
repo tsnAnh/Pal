@@ -4,6 +4,7 @@ from tui_gateway.chat_install import (
     AppCreated,
     BotIdentitySource,
     ChatProvider,
+    IdentityUpdate,
     SetupKey,
     SpaceJoin,
     StaleRevision,
@@ -15,6 +16,7 @@ from tui_gateway.contracts.chat_provider import (
     CapabilityMode,
     IdentityPolicy,
     IdentityProjection,
+    IdentityUpdateOutcome,
     Installation,
     InstallationStatus,
     NextAction,
@@ -52,6 +54,13 @@ class _FakeBase(ChatProvider):
         self.apps_created: list[str] = []
         self.installs: dict[str, Installation] = {}
         self.joined: set[str] = set()
+        self.config_credentials: list[tuple[str, str | None]] = []
+        self.reject_config_credential = False
+
+    def accept_config_credential(self, state: SetupState, vault_item_id: str, refresh_vault_item_id: str | None) -> None:
+        if self.reject_config_credential:
+            raise ValueError("provider secret text")
+        self.config_credentials.append((vault_item_id, refresh_vault_item_id))
 
     def capabilities(self) -> Capabilities:
         return self.caps

@@ -295,21 +295,143 @@ def test_store_state_survives_a_restart_and_events_are_one_per_revision(env):
     assert [seq for seq, _ in events] == sorted({seq for seq, _ in events})
 
 
-def test_watcher_emits_each_revision_exactly_once(env, monkeypatch):
-    emitted: list[tuple[str, dict]] = []
-    monkeypatch.setattr(server, "_broadcast_global_event", lambda event, payload=None, **_: emitted.append((event, payload)))
+class Peer:
+    def __init__(self, skin_home=None):
+        self.skin_home, self.frames = skin_home, []
+
+    def write(self, frame) -> None:
+        self.frames.append(frame)
+
+
+def test_watcher_emits_each_revision_exactly_once_to_the_profiles_clients_only(env, monkeypatch):
+    mine, elsewhere = Peer(), Peer(str(env.home.parent / "other-profile"))
+    monkeypatch.setattr(server, "_live_transports", {mine, elsewhere})
     monkeypatch.setattr(server, "_chat_install_seq", None)
     server._broadcast_chat_install_changes()
-    assert emitted == []
+    assert mine.frames == []
     state = drive_to_allow("fake-authorize")
     allow(env, state)
     server._broadcast_chat_install_changes()
     server._broadcast_chat_install_changes()
     final = ChatInstallStore(env.home).load((BOT, "fake-authorize", "w1"))
-    assert [e for e, _ in emitted] == ["chat.install.changed"] * final.revision
-    assert [p["state"]["revision"] for _, p in emitted] == list(range(1, final.revision + 1))
-    for _, payload in emitted:
+    assert elsewhere.frames == []
+    payloads = [f["params"]["payload"] for f in mine.frames]
+    assert {f["params"]["type"] for f in mine.frames} == {"chat.install.changed"}
+    assert [p["state"]["revision"] for p in payloads] == list(range(1, final.revision + 1))
+    for payload in payloads:
         wire.ChatInstallChangedPayload.model_validate(payload)
+
+
+def test_event_for_another_bot_reaches_only_that_bots_peers(env, monkeypatch):
+    from hermes_cli.profiles import create_profile, get_profile_dir
+    create_profile("scout", no_alias=True, no_skills=True)
+    launch, scout = Peer(), Peer(str(get_profile_dir("scout")))
+    monkeypatch.setattr(server, "_live_transports", {launch, scout})
+    server._broadcast_profile_event("chat.install.changed", {"state": ci.initial_state("scout", "fake-credential", "w1", 0.0).model_dump(mode="json")}, "scout")
+    assert launch.frames == [] and len(scout.frames) == 1
+
+
+def test_access_log_never_prints_the_callback_query(env):
+    import io
+    from gateway.chat_install_runtime import RedactInstallCallbackQuery
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    logger = logging.getLogger("test.access.redaction")
+    logger.propagate = False
+    logger.addHandler(handler)
+    logger.addFilter(RedactInstallCallbackQuery())
+    line = '%s - "%s %s HTTP/%s" %d'
+    logger.warning(line, "127.0.0.1:1", "GET", f"{ci.REDIRECT_PATH}?code={CODE}&state=nonce-1", "1.1", 200)
+    logger.warning(line, "127.0.0.1:1", "GET", "/api/other?page=2", "1.1", 200)
+    text = stream.getvalue()
+    assert CODE not in text and "nonce-1" not in text and ci.REDIRECT_PATH in text
+    assert "/api/other?page=2" in text
+
+
+def test_listeners_install_the_redaction_filter_once(monkeypatch):
+    from gateway.chat_install_runtime import RedactInstallCallbackQuery
+    from hermes_cli.web_server_lifecycle import _uvicorn_console_logging
+    access = logging.getLogger("uvicorn.access")
+    saved = (list(access.handlers), list(access.filters), access.propagate)
+    try:
+        _uvicorn_console_logging()
+        _uvicorn_console_logging()
+        assert sum(isinstance(f, RedactInstallCallbackQuery) for f in access.filters) == 1
+    finally:
+        access.handlers[:], access.filters[:], access.propagate = saved
+
+
+def test_done_page_links_back_into_the_app_without_code_or_state(env):
+    state = drive_to_allow("fake-credential")
+    page = allow(env, state).text
+    assert 'href="dev.tsnanh.hermes.bot://chat/install-done"' in page
+    assert CODE not in page and nonce_of(state.next_action.link) not in page
+    replay = allow(env, state)
+    assert replay.status_code == 400 and "dev.tsnanh" not in replay.text
+
+
+def test_credential_saved_hands_both_vault_items_to_the_provider(env):
+    provider = env.providers["fake-credential"]
+    state = state_of(call("chat.install.begin", provider_id="fake-credential"))
+    call("chat.install.advance", provider_id="fake-credential", event="credential_saved",
+         expected_revision=state.revision, vault_item_id="vault-config", refresh_vault_item_id="vault-refresh")
+    assert provider.config_credentials == [("vault-config", "vault-refresh")]
+
+
+def test_rejected_config_credential_is_a_typed_error_with_a_fix(env, caplog):
+    caplog.set_level(logging.DEBUG)
+    env.providers["fake-credential"].reject_config_credential = True
+    state = state_of(call("chat.install.begin", provider_id="fake-credential"))
+    failed = state_of(call("chat.install.advance", provider_id="fake-credential", event="credential_saved",
+                           expected_revision=state.revision, vault_item_id="vault-config"))
+    assert failed.step is wire.SetupStep.error and failed.error.fix is wire.FixAction.reenter_credential
+    assert "provider secret text" not in caplog.text
+
+
+def test_pasted_token_without_a_known_owner_asks_who_the_owner_is(env):
+    provider = env.providers["fake-credential"]
+    provider.authorizing_identity = lambda installation: None
+    state = drive_to_allow("fake-credential")
+    asked = state_of(call("chat.install.advance", provider_id="fake-credential", event="allow_granted",
+                          expected_revision=state.revision, vault_item_id="vault-bot-token"))
+    assert asked.step is wire.SetupStep.needs_owner and asked.installation_id
+    assert (asked.next_action.kind, asked.next_action.action_id) == (wire.NextActionKind.enter_text, "owner_member_id")
+    assert env.control.applied == []
+    provider.parse_owner_identity = lambda raw: raw.strip() if raw.strip().startswith("UFAKE") else None
+    unchanged = call("chat.install.advance", provider_id="fake-credential", event="owner_confirmed",
+                     expected_revision=asked.revision, owner_member_id="not-a-member")
+    assert unchanged["error"]["data"]["reason"] == "invalid_event"
+    done = state_of(call("chat.install.advance", provider_id="fake-credential", event="owner_confirmed",
+                         expected_revision=asked.revision, owner_member_id=" UFAKE0000 "))
+    assert done.step is wire.SetupStep.ready
+    assert env.control.applied[0][2]["FAKE_ALLOWED_USERS"] == "UFAKE0000"
+
+
+def test_owner_confirmed_outside_its_step_is_invalid(env):
+    state = drive_to_allow("fake-credential")
+    response = call("chat.install.advance", provider_id="fake-credential", event="owner_confirmed",
+                    expected_revision=state.revision, owner_member_id="UFAKE0000")
+    assert response["error"]["data"]["reason"] == "invalid_event"
+
+
+def test_update_identity_needs_an_installation_and_a_provider_that_can(env):
+    assert call("chat.install.update_identity", provider_id="fake-credential")["error"]["data"]["reason"] == "no_installation"
+    state = drive_to_allow("fake-credential")
+    allow(env, state)
+    assert call("chat.install.update_identity", provider_id="fake-credential")["error"]["data"]["reason"] == "not_implemented"
+    provider = env.providers["fake-credential"]
+    provider.update_identity = lambda installation: ci.IdentityUpdate(
+        wire.IdentityUpdateOutcome.needs_manual_avatar,
+        provider.identity_projection(ci.BotIdentitySource("pal", "Pal", None)),
+        wire.NextAction(kind=wire.NextActionKind.button, action_id="set_icon"))
+    result = call("chat.install.update_identity", provider_id="fake-credential")["result"]
+    assert result["outcome"] == "needs_manual_avatar" and result["next_action"]["action_id"] == "set_icon"
+
+
+def test_update_identity_is_owner_only(env, monkeypatch):
+    monkeypatch.setattr(server, "_owner_connection_refusal", lambda rid: {"id": rid, "error": {"code": 4403}})
+    refused = call("chat.install.update_identity", provider_id="fake-credential")
+    assert refused["error"]["data"]["reason"] == "owner_only"
 
 
 def test_secrets_stay_out_of_the_database_and_nonces_are_stored_hashed(env):

@@ -188,8 +188,10 @@ def test_abstract_provider_raises_typed_not_implemented():
         "revoke": lambda: bare.revoke(install),
         "adapter_env": lambda: bare.adapter_env(install),
         "adopt_token": lambda: bare.adopt_token(state, "vault-item"),
+        "update_identity": lambda: bare.update_identity(install),
     }
-    assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env", "authorizing_identity"}
+    assert set(calls) == {n for n in vars(ci.ChatProvider) if not n.startswith("_")} - {"provider_id", "allowed_users_env", "authorizing_identity",
+                                                                                  "accept_config_credential", "parse_owner_identity"}
     for operation, call in calls.items():
         with pytest.raises(ci.ProviderNotImplemented) as info:
             call()
@@ -217,6 +219,9 @@ def _fixture_models(gw: Gateway) -> list[BaseModel]:
         wire.ChatSpaceJoinResult(outcome=join.outcome, next_action=join.next_action),
         wire.ChatBindingListResult(bindings=[wire.Binding(bot="pal", space_id="s-public", installation_id=install.id, live=True)]),
         wire.ChatInstallChangedPayload(state=state),
+        wire.ChatIdentityUpdateResult(outcome=wire.IdentityUpdateOutcome.needs_manual_avatar,
+                                      identity=gw.provider.identity_projection(ci.BotIdentitySource("pal", "Pal", None)),
+                                      next_action=wire.NextAction(kind=wire.NextActionKind.button, action_id="set_icon")),
         gw.provider.identity_projection(ci.BotIdentitySource("pal", "Pal the Very Helpful Assistant Bot!", "avatars/pal.png")),
     ]
 

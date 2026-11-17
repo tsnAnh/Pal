@@ -85,6 +85,10 @@ struct PalApp: App {
                 .environment(shortcuts)
                 #endif
                 .macWindowSizing()
+                .onOpenURL { url in
+                    guard ChatInstallLink(url: url) != nil, let bot = ChatInstallReturn.take(), roster.bot(named: bot) != nil else { return }
+                    router.openSlack(botName: bot)
+                }
                 .task { await model.restore() }
                 .task { await offers.listen() }
                 .task {

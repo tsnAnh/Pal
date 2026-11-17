@@ -18,11 +18,13 @@ router = APIRouter()
 _HEADERS = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
 _PAGE = ('<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
          '<title>Pal</title><body style="font-family:-apple-system,system-ui,sans-serif;margin:3rem 1.5rem">'
-         '<p>{message}</p>')
+         '<p>{message}</p>{link}')
+APP_RETURN_LINK = "dev.tsnanh.hermes.bot://chat/install-done"
+_RETURN = f'<p><a href="{APP_RETURN_LINK}">Return to Pal</a></p>'
 _PAGES = {
-    RedirectOutcome.completed: (200, "Done. Go back to Pal to finish."),
-    RedirectOutcome.denied: (200, "Nothing was installed. Go back to Pal to try again."),
-    RedirectOutcome.rejected: (400, "This link has expired or was already used. Go back to Pal and start again."),
+    RedirectOutcome.completed: (200, "Done. Go back to Pal to finish.", _RETURN),
+    RedirectOutcome.denied: (200, "Nothing was installed. Go back to Pal to try again.", _RETURN),
+    RedirectOutcome.rejected: (400, "This link has expired or was already used. Go back to Pal and start again.", ""),
 }
 
 
@@ -38,5 +40,5 @@ async def chat_install_callback(code: str = "", state: str = "", error: str = ""
         outcome = await run_in_threadpool(_complete, code, state, error)
     except Exception:  # health: allow BLE001 -- the page must not echo anything, any failure reads as an expired link
         outcome = RedirectOutcome.rejected
-    status, message = _PAGES[outcome]
-    return HTMLResponse(_PAGE.format(message=message), status_code=status, headers=_HEADERS)
+    status, message, link = _PAGES[outcome]
+    return HTMLResponse(_PAGE.format(message=message, link=link), status_code=status, headers=_HEADERS)

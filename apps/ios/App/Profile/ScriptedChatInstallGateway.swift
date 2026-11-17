@@ -162,6 +162,14 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
         move("revoked")
     }
 
+    func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
+        try decode(ChatIdentityUpdateResult.self, [
+            "outcome": "updated",
+            "identity": ["app_name": "Pal", "display_name": "Pal", "username": "pal", "avatar_ref": NSNull(), "avatar_bytes": NSNull()],
+            "next_action": ["kind": "none", "action_id": "none", "link": NSNull(), "copy_text": NSNull()],
+        ])
+    }
+
     func storeSecret(label: String, value: String) async throws -> String {
         "vault-scripted-\(snapshot.revision)"
     }

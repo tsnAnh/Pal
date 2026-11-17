@@ -105,6 +105,12 @@ final class AppRouter {
         if path.last != .chat(botName: botName) { path = [.chat(botName: botName)] }
     }
 
+    func openSlack(botName: String) {
+        isSearching = false
+        sheet = nil
+        if path.last != .slack(botName: botName) { push(.slack(botName: botName)) }
+    }
+
     func openRoom(id roomID: String) {
         isSearching = false
         sheet = nil

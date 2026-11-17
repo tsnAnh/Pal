@@ -96,7 +96,8 @@ def _(rid, params: dict) -> dict:
     manual = params.get("manual_step")
     return _chat_run(rid, params, lambda service, bot: _chat_status_body(*service.advance(
         bot, *_chat_target(params), SetupEventKind(params["event"]), int(params["expected_revision"]),
-        ProviderCapability(manual) if manual else None, params.get("vault_item_id"))))
+        ProviderCapability(manual) if manual else None, params.get("vault_item_id"),
+        params.get("refresh_vault_item_id"), params.get("owner_member_id"))))
 
 
 @method("chat.spaces.list")
@@ -120,6 +121,16 @@ def _(rid, params: dict) -> dict:
 def _(rid, params: dict) -> dict:
     return _chat_run(rid, params, lambda service, bot: {
         "bindings": [b.model_dump(mode="json") for b in service.bindings(bot)]})
+
+
+@method("chat.install.update_identity")
+@_profile_scoped
+def _(rid, params: dict) -> dict:
+    def call(service, bot):
+        result = service.update_identity(bot, *_chat_target(params))
+        return {"outcome": result.outcome.value, "identity": result.identity.model_dump(mode="json"),
+                "next_action": result.next_action.model_dump(mode="json")}
+    return _chat_run(rid, params, call)
 
 
 @method("chat.install.revoke")

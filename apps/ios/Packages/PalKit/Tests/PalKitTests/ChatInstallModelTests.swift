@@ -21,9 +21,10 @@ private func provider(guided: [String] = ["set_icon", "app_level_credential"], c
 }
 
 private func state(
-    _ step: String, _ revision: Int, action: [String: Any?] = [:], done: [String] = [], error: [String: String]? = nil, bot: String = "pal"
+    _ step: String, _ revision: Int, action: [String: Any?] = [:], done: [String] = [], error: [String: String]? = nil, bot: String = "pal",
+    fallback: [String: Any]? = nil
 ) throws -> ChatSetupStateWire {
-    try decode(ChatSetupStateWire.self, stateJSON(step, revision, action: action, done: done, error: error, bot: bot))
+    try decode(ChatSetupStateWire.self, stateJSON(step, revision, action: action, done: done, error: error, bot: bot, fallback: fallback))
 }
 
 private func changed(
@@ -33,7 +34,8 @@ private func changed(
 }
 
 private func stateJSON(
-    _ step: String, _ revision: Int, action: [String: Any?] = [:], done: [String] = [], error: [String: String]? = nil, bot: String = "pal"
+    _ step: String, _ revision: Int, action: [String: Any?] = [:], done: [String] = [], error: [String: String]? = nil, bot: String = "pal",
+    fallback: [String: Any]? = nil
 ) -> [String: Any] {
     let next: [String: Any] = [
         "kind": action["kind"] as? String ?? "none", "action_id": action["action_id"] as? String ?? "none",
@@ -42,7 +44,7 @@ private func stateJSON(
     return [
         "bot": bot, "provider_id": "slack", "workspace": "T1", "step": step, "revision": revision,
         "app_id": NSNull(), "installation_id": NSNull(), "manual_steps_done": done, "resume_step": NSNull(),
-        "next_action": next, "error": error ?? NSNull(), "updated_at": 1_700_000_000.0,
+        "next_action": next, "fallback_action": fallback ?? NSNull(), "error": error ?? NSNull(), "updated_at": 1_700_000_000.0,
     ]
 }
 
@@ -55,6 +57,8 @@ private actor FakeChatInstallClient: ChatInstallClient {
     var stored: [String: String] = [:]
     var spaceList: [ChatSpaceRefWire] = []
     var bound: [ChatBindingWire] = []
+    var identityResult: ChatIdentityUpdateResult?
+    var identityError: ChatInstallClientError?
 
     init(_ capabilities: [ChatCapabilitiesWire], _ state: ChatSetupStateWire) {
         self.capabilities = capabilities
@@ -66,6 +70,7 @@ private actor FakeChatInstallClient: ChatInstallClient {
     func set(_ state: ChatSetupStateWire) { current.state = state }
     func setSpaces(_ spaces: [ChatSpaceRefWire], _ bindings: [ChatBindingWire]) { spaceList = spaces; bound = bindings }
     func markUnsupported() { unsupported = true }
+    func setIdentity(_ result: ChatIdentityUpdateResult?, error: ChatInstallClientError? = nil) { identityResult = result; identityError = error }
 
     func providers() async throws -> [ChatCapabilitiesWire] {
         calls.append("providers")
@@ -85,6 +90,11 @@ private actor FakeChatInstallClient: ChatInstallClient {
     }
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire] { calls.append("bindings"); return bound }
     func revoke(_ scope: ChatInstallScope) async throws { calls.append("revoke") }
+    func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
+        calls.append("updateIdentity")
+        if let identityError { throw identityError }
+        return try #require(identityResult)
+    }
     func storeSecret(label: String, value: String) async throws -> String {
         let id = "vault-\(stored.count + 1)"
         stored[id] = value
@@ -199,6 +209,93 @@ struct ChatInstallModelTests {
         let visible = [String(reflecting: model.snapshot as Any), String(reflecting: model.screen), String(reflecting: model.checklist),
                        String(reflecting: advance), String(reflecting: model.notice as Any)].joined()
         #expect(!visible.contains("FAKE"))
+    }
+
+    @Test func refreshTokenIdIsSentWithCredentialSavedAndOmittedWithoutRefresh() async throws {
+        let needs = try state("needs_credential", 1, action: ["kind": "paste_credential", "action_id": "config_credential"])
+        let (model, client) = try await model(needs)
+        await model.saveCredential(access: fakeSecret, refresh: fakeRefresh)
+        let stored = await client.stored
+        let advance = try #require(await client.advances.first)
+        #expect(advance.vaultItemId.flatMap { stored[$0] } == fakeSecret)
+        #expect(advance.refreshVaultItemId.flatMap { stored[$0] } == fakeRefresh)
+        let (bare, bareClient) = try await self.model(needs)
+        await bare.saveCredential(access: fakeSecret, refresh: "")
+        #expect(await bareClient.stored.count == 1)
+        #expect(await bareClient.advances.first?.refreshVaultItemId == nil)
+        let (none, noneClient) = try await self.model(needs)
+        await none.saveCredential(access: fakeSecret, refresh: nil)
+        #expect(await noneClient.advances.first?.refreshVaultItemId == nil)
+    }
+
+    @Test func ownerStepShowsOwnerScreenAndConfirmSendsTrimmedMemberId() async throws {
+        let (model, client) = try await model(try state("needs_owner", 6, action: ["kind": "enter_text", "action_id": "owner_member_id"]))
+        #expect(model.screen == .owner)
+        #expect(model.primaryAction == .confirmOwner)
+        #expect(model.checklist.first { $0.status == .active }?.kind == .allow)
+        await model.confirmOwner("   ")
+        #expect(await client.advances.isEmpty)
+        await model.confirmOwner("  UFAKE0000\n")
+        let advance = try #require(await client.advances.first)
+        #expect(advance.event == .ownerConfirmed)
+        #expect(advance.ownerMemberId == "UFAKE0000")
+        #expect(advance.expectedRevision == 6)
+    }
+
+    @Test func confirmOwnerIsIgnoredOutsideNeedsOwner() async throws {
+        let (model, client) = try await model(try state("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow"]))
+        await model.confirmOwner("UFAKE0000")
+        #expect(await client.advances.isEmpty)
+    }
+
+    @Test func botTokenIsAdoptedOnlyWhenTheGatewayOffersTheFallback() async throws {
+        let fallback: [String: Any] = ["kind": "paste_credential", "action_id": "bot_token"]
+        let allow: [String: Any?] = ["kind": "open_link", "action_id": "allow", "link": "https://slack.com/a"]
+        let (model, client) = try await model(try state("needs_allow", 5, action: allow, fallback: fallback))
+        #expect(model.offersBotToken)
+        await model.adoptBotToken("  fake-token-do-not-use ")
+        let stored = await client.stored
+        let advance = try #require(await client.advances.first)
+        #expect(advance.event == .allowGranted)
+        #expect(advance.vaultItemId.flatMap { stored[$0] } == "fake-token-do-not-use")
+        #expect(!String(reflecting: advance).contains("fake-token-do-not-use"))
+        let (plain, plainClient) = try await self.model(try state("needs_allow", 5, action: allow))
+        #expect(!plain.offersBotToken)
+        await plain.adoptBotToken("fake-token-do-not-use")
+        #expect(await plainClient.advances.isEmpty)
+        #expect(await plainClient.stored.isEmpty)
+        let (wrongStep, wrongClient) = try await self.model(try state("ready", 7, fallback: fallback))
+        await wrongStep.adoptBotToken("fake-token-do-not-use")
+        #expect(await wrongClient.advances.isEmpty)
+    }
+
+    @Test func identityUpdateStoresTheResultOnlyWhenReady() async throws {
+        let manual = try decode(ChatIdentityUpdateResult.self, [
+            "outcome": "needs_manual_avatar",
+            "identity": ["app_name": "Pal", "display_name": "Pal", "username": "pal", "avatar_ref": NSNull(), "avatar_bytes": NSNull()],
+            "next_action": ["kind": "button", "action_id": "set_icon", "link": "https://api.slack.com/apps/A1/general", "copy_text": NSNull()],
+        ])
+        let (model, client) = try await model(try state("ready", 7))
+        await client.setIdentity(manual)
+        await model.updateIdentity()
+        #expect(model.identityUpdate?.outcome == .needsManualAvatar)
+        #expect(model.identityUpdate?.nextAction.actionId == "set_icon")
+        #expect(model.notice == nil)
+        let (early, earlyClient) = try await self.model(try state("needs_allow", 5, action: ["kind": "open_link", "action_id": "allow"]))
+        await early.updateIdentity()
+        #expect(early.identityUpdate == nil)
+        #expect(!(await earlyClient.calls.contains("updateIdentity")))
+    }
+
+    @Test func identityUpdateFailureShowsANoticeAndUnsupportedIsNotSaved() async throws {
+        let (model, client) = try await model(try state("ready", 7))
+        await client.setIdentity(nil, error: .unsupported)
+        await model.updateIdentity()
+        #expect(model.notice == .notSaved)
+        #expect(model.identityUpdate == nil)
+        await client.setIdentity(nil, error: .offline)
+        await model.updateIdentity()
+        #expect(model.notice == .offline)
     }
 
     @Test func appLevelKeyIsStoredAndStepAdvances() async throws {

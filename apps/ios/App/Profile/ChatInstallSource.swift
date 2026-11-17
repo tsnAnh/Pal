@@ -90,6 +90,8 @@ struct GatewayChatInstallClient: ChatInstallClient {
         ]
         if let step = advance.manualStep { extra["manual_step"] = .string(step.rawValue) }
         if let id = advance.vaultItemId { extra["vault_item_id"] = .string(id) }
+        if let id = advance.refreshVaultItemId { extra["refresh_vault_item_id"] = .string(id) }
+        if let member = advance.ownerMemberId { extra["owner_member_id"] = .string(member) }
         _ = try await perform("chat.install.advance", scope, extra)
     }
 
@@ -107,6 +109,10 @@ struct GatewayChatInstallClient: ChatInstallClient {
 
     func revoke(_ scope: ChatInstallScope) async throws {
         _ = try await perform("chat.install.revoke", scope)
+    }
+
+    func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult {
+        try decode(ChatIdentityUpdateResult.self, await perform("chat.install.update_identity", scope))
     }
 
     func storeSecret(label: String, value: String) async throws -> String {

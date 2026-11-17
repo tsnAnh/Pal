@@ -23,19 +23,19 @@ public enum ChatProviderCapability: String, ChatWireEnum {
 
 public enum ChatSetupStep: String, ChatWireEnum {
     case notStarted = "not_started", needsCredential = "needs_credential", creatingApp = "creating_app"
-    case needsManualStep = "needs_manual_step", needsAllow = "needs_allow", installing = "installing"
-    case ready = "ready", error = "error", revoked = "revoked", unknown
+    case needsManualStep = "needs_manual_step", needsAllow = "needs_allow", needsOwner = "needs_owner"
+    case installing = "installing", ready = "ready", error = "error", revoked = "revoked", unknown
 }
 
 public enum ChatSetupEventKind: String, ChatWireEnum {
     case begin = "begin", credentialSaved = "credential_saved", appCreated = "app_created"
-    case manualStepDone = "manual_step_done", allowGranted = "allow_granted", installed = "installed"
-    case failed = "failed", retry = "retry", revoked = "revoked", unknown
+    case manualStepDone = "manual_step_done", allowGranted = "allow_granted", ownerConfirmed = "owner_confirmed"
+    case installed = "installed", failed = "failed", retry = "retry", revoked = "revoked", unknown
 }
 
 public enum ChatNextActionKind: String, ChatWireEnum {
     case noAction = "none", pasteCredential = "paste_credential", openLink = "open_link"
-    case copyText = "copy_text", button = "button", unknown
+    case copyText = "copy_text", enterText = "enter_text", button = "button", unknown
 }
 
 public enum ChatSetupErrorCode: String, ChatWireEnum {
@@ -58,6 +58,10 @@ public enum ChatSpaceKind: String, ChatWireEnum {
 
 public enum ChatSpaceJoinOutcome: String, ChatWireEnum {
     case joined = "joined", alreadyJoined = "already_joined", needsInvite = "needs_invite", unknown
+}
+
+public enum ChatIdentityUpdateOutcome: String, ChatWireEnum {
+    case updated = "updated", needsManualAvatar = "needs_manual_avatar", unknown
 }
 
 public enum ChatRpcErrorReason: String, ChatWireEnum {
@@ -138,6 +142,7 @@ public struct ChatSetupStateWire: Decodable, Sendable, Hashable {
     public var manualStepsDone: [ChatProviderCapability]
     public var resumeStep: ChatSetupStep?
     public var nextAction: ChatNextActionWire
+    public var fallbackAction: ChatNextActionWire?
     public var error: ChatSetupErrorWire?
     public var updatedAt: Double
 
@@ -145,7 +150,7 @@ public struct ChatSetupStateWire: Decodable, Sendable, Hashable {
         case bot, workspace, step, revision, error
         case providerId = "provider_id", appId = "app_id", installationId = "installation_id"
         case manualStepsDone = "manual_steps_done", resumeStep = "resume_step"
-        case nextAction = "next_action", updatedAt = "updated_at"
+        case nextAction = "next_action", fallbackAction = "fallback_action", updatedAt = "updated_at"
     }
 }
 
@@ -205,6 +210,17 @@ public struct ChatSpaceJoinResult: Decodable, Sendable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case outcome
+        case nextAction = "next_action"
+    }
+}
+
+public struct ChatIdentityUpdateResult: Decodable, Sendable, Hashable {
+    public var outcome: ChatIdentityUpdateOutcome
+    public var identity: ChatIdentityProjectionWire
+    public var nextAction: ChatNextActionWire
+
+    enum CodingKeys: String, CodingKey {
+        case outcome, identity
         case nextAction = "next_action"
     }
 }

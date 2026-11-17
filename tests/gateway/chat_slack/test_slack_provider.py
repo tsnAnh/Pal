@@ -324,3 +324,130 @@ def test_registry_returns_slack_provider(tmp_path):
     assert isinstance(provider, SlackProvider) and provider.provider_id == "slack"
     with pytest.raises(ci.ChatProviderError):
         provider_for("nope")
+
+
+ACCESS = f"xoxe.xoxp-{FAKE_TOKEN}-0"
+
+
+def _config_items(kit: Kit, access: str = ACCESS, refresh: str | None = REFRESH):
+    access_id = kit.vault.add_item("api_key", "access", {"api_key": access}).id
+    refresh_id = kit.vault.add_item("api_key", "refresh", {"api_key": refresh}).id if refresh else None
+    return access_id, refresh_id
+
+
+def test_manifest_subscribes_to_membership_events_and_reads_channels(tmp_path):
+    kit = Kit(tmp_path)
+    manifest = kit.slack.apps[kit.begin().app_id]
+    assert {"member_joined_channel", "member_left_channel"} <= set(manifest["settings"]["event_subscriptions"]["bot_events"])
+    assert {"channels:read", "groups:read"} <= set(manifest["oauth_config"]["scopes"]["bot"])
+
+
+def test_both_config_tokens_are_joined_into_one_renewable_pair(tmp_path):
+    kit = Kit(tmp_path)
+    access_id, refresh_id = _config_items(kit)
+    kit.provider.accept_config_credential(kit.state(), access_id, refresh_id)
+    assert refresh_id not in {m.id for m in kit.vault.list_items()}
+    assert _modes(kit.provider.capabilities("w1"))[CAP.unattended_refresh] is wire.CapabilityMode.automatic
+    created = kit.provider.begin_install(kit.state(), access_id)
+    assert created.app_id in kit.slack.apps and kit.slack.rotations == 1
+
+
+def test_access_token_alone_works_but_is_reported_as_not_renewing(tmp_path):
+    kit = Kit(tmp_path)
+    access_id, _ = _config_items(kit, refresh=None)
+    kit.slack.access = {ACCESS}
+    kit.provider.accept_config_credential(kit.state(), access_id, None)
+    assert _modes(kit.provider.capabilities("w1"))[CAP.unattended_refresh] is wire.CapabilityMode.guided
+    assert kit.provider.begin_install(kit.state(), access_id).app_id in kit.slack.apps
+    assert kit.slack.rotations == 0
+    kit.slack.now += 13 * 3600
+    with pytest.raises(SlackSetupError) as info:
+        kit.provider.begin_install(kit.state(), access_id)
+    assert info.value.code is wire.SetupErrorCode.credential_expired and info.value.fix is wire.FixAction.reenter_credential
+    assert kit.slack.rotations == 0
+
+
+def test_a_refresh_item_that_is_not_a_refresh_token_is_rejected(tmp_path):
+    kit = Kit(tmp_path)
+    access_id, refresh_id = _config_items(kit, refresh=f"xoxb-{FAKE_TOKEN}")
+    with pytest.raises(SlackSetupError) as info:
+        kit.provider.accept_config_credential(kit.state(), access_id, refresh_id)
+    assert info.value.code is wire.SetupErrorCode.credential_rejected
+
+
+def _bot_token_item(kit: Kit, token: str = BOT_TOKEN) -> str:
+    return kit.vault.add_item("api_key", "bot token", {"api_key": token}).id
+
+
+def test_adopt_token_validates_with_auth_test_and_leaves_the_owner_unknown(tmp_path, caplog):
+    caplog.set_level(logging.DEBUG)
+    kit = Kit(tmp_path)
+    item_id = _bot_token_item(kit)
+    installation = kit.provider.adopt_token(kit.state(), item_id)
+    assert kit.slack.calls == ["auth.test"]
+    assert (installation.workspace_id, installation.workspace_name, installation.status) == ("T1", "Acme", wire.InstallationStatus.active)
+    assert installation.vault_item_ids == [item_id]
+    assert kit.provider.authorizing_identity(installation) == ""
+    assert BOT_TOKEN not in caplog.text and FAKE_TOKEN not in caplog.text
+
+
+def test_adopt_token_refuses_a_user_token_and_a_rejected_token(tmp_path):
+    kit = Kit(tmp_path)
+    with pytest.raises(SlackSetupError) as info:
+        kit.provider.adopt_token(kit.state(), _bot_token_item(kit, f"xoxp-{FAKE_TOKEN}"))
+    assert info.value.code is wire.SetupErrorCode.credential_rejected and kit.slack.calls == []
+    kit.slack.fail["auth.test"] = "invalid_auth"
+    with pytest.raises(SlackSetupError) as info:
+        kit.provider.adopt_token(kit.state(), _bot_token_item(kit))
+    assert info.value.code is wire.SetupErrorCode.credential_rejected
+
+
+def test_owner_member_ids_are_checked_in_slack_shape(tmp_path):
+    parse = Kit(tmp_path).provider.parse_owner_identity
+    assert parse(" ufake0000 ") == "UFAKE0000" and parse("WFAKE00000") == "WFAKE00000"
+    assert parse("") is None and parse("not a member") is None and parse("C12345678") is None
+
+
+def _installed(kit: Kit):
+    kit.provider.records.update_workspace("w1", capabilities={"set_icon": "automatic"})
+    return kit.install()[1]
+
+
+def test_update_identity_resends_name_and_picture_when_the_icon_is_automatic(tmp_path):
+    kit = Kit(tmp_path)
+    installation = _installed(kit)
+    kit.provider._identity = lambda bot: ci.BotIdentitySource(bot, LONG, None)
+    kit.slack.calls.clear()
+    update = kit.provider.update_identity(installation)
+    manifest = kit.slack.apps[kit.provider.records.app("pal", "w1")["app_id"]]
+    assert manifest["display_information"]["name"] == LONG[:35].strip()
+    assert manifest["features"]["bot_user"]["display_name"] == LONG[:80].strip()
+    assert update.outcome is wire.IdentityUpdateOutcome.updated and update.next_action.kind is wire.NextActionKind.none
+    assert kit.slack.calls == ["apps.manifest.update"]
+    kit.provider._identity = lambda bot: ci.BotIdentitySource(bot, "Pal", str(tmp_path / "avatar.png"))
+    kit.provider.update_identity(installation)
+    assert kit.slack.calls[-1] == "apps.icon.set"
+
+
+def test_update_identity_returns_the_guided_avatar_step_when_the_icon_is_manual(tmp_path):
+    kit = Kit(tmp_path)
+    installation = kit.install()[1]
+    kit.slack.calls.clear()
+    update = kit.provider.update_identity(installation)
+    assert update.outcome is wire.IdentityUpdateOutcome.needs_manual_avatar
+    assert (update.next_action.kind, update.next_action.action_id) == (wire.NextActionKind.button, "set_icon")
+    assert "apps.icon.set" not in kit.slack.calls
+
+
+def test_profile_identity_reads_the_profile_name_and_avatar(tmp_path, monkeypatch):
+    from gateway.chat_slack.provider import profile_identity
+    from hermes_cli.profiles import create_profile, get_profile_dir, write_profile_meta
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+    create_profile("scout", no_alias=True, no_skills=True)
+    home = get_profile_dir("scout")
+    assert profile_identity("scout") == ci.BotIdentitySource("scout", "scout", None)
+    write_profile_meta(home, display_name="Scout Prime")
+    (home / "assets").mkdir()
+    (home / "assets" / "avatar.png").write_bytes(b"x")
+    assert profile_identity("scout") == ci.BotIdentitySource("scout", "Scout Prime", str(home / "assets" / "avatar.png"))

@@ -7,12 +7,19 @@ public struct ChatInstallAdvance: Sendable, Hashable {
     public var expectedRevision: Int
     public var manualStep: ChatProviderCapability?
     public var vaultItemId: String?
+    public var refreshVaultItemId: String?
+    public var ownerMemberId: String?
 
-    public init(event: ChatSetupEventKind, expectedRevision: Int, manualStep: ChatProviderCapability? = nil, vaultItemId: String? = nil) {
+    public init(
+        event: ChatSetupEventKind, expectedRevision: Int, manualStep: ChatProviderCapability? = nil, vaultItemId: String? = nil,
+        refreshVaultItemId: String? = nil, ownerMemberId: String? = nil
+    ) {
         self.event = event
         self.expectedRevision = expectedRevision
         self.manualStep = manualStep
         self.vaultItemId = vaultItemId
+        self.refreshVaultItemId = refreshVaultItemId
+        self.ownerMemberId = ownerMemberId
     }
 }
 
@@ -42,6 +49,7 @@ public protocol ChatInstallClient: Sendable {
     func join(_ scope: ChatInstallScope, spaceId: String) async throws -> ChatSpaceJoinResult
     func bindings(_ scope: ChatInstallScope) async throws -> [ChatBindingWire]
     func revoke(_ scope: ChatInstallScope) async throws
+    func updateIdentity(_ scope: ChatInstallScope) async throws -> ChatIdentityUpdateResult
     func storeSecret(label: String, value: String) async throws -> String
 }
 
@@ -54,6 +62,7 @@ public enum ChatInstallScreen: Hashable, Sendable {
     case credential
     case setup(task: ChatProviderCapability?)
     case allow(URL?)
+    case owner
     case ready
     case error(ChatSetupErrorCode, fix: ChatFixAction)
 }
@@ -62,6 +71,7 @@ public enum ChatInstallAction: Hashable, Sendable {
     case reload
     case begin
     case saveCredential
+    case confirmOwner
     case markDone(ChatProviderCapability)
     case openLink(URL)
     case copy(String)
@@ -136,6 +146,7 @@ public struct ChatIdentityPreview: Hashable, Sendable {
 @Observable
 public final class ChatInstallModel {
     public static let guidedSteps: [ChatProviderCapability] = [.setIcon, .appLevelCredential, .gatewayRedirect]
+    private static let botTokenActionId = "bot_token"
 
     public private(set) var providers: [ChatCapabilitiesWire] = []
     public private(set) var provider: ChatCapabilitiesWire?
@@ -143,6 +154,7 @@ public final class ChatInstallModel {
     public private(set) var spaces: [ChatSpaceRow] = []
     public private(set) var isWorking = false
     public private(set) var notice: ChatInstallNotice?
+    public private(set) var identityUpdate: ChatIdentityUpdateResult?
     private var loadFailed = false
     private var unsupported = false
     private var invites: [String: ChatNextActionWire] = [:]
@@ -173,6 +185,7 @@ public final class ChatInstallModel {
         case .creatingApp, .installing: return .setup(task: nil)
         case .needsManualStep: return .setup(task: pendingTask)
         case .needsAllow: return .allow(state.nextAction.link.flatMap(URL.init(string:)))
+        case .needsOwner: return .owner
         case .ready: return .ready
         case .error:
             guard let error = state.error else { return .unavailable }
@@ -188,6 +201,7 @@ public final class ChatInstallModel {
         case .unsupported: nil
         case .intro: .begin
         case .credential: .saveCredential
+        case .owner: .confirmOwner
         case .setup(let task): task.map(ChatInstallAction.markDone)
         case .allow(let url): url.map(ChatInstallAction.openAllow) ?? .checkAgain
         case .error(_, let fix): .fix(fix)
@@ -204,6 +218,10 @@ public final class ChatInstallModel {
         case .ready: return [.disconnect]
         default: return []
         }
+    }
+
+    public var offersBotToken: Bool {
+        state?.step == .needsAllow && state?.fallbackAction?.actionId == Self.botTokenActionId
     }
 
     public var checklist: [ChatSetupChecklistItem] {
@@ -290,8 +308,44 @@ public final class ChatInstallModel {
         let label = credentialLabel
         await mutate {
             let id = try await self.client.storeSecret(label: label, value: access)
-            if let refresh { _ = try await self.client.storeSecret(label: label + " (refresh)", value: refresh) }
-            try await self.client.advance(scope, ChatInstallAdvance(event: .credentialSaved, expectedRevision: state.revision, vaultItemId: id))
+            var refreshId: String?
+            if let refresh, !refresh.isEmpty { refreshId = try await self.client.storeSecret(label: label + " (refresh)", value: refresh) }
+            try await self.client.advance(
+                scope, ChatInstallAdvance(event: .credentialSaved, expectedRevision: state.revision, vaultItemId: id, refreshVaultItemId: refreshId)
+            )
+        }
+    }
+
+    public func confirmOwner(_ memberId: String) async {
+        let member = memberId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let scope, let state, state.step == .needsOwner, !member.isEmpty else { return }
+        await mutate {
+            try await self.client.advance(scope, ChatInstallAdvance(event: .ownerConfirmed, expectedRevision: state.revision, ownerMemberId: member))
+        }
+    }
+
+    public func adoptBotToken(_ token: String) async {
+        let value = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let scope, let state, offersBotToken, !value.isEmpty else { return }
+        let label = credentialLabel + " bot token"
+        await mutate {
+            let id = try await self.client.storeSecret(label: label, value: value)
+            try await self.client.advance(scope, ChatInstallAdvance(event: .allowGranted, expectedRevision: state.revision, vaultItemId: id))
+        }
+    }
+
+    public func updateIdentity() async {
+        guard let scope, state?.step == .ready else { return }
+        isWorking = true
+        notice = nil
+        defer { isWorking = false }
+        do {
+            identityUpdate = try await client.updateIdentity(scope)
+        } catch is CancellationError {
+        } catch ChatInstallClientError.offline {
+            notice = .offline
+        } catch {
+            notice = .notSaved
         }
     }
 
@@ -313,6 +367,7 @@ public final class ChatInstallModel {
     public func disconnect() async {
         guard let scope else { return }
         await mutate { try await self.client.revoke(scope) }
+        identityUpdate = nil
         spaces = []
         invites = [:]
     }
@@ -381,7 +436,7 @@ public final class ChatInstallModel {
         case .creatingApp: .createApp
         case .needsManualStep:
             ChatProviderCapability(rawValue: state.nextAction.actionId).map { .manual($0) }
-        case .needsAllow: .allow
+        case .needsAllow, .needsOwner: .allow
         case .installing: .install
         default: nil
         }
