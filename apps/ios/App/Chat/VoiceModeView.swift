@@ -102,7 +102,7 @@ struct VoiceModeView: View {
                     .opacity(conversation.phase == .speaking || conversation.phase == .thinking ? 1 : 0.35)
                     .disabled(conversation.phase != .speaking && conversation.phase != .thinking)
             }
-            Button(action: dismiss) {
+            Button(action: dismiss) { // nav-chrome: ok
                 Image(systemName: "xmark")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(accent == Color(theme.palette.chipSelectedFill) ? Color(theme.palette.chipSelectedText) : (model.chatAccent?.foreground ?? .white))

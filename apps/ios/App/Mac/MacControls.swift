@@ -7,7 +7,7 @@ struct MacPlainCloseButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button(action: action) { // nav-chrome: ok
             Image(systemName: "xmark")
                 .font(.system(size: 10, weight: .regular))
                 .foregroundStyle(PalTokens.textSecondary)

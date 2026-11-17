@@ -67,7 +67,7 @@ struct KanbanSurface: View {
     private func destination(_ route: KanbanRoute) -> some View {
         switch route {
         case .board(let slug):
-            KanbanBoardView(store: store, board: slug, openCard: { path.append(.card(board: slug, taskID: $0)) }, back: pop, close: close)
+            KanbanBoardView(store: store, board: slug, openCard: { path.append(.card(board: slug, taskID: $0)) }, back: pop)
         case .card(let board, let taskID):
             KanbanCardView(store: store, board: board, taskID: taskID, openCard: { path.append(.card(board: board, taskID: $0)) }, back: pop)
         }
@@ -97,12 +97,19 @@ struct KanbanPage<Content: View>: View {
 
     var body: some View {
         #if os(macOS)
-        VStack(spacing: 0) {
-            macHeader
-            scrolling
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(identifier)
+        scrolling
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .navigationTitle(title)
+            .toolbar {
+                if back == nil, let close {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(role: .close, action: close)
+                            .accessibilityIdentifier("\(identifier)-close")
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier(identifier)
         #else
         SheetChrome(
             title: title,
@@ -128,46 +135,6 @@ struct KanbanPage<Content: View>: View {
         }
     }
 
-    #if os(macOS)
-    private var macHeader: some View {
-        HStack {
-            if let back {
-                Button(action: back) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
-                        Text(title).font(.system(size: 15, weight: .medium)).lineLimit(1)
-                    }
-                    .foregroundStyle(PalTokens.textPrimary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("\(identifier)-back")
-            } else {
-                Text(title)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(PalTokens.textPrimary)
-                    .lineLimit(1)
-                    .accessibilityAddTraits(.isHeader)
-            }
-            Spacer()
-            if let close {
-                Button(action: close) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(PalTokens.textSecondary)
-                        .frame(width: 28, height: 28)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Close"))
-                .accessibilityIdentifier("kanban-close")
-            }
-        }
-        .padding(.leading, 29)
-        .padding(.trailing, 38)
-        .padding(.top, 47)
-        .padding(.bottom, 16)
-    }
-    #endif
 }
 
 enum KanbanTime {

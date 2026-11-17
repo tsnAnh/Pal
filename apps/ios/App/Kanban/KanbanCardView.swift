@@ -43,7 +43,7 @@ struct KanbanCardView: View {
             HStack(spacing: 8) {
                 Text(title).hermesText(.rowTitle).foregroundStyle(PalTokens.textPrimary).lineLimit(1)
                 Spacer(minLength: 0)
-                Button(action: back) {
+                Button(action: back) { // nav-chrome: ok
                     Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(PalTokens.textSecondary)
                         .frame(width: 28, height: 28)
                 }
