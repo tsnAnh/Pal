@@ -61,8 +61,8 @@ struct MacConnectApps: View {
             UpworkConnectionSheet(model: model, app: app)
                 .macSheetFrame()
         }
-        .sheet(item: $model.googleApp) { _ in
-            GoogleWorkspaceSheet(model: model.google)
+        .sheet(item: $model.oauthClientSheet) { sheet in
+            OAuthClientSheet(model: sheet)
                 .macSheetFrame()
         }
         .sheet(item: $model.keyRequest) { request in
@@ -182,11 +182,10 @@ struct MacConnectApps: View {
         let state = model.cardState(app)
         let action: MacRowAction? = if app.requiresAppSignIn {
             MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state.isReconnect) { model.upworkApp = app }
-        } else if app.source == .googleWorkspace {
-            MacRowAction(
-                title: GoogleWorkspaceText.actionTitle(model.googleRow(app).state),
-                prominent: model.googleRow(app).state == .needsAuthorization
-            ) { model.googleApp = app }
+        } else if app.oauthClientEntry != nil {
+            MacRowAction(title: OAuthClientCardText.actionTitle(app.state), prominent: OAuthClientCardText.prominent(app.state)) {
+                model.oauthClientAction(app)
+            }
         } else if case .custom = app.source {
             MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
         } else {
@@ -205,13 +204,12 @@ struct MacConnectApps: View {
         return tileRow(
             title: app.name, summary: summary(for: app, state: state),
             identifier: "connectApp-\(app.id)", trailing: action, busy: model.busy.contains(app.id),
-            status: ConnectAppStatus(app.source == .googleWorkspace ? model.googleRow(app).state : app.state).row
+            status: ConnectAppStatus(app.state).row
         ) { icon(for: app) }
     }
 
     private func summary(for app: ConnectApp, state: ConnectorCardState) -> String {
         if app.requiresAppSignIn { return UpworkCardText.summary(state, fallback: app.summary) }
-        if app.source == .googleWorkspace { return GoogleWorkspaceText.summary(model.googleRow(app)) }
         return OtherConnectorCardText.summary(state, fallback: app.summary)
     }
 

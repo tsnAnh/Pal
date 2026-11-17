@@ -57,8 +57,8 @@ struct ConnectAppsSheet: View {
             UpworkConnectionSheet(model: model, app: app)
                 .macSheetFrame()
         }
-        .sheet(item: $model.googleApp) { _ in
-            GoogleWorkspaceSheet(model: model.google)
+        .sheet(item: $model.oauthClientSheet) { sheet in
+            OAuthClientSheet(model: sheet)
                 .macSheetFrame()
         }
         .sheet(item: $model.pastingApp, onDismiss: { Task { await model.cancelPaste() } }) { app in

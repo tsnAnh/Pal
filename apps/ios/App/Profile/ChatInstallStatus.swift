@@ -16,6 +16,13 @@ struct ChatStatusCopy {
         return "code: \(code)\napp: \(version)"
     }
 
+    init(symbol: String, title: String, reason: String, code: String) {
+        self.symbol = symbol
+        self.title = title
+        self.reason = reason
+        self.code = code
+    }
+
     init?(model: ChatInstallModel, displayName: String) {
         guard let code = model.statusCode else { return nil }
         self.code = code
@@ -64,6 +71,7 @@ struct ChatInstallStatus<Secondary: View>: View {
     let primaryTitle: String?
     let isBusy: Bool
     let perform: () -> Void
+    var identifierPrefix = "chatInstall"
     @ViewBuilder let secondary: () -> Secondary
 
     @State private var showsDetails = false
@@ -77,7 +85,7 @@ struct ChatInstallStatus<Secondary: View>: View {
         } actions: {
             VStack(spacing: 12) {
                 if let primaryTitle {
-                    PillButton(primaryTitle, kind: .accent, size: .large, isBusy: isBusy, accessibilityIdentifier: "chatInstallPrimary") {
+                    PillButton(primaryTitle, kind: .accent, size: .large, isBusy: isBusy, accessibilityIdentifier: "\(identifierPrefix)Primary") {
                         perform()
                     }
                 }
@@ -87,7 +95,7 @@ struct ChatInstallStatus<Secondary: View>: View {
         }
         .frame(maxWidth: 420)
         .frame(maxWidth: .infinity)
-        .accessibilityIdentifier("chatInstallStatus")
+        .accessibilityIdentifier("\(identifierPrefix)Status")
     }
 
     private var details: some View {
@@ -97,16 +105,16 @@ struct ChatInstallStatus<Secondary: View>: View {
                     .hermesText(.rowSubtitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                     .textSelection(.enabled)
-                    .accessibilityIdentifier("chatInstallReasonCode")
+                    .accessibilityIdentifier("\(identifierPrefix)ReasonCode")
                 Spacer(minLength: 0)
                 Button(String(localized: "Copy")) { Pasteboard.string = copy.details }
                     .buttonStyle(.pill())
-                    .accessibilityIdentifier("chatInstallCopyDetails")
+                    .accessibilityIdentifier("\(identifierPrefix)CopyDetails")
             }
             .padding(.top, 8)
         }
         .hermesText(.rowSubtitle)
         .foregroundStyle(Color(theme.palette.textSecondary))
-        .accessibilityIdentifier("chatInstallDetails")
+        .accessibilityIdentifier("\(identifierPrefix)Details")
     }
 }
