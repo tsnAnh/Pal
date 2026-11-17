@@ -6,7 +6,8 @@ import time
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from tools.connectors.contract import Actor, SettleReason, TargetState, allowed
-from tools.connectors.gateway.config import ensure_guest_identity, operation_session_key
+from tools.connectors.gateway.config import ensure_guest_identity
+from tools.connectors.live import operation_session_key
 from tools.connectors.gateway.errors import RateLimited, ToolGatewayError
 from tools.connectors.operation import ConnectionOperation, DetachedOperation, IllegalTransition, Target
 from tools.connectors.run import Kind, run_operation
