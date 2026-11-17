@@ -15,6 +15,7 @@
         "app_id": null,
         "bot": "pal",
         "error": null,
+        "fallback_action": null,
         "installation_id": "fake-authorize-install-pal-w1",
         "manual_steps_done": [],
         "next_action": {
@@ -36,6 +37,7 @@
         "bot": "pal",
         "created_at": 1700000000.0,
         "id": "fake-authorize-install-pal-w1",
+        "owner_user_id": "U_OWNER",
         "provider_id": "fake-authorize",
         "status": "active",
         "updated_at": 1700000000.0,
@@ -49,6 +51,7 @@
         "app_id": null,
         "bot": "pal",
         "error": null,
+        "fallback_action": null,
         "installation_id": "fake-authorize-install-pal-w1",
         "manual_steps_done": [],
         "next_action": {
@@ -140,6 +143,7 @@
         "app_id": "fake-credential-app-1",
         "bot": "pal",
         "error": null,
+        "fallback_action": null,
         "installation_id": "fake-credential-install-pal-w1",
         "manual_steps_done": [
           "set_icon"
@@ -163,6 +167,7 @@
         "bot": "pal",
         "created_at": 1700000000.0,
         "id": "fake-credential-install-pal-w1",
+        "owner_user_id": "U_OWNER",
         "provider_id": "fake-credential",
         "status": "active",
         "updated_at": 1700000000.0,
@@ -176,6 +181,7 @@
         "app_id": "fake-credential-app-1",
         "bot": "pal",
         "error": null,
+        "fallback_action": null,
         "installation_id": "fake-credential-install-pal-w1",
         "manual_steps_done": [
           "set_icon"

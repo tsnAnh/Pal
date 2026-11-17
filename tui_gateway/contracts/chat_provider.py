@@ -127,6 +127,7 @@ class SetupState(Result):
     manual_steps_done: list[ProviderCapability] = Field(default_factory=list)
     resume_step: SetupStep | None = None
     next_action: NextAction
+    fallback_action: NextAction | None = None
     error: SetupError | None = None
     updated_at: float
 
@@ -147,6 +148,7 @@ class Installation(Result):
     created_at: float
     updated_at: float
     vault_item_ids: list[str]
+    owner_user_id: str | None = None
 
 
 class SpaceKind(WireEnum):
@@ -180,6 +182,10 @@ class ChatRpcErrorReason(WireEnum):
     not_implemented = "not_implemented"
     stale_revision = "stale_revision"
     no_installation = "no_installation"
+    owner_only = "owner_only"
+    needs_public_url = "needs_public_url"
+    invalid_event = "invalid_event"
+    provider_failed = "provider_failed"
 
 
 class ChatProviderParams(ProfileParams):
@@ -199,6 +205,7 @@ class ChatInstallAdvanceParams(ChatInstallParams):
 
 class ChatSpaceJoinParams(ChatInstallParams):
     space_id: str = Field(min_length=1)
+    hello: bool = False
 
 
 class ChatProviderListResult(Result):
