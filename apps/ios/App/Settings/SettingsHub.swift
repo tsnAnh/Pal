@@ -25,6 +25,7 @@ enum SettingsRoute: Hashable {
     case appearance
     case haptics
     case dataSharing
+    case diagnostics
 }
 
 enum Loadable<Value> {

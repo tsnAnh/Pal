@@ -8,6 +8,7 @@ extension ChatStatusCopy {
         self.title = title
         self.reason = reason
         self.code = code
+        fault = nil
     }
 
     static func boardsFailure(_ load: KanbanLoad, code: String?) -> ChatStatusCopy {
