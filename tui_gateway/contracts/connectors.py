@@ -153,6 +153,13 @@ method(
 )
 
 
+class ConnectorCatalogStatus(WireEnum):
+    connected = "connected"
+    needs_reconnect = "needs_reconnect"
+    not_connected = "not_connected"
+    needs_setup = "needs_setup"
+
+
 class ConnectorCatalogRow(Result):
     model_config = Result.model_config | {"from_attributes": True}
 
@@ -161,6 +168,11 @@ class ConnectorCatalogRow(Result):
     description: str
     category: str
     logo_url: str | None = None
+    icon: str | None = None
+    method: str | None = None
+    verified: bool | None = None
+    mcp_url: str | None = None
+    status: ConnectorCatalogStatus | None = None
 
 
 class ConnectorsCatalogResult(Result):
@@ -173,7 +185,7 @@ method(
     "connectors.catalog",
     params=ProfileParams,
     result=ConnectorsCatalogResult,
-    doc="The hosted connector catalog available to the scoped member.",
+    doc="The Pal-owned connector catalog with each entry's direct connection status for the scoped profile.",
 )
 
 

@@ -8,19 +8,19 @@ import PalT3Code
 import SwiftUI
 
 struct MacConnectApps: View {
-    @State private var model: ConnectAppsModel
+    @State var model: ConnectAppsModel
 
-    @State private var confirmsT3Disconnect = false
+    @State var confirmsT3Disconnect = false
     @Environment(\.scenePhase) private var scenePhase
 
-    private static let rowsPerSectionInAll = 6
-    private let columns = [GridItem(.flexible(), spacing: 30), GridItem(.flexible(), spacing: 30)]
+    static let rowsPerSectionInAll = 6
+    let columns = [GridItem(.flexible(), spacing: 30), GridItem(.flexible(), spacing: 30)]
 
     init(model: ConnectAppsModel) {
         _model = State(initialValue: model)
     }
 
-    private var onCatalog: Bool { model.page == .catalog }
+    var onCatalog: Bool { model.page == .catalog }
 
     var body: some View {
         Group {
@@ -56,10 +56,6 @@ struct MacConnectApps: View {
             Button("Cancel", role: .cancel) {}
         } message: { target in
             Text(disconnectMessage(target))
-        }
-        .sheet(item: $model.accountsModel) { accounts in
-            ConnectorAccountsView(model: accounts)
-                .macSheetFrame()
         }
         .sheet(item: $model.upworkApp) { app in
             UpworkConnectionSheet(model: model, app: app)
@@ -130,154 +126,8 @@ struct MacConnectApps: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            if onCatalog {
-                Text("Connect Apps")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(PalTokens.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-            } else {
-                Button { model.page = .catalog } label: { // nav-chrome: ok
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
-                        Text("Your plugins").font(.system(size: 15, weight: .medium))
-                    }
-                    .foregroundStyle(PalTokens.textPrimary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("connectAppsBack")
-            }
-            Spacer()
-            if onCatalog { connectedCount }
-        }
-        .padding(.leading, 29)
-        .padding(.trailing, 38)
-        .padding(.top, 47)
-        .frame(height: 71, alignment: .top)
-    }
-
-    private var connectedCount: some View {
-        Button { model.page = .yourPlugins } label: {
-            HStack(spacing: 6) {
-                stackedIcons
-                HStack(spacing: 4) {
-                    Text("\(model.connectedCount) connected")
-                        .font(.system(size: 11))
-                        .foregroundStyle(PalTokens.textSecondary)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(PalTokens.textSecondary)
-                }
-            }
-            .frame(height: 24)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text("\(model.connectedCount) connected"))
-        .accessibilityIdentifier("connectedCountButton")
-    }
-
-    private var stackedIcons: some View {
-        HStack(spacing: -3) {
-            ForEach(Array(model.connectedApps.prefix(4).enumerated()), id: \.element.id) { index, app in
-                MacAppTile(url: app.iconURL, size: 16, radius: 4, glyphSize: 8)
-                    .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(PalTokens.elevated, lineWidth: 1))
-                    .zIndex(Double(-index))
-            }
-        }
-        .accessibilityHidden(true)
-    }
-
-    private var searchField: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(PalTokens.textSecondary)
-            TextField("Search across apps and skills", text: $model.query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 12))
-                .accessibilityIdentifier("connectAppsSearch")
-        }
-        .padding(.horizontal, 12)
-        .frame(height: 28)
-        .palGlass(RoundedRectangle(cornerRadius: 10, style: .continuous), interactive: false)
-    }
-
-    private var chips: some View {
-        ScrollView(.horizontal) {
-            HStack(spacing: 6) {
-                ForEach(model.chips, id: \.self) { chip in chipButton(chip) }
-            }
-            .padding(.horizontal, 29)
-        }
-        .scrollIndicators(.never)
-        .frame(height: 25)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("connectAppsChips")
-    }
-
-    private func chipTitle(_ id: String) -> String {
-        switch id {
-        case ConnectChip.all: String(localized: "All")
-        default: id
-        }
-    }
-
-    private func chipButton(_ id: String) -> some View {
-        let selected = model.selection == id && model.trimmedQuery.isEmpty
-        return Button { model.selection = id; model.query = "" } label: {
-            Text(chipTitle(id))
-                .font(.system(size: 12))
-                .foregroundStyle(selected ? PalTokens.inverseText : PalTokens.textSecondary)
-                .padding(.horizontal, 9)
-                .frame(height: 25)
-                .background(selected ? PalTokens.inverseFill : PalTokens.chipFill, in: Capsule())
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? .isSelected : [])
-        .accessibilityIdentifier("connectAppsChips-\(id)")
-    }
-
     @ViewBuilder
-    private var catalogContent: some View {
-        switch model.phase {
-        case .loading where model.catalog.apps.isEmpty:
-            DelayedProgressView().frame(maxWidth: .infinity).padding(.top, 60).accessibilityIdentifier("connectAppsLoading")
-        case .unavailable:
-            VStack(spacing: 14) {
-                Text("Couldn't load apps").foregroundStyle(PalTokens.textSecondary)
-                Button("Try again") { Task { await model.reload() } }
-                    .buttonStyle(.palPill)
-                    .accessibilityIdentifier("connectAppsRetry")
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.top, 60)
-            .accessibilityIdentifier("connectAppsUnavailable")
-        default:
-            if !model.trimmedQuery.isEmpty { searchResults } else { selectedSection }
-        }
-    }
-
-    @ViewBuilder
-    private var selectedSection: some View {
-        switch model.selection {
-        case ConnectChip.all:
-            deviceSection(model.devices.thisDevice)
-            ForEach(model.catalog.categories, id: \.self) { category in
-                section(title: category, identifier: "connectAppsSection-\(category)", viewAll: { model.selection = category }) {
-                    appGrid(Array(model.catalog.apps(in: category).prefix(Self.rowsPerSectionInAll)))
-                }
-            }
-            capabilitiesSection
-        case let category:
-            section(title: category, identifier: "connectAppsSectionTitle", viewAll: nil) {
-                appGrid(model.catalog.apps(in: category))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var searchResults: some View {
+    var searchResults: some View {
         let apps = model.searchedApps
         let skills = model.searchedSkills
         if apps.isEmpty, skills.isEmpty {
@@ -296,7 +146,7 @@ struct MacConnectApps: View {
             section(title: String(localized: "Skills"), identifier: "connectAppsSection-skills", viewAll: nil) {
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
                     ForEach(skills) { skill in
-                        tileRow(title: skill.name, summary: skill.category, identifier: "skill-\(skill.id)", trailing: nil, busy: false) { MacAppTile(url: nil) }
+                        tileRow(title: skill.name, summary: skill.category, identifier: "skill-\(skill.id)", trailing: nil, busy: false) { MacAppTile() }
                     }
                 }
             }
@@ -328,114 +178,9 @@ struct MacConnectApps: View {
         }
     }
 
-    private func section<Body: View>(title: String, identifier: String, viewAll: (() -> Void)?, @ViewBuilder content: () -> Body) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(PalTokens.textSecondary)
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier(identifier)
-                Spacer()
-                if let viewAll {
-                    Button("View all", action: viewAll)
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11))
-                        .foregroundStyle(PalTokens.textSecondary)
-                        .accessibilityIdentifier("\(identifier)-viewAll")
-                }
-            }
-            content()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-                .kanbanGlass(RoundedRectangle(cornerRadius: PalMetrics.tileRadius, style: .continuous))
-        }
-    }
-
-    @ViewBuilder
-    private var capabilitiesSection: some View {
-        switch model.capabilitiesPhase {
-        case .hidden:
-            EmptyView()
-        case .loading:
-            section(title: String(localized: "Capabilities"), identifier: "capabilitiesTitle", viewAll: nil) {
-                DelayedProgressView().controlSize(.small).accessibilityIdentifier("capabilitiesLoading")
-            }
-        case .failed:
-            section(title: String(localized: "Capabilities"), identifier: "capabilitiesTitle", viewAll: nil) {
-                Text("Couldn't load capabilities")
-                    .font(.system(size: 11))
-                    .foregroundStyle(PalTokens.textSecondary)
-                    .accessibilityIdentifier("capabilitiesError")
-            }
-        case .ready(let rows):
-            if !rows.isEmpty {
-                section(title: String(localized: "Capabilities"), identifier: "capabilitiesTitle", viewAll: nil) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: 14) {
-                        ForEach(rows) { row in MacCapabilityRow(row: row, onSetKey: model.canSetKeys ? { model.beginKeyEntry(row, keyName: $0) } : nil) }
-                    }
-                    .accessibilityElement(children: .contain)
-                    .accessibilityIdentifier("capabilitiesList")
-                }
-            }
-        }
-    }
-
-    private func deviceSection(_ device: DeviceSection) -> some View {
-        section(title: device.title, identifier: "connectAppsSection-device-\(device.id)", viewAll: nil) {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
-                ForEach(device.rows) { deviceRow($0) }
-                MacT3CodeRow(host: model.devices.t3) { confirmsT3Disconnect = true }
-            }
-        }
-    }
-
-    private func deviceRow(_ row: DeviceConnectorRow) -> some View {
-        let look = DeviceRowPresentation(row: row)
-        let identifier = "deviceConnector-\(row.id.rawValue)"
-        return HStack(spacing: 8) {
-            DeviceTile(connector: row.id).scaleEffect(0.95).frame(width: 38, height: 38)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(row.entry.title)
-                    .font(.system(size: 12))
-                    .foregroundStyle(PalTokens.textPrimary)
-                    .lineLimit(1)
-                Text(look.summary)
-                    .font(.system(size: 11))
-                    .foregroundStyle(PalTokens.textSecondary)
-                    .lineLimit(2)
-            }
-            Spacer(minLength: 8)
-            if model.devices.busy.contains(row.id) {
-                ProgressView().controlSize(.small)
-            } else if let action = deviceAction(look, row.id) {
-                action.view(identifier: "\(identifier)-action")
-            }
-        }
-        .frame(height: 60.5)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(identifier)
-    }
-
-    private func deviceAction(_ look: DeviceRowPresentation, _ id: DeviceConnectorID) -> MacRowAction? {
-        guard let title = look.buttonTitle else { return nil }
-        let localized = String(localized: String.LocalizationValue(title))
-        switch look.action {
-        case .allow: return MacRowAction(title: localized, prominent: true) { Task { await model.devices.allow(id) } }
-        case .openSettings: return MacRowAction(title: localized, prominent: true) { model.devices.openSettings(for: id) }
-        case nil: return MacRowAction(title: localized, checked: true) {}
-        }
-    }
-
-    private func appGrid(_ apps: [ConnectApp]) -> some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 0) {
-            ForEach(apps) { appRow($0) }
-        }
-    }
-
-    private func appRow(_ app: ConnectApp) -> some View {
+    func appRow(_ app: ConnectApp) -> some View {
         let state = model.cardState(app)
-        let action: MacRowAction = if app.requiresAppSignIn {
+        let action: MacRowAction? = if app.requiresAppSignIn {
             MacRowAction(title: UpworkCardText.actionTitle(state), prominent: state.isReconnect) { model.upworkApp = app }
         } else if app.source == .googleWorkspace {
             MacRowAction(
@@ -446,9 +191,15 @@ struct MacConnectApps: View {
             MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manage(app) }
         } else {
             switch app.state {
-        case .disconnected: MacRowAction(title: OtherConnectorCardText.connectTitle(state), prominent: false) { Task { await model.connect(app) } }
-        case .needsAuthorization: MacRowAction(title: String(localized: "Authorize"), prominent: true) { Task { await model.connect(app) } }
-        case .connected: MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manageAccounts(app) }
+            case .disconnected: MacRowAction(title: OtherConnectorCardText.connectTitle(state), prominent: false) { Task { await model.connect(app) } }
+            case .needsAuthorization: MacRowAction(title: String(localized: "Authorize"), prominent: true) { Task { await model.connect(app) } }
+            case .needsSetup: nil
+            case .connected:
+                if app.requiresToken {
+                    MacRowAction(title: String(localized: "Update token"), prominent: false) { Task { await model.connect(app) } }
+                } else {
+                    MacRowAction(title: String(localized: "Manage"), prominent: false) { model.manageAccounts(app) }
+                }
             }
         }
         return tileRow(
@@ -467,8 +218,7 @@ struct MacConnectApps: View {
     @ViewBuilder
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
-        case .hosted: MacAppTile(url: app.iconURL)
-        case .mcp, .custom, .googleWorkspace: MacAppTile(url: nil)
+        case .catalog, .mcp, .custom, .googleWorkspace: MacAppTile()
         }
     }
 
@@ -503,7 +253,7 @@ struct MacConnectApps: View {
     }
 }
 
-private struct MacCapabilityRow: View {
+struct MacCapabilityRow: View {
     let row: CapabilityRow
     let onSetKey: ((String) -> Void)?
 
@@ -562,28 +312,16 @@ private struct MacCapabilityRow: View {
     }
 }
 
-private struct MacAppTile: View {
-    let url: URL?
+struct MacAppTile: View {
     var size: CGFloat = 38
     var radius: CGFloat = 10
     var glyphSize: CGFloat = 16
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
-        Group {
-            if let url {
-                RemoteLogo(url: url) { logo in
-                    logo.padding(size * 0.18).background(.white)
-                } placeholder: {
-                    glyph
-                }
-            } else {
-                glyph
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(shape)
-        .accessibilityHidden(true)
+        glyph
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
+            .accessibilityHidden(true)
     }
 
     private var glyph: some View {

@@ -8,7 +8,7 @@ private let redirect = "http://127.0.0.1:50123/callback"
 
 private func preset(state: ConnectAppState = .disconnected) -> ConnectApp {
     ConnectApp(
-        id: "mcp:notion", name: "Notion", summary: "", category: "Other", iconURL: nil,
+        id: "mcp:notion", name: "Notion", summary: "", category: "Other",
         source: .mcp(name: "notion", requires: []), state: state
     )
 }

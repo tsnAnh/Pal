@@ -4,7 +4,6 @@ import PalProtocol
 import PalTransport
 
 public enum SkillsCatalogError: Error, Sendable, Equatable {
-    case signInRequired
     case installBlocked
     case installFailed
     case updateFailed
@@ -17,7 +16,6 @@ public enum SkillsCatalogError: Error, Sendable, Equatable {
 
     public var userMessage: String {
         switch self {
-        case .signInRequired: String(localized: "Sign in to Nous Portal on your Pal first, then try again.")
         case .installBlocked: String(localized: "This skill was blocked by a safety check and wasn't installed.")
         case .installFailed: String(localized: "Couldn't install this skill. Try again.")
         case .updateFailed: String(localized: "Couldn't update. Try again.")
@@ -40,7 +38,7 @@ public enum SkillsCatalogError: Error, Sendable, Equatable {
         case 4101: return .invalidKey
         case 4004: return .notFound
         case 5034: return .keyNotSaved
-        default: return ConnectAppsService.map(.rpc(rpc)) == .signInRequired ? .signInRequired : .unavailable
+        default: return .unavailable
         }
     }
 

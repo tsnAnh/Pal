@@ -9,7 +9,7 @@ public enum ConnectAppStatus: Sendable, Equatable {
         switch state {
         case .connected: self = .connected
         case .needsAuthorization: self = .needsSignIn
-        case .disconnected: self = .notConnected
+        case .disconnected, .needsSetup: self = .notConnected
         }
     }
 

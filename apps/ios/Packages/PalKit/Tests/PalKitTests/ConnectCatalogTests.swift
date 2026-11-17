@@ -6,53 +6,69 @@ import PalTransport
 import Synchronization
 import Testing
 
-private let hostedEntries = [
-    HostedConnectorEntry(slug: "slack", name: "Slack", description: "Read and post messages", category: "Communication"),
-    HostedConnectorEntry(slug: "gmail", name: "Gmail", description: "Search and draft email", category: "Communication"),
-    HostedConnectorEntry(slug: "github", name: "GitHub", description: "Issues and pull requests", category: "Developer"),
-    HostedConnectorEntry(slug: "figma", name: "Figma", description: "Design files", category: "Design and media"),
-    HostedConnectorEntry(slug: "odd", name: "Odd", description: "", category: "Zebra"),
-    HostedConnectorEntry(slug: "bare", name: "Bare", description: "No category", category: ""),
+private let catalogEntries = [
+    catalogEntry("slack", "Slack", "Communication", method: .mcpOAuth),
+    catalogEntry("gmail", "Gmail", "Communication", method: .mcpOAuth),
+    catalogEntry("github", "GitHub", "Developer", method: .apiKey),
+    catalogEntry("figma", "Figma", "Design and media", method: .mcpOAuth),
+    catalogEntry("odd", "Odd", "Zebra"),
+    catalogEntry("bare", "Bare", ""),
+    catalogEntry("upwork", "Upwork", "Sales and support", method: .native, url: nil),
+    catalogEntry("google-workspace", "Google Workspace", "Files and docs", method: .native, url: nil),
+    catalogEntry("acme", "Acme", "Developer", method: .oauthClient, status: .needsSetup, url: nil),
 ]
 
 @Suite("Connect catalog")
 struct ConnectCatalogTests {
     @Test func categoriesComeFromTheCatalogInReadingOrderWithUnknownOnesLastBeforeOther() {
-        let catalog = ConnectCatalog.make(hosted: hostedEntries, states: [], mcp: [McpPresetEntry(name: "algolia", description: "Search")])
+        let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: [McpPresetEntry(name: "algolia", description: "Search")])
         #expect(catalog.categories == ["Communication", "Design and media", "Developer", "Zebra", "Other"])
     }
 
     @Test func aConnectorWithoutACategoryLandsInOther() {
-        let catalog = ConnectCatalog.make(hosted: hostedEntries, states: [], mcp: [])
+        let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: [])
         #expect(catalog.apps.first { $0.name == "Bare" }?.category == ConnectCatalog.otherCategory)
     }
 
-    @Test func hostedStateFollowsTheAccountStatus() {
-        let states = [
-            HostedConnectorState(connector: "slack", connected: true, connectionStatus: "active"),
-            HostedConnectorState(connector: "gmail", connected: true, connectionStatus: "expired"),
-            HostedConnectorState(connector: "github", connected: true, connectionStatus: "revoked"),
-            HostedConnectorState(connector: "figma", connected: false, connectionStatus: nil),
-        ]
-        let catalog = ConnectCatalog.make(hosted: hostedEntries, states: states, mcp: [])
-        func state(_ name: String) -> ConnectAppState? { catalog.apps.first { $0.name == name }?.state }
-        #expect(state("Slack") == .connected)
-        #expect(state("Gmail") == .needsAuthorization)
-        #expect(state("GitHub") == .disconnected)
-        #expect(state("Figma") == .disconnected)
-        #expect(catalog.connectedApps.map(\.name).sorted() == ["Gmail", "Slack"])
+    @Test func nativeRowsAndTheGoogleRowAreNotListedFromTheCatalog() {
+        let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: [])
+        #expect(!catalog.apps.map(\.id).contains("connector:upwork"))
+        #expect(!catalog.apps.map(\.id).contains("connector:google-workspace"))
     }
 
-    @Test func aPresetBackedByAHostedConnectorIsShownOnceAsTheHostedRow() {
-        let mcp = [
-            McpPresetEntry(name: "slack", description: "preset slack", connectorSlug: "slack", installed: true, enabled: true),
-            McpPresetEntry(name: "linear", description: "Issues", connectorSlug: nil),
-            McpPresetEntry(name: "stripe", description: "Payments", connectorSlug: "stripe-not-in-catalog"),
+    @Test func theStatusDecidesTheRowState() {
+        let rows = [
+            catalogEntry("a", "A", "Developer", status: .connected),
+            catalogEntry("b", "B", "Developer", status: .needsReconnect),
+            catalogEntry("c", "C", "Developer", status: .notConnected),
+            catalogEntry("d", "D", "Developer", method: .oauthClient, status: .needsSetup, url: nil),
         ]
-        let catalog = ConnectCatalog.make(hosted: hostedEntries, states: [], mcp: mcp)
+        let catalog = ConnectCatalog.make(catalog: rows, mcp: [])
+        func state(_ name: String) -> ConnectAppState? { catalog.apps.first { $0.name == name }?.state }
+        #expect(state("A") == .connected)
+        #expect(state("B") == .needsAuthorization)
+        #expect(state("C") == .disconnected)
+        #expect(state("D") == .needsSetup)
+        #expect(catalog.connectedApps.map(\.name).sorted() == ["A", "B"])
+        #expect(catalog.apps.first { $0.name == "D" }?.summary == "Needs setup on your Pal before it can connect.")
+        #expect(ConnectAppStatus(.needsSetup) == .notConnected)
+    }
+
+    @Test func aPresetOrServerBackedByACatalogEntryIsShownOnceAsTheCatalogRow() {
+        let mcp = [
+            McpPresetEntry(name: "slack", description: "preset slack", connectorSlug: nil, installed: true, enabled: true),
+            McpPresetEntry(name: "gmail-preset", description: "", connectorSlug: "gmail"),
+            McpPresetEntry(name: "linear", description: "Issues", connectorSlug: nil),
+            McpPresetEntry(name: "upwork", description: "Upwork", connectorSlug: "upwork"),
+        ]
+        let servers = [McpServerEntry(name: "figma", url: "https://mcp.figma.example/mcp"), McpServerEntry(name: "mine", url: "https://mine.example/mcp")]
+        let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: mcp, servers: servers)
         #expect(catalog.apps.filter { $0.name == "Slack" }.count == 1)
-        #expect(catalog.apps.first { $0.name == "Slack" }?.source == .hosted(slug: "slack"))
-        #expect(catalog.apps.map(\.id).contains("mcp:linear") && catalog.apps.map(\.id).contains("mcp:stripe"))
+        #expect(catalog.apps.filter { $0.name == "Figma" }.count == 1)
+        #expect(catalog.apps.first { $0.name == "Slack" }?.source == .catalog(catalogEntries[0]))
+        let ids = catalog.apps.map(\.id)
+        #expect(ids.contains("mcp:linear") && ids.contains("mcp:upwork") && ids.contains("custom:mine"))
+        #expect(!ids.contains("mcp:slack") && !ids.contains("mcp:gmail-preset") && !ids.contains("custom:figma"))
     }
 
     @Test func aStandalonePresetIsConnectedOnlyWhenInstalledAndEnabled() {
@@ -61,39 +77,48 @@ struct ConnectCatalogTests {
             McpPresetEntry(name: "paused", description: "", installed: true, enabled: false),
             McpPresetEntry(name: "fresh", description: ""),
         ]
-        let catalog = ConnectCatalog.make(hosted: [], states: [], mcp: mcp)
+        let catalog = ConnectCatalog.make(catalog: [], mcp: mcp)
         #expect(catalog.apps.filter(\.isConnected).map(\.name) == ["On"])
     }
 
     @Test func presetSlugsBecomeReadableNames() {
-        let catalog = ConnectCatalog.make(hosted: [], states: [], mcp: [McpPresetEntry(name: "hugging_face", description: ""), McpPresetEntry(name: "aws-knowledge", description: "")])
+        let presets = [McpPresetEntry(name: "hugging_face", description: ""), McpPresetEntry(name: "aws-knowledge", description: "")]
+        let catalog = ConnectCatalog.make(catalog: [], mcp: presets)
         #expect(Set(catalog.apps.map(\.name)) == ["Hugging Face", "Aws Knowledge"])
     }
 
-    @Test func searchMatchesNameAndSummaryIgnoringCaseAndDiacritics() {
-        let catalog = ConnectCatalog.make(hosted: hostedEntries, states: [], mcp: [])
+    @Test func searchMatchesNameIgnoringCaseAndDiacritics() {
+        let catalog = ConnectCatalog.make(catalog: catalogEntries, mcp: [])
         #expect(catalog.matching("SLACK").map(\.name) == ["Slack"])
-        #expect(catalog.matching("pull requests").map(\.name) == ["GitHub"])
-        #expect(catalog.matching("  ").count == hostedEntries.count)
+        #expect(catalog.matching("  ").count == catalog.apps.count)
         #expect(catalog.matching("zzz").isEmpty)
     }
 
     @Test func installedSkillsAreSearchableByNameAndCategory() {
         let skills = InstalledSkill.parse(["skills": ["apple": ["apple-reminders", "findmy"], "email": ["himalaya"]]])
-        let catalog = ConnectCatalog.make(hosted: [], states: [], mcp: [], skills: skills)
+        let catalog = ConnectCatalog.make(catalog: [], mcp: [], skills: skills)
         #expect(catalog.matchingSkills("remind").map(\.name) == ["apple-reminders"])
         #expect(catalog.matchingSkills("email").map(\.name) == ["himalaya"])
         #expect(catalog.matchingSkills("").isEmpty)
     }
 
-    @Test func aNonHttpsLogoIsDropped() throws {
+    @Test func theGatewayPayloadDecodesAndDropsRowsItDoesNotUnderstand() throws {
         let rows: JSONValue = [
-            ["slug": "a", "name": "A", "description": "", "category": "Developer", "logo_url": "http://insecure.example/a.png"],
-            ["slug": "b", "name": "B", "description": "", "category": "Developer", "logo_url": "https://logos.example/b.png"],
+            [
+                "slug": "a", "name": "A", "description": "", "category": "Developer", "icon": "plugin_glyph", "method": "mcp_oauth",
+                "verified": true, "mcp_url": "https://a.example/mcp", "logo_url": nil, "status": "needs_reconnect",
+            ],
+            [
+                "slug": "b", "name": "B", "category": "Developer", "icon": "plugin_glyph", "method": "none",
+                "verified": false, "mcp_url": "http://insecure.example/mcp", "status": "not_connected",
+            ],
+            ["slug": "c", "name": "C", "category": "Developer", "method": "telepathy", "status": "not_connected"],
+            ["slug": "d", "name": "D", "category": "Developer", "method": "api_key", "status": "maybe"],
         ]
-        let entries = try rows.arrayValue!.map { try $0.decoded(as: HostedConnectorEntry.self) }
-        #expect(entries[0].logoURL == nil)
-        #expect(entries[1].logoURL?.host == "logos.example")
+        let entries = rows.arrayValue!.compactMap { try? $0.decoded(as: PalCatalogEntry.self) }
+        #expect(entries.map(\.slug) == ["a", "b"])
+        #expect(entries[0].method == .mcpOAuth && entries[0].status == .needsReconnect && entries[0].mcpURL?.host == "a.example")
+        #expect(entries[1].mcpURL == nil)
     }
 }
 
@@ -102,12 +127,8 @@ private final class ScriptedRPC: ConnectRPC {
 
     private let replies: Mutex<[String: Reply]>
     private let log = Mutex<[(String, JSONValue)]>([])
-    let sendsAccountSource: Bool
 
-    init(_ replies: [String: Reply], sendsAccountSource: Bool = false) {
-        self.replies = Mutex(replies)
-        self.sendsAccountSource = sendsAccountSource
-    }
+    init(_ replies: [String: Reply]) { self.replies = Mutex(replies) }
 
     func call(_ method: String, _ params: JSONValue) async throws -> JSONValue {
         log.withLock { $0.append((method, params)) }
@@ -133,20 +154,27 @@ private func service(_ rpc: ScriptedRPC, profile: String? = nil) -> ConnectAppsS
 @Suite("Connect apps service")
 struct ConnectAppsServiceTests {
     private let catalogReply: ScriptedRPC.Reply = { _ in
-        ["connectors": [["slug": "slack", "name": "Slack", "description": "Chat", "category": "Communication"]]]
+        ["connectors": [[
+            "slug": "slack", "name": "Slack", "description": "", "category": "Communication", "icon": "plugin_glyph", "method": "mcp_oauth",
+            "verified": true, "mcp_url": "https://mcp.slack.example/mcp", "status": "connected",
+        ]]]
     }
 
-    @Test func loadsAndMergesAllThreeSourcesWithTheScopedProfile() async throws {
+    private let forbidden = [
+        "connectors.connect", "connectors.list", "connectors.accounts", "connectors.accounts.remove",
+        "connectors.operation.wake", "connectors.operation.status",
+    ]
+
+    @Test func loadsAndMergesAllSourcesWithTheScopedProfileWithoutReadingAccountStatus() async throws {
         let rpc = ScriptedRPC([
             "connectors.catalog": catalogReply,
-            "connectors.list": { _ in ["available": true, "connectors": [["connector": "slack", "connected": true, "connection_status": "active"]]] },
             "mcp.catalog": { _ in ["servers": [["name": "linear", "description": "Issues", "installed": false, "enabled": false, "requires": [], "transport": "x"]]] },
         ])
         let catalog = try await service(rpc, profile: "alpha").load()
         #expect(catalog.apps.map(\.name) == ["Linear", "Slack"])
         #expect(catalog.connectedApps.map(\.name) == ["Slack"])
-        #expect(rpc.params("connectors.list").first?["profile"]?.stringValue == "alpha")
-        #expect(rpc.params("connectors.list").first?["owner"]?["type"]?.stringValue == "account")
+        #expect(rpc.params("connectors.catalog").first?["profile"]?.stringValue == "alpha")
+        #expect(Set(rpc.methods()).isDisjoint(with: forbidden))
     }
 
     @Test func oneFailedSourceDoesNotHideTheOthers() async throws {
@@ -159,55 +187,12 @@ struct ConnectAppsServiceTests {
         await #expect(throws: ConnectAppsError.unavailable) { try await service(ScriptedRPC([:])).load() }
     }
 
-    @Test func hostedConnectWaitsForTheOperationToSettleConnected() async throws {
-        let polls = Mutex(0)
-        let rpc = ScriptedRPC([
-            "connectors.connect": { _ in ["op_id": "op1", "settled": false, "targets": [["state": "initiated", "connect_url": "https://connect.example/start"]]] },
-            "connectors.operation.wake": { _ in ["status": "ok"] },
-            "connectors.operation.status": { _ in
-                let count = polls.withLock { $0 += 1; return $0 }
-                return ["op_id": "op1", "settled": .bool(count > 1), "targets": [["state": .string(count > 1 ? "connected" : "initiated")]]]
-            },
-        ])
-        let app = ConnectApp(id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil, source: .hosted(slug: "slack"), state: .disconnected)
-        try await service(rpc).connect(app)
-        #expect(rpc.methods() == ["connectors.connect", "connectors.operation.wake", "connectors.operation.status", "connectors.operation.status"])
-    }
-
-    @Test(arguments: [false, true])
-    func hostedConnectNamesPalAsTheOwnerOnlyWhenTheGatewayAdvertisesIt(advertised: Bool) async throws {
-        let rpc = ScriptedRPC([
-            "connectors.connect": { _ in ["op_id": "op1", "settled": false, "targets": [["state": "initiated"]]] },
-            "connectors.operation.wake": { _ in ["status": "ok"] },
-            "connectors.operation.status": { _ in ["op_id": "op1", "settled": true, "targets": [["state": "connected"]]] },
-        ], sendsAccountSource: advertised)
-        let app = ConnectApp(id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil, source: .hosted(slug: "slack"), state: .disconnected)
-        try await service(rpc).connect(app)
-        let owner: JSONValue = advertised ? ["type": "account", "source": "ios"] : ["type": "account"]
-        for method in ["connectors.connect", "connectors.operation.wake", "connectors.operation.status"] {
-            #expect(!rpc.params(method).isEmpty && rpc.params(method).allSatisfy { $0["owner"] == owner })
-        }
-    }
-
-    @Test func aFailedOperationIsAFailureNotASilentSuccess() async {
-        let rpc = ScriptedRPC([
-            "connectors.connect": { _ in ["op_id": "op1", "settled": false, "targets": [["state": "initiated"]]] },
-            "connectors.operation.wake": { _ in ["status": "ok"] },
-            "connectors.operation.status": { _ in ["op_id": "op1", "settled": true, "targets": [["state": "failed"]]] },
-        ])
-        let app = ConnectApp(id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil, source: .hosted(slug: "slack"), state: .disconnected)
-        await #expect(throws: ConnectAppsError.failed) { try await service(rpc).connect(app) }
-    }
-
-    @Test func missingSignInIsReportedAsSuch() async {
-        let rpc = ScriptedRPC(["connectors.connect": { _ in throw GatewayTransportError.rpc(RPCError(code: 5030, message: "x", data: ["code": "NEEDS_NOUS_AUTH"])) }])
-        let app = ConnectApp(id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil, source: .hosted(slug: "slack"), state: .disconnected)
-        await #expect(throws: ConnectAppsError.signInRequired) { try await service(rpc).connect(app) }
-    }
-
     @Test func aPresetThatNeedsAKeyAsksForItBeforeTouchingTheGateway() async {
         let rpc = ScriptedRPC([:])
-        let app = ConnectApp(id: "mcp:acme", name: "Acme", summary: "", category: "Other", iconURL: nil, source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected)
+        let app = ConnectApp(
+            id: "mcp:acme", name: "Acme", summary: "", category: "Other",
+            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected
+        )
         await #expect(throws: ConnectAppsError.credentialsRequired(["ACME_KEY"])) { try await service(rpc).connect(app) }
         #expect(rpc.methods().isEmpty)
     }
@@ -217,7 +202,10 @@ struct ConnectAppsServiceTests {
             "mcp.servers.add": { _ in ["ok": true] },
             "mcp.servers.set_api_key": { _ in ["ok": true] },
         ])
-        let app = ConnectApp(id: "mcp:acme", name: "Acme", summary: "", category: "Other", iconURL: nil, source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected)
+        let app = ConnectApp(
+            id: "mcp:acme", name: "Acme", summary: "", category: "Other",
+            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected
+        )
         try await service(rpc).connect(app, credentials: ["ACME_KEY": "s3cret-value"])
         #expect(rpc.methods() == ["mcp.servers.add", "mcp.servers.set_api_key"])
         #expect(rpc.params("mcp.servers.set_api_key").first?["env_var"]?.stringValue == "ACME_KEY")
@@ -230,24 +218,17 @@ struct ConnectAppsServiceTests {
             "mcp.servers.set_api_key": { _ in throw GatewayTransportError.rpc(RPCError(code: 4001, message: "bad")) },
             "mcp.servers.remove": { _ in ["ok": true, "removed": true] },
         ])
-        let app = ConnectApp(id: "mcp:acme", name: "Acme", summary: "", category: "Other", iconURL: nil, source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected)
+        let app = ConnectApp(
+            id: "mcp:acme", name: "Acme", summary: "", category: "Other",
+            source: .mcp(name: "acme", requires: ["ACME_KEY"]), state: .disconnected
+        )
         await #expect(throws: (any Error).self) { try await service(rpc).connect(app, credentials: ["ACME_KEY": "v"]) }
         #expect(rpc.methods().last == "mcp.servers.remove")
     }
 
-    @Test func disconnectingAHostedConnectorRemovesEveryAccountItHas() async throws {
-        let rpc = ScriptedRPC([
-            "connectors.accounts": { _ in ["accounts": [["connection_id": "ca_1"], ["connection_id": "ca_2"]]] },
-            "connectors.accounts.remove": { _ in ["connection_id": "x", "connector": "slack", "status": "removed"] },
-        ])
-        let app = ConnectApp(id: "connector:slack", name: "Slack", summary: "", category: "Communication", iconURL: nil, source: .hosted(slug: "slack"), state: .connected)
-        try await service(rpc).disconnect(app)
-        #expect(rpc.params("connectors.accounts.remove").compactMap { $0["connection_id"]?.stringValue } == ["ca_1", "ca_2"])
-    }
-
     @Test func disconnectingAPresetRemovesItsServer() async throws {
         let rpc = ScriptedRPC(["mcp.servers.remove": { _ in ["ok": true, "removed": true] }])
-        let app = ConnectApp(id: "mcp:linear", name: "Linear", summary: "", category: "Other", iconURL: nil, source: .mcp(name: "linear", requires: []), state: .connected)
+        let app = ConnectApp(id: "mcp:linear", name: "Linear", summary: "", category: "Other", source: .mcp(name: "linear", requires: []), state: .connected)
         try await service(rpc).disconnect(app)
         #expect(rpc.params("mcp.servers.remove").first?["name"]?.stringValue == "linear")
     }
@@ -255,7 +236,7 @@ struct ConnectAppsServiceTests {
     @Test func aTokenConnectorCardCarriesItsSetupTextAndAsksForTheKey() throws {
         let row: JSONValue = ["name": "github", "description": "Read-only GitHub", "requires": ["MCP_GITHUB_API_KEY"], "setup": "Read-only. Contents, Issues."]
         let preset = try row.decoded(as: McpPresetEntry.self)
-        let catalog = ConnectCatalog.make(hosted: [], states: [], mcp: [preset])
+        let catalog = ConnectCatalog.make(catalog: [], mcp: [preset])
         let app = try #require(catalog.apps.first)
         #expect(app.setup == "Read-only. Contents, Issues.")
         #expect(app.source == .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]))
@@ -267,14 +248,20 @@ struct ConnectAppsServiceTests {
             "mcp.servers.add": { _ in throw GatewayTransportError.rpc(RPCError(code: 4090, message: "exists")) },
             "mcp.servers.set_api_key": { _ in throw GatewayTransportError.rpc(RPCError(code: 4001, message: "bad")) },
         ])
-        let app = ConnectApp(id: "mcp:github", name: "Github", summary: "", category: "Other", iconURL: nil, source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected)
+        let app = ConnectApp(
+            id: "mcp:github", name: "Github", summary: "", category: "Other",
+            source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
+        )
         await #expect(throws: (any Error).self) { try await service(rpc).connect(app, credentials: ["MCP_GITHUB_API_KEY": "v"]) }
         #expect(!rpc.methods().contains("mcp.servers.remove"))
     }
 
     @Test func aRefusedTokenIsReportedAfterTheServerTestsIt() async {
         let rpc = ScriptedRPC(["mcp.servers.test": { _ in ["ok": false, "reason": "auth_refused", "tools": []] }])
-        let app = ConnectApp(id: "mcp:github", name: "Github", summary: "", category: "Other", iconURL: nil, source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected)
+        let app = ConnectApp(
+            id: "mcp:github", name: "Github", summary: "", category: "Other",
+            source: .mcp(name: "github", requires: ["MCP_GITHUB_API_KEY"]), state: .connected
+        )
         #expect(await service(rpc).tokenFailure(app) == .authRefused)
     }
 }

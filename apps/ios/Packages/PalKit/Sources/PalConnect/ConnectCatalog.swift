@@ -1,54 +1,73 @@
 import Foundation
 import PalProtocol
 
-public struct HostedConnectorEntry: Decodable, Sendable, Equatable {
+public struct PalCatalogEntry: Decodable, Sendable, Hashable {
+    public enum Method: String, Decodable, Sendable {
+        case mcpOAuth = "mcp_oauth"
+        case none
+        case apiKey = "api_key"
+        case native
+        case oauthClient = "oauth_client"
+    }
+
+    public enum Status: String, Decodable, Sendable {
+        case connected
+        case needsReconnect = "needs_reconnect"
+        case notConnected = "not_connected"
+        case needsSetup = "needs_setup"
+    }
+
     public var slug: String
     public var name: String
-    public var description: String
     public var category: String
-    public var logoURL: URL?
+    public var icon: String
+    public var method: Method
+    public var verified: Bool
+    public var mcpURL: URL?
+    public var status: Status
 
-    public init(slug: String, name: String, description: String, category: String, logoURL: URL? = nil) {
+    public init(
+        slug: String, name: String, category: String = "", icon: String = "", method: Method,
+        verified: Bool = false, mcpURL: URL? = nil, status: Status = .notConnected
+    ) {
         self.slug = slug
         self.name = name
-        self.description = description
         self.category = category
-        self.logoURL = logoURL
+        self.icon = icon
+        self.method = method
+        self.verified = verified
+        self.mcpURL = mcpURL
+        self.status = status
     }
 
     enum CodingKeys: String, CodingKey {
-        case slug, name, description, category
-        case logoURL = "logo_url"
+        case slug, name, category, icon, method, verified, status
+        case mcpURL = "mcp_url"
     }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         slug = try container.decode(String.self, forKey: .slug)
         name = try container.decode(String.self, forKey: .name)
-        description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
         category = try container.decodeIfPresent(String.self, forKey: .category) ?? ""
-        logoURL = (try container.decodeIfPresent(String.self, forKey: .logoURL)).flatMap { URL(string: $0) }.flatMap(Self.secure)
+        icon = try container.decodeIfPresent(String.self, forKey: .icon) ?? ""
+        method = try container.decode(Method.self, forKey: .method)
+        verified = try container.decodeIfPresent(Bool.self, forKey: .verified) ?? false
+        status = try container.decode(Status.self, forKey: .status)
+        mcpURL = (try container.decodeIfPresent(String.self, forKey: .mcpURL)).flatMap { URL(string: $0) }.flatMap(Self.secure)
     }
 
     private static func secure(_ url: URL) -> URL? {
         url.scheme?.lowercased() == "https" ? url : nil
     }
-}
 
-public struct HostedConnectorState: Decodable, Sendable, Equatable {
-    public var connector: String
-    public var connected: Bool
-    public var connectionStatus: String?
-
-    public init(connector: String, connected: Bool, connectionStatus: String? = nil) {
-        self.connector = connector
-        self.connected = connected
-        self.connectionStatus = connectionStatus
-    }
-
-    enum CodingKeys: String, CodingKey {
-        case connector, connected
-        case connectionStatus = "connection_status"
+    var appState: ConnectAppState {
+        switch status {
+        case .connected: .connected
+        case .needsReconnect: .needsAuthorization
+        case .needsSetup: .needsSetup
+        case .notConnected: .disconnected
+        }
     }
 }
 
@@ -95,10 +114,11 @@ public enum ConnectAppState: Sendable, Equatable {
     case disconnected
     case connected
     case needsAuthorization
+    case needsSetup
 }
 
 public enum ConnectAppSource: Sendable, Hashable {
-    case hosted(slug: String)
+    case catalog(PalCatalogEntry)
     case mcp(name: String, requires: [String])
     case custom(CustomConnectorInfo)
     case googleWorkspace
@@ -109,18 +129,19 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
     public var name: String
     public var summary: String
     public var category: String
-    public var iconURL: URL?
     public var source: ConnectAppSource
     public var state: ConnectAppState
     public var authReason: String?
     public var setup: String
 
-    public init(id: String, name: String, summary: String, category: String, iconURL: URL?, source: ConnectAppSource, state: ConnectAppState, authReason: String? = nil, setup: String = "") {
+    public init(
+        id: String, name: String, summary: String, category: String, source: ConnectAppSource, state: ConnectAppState,
+        authReason: String? = nil, setup: String = ""
+    ) {
         self.id = id
         self.name = name
         self.summary = summary
         self.category = category
-        self.iconURL = iconURL
         self.source = source
         self.state = state
         self.authReason = authReason
@@ -128,6 +149,14 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
     }
 
     public var isConnected: Bool { state == .connected }
+
+    public var requiresToken: Bool {
+        switch source {
+        case .mcp(_, let requires): !requires.isEmpty
+        case .catalog(let entry): entry.method == .apiKey
+        case .custom, .googleWorkspace: false
+        }
+    }
 }
 
 public struct InstalledSkill: Sendable, Equatable, Identifiable {
@@ -184,7 +213,7 @@ public struct ConnectCatalog: Sendable, Equatable {
     }
 
     public var connectedApps: [ConnectApp] {
-        apps.filter { $0.state != .disconnected }
+        apps.filter { $0.state == .connected || $0.state == .needsAuthorization }
     }
 
     public func matching(_ query: String) -> [ConnectApp] {
@@ -193,30 +222,36 @@ public struct ConnectCatalog: Sendable, Equatable {
         return apps.filter { $0.name.localizedStandardContains(needle) || $0.summary.localizedStandardContains(needle) }
     }
 
-    public static func make(hosted: [HostedConnectorEntry], states: [HostedConnectorState], mcp: [McpPresetEntry], skills: [InstalledSkill] = [], servers: [McpServerEntry] = [], google: GoogleWorkspaceStatus? = nil) -> ConnectCatalog {
-        let stateBySlug = Dictionary(states.map { ($0.connector, $0) }, uniquingKeysWith: { _, last in last })
-        let hostedSlugs = Set(hosted.map(\.slug))
-        var apps = hosted.map { entry in
+    public static func make(
+        catalog: [PalCatalogEntry], mcp: [McpPresetEntry], skills: [InstalledSkill] = [],
+        servers: [McpServerEntry] = [], google: GoogleWorkspaceStatus? = nil
+    ) -> ConnectCatalog {
+        let catalogSlugs = Set(catalog.map(\.slug))
+        let ownedElsewhere = Set(catalog.filter { $0.method == .native }.map(\.slug))
+        var apps = catalog.filter { $0.method != .native && $0.slug != ServiceKind.google.connectorSlug }.map { entry in
             ConnectApp(
-                id: "connector:\(entry.slug)", name: entry.name, summary: entry.description,
-                category: entry.category.isEmpty ? otherCategory : entry.category, iconURL: entry.logoURL,
-                source: .hosted(slug: entry.slug), state: hostedState(stateBySlug[entry.slug])
+                id: "connector:\(entry.slug)", name: entry.name,
+                summary: entry.status == .needsSetup ? String(localized: "Needs setup on your Pal before it can connect.") : "",
+                category: entry.category.isEmpty ? otherCategory : entry.category,
+                source: .catalog(entry), state: entry.appState
             )
         }
-        let standalone = mcp.filter { preset in preset.connectorSlug.map { !hostedSlugs.contains($0) } ?? true }
+        let standalone = mcp.filter { preset in
+            ownedElsewhere.contains(preset.name) || !(catalogSlugs.contains(preset.name) || preset.connectorSlug.map(catalogSlugs.contains) == true)
+        }
         apps += standalone.map { preset in
             ConnectApp(
                 id: "mcp:\(preset.name)", name: displayName(preset.name), summary: preset.description, category: otherCategory,
-                iconURL: nil, source: .mcp(name: preset.name, requires: preset.requires),
+                source: .mcp(name: preset.name, requires: preset.requires),
                 state: mcpState(preset), authReason: preset.needsAuthReason, setup: preset.setup
             )
         }
         let presetNames = Set(mcp.map(\.name))
-        apps += servers.filter { !presetNames.contains($0.name) }.compactMap { entry in
+        apps += servers.filter { !presetNames.contains($0.name) && !catalogSlugs.contains($0.name) }.compactMap { entry in
             entry.customInfo.map { info in
                 ConnectApp(
                     id: "custom:\(info.name)", name: info.name, summary: "Custom connector", category: customCategory,
-                    iconURL: nil, source: .custom(info), state: entry.enabled ? .connected : .disconnected
+                    source: .custom(info), state: entry.enabled ? .connected : .disconnected
                 )
             }
         }
@@ -224,7 +259,7 @@ public struct ConnectCatalog: Sendable, Equatable {
             apps.append(
                 ConnectApp(
                     id: GoogleWorkspaceCatalog.appID, name: GoogleWorkspaceCatalog.name, summary: GoogleWorkspaceCatalog.summary,
-                    category: "Files and docs", iconURL: nil, source: .googleWorkspace, state: google.catalogState,
+                    category: "Files and docs", source: .googleWorkspace, state: google.catalogState,
                     authReason: google.state == .reauthNeeded ? (google.reauthReason ?? .unknown).plainReason : nil
                 )
             )
@@ -237,15 +272,6 @@ public struct ConnectCatalog: Sendable, Equatable {
         guard preset.installed && preset.enabled else { return .disconnected }
         let reason = preset.needsAuthReason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return reason.isEmpty ? .connected : .needsAuthorization
-    }
-
-    static func hostedState(_ state: HostedConnectorState?) -> ConnectAppState {
-        guard let state, state.connected else { return .disconnected }
-        switch state.connectionStatus {
-        case nil, "active": return .connected
-        case "pending", "failed", "expired": return .needsAuthorization
-        default: return .disconnected
-        }
     }
 
     static func displayName(_ slug: String) -> String {
