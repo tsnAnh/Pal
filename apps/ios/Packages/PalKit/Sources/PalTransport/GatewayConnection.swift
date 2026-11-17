@@ -167,6 +167,7 @@ public actor GatewayConnection {
         self.observer = observer
         self.diagnostics = diagnostics
         self.requestTimeout = requestTimeout
+        self.faults = faults
     }
 
     public static func dial(
