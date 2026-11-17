@@ -70,7 +70,7 @@ extension ConnectAppsModel {
     func beginOtherPaste(_ app: ConnectApp) async {
         guard pasteSession == nil else { return }
         do {
-            let session = try await service.beginMcpPaste(app)
+            guard case .paste(let session) = try await service.signInMcp(app, platform: ConnectorPlatform.current) else { return }
             guard ExternalLink.open(session.authorizeURL) else {
                 await session.cancel()
                 failures[app.id] = McpOAuthError.browserUnavailable.reason

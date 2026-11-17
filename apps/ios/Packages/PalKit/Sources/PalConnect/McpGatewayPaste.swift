@@ -135,24 +135,6 @@ public final class McpGatewayPasteSession: McpPasteSigning, CustomStringConverti
 }
 
 extension ConnectAppsService {
-    func startOAuth(name: String, redirectURI: String, clientID: String?) async throws -> (flow: String, link: URL) {
-        var params: [String: JSONValue] = ["name": .string(name), "client_redirect_uri": .string(redirectURI)]
-        if let clientID { params["client_id"] = .string(clientID) }
-        let started: JSONValue
-        do {
-            started = try await rawCall("mcp.servers.oauth.start", params)
-        } catch let error as GatewayTransportError {
-            if case .rpc(let rpc) = error {
-                throw ConnectAppsError.signInFailed(McpSignInFailure.classify(rpc.message).reason)
-            }
-            throw ConnectAppsError.failed
-        }
-        guard let flow = started["session_id"]?.stringValue, let link = started["auth_url"]?.stringValue.flatMap(URL.init(string:)),
-              link.scheme?.lowercased() == "https" || link.scheme?.lowercased() == "http"
-        else { throw ConnectAppsError.signInFailed(McpSignInFailure.other.reason) }
-        return (flow, link)
-    }
-
     func awaitApproval(name: String, flow: String) async throws {
         for _ in 0..<timing.pollAttempts {
             let poll = try await call("mcp.servers.oauth.poll", ["name": .string(name), "session_id": .string(flow)])
@@ -165,7 +147,7 @@ extension ConnectAppsService {
         throw ConnectAppsError.signInFailed(McpSignInFailure.expired.reason)
     }
 
-    public func beginMcpPaste(_ app: ConnectApp) async throws -> any McpPasteSigning {
+    public func signInMcp(_ app: ConnectApp, platform: ConnectorPlatform) async throws -> McpConnectOutcome {
         let name: String
         let adding: Bool
         switch app.source {
@@ -181,21 +163,23 @@ extension ConnectAppsService {
         let service = self
         let rollback: (@Sendable () async -> Void)? = adding ? { @Sendable in _ = try? await service.call("mcp.servers.remove", ["name": .string(name)]) } : nil
         do {
-            let port = UInt16.random(in: McpOAuthFlow.pasteRedirectPorts)
-            let started = try await startOAuth(name: name, redirectURI: "http://127.0.0.1:\(port)\(LoopbackRedirectListener.callbackPath)", clientID: nil)
-            let query = URLComponents(url: started.link, resolvingAgainstBaseURL: false)?.queryItems ?? []
-            guard let state = query.first(where: { $0.name == "state" })?.value, !state.isEmpty,
-                  let redirect = query.first(where: { $0.name == "redirect_uri" })?.value.flatMap(URL.init(string:))
-            else {
-                _ = try? await call("mcp.servers.oauth.cancel", ["name": .string(name), "session_id": .string(started.flow)])
-                throw ConnectAppsError.signInFailed(McpSignInFailure.other.reason)
-            }
-            return McpGatewayPasteSession(
-                service: self, name: name, flow: started.flow, authorizeURL: started.link, state: state, redirect: redirect, rollback: rollback
-            )
+            return try await signInMcp(name: name, platform: platform, browser: browser, rollback: rollback)
         } catch {
             await rollback?()
             throw error
         }
+    }
+
+    func pasteSession(name: String, started: McpOAuthStart, rollback: (@Sendable () async -> Void)?) async throws -> any McpPasteSigning {
+        let query = URLComponents(url: started.link, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        guard let state = query.first(where: { $0.name == "state" })?.value, !state.isEmpty,
+              let redirect = query.first(where: { $0.name == "redirect_uri" })?.value.flatMap(URL.init(string:))
+        else {
+            _ = try? await call("mcp.servers.oauth.cancel", ["name": .string(name), "session_id": .string(started.flow)])
+            throw ConnectAppsError.signInFailed(McpSignInFailure.other.reason)
+        }
+        return McpGatewayPasteSession(
+            service: self, name: name, flow: started.flow, authorizeURL: started.link, state: state, redirect: redirect, rollback: rollback
+        )
     }
 }

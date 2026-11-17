@@ -232,10 +232,10 @@ public struct ConnectAppsService: Sendable {
     }
 
     func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil) async throws {
-        let listener = try await startLoopback()
-        defer { listener.cancel() }
-        let (flow, link) = try await startOAuth(name: name, redirectURI: listener.redirectURI, clientID: clientID)
-        try await completeLoopback(name: name, flow: flow, link: link, listener: listener, browser: browser)
+        if case .paste(let session) = try await signInMcp(name: name, platform: .mac, browser: browser, clientID: clientID, rollback: nil) {
+            await session.cancel()
+            throw ConnectAppsError.unavailable
+        }
     }
 
     func completeLoopback(
@@ -245,17 +245,9 @@ public struct ConnectAppsService: Sendable {
         do {
             parameters = try await Self.awaitRedirect(listener: listener, browser: browser, url: link)
         } catch {
-            _ = try? await call("mcp.servers.oauth.cancel", ["name": .string(name), "session_id": .string(flow)])
-            if error is CancellationError || (error as? SignInError) == .cancelled { throw ConnectAppsError.cancelled }
-            throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)
+            throw await failedSignIn(name: name, flow: flow, error: error)
         }
-        var relay: [String: JSONValue] = ["name": .string(name), "session_id": .string(flow)]
-        for key in ["code", "state", "error", "iss"] { if let value = parameters[key] { relay[key] = .string(value) } }
-        let delivered = try await call("mcp.servers.oauth.callback", relay)
-        if delivered["ok"]?.boolValue == false {
-            throw ConnectAppsError.signInFailed(McpSignInFailure.classify(delivered["error_message"]?.stringValue).reason)
-        }
-        try await awaitApproval(name: name, flow: flow)
+        try await relayCallback(name: name, flow: flow, parameters: parameters)
     }
 
     private enum Step: Sendable {
