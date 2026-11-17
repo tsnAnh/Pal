@@ -5,72 +5,113 @@ import SwiftUI
 
 struct KanbanBoardsView: View {
     let store: KanbanStore
-    let open: (String) -> Void
+    @Binding var selected: String?
     let close: (() -> Void)?
+    let openCard: (String, String) -> Void
 
+    @State private var last: String?
+    @State private var lastLoaded = false
     @Environment(\.scenePhase) private var scenePhase
 
+    private var boards: [KanbanBoard] { store.session.boards }
+    private var slugs: [String] { boards.map(\.scope.board) }
+
     var body: some View {
-        KanbanPage(title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoards", back: nil, close: close) {
-            content
+        Group {
+            if let board = selected {
+                KanbanBoardView(
+                    store: store, board: board, openCard: { openCard(board, $0) }, close: close,
+                    picker: KanbanBoardChoice.showsPicker(boards: slugs) ? KanbanBoardPicker(boards: boards, selected: $selected) : nil
+                )
+                .id(board)
+            } else {
+                KanbanPage(title: KanbanPresentation.surfaceTitle, identifier: "kanbanBoards", back: nil, close: close, scrolls: false) {
+                    content
+                }
+            }
         }
         .task(id: scenePhase == .active) {
+            if !lastLoaded {
+                last = await store.lastBoard()
+                lastLoaded = true
+            }
             if scenePhase == .active { await store.loadBoards() }
         }
-        .refreshable { await store.loadBoards() }
+        .onChange(of: slugs, initial: true) { choose() }
+        .onChange(of: lastLoaded) { choose() }
+        .onChange(of: store.boardsLoad) { choose() }
+        .onChange(of: selected) { _, board in
+            if let board, slugs.contains(board) { store.remember(board: board) }
+        }
+    }
+
+    private func choose() {
+        guard lastLoaded else { return }
+        if slugs.isEmpty {
+            selected = store.boardsLoad == .ready ? nil : (selected ?? last)
+        } else if selected.map({ !slugs.contains($0) }) ?? true {
+            selected = KanbanBoardChoice.pick(boards: slugs, last: last)
+        }
     }
 
     @ViewBuilder
     private var content: some View {
-        let boards = store.session.boards
-        if !boards.isEmpty {
-            if store.boardsLoad == .failed || store.boardsLoad == .unreachable { failure }
-            list(boards)
-        } else {
-            switch store.boardsLoad {
-            case .idle, .loading:
-                LoadingRow(title: "Loading boards", identifier: "kanbanBoardsLoading")
-            case .failed, .unreachable:
-                failure
-            case .ready:
-                ContentUnavailableView("No boards yet", systemImage: "rectangle.split.3x1", description: Text("Boards on this server appear here."))
-            default:
-                KanbanUnavailable(load: store.boardsLoad)
+        switch store.boardsLoad {
+        case .idle, .loading:
+            KanbanBoardSkeleton(wide: KanbanBoardsView.wide)
+        case .failed, .unreachable:
+            FailureCard(message: (store.boardsLoad == .unreachable ? KanbanLoad.unreachable : KanbanLoad.failed).message ?? "", identifier: "kanbanBoardsFailure") {
+                Task { await store.loadBoards() }
             }
+        case .ready:
+            ContentUnavailableView("No boards yet", systemImage: "rectangle.split.3x1", description: Text("Boards on this server appear here."))
+        default:
+            KanbanUnavailable(load: store.boardsLoad)
         }
     }
 
-    private var failure: some View {
-        FailureCard(message: (store.boardsLoad == .unreachable ? KanbanLoad.unreachable : KanbanLoad.failed).message ?? "", identifier: "kanbanBoardsFailure") {
-            Task { await store.loadBoards() }
-        }
+    private static var wide: Bool {
+        #if os(macOS)
+        true
+        #else
+        UIDevice.current.userInterfaceIdiom == .pad
+        #endif
     }
+}
 
-    private func list(_ boards: [KanbanBoard]) -> some View {
-        GroupedCard(accessibilityIdentifier: "kanbanBoardsList") {
-            ForEach(boards) { board in
-                SettingsRow.navigate(
-                    board.name,
-                    subtitle: subtitle(board),
-                    value: total(board),
-                    accessibilityIdentifier: "kanbanBoard-\(board.scope.board)"
-                ) { open(board.scope.board) }
+struct KanbanBoardPicker: View {
+    let boards: [KanbanBoard]
+    @Binding var selected: String?
+
+    var body: some View {
+        Menu {
+            Picker("Board", selection: $selected) {
+                ForEach(boards) { board in
+                    VStack {
+                        Text(board.name)
+                        if let detail = Self.detail(board) { Text(detail) }
+                    }
+                    .tag(Optional(board.scope.board))
+                    .accessibilityIdentifier("kanbanBoard-\(board.scope.board)")
+                }
             }
+            .pickerStyle(.inline)
+        } label: {
+            Label("Switch board", systemImage: "rectangle.split.3x1")
         }
+        .accessibilityIdentifier("kanbanBoardPicker")
     }
 
-    private func subtitle(_ board: KanbanBoard) -> String? {
+    static func detail(_ board: KanbanBoard) -> String? {
         var parts: [String] = []
         if !board.description.isEmpty { parts.append(board.description) }
         if board.dispatchMode == "external" { parts.append("Coordinator-owned") }
         if board.archived { parts.append("Archived") }
+        if let counts = board.taskCounts {
+            let sum = counts.values.reduce(0, +)
+            parts.append(sum == 1 ? "1 card" : "\(sum) cards")
+        }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private func total(_ board: KanbanBoard) -> String? {
-        guard let counts = board.taskCounts else { return nil }
-        let sum = counts.values.reduce(0, +)
-        return sum == 1 ? "1 card" : "\(sum) cards"
     }
 }
 

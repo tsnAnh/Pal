@@ -51,6 +51,17 @@ public struct KanbanDiskCache: Sendable {
     public func remove(board: String) {
         store.remove(name: Self.name(board: board), account: account)
     }
+
+    public static let lastBoardName = "kanban-last-board"
+
+    public func lastBoard() async -> String? {
+        await store.loadDetached(String.self, name: Self.lastBoardName, account: account)
+    }
+
+    public func saveLastBoard(_ board: String) {
+        guard !board.isEmpty, board.count <= KanbanBoardChoice.maxSlugLength else { return }
+        store.save(board, name: Self.lastBoardName, account: account)
+    }
 }
 
 public enum KanbanReadiness {

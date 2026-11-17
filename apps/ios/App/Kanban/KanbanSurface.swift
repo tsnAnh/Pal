@@ -4,7 +4,6 @@ import PalTransport
 import SwiftUI
 
 enum KanbanRoute: Hashable {
-    case board(String)
     case card(board: String, taskID: String)
 }
 
@@ -20,6 +19,7 @@ extension KanbanStore {
 struct KanbanSurface: View {
     @State private var store: KanbanStore
     @State private var path: [KanbanRoute] = []
+    @State private var selected: String?
     let roster: RosterModel
     let close: (() -> Void)?
 
@@ -31,17 +31,10 @@ struct KanbanSurface: View {
         self.close = close
     }
 
-    private var visibleBoard: String? {
-        for route in path.reversed() {
-            if case .board(let slug) = route { return slug }
-        }
-        return nil
-    }
-
     var body: some View {
-        let target = KanbanFollowTarget(board: visibleBoard, isActive: scenePhase == .active)
+        let target = KanbanFollowTarget(board: selected, isActive: scenePhase == .active)
         NavigationStack(path: $path) {
-            KanbanBoardsView(store: store, open: { path.append(.board($0)) }, close: close)
+            KanbanBoardsView(store: store, selected: $selected, close: close) { path.append(.card(board: $0, taskID: $1)) }
                 .environment(\.sheetChromeHostedInNavigation, true)
                 .navigationDestination(for: KanbanRoute.self) { route in
                     destination(route)
@@ -66,8 +59,6 @@ struct KanbanSurface: View {
     @ViewBuilder
     private func destination(_ route: KanbanRoute) -> some View {
         switch route {
-        case .board(let slug):
-            KanbanBoardView(store: store, board: slug, openCard: { path.append(.card(board: slug, taskID: $0)) }, back: pop)
         case .card(let board, let taskID):
             KanbanCardView(store: store, board: board, taskID: taskID, openCard: { path.append(.card(board: board, taskID: $0)) }, back: pop)
         }
@@ -84,42 +75,43 @@ struct KanbanPage<Content: View>: View {
     let back: (() -> Void)?
     let close: (() -> Void)?
     let scrolls: Bool
+    let picker: KanbanBoardPicker?
     private let content: Content
 
-    init(title: String, identifier: String, back: (() -> Void)?, close: (() -> Void)?, scrolls: Bool = true, @ViewBuilder content: () -> Content) {
+    init(title: String, identifier: String, back: (() -> Void)?, close: (() -> Void)?, scrolls: Bool = true, picker: KanbanBoardPicker? = nil, @ViewBuilder content: () -> Content) {
         self.title = title
         self.identifier = identifier
         self.back = back
         self.close = close
         self.scrolls = scrolls
+        self.picker = picker
         self.content = content()
     }
 
     var body: some View {
-        #if os(macOS)
-        scrolling
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .navigationTitle(title)
-            .toolbar {
-                if back == nil, let close {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(role: .close, action: close)
-                            .accessibilityIdentifier("\(identifier)-close")
-                    }
-                }
+        Group {
+            if let picker {
+                chrome { picker }
+            } else {
+                chrome { EmptyView() }
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier(identifier)
-        #else
+        }
+        #if os(macOS)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .windowToolbar)
+        #endif
+    }
+
+    private func chrome<Trailing: View>(@ViewBuilder trailing: () -> Trailing) -> some View {
         SheetChrome(
             title: title,
             leading: back == nil ? .close : .back,
             accessibilityIdentifier: identifier,
-            onLeading: { (back ?? close)?() }
+            onLeading: { (back ?? close)?() },
+            trailing: trailing
         ) {
             scrolling
         }
-        #endif
     }
 
     @ViewBuilder

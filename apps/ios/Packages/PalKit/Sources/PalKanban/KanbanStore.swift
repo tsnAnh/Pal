@@ -99,6 +99,14 @@ public final class KanbanStore {
         if let generation = session.cache(board)?.generation { settledGenerations[board] = generation }
     }
 
+    public func lastBoard() async -> String? {
+        await disk?.lastBoard()
+    }
+
+    public func remember(board: String) {
+        disk?.saveLastBoard(board)
+    }
+
     public func load(of board: String) -> KanbanLoad {
         boardLoads[board] ?? .idle
     }
