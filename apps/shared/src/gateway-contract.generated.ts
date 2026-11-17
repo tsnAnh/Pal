@@ -1731,6 +1731,21 @@ export interface ConnectorCatalogRow {
   status?: ConnectorCatalogStatus | null
 }
 export type ConnectorCatalogStatus = 'connected' | 'needs_reconnect' | 'not_connected' | 'needs_setup'
+export interface ConnectorsLegacyResult {
+  source_readable: boolean
+  items: LegacyConnectorRow[]
+}
+export interface LegacyConnectorRow {
+  catalog_id: string | null
+  name: string
+  legacy_slug: string
+  legacy_source: LegacyConnectorSource
+  method: string | null
+  state: LegacyConnectorState
+  last_seen: number | null
+}
+export type LegacyConnectorSource = 'portal' | 'composio' | 'unknown'
+export type LegacyConnectorState = 'needs_reconnect' | 'needs_setup' | 'unmapped'
 export interface ConnectorAccountsParams {
   profile?: string | null
   connector?: string | null
@@ -8298,6 +8313,8 @@ export interface RpcMethods {
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
+  /** Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only. */
+  'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
   /** The current snapshot of one open session or account operation. */
@@ -8947,6 +8964,7 @@ export const RPC_METHODS = [
   'connectors.accounts.rename',
   'connectors.catalog',
   'connectors.connect',
+  'connectors.legacy',
   'connectors.list',
   'connectors.operation.status',
   'connectors.operation.wake',
@@ -9318,6 +9336,8 @@ export interface CanonicalRpcMethods {
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
+  /** Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only. */
+  'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
   /** The current snapshot of one open session or account operation. */
@@ -9591,6 +9611,7 @@ export const CANONICAL_RPC_METHODS = [
   'connectors.accounts.remove',
   'connectors.catalog',
   'connectors.connect',
+  'connectors.legacy',
   'connectors.list',
   'connectors.operation.status',
   'connectors.operation.wake',
