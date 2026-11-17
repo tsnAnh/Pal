@@ -216,9 +216,9 @@ DEFAULT_CONFIG = {
         # clarify-tool reply; then it unblocks with "[user did not respond within Xm]". 0 or less =
         # unlimited. Resolved by tools/clarify_gateway.py::resolve_clarify_timeout (a legacy
         # top-level ``clarify.timeout`` still wins when explicitly set).
-        # 90s: an unanswered question must not hold the turn (and the chat) for long. A user who
+        # 0: a question is never skipped by clock; it waits until answered or dismissed. A user who
         # writes anything instead of answering cancels the question at once and their message runs.
-        "clarify_timeout": 90,
+        "clarify_timeout": 0,
         # "Still working" status interval (seconds); 0 = off. Lower = faster feedback, more noise;
         # 180 catches spinning weak-model runs before users /restart.
         "gateway_notify_interval": 180,
