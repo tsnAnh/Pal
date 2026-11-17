@@ -129,13 +129,14 @@ public struct SettingsAPI: Sendable {
         ])
     }
 
-    public func addVaultAPIKey(_ draft: VaultAPIKeyDraft) async throws {
+    @discardableResult
+    public func addVaultAPIKey(_ draft: VaultAPIKeyDraft) async throws -> String {
         guard draft.isComplete else { throw SettingsFailure.rejected(code: "incomplete") }
-        _ = try await perform(SettingsWire.VaultAdded.self, "vault.add", [
+        return try await perform(SettingsWire.VaultAdded.self, "vault.add", [
             "kind": "api_key",
             "label": .string(draft.trimmedLabel),
             "secret": .object(["api_key": .string(draft.apiKey)]),
-        ])
+        ]).id
     }
 
     public func updateVaultItem(_ draft: VaultEditDraft) async throws {

@@ -36,6 +36,7 @@ targets:
         CFBundleDisplayName: Pal
         CFBundleName: Pal
         ITSAppUsesNonExemptEncryption: false
+        NSPhotoLibraryAddUsageDescription: Pal saves your bot's picture to Photos so you can add it in Slack.
         NSMicrophoneUsageDescription: Pal listens while you dictate a message or talk to a bot in voice mode.
         NSSpeechRecognitionUsageDescription: Pal turns your speech into text on this device for dictation and voice mode.
         NSCameraUsageDescription: Pal can take a photo to send to a bot.
