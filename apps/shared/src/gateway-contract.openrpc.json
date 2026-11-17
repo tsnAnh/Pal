@@ -1051,6 +1051,60 @@
       }
     },
     {
+      "name": "connectors.discord.guilds",
+      "summary": "Owner only. The servers the saved bot is in, read live from Discord, with the saved allow-list and read-only choice.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DiscordGuildsResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.discord.save",
+      "summary": "Owner only. Save the Discord stdio server with DISCORD_ALLOWED_GUILDS from guild_ids (at least one, each a server the bot is in) and DISCORD_MCP_READ_ONLY from read_only, then run the MCP handshake. A failed handshake restores the previous server config and is an error; a live server restarts with the new env.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DiscordSaveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DiscordSaveResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.discord.token",
+      "summary": "Owner only. Check the bot token in Vault item item with Discord and save it to the profile's .env as DISCORD_TOKEN. Returns the bot's name and application id only, never the token.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/DiscordTokenParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/DiscordBotResult"
+        }
+      }
+    },
+    {
       "name": "connectors.legacy",
       "summary": "Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only.",
       "params": [
@@ -23812,6 +23866,161 @@
           "ok"
         ],
         "title": "DiagnosticsShareNousResult",
+        "type": "object"
+      },
+      "DiscordBotResult": {
+        "additionalProperties": false,
+        "properties": {
+          "bot_name": {
+            "title": "Bot Name",
+            "type": "string"
+          },
+          "application_id": {
+            "title": "Application Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bot_name",
+          "application_id"
+        ],
+        "title": "DiscordBotResult",
+        "type": "object"
+      },
+      "DiscordGuildRow": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "DiscordGuildRow",
+        "type": "object"
+      },
+      "DiscordGuildsResult": {
+        "additionalProperties": false,
+        "properties": {
+          "guilds": {
+            "items": {
+              "$ref": "#/components/schemas/DiscordGuildRow"
+            },
+            "title": "Guilds",
+            "type": "array"
+          },
+          "allowed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed",
+            "type": "array"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "guilds",
+          "allowed",
+          "read_only"
+        ],
+        "title": "DiscordGuildsResult",
+        "type": "object"
+      },
+      "DiscordSaveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "guild_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Guild Ids",
+            "type": "array"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "guild_ids",
+          "read_only"
+        ],
+        "title": "DiscordSaveParams",
+        "type": "object"
+      },
+      "DiscordSaveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "tools": {
+            "title": "Tools",
+            "type": "integer"
+          },
+          "read_only": {
+            "title": "Read Only",
+            "type": "boolean"
+          },
+          "guild_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Guild Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tools",
+          "read_only",
+          "guild_ids"
+        ],
+        "title": "DiscordSaveResult",
+        "type": "object"
+      },
+      "DiscordTokenParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "item": {
+            "title": "Item",
+            "type": "string"
+          }
+        },
+        "required": [
+          "item"
+        ],
+        "title": "DiscordTokenParams",
         "type": "object"
       },
       "DiscoveredRepo": {
@@ -55470,7 +55679,8 @@
         "enum": [
           "google_client",
           "github_token",
-          "canva_client"
+          "canva_client",
+          "discord_bot"
         ],
         "title": "SetupCheckKind",
         "type": "string"
@@ -56341,7 +56551,9 @@
         "enum": [
           "public_url",
           "open_page",
-          "paste"
+          "paste",
+          "server_picker",
+          "access"
         ],
         "title": "SetupStepKind",
         "type": "string"

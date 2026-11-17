@@ -130,6 +130,7 @@ public enum LegacyReconnect {
         .apiKey: .catalogConnect,
         .oauthClient: .needsSetup,
         .botApp: .needsSetup,
+        .botTokenStdio: .needsSetup,
         .native: .nativeSignIn,
     ]
 

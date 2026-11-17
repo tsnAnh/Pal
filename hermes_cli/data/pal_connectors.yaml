@@ -173,6 +173,56 @@ connectors:
   mcp_url: https://mcp.deepwiki.com/mcp
   verified: true
   source: https://docs.devin.ai/work-with-devin/deepwiki-mcp
+- id: discord
+  name: Discord
+  icon: plugin_glyph
+  category: Communication
+  method: bot_token_stdio
+  verified: true
+  source: https://github.com/pasympa/discord-mcp
+  notes: Runs on your Pal with your own Discord bot. Read only until you turn on writing.
+  stdio:
+    command: npx
+    args: [-y, "@pasympa/discord-mcp@2.4.0"]
+    env:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_MCP_TOOLSETS: discovery,messages
+      DISCORD_GUILD_MEMBERS: "false"
+  setup:
+    steps:
+    - id: bot
+      kind: open_page
+      title: Create your Discord bot
+      body: 'In the Discord Developer Portal, choose New Application and name it. Open Bot, choose Reset Token and copy
+        the token. On the same page, turn on Message Content Intent so Pal can read messages.'
+      links:
+      - {label: Open Discord Developer Portal, url: "https://discord.com/developers/applications"}
+      copies:
+      - {label: Application name, value: Pal}
+    - id: token
+      kind: paste
+      title: Paste your bot token
+      body: Paste the token from the Bot page. Pal checks it with Discord before saving it on your Pal.
+      fields:
+      - {id: token, label: Bot token, secret: true}
+      check: discord_bot
+    - id: invite
+      kind: open_page
+      title: Add the bot to your servers
+      body: 'Open the invite link and pick each server the bot may read. It asks only for View Channels and Read Message
+        History. To let Pal post later, use the second link instead: it adds Send Messages and Add Reactions.'
+      links:
+      - {label: Invite the bot to read, url: "https://discord.com/oauth2/authorize?client_id={discord_application_id}&scope=bot&permissions=66560"}
+      - {label: Invite the bot to read and post, url: "https://discord.com/oauth2/authorize?client_id={discord_application_id}&scope=bot&permissions=68672"}
+    - id: servers
+      kind: server_picker
+      title: Choose the servers Pal may use
+      body: Pal can only reach the servers you tick here, even if the bot is in more.
+    - id: access
+      kind: access
+      title: Choose what Pal may do
+      body: Read only lets Pal read channels and messages. Read and write also lets the bot post, react and delete as
+        itself.
 - id: dropbox
   name: Dropbox
   icon: dropbox

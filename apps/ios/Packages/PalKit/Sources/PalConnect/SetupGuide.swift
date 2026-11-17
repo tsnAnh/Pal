@@ -147,12 +147,15 @@ public struct SetupStep: Decodable, Sendable, Hashable, Identifiable {
         case publicURL = "public_url"
         case openPage = "open_page"
         case paste
+        case serverPicker = "server_picker"
+        case access
     }
 
     public enum Check: String, Decodable, Sendable {
         case googleClient = "google_client"
         case githubToken = "github_token"
         case canvaClient = "canva_client"
+        case discordBot = "discord_bot"
     }
 
     public var id: String

@@ -22,6 +22,12 @@ struct SetupGuideView: View {
         } message: {
             Text("The new client replaces the one saved on your Pal.")
         }
+        .alert(String(localized: "Let the bot post?"), isPresented: Binding(get: { model.confirmsWrite }, set: { model.confirmsWrite = $0 })) {
+            Button(String(localized: "Allow posting"), role: .destructive) { model.confirmWrite() }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("The bot can post, react and delete messages as itself in the servers you picked.")
+        }
         .alert(String(localized: "Remove the saved client?"), isPresented: Binding(get: { model.confirmsRemove }, set: { model.confirmsRemove = $0 })) {
             Button(String(localized: "Remove client"), role: .destructive) { Task { await model.removeClient() } }
             Button(String(localized: "Cancel"), role: .cancel) {}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -14,6 +15,7 @@ class ConnectionMethod(str, Enum):
     MCP_OAUTH = "mcp_oauth"
     OAUTH_CLIENT = "oauth_client"
     BOT_APP = "bot_app"
+    BOT_TOKEN_STDIO = "bot_token_stdio"
     API_KEY = "api_key"
     NATIVE = "native"
     NONE = "none"
@@ -67,6 +69,13 @@ class SetupStep:
 
 
 @dataclass(frozen=True)
+class StdioRecipe:
+    command: str
+    args: tuple[str, ...]
+    env: tuple[tuple[str, str], ...]
+
+
+@dataclass(frozen=True)
 class SetupGuide:
     steps: tuple[SetupStep, ...]
 
@@ -86,6 +95,7 @@ class PalConnector:
     replaces_portal_slug: str | None = None
     notes: str | None = None
     setup: SetupGuide | None = None
+    stdio: StdioRecipe | None = None
 
 
 class PalCatalogError(ValueError):
@@ -93,7 +103,7 @@ class PalCatalogError(ValueError):
 
 
 _REQUIRED = ("id", "name", "icon", "category", "method", "verified", "source")
-_OPTIONAL = ("mcp_url", "oauth", "scopes", "replaces_portal_slug", "notes", "setup")
+_OPTIONAL = ("mcp_url", "oauth", "scopes", "replaces_portal_slug", "notes", "setup", "stdio")
 
 
 def _https(value: object, field: str, cid: str) -> str:
@@ -102,8 +112,9 @@ def _https(value: object, field: str, cid: str) -> str:
     return value
 
 
-STEP_KINDS = ("public_url", "open_page", "paste")
-STEP_CHECKS = ("google_client", "github_token", "canva_client")
+STEP_KINDS = ("public_url", "open_page", "paste", "server_picker", "access")
+STEP_CHECKS = ("google_client", "github_token", "canva_client", "discord_bot")
+_PINNED_PACKAGE = re.compile(r"^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@\d+\.\d+\.\d+$")
 
 
 def _text(raw: object, key: str, where: str) -> str:
@@ -167,6 +178,20 @@ def _parse_setup(raw: object, cid: str) -> SetupGuide:
     return SetupGuide(steps)
 
 
+def _parse_stdio(raw: object, cid: str) -> StdioRecipe:
+    where = f"{cid}: stdio"
+    if not isinstance(raw, dict) or set(raw) != {"command", "args", "env"}:
+        raise PalCatalogError(f"{where} needs exactly command, args and env")
+    args, env = raw["args"], raw["env"]
+    if not isinstance(args, list) or not all(isinstance(a, str) and a for a in args):
+        raise PalCatalogError(f"{where}: args must be a list of strings")
+    if not isinstance(env, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
+        raise PalCatalogError(f"{where}: env must map names to strings")
+    if sum(bool(_PINNED_PACKAGE.match(a)) for a in args) != 1:
+        raise PalCatalogError(f"{where}: args need exactly one package pinned to an exact version")
+    return StdioRecipe(_text(raw, "command", where), tuple(args), tuple(env.items()))
+
+
 def _parse_entry(raw: object) -> PalConnector:
     if not isinstance(raw, dict):
         raise PalCatalogError("connector entry must be a mapping")
@@ -195,11 +220,14 @@ def _parse_entry(raw: object) -> PalConnector:
     mcp_url = _https(raw["mcp_url"], "mcp_url", cid) if raw.get("mcp_url") is not None else None
     if method is ConnectionMethod.OAUTH_CLIENT and oauth is None and mcp_url is None:
         raise PalCatalogError(f"{cid}: oauth_client needs oauth endpoints or an mcp_url")
+    stdio = _parse_stdio(raw["stdio"], cid) if raw.get("stdio") is not None else None
+    if (method is ConnectionMethod.BOT_TOKEN_STDIO) != (stdio is not None):
+        raise PalCatalogError(f"{cid}: bot_token_stdio entries, and only they, carry a stdio recipe")
     return PalConnector(
         id=raw["id"], name=raw["name"], icon=raw["icon"], category=raw["category"], method=method,
         verified=raw["verified"], source=_https(raw["source"], "source", cid), mcp_url=mcp_url, oauth=oauth,
         scopes=tuple(scopes), replaces_portal_slug=raw.get("replaces_portal_slug"), notes=raw.get("notes"),
-        setup=_parse_setup(raw["setup"], cid) if raw.get("setup") is not None else None,
+        setup=_parse_setup(raw["setup"], cid) if raw.get("setup") is not None else None, stdio=stdio,
     )
 
 

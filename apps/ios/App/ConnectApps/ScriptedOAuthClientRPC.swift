@@ -50,8 +50,9 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private var addressSaved = false
     private var progress: [String: Progress] = [
         "google-workspace": Progress(), "github": Progress(), "figma": Progress(),
-        "dropbox": Progress(), "canva": Progress(),
+        "dropbox": Progress(), "canva": Progress(), "discord": Progress(),
     ]
+    private var discord = ScriptedDiscord()
     private var items = 0
     private var vault: [String: String] = [:]
 
@@ -80,6 +81,8 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private func auxiliary(_ method: String, _ params: JSONValue) async throws -> JSONValue {
         switch method {
         case "vault.add": return addItem(params)
+        case "connectors.discord.token", "connectors.discord.guilds", "connectors.discord.save":
+            return try discord.handle(method, params, vault: vault)
         case "vault.remove":
             vault[params["id"]?.stringValue ?? ""] = nil
             return ["ok": true]
@@ -122,9 +125,10 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         let sent = params["values"]?.objectValue ?? [:]
         guard sent.values.allSatisfy({ vault[$0.stringValue ?? ""] != nil }) else { throw Self.failure(4000, "INVALID_PARAMS") }
         if !sent.values.contains(where: { vault[$0.stringValue ?? ""]?.contains("rejected") == true }) {
-            return ["slug": .string(slug), "ok": true, "account": slug == "github" ? JSONValue.string("scripted-user") : JSONValue.null]
+            let accounts: [String: JSONValue] = ["github": "scripted-user", "discord": .string(ScriptedDiscord.botName)]
+            return ["slug": .string(slug), "ok": true, "account": accounts[slug] ?? JSONValue.null]
         }
-        let reason = slug == "github" ? "INVALID_TOKEN" : "INVALID_CLIENT"
+        let reason = slug == "github" || slug == "discord" ? "INVALID_TOKEN" : "INVALID_CLIENT"
         return ["slug": .string(slug), "ok": false, "reason": .string(reason), "message": "The provider turned that down."]
     }
 
@@ -132,7 +136,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         let live = try await base.call("connectors.catalog", params)
         let kept = (live["connectors"]?.arrayValue ?? []).filter { progress[$0["slug"]?.stringValue ?? ""] == nil }
         let guided = ["figma", "dropbox", "canva"].map(mcpClientRow)
-        return ["connectors": .array(kept + [googleRow(), githubRow()] + guided)]
+        return ["connectors": .array(kept + [googleRow(), githubRow(), discord.row()] + guided)]
     }
 
     private func googleRow() -> JSONValue {
