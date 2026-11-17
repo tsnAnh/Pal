@@ -1,3 +1,4 @@
+import PalDesign
 import PalDevice
 import SwiftUI
 
@@ -15,13 +16,14 @@ extension RosterModel {
 struct CustomConnectorBot: Identifiable, Equatable {
     let name: String
     let displayName: String
+    let spec: BotAvatarSpec?
 
     var id: String { name }
 }
 
 extension RosterModel {
     var customConnectorBots: [CustomConnectorBot] {
-        bots.map { CustomConnectorBot(name: $0.name, displayName: $0.displayName) }
+        bots.map { CustomConnectorBot(name: $0.name, displayName: $0.displayName, spec: $0.spec) }
     }
 
     func currentBotName(forProfile profile: String?) -> String? {

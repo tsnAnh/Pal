@@ -96,7 +96,10 @@ final class ConnectAppsModel {
     var showsSkills = false
     var upworkApp: ConnectApp?
     var oauthClientSheet: OAuthClientSheetModel?
+    var showsSlackPicker = false
     let google: GoogleWorkspaceModel
+    let slack: SlackBotsModel
+    let slackWizard: SlackWizardContext
     var pasteSession: (any McpPasteSigning)?
     var pastingApp: ConnectApp?
     var pasteTargetID = UpworkConnector.service
@@ -122,6 +125,8 @@ final class ConnectAppsModel {
         connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser,
         bots: [CustomConnectorBot] = [], currentBot: String? = nil
     ) {
+        slackWizard = SlackWizardContext(bots: bots, connection: connection)
+        slack = SlackBotsModel(bots: slackWizard.slackBots())
         self.profile = profile
         self.botName = botName
         devices = DeviceConnectorsModel(pool: pool, profile: profile, surfaces: connection.surfaces)
@@ -168,6 +173,7 @@ final class ConnectAppsModel {
     func start() async {
         Task { await devices.start() }
         Task { await legacy.load() }
+        Task { await slack.load() }
         await reload()
         await loadCapabilities()
     }

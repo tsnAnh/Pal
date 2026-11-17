@@ -25,6 +25,22 @@ struct ChatStatusCopy {
         self.fault = fault
     }
 
+    init(failure error: ChatInstallClientError) {
+        if error == .unsupported {
+            symbol = "arrow.down.circle"
+            title = String(localized: "Gateway needs update")
+            reason = String(localized: "Update Pal on your computer to set up Slack here.")
+            code = ChatInstallModel.gatewayOutdatedCode
+            fault = nil
+        } else {
+            symbol = error.isUnreachable ? "wifi.slash" : error.reason == .forbidden ? "lock" : "exclamationmark.triangle"
+            title = String(localized: "Can't reach Slack setup")
+            reason = Self.reason(error.reason)
+            code = error.reason.rawValue
+            fault = error.fault
+        }
+    }
+
     init?(model: ChatInstallModel, displayName: String) {
         guard let code = model.statusCode else { return nil }
         self.code = code
