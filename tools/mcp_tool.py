@@ -511,9 +511,6 @@ _CONNECT_RETRY_BASE_BACKOFF_SEC, _CONNECT_RETRY_MAX_BACKOFF_SEC = 30.0, 600.0
 # — they keep the count and timestamp in sync.
 _server_error_counts: dict[Any, int] = {}
 _server_breaker_opened_at: dict[Any, float] = {}
-# True while every strike in the current streak was the tool's own error payload (server reachable,
-# call rejected); picks the open-breaker wording, since "unreachable" was false for that case (#11113).
-_server_errors_all_application: dict[Any, bool] = {}
 _CIRCUIT_BREAKER_THRESHOLD, _CIRCUIT_BREAKER_COOLDOWN_SEC = 3, 60.0
 
 # Trust-tier gating (``trust: full | untrusted``): on an untrusted server every write-capable
@@ -536,10 +533,9 @@ _server_action_policies: dict[Any, Any] = {}
 _TRUST_FULL, _TRUST_UNTRUSTED = "full", "untrusted"
 
 
-def _bump_server_error(server_name: str, *, application: bool = False) -> None:
-    """Count a failure; at the threshold (re)stamp the breaker-open time. Keyed by the calling
-    scope's connection so one profile's failing server never opens another profile's breaker.
-    *application*: the call completed and the payload was an error (transport is fine)."""
+def _bump_server_error(server_name: str) -> None:
+    """Count a transport failure; at the threshold (re)stamp the breaker-open time. Keyed by the calling
+    scope's connection so one profile's failing server never opens another profile's breaker."""
     from tools.mcp_tool_device import device_offline
     from tools.mcp_tool_scope import _resolve_server_key
     if device_offline(server_name):
@@ -547,7 +543,6 @@ def _bump_server_error(server_name: str, *, application: bool = False) -> None:
     key = _resolve_server_key(server_name)
     n = _server_error_counts.get(key, 0) + 1
     _server_error_counts[key] = n
-    _server_errors_all_application[key] = application and (n == 1 or _server_errors_all_application.get(key, False))
     if n >= _CIRCUIT_BREAKER_THRESHOLD:
         _server_breaker_opened_at[key] = time.monotonic()
 
@@ -558,7 +553,6 @@ def _reset_server_error(server_name: str) -> None:
     key = _resolve_server_key(server_name)
     _server_error_counts[key] = 0
     _server_breaker_opened_at.pop(key, None)
-    _server_errors_all_application.pop(key, None)
 
 
 # Servers opted into parallel tool calls, keyed by the consuming profile's own key (``foo-bar``/

@@ -107,10 +107,12 @@ def test_successful_data_that_carries_a_code_field_is_not_a_refusal(fake_t3):
     assert "refusal" not in answer and "error" not in answer
 
 
-def test_ordinary_tool_errors_still_count(fake_t3):
+def test_ordinary_tool_errors_do_not_count(fake_t3):
+    """An isError result is a live server's per-call answer, so only transport failures may open the breaker."""
     for _ in range(3):
         assert "refusal" not in _call(fake_t3["plain_failure"])
-    assert "rejected the last 3 calls" in _call(fake_t3["t3_thread_read"])["error"]
+    assert _breaker_state() == ({}, {})
+    assert _call(fake_t3["t3_thread_read"]) == {"result": "thread-list-ok"}
 
 
 def test_real_timeouts_still_open_the_breaker(fake_t3):

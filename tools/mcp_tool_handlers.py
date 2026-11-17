@@ -239,12 +239,6 @@ def _check_circuit_breaker(server_name: str) -> Optional[str]:
     if failures < _core._CIRCUIT_BREAKER_THRESHOLD or age >= _core._CIRCUIT_BREAKER_COOLDOWN_SEC:
         return None
     retry_in = max(1, int(_core._CIRCUIT_BREAKER_COOLDOWN_SEC - age))
-    if _core._server_errors_all_application.get(key):
-        # The server answered every time; the calls were rejected. Calling it "unreachable" sent the
-        # model to the user instead of to its own arguments (#11113).
-        return tool_error(f"MCP server '{server_name}' rejected the last {failures} calls (it is reachable; see the "
-                          f"error text those calls returned). Paused for ~{retry_in}s. Do NOT repeat the same call — "
-                          f"fix the arguments/URL/target or use a different approach.")
     return tool_error(f"MCP server '{server_name}' is unreachable after {failures} consecutive failures"
                       f"{_device_failure_note(server_name)}. Auto-retry available in ~{retry_in}s. Do NOT retry "
                       f"this tool yet — use alternative approaches or ask the user to check the MCP server.")
@@ -292,24 +286,10 @@ def _result_is_error(result) -> bool:
         return False
 
 
-def _result_is_refusal(result) -> bool:
-    try:
-        payload = json.loads(result)
-    except (json.JSONDecodeError, TypeError):
-        return False
-    return isinstance(payload, dict) and "error" in payload and isinstance(payload.get("refusal"), str)
-
-
 def _record_call_outcome(server_name: str, result) -> Any:
-    """Breaker bookkeeping: an error payload from the tool itself still counts as a strike (#10447),
-    flagged as an application error so the open-breaker message stays truthful. A typed refusal
-    (``refusal`` field, set only by ``_render_call_tool_result``) is a working server's answer: no strike."""
-    if _result_is_refusal(result):
-        return result
-    if _result_is_error(result):
-        _core._bump_server_error(server_name, application=True)
-    else:
-        _core._reset_server_error(server_name)
+    """Breaker bookkeeping: a completed call proves the transport, so it closes the breaker even when the
+    tool answered with an error or a typed refusal; only transport failures strike."""
+    _core._reset_server_error(server_name)
     return result
 
 
@@ -335,8 +315,7 @@ def _lookup_reconnectable_server(server_name: str, require_loop: bool = False):
 
 def _retry_once(server_name: str, retry_call, op_description: str, what: str):
     """Re-run ``retry_call`` after a recovery step. Returns the result when the RPC completed
-    (an application error is still the tool's real answer, and still a breaker strike per #10447);
-    None when the retry raised (caller falls through)."""
+    (an application error is still the tool's real answer); None when the retry raised (caller falls through)."""
     try:
         result = retry_call()
     except Exception as retry_exc:
