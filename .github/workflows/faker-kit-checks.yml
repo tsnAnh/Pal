@@ -1,6 +1,12 @@
 name: faker-kit-checks
 on:
   pull_request:
+    paths:
+      - '.claude/skills/**'
+      - '.agents/skills/**'
+      - 'scripts/link-skills.sh'
+      - '.github/**'
+      - 'scripts/check'
 jobs:
   kit:
     runs-on: ubuntu-latest
