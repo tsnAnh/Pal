@@ -141,8 +141,8 @@ def _(rid, params):
 @method("connectors.oauth_client.connect")
 @_profile_scoped
 def _(rid, params):
-    from tui_gateway.contracts.connectors import OAuthClientConnectParams
-    return _oauth_client_call(OAuthClientConnectParams, lambda rpc, request: rpc.connect(request))(rid, params)
+    from tui_gateway.contracts.connectors import OAuthClientSlugParams
+    return _oauth_client_call(OAuthClientSlugParams, lambda rpc, request: rpc.connect(request.slug))(rid, params)
 
 
 @method("connectors.oauth_client.remove")

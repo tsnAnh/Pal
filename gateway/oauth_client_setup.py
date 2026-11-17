@@ -25,14 +25,10 @@ NONCE_TTL_SECONDS = 600.0
 HTTP_TIMEOUT_SECONDS = 15.0
 GOOGLE_REDIRECT_PATH = "/webapp/google-install/callback"
 GOOGLE_PROVIDER = "google-workspace"
-ASANA_PROVIDER = "asana"
-ASANA_REDIRECT_URL = "http://localhost:27890/callback"
-ASANA_SECRET_ENV = "ASANA_CLIENT_SECRET"
 GOOGLE_TOKEN_FILE = "google_token.json"
 GOOGLE_IDENTITY_SCOPES = ("openid", "email")
 
 CONSOLE_URLS = {
-    ASANA_PROVIDER: "https://app.asana.com/0/my-apps",
     GOOGLE_PROVIDER: "https://console.cloud.google.com/apis/credentials",
 }
 
@@ -333,14 +329,6 @@ def google_remove(store: OAuthClientStore, profile_home) -> None:
 def google_status(store: OAuthClientStore, profile_home) -> ConnectionStatus | None:
     row = store.connection(GOOGLE_PROVIDER, profile_key(profile_home))
     return row[0] if row else None
-
-
-def asana_server_config(client_id: str) -> dict:
-    from hermes_cli.pal_connectors import load_pal_connectors
-    entry = next(e for e in load_pal_connectors() if e.id == ASANA_PROVIDER)
-    return {"url": entry.mcp_url, "transport": "http", "auth": "oauth",
-            "oauth": {"client_id": client_id, "client_secret": f"${{{ASANA_SECRET_ENV}}}",
-                      "redirect_host": "localhost", "redirect_port": 27890}}
 
 
 def build_store(home=None) -> OAuthClientStore:

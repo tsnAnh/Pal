@@ -1748,15 +1748,9 @@ export interface OAuthClientSaveParams {
   client_id_item: string
   client_secret_item: string
 }
-export interface OAuthClientConnectParams {
-  profile?: string | null
-  slug: string
-  client_redirect_uri?: string | null
-}
 export interface OAuthClientConnectResult {
   slug: string
   auth_url: string
-  session_id: string | null
 }
 export interface OAuthClientRemoveResult {
   slug: string
@@ -8348,8 +8342,8 @@ export interface RpcMethods {
   'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
-  /** Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog. */
-  'connectors.oauth_client.connect': { params: OAuthClientConnectParams; result: OAuthClientConnectResult }
+  /** Start the scoped profile's sign-in: the provider redirects to the gateway and the app polls connectors.catalog. */
+  'connectors.oauth_client.connect': { params: OAuthClientSlugParams; result: OAuthClientConnectResult }
   /** Remove the scoped profile's sign-in. The owner's saved OAuth client stays. */
   'connectors.oauth_client.remove': { params: OAuthClientSlugParams; result: OAuthClientRemoveResult }
   /** Owner only. Save the OAuth client once for every profile and device: both values are Vault item ids the app wrote with vault.add. */
