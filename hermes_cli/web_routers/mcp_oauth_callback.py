@@ -21,7 +21,8 @@ _PAGE = ('<!doctype html><meta charset="utf-8"><meta name="viewport" content="wi
          '<p>{message}</p><p><a href="{link}">Return to Pal</a></p>')
 _DONE = (200, "Done. Go back to Pal to finish.")
 _DENIED = (200, "Sign-in was not completed. Go back to Pal to try again.")
-_REJECTED = (400, "This link has expired or was already used. Go back to Pal and start again.")
+REJECTED_MESSAGE = "This link has expired or was already used. Go back to Pal and start again."
+_REJECTED = (400, REJECTED_MESSAGE)
 
 
 def _deliver(code: str, state: str, error: str, iss: str) -> bool:

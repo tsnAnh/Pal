@@ -4043,6 +4043,20 @@ export interface PetScaleResult {
   ok: boolean
   scale: number
 }
+export type PublicUrlGetParams = Record<string, never>
+export interface PublicUrlState {
+  url?: string | null
+  routes_enabled: boolean
+  suggestion?: string | null
+}
+export interface PublicUrlSetParams {
+  url: string
+}
+export interface PublicUrlCheckResult {
+  outcome: PublicUrlCheckOutcome
+  url?: string | null
+}
+export type PublicUrlCheckOutcome = 'reachable' | 'not_reachable' | 'wrong_service' | 'not_served' | 'no_address'
 /** ``text`` is normally a string; the relay / hosted paths may hand a structured (parts list) payload, and the busy path renders it. Truncation (rewind / edit / regenerate) needs explicit consent: ``confirm_truncate`` plus one durable target (``truncate_before_row_id`` preferred, ``truncate_before_message_id``, or the legacy ``truncate_before_user_ordinal``). */
 export interface PromptSubmitParams {
   session_id: string
@@ -9005,6 +9019,12 @@ export interface RpcMethods {
   'wake.status': { params: WakeStatusParams; result: WakeStatusResult }
   /** Stop this surface's listener; persist also writes wake_word.enabled: false. */
   'wake.stop': { params: WakeStopParams; result: WakeStopResult }
+  /** Owner only. One request from the gateway to <public_url>/webapp/mcp-oauth/callback with a state nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service, not_served (the gateway answers but does not serve this address) or no_address. */
+  'webapp.public_url.check': { params: PublicUrlGetParams; result: PublicUrlCheckResult }
+  /** Owner only. The gateway's saved public https address (webapp.public_url), whether the Webapp routes that serve the sign-in callbacks are enabled, and a read-only suggestion from the tailnet (null when the Tailscale CLI is absent or fails). */
+  'webapp.public_url.get': { params: PublicUrlGetParams; result: PublicUrlState }
+  /** Owner only. Save the address: https only, a host name (never an IP), no userinfo, path beyond /, query or fragment, at most 255 characters; stored lower-cased without a trailing slash. An empty url clears it. A refusal carries data.problem. The gateway reads the address when it starts. */
+  'webapp.public_url.set': { params: PublicUrlSetParams; result: PublicUrlState }
   /** Create a route. Give secret or generate_secret, not both; a generated secret is returned once. The gateway loads the route on its next request, no restart. 4101 invalid, 4409 name taken, 5321 data.code webhook_disabled. 4403 secondary profile. */
   'webhook.routes.add': { params: WebhookRouteAddParams; result: WebhookRouteAddResult }
   /** Webhook routes of this gateway with their local path and public URL, never a secret. public_base_url is webapp.public_url, or null when unset. 4403 secondary profile. */
@@ -9370,6 +9390,9 @@ export const RPC_METHODS = [
   'wake.start',
   'wake.status',
   'wake.stop',
+  'webapp.public_url.check',
+  'webapp.public_url.get',
+  'webapp.public_url.set',
   'webhook.routes.add',
   'webhook.routes.list',
   'webhook.routes.probe',
@@ -9677,6 +9700,12 @@ export interface CanonicalRpcMethods {
   'vault.unlock': { params: VaultUnlockParams; result: VaultUnlockResult }
   /** Edit a local vault item's label, origin or secret fields (blank secret fields are kept). */
   'vault.update': { params: VaultUpdateParams; result: VaultUpdateResult }
+  /** Owner only. One request from the gateway to <public_url>/webapp/mcp-oauth/callback with a state nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service, not_served (the gateway answers but does not serve this address) or no_address. */
+  'webapp.public_url.check': { params: PublicUrlGetParams; result: PublicUrlCheckResult }
+  /** Owner only. The gateway's saved public https address (webapp.public_url), whether the Webapp routes that serve the sign-in callbacks are enabled, and a read-only suggestion from the tailnet (null when the Tailscale CLI is absent or fails). */
+  'webapp.public_url.get': { params: PublicUrlGetParams; result: PublicUrlState }
+  /** Owner only. Save the address: https only, a host name (never an IP), no userinfo, path beyond /, query or fragment, at most 255 characters; stored lower-cased without a trailing slash. An empty url clears it. A refusal carries data.problem. The gateway reads the address when it starts. */
+  'webapp.public_url.set': { params: PublicUrlSetParams; result: PublicUrlState }
   /** Adopt a registered execution after verifying the live producer claim. */
   'worker.adopt': { params: WorkerScopeParams; result: WorkerExecution }
   /** Sequence-fenced typed persistence write from an adopted worker. */
@@ -9846,6 +9875,9 @@ export const CANONICAL_RPC_METHODS = [
   'vault.sources',
   'vault.unlock',
   'vault.update',
+  'webapp.public_url.check',
+  'webapp.public_url.get',
+  'webapp.public_url.set',
   'worker.adopt',
   'worker.persist',
   'worker.register'
