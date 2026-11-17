@@ -170,6 +170,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
                 .accessibilityLabel(Text(leading.accessibilityLabel))
                 .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-\(leading.identifierSuffix)")
                 if let title, inlineTitle {

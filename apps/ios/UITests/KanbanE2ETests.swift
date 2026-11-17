@@ -174,5 +174,40 @@ final class KanbanE2ETests: E2ETestCase {
         XCTAssertGreaterThanOrEqual(filter.minY, close.maxY, "the filter bar starts below the header row")
         screenShot("kanban-mac-board-chrome")
     }
+
+    func testEscapeClosesTopmostFirstThenKanban() throws {
+        try control("kanban-seed")
+        let app = launch()
+        signInIfNeeded(app)
+        let entry = app.buttons["kanbanButton"]
+        waitFor(entry, timeout: 20, "work boards button")
+        entry.hit()
+        openSeededBoard(app)
+        show(app, column: "ready")
+        let row = card(app, in: "ready")
+        waitFor(row, timeout: 20, "the card in Ready")
+
+        let search = any(app, "kanbanSearch")
+        search.hit()
+        search.typeText("zzz")
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertEqual(search.value as? String ?? "", "", "Escape clears the search text first")
+        XCTAssertTrue(any(app, "kanbanBoard").exists, "Kanban stays open while the search had text")
+
+        row.hit()
+        waitFor(any(app, "kanbanBody"), timeout: 20, "card detail")
+        app.typeKey(.escape, modifierFlags: [])
+        waitFor(any(app, "kanbanBoard"), timeout: 20, "Escape closes the card first")
+        XCTAssertFalse(any(app, "kanbanBody").exists, "the card detail is gone")
+
+        app.typeKey(.escape, modifierFlags: [])
+        waitFor(entry, timeout: 20, "a second Escape closes Kanban")
+        XCTAssertFalse(any(app, "kanbanBoard").exists, "the board is gone")
+
+        entry.hit()
+        openSeededBoard(app)
+        app.typeKey(.escape, modifierFlags: [])
+        waitFor(entry, timeout: 20, "Escape closes Kanban from the board")
+    }
     #endif
 }
