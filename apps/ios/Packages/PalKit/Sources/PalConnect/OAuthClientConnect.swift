@@ -66,28 +66,11 @@ public struct OAuthClientSetup: Sendable, Equatable {
     private static func secure(_ url: URL) -> URL? {
         url.scheme?.lowercased() == "https" ? url : nil
     }
-
-    var fixedLoopback: (host: String, port: UInt16)? {
-        guard let text = redirectURL, let url = URL(string: text), url.scheme?.lowercased() == "http",
-              let host = url.host(), LoopbackHost.isLoopback(host), let port = url.port, let fixed = UInt16(exactly: port)
-        else { return nil }
-        return (host, fixed)
-    }
-}
-
-public enum OAuthClientConnectOutcome: Sendable {
-    case connected
-    case paste(any McpPasteSigning)
-}
-
-private struct OAuthClientStart {
-    var authURL: URL
-    var sessionID: String?
 }
 
 extension ConnectApp {
     public var oauthClientEntry: PalCatalogEntry? {
-        if case .catalog(let entry) = source, entry.method == .oauthClient { entry } else { nil }
+        if case .catalog(let entry) = source, entry.hasGuidedSetup { entry } else { nil }
     }
 }
 
@@ -149,27 +132,13 @@ extension ConnectAppsService {
         _ = try await oauthClientCall("connectors.oauth_client.remove", ["slug": .string(slug)])
     }
 
-    public func connectOAuthClient(_ entry: PalCatalogEntry, route: McpConnectRoute) async throws -> OAuthClientConnectOutcome {
+    public func connectOAuthClient(_ entry: PalCatalogEntry) async throws {
         guard entry.status != .needsSetup else { throw ConnectAppsError.oauthClient(.needsSetup) }
-        let setup = try await oauthClientSetup(slug: entry.slug)
-        guard setup.configured else { throw ConnectAppsError.oauthClient(.needsSetup) }
-        var listener: LoopbackRedirectListener?
-        if let fixed = setup.fixedLoopback, route != .pasteAddress {
-            listener = try await startLoopback(port: fixed.port, host: fixed.host)
-        }
-        defer { listener?.cancel() }
-        let started = try await startOAuthClient(entry.slug, redirect: setup.fixedLoopback == nil ? nil : setup.redirectURL)
+        guard try await oauthClientSetup(slug: entry.slug).configured else { throw ConnectAppsError.oauthClient(.needsSetup) }
+        let url = try await startOAuthClient(entry.slug)
         let undo = entry.status == .notConnected ? signInRollback(entry.slug) : nil
         do {
-            if let listener {
-                guard let flow = started.sessionID else { throw ConnectAppsError.oauthClient(.connectFailed) }
-                try await completeLoopback(name: entry.slug, flow: flow, link: started.authURL, listener: listener, browser: browser)
-            } else if let flow = started.sessionID {
-                return .paste(try pasteSession(entry.slug, flow: flow, started: started, rollback: undo))
-            } else {
-                try await awaitOAuthClientConnected(slug: entry.slug, url: started.authURL)
-            }
-            return .connected
+            try await awaitOAuthClientConnected(slug: entry.slug, url: url)
         } catch {
             await undo?()
             throw error
@@ -181,26 +150,12 @@ extension ConnectAppsService {
         return { @Sendable in _ = try? await service.rawCall("connectors.oauth_client.remove", ["slug": .string(slug)]) }
     }
 
-    private func startOAuthClient(_ slug: String, redirect: String?) async throws -> OAuthClientStart {
-        var params: [String: JSONValue] = ["slug": .string(slug)]
-        if let redirect { params["client_redirect_uri"] = .string(redirect) }
-        let result = try await oauthClientCall("connectors.oauth_client.connect", params)
+    private func startOAuthClient(_ slug: String) async throws -> URL {
+        let result = try await oauthClientCall("connectors.oauth_client.connect", ["slug": .string(slug)])
         guard let url = result["auth_url"]?.stringValue.flatMap(URL.init(string:)),
               url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http"
         else { throw ConnectAppsError.oauthClient(.connectFailed) }
-        return OAuthClientStart(authURL: url, sessionID: result["session_id"]?.stringValue.flatMap { $0.isEmpty ? nil : $0 })
-    }
-
-    private func pasteSession(
-        _ slug: String, flow: String, started: OAuthClientStart, rollback: (@Sendable () async -> Void)?
-    ) throws -> any McpPasteSigning {
-        let query = URLComponents(url: started.authURL, resolvingAgainstBaseURL: false)?.queryItems ?? []
-        guard let state = query.first(where: { $0.name == "state" })?.value, !state.isEmpty,
-              let redirect = query.first(where: { $0.name == "redirect_uri" })?.value.flatMap(URL.init(string:))
-        else { throw ConnectAppsError.oauthClient(.connectFailed) }
-        return McpGatewayPasteSession(
-            service: self, name: slug, flow: flow, authorizeURL: started.authURL, state: state, redirect: redirect, rollback: rollback
-        )
+        return url
     }
 
     private enum ConsentStep: Sendable {

@@ -6,13 +6,11 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-import hermes_yaml as yaml
 from gateway import oauth_client_setup as setup_mod
 from tui_gateway import server
 
 OWNER_SECRET = "fake-token-do-not-use"
 GOOGLE_CLIENT_ID = "fake-client.apps.googleusercontent.com"
-ASANA_CLIENT_ID = "fake-asana-client"
 PUBLIC_URL = "https://pal.example.ts.net"
 
 
@@ -176,32 +174,3 @@ def test_remove_deletes_the_profile_sign_in_and_keeps_the_owner_client(root, pub
     assert not token_file.exists()
     assert _status("google-workspace") == "not_connected"
     assert _ok("connectors.oauth_client.setup", slug="google-workspace")["configured"] is True
-
-
-def test_asana_connects_through_the_mcp_path_with_the_owner_client(root, public_url, monkeypatch, caplog):
-    caplog.set_level(logging.DEBUG)
-    started = {}
-
-    def fake_start(home, name, cfg, client_redirect_uri=None):
-        started.update(name=name, cfg=cfg)
-        return {"session_id": "s1", "auth_url": "https://app.asana.com/-/oauth_authorize?x=1", "flow": "pkce"}
-
-    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", fake_start)
-    assert _status("asana") == "needs_setup"
-    _save("asana", ASANA_CLIENT_ID)
-    assert _status("asana") == "not_connected"
-
-    result = _ok("connectors.oauth_client.connect", slug="asana")
-
-    assert result["session_id"] == "s1"
-    assert started["cfg"]["oauth"]["client_id"] == ASANA_CLIENT_ID
-    assert started["cfg"]["oauth"]["redirect_port"] == 27890
-    config = (root / "profiles" / "work" / "config.yaml").read_text()
-    assert OWNER_SECRET not in config
-    assert yaml.safe_load(config)["mcp_servers"]["asana"]["oauth"]["client_id"] == ASANA_CLIENT_ID
-    assert _status("asana") == "connected"
-    assert OWNER_SECRET not in _wire_and_logs(caplog, result)
-
-    _ok("connectors.oauth_client.remove", slug="asana")
-    assert _status("asana") == "not_connected"
-    assert _ok("connectors.oauth_client.setup", slug="asana")["configured"] is True

@@ -64,6 +64,10 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         url.scheme?.lowercased() == "https" ? url : nil
     }
 
+    var hasGuidedSetup: Bool {
+        method == .oauthClient && OAuthClientGuide.guidedSlugs.contains(slug)
+    }
+
     var appState: ConnectAppState {
         switch status {
         case .connected: .connected
@@ -230,22 +234,11 @@ public struct ConnectCatalog: Sendable, Equatable {
         servers: [McpServerEntry] = [], google: GoogleWorkspaceStatus? = nil
     ) -> ConnectCatalog {
         let catalogSlugs = Set(catalog.map(\.slug))
-        let ownedElsewhere = Set(catalog.filter { $0.method == .native }.map(\.slug))
         var apps = catalog.filter { $0.method != .native }.map { entry in
             ConnectApp(
                 id: "connector:\(entry.slug)", name: entry.name, summary: summary(for: entry),
                 category: entry.category.isEmpty ? otherCategory : entry.category,
                 source: .catalog(entry), state: entry.appState
-            )
-        }
-        let standalone = mcp.filter { preset in
-            ownedElsewhere.contains(preset.name) || !(catalogSlugs.contains(preset.name) || preset.connectorSlug.map(catalogSlugs.contains) == true)
-        }
-        apps += standalone.map { preset in
-            ConnectApp(
-                id: "mcp:\(preset.name)", name: displayName(preset.name), summary: preset.description, category: otherCategory,
-                source: .mcp(name: preset.name, requires: preset.requires),
-                state: mcpState(preset), authReason: preset.needsAuthReason, setup: preset.setup
             )
         }
         let presetNames = Set(mcp.map(\.name))
@@ -271,20 +264,16 @@ public struct ConnectCatalog: Sendable, Equatable {
     }
 
     static func summary(for entry: PalCatalogEntry) -> String {
-        if entry.method == .oauthClient {
+        let setup = setupSummary(for: entry)
+        if !setup.isEmpty || entry.verified { return setup }
+        return String(localized: "Not verified: may not connect")
+    }
+
+    private static func setupSummary(for entry: PalCatalogEntry) -> String {
+        if entry.hasGuidedSetup {
             if let notes = entry.notes { return notes }
             return entry.status == .needsSetup ? String(localized: "Save your OAuth client once to connect.") : ""
         }
         return entry.status == .needsSetup ? String(localized: "Needs setup on your Pal before it can connect.") : ""
-    }
-
-    static func mcpState(_ preset: McpPresetEntry) -> ConnectAppState {
-        guard preset.installed && preset.enabled else { return .disconnected }
-        let reason = preset.needsAuthReason?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return reason.isEmpty ? .connected : .needsAuthorization
-    }
-
-    static func displayName(_ slug: String) -> String {
-        slug.split(whereSeparator: { $0 == "-" || $0 == "_" }).map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
     }
 }

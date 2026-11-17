@@ -63,7 +63,7 @@ def test_catalog_lists_every_pal_entry_with_its_method_and_nothing_connected(wor
 def test_owner_registered_oauth_clients_need_setup(work_home):
     rows = _rows()
 
-    assert rows["asana"]["status"] == rows["google-workspace"]["status"] == "needs_setup"
+    assert rows["slack"]["status"] == rows["google-workspace"]["status"] == "needs_setup"
 
 
 def test_a_no_auth_entry_added_through_the_mcp_path_shows_connected(work_home):
