@@ -479,7 +479,7 @@ async def test_the_device_tools_are_in_the_toolset_and_their_text_tells_the_bot_
     from hermes_constants import reset_hermes_home_override, set_hermes_home_override
     token = set_hermes_home_override(home_of(authority))
     try:
-        defs = {d['function']['name']: d['function'] for d in get_tool_definitions(enabled_toolsets=['iphone'], quiet_mode=True)}
+        defs = {d['function']['name']: d['function'] for d in get_tool_definitions(enabled_toolsets=['iphone'], quiet_mode=True, skip_tool_search_assembly=True)}
     finally:
         reset_hermes_home_override(token)
     text = defs['device']['description']

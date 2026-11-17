@@ -227,8 +227,9 @@ def session_unavailable_error(name: str, session_tool_names: Optional[Iterable[s
     catalog that ``tool_search`` can still refresh). A missing GUI surface keeps its own reason."""
     if session_tool_names is None or name in set(session_tool_names):
         return None
-    from tools.tool_search import _core_tool_names, out_of_scope_reason  # late: imports this module
-    if name not in _core_tool_names() or _registry_entry(name) is None:
+    from tools.tool_search import out_of_scope_reason  # late: imports this module
+    from toolsets import BUILTIN_TOOL_NAMES
+    if name not in BUILTIN_TOOL_NAMES or _registry_entry(name) is None:
         return None
     return out_of_scope_reason(name) or unavailable_in_session_reason(name)
 
@@ -247,8 +248,8 @@ def not_deferrable_error(name: str, session_tool_names: Optional[Iterable[str]] 
     instead. Stays None for callers with no session context; deliberately never consults the
     global blocklist, because a top-level session legitimately has these tools.
     """
-    from tools.tool_search import _core_tool_names  # late: tool_search imports this module
-    if name in _core_tool_names() or _registry_entry(name) is not None:
+    from toolsets import BUILTIN_TOOL_NAMES
+    if name in BUILTIN_TOOL_NAMES or _registry_entry(name) is not None:
         if session_tool_names is not None and name not in set(session_tool_names):
             return unavailable_in_session_reason(name)
         return (f"'{name}' is a directly-listed tool, not a deferred one. "

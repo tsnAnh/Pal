@@ -24,6 +24,14 @@ from agent.turn_truncation import boosted_output_cap
 logger = logging.getLogger("agent.conversation_loop")
 
 
+def _session_reaches(agent: Any, tool: str) -> bool:
+    """Eager in the session's tools[] or deferred behind the tool_search bridge."""
+    if tool in (getattr(agent, "valid_tool_names", None) or ()):
+        return True
+    from agent.tool_executor import _tool_search_scoped_names
+    return tool in _tool_search_scoped_names(agent)
+
+
 def _anchors_current_turn(messages: Any, idx: Any, user_message: Any) -> bool:
     """True when ``messages[idx]`` is this turn's user row (verbatim, or its user-originated view)."""
     if not isinstance(idx, int) or not 0 <= idx < len(messages):
@@ -58,7 +66,7 @@ def _maybe_inject_iteration_budget_warning(agent: Any, messages: Any) -> bool:
     kanban_worker = (
         bool(os.environ.get("HERMES_KANBAN_TASK"))
         and is_dispatcher_owned_worker_context()
-        and "kanban_complete" in getattr(agent, "valid_tool_names", ())
+        and _session_reaches(agent, "kanban_complete")
     )
     if ratio is None and kanban_worker:
         ratio = 0.9

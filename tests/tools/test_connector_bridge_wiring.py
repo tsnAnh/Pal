@@ -24,9 +24,13 @@ from tools.tool_search import (
 from tools.tool_search_validation import normalize_tool_call_entries
 
 
-def _tool_search_description(tool_defs):
-    # session_search is in the default defer set, so the bridge activates in
-    # both arms for the same reason: a deferrable local tool exists.
+def _tool_search_description(tool_defs, monkeypatch):
+    # Deferral needs a registered tool outside the eager set; these two are registered for the
+    # call only so the bridge activates in both arms for the same reason without leaking
+    # registry state into the tests that rely on unregistered fake defs.
+    registered = {"session_search", "manage_connections"}
+    monkeypatch.setattr(
+        "tools.tool_search._registry_toolset", lambda name: "builtin" if name in registered else None)
     defs = tool_defs + [{"type": "function", "function": {
         "name": "session_search", "description": "Search past sessions", "parameters": {}}}]
     assembled = assemble_tool_defs(
@@ -36,17 +40,17 @@ def _tool_search_description(tool_defs):
                 if td["function"]["name"] == "tool_search")
 
 
-def test_tool_search_names_manage_connections_only_when_the_session_has_it():
+def test_tool_search_names_manage_connections_only_when_the_session_has_it(monkeypatch):
     """The model learns that connectors__ names belong to accounts managed by
     manage_connections from the tool_search description, but only when that tool is in the
     session. Signed out (or connectors off) the tool is absent and the description must not
     name a tool the model cannot call."""
-    with_connections = _tool_search_description(_local_defs())
+    with_connections = _tool_search_description(_local_defs(), monkeypatch)
     assert "manage_connections" in with_connections
     assert "connectors__" in with_connections
 
     without = _tool_search_description(
-        [td for td in _local_defs() if td["function"]["name"] != "manage_connections"])
+        [td for td in _local_defs() if td["function"]["name"] != "manage_connections"], monkeypatch)
     assert "manage_connections" not in without
 
 

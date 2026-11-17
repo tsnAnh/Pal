@@ -16,7 +16,7 @@ _HERMES_CORE_TOOLS = [
     "skills_list", "skill_view", "skill_manage",
     "browser_exec",  # THE browser: Python over CDP (browser-harness)
     "browser_cdp", "browser_dialog",
-    "browser_vault",  # rides with the browser; deferred by default (tools.tool_search.defer)
+    "browser_vault",  # rides with the browser
     "text_to_speech",
     "todo_list", "memory",
     "session_search",

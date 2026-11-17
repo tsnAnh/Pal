@@ -23,6 +23,14 @@ LIVE_CONTROL = {"action", "subagent_id", "message"}
 
 
 @pytest.fixture(autouse=True)
+def _delegate_task_eager(monkeypatch):
+    from tools import tool_search
+    off = tool_search.ToolSearchConfig.from_raw({"enabled": "off"})
+    monkeypatch.setattr(tool_search, "load_config", lambda: off)
+    monkeypatch.setattr(tool_search, "load_config_readonly", lambda: off)
+
+
+@pytest.fixture(autouse=True)
 def _clean_queue_and_context(monkeypatch):
     import gateway.session_context as sc
 

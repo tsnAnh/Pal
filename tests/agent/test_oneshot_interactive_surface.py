@@ -31,7 +31,15 @@ def _by_name(agent):
     return {tool["function"]["name"]: tool["function"] for tool in agent.tools}
 
 
-def test_oneshot_tool_build_drops_clarify_and_delegate_live_control(monkeypatch):
+@pytest.fixture(autouse=False)
+def delegate_task_eager(monkeypatch):
+    from tools import tool_search
+    off = tool_search.ToolSearchConfig.from_raw({"enabled": "off"})
+    monkeypatch.setattr(tool_search, "load_config", lambda: off)
+    monkeypatch.setattr(tool_search, "load_config_readonly", lambda: off)
+
+
+def test_oneshot_tool_build_drops_clarify_and_delegate_live_control(monkeypatch, delegate_task_eager):
     import model_tools
 
     interactive = _built_agent(monkeypatch, oneshot=False)

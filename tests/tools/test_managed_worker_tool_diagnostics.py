@@ -40,7 +40,7 @@ def test_delegate_task_absent_from_a_turn_is_reported_as_unavailable(monkeypatch
 @pytest.mark.parametrize("name, toolsets, expected", [
     ("clarify", ["file"], "not available in this execution context"),  # stripped: never "call it directly"
     ("clarify", ["file", "clarify"], "Call it directly"),               # reachable: the door guidance holds
-    ("delegate_task", ["file", "delegation"], "Call it directly"),      # a worker turn that has it
+    ("delegate_task", ["file", "delegation"], "handled by the agent loop"),  # deferred: the bridge accepts it
 ])
 def test_core_tool_guidance_follows_the_session(monkeypatch, name, toolsets, expected):
     monkeypatch.setattr(runtime_session_store, "_worker_process", name == "delegate_task")
@@ -49,10 +49,8 @@ def test_core_tool_guidance_follows_the_session(monkeypatch, name, toolsets, exp
 
 
 def test_a_deferred_tool_absent_from_the_session_is_not_sent_to_tool_search(monkeypatch):
-    """Deferral is a property of the tool, availability one of the session (``defer: [delegate_task]``)."""
+    """Deferral is a property of the tool, availability one of the session (``delegate_task`` is deferred)."""
     monkeypatch.setattr(runtime_session_store, "_worker_process", False)
-    deferred = ToolSearchConfig.from_raw({"defer": ["delegate_task"]})
-    monkeypatch.setattr(tool_search, "load_config_readonly", lambda: deferred)
     described = json.loads(model_tools.handle_function_call(
         "tool_describe", {"names": ["delegate_task"]}, enabled_toolsets=["file"]))
     for message in (_bridge("delegate_task", ["file"]), described["errors"]["delegate_task"]):
