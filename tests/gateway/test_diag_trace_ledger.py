@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -135,3 +136,17 @@ async def test_a_fault_row_names_the_device_that_said_hello(bots):
     await traced(phone, *REFUSED, trace='dev1')
     [row] = [f for f in await recent(bots) if f['trace'] == 'dev1']
     assert (row['device_kind'], row['device_name'], row['app_build']) == ('ios', 'Owner iPhone', '1.4 (88)')
+
+
+@pytest.mark.asyncio
+async def test_diag_report_records_every_payload_the_app_sends_after_a_restart(bots):
+    fixture = Path(__file__).resolve().parents[2] / 'apps/ios/Fixtures/diag-report/app-payloads.json'
+    payloads = json.loads(fixture.read_text())
+    assert set(payloads) == {'offline', 'timeout', 'decode'}
+    owner = bots.connect('default', host=True, capabilities=FULL)
+    for kind, payload in payloads.items():
+        assert (await call(owner, 'diag.report', payload))['result'] == {'recorded': True}, kind
+    rows = {f['trace']: f for f in await recent(bots)}
+    for payload in payloads.values():
+        row = rows[payload['trace']]
+        assert (row['method'], row['reason'], row['source']) == (payload['method'], payload['reason'], payload['source'])

@@ -15,18 +15,18 @@ public enum FaultReporter {
     }
 
     public static func flush(_ store: FaultStore, call: Call) async {
-        var delivered: Set<String> = []
+        var settled: Set<String> = []
         for record in await store.pendingReports() {
             guard !Task.isCancelled else { break }
             do {
                 _ = try await call(GatewayConnection.reportMethod, params(record))
-                delivered.insert(record.id)
+                settled.insert(record.id)
             } catch GatewayTransportError.rpc {
-                continue
+                settled.insert(record.id)
             } catch {
                 break
             }
         }
-        await store.markReported(delivered)
+        await store.markReported(settled)
     }
 }
