@@ -112,7 +112,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         guard publicAddress else { throw Self.failure(4412, "NEEDS_PUBLIC_URL") }
         Task { await self.finishGoogleSignIn() }
         return [
-            "slug": "google-workspace", "auth_url": "https://accounts.google.com/o/oauth2/v2/auth?state=\(OAuthClientScript.state)",
+            "slug": "google-workspace", "auth_url": .string("https://accounts.google.com/o/oauth2/v2/auth?state=\(OAuthClientScript.state)"),
             "session_id": .null,
         ]
     }
