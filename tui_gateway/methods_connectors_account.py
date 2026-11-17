@@ -89,6 +89,7 @@ def _catalog_row(entry):
     return ConnectorCatalogRow(
         slug=entry.id, name=entry.name, description="", category=entry.category, icon=entry.icon,
         method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, status=_catalog_status(entry),
+        notes=entry.notes,
     )
 
 
@@ -99,12 +100,56 @@ def _catalog_status(entry):
     from tui_gateway.contracts.connectors import ConnectorCatalogStatus
 
     if entry.method is ConnectionMethod.OAUTH_CLIENT:
-        return ConnectorCatalogStatus.needs_setup
+        from tui_gateway.oauth_client_rpc import oauth_client_status
+        return oauth_client_status(entry)
     if not mcp_catalog.is_enabled(entry.id):
         return ConnectorCatalogStatus.not_connected
     if pending_reauth_reason(entry.id):
         return ConnectorCatalogStatus.needs_reconnect
     return ConnectorCatalogStatus.connected
+
+
+def _oauth_client_call(params_model, action):
+    def handler(rid, params):
+        from pydantic import ValidationError
+        from tui_gateway import oauth_client_rpc as rpc
+        try:
+            request = params_model.model_validate(params)
+        except ValidationError:
+            return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "slug is required.")
+        try:
+            return _ok(rid, action(rpc, request).model_dump(mode="json"))
+        except rpc.OAuthClientRpcError as exc:
+            return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
+    return handler
+
+
+@method("connectors.oauth_client.setup")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.connectors import OAuthClientSlugParams
+    return _oauth_client_call(OAuthClientSlugParams, lambda rpc, request: rpc.setup(request.slug))(rid, params)
+
+
+@method("connectors.oauth_client.save")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.connectors import OAuthClientSaveParams
+    return _oauth_client_call(OAuthClientSaveParams, lambda rpc, request: rpc.save(request))(rid, params)
+
+
+@method("connectors.oauth_client.connect")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.connectors import OAuthClientConnectParams
+    return _oauth_client_call(OAuthClientConnectParams, lambda rpc, request: rpc.connect(request))(rid, params)
+
+
+@method("connectors.oauth_client.remove")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.connectors import OAuthClientSlugParams
+    return _oauth_client_call(OAuthClientSlugParams, lambda rpc, request: rpc.remove(request.slug))(rid, params)
 
 
 @method("connectors.legacy")

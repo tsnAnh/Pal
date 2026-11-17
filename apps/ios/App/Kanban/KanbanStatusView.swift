@@ -3,14 +3,6 @@ import PalTransport
 import SwiftUI
 
 extension ChatStatusCopy {
-    init(symbol: String, title: String, reason: String, code: String) {
-        self.symbol = symbol
-        self.title = title
-        self.reason = reason
-        self.code = code
-        fault = nil
-    }
-
     static func boardsFailure(_ load: KanbanLoad, code: String?) -> ChatStatusCopy {
         let unverified = code == "boards_unverified"
         return ChatStatusCopy(

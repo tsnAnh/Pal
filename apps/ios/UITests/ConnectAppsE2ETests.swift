@@ -4,12 +4,12 @@ import XCTest
 
 @MainActor
 class ConnectAppsTestCase: E2ETestCase {
-    func launchConnectApps() -> XCUIApplication {
+    func launchConnectApps(extraArguments: [String] = []) -> XCUIApplication {
         let app = launch(extraArguments: [
             "-hermes-open-connect-apps",
             "-hermes-record-external-links",
             "-\(AppearanceStore.defaultsKey)", AppearanceMode.dark.rawValue,
-        ])
+        ] + extraArguments)
         if !sheet(app).waitForExistence(timeout: 25) { signInIfNeeded(app) }
         waitFor(sheet(app), timeout: 30, "connect apps sheet")
         return app
@@ -71,6 +71,17 @@ class ConnectAppsTestCase: E2ETestCase {
     func assistantReply(_ app: XCUIApplication, containing text: String, timeout: TimeInterval = 90) {
         waitFor(bubbles(app, "assistantBubble", containing: text).firstMatch, timeout: timeout, "assistant reply containing '\(text)'")
     }
+    func search(_ app: XCUIApplication, _ text: String) {
+        let field = app.descendants(matching: .any)["connectAppsSearch"]
+        for _ in 0..<20 where !field.isHittable { app.swipeDown() }
+        field.hit()
+        field.typeText(text)
+    }
+
+    func action(_ app: XCUIApplication, _ slug: String) -> XCUIElement {
+        app.buttons["connectApp-connector:\(slug)-action"]
+    }
+
 }
 
 @MainActor
@@ -144,17 +155,6 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         waitFor(app.buttons["customConnectorBackButton"], timeout: 10, "custom connector form opens")
     }
 
-    private func search(_ app: XCUIApplication, _ text: String) {
-        let field = app.descendants(matching: .any)["connectAppsSearch"]
-        for _ in 0..<20 where !field.isHittable { app.swipeDown() }
-        field.hit()
-        field.typeText(text)
-    }
-
-    private func action(_ app: XCUIApplication, _ slug: String) -> XCUIElement {
-        app.buttons["connectApp-connector:\(slug)-action"]
-    }
-
     func test3AnAppWithNoSignInConnectsDirectlyAndDisconnects() throws {
         let app = launchConnectApps()
         waitForCatalog(app)
@@ -173,15 +173,16 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         waitLabel(connect, contains: "Connect")
     }
 
-    func test4AnAppThatNeedsSetupOffersNoDeadEndAction() throws {
+    func test4AnAppThatNeedsSetupOffersTheSetUpSheetWithNoPortalCopy() throws {
         let app = launchConnectApps()
         waitForCatalog(app)
         search(app, "Asana")
         let row = app.descendants(matching: .any)["connectApp-connector:asana"]
         waitFor(row, timeout: 30, "Asana row")
-        XCTAssertTrue(app.staticTexts["Needs setup on your Pal before it can connect."].exists)
-        XCTAssertFalse(action(app, "asana").exists, "no action on a row that needs setup")
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
+        let setUp = action(app, "asana")
+        waitFor(setUp, timeout: 10, "Asana set up action")
+        XCTAssertEqual(setUp.label, "Set up")
     }
 
     func test5AnOAuthAppStartsSignInThroughTheSystemBrowserAndLeavesNothingBehindWhenCancelled() throws {

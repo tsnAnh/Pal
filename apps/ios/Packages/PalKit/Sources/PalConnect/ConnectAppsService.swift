@@ -13,11 +13,20 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     case cancelled
     case credentialsRequired([String])
     case signInFailed(String)
+    case oauthClient(OAuthClientFailure, GatewayFault? = nil)
     case failed
     case faulted(GatewayFault)
 
     public var fault: GatewayFault? {
-        if case .faulted(let fault) = self { return fault }
+        switch self {
+        case .faulted(let fault): fault
+        case .oauthClient(_, let fault): fault
+        default: nil
+        }
+    }
+
+    public var oauthClientFailure: OAuthClientFailure? {
+        if case .oauthClient(let failure, _) = self { return failure }
         return nil
     }
 }
@@ -25,10 +34,12 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
 public struct ConnectAppsTiming: Sendable {
     public var pollInterval: Duration
     public var pollAttempts: Int
+    public var consentAttempts: Int
 
-    public init(pollInterval: Duration = .seconds(1), pollAttempts: Int = 40) {
+    public init(pollInterval: Duration = .seconds(1), pollAttempts: Int = 40, consentAttempts: Int = 300) {
         self.pollInterval = pollInterval
         self.pollAttempts = pollAttempts
+        self.consentAttempts = consentAttempts
     }
 
     public static let standard = ConnectAppsTiming()
@@ -37,7 +48,7 @@ public struct ConnectAppsTiming: Sendable {
 public struct ConnectAppsService: Sendable {
     let rpc: any ConnectRPC
     let profile: String?
-    private let browser: any AuthorizationBrowser
+    let browser: any AuthorizationBrowser
     let systemBrowser: any AuthorizationBrowser
     let timing: ConnectAppsTiming
     let diagnostics: Diagnostics
@@ -89,11 +100,10 @@ public struct ConnectAppsService: Sendable {
         async let presets = attempt { try decodeList(await call("mcp.catalog"), key: "servers", as: McpPresetEntry.self) }
         async let skills = attempt { InstalledSkill.parse(try await call("skills.manage", ["action": "list"])) }
         async let servers = attempt { try decodeList(await call("mcp.servers.list"), key: "servers", as: McpServerEntry.self) }
-        async let google = attempt { try await GoogleWorkspaceService(rpc: rpc, diagnostics: diagnostics).status() }
-        let (entriesResult, presetsResult, skillsResult, serversResult, googleResult) = await (entries, presets, skills, servers, google)
+        let (entriesResult, presetsResult, skillsResult, serversResult) = await (entries, presets, skills, servers)
         if entriesResult == nil, presetsResult == nil { throw ConnectAppsError.unavailable }
         return ConnectCatalog.make(
-            catalog: entriesResult ?? [], mcp: presetsResult ?? [], skills: skillsResult ?? [], servers: serversResult ?? [], google: googleResult
+            catalog: entriesResult ?? [], mcp: presetsResult ?? [], skills: skillsResult ?? [], servers: serversResult ?? []
         )
     }
 
@@ -109,7 +119,7 @@ public struct ConnectAppsService: Sendable {
         }
     }
 
-    private func decodeList<T: Decodable & Sendable>(_ value: JSONValue, key: String, as type: T.Type) throws -> [T] {
+    func decodeList<T: Decodable & Sendable>(_ value: JSONValue, key: String, as type: T.Type) throws -> [T] {
         guard let rows = value[key]?.arrayValue else { throw ConnectAppsError.failed }
         return rows.compactMap { try? $0.decoded(as: T.self) }
     }
@@ -127,6 +137,7 @@ public struct ConnectAppsService: Sendable {
 
     public func disconnect(_ app: ConnectApp) async throws {
         switch app.source {
+        case .catalog(let entry) where entry.method == .oauthClient: try await removeOAuthClientSignIn(slug: entry.slug)
         case .catalog(let entry): _ = try await call("mcp.servers.remove", ["name": .string(entry.slug)])
         case .mcp(let name, _): _ = try await call("mcp.servers.remove", ["name": .string(name)])
         case .custom(let info): _ = try await call("mcp.servers.remove", ["name": .string(info.name)])
@@ -149,7 +160,12 @@ public struct ConnectAppsService: Sendable {
         case .apiKey:
             guard let token = credentials["token"], !token.isEmpty else { throw ConnectAppsError.credentialsRequired(["token"]) }
             try await storeCatalogToken(entry, token: token)
-        case .native, .oauthClient: throw ConnectAppsError.unavailable
+        case .native: throw ConnectAppsError.unavailable
+        case .oauthClient:
+            if case .paste(let session) = try await connectOAuthClient(entry, route: .loopback) {
+                await session.cancel()
+                throw ConnectAppsError.unavailable
+            }
         }
     }
 
@@ -207,15 +223,24 @@ public struct ConnectAppsService: Sendable {
         return nil
     }
 
-    func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil) async throws {
-        let listener: LoopbackRedirectListener
+    func startLoopback(port: UInt16? = nil, host: String = "127.0.0.1") async throws -> LoopbackRedirectListener {
         do {
-            listener = try await LoopbackRedirectListener.start(diagnostics: diagnostics)
+            return try await LoopbackRedirectListener.start(fixedPort: port, redirectHost: host, diagnostics: diagnostics)
         } catch {
             throw ConnectAppsError.signInFailed(McpOAuthError.from(error).reason)
         }
+    }
+
+    func authorizeMcp(name: String, browser: any AuthorizationBrowser, clientID: String? = nil) async throws {
+        let listener = try await startLoopback()
         defer { listener.cancel() }
         let (flow, link) = try await startOAuth(name: name, redirectURI: listener.redirectURI, clientID: clientID)
+        try await completeLoopback(name: name, flow: flow, link: link, listener: listener, browser: browser)
+    }
+
+    func completeLoopback(
+        name: String, flow: String, link: URL, listener: LoopbackRedirectListener, browser: any AuthorizationBrowser
+    ) async throws {
         let parameters: [String: String]
         do {
             parameters = try await Self.awaitRedirect(listener: listener, browser: browser, url: link)

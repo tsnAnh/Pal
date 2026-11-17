@@ -41,6 +41,11 @@ class ConnectorErrorReason(WireEnum):
     org_access_denied = "ORG_ACCESS_DENIED"
     invalid_policy = "INVALID_POLICY"
     alias_taken = "ALIAS_TAKEN"
+    needs_setup = "NEEDS_SETUP"
+    needs_public_url = "NEEDS_PUBLIC_URL"
+    invalid_client = "INVALID_CLIENT"
+    client_unreadable = "CLIENT_UNREADABLE"
+    connect_failed = "CONNECT_FAILED"
 
 
 class ConnectorsListParams(ProfileParams):
@@ -173,6 +178,7 @@ class ConnectorCatalogRow(Result):
     verified: bool | None = None
     mcp_url: str | None = None
     status: ConnectorCatalogStatus | None = None
+    notes: str | None = None
 
 
 class ConnectorsCatalogResult(Result):
@@ -186,6 +192,70 @@ method(
     params=ProfileParams,
     result=ConnectorsCatalogResult,
     doc="The Pal-owned connector catalog with each entry's direct connection status for the scoped profile.",
+)
+
+
+class OAuthClientSlugParams(ProfileParams):
+    slug: str
+
+
+class OAuthClientSaveParams(OAuthClientSlugParams):
+    client_id_item: str
+    client_secret_item: str
+
+
+class OAuthClientConnectParams(OAuthClientSlugParams):
+    client_redirect_uri: str | None = None
+
+
+class OAuthClientSetupResult(Result):
+    slug: str
+    configured: bool
+    console_url: str
+    redirect_url: str | None
+
+
+class OAuthClientConnectResult(Result):
+    slug: str
+    auth_url: str
+    session_id: str | None
+
+
+class OAuthClientRemoveResult(Result):
+    slug: str
+    removed: bool
+
+
+method(
+    "connectors.oauth_client.setup",
+    params=OAuthClientSlugParams,
+    result=OAuthClientSetupResult,
+    doc="Whether the owner's OAuth client for an oauth_client catalog entry is saved, the console page to "
+        "register it on and the redirect URL to register; redirect_url is null until the gateway has a public https address.",
+)
+
+method(
+    "connectors.oauth_client.save",
+    params=OAuthClientSaveParams,
+    result=OAuthClientSetupResult,
+    doc="Owner only. Save the OAuth client once for every profile and device: both values are Vault item ids "
+        "the app wrote with vault.add.",
+)
+
+method(
+    "connectors.oauth_client.connect",
+    params=OAuthClientConnectParams,
+    result=OAuthClientConnectResult,
+    doc="Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through "
+        "mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the "
+        "gateway and the app polls connectors.catalog.",
+)
+
+method(
+    "connectors.oauth_client.remove",
+    params=OAuthClientSlugParams,
+    result=OAuthClientRemoveResult,
+    doc="Remove the scoped profile's sign-in. The owner's saved OAuth client stays.",
 )
 
 

@@ -37,6 +37,7 @@ class PalConnector:
     oauth: OAuthEndpoints | None = None
     scopes: tuple[str, ...] = ()
     replaces_portal_slug: str | None = None
+    notes: str | None = None
 
 
 class PalCatalogError(ValueError):
@@ -44,7 +45,7 @@ class PalCatalogError(ValueError):
 
 
 _REQUIRED = ("id", "name", "icon", "category", "method", "verified", "source")
-_OPTIONAL = ("mcp_url", "oauth", "scopes", "replaces_portal_slug")
+_OPTIONAL = ("mcp_url", "oauth", "scopes", "replaces_portal_slug", "notes")
 
 
 def _https(value: object, field: str, cid: str) -> str:
@@ -84,7 +85,7 @@ def _parse_entry(raw: object) -> PalConnector:
     return PalConnector(
         id=raw["id"], name=raw["name"], icon=raw["icon"], category=raw["category"], method=method,
         verified=raw["verified"], source=_https(raw["source"], "source", cid), mcp_url=mcp_url, oauth=oauth,
-        scopes=tuple(scopes), replaces_portal_slug=raw.get("replaces_portal_slug"),
+        scopes=tuple(scopes), replaces_portal_slug=raw.get("replaces_portal_slug"), notes=raw.get("notes"),
     )
 
 

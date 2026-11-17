@@ -1087,6 +1087,78 @@
       }
     },
     {
+      "name": "connectors.oauth_client.connect",
+      "summary": "Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/OAuthClientConnectParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/OAuthClientConnectResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.oauth_client.remove",
+      "summary": "Remove the scoped profile's sign-in. The owner's saved OAuth client stays.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/OAuthClientSlugParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/OAuthClientRemoveResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.oauth_client.save",
+      "summary": "Owner only. Save the OAuth client once for every profile and device: both values are Vault item ids the app wrote with vault.add.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/OAuthClientSaveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/OAuthClientSetupResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.oauth_client.setup",
+      "summary": "Whether the owner's OAuth client for an oauth_client catalog entry is saved, the console page to register it on and the redirect URL to register; redirect_url is null until the gateway has a public https address.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/OAuthClientSlugParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/OAuthClientSetupResult"
+        }
+      }
+    },
+    {
       "name": "connectors.operation.status",
       "summary": "The current snapshot of one open session or account operation.",
       "params": [
@@ -19949,6 +20021,18 @@
               }
             ],
             "default": null
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Notes"
           }
         },
         "required": [
@@ -37939,6 +38023,192 @@
           "kind"
         ],
         "title": "NotificationShowPayload",
+        "type": "object"
+      },
+      "OAuthClientConnectParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "client_redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Client Redirect Uri"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "OAuthClientConnectParams",
+        "type": "object"
+      },
+      "OAuthClientConnectResult": {
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "auth_url": {
+            "title": "Auth Url",
+            "type": "string"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          }
+        },
+        "required": [
+          "slug",
+          "auth_url",
+          "session_id"
+        ],
+        "title": "OAuthClientConnectResult",
+        "type": "object"
+      },
+      "OAuthClientRemoveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "removed": {
+            "title": "Removed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "slug",
+          "removed"
+        ],
+        "title": "OAuthClientRemoveResult",
+        "type": "object"
+      },
+      "OAuthClientSaveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "client_id_item": {
+            "title": "Client Id Item",
+            "type": "string"
+          },
+          "client_secret_item": {
+            "title": "Client Secret Item",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug",
+          "client_id_item",
+          "client_secret_item"
+        ],
+        "title": "OAuthClientSaveParams",
+        "type": "object"
+      },
+      "OAuthClientSetupResult": {
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "console_url": {
+            "title": "Console Url",
+            "type": "string"
+          },
+          "redirect_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Url"
+          }
+        },
+        "required": [
+          "slug",
+          "configured",
+          "console_url",
+          "redirect_url"
+        ],
+        "title": "OAuthClientSetupResult",
+        "type": "object"
+      },
+      "OAuthClientSlugParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "OAuthClientSlugParams",
         "type": "object"
       },
       "OkResult": {
@@ -64541,7 +64811,12 @@
           "ORG_REQUIRED",
           "ORG_ACCESS_DENIED",
           "INVALID_POLICY",
-          "ALIAS_TAKEN"
+          "ALIAS_TAKEN",
+          "NEEDS_SETUP",
+          "NEEDS_PUBLIC_URL",
+          "INVALID_CLIENT",
+          "CLIENT_UNREADABLE",
+          "CONNECT_FAILED"
         ]
       }
     }

@@ -11,33 +11,44 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
     private let listener: NWListener
     private let diagnostics: Diagnostics
     private let expectedState: String?
+    private let redirectHost: String
     private var outcome: Result<[String: String], SignInError>?
     private var waiter: CheckedContinuation<[String: String], any Error>?
     private var finished = false
 
-    public var redirectURI: String { "http://127.0.0.1:\(port)\(Self.callbackPath)" }
+    public var redirectURI: String { "http://\(redirectHost):\(port)\(Self.callbackPath)" }
 
-    private init(listener: NWListener, diagnostics: Diagnostics, expectedState: String?) {
+    private init(listener: NWListener, diagnostics: Diagnostics, expectedState: String?, redirectHost: String) {
         self.listener = listener
         self.diagnostics = diagnostics
         self.expectedState = expectedState
+        self.redirectHost = redirectHost
     }
 
     public static func start(
         timeout: Duration = .seconds(300),
         expectedState: String? = nil,
+        fixedPort: UInt16? = nil,
+        redirectHost: String = "127.0.0.1",
         diagnostics: Diagnostics = .silent
     ) async throws -> LoopbackRedirectListener {
         let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
-        parameters.allowLocalEndpointReuse = false
+        var endpointPort = NWEndpoint.Port.any
+        if let fixedPort {
+            guard let pinned = NWEndpoint.Port(rawValue: fixedPort) else { throw SignInError.listenerFailed }
+            endpointPort = pinned
+        }
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: endpointPort)
+        parameters.allowLocalEndpointReuse = fixedPort != nil
         let nwListener: NWListener
         do {
             nwListener = try NWListener(using: parameters)
         } catch {
             throw SignInError.listenerFailed
         }
-        let instance = LoopbackRedirectListener(listener: nwListener, diagnostics: diagnostics, expectedState: expectedState)
+        let instance = LoopbackRedirectListener(
+            listener: nwListener, diagnostics: diagnostics, expectedState: expectedState, redirectHost: redirectHost
+        )
         try await instance.begin(timeout: timeout)
         diagnostics.info("loopback", "listening on 127.0.0.1:\(instance.port)")
         return instance
@@ -150,7 +161,7 @@ public final class LoopbackRedirectListener: @unchecked Sendable {
             reply(on: connection, status: "410 Gone", body: Self.page("This sign-in link was already used."), then: nil)
             return
         }
-        guard let request = Self.parse(head: head, expectedHost: "127.0.0.1:\(port)") else {
+        guard let request = Self.parse(head: head, expectedHost: "\(redirectHost):\(port)") else {
             reply(on: connection, status: "404 Not Found", body: Self.page("Not found."), then: nil)
             return
         }

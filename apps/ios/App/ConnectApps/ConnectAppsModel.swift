@@ -95,7 +95,7 @@ final class ConnectAppsModel {
     var disconnectTarget: ConnectDisconnectTarget?
     var showsSkills = false
     var upworkApp: ConnectApp?
-    var googleApp: ConnectApp?
+    var oauthClientSheet: OAuthClientSheetModel?
     let google: GoogleWorkspaceModel
     var pasteSession: (any McpPasteSigning)?
     var pastingApp: ConnectApp?
@@ -128,7 +128,7 @@ final class ConnectAppsModel {
         self.bots = bots
         self.currentBot = currentBot
         let connectService = ConnectAppsService(
-            rpc: ConnectionRPC(model: connection), profile: profile, browser: browser,
+            rpc: OAuthClientScript.wrap(ConnectionRPC(model: connection)), profile: profile, browser: OAuthClientScript.browser(browser),
             systemBrowser: SystemBrowserAuthorization(), nativeSignIn: UpworkSignIn.native(connection: connection), diagnostics: .osLog()
         )
         service = connectService
@@ -271,7 +271,7 @@ final class ConnectAppsModel {
             if app.requiresAppSignIn { failures[app.id] = McpOAuthError.cancelled.reason }
         case .signInFailed(let reason): failures[app.id] = reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
-        case .unavailable, .failed, .faulted: fail(app, "Couldn't connect \(app.name). Try again.")
+        case .unavailable, .failed, .faulted, .oauthClient: fail(app, "Couldn't connect \(app.name). Try again.")
         }
     }
 

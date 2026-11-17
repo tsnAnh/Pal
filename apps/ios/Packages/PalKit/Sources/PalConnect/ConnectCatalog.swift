@@ -25,10 +25,11 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
     public var verified: Bool
     public var mcpURL: URL?
     public var status: Status
+    public var notes: String?
 
     public init(
         slug: String, name: String, category: String = "", icon: String = "", method: Method,
-        verified: Bool = false, mcpURL: URL? = nil, status: Status = .notConnected
+        verified: Bool = false, mcpURL: URL? = nil, status: Status = .notConnected, notes: String? = nil
     ) {
         self.slug = slug
         self.name = name
@@ -38,10 +39,11 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         self.verified = verified
         self.mcpURL = mcpURL
         self.status = status
+        self.notes = notes
     }
 
     enum CodingKeys: String, CodingKey {
-        case slug, name, category, icon, method, verified, status
+        case slug, name, category, icon, method, verified, status, notes
         case mcpURL = "mcp_url"
     }
 
@@ -54,6 +56,7 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         method = try container.decode(Method.self, forKey: .method)
         verified = try container.decodeIfPresent(Bool.self, forKey: .verified) ?? false
         status = try container.decode(Status.self, forKey: .status)
+        notes = ConnectorCardState.cleaned(try container.decodeIfPresent(String.self, forKey: .notes))
         mcpURL = (try container.decodeIfPresent(String.self, forKey: .mcpURL)).flatMap { URL(string: $0) }.flatMap(Self.secure)
     }
 
@@ -228,10 +231,9 @@ public struct ConnectCatalog: Sendable, Equatable {
     ) -> ConnectCatalog {
         let catalogSlugs = Set(catalog.map(\.slug))
         let ownedElsewhere = Set(catalog.filter { $0.method == .native }.map(\.slug))
-        var apps = catalog.filter { $0.method != .native && $0.slug != ServiceKind.google.connectorSlug }.map { entry in
+        var apps = catalog.filter { $0.method != .native }.map { entry in
             ConnectApp(
-                id: "connector:\(entry.slug)", name: entry.name,
-                summary: entry.status == .needsSetup ? String(localized: "Needs setup on your Pal before it can connect.") : "",
+                id: "connector:\(entry.slug)", name: entry.name, summary: summary(for: entry),
                 category: entry.category.isEmpty ? otherCategory : entry.category,
                 source: .catalog(entry), state: entry.appState
             )
@@ -266,6 +268,14 @@ public struct ConnectCatalog: Sendable, Equatable {
         }
         apps.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         return ConnectCatalog(apps: apps, skills: skills)
+    }
+
+    static func summary(for entry: PalCatalogEntry) -> String {
+        if entry.method == .oauthClient {
+            if let notes = entry.notes { return notes }
+            return entry.status == .needsSetup ? String(localized: "Save your OAuth client once to connect.") : ""
+        }
+        return entry.status == .needsSetup ? String(localized: "Needs setup on your Pal before it can connect.") : ""
     }
 
     static func mcpState(_ preset: McpPresetEntry) -> ConnectAppState {

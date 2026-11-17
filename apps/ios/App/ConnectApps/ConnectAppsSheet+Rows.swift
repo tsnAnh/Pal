@@ -175,23 +175,10 @@ extension ConnectAppsSheet {
         ) { icon(for: app) }
     }
 
-    func googleRow(_ listed: ConnectApp) -> some View {
-        let app = model.googleRow(listed)
-        return ConnectAppRow(
-            title: app.name, summary: GoogleWorkspaceText.summary(app), accessibilityIdentifier: "connectApp-\(app.id)",
-            isBusy: model.google.isSigningIn, status: ConnectAppStatus(app.state).row, inset: Self.cardInset,
-            trailing: ConnectRowAction(
-                GoogleWorkspaceText.actionTitle(app.state), kind: app.state == .needsAuthorization ? .accent : .neutral
-            ) { model.googleApp = app }
-        ) { icon(for: app) }
-    }
-
     @ViewBuilder
     func appRow(_ app: ConnectApp) -> some View {
         if app.requiresAppSignIn {
             upworkRow(app)
-        } else if app.source == .googleWorkspace {
-            googleRow(app)
         } else {
             plainRow(app)
         }
@@ -200,6 +187,10 @@ extension ConnectAppsSheet {
     func plainRow(_ app: ConnectApp) -> some View {
         let action: ConnectRowAction? = if case .custom = app.source {
             ConnectRowAction("Manage") { model.manage(app) }
+        } else if app.oauthClientEntry != nil {
+            ConnectRowAction(OAuthClientCardText.actionTitle(app.state), kind: OAuthClientCardText.prominent(app.state) ? .accent : .neutral) {
+                model.oauthClientAction(app)
+            }
         } else {
             switch app.state {
             case .disconnected: ConnectRowAction(OtherConnectorCardText.connectTitle(model.cardState(app))) { Task { await model.connect(app) } }
