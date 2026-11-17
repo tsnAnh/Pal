@@ -31,6 +31,7 @@ class Gateway:
     def __init__(self, provider: ci.ChatProvider, store: MemorySetupStore):
         self.provider, self.store = provider, store
         self.vault = {"vault-config": FAKE_TOKEN}
+        self.config_item = "vault-config"
         self.caps = provider.capabilities()
 
     def state(self, bot: str, workspace: str) -> wire.SetupState:
@@ -40,7 +41,7 @@ class Gateway:
     def send(self, bot: str, workspace: str, kind: wire.SetupEventKind, **extra) -> wire.SetupState:
         state = self.state(bot, workspace)
         if kind is wire.SetupEventKind.app_created and ci.needs_app_creation(state):
-            created = self.provider.begin_install(state, "vault-config")
+            created = self.provider.begin_install(state, self.config_item)
             extra |= {"app_id": created.app_id, "authorize_link": created.authorize_link}
         if kind is wire.SetupEventKind.manual_step_done and state.step is wire.SetupStep.needs_manual_step:
             extra.setdefault("manual_step", wire.ProviderCapability(state.next_action.action_id))
