@@ -40,6 +40,10 @@ class SlackRecords:
         with self._lock:
             return dict(self._read()["apps"].get(f"{bot}|{workspace}", {}))
 
+    def apps_for(self, bot: str) -> list[dict[str, Any]]:
+        with self._lock:
+            return [dict(record) for key, record in self._read()["apps"].items() if key.split("|", 1)[0] == bot]
+
     def update_app(self, bot: str, workspace: str, **changes: Any) -> None:
         with self.edit() as data:
             data["apps"].setdefault(f"{bot}|{workspace}", {"workspace": workspace}).update(changes)
