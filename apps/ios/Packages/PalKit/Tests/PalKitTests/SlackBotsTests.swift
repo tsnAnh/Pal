@@ -96,7 +96,10 @@ struct SlackBotsTests {
         await broken.failStatus(.faulted(.offline, fault))
         let bots = model([("pal", broken)])
         await bots.load()
-        guard case .failed(let error) = bots.phase else { return Issue.record("expected a failed phase") }
+        guard case .failed(let error) = bots.phase else {
+            Issue.record("expected a failed phase")
+            return
+        }
         #expect(error.fault == fault)
     }
 
