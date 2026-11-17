@@ -9,6 +9,7 @@ DNS-rebinding Host check and gate decision. ``hermes_cli.web_server`` and
 
 import os
 import re
+import time
 import urllib.parse
 from typing import Optional
 
@@ -45,6 +46,42 @@ def public_url_hosts(public_url: str) -> frozenset[str]:
     except ValueError:
         hostname = None
     return frozenset({hostname.lower()}) if hostname else frozenset()
+
+
+_CALLBACK_HOSTS_TTL_SECONDS = 5.0
+_callback_hosts_cache: tuple[float, frozenset[str]] = (-_CALLBACK_HOSTS_TTL_SECONDS, frozenset())
+
+
+def callback_only_hosts() -> frozenset[str]:
+    """The host ``webapp.public_url`` names while the Webapp is off, else empty. Read per request through a
+    short cache, so saving the address reaches a running gateway without a restart."""
+    global _callback_hosts_cache
+    now = time.monotonic()
+    stamp, hosts = _callback_hosts_cache
+    if now - stamp < _CALLBACK_HOSTS_TTL_SECONDS:
+        return hosts
+    from gateway.webapp_listener import webapp_settings
+    from hermes_constants import get_hermes_home
+    settings = webapp_settings(get_hermes_home())
+    hosts = frozenset() if settings.enabled else public_url_hosts(settings.public_url)
+    _callback_hosts_cache = (now, hosts)
+    return hosts
+
+
+def is_callback_only_request(scope: dict, state) -> bool:
+    """A gateway-listener request for one exact OAuth callback route on the host ``webapp.public_url``
+    names while the Webapp is off. Matches the decoded path exactly (no trailing slash, no ``..``, no
+    doubled slash) and refuses any percent-encoded raw path, so an encoded ``/`` or ``.`` cannot reach a
+    callback by a spelling the router would decode."""
+    from hermes_cli.dashboard_auth.public_paths import OAUTH_CALLBACK_PATHS
+    if getattr(state, "gateway_runner", None) is None or scope.get("path") not in OAUTH_CALLBACK_PATHS:
+        return False
+    raw_path = scope.get("raw_path")
+    if raw_path is not None and raw_path.split(b"?", 1)[0] != scope["path"].encode():
+        return False
+    headers = dict(scope.get("headers") or ())
+    host = _host_header_hostname(headers.get(b"host", b"").decode("latin-1"))
+    return bool(host) and host in callback_only_hosts()
 
 
 def _host_header_hostname(host_header: str) -> str:

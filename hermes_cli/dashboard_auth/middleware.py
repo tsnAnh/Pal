@@ -30,7 +30,7 @@ from hermes_cli.dashboard_auth.cookies import (
     read_session_provider, read_sso_attempt_cookie, set_session_cookies,
     set_session_provider_cookie, set_sso_attempt_cookie)
 from hermes_cli.dashboard_auth.prefix import prefix_from_request
-from hermes_cli.dashboard_auth.public_paths import PUBLIC_API_PATHS
+from hermes_cli.dashboard_auth.public_paths import OAUTH_CALLBACK_PATHS, PUBLIC_API_PATHS
 from hermes_cli.dashboard_auth.refresh_singleflight import refresh_session_coalesced
 from hermes_cli.dashboard_auth.request_utils import (
     access_token_max_age as _expires_in_seconds, client_ip as _client_ip,
@@ -47,12 +47,9 @@ _GATE_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/api/auth/providers", "/api/mcp/oauth/callback/",
     # A saved gateway's sign-in redirect: its one-use state is the credential (gateway_connections_oauth).
     "/webapp/gateway-connections/oauth/callback",
-    # A chat provider's Allow redirect: its one-use state is the credential (gateway/chat_install_service.py).
-    "/webapp/chat-install/callback",
-    # An MCP server's sign-in redirect for the Pal app: its one-use state is the credential (tui_gateway/mcp_oauth_sessions.py).
-    "/webapp/mcp-oauth/callback",
-    # Google's sign-in redirect: its one-use state is the credential (gateway/oauth_client_setup.py).
-    "/webapp/google-install/callback",
+    # Chat provider, MCP server and Google redirects: each one-use state is the credential
+    # (gateway/chat_install_service.py, tui_gateway/mcp_oauth_sessions.py, gateway/oauth_client_setup.py).
+    *OAUTH_CALLBACK_PATHS,
     "/assets/", "/dashboard-plugins/", "/favicon.ico", "/ds-assets/", "/fonts/", "/fonts-terminal/")
 
 # Page icons, matched exactly. Browsers fetch them without cookies (the Webapp's page icon and
