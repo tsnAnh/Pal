@@ -88,6 +88,13 @@ struct KanbanFilterBar: View {
                 .hermesText(.chip)
                 .foregroundStyle(PalTokens.textPrimary)
                 .autocorrectionDisabled()
+                #if os(macOS)
+                .onKeyPress(.escape) {
+                    guard !filter.text.isEmpty else { return .ignored }
+                    filter.text = ""
+                    return .handled
+                }
+                #endif
                 .accessibilityLabel(Text("Search cards"))
                 .accessibilityIdentifier("kanbanSearch")
             if !filter.text.isEmpty {

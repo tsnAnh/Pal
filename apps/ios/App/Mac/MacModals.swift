@@ -37,7 +37,7 @@ struct MacModalHost: View {
                 } else if router.sheet == .kanban {
                     KanbanSurface(connection: connection, roster: roster, close: { router.dismissSheet() })
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.top, MacMetrics.topBarHeight)
+                        .padding(.top, MacMetrics.trafficLightCenter.y + MacMetrics.trafficLightPitch / 2)
                         .background(PalTokens.content)
                         .accessibilityElement(children: .contain)
                         .accessibilityIdentifier("kanbanPanel")

@@ -48,7 +48,6 @@ public enum SheetSurface: Sendable {
 }
 
 public struct SheetChrome<Trailing: View, Content: View>: View {
-    @Environment(\.colorScheme) private var colorScheme
     public let title: String?
     public let leading: SheetLeadingButton
     public let titleAlignment: SheetTitleAlignment
@@ -164,10 +163,14 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
             HStack(spacing: 0) {
                 Button(action: onLeading) {
                     Image(systemName: leading.systemName)
-                        .frame(width: 20, height: 20)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(PalTokens.textSecondary)
+                        .frame(width: 33, height: 33)
+                        .palGlass(Circle())
+                        .contentShape(Circle())
                 }
-                .buttonStyle(.glass(PalGlass.style(interactive: false, colorScheme: colorScheme)))
-                .buttonBorderShape(.circle)
+                .buttonStyle(.plain)
+                .keyboardShortcut(.cancelAction)
                 .accessibilityLabel(Text(leading.accessibilityLabel))
                 .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-\(leading.identifierSuffix)")
                 if let title, inlineTitle {

@@ -143,18 +143,17 @@ final class KanbanE2ETests: E2ETestCase {
         signInIfNeeded(app)
         let entry = app.buttons["kanbanButton"]
         waitFor(entry, timeout: 20, "work boards button")
+        let search = any(app, "rosterSearchField").frame
         entry.hit()
         openSeededBoard(app)
         waitFor(any(app, "kanbanBoard-title"), timeout: 20, "board header")
 
         let window = app.windows.firstMatch.frame
-        let titleBar = CGRect(x: window.minX, y: window.minY, width: window.width, height: 55)
-        let trafficLights = CGRect(x: window.minX, y: window.minY, width: 78, height: 35)
+        let trafficLights = CGRect(x: window.minX, y: window.minY, width: 78, height: 30)
         XCTAssertTrue(app.toolbars.buttons.count == 0, "Kanban puts nothing in the window toolbar")
         for identifier in ["kanbanBoard-close", "kanbanBoard-title", "kanbanBoardPicker", "kanbanFilterState"] {
             let element = any(app, identifier)
             XCTAssertTrue(element.exists, "\(identifier) is on screen")
-            XCTAssertFalse(element.frame.intersects(titleBar), "\(identifier) sits below the title bar")
             XCTAssertFalse(element.frame.intersects(trafficLights), "\(identifier) is clear of the traffic lights")
         }
         XCTAssertFalse(any(app, "kanbanTitle").exists, "the filter bar no longer repeats the title and board name")
@@ -168,10 +167,47 @@ final class KanbanE2ETests: E2ETestCase {
         XCTAssertEqual(picker.height, close.height, accuracy: 2, "the dropdown is as tall as the close button")
         XCTAssertLessThan(close.maxX, title.minX, "the title follows the close button")
         XCTAssertLessThan(title.maxX, picker.minX, "the dropdown sits right of the title")
-        XCTAssertLessThanOrEqual(close.minY - titleBar.maxY, 2, "no empty band above the header row")
+        XCTAssertEqual(close.minY - window.minY, 30.5, accuracy: 2, "the header row sits just below the traffic lights, with no empty band")
+        XCTAssertEqual(close.width, search.width, accuracy: 0.5, "the close button is the same size as the search button")
+        XCTAssertEqual(close.height, search.height, accuracy: 0.5, "the close button is the same height as the search button")
         let filter = any(app, "kanbanFilterState").frame
         XCTAssertGreaterThanOrEqual(filter.minY, close.maxY, "the filter bar starts below the header row")
         screenShot("kanban-mac-board-chrome")
+    }
+
+    func testEscapeClosesTopmostFirstThenKanban() throws {
+        try control("kanban-seed")
+        let app = launch()
+        signInIfNeeded(app)
+        let entry = app.buttons["kanbanButton"]
+        waitFor(entry, timeout: 20, "work boards button")
+        entry.hit()
+        openSeededBoard(app)
+        show(app, column: "ready")
+        let row = card(app, in: "ready")
+        waitFor(row, timeout: 20, "the card in Ready")
+
+        let search = any(app, "kanbanSearch")
+        search.hit()
+        search.typeText("zzz")
+        app.typeKey(.escape, modifierFlags: [])
+        XCTAssertEqual(search.value as? String ?? "", "", "Escape clears the search text first")
+        XCTAssertTrue(any(app, "kanbanBoard").exists, "Kanban stays open while the search had text")
+
+        row.hit()
+        waitFor(any(app, "kanbanBody"), timeout: 20, "card detail")
+        app.typeKey(.escape, modifierFlags: [])
+        waitFor(any(app, "kanbanBoard"), timeout: 20, "Escape closes the card first")
+        XCTAssertFalse(any(app, "kanbanBody").exists, "the card detail is gone")
+
+        app.typeKey(.escape, modifierFlags: [])
+        waitFor(entry, timeout: 20, "a second Escape closes Kanban")
+        XCTAssertFalse(any(app, "kanbanBoard").exists, "the board is gone")
+
+        entry.hit()
+        openSeededBoard(app)
+        app.typeKey(.escape, modifierFlags: [])
+        waitFor(entry, timeout: 20, "Escape closes Kanban from the board")
     }
     #endif
 }
