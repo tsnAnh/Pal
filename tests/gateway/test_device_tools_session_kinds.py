@@ -1,4 +1,5 @@
 import json
+import re
 from dataclasses import replace
 
 import pytest
@@ -34,8 +35,15 @@ def offered(authority, policy, session_id):
     from toolsets import session_disabled_toolsets
     enabled = policy_turn_toolsets(authority, policy, {}, session_id)
     disabled = session_disabled_toolsets(None, policy.platform, enabled=enabled)
-    tools = model_tools.get_tool_definitions(enabled_toolsets=enabled, disabled_toolsets=disabled, quiet_mode=True)
-    return {tool['function']['name'] for tool in tools or []} & DEVICE_TOOLS
+    kwargs = dict(enabled_toolsets=enabled, disabled_toolsets=disabled, quiet_mode=True)
+    raw = {tool['function']['name'] for tool in model_tools.get_tool_definitions(skip_tool_search_assembly=True, **kwargs) or []}
+    sent = model_tools.get_tool_definitions(**kwargs) or []
+    assert not DEVICE_TOOLS & {tool['function']['name'] for tool in sent}
+    description = next((t['function']['description'] for t in sent if t['function']['name'] == 'tool_search'), '')
+    listed = {name for name in DEVICE_TOOLS if re.search(rf'(?<![\w.]){name}(?=[,;:\s)]|$)', description)}
+    reachable = raw & DEVICE_TOOLS
+    assert listed >= reachable
+    return reachable
 
 
 def switch_mac(home, registered):

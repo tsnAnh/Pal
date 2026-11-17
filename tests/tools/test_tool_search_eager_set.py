@@ -106,6 +106,7 @@ def test_device_tools_follow_the_registered_device(services):
     assert not DEVICE_TOOLS & set(_names(toolsets, assembled=True))
     description = _description(toolsets)
     assert all(name in description for name in DEVICE_TOOLS)
+    assert description.index("devices_list") < description.index("device,")
     assert "devices_list" in _bridge("tool_search", {"queries": ["list devices"]}, toolsets)["tools"]
 
 

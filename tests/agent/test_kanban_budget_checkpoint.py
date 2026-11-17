@@ -29,6 +29,7 @@ def test_checkpoint_requires_opt_in_or_dispatcher_completion_scope(
         try:
             if scope == "no-completion-tool":
                 agent.valid_tool_names.discard("kanban_complete")
+                monkeypatch.setattr("agent.tool_executor._tool_search_scoped_names", lambda _agent: frozenset())
             for _ in range(3):
                 agent.iteration_budget.consume()
             messages = [{"role": "user", "content": "work"},

@@ -264,6 +264,10 @@ def hidden_declared_sources() -> list[dict[str, Any]]:
     return rows
 
 
+# ``devices_list`` yields the device names ``device`` needs, so the listing names it first.
+_LISTED_FIRST = frozenset({"devices_list"})
+
+
 def build_catalog_listing_with_form(
     deferrable: list[dict[str, Any]], *, max_tokens: int = 4000) -> tuple[Optional[str], str]:
     """Render the deferred-catalog manifest: ``- name: short desc`` lines grouped per source.
@@ -286,7 +290,7 @@ def build_catalog_listing_with_form(
 
     def render_group(label: str, mode: str) -> str:
         """Render one server's block. mode: 'full' | 'names' | 'summary'."""
-        tools = sorted(groups[label])
+        tools = sorted(groups[label], key=lambda t: (t[0] not in _LISTED_FIRST, t))
         if mode == "summary":
             return (f"{label} ({len(tools)} tools — names not listed; "
                     f"discover via `{TOOL_SEARCH_NAME}`)")

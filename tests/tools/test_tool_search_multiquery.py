@@ -447,17 +447,18 @@ class TestBatchedDescribe:
         assert "errors" not in result
 
     def test_registered_direct_surface_name_keeps_exact_error(self):
+        import model_tools
         from tools.tool_search import ToolSearchConfig, dispatch_tool_describe
 
-        name = "mq_desktop_direct_action"
-        tool_def = _register(name, "desktop_ui")
+        name = "read_file"
+        assert model_tools.registry.get_entry(name) is not None
         result = json.loads(dispatch_tool_describe(
             {"names": [name]},
-            current_tool_defs=[tool_def],
+            current_tool_defs=[_td(name, "Read a file.")],
             config=ToolSearchConfig.from_raw({}),
         ))
 
-        assert result["errors"][name]
+        assert "directly-listed tool" in result["errors"][name]
         assert name not in result.get("not_found", [])
 
     def test_registry_lookup_failure_is_not_found(self, monkeypatch):

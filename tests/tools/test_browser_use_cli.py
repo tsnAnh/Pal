@@ -143,7 +143,7 @@ class TestToolSurfaceSwap:
         import model_tools
 
         defs = model_tools.get_tool_definitions(
-            enabled_toolsets=["browser"], quiet_mode=False
+            enabled_toolsets=["browser"], quiet_mode=False, skip_tool_search_assembly=True
         )
         names = {t["function"]["name"] for t in defs}
         assert "browser_exec" not in names
@@ -156,7 +156,7 @@ class TestToolSurfaceSwap:
         import model_tools
 
         defs = model_tools.get_tool_definitions(
-            enabled_toolsets=["browser", "terminal"], quiet_mode=False
+            enabled_toolsets=["browser", "terminal"], quiet_mode=False, skip_tool_search_assembly=True
         )
         names = {t["function"]["name"] for t in defs}
         assert "browser_exec" in names
