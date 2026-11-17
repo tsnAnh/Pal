@@ -1,5 +1,7 @@
 import pytest
 
+import hermes_yaml as yaml
+
 from hermes_cli.pal_connectors import ConnectionMethod, PalCatalogError, load_pal_connectors
 
 OWNER_PICKS = frozenset({
@@ -10,14 +12,14 @@ OWNER_PICKS = frozenset({
     "linear", "atlassian", "clickup", "monday", "todoist", "notion", "airtable", "craft", "miro",
     "google-workspace", "dropbox", "figma", "canva", "gamma", "cloudinary", "comfy-cloud", "webflow", "wordpress-com",
     "stripe", "intercom", "calendly",
-    "slack", "clickhouse", "mintlify", "upwork",
+    "slack", "clickhouse", "mintlify", "upwork", "discord",
 })
 
 
 def test_shipped_catalog_is_exactly_the_owner_picks():
     ids = {e.id for e in load_pal_connectors()}
     assert ids == OWNER_PICKS
-    assert len(ids) == 50 and "discord" not in ids
+    assert len(ids) == 51
 
 
 def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():
@@ -35,6 +37,28 @@ def test_a_bot_app_entry_needs_no_endpoint_and_slack_is_one():
     assert entries["slack"].method is ConnectionMethod.BOT_APP
     assert entries["slack"].mcp_url is None and entries["slack"].oauth is None
     assert entries["slack"].category == "Communication" and entries["slack"].icon == "plugin_glyph"
+
+
+def test_discord_runs_the_pinned_stdio_server_with_the_token_only_as_a_template():
+    discord = {e.id: e for e in load_pal_connectors()}["discord"]
+
+    assert discord.method is ConnectionMethod.BOT_TOKEN_STDIO and discord.mcp_url is None
+    assert (discord.stdio.command, discord.stdio.args) == ("npx", ("-y", "@pasympa/discord-mcp@2.4.0"))
+    assert dict(discord.stdio.env) == {
+        "DISCORD_TOKEN": "${DISCORD_TOKEN}", "DISCORD_MCP_TOOLSETS": "discovery,messages", "DISCORD_GUILD_MEMBERS": "false"}
+    assert [s.kind for s in discord.setup.steps] == ["open_page", "paste", "open_page", "server_picker", "access"]
+
+
+@pytest.mark.parametrize("args", [["-y", "@pasympa/discord-mcp"], ["-y", "@pasympa/discord-mcp@latest"],
+                                  ["-y", "@pasympa/discord-mcp@^2.4.0"]])
+def test_a_stdio_recipe_without_an_exact_pinned_version_is_refused(tmp_path, args):
+    path = tmp_path / "catalog.yaml"
+    path.write_text(yaml.safe_dump({"version": 1, "connectors": [{
+        "id": "x", "name": "X", "icon": "plugin_glyph", "category": "Communication", "method": "bot_token_stdio",
+        "verified": True, "source": "https://example.com", "stdio": {"command": "npx", "args": args, "env": {}}}]}))
+
+    with pytest.raises(PalCatalogError, match="pinned"):
+        load_pal_connectors(path)
 
 
 def test_catalog_never_routes_through_portal_or_composio():

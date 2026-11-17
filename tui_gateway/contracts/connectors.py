@@ -171,12 +171,15 @@ class SetupStepKind(WireEnum):
     public_url = "public_url"
     open_page = "open_page"
     paste = "paste"
+    server_picker = "server_picker"
+    access = "access"
 
 
 class SetupCheckKind(WireEnum):
     google_client = "google_client"
     github_token = "github_token"
     canva_client = "canva_client"
+    discord_bot = "discord_bot"
 
 
 class SetupLinkRow(Result):
