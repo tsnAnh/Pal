@@ -133,6 +133,8 @@ Every former god file is a **facade** (public entry points + the names other pac
   `@pytest.mark.platforms(...)`, never by faking `sys.platform`; tests never write to `~/.hermes/`
   (more: `tests/AGENTS.md`).
 
+- **Swift:** `python scripts/check --only swift-lint` before every push.
+
 ## Routing Table — working in X → read X/AGENTS.md
 
 | Area | Read | Covers |

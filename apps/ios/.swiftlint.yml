@@ -1,0 +1,8 @@
+disabled_rules:
+  - identifier_name
+  - trailing_comma
+excluded:
+  - .build
+line_length:
+  warning: 160
+  error: 200
