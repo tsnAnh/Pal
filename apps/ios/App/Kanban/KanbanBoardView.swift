@@ -8,7 +8,6 @@ struct KanbanBoardView: View {
     let board: String
     let openCard: (String) -> Void
     let back: () -> Void
-    let close: (() -> Void)?
 
     @State private var filter = KanbanFilter()
     @State private var pagerColumn: KanbanColumn = .backlog
@@ -29,7 +28,7 @@ struct KanbanBoardView: View {
     }
 
     var body: some View {
-        KanbanPage(title: cache?.board?.name ?? board, identifier: "kanbanBoard", back: back, close: close, scrolls: cache == nil) {
+        KanbanPage(title: cache?.board?.name ?? board, identifier: "kanbanBoard", back: back, close: nil, scrolls: cache == nil) {
             content
         }
         .refreshable { await store.refreshSnapshot(board: board) }
