@@ -68,6 +68,7 @@ struct SetupGuideStepView: View {
         } else if let address = model.publicAddress {
             SetupCopyCard(label: String(localized: "Web address"), value: address, identifier: "setupGuideAddress")
         }
+        SetupAddressEditor(model: model)
     }
 
     private func copies(_ copies: [SetupCopy]) -> some View {

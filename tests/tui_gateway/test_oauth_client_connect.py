@@ -270,3 +270,30 @@ def test_remove_client_is_owner_only_and_the_default_keeps_the_client(root, publ
     finally:
         _connection_profile_home.reset(token)
     assert _ok("connectors.oauth_client.setup", slug="figma")["configured"] is True
+
+
+@pytest.mark.parametrize("slug", ["figma", "dropbox", "canva"])
+def test_mcp_clients_redirect_to_the_gateway_callback_and_fall_back_to_loopback(root, public_url, monkeypatch, slug):
+    started = {}
+
+    def fake_start(home, name, cfg, client_redirect_uri=None):
+        started.update(via="loopback", redirect=cfg["oauth"].get("redirect_uri"))
+        return {"session_id": "s1", "auth_url": "https://vendor.example/oauth", "flow": "pkce"}
+
+    def fake_gateway(home, name, cfg, redirect_uri):
+        started.update(via="gateway", redirect=redirect_uri, configured=cfg["oauth"]["redirect_uri"])
+        return {"session_id": "s1", "auth_url": "https://vendor.example/oauth", "flow": "pkce"}
+
+    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", fake_start)
+    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_gateway_flow", fake_gateway)
+    _save(slug, FIGMA_CLIENT_ID)
+
+    callback = PUBLIC_URL + "/webapp/mcp-oauth/callback"
+    assert _ok("connectors.oauth_client.setup", slug=slug)["redirect_url"] == callback
+    _ok("connectors.oauth_client.connect", slug=slug)
+    assert started == {"via": "gateway", "redirect": callback, "configured": callback}
+
+    public_url["url"] = None
+    assert _ok("connectors.oauth_client.setup", slug=slug)["redirect_url"] == setup_mod.MCP_REDIRECT_URL
+    _ok("connectors.oauth_client.connect", slug=slug)
+    assert started["via"] == "loopback"
