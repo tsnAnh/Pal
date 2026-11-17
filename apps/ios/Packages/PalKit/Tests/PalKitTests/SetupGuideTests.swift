@@ -94,6 +94,12 @@ struct SetupGuideWireTests {
         #expect(parsed.problem == nil && parsed.fallback == nil && parsed.title == "Address")
     }
 
+    @Test func theCanvaClientCheckKindDecodes() throws {
+        let canva = JSONValue.object(tokenStep.objectValue!.merging(["check": "canva_client"]) { _, new in new })
+        let step = try #require(try guided([canva]).decoded(as: PalCatalogEntry.self).setupGuide?.steps.first)
+        #expect(step.check == .canvaClient && step.kind == .paste)
+    }
+
     @Test func anUnknownCheckKindLeavesTheStepWithoutACheck() throws {
         var future = tokenStep
         future = .object(future.objectValue!.merging(["check": "future_check"]) { _, new in new })

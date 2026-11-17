@@ -46,6 +46,9 @@ def test_setup_guides_parse_with_ordered_steps_and_valid_shapes():
     for slug in ("figma", "dropbox"):
         assert guided[slug].method is ConnectionMethod.OAUTH_CLIENT and guided[slug].mcp_url and guided[slug].oauth
         assert all(s.check is None for s in guided[slug].setup.steps)
+    canva = guided["canva"]
+    assert canva.method is ConnectionMethod.OAUTH_CLIENT and canva.mcp_url == "https://api.canva.com/connect/v1/mcp"
+    assert [s.check for s in canva.setup.steps] == [None, "canva_client"]
 
 
 @pytest.mark.parametrize("step", [

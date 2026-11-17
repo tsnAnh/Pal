@@ -98,11 +98,44 @@ connectors:
   name: Canva
   icon: plugin_glyph
   category: Other
-  method: mcp_oauth
-  mcp_url: https://mcp.canva.com/mcp
+  method: oauth_client
+  mcp_url: https://api.canva.com/connect/v1/mcp
+  oauth:
+    authorization_url: https://www.canva.com/api/oauth/authorize
+    token_url: https://api.canva.com/rest/v1/oauth/token
+  scopes:
+  - design:content:read
+  - design:content:write
+  - design:meta:read
+  - asset:read
+  - asset:write
+  - brandtemplate:meta:read
+  - brandtemplate:content:read
+  - profile:read
   replaces_portal_slug: canva_mcp
-  verified: false
-  source: https://www.canva.dev/docs/mcp/
+  verified: true
+  source: https://www.canva.dev/docs/apps/mcp/
+  setup:
+    steps:
+    - id: app
+      kind: open_page
+      title: Create a Canva app
+      body: Create an app and choose who can use it, Anyone on Canva or your team on Enterprise. You can't change this
+        later. Under Configuration, copy the Client ID, press Generate secret and copy it right away, because Canva shows
+        it once. Under Redirect URLs, add the address below, then tick the scopes below.
+      links:
+      - {label: Open Canva developer portal, url: "https://www.canva.com/developers/apps"}
+      copies:
+      - {label: Redirect URL, value: "{mcp_redirect_url}"}
+      - {label: Scopes, value: "design:content:read design:content:write design:meta:read asset:read asset:write brandtemplate:meta:read brandtemplate:content:read profile:read"}
+    - id: client
+      kind: paste
+      title: Paste your client
+      body: Paste the Client ID and the secret Canva showed you. Pal checks them with Canva before saving.
+      fields:
+      - {id: client_id, label: Client ID, secret: false}
+      - {id: client_secret, label: Client secret, secret: true}
+      check: canva_client
 - id: circleci
   name: Circleci
   icon: plugin_glyph

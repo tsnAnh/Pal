@@ -220,6 +220,30 @@ final class SetupGuideE2ETests: ConnectAppsTestCase {
         )
     }
 
+    func test8CanvaGuidesTheAppRejectsTheClientThenSavesAndConnects() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
+        let button = openGuide(app, name: "Canva", slug: "canva", action: "Set up")
+        expectStep(app, "app", "1 of 2")
+        XCTAssertEqual(element(app, "setupGuideCopy-0Value").label, "https://pal.example.test/webapp/mcp-oauth/callback")
+        XCTAssertTrue(element(app, "setupGuideCopy-1Value").label.contains(":read"), "the scopes are ready to copy")
+        element(app, "setupGuideLink-0").hit()
+        openedLink(app, prefix: "https://www.canva.com/developers/apps")
+        next(app)
+        expectStep(app, "client", "2 of 2")
+        enter(app, "client_id", "fake-client-id")
+        enter(app, "client_secret", "rejected-secret-do-not-use")
+        submit(app).hit()
+        rejectOnce(app, code: "INVALID_CLIENT", shotName: "setup-guide-canva-rejected")
+        enter(app, "client_id", "fake-client-id")
+        enter(app, "client_secret", "fake-token-do-not-use")
+        submit(app).hit()
+        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
+        openedLink(app, prefix: "https://www.canva.com/api/oauth/authorize")
+        returnLoopbackRedirect(app)
+        waitLabel(button, contains: "Remove", timeout: 45)
+        shot(app, "setup-guide-canva-connected")
+    }
+
     func test7GoogleRefusesAnIPAddressAndOffersTheFallbacks() throws {
         let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client", "-hermes-test-oauth-client-ip-address"])
         _ = openGuide(app, name: "Google Workspace", slug: "google-workspace", action: "Set up")

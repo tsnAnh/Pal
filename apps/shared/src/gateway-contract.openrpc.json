@@ -55270,7 +55270,8 @@
         "enum": [
           "google_client",
           "github_token",
-          "slack_client"
+          "slack_client",
+          "canva_client"
         ],
         "title": "SetupCheckKind",
         "type": "string"

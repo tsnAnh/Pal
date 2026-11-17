@@ -153,6 +153,7 @@ public struct SetupStep: Decodable, Sendable, Hashable, Identifiable {
         case googleClient = "google_client"
         case githubToken = "github_token"
         case slackClient = "slack_client"
+        case canvaClient = "canva_client"
     }
 
     public var id: String

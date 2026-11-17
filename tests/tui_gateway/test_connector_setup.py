@@ -238,3 +238,30 @@ def test_google_console_step_carries_the_rejected_address_fallback(root, public_
     assert fallback["links"] and all(link["url"].startswith("https://") for link in fallback["links"])
     assert all(s["fallback"] is None for sid, s in steps.items() if sid != "console")
     assert _row("slack")["setup_guide"]["steps"][0]["fallback"] is None
+
+
+def test_canva_guide_copies_the_gateway_redirect_and_scopes(root, public_url):
+    app = _row("canva")["setup_guide"]["steps"][0]
+    assert app["copies"][0] == {"label": "Redirect URL", "value": f"{PUBLIC_URL}/webapp/mcp-oauth/callback"}
+    assert "profile:read" in app["copies"][1]["value"]
+    assert _row("canva")["setup_guide"]["steps"][1]["check"] == "canva_client"
+    public_url["url"] = None
+    assert [c["label"] for c in _row("canva")["setup_guide"]["steps"][0]["copies"]] == ["Scopes"]
+
+
+def test_canva_check_sends_the_public_redirect_and_never_leaks_the_secret(root, public_url, provider, caplog):
+    caplog.set_level(logging.DEBUG)
+    provider["handler"] = lambda _r: httpx.Response(400, json={"error": "invalid_grant"})
+    values = {"client_id": _item("OC-fake"), "client_secret": _item(SECRET)}
+
+    result = _ok("connectors.setup.check", slug="canva", values=values)
+
+    assert result == {"slug": "canva", "ok": True, "reason": None, "message": None, "account": None}
+    assert "mcp-oauth%2Fcallback" in provider["seen"][0].content.decode()
+    provider["handler"] = lambda _r: httpx.Response(401, json={"error": "invalid_client"})
+    rejected = _ok("connectors.setup.check", slug="canva", values=values)
+    assert rejected["ok"] is False and rejected["reason"] == "INVALID_CLIENT"
+    assert SECRET not in json.dumps([result, rejected]) + caplog.text
+    assert SECRET not in provider["seen"][0].headers["authorization"]
+    public_url["url"] = None
+    assert _ok("connectors.setup.check", slug="canva", values=values)["reason"] == "NEEDS_PUBLIC_URL"

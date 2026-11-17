@@ -19,6 +19,7 @@ enum OAuthClientScript {
         "slack": ("https://slack.com/oauth/v2_user/authorize", OAuthClientScript.slackSession),
         "figma": ("https://www.figma.com/oauth", "scripted-session-figma"),
         "dropbox": ("https://www.dropbox.com/oauth2/authorize", "scripted-session-dropbox"),
+        "canva": ("https://www.canva.com/api/oauth/authorize", "scripted-session-canva"),
     ]
 
     static var isActive: Bool { ProcessInfo.processInfo.arguments.contains(argument) }
@@ -50,7 +51,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private let ipAddress: Bool
     private var progress: [String: Progress] = [
         "asana": Progress(), "google-workspace": Progress(), "github": Progress(), "slack": Progress(), "figma": Progress(),
-        "dropbox": Progress(),
+        "dropbox": Progress(), "canva": Progress(),
     ]
     private var items = 0
     private var vault: [String: String] = [:]
@@ -132,7 +133,8 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
             "slug": "asana", "name": "Asana", "category": "Other", "icon": "plugin_glyph", "method": "oauth_client", "verified": true,
             "mcp_url": "https://mcp.asana.com/v2/mcp", "status": .string(status("asana")),
         ]
-        return ["connectors": .array(kept + [asana, googleRow(), githubRow(), slackRow(), mcpClientRow("figma"), mcpClientRow("dropbox")])]
+        let guided = ["figma", "dropbox", "canva"].map(mcpClientRow)
+        return ["connectors": .array(kept + [asana, googleRow(), githubRow(), slackRow()] + guided)]
     }
 
     private func googleRow() -> JSONValue {
@@ -168,11 +170,16 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
 
     private func mcpClientRow(_ slug: String) -> JSONValue {
         let saved = progress[slug]?.configured == true
-        let isFigma = slug == "figma"
+        let guides = [
+            "figma": ("Figma", ScriptedSetupGuides.figma(publicAddress: publicAddress)),
+            "dropbox": ("Dropbox", ScriptedSetupGuides.dropbox(publicAddress: publicAddress)),
+            "canva": ("Canva", ScriptedSetupGuides.canva(publicAddress: publicAddress)),
+        ]
+        let (name, guide) = guides[slug] ?? (slug, .null)
         return [
-            "slug": .string(slug), "name": .string(isFigma ? "Figma" : "Dropbox"), "category": "Other", "icon": "plugin_glyph",
+            "slug": .string(slug), "name": .string(name), "category": "Other", "icon": "plugin_glyph",
             "method": "oauth_client", "verified": true, "mcp_url": .string("https://mcp.\(slug).com/mcp"), "status": .string(status(slug)),
-            "setup_guide": isFigma ? ScriptedSetupGuides.figma(publicAddress: publicAddress) : ScriptedSetupGuides.dropbox(publicAddress: publicAddress),
+            "setup_guide": guide,
             "setup_progress": ScriptedSetupGuides.progress(saved ? "client" : "app", saved: saved ? ["client_id", "client_secret"] : []),
         ]
     }
@@ -183,6 +190,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         let consoles = [
             "asana": "https://app.asana.com/0/my-apps", "slack": "https://api.slack.com/apps",
             "figma": "https://www.figma.com/developers/apps", "dropbox": "https://www.dropbox.com/developers/console/apps",
+            "canva": "https://www.canva.com/developers/apps",
         ]
         let console = consoles[slug] ?? "https://console.cloud.google.com/apis/credentials"
         let redirect = loopback ? OAuthClientScript.asanaRedirect : (publicAddress ? OAuthClientScript.googleRedirect : nil)

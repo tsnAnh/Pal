@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import logging
 import secrets
 from dataclasses import dataclass
@@ -12,6 +13,7 @@ TIMEOUT_SECONDS = 10.0
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GITHUB_USER_URL = "https://api.github.com/user"
 SLACK_USER_TOKEN_URL = "https://slack.com/api/oauth.v2.user.access"
+CANVA_TOKEN_URL = "https://api.canva.com/rest/v1/oauth/token"
 
 default_transport: httpx.BaseTransport | None = None
 
@@ -19,7 +21,10 @@ FIELDS = {
     "google_client": ("client_id", "client_secret"),
     "github_token": ("token",),
     "slack_client": ("client_id", "client_secret"),
+    "canva_client": ("client_id", "client_secret"),
 }
+
+REDIRECT_TEMPLATE = {"canva_client": "mcp_redirect_url"}
 
 
 @dataclass(frozen=True)
@@ -82,15 +87,26 @@ def _slack(client: httpx.Client, values: dict[str, str], _redirect_url: str | No
     return UNAVAILABLE
 
 
-_CHECKS = {"google_client": _google, "github_token": _github, "slack_client": _slack}
+def _canva(client: httpx.Client, values: dict[str, str], redirect_url: str | None) -> CheckOutcome:
+    if not redirect_url:
+        return NEEDS_PUBLIC_URL
+    basic = base64.b64encode(f"{values['client_id']}:{values['client_secret']}".encode()).decode()
+    response = client.post(CANVA_TOKEN_URL, headers={"Authorization": f"Basic {basic}"}, data={
+        "grant_type": "authorization_code", "code": secrets.token_urlsafe(24),
+        "code_verifier": secrets.token_urlsafe(48), "redirect_uri": redirect_url})
+    if response.status_code == 400 and _json_object(response).get("error") == "invalid_grant":
+        return ACCEPTED
+    if response.status_code == 401:
+        return INVALID_CLIENT
+    return UNAVAILABLE
+
+
+_CHECKS = {"google_client": _google, "github_token": _github, "slack_client": _slack, "canva_client": _canva}
 
 
 def run_check(kind: str, values: dict[str, str], *, redirect_url: str | None = None,
               transport: httpx.BaseTransport | None = None) -> CheckOutcome:
-    """One provider call that proves pasted credentials work without completing a sign-in.
-
-    Only the failure reason and exception type are logged: the values are secrets.
-    """
+    # Only the failure reason and exception type are logged: the values are secrets.
     missing = [name for name in FIELDS[kind] if not values.get(name)]
     if missing:
         raise ValueError(f"missing {missing}")

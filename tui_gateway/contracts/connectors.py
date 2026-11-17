@@ -177,6 +177,7 @@ class SetupCheckKind(WireEnum):
     google_client = "google_client"
     github_token = "github_token"
     slack_client = "slack_client"
+    canva_client = "canva_client"
 
 
 class SetupLinkRow(Result):

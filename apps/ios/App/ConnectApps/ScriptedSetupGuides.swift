@@ -131,6 +131,22 @@ enum ScriptedSetupGuides {
         ]
     }
 
+    static func canva(publicAddress: Bool) -> JSONValue {
+        [
+            "steps": [
+                step(
+                    "app", "open_page", "Create a Canva app", body: "Create an app, then copy the Client ID and generate a secret right away.",
+                    links: [link("Open Canva developer portal", "https://www.canva.com/developers/apps")],
+                    copies: mcpCopies(publicAddress, redirect: "Redirect URL", scopes: "design:content:read profile:read")
+                ),
+                step(
+                    "client", "paste", "Paste your client", body: "Paste the Client ID and secret Canva showed you.",
+                    fields: clientFields, check: "canva_client"
+                ),
+            ],
+        ]
+    }
+
     private static func mcpCopies(_ publicAddress: Bool, redirect: String, scopes: String) -> [JSONValue] {
         let address: [JSONValue] = publicAddress
             ? [["label": .string(redirect), "value": .string(OAuthClientScript.mcpRedirect)]] : []

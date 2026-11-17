@@ -135,7 +135,7 @@ def run_setup_check(request) -> ConnectorSetupCheckResult:
         raise SetupCheckRpcError(4000, ConnectorErrorReason.invalid_params, "Some pasted values are missing.")
     vault = setup_mod.vault_for(_home())
     values = {name: _secret(vault, request.values[name]) for name in expected}
-    redirect = _templates(entry).get("redirect_url")
+    redirect = _templates(entry).get(checks.REDIRECT_TEMPLATE.get(step.check, "redirect_url"))
     outcome = checks.run_check(step.check, values, redirect_url=redirect)
     return ConnectorSetupCheckResult(
         slug=entry.id, ok=outcome.ok, reason=ConnectorErrorReason[outcome.reason] if outcome.reason else None,
