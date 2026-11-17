@@ -19,6 +19,7 @@ from tui_gateway.chat_install import (
     AppCreated,
     BotIdentitySource,
     ChatProvider,
+    IdentityUpdate,
     SpaceJoin,
 )
 from tui_gateway.contracts.chat_provider import (
@@ -26,6 +27,7 @@ from tui_gateway.contracts.chat_provider import (
     CapabilityEntry,
     CapabilityMode,
     IdentityProjection,
+    IdentityUpdateOutcome,
     Installation,
     InstallationStatus,
     NextAction,
@@ -41,7 +43,7 @@ from tui_gateway.contracts.chat_provider import (
 from .api import SlackApi, SlackSetupError
 from .avatar import prepare_avatar
 from .records import SlackRecords
-from .token_store import ConfigTokenStore
+from .token_store import REFRESH_TOKEN_PREFIX, ConfigTokenStore
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,9 @@ PROBE_APP_NAME = "Pal workspace check (temp)"
 NEEDS_INVITE_ERRORS = {"method_not_supported_for_channel_type", "channel_not_found", "is_private"}
 GONE_ERRORS = {"app_not_found", "token_revoked", "invalid_auth"}
 REFRESH_LIFETIME_UNKNOWN = "unknown"
+BOT_TOKEN_PREFIX = "xoxb-"
+MEMBER_ID = re.compile(r"[UW][A-Z0-9]{6,20}")
+AVATAR_EXTENSIONS = ("png", "jpg", "jpeg", "webp")
 PROBED = (ProviderCapability.set_icon, ProviderCapability.app_level_credential,
           ProviderCapability.gateway_redirect, ProviderCapability.unattended_refresh)
 _NO_ACTION = NextAction(kind=NextActionKind.none, action_id="none")
@@ -63,8 +68,12 @@ class ProbeCheck:
     slack_error: str | None = None
 
 
-def _default_identity(bot: str) -> BotIdentitySource:
-    return BotIdentitySource(bot=bot, display_name=bot, avatar_path=None)
+def profile_identity(bot: str) -> BotIdentitySource:
+    from hermes_cli.profiles import get_profile_dir, read_profile_meta
+    home = get_profile_dir(bot)
+    avatar = next((path for ext in AVATAR_EXTENSIONS if (path := home / "assets" / f"avatar.{ext}").is_file()), None)
+    return BotIdentitySource(bot=bot, display_name=read_profile_meta(home).get("display_name") or bot,
+                             avatar_path=str(avatar) if avatar else None)
 
 
 def _username(name: str) -> str:
@@ -94,7 +103,7 @@ class SlackProvider(ChatProvider):
 
     def __init__(self, *, redirect_url: str | None = None, vault: VaultStore | None = None,
                  api: SlackApi | None = None, records: SlackRecords | None = None,
-                 identity: Callable[[str], BotIdentitySource] = _default_identity,
+                 identity: Callable[[str], BotIdentitySource] = profile_identity,
                  clock: Callable[[], float] = time.time):
         self.redirect_url = redirect_url
         self.vault = vault or get_vault_store()
@@ -131,9 +140,7 @@ class SlackProvider(ChatProvider):
             self.tokens.bind(workspace, config_vault_item_id)
         token = self.tokens.valid_config_token(workspace)
         source = self._identity(bot)
-        projection = self.identity_projection(source)
-        redirect = self.redirect_url if self._automatic(workspace, ProviderCapability.gateway_redirect) else None
-        manifest = json.dumps(bot_manifest(projection, redirect, f"{projection.display_name} on Slack"))
+        projection, manifest = self._manifest(workspace, source)
         record = self.records.app(bot, workspace)
         app_id = state.app_id or record.get("app_id")
         if not (app_id and record.get("authorize_link") and self._updated(token, app_id, manifest)):
@@ -141,6 +148,11 @@ class SlackProvider(ChatProvider):
         self.records.update_app(bot, workspace, invite_handle=projection.display_name)
         self._finish_app(bot, workspace, token, app_id, source)
         return AppCreated(app_id=app_id, authorize_link=self.records.app(bot, workspace)["authorize_link"])
+
+    def _manifest(self, workspace: str, source: BotIdentitySource) -> tuple[IdentityProjection, str]:
+        projection = self.identity_projection(source)
+        redirect = self.redirect_url if self._automatic(workspace, ProviderCapability.gateway_redirect) else None
+        return projection, json.dumps(bot_manifest(projection, redirect, f"{projection.display_name} on Slack"))
 
     def _updated(self, token: str, app_id: str, manifest: str) -> bool:
         try:
@@ -166,17 +178,38 @@ class SlackProvider(ChatProvider):
         logger.info("slack app %s created for bot %s", app_id, bot)
         return app_id
 
+    def _set_icon(self, bot: str, workspace: str, token: str, app_id: str, avatar_path: str) -> None:
+        icon = prepare_avatar(Path(avatar_path).read_bytes())
+        self.api.call("apps.icon.set", token=token, data={"app_id": app_id},
+                      files={"file": ("avatar.png", icon, "image/png")})
+        self.records.update_app(bot, workspace, icon_set=True)
+
     def _finish_app(self, bot: str, workspace: str, token: str, app_id: str, source: BotIdentitySource) -> None:
         record = self.records.app(bot, workspace)
         if self._automatic(workspace, ProviderCapability.set_icon) and source.avatar_path and not record.get("icon_set"):
-            icon = prepare_avatar(Path(source.avatar_path).read_bytes())
-            self.api.call("apps.icon.set", token=token, data={"app_id": app_id},
-                          files={"file": ("avatar.png", icon, "image/png")})
-            self.records.update_app(bot, workspace, icon_set=True)
+            self._set_icon(bot, workspace, token, app_id, source.avatar_path)
         if self._automatic(workspace, ProviderCapability.app_level_credential) and not record.get("app_token_item_id"):
             body = self.api.call("apps.token.create", token=token, data={"app_id": app_id, "scopes": APP_LEVEL_SCOPES})
             item = self.vault.add_item("api_key", f"Slack app {app_id} app-level token", {"api_key": str(body["token"])})
             self.records.update_app(bot, workspace, app_token_item_id=item.id)
+
+    def accept_config_credential(self, state: SetupState, vault_item_id: str, refresh_vault_item_id: str | None) -> None:
+        workspace = state.workspace
+        access = self._secret(vault_item_id)
+        refresh = self._secret(refresh_vault_item_id) if refresh_vault_item_id else None
+        if refresh is not None and not refresh.startswith(REFRESH_TOKEN_PREFIX):
+            raise SlackSetupError(SetupErrorCode.credential_rejected)
+        stored_pair = access.startswith((REFRESH_TOKEN_PREFIX, "{"))
+        if stored_pair:
+            self.tokens.bind(workspace, vault_item_id)
+        else:
+            self.tokens.adopt_pair(workspace, vault_item_id, access, refresh)
+        renewable = stored_pair or refresh is not None
+        stored = dict(self.records.workspace(workspace).get("capabilities", {}))
+        stored[ProviderCapability.unattended_refresh.value] = (CapabilityMode.automatic if renewable else CapabilityMode.guided).value
+        self.records.update_workspace(workspace, capabilities=stored)
+        if refresh_vault_item_id:
+            self.vault.remove_item(refresh_vault_item_id)
 
     def accept_app_level_credential(self, bot: str, workspace: str, vault_item_id: str) -> None:
         self.records.update_app(bot, workspace, app_token_item_id=vault_item_id)
@@ -208,6 +241,45 @@ class SlackProvider(ChatProvider):
         )
         logger.info("slack bot %s installed in workspace %s", bot, workspace)
         return self._installation(bot, self.records.app(bot, workspace))
+
+    def adopt_token(self, state: SetupState, vault_item_id: str) -> Installation:
+        bot, workspace = state.bot, state.workspace
+        token = self._secret(vault_item_id)
+        if not token.startswith(BOT_TOKEN_PREFIX):
+            raise SlackSetupError(SetupErrorCode.credential_rejected)
+        body = self.api.call("auth.test", token=token)
+        team_id, bot_user_id = str(body.get("team_id") or ""), str(body.get("user_id") or "")
+        if not (team_id and bot_user_id):
+            raise SlackSetupError(SetupErrorCode.credential_rejected)
+        previous = self.records.app(bot, workspace)
+        if previous.get("bot_token_item_id") and previous["bot_token_item_id"] != vault_item_id:
+            self.vault.remove_item(previous["bot_token_item_id"])
+        now = self._clock()
+        self.records.update_app(
+            bot, workspace, bot_token_item_id=vault_item_id, team_id=team_id, team_name=str(body.get("team") or ""),
+            bot_user_id=bot_user_id, authorizing_user="", installation_id=f"slack-{team_id}-{bot}",
+            installed_at=previous.get("installed_at", now), updated_at=now,
+        )
+        logger.info("slack bot %s adopted in workspace %s", bot, workspace)
+        return self._installation(bot, self.records.app(bot, workspace))
+
+    def parse_owner_identity(self, raw: str) -> str | None:
+        member = raw.strip().upper()
+        return member if MEMBER_ID.fullmatch(member) else None
+
+    def update_identity(self, installation: Installation) -> IdentityUpdate:
+        workspace, record = self._record_for(installation)
+        bot, source = installation.bot, self._identity(installation.bot)
+        token = self.tokens.valid_config_token(workspace)
+        projection, manifest = self._manifest(workspace, source)
+        self.api.call("apps.manifest.update", token=token, data={"app_id": record["app_id"], "manifest": manifest})
+        self.records.update_app(bot, workspace, invite_handle=projection.display_name)
+        if not self._automatic(workspace, ProviderCapability.set_icon):
+            return IdentityUpdate(IdentityUpdateOutcome.needs_manual_avatar, projection,
+                                  NextAction(kind=NextActionKind.button, action_id=ProviderCapability.set_icon.value))
+        if source.avatar_path:
+            self._set_icon(bot, workspace, token, record["app_id"], source.avatar_path)
+        return IdentityUpdate(IdentityUpdateOutcome.updated, projection, _NO_ACTION)
 
     def _installation(self, bot: str, record: dict[str, Any]) -> Installation:
         items = [record[k] for k in ("bot_token_item_id", "app_token_item_id", "credentials_item_id") if record.get(k)]

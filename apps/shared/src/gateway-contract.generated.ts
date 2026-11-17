@@ -854,14 +854,14 @@ export interface SetupState {
   error?: SetupError | null
   updated_at: number
 }
-export type SetupStep = 'not_started' | 'needs_credential' | 'creating_app' | 'needs_manual_step' | 'needs_allow' | 'installing' | 'ready' | 'error' | 'revoked'
+export type SetupStep = 'not_started' | 'needs_credential' | 'creating_app' | 'needs_manual_step' | 'needs_allow' | 'needs_owner' | 'installing' | 'ready' | 'error' | 'revoked'
 export interface NextAction {
   kind: NextActionKind
   action_id: string
   link?: string | null
   copy_text?: string | null
 }
-export type NextActionKind = 'none' | 'paste_credential' | 'open_link' | 'copy_text' | 'button'
+export type NextActionKind = 'none' | 'paste_credential' | 'open_link' | 'copy_text' | 'enter_text' | 'button'
 export interface SetupError {
   code: SetupErrorCode
   fix: FixAction
@@ -888,8 +888,10 @@ export interface ChatInstallAdvanceParams {
   expected_revision: number
   manual_step?: ProviderCapability | null
   vault_item_id?: string | null
+  refresh_vault_item_id?: string | null
+  owner_member_id?: string | null
 }
-export type SetupEventKind = 'begin' | 'credential_saved' | 'app_created' | 'manual_step_done' | 'allow_granted' | 'installed' | 'failed' | 'retry' | 'revoked'
+export type SetupEventKind = 'begin' | 'credential_saved' | 'app_created' | 'manual_step_done' | 'allow_granted' | 'owner_confirmed' | 'installed' | 'failed' | 'retry' | 'revoked'
 export interface ChatSpacesListResult {
   spaces: SpaceRef[]
 }
@@ -920,6 +922,19 @@ export interface Binding {
   space_id: string
   installation_id: string
   live: boolean
+}
+export interface ChatIdentityUpdateResult {
+  outcome: IdentityUpdateOutcome
+  identity: IdentityProjection
+  next_action: NextAction
+}
+export type IdentityUpdateOutcome = 'updated' | 'needs_manual_avatar'
+export interface IdentityProjection {
+  app_name: string
+  display_name: string
+  username: string
+  avatar_ref?: string | null
+  avatar_bytes?: number | null
 }
 /** ``key`` selects one getter from ``_CONFIG_GETTERS``; ``cwd`` feeds the ``project`` getter, ``session_id`` lets ``reasoning`` / ``fast`` answer with the session's live pin. */
 export interface ConfigGetParams {
@@ -8189,7 +8204,7 @@ export interface RpcMethods {
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
   /** Channels this bot is bound to and whether it is live in each. */
   'chat.binding.list': { params: ChatInstallParams; result: ChatBindingListResult }
-  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. */
+  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id. */
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
   'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }
@@ -8197,6 +8212,8 @@ export interface RpcMethods {
   'chat.install.revoke': { params: ChatInstallParams; result: ChatInstallStatusResult }
   /** Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it. */
   'chat.install.status': { params: ChatInstallParams; result: ChatInstallStatusResult }
+  /** Send the bot's current name and display name to the chat app, and its picture when the provider can set it. needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only. */
+  'chat.install.update_identity': { params: ChatInstallParams; result: ChatIdentityUpdateResult }
   /** Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only. */
   'chat.provider.list': { params: ProfileParams; result: ChatProviderListResult }
   /** Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live. */
@@ -8862,6 +8879,7 @@ export const RPC_METHODS = [
   'chat.install.begin',
   'chat.install.revoke',
   'chat.install.status',
+  'chat.install.update_identity',
   'chat.provider.list',
   'chat.space.join',
   'chat.spaces.list',
@@ -9216,7 +9234,7 @@ export interface CanonicalRpcMethods {
   'capabilities.status': { params: ProfileParams; result: CapabilitiesStatusResult }
   /** Channels this bot is bound to and whether it is live in each. */
   'chat.binding.list': { params: ChatInstallParams; result: ChatBindingListResult }
-  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. */
+  /** Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id. */
   'chat.install.advance': { params: ChatInstallAdvanceParams; result: ChatInstallStatusResult }
   /** Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL. */
   'chat.install.begin': { params: ChatInstallParams; result: ChatInstallStatusResult }

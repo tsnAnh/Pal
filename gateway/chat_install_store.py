@@ -212,6 +212,10 @@ class ChatInstallStore:
                 (installation.id, installation.bot, installation.provider_id, installation.workspace_id,
                  installation.model_dump_json(), json.dumps(sorted(env_keys)), owner_id))
 
+    def set_owner(self, installation_id: str, owner_id: str) -> None:
+        with self._write() as conn:
+            conn.execute("UPDATE installations SET owner_id=? WHERE id=?", (owner_id, installation_id))
+
     def owner_id(self, installation_id: str) -> str | None:
         with self._read() as conn:
             row = conn.execute("SELECT owner_id FROM installations WHERE id=?", (installation_id,)).fetchone()

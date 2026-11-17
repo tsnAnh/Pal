@@ -457,6 +457,18 @@ def _broadcast_watched_changes(now: float | None = None) -> None:
             _broadcast_global_event(event, payload_fn())
 
 
+def _broadcast_profile_event(event: str, payload: dict, profile: str) -> None:
+    from hermes_cli.profiles import get_profile_dir
+    with contextlib.suppress(Exception):
+        home = _skin_home_for(str(get_profile_dir(profile)))
+        with _live_transports_lock:
+            peers = [peer for peer in _live_transports if getattr(peer, "skin_home", None) == home]
+        frame = _event_frame(event, "", payload)
+        for peer in peers:
+            with contextlib.suppress(Exception):
+                peer.write(frame)
+
+
 _chat_install_seq = None
 
 
@@ -471,7 +483,7 @@ def _broadcast_chat_install_changes() -> None:
         return
     for seq, state in store.events_after(_chat_install_seq):
         _chat_install_seq = seq
-        _broadcast_global_event("chat.install.changed", {"state": state.model_dump(mode="json")})
+        _broadcast_profile_event("chat.install.changed", {"state": state.model_dump(mode="json")}, state.bot)
 
 
 _skin_watcher_started = False

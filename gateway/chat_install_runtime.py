@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+import logging
+
 from gateway.chat_install_service import ChatInstallService
 from gateway.chat_install_store import ChatInstallStore
 from tui_gateway.chat_install import REDIRECT_PATH
+
+
+class RedactInstallCallbackQuery(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        args = record.args
+        if isinstance(args, tuple) and len(args) >= 3 and isinstance(args[2], str) and args[2].startswith(REDIRECT_PATH):
+            record.args = (*args[:2], args[2].split("?", 1)[0], *args[3:])
+        return True
 
 
 class MessagingAdapterControl:

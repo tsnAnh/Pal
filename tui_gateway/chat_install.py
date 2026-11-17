@@ -10,6 +10,7 @@ from tui_gateway.contracts.chat_provider import (
     CapabilityMode,
     FixAction,
     IdentityPolicy,
+    IdentityUpdateOutcome,
     IdentityProjection,
     Installation,
     NextAction,
@@ -54,12 +55,20 @@ class AppCreated:
 
 
 @dataclass(frozen=True)
+class IdentityUpdate:
+    outcome: IdentityUpdateOutcome
+    identity: IdentityProjection
+    next_action: NextAction
+
+
+@dataclass(frozen=True)
 class SpaceJoin:
     outcome: SpaceJoinOutcome
     next_action: NextAction
 
 
 REDIRECT_PATH = "/webapp/chat-install/callback"
+OWNER_FIELD_ID = "owner_member_id"
 
 
 class ChatProvider(abc.ABC):
@@ -98,6 +107,15 @@ class ChatProvider(abc.ABC):
 
     def adopt_token(self, state: SetupState, vault_item_id: str) -> Installation:
         raise self._missing("adopt_token")
+
+    def accept_config_credential(self, state: SetupState, vault_item_id: str, refresh_vault_item_id: str | None) -> None:
+        return None
+
+    def parse_owner_identity(self, raw: str) -> str | None:
+        return raw.strip() or None
+
+    def update_identity(self, installation: Installation) -> IdentityUpdate:
+        raise self._missing("update_identity")
 
 
 SETUP_CAPABILITIES = (
@@ -145,6 +163,7 @@ class SetupEvent:
     manual_step: ProviderCapability | None = None
     error: SetupErrorCode | None = None
     authorize_link: str | None = None
+    owner_pending: bool = False
 
 
 def _pending_manual(caps: Capabilities, done: list[ProviderCapability]) -> ProviderCapability | None:
@@ -161,6 +180,8 @@ def _action_for(step: SetupStep, manual: ProviderCapability | None, link: str | 
         return NextAction(kind=NextActionKind.button, action_id=manual.value)
     if step is SetupStep.needs_allow:
         return NextAction(kind=NextActionKind.open_link, action_id="allow", link=link)
+    if step is SetupStep.needs_owner:
+        return NextAction(kind=NextActionKind.enter_text, action_id=OWNER_FIELD_ID)
     if step is SetupStep.error and error is not None:
         return NextAction(kind=NextActionKind.button, action_id=error.fix.value)
     return NextAction(kind=NextActionKind.none, action_id="none")
@@ -202,7 +223,10 @@ def _target(state: SetupState, event: SetupEvent, caps: Capabilities) -> tuple[S
         done = state.manual_steps_done if event.manual_step in state.manual_steps_done else [*state.manual_steps_done, event.manual_step]
         return _after_app(caps, done), {"manual_steps_done": done}
     if kind is SetupEventKind.allow_granted and step is SetupStep.needs_allow and event.installation_id:
-        return SetupStep.installing, {"installation_id": state.installation_id or event.installation_id}
+        target = SetupStep.needs_owner if event.owner_pending else SetupStep.installing
+        return target, {"installation_id": state.installation_id or event.installation_id}
+    if kind is SetupEventKind.owner_confirmed and step is SetupStep.needs_owner:
+        return SetupStep.installing, {}
     if kind is SetupEventKind.installed and step is SetupStep.installing:
         return SetupStep.ready, {}
     return None

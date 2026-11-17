@@ -64,6 +64,7 @@ class SetupStep(WireEnum):
     creating_app = "creating_app"
     needs_manual_step = "needs_manual_step"
     needs_allow = "needs_allow"
+    needs_owner = "needs_owner"
     installing = "installing"
     ready = "ready"
     error = "error"
@@ -76,6 +77,7 @@ class SetupEventKind(WireEnum):
     app_created = "app_created"
     manual_step_done = "manual_step_done"
     allow_granted = "allow_granted"
+    owner_confirmed = "owner_confirmed"
     installed = "installed"
     failed = "failed"
     retry = "retry"
@@ -87,6 +89,7 @@ class NextActionKind(WireEnum):
     paste_credential = "paste_credential"
     open_link = "open_link"
     copy_text = "copy_text"
+    enter_text = "enter_text"
     button = "button"
 
 
@@ -197,6 +200,13 @@ class ChatInstallAdvanceParams(ChatInstallParams):
     expected_revision: int = Field(ge=0)
     manual_step: ProviderCapability | None = None
     vault_item_id: str | None = None
+    refresh_vault_item_id: str | None = None
+    owner_member_id: str | None = None
+
+
+class IdentityUpdateOutcome(WireEnum):
+    updated = "updated"
+    needs_manual_avatar = "needs_manual_avatar"
 
 
 class ChatSpaceJoinParams(ChatInstallParams):
@@ -211,6 +221,12 @@ class ChatProviderListResult(Result):
 class ChatInstallStatusResult(Result):
     state: SetupState
     installation: Installation | None = None
+
+
+class ChatIdentityUpdateResult(Result):
+    outcome: IdentityUpdateOutcome
+    identity: IdentityProjection
+    next_action: NextAction
 
 
 class ChatSpacesListResult(Result):
@@ -238,13 +254,17 @@ method("chat.install.begin", params=ChatInstallParams, result=ChatInstallStatusR
        doc="Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL.")
 method("chat.install.advance", params=ChatInstallAdvanceParams, result=ChatInstallStatusResult,
        doc="Send one setup event with the revision the client last saw. stale_revision when another client moved first; "
-           "invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token.")
+           "invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token. "
+           "credential_saved takes refresh_vault_item_id with the config refresh token. owner_confirmed takes owner_member_id.")
 method("chat.spaces.list", params=ChatInstallParams, result=ChatSpacesListResult,
        doc="Channels the installed bot can see, with whether it has joined.")
 method("chat.space.join", params=ChatSpaceJoinParams, result=ChatSpaceJoinResult,
        doc="Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live.")
 method("chat.binding.list", params=ChatInstallParams, result=ChatBindingListResult,
        doc="Channels this bot is bound to and whether it is live in each.")
+method("chat.install.update_identity", params=ChatInstallParams, result=ChatIdentityUpdateResult,
+       doc="Send the bot's current name and display name to the chat app, and its picture when the provider can set it. "
+           "needs_manual_avatar with a button next_action when the picture is still a guided step. Owner connections only.")
 method("chat.install.revoke", params=ChatInstallParams, result=ChatInstallStatusResult,
        doc="Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall.")
 event("chat.install.changed", ChatInstallChangedPayload,
@@ -253,5 +273,5 @@ event("chat.install.changed", ChatInstallChangedPayload,
 WIRE_MODELS: tuple[type[Params | Result | Payload], ...] = (
     ChatProviderParams, ChatInstallParams, ChatInstallAdvanceParams, ChatSpaceJoinParams,
     ChatProviderListResult, ChatInstallStatusResult, ChatSpacesListResult, ChatSpaceJoinResult,
-    ChatBindingListResult, ChatInstallChangedPayload, IdentityProjection,
+    ChatBindingListResult, ChatInstallChangedPayload, ChatIdentityUpdateResult, IdentityProjection,
 )

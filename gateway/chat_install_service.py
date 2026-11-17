@@ -12,6 +12,7 @@ from gateway.chat_install_store import ChatInstallStore
 from tui_gateway.chat_install import (
     ChatProvider,
     ChatProviderError,
+    IdentityUpdate,
     ProviderNotImplemented,
     SetupEvent,
     SetupKey,
@@ -40,7 +41,8 @@ from tui_gateway.contracts.chat_provider import (
 logger = logging.getLogger(__name__)
 
 CLIENT_EVENTS = frozenset({
-    SetupEventKind.credential_saved, SetupEventKind.manual_step_done, SetupEventKind.allow_granted, SetupEventKind.retry,
+    SetupEventKind.credential_saved, SetupEventKind.manual_step_done, SetupEventKind.allow_granted,
+    SetupEventKind.owner_confirmed, SetupEventKind.retry,
 })
 SET_PUBLIC_URL_ACTION = NextAction(kind=NextActionKind.button, action_id="set_public_url")
 
@@ -171,7 +173,8 @@ class ChatInstallService:
         return state, self._installation_of(state)
 
     def advance(self, bot: str, provider_id: str, workspace: str, event: SetupEventKind, expected_revision: int,
-                manual_step=None, vault_item_id: str | None = None) -> tuple[SetupState, Installation | None]:
+                manual_step=None, vault_item_id: str | None = None, refresh_vault_item_id: str | None = None,
+                owner_member_id: str | None = None) -> tuple[SetupState, Installation | None]:
         provider = self._provider(provider_id)
         state = self._current(bot, provider_id, workspace)
         if state.revision != expected_revision:
@@ -185,15 +188,17 @@ class ChatInstallService:
         try:
             if event is SetupEventKind.allow_granted:
                 new = self._adopt(provider, state, vault_item_id)
+            elif event is SetupEventKind.owner_confirmed:
+                new = self._confirm_owner(provider, state, owner_member_id)
             else:
-                new = self._client_event(provider, state, event, manual_step, vault_item_id)
+                new = self._client_event(provider, state, event, manual_step, vault_item_id, refresh_vault_item_id)
         except StaleRevision:
             raise ChatServiceError(ChatRpcErrorReason.stale_revision, self._current(bot, provider_id, workspace)) from None
         if new is state:
             raise ChatServiceError(GatewayReason.invalid_event, state)
         return new, self._installation_of(new)
 
-    def _client_event(self, provider, state, event, manual_step, vault_item_id) -> SetupState:
+    def _client_event(self, provider, state, event, manual_step, vault_item_id, refresh_vault_item_id) -> SetupState:
         if event is SetupEventKind.manual_step_done and manual_step is None and state.step is SetupStep.needs_manual_step:
             from tui_gateway.contracts.chat_provider import ProviderCapability
             manual_step = ProviderCapability(state.next_action.action_id)
@@ -201,6 +206,12 @@ class ChatInstallService:
         if new is state:
             return state
         if event is SetupEventKind.credential_saved and vault_item_id:
+            try:
+                provider.accept_config_credential(new, vault_item_id, refresh_vault_item_id)
+            except Exception as exc:  # health: allow BLE001 -- provider errors carry provider text, so only the exception type is logged
+                logger.warning("chat install credential rejected provider=%s error=%s", state.provider_id, type(exc).__name__)
+                code = getattr(exc, "code", None)
+                return self._fail(provider, new, code if isinstance(code, SetupErrorCode) else SetupErrorCode.credential_rejected)
             self.store.set_config_item(setup_key(new), vault_item_id)
         return self._drive(provider, new)
 
@@ -212,22 +223,32 @@ class ChatInstallService:
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
             logger.warning("chat install adopt failed provider=%s error=%s", state.provider_id, type(exc).__name__)
             return self._fail(provider, state, SetupErrorCode.install_failed)
-        return self._complete(provider, state, installation)
+        return self._complete(provider, state, installation, owner_optional=True)
 
-    def _complete(self, provider: ChatProvider, state: SetupState, installation: Installation) -> SetupState:
+    def _confirm_owner(self, provider: ChatProvider, state: SetupState, raw: str | None) -> SetupState:
+        owner = provider.parse_owner_identity(raw or "")
+        if state.step is not SetupStep.needs_owner or not owner or state.installation_id is None:
+            return state
+        self.store.set_owner(state.installation_id, owner)
+        state = self._apply(provider, state, SetupEvent(kind=SetupEventKind.owner_confirmed))
+        return self._finish(provider, state)
+
+    def _complete(self, provider: ChatProvider, state: SetupState, installation: Installation,
+                  owner_optional: bool = False) -> SetupState:
         try:
             owner = provider.authorizing_identity(installation)
-            if not owner:
+            if not owner and not owner_optional:
                 return self._fail(provider, state, SetupErrorCode.install_failed)
             env_keys = [*provider.adapter_env(installation), *([provider.allowed_users_env] if provider.allowed_users_env else [])]
-            self.store.save_installation(installation, env_keys, owner)
+            self.store.save_installation(installation, env_keys, owner or "")
         except StaleRevision:
             raise
         except Exception as exc:  # health: allow BLE001 -- provider and adapter errors carry provider text, so only the exception type is logged
             logger.warning("chat install persist failed provider=%s error=%s", state.provider_id, type(exc).__name__)
             return self._fail(provider, state, SetupErrorCode.install_failed)
-        state = self._apply(provider, state, SetupEvent(kind=SetupEventKind.allow_granted, installation_id=installation.id))
-        return self._finish(provider, state)
+        state = self._apply(provider, state, SetupEvent(
+            kind=SetupEventKind.allow_granted, installation_id=installation.id, owner_pending=not owner))
+        return self._finish(provider, state) if state.step is SetupStep.installing else state
 
     def _finish(self, provider: ChatProvider, state: SetupState) -> SetupState:
         installation = self.store.installation(state.installation_id) if state.installation_id else None
@@ -301,6 +322,10 @@ class ChatInstallService:
         from tui_gateway.contracts.chat_provider import SpaceJoinOutcome
         self.store.set_binding(installation.id, space_id, bot, result.outcome is not SpaceJoinOutcome.needs_invite, hello)
         return result
+
+    def update_identity(self, bot: str, provider_id: str, workspace: str) -> IdentityUpdate:
+        provider, state, installation = self._installed(bot, provider_id, workspace)
+        return self._call(state, lambda: provider.update_identity(installation))
 
     def bindings(self, bot: str) -> list[Binding]:
         return [row.wire() for row in self.store.bindings(bot)]

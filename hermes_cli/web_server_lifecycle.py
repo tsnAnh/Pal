@@ -548,6 +548,10 @@ def _uvicorn_console_logging() -> None:
             handler = logging.StreamHandler(stream)
             handler.setFormatter(formatter)
             logger.addHandler(handler)
+    from gateway.chat_install_runtime import RedactInstallCallbackQuery
+    access = logging.getLogger("uvicorn.access")
+    if not any(isinstance(item, RedactInstallCallbackQuery) for item in access.filters):
+        access.addFilter(RedactInstallCallbackQuery())
     # LOGGING_CONFIG's level for the parent; uvicorn.Config sets only the child loggers' levels.
     logging.getLogger("uvicorn").setLevel(logging.INFO)
 

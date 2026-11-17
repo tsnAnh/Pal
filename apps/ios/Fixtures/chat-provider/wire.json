@@ -10,6 +10,22 @@
         }
       ]
     },
+    "ChatIdentityUpdateResult": {
+      "identity": {
+        "app_name": "Pal",
+        "avatar_bytes": null,
+        "avatar_ref": null,
+        "display_name": "Pal",
+        "username": "pal"
+      },
+      "next_action": {
+        "action_id": "set_icon",
+        "copy_text": null,
+        "kind": "button",
+        "link": null
+      },
+      "outcome": "needs_manual_avatar"
+    },
     "ChatInstallChangedPayload": {
       "state": {
         "app_id": null,
@@ -136,6 +152,22 @@
           "space_id": "s-public"
         }
       ]
+    },
+    "ChatIdentityUpdateResult": {
+      "identity": {
+        "app_name": "Pal",
+        "avatar_bytes": null,
+        "avatar_ref": null,
+        "display_name": "Pal",
+        "username": "pal"
+      },
+      "next_action": {
+        "action_id": "set_icon",
+        "copy_text": null,
+        "kind": "button",
+        "link": null
+      },
+      "outcome": "needs_manual_avatar"
     },
     "ChatInstallChangedPayload": {
       "state": {

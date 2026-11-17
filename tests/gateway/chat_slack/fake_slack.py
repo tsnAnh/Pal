@@ -115,5 +115,8 @@ class FakeSlack:
         self.joined.add(form["channel"])
         return {"ok": True, **({"warning": "already_in_channel"} if already else {})}
 
+    def m_auth_test(self, form):
+        return {"ok": True, "team_id": "T1", "team": "Acme", "user_id": "UBOT", "bot_id": "B1"}
+
     def m_auth_revoke(self, form):
         return {"ok": True}

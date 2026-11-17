@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 ROTATE_MARGIN_S = 30 * 60
 WRITE_ATTEMPTS = 3
 REFRESH_TOKEN_PREFIX = "xoxe-"
+ACCESS_LIFETIME_S = 12 * 60 * 60
 
 
 @dataclass(frozen=True)
@@ -37,6 +38,12 @@ class ConfigTokenStore:
 
     def bind(self, workspace: str, vault_item_id: str) -> None:
         self._records.update_workspace(workspace, config_item_id=vault_item_id)
+
+    def adopt_pair(self, workspace: str, item_id: str, access_token: str, refresh_token: str | None) -> None:
+        pair = TokenPair(access_token, refresh_token or "", 0.0 if refresh_token else self._clock() + ACCESS_LIFETIME_S)
+        with self._lock(workspace):
+            self._write(workspace, item_id, pair)
+        self.bind(workspace, item_id)
 
     def valid_config_token(self, workspace: str) -> str:
         return self._token(workspace, force=False)
@@ -79,6 +86,8 @@ class ConfigTokenStore:
             raise SlackSetupError(SetupErrorCode.credential_rejected) from None
 
     def _rotate(self, workspace: str, item_id: str, pair: TokenPair) -> str:
+        if not pair.refresh_token:
+            raise SlackSetupError(SetupErrorCode.credential_expired)
         body = self._api.call("tooling.tokens.rotate", data={"refresh_token": pair.refresh_token})
         fresh = TokenPair(str(body["token"]), str(body["refresh_token"]), float(body["exp"]))
         self._unwritten[workspace] = fresh
