@@ -180,17 +180,8 @@ private struct MacGeneralSection: View {
 
     private var themeSelection: Binding<AppearanceMode> {
         Binding(
-            get: { appearance.mode == .botColor ? .dark : appearance.mode },
+            get: { appearance.mode },
             set: { appearance.mode = $0 }
-        )
-    }
-
-    private var accentIsBotColor: Binding<Bool> {
-        Binding(
-            get: { appearance.mode == .botColor },
-            set: { useBotColor in
-                if useBotColor { appearance.mode = .botColor } else if appearance.mode == .botColor { appearance.mode = .dark }
-            }
         )
     }
 
@@ -284,15 +275,6 @@ private struct MacGeneralSection: View {
                 MacRow(title: String(localized: "Theme"), identifier: "settingsAppearanceRow") {
                     MacMenuValue(current: themeSelection.wrappedValue.title, selection: themeSelection, identifier: "macThemeMenu") {
                         ForEach(Self.themes) { mode in Text(mode.title).tag(mode) }
-                    }
-                }
-                MacRow(title: String(localized: "Accent"), identifier: "macAccentRow") {
-                    MacMenuValue(
-                        current: accentIsBotColor.wrappedValue ? String(localized: "Bot color") : String(localized: "Default"),
-                        selection: accentIsBotColor, identifier: "macAccentMenu"
-                    ) {
-                        Text("Default").tag(false)
-                        Text("Bot color").tag(true)
                     }
                 }
                 Button {

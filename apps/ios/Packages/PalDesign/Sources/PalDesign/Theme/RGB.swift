@@ -81,13 +81,4 @@ public struct RGB: Equatable, Hashable, Sendable {
         }
     }
 
-    public func tinted(toward accent: RGB, saturationScale: Double, brightnessLift: Double) -> RGB {
-        let own = hueSaturationBrightness
-        let target = accent.hueSaturationBrightness
-        return RGB(
-            hue: target.hue,
-            saturation: min(1, target.saturation * saturationScale),
-            brightness: min(1, own.brightness + brightnessLift)
-        )
-    }
 }

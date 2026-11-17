@@ -7,7 +7,6 @@ public enum AppearanceMode: String, CaseIterable, Identifiable, Sendable {
     case light
     case dark
     case black
-    case botColor
 
     public var id: String { rawValue }
 
@@ -17,7 +16,6 @@ public enum AppearanceMode: String, CaseIterable, Identifiable, Sendable {
         case .light: "Light"
         case .dark: "Dark"
         case .black: "Black"
-        case .botColor: "Bot color"
         }
     }
 
@@ -25,17 +23,16 @@ public enum AppearanceMode: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .followSystem: nil
         case .light: .light
-        case .dark, .black, .botColor: .dark
+        case .dark, .black: .dark
         }
     }
 
-    public func palette(systemScheme: ColorScheme, botAccent: RGB?) -> PalPalette {
+    public func palette(systemScheme: ColorScheme) -> PalPalette {
         switch self {
         case .followSystem: systemScheme == .dark ? .measuredDark : .derivedLight
         case .light: .derivedLight
         case .dark: .measuredDark
         case .black: .derivedBlack
-        case .botColor: botAccent.map { PalPalette.measuredDark.tinted(toward: $0) } ?? .measuredDark
         }
     }
 }

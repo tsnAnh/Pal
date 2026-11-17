@@ -98,30 +98,4 @@ extension PalPalette {
         )
     }
 
-    struct Tint {
-        let saturationScale: Double
-        let brightnessLift: Double
-    }
-
-    static let surfaceTint = Tint(saturationScale: 0.55, brightnessLift: 0.05)
-    static let canvasTint = Tint(saturationScale: 0.5, brightnessLift: 0.035)
-    static let strokeTint = Tint(saturationScale: 0.4, brightnessLift: 0.08)
-
-    public func tinted(toward accent: RGB) -> PalPalette {
-        func apply(_ color: RGB, _ tint: Tint) -> RGB {
-            color.tinted(toward: accent, saturationScale: tint.saturationScale, brightnessLift: tint.brightnessLift)
-        }
-        var palette = self
-        palette.canvas = apply(canvas, Self.canvasTint)
-        palette.sheetBackground = apply(sheetBackground, Self.canvasTint)
-        palette.groupedCard = apply(groupedCard, Self.surfaceTint)
-        palette.circleButtonFill = apply(circleButtonFill, Self.surfaceTint)
-        palette.chipFill = apply(chipFill, Self.surfaceTint)
-        palette.pillFill = apply(pillFill, Self.surfaceTint)
-        palette.cardStroke = apply(cardStroke, Self.strokeTint)
-        palette.separator = apply(separator, Self.strokeTint)
-        palette.circleButtonStroke = apply(circleButtonStroke, Self.strokeTint)
-        palette.tileStroke = apply(tileStroke, Self.strokeTint)
-        return palette
-    }
 }

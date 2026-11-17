@@ -59,7 +59,6 @@ public enum AppearanceTileIcon: View {
     case light
     case dark
     case black
-    case botColor
 
     public var body: some View {
         switch self {
@@ -71,13 +70,6 @@ public enum AppearanceTileIcon: View {
             Image(systemName: "moon.fill").font(.system(size: 24))
         case .black:
             Circle().frame(width: 26, height: 26)
-        case .botColor:
-            Circle()
-                .fill(AngularGradient(
-                    colors: [.red, .orange, .yellow, .green, .teal, .blue, .purple, .pink, .red],
-                    center: .center
-                ))
-                .frame(width: 26, height: 26)
         }
     }
 }

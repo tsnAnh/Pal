@@ -10,7 +10,7 @@ struct AppearanceScreen: View {
     @Environment(AppearanceStore.self) private var appearance
 
     private static let top: [AppearanceMode] = [.followSystem, .light, .dark]
-    private static let bottom: [AppearanceMode] = [.black, .botColor]
+    private static let bottom: [AppearanceMode] = [.black]
 
     private static func icon(for mode: AppearanceMode) -> AppearanceTileIcon {
         switch mode {
@@ -18,7 +18,6 @@ struct AppearanceScreen: View {
         case .light: .light
         case .dark: .dark
         case .black: .black
-        case .botColor: .botColor
         }
     }
 

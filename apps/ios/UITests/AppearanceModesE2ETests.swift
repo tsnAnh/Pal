@@ -57,15 +57,14 @@ final class AppearanceModesE2ETests: E2ETestCase {
         signInIfNeeded(signIn)
         signIn.terminate()
 
-        let accent = try XCTUnwrap(RGB(hexString: try XCTUnwrap(BotAccent(name: "default", uiMeta: nil)).accentHex))
-        let expectations: [(AppearanceMode, ColorScheme)] = [(.light, .light), (.dark, .dark), (.black, .dark), (.botColor, .dark)]
+        let expectations: [(AppearanceMode, ColorScheme)] = [(.light, .light), (.dark, .dark), (.black, .dark)]
         var rendered: [AppearanceMode: RGB] = [:]
         for (mode, scheme) in expectations {
             let canvas = try renderedCanvas(mode: mode)
-            assertClose(canvas, mode.palette(systemScheme: scheme, botAccent: accent).canvas, "\(mode.rawValue) canvas")
+            assertClose(canvas, mode.palette(systemScheme: scheme).canvas, "\(mode.rawValue) canvas")
             rendered[mode] = canvas
         }
-        XCTAssertEqual(Set(rendered.values.map(\.hex)).count, 4, "four explicit modes render four different canvases")
+        XCTAssertEqual(Set(rendered.values.map(\.hex)).count, 3, "three explicit modes render three different canvases")
     }
 
     func test2FollowSystemRendersTheLightPaletteOnALightDevice() throws {

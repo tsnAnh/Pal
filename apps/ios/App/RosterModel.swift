@@ -158,8 +158,6 @@ final class RosterModel {
 
     var rows: [BotRow] { visibleBots.filter { !$0.isPinned } }
 
-    var accentBot: BotRow? { pinned.first ?? visibleBots.first(where: \.isPrimary) }
-
     var replacementPrimaries: [BotRow] { bots.filter { !$0.isPrimary } }
 
     var searchBots: [SearchBot] {
