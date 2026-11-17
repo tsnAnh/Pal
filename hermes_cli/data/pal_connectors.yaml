@@ -49,9 +49,42 @@ connectors:
   category: Design and web
   method: oauth_client
   mcp_url: https://api.canva.com/connect/v1/mcp
+  oauth:
+    authorization_url: https://www.canva.com/api/oauth/authorize
+    token_url: https://api.canva.com/rest/v1/oauth/token
+  scopes:
+  - design:content:read
+  - design:content:write
+  - design:meta:read
+  - asset:read
+  - asset:write
+  - brandtemplate:meta:read
+  - brandtemplate:content:read
+  - profile:read
   replaces_portal_slug: canva_mcp
   verified: true
   source: https://www.canva.dev/docs/apps/quickstart/
+  setup:
+    steps:
+    - id: app
+      kind: open_page
+      title: Create a Canva app
+      body: Create an app and choose who can use it, Anyone on Canva or your team on Enterprise. You can't change this
+        later. Under Configuration, copy the Client ID, press Generate secret and copy it right away, because Canva shows
+        it once. Under Redirect URLs, add the address below, then tick the scopes below.
+      links:
+      - {label: Open Canva developer portal, url: "https://www.canva.com/developers/apps"}
+      copies:
+      - {label: Redirect URL, value: "{mcp_redirect_url}"}
+      - {label: Scopes, value: "design:content:read design:content:write design:meta:read asset:read asset:write brandtemplate:meta:read brandtemplate:content:read profile:read"}
+    - id: client
+      kind: paste
+      title: Paste your client
+      body: Paste the Client ID and the secret Canva showed you. Pal checks them with Canva before saving.
+      fields:
+      - {id: client_id, label: Client ID, secret: false}
+      - {id: client_secret, label: Client secret, secret: true}
+      check: canva_client
 - id: circleci
   name: Circleci
   icon: circleci
@@ -140,18 +173,74 @@ connectors:
   category: Docs and files
   method: oauth_client
   mcp_url: https://mcp.dropbox.com/mcp
+  oauth:
+    authorization_url: https://www.dropbox.com/oauth2/authorize
+    token_url: https://api.dropboxapi.com/oauth2/token
+  scopes:
+  - account_info.read
+  - files.metadata.read
+  - files.content.read
+  - files.content.write
   replaces_portal_slug: dropbox
   verified: true
   source: https://help.dropbox.com/integrations/connect-dropbox-mcp-server
+  setup:
+    steps:
+    - id: app
+      kind: open_page
+      title: Create a Dropbox app
+      body: In the Dropbox App Console, create an app and choose Full Dropbox or App folder access. On the Settings tab,
+        under OAuth 2, add the redirect URI below to Redirect URIs. On the Permissions tab, tick the scopes below and
+        press Submit. The App key and App secret are on the Settings tab.
+      links:
+      - {label: Open Dropbox App Console, url: "https://www.dropbox.com/developers/console/apps"}
+      copies:
+      - {label: Redirect URI, value: "{mcp_redirect_url}"}
+      - {label: Scopes, value: "account_info.read files.metadata.read files.content.read files.content.write"}
+    - id: client
+      kind: paste
+      title: Paste your app key and secret
+      body: Copy the App key and App secret from the Settings tab and paste them here.
+      fields:
+      - {id: client_id, label: App key, secret: false}
+      - {id: client_secret, label: App secret, secret: true}
 - id: figma
   name: Figma
   icon: figma
   category: Design and web
   method: oauth_client
   mcp_url: https://mcp.figma.com/mcp
+  oauth:
+    authorization_url: https://www.figma.com/oauth
+    token_url: https://api.figma.com/v1/oauth/token
+  scopes:
+  - current_user:read
+  - file_content:read
+  - file_metadata:read
+  - file_comments:read
   replaces_portal_slug: figma
   verified: true
   source: https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/
+  setup:
+    steps:
+    - id: app
+      kind: open_page
+      title: Create a Figma app
+      body: Create a new app, name it and pick your team. Copy the Client ID and Client secret right away, because Figma
+        shows the secret only once. Under OAuth credentials, add the redirect URL below. Under OAuth scopes, tick the
+        scopes below. Publish the app as private.
+      links:
+      - {label: Open Figma apps, url: "https://www.figma.com/developers/apps"}
+      copies:
+      - {label: Redirect URL, value: "{mcp_redirect_url}"}
+      - {label: Scopes, value: "current_user:read file_content:read file_metadata:read file_comments:read"}
+    - id: client
+      kind: paste
+      title: Paste your client
+      body: Paste the Client ID and Client secret Figma showed you.
+      fields:
+      - {id: client_id, label: Client ID, secret: false}
+      - {id: client_secret, label: Client secret, secret: true}
 - id: gamma
   name: Gamma
   icon: plugin_glyph
@@ -168,6 +257,24 @@ connectors:
   mcp_url: https://api.githubcopilot.com/mcp/
   verified: true
   source: https://github.com/github/github-mcp-server/blob/main/docs/remote-server.md
+  setup:
+    steps:
+    - id: token_page
+      kind: open_page
+      title: Create a GitHub token
+      body: 'Create a fine-grained token with these permissions: Repository access, Contents read, Issues read and write,
+        Pull requests read and write, Metadata read.'
+      links:
+      - {label: Open GitHub token page, url: "https://github.com/settings/personal-access-tokens/new"}
+      copies:
+      - {label: Token name, value: Pal}
+    - id: token
+      kind: paste
+      title: Paste your token
+      body: Paste the token GitHub shows once. Pal checks it with GitHub before saving.
+      fields:
+      - {id: token, label: Token, secret: true, prefixes: [github_pat_, ghp_]}
+      check: github_token
 - id: gitlab
   name: Gitlab
   icon: gitlab
@@ -193,6 +300,51 @@ connectors:
   - https://www.googleapis.com/auth/contacts.readonly
   - https://www.googleapis.com/auth/spreadsheets
   - https://www.googleapis.com/auth/documents
+  setup:
+    steps:
+    - id: address
+      kind: public_url
+      title: Your Pal's web address
+      body: Google sends you back to your Pal after you sign in, so your Pal needs a public https address. Use the address
+        you already reach your Pal at, such as your Tailscale address.
+    - id: console
+      kind: open_page
+      title: Create a Google sign-in client
+      body: In Google Cloud, create an OAuth client ID of type Web application. Paste the redirect URI below into
+        its Authorized redirect URIs.
+      links:
+      - {label: Open Google Cloud credentials, url: "https://console.cloud.google.com/apis/credentials"}
+      copies:
+      - {label: Redirect URI, value: "{redirect_url}"}
+      fallback:
+        label: Google rejected the address
+        body: Google only accepts redirect addresses that start with https and use a domain name, not an IP address. Use
+          your own domain for your Pal's address, or create a Desktop app client in Google Cloud, which needs no public
+          address.
+        links:
+        - {label: Google's Desktop app guide, url: "https://developers.google.com/identity/protocols/oauth2/native-app"}
+        - {label: Open Google Cloud credentials, url: "https://console.cloud.google.com/apis/credentials"}
+    - id: apis
+      kind: open_page
+      title: Turn on the Google services
+      body: Turn on each service Pal should use. Then add yourself as a test user on the OAuth consent screen. While the
+        app is in Testing mode, Google ends the sign-in after 7 days.
+      links:
+      - {label: Gmail, url: "https://console.cloud.google.com/apis/library/gmail.googleapis.com"}
+      - {label: Calendar, url: "https://console.cloud.google.com/apis/library/calendar-json.googleapis.com"}
+      - {label: Drive, url: "https://console.cloud.google.com/apis/library/drive.googleapis.com"}
+      - {label: People, url: "https://console.cloud.google.com/apis/library/people.googleapis.com"}
+      - {label: Sheets, url: "https://console.cloud.google.com/apis/library/sheets.googleapis.com"}
+      - {label: Docs, url: "https://console.cloud.google.com/apis/library/docs.googleapis.com"}
+      - {label: Consent screen, url: "https://console.cloud.google.com/apis/credentials/consent"}
+    - id: client
+      kind: paste
+      title: Paste your client
+      body: Copy the client ID and client secret Google shows and paste them here. Pal checks them with Google before saving.
+      fields:
+      - {id: client_id, label: Client ID, secret: false, suffix: .apps.googleusercontent.com}
+      - {id: client_secret, label: Client secret, secret: true}
+      check: google_client
   notes: Google lets only the test users you added sign in until it verifies your app, and their sign-in lasts
     7 days while the app is in Testing. Publish and verify the app in Google Cloud Console to remove both limits.
   verified: true

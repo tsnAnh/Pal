@@ -97,6 +97,7 @@ final class ConnectAppsModel {
     var upworkApp: ConnectApp?
     var oauthClientSheet: OAuthClientSheetModel?
     var showsSlackPicker = false
+    var setupGuideSheet: SetupGuideModel?
     let google: GoogleWorkspaceModel
     let slack: SlackBotsModel
     let slackWizard: SlackWizardContext
@@ -199,6 +200,7 @@ final class ConnectAppsModel {
     }
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
+        if presentsSetupGuide(app) { return }
         busy.insert(app.id)
         failures[app.id] = nil
         defer { busy.remove(app.id) }

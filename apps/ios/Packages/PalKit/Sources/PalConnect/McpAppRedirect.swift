@@ -92,7 +92,7 @@ extension ConnectAppsService {
         return .connected
     }
 
-    private func authenticate(_ started: McpOAuthStart, name: String, using callbackBrowser: (any CallbackAuthorizationBrowser)?) async throws -> URL {
+    func authenticate(_ started: McpOAuthStart, name: String, using callbackBrowser: (any CallbackAuthorizationBrowser)?) async throws -> URL {
         guard let callbackBrowser else {
             _ = try? await call("mcp.servers.oauth.cancel", ["name": .string(name), "session_id": .string(started.flow)])
             throw ConnectAppsError.signInFailed(McpSignInFailure.other.reason)

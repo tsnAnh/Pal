@@ -65,6 +65,10 @@ struct ConnectAppsSheet: View {
             OAuthClientSheet(model: sheet)
                 .macSheetFrame()
         }
+        .sheet(item: $model.setupGuideSheet) { guide in
+            SetupGuideView(model: guide)
+                .macSheetFrame()
+        }
         .sheet(item: $model.pastingApp, onDismiss: { Task { await model.cancelPaste() } }) { app in
             OtherConnectorPasteSheet(model: model, app: app)
                 .macSheetFrame()

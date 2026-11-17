@@ -69,6 +69,10 @@ struct MacConnectApps: View {
             OAuthClientSheet(model: sheet)
                 .macSheetFrame()
         }
+        .sheet(item: $model.setupGuideSheet) { guide in
+            SetupGuideView(model: guide)
+                .macSheetFrame()
+        }
         .sheet(item: $model.keyRequest) { request in
             CapabilityKeyEntrySheet(model: model, request: request)
                 .macSheetFrame()

@@ -6,11 +6,13 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+import hermes_yaml as yaml
 from gateway import oauth_client_setup as setup_mod
 from tui_gateway import server
 
 OWNER_SECRET = "fake-token-do-not-use"
 GOOGLE_CLIENT_ID = "fake-client.apps.googleusercontent.com"
+FIGMA_CLIENT_ID = "fake-figma-client"
 PUBLIC_URL = "https://pal.example.ts.net"
 
 
@@ -174,3 +176,97 @@ def test_remove_deletes_the_profile_sign_in_and_keeps_the_owner_client(root, pub
     assert not token_file.exists()
     assert _status("google-workspace") == "not_connected"
     assert _ok("connectors.oauth_client.setup", slug="google-workspace")["configured"] is True
+
+
+def test_figma_connects_through_the_mcp_path_with_the_owner_client(root, public_url, monkeypatch, caplog):
+    caplog.set_level(logging.DEBUG)
+    started = {}
+
+    def fake_start(home, name, cfg, client_redirect_uri=None):
+        started.update(name=name, cfg=cfg)
+        return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
+
+    def fake_gateway(home, name, cfg, redirect_uri):
+        started.update(name=name, cfg=cfg, redirect_uri=redirect_uri)
+        return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
+
+    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", fake_start)
+    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_gateway_flow", fake_gateway)
+    assert _status("figma") == "needs_setup"
+    _save("figma", FIGMA_CLIENT_ID)
+    assert _status("figma") == "not_connected"
+
+    result = _ok("connectors.oauth_client.connect", slug="figma")
+
+    assert result["session_id"] == "s1"
+    assert started["cfg"]["oauth"]["client_id"] == FIGMA_CLIENT_ID
+    assert started["redirect_uri"] == PUBLIC_URL + "/webapp/mcp-oauth/callback"
+    assert started["cfg"]["oauth"]["redirect_uri"] == started["redirect_uri"]
+    assert "redirect_port" not in started["cfg"]["oauth"]
+    config = (root / "profiles" / "work" / "config.yaml").read_text()
+    assert OWNER_SECRET not in config
+    assert yaml.safe_load(config)["mcp_servers"]["figma"]["oauth"]["client_id"] == FIGMA_CLIENT_ID
+    assert _status("figma") == "connected"
+    assert OWNER_SECRET not in _wire_and_logs(caplog, result)
+
+    _ok("connectors.oauth_client.remove", slug="figma")
+    assert _status("figma") == "not_connected"
+    assert _ok("connectors.oauth_client.setup", slug="figma")["configured"] is True
+
+
+def test_figma_keeps_the_registered_loopback_without_a_public_https_address(root, public_url, monkeypatch):
+    started = {}
+
+    def fake_start(home, name, cfg, client_redirect_uri=None):
+        started.update(cfg=cfg)
+        return {"session_id": "s1", "auth_url": "https://www.figma.com/oauth?x=1", "flow": "pkce"}
+
+    monkeypatch.setattr("tui_gateway.mcp_oauth_sessions.start_flow", fake_start)
+    public_url["url"] = None
+    _save("figma", FIGMA_CLIENT_ID)
+    assert _ok("connectors.oauth_client.setup", slug="figma")["redirect_url"] == "http://localhost:27890/callback"
+    _ok("connectors.oauth_client.connect", slug="figma")
+    assert started["cfg"]["oauth"]["redirect_port"] == 27890 and "redirect_uri" not in started["cfg"]["oauth"]
+
+
+def _vault_ids(profile="work"):
+    return {item["id"] for item in _ok("vault.list", profile)["items"]}
+
+
+def test_remove_client_deletes_the_saved_client_and_its_vault_items(root, public_url):
+    _save("figma", FIGMA_CLIENT_ID)
+    record = setup_mod.build_store().client("figma")
+    items = {record.client_id_item, record.client_secret_item}
+    assert items <= _vault_ids()
+
+    result = _ok("connectors.oauth_client.remove", slug="figma", remove_client=True)
+
+    assert result["removed"] is True
+    assert _ok("connectors.oauth_client.setup", slug="figma")["configured"] is False
+    assert _status("figma") == "needs_setup"
+    assert not items & _vault_ids()
+    assert _ok("connectors.oauth_client.remove", slug="figma", remove_client=True)["removed"] is False
+
+
+def test_remove_client_drops_the_google_sign_in_with_the_client(root, public_url, exchange, web):
+    _save("google-workspace", GOOGLE_CLIENT_ID)
+    _callback(web, code="fake-code-do-not-use", state=_begin_google())
+    assert (root / "profiles" / "work" / "google_token.json").exists()
+
+    _ok("connectors.oauth_client.remove", slug="google-workspace", remove_client=True)
+
+    assert not (root / "profiles" / "work" / "google_token.json").exists()
+    assert _status("google-workspace") == "needs_setup"
+
+
+def test_remove_client_is_owner_only_and_the_default_keeps_the_client(root, public_url):
+    from tui_gateway.ws_legacy_fallback import _connection_profile_home
+    _save("figma", FIGMA_CLIENT_ID)
+    token = _connection_profile_home.set(str(root / "profiles" / "home"))
+    try:
+        response = _call("connectors.oauth_client.remove", "work", slug="figma", remove_client=True)
+        assert response["error"]["data"]["reason"] == "NOT_OWNER"
+        assert "error" not in _call("connectors.oauth_client.remove", "work", slug="figma")
+    finally:
+        _connection_profile_home.reset(token)
+    assert _ok("connectors.oauth_client.setup", slug="figma")["configured"] is True
