@@ -549,8 +549,10 @@ def _is_session_expired_error(exc: BaseException) -> bool:
     return found
 
 
+_GRANT_REFUSAL = r"capability_denied|(?:\w+_)?escalation_denied"
+_GRANT_REFUSAL_RE = re.compile(rf"(?:^|_)(?:{_GRANT_REFUSAL})(?:$|_)")
 _REFUSAL_CODE_RE = re.compile(
-    r"(?:^|_)(?:unauthori[sz]ed|unauthenticated|forbidden|permission_denied|access_denied"
+    rf"(?:^|_)(?:{_GRANT_REFUSAL}|unauthori[sz]ed|unauthenticated|forbidden|permission_denied|access_denied"
     r"|insufficient_(?:scope|permissions?)|(?:auth(?:entication|orization)?|oauth|credentials?)_required"
     r"|needs_(?:re)?auth)(?:$|_)")
 _REFUSAL_PLAIN_TEXT = {
@@ -587,6 +589,9 @@ def typed_refusal_code(structured: Any, error_text: str) -> Optional[str]:
 
 
 def refusal_message(code: str, server_name: str) -> str:
+    if _GRANT_REFUSAL_RE.search(code):
+        return (f"MCP server '{server_name}' refused this call ({code}): the server is working, but this client's "
+                f"grant is read-only or lacks the capability this tool needs. Do not retry the call or try to escalate.")
     return _REFUSAL_PLAIN_TEXT.get(code) or (
         f"MCP server '{server_name}' refused this call ({code}): the server is working, but it needs sign-in or "
         f"permission that is not available here. Do not retry the same call.")
