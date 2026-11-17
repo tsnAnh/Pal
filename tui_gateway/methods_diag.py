@@ -8,6 +8,7 @@ _registry = HandlerRegistry()
 method = _registry.method
 
 _DIAG_OWNER_ONLY = 4403
+_TRANSPORT_METHODS = frozenset({"gateway.ping"})
 
 
 def _diag_refusal(rid):
@@ -37,7 +38,8 @@ def _(rid, params: dict) -> dict:
     if refusal := _diag_refusal(rid):
         return refusal
     from gateway import diag_trace
-    if params["method"] not in _contracts.METHODS and params["method"] not in _contracts.CANONICAL_METHODS:
+    reported = params["method"]
+    if reported not in _contracts.METHODS and reported not in _contracts.CANONICAL_METHODS and reported not in _TRANSPORT_METHODS:
         return _err(rid, 4000, "invalid params: method", data={"reason": "invalid_params", "field": "method"})
     diag_trace.Trace(params["trace"], outer=False).write(
         {}, code=params.get("code"), reason=params["reason"], transport=current_transport(), scope="",

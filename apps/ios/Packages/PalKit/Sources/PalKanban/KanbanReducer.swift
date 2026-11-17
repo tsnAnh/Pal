@@ -35,6 +35,12 @@ public struct KanbanBoardCache: Sendable, Equatable, Codable {
     public var sortedCards: [KanbanCard] {
         cards.values.sorted { ($0.createdAt ?? 0, $0.taskID) < ($1.createdAt ?? 0, $1.taskID) }
     }
+
+    var cursorless: KanbanBoardCache {
+        var copy = self
+        copy.cursor = nil
+        return copy
+    }
 }
 
 public struct KanbanSnapshotStaging: Sendable {
@@ -102,22 +108,28 @@ public struct KanbanSession: Sendable, Equatable {
         boardKey(board).flatMap { details[KanbanCardKey(board: $0, taskID: taskID)] }
     }
 
+    public private(set) var released = false
+
+    public var requestGatewayID: String? { released ? nil : gatewayID }
+
     @discardableResult
     public mutating func adopt(gatewayID id: String) -> Bool {
+        released = false
         guard let held = gatewayID, held != id else {
             gatewayID = id
             return false
         }
-        dropAll()
         gatewayID = id
+        caches = Dictionary(caches.map { (KanbanBoardKey(gatewayID: id, board: $0.key.board), $0.value.cursorless) }, uniquingKeysWith: { first, _ in first })
+        details = Dictionary(details.map {
+            (KanbanCardKey(board: KanbanBoardKey(gatewayID: id, board: $0.key.board.board), taskID: $0.key.taskID), $0.value)
+        }, uniquingKeysWith: { first, _ in first })
         return true
     }
 
-    public mutating func dropAll() {
-        gatewayID = nil
-        boards = []
-        caches = [:]
-        details = [:]
+    public mutating func release() {
+        released = true
+        caches = caches.mapValues(\.cursorless)
     }
 
     public mutating func setBoards(_ boards: [KanbanBoard]) {

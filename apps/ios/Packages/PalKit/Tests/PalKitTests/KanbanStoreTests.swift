@@ -13,7 +13,7 @@ final class KanbanScript: Sendable {
 
     enum Reply: Sendable {
         case result(JSONValue)
-        case failure(RPCError)
+        case failure(RPCError), unreachable
     }
 
     private let queues = Mutex<[String: [Reply]]>([:])
@@ -50,7 +50,7 @@ final class KanbanScript: Sendable {
             switch reply {
             case .result(let value)?: return value
             case .failure(let error)?: throw GatewayTransportError.rpc(error)
-            case nil: throw GatewayTransportError.timedOut
+            case nil, .unreachable?: throw GatewayTransportError.timedOut
             }
         }
     }
@@ -222,7 +222,7 @@ struct KanbanStoreTests {
         #expect(store.session.cache("ops")?.highWater == 0)
     }
 
-    @Test("a response from another gateway drops every cache and the old cursor is never sent again")
+    @Test("a response from another gateway keeps the shown board and boards list and never sends the old cursor again")
     func gatewayChangeDropsEverything() async throws {
         let script = KanbanScript()
         script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1")], cursor: "cursor-A", gateway: "A"))
@@ -238,14 +238,14 @@ struct KanbanStoreTests {
         #expect(await store.pollOnce(board: "ops") == .wait)
         #expect(store.session.gatewayID == "B")
         #expect(store.session.cache("ops")?.cursor == "cursor-B")
-        #expect(store.session.boards.isEmpty)
+        #expect(store.session.boards.map(\.scope.board) == ["ops", "lab"])
         #expect(store.session.caches.keys.allSatisfy { $0.gatewayID == "B" })
         #expect(script.calls("kanban.events.since").first?.params["cursor"]?.stringValue == "cursor-A")
         #expect(script.calls("kanban.events.since").count == 1)
         #expect(script.calls("kanban.board.snapshot").last?.params["gateway_id"]?.stringValue == "B")
     }
 
-    @Test("a gateway_mismatch refusal drops all cached state and refetches without the old gateway id")
+    @Test("a gateway_mismatch refusal refetches without the old gateway id")
     func gatewayMismatchRefusal() async throws {
         let script = KanbanScript()
         script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1")], cursor: "c1", gateway: "A"))
@@ -255,7 +255,7 @@ struct KanbanStoreTests {
         script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t2", gateway: "B")], cursor: "cB", gateway: "B"))
         #expect(await store.pollOnce(board: "ops") == .wait)
         let calls = script.calls("kanban.board.snapshot")
-        #expect(calls.last?.params.keys.contains("gateway_id") == false)
+        #expect(calls.dropFirst().first?.params.keys.contains("gateway_id") == false)
         #expect(store.session.gatewayID == "B")
         #expect(store.session.cache("ops")?.cards.values.map(\.taskID) == ["t2"])
     }

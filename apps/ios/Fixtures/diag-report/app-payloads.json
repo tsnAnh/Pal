@@ -1,0 +1,5 @@
+{
+  "offline": {"trace": "restart1", "source": "transport", "reason": "offline", "method": "gateway.ping"},
+  "timeout": {"trace": "restart2", "source": "transport", "reason": "timeout", "method": "kanban.events.since"},
+  "decode": {"trace": "restart3", "source": "decode", "reason": "decode", "method": "kanban.board.snapshot"}
+}
