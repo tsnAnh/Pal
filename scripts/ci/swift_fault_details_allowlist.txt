@@ -1,0 +1,16 @@
+# EnumName: why it does not carry a GatewayFault yet (owner decides; each needs a faulted case and its screens migrated)
+GatewayTransportError: the raw transport error itself; GatewayFault is built from its .rpc payload by the callers
+BotsError: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+ComputerFailure: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+GatewayLimitsFailure: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+GitHubTokenFailure: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+KitFailure: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+HostFailure: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+TeachFailure: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+TemplateImportError: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+WebhookRoutesFailure: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+GoogleWorkspaceError: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+SkillsCatalogError: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+KanbanFailure: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+BotAdminError: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
+SettingsFailure: classifies the RPC error into closed cases without the method name; a fault needs a new faulted case, a method at each classify call and exhaustive-switch updates in its screens
