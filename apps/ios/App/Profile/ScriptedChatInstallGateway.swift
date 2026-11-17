@@ -74,8 +74,11 @@ actor ScriptedChatInstallGateway: ChatInstallClient {
         try JSONDecoder().decode(T.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
+    static let refusal = GatewayFault(code: 4403, reason: "owner_only", trace: TraceID("7f3k2m9a")!, method: "chat.provider.list",
+                                      source: .gateway, gatewayVersion: "291aaa2b")
+
     func providers() async throws -> [ChatCapabilitiesWire] {
-        if ProcessInfo.processInfo.arguments.contains(Self.failArgument) { throw ChatInstallClientError.failed(.forbidden) }
+        if ProcessInfo.processInfo.arguments.contains(Self.failArgument) { throw ChatInstallClientError.faulted(.forbidden, Self.refusal) }
         return [try decode(ChatCapabilitiesWire.self, [
             "provider_id": "slack", "requires_config_credential": true, "creates_app": true,
             "capabilities": [

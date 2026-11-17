@@ -396,19 +396,30 @@ async def _dispatch_request(authority_connection: Any, req: Any, req_method: Any
         # The answer to a request a sidecar RPC sent back to THIS socket (vault.preview.fill's page
         # scripts); the authority's own registry never holds those ids.
         return None
-    with serving_local_desktop(getattr(transport, "desktop_local", False)):
-        if authority_connection is None:
-            return await asyncio.to_thread(server.dispatch, req, transport)
-        resp = await authority_connection.dispatch(req)
-        actor = authority_connection.actor
-        if (_is_unknown_method(resp) and req_method in server._methods
-                and legacy_fallback_allowed(actor, req_method)):
-            # Session verbs live on the authority; everything else the sidecar still
-            # registers (pet, wake word, connectors) keeps its legacy handler. A legacy
-            # session writer keeps the authority's -32601 (ws_legacy_fallback), as does a
-            # method neither side knows, which the client's capability fallbacks key on.
-            resp = await asyncio.to_thread(dispatch_legacy, server, req, transport, actor)
-        return resp
+    from gateway import diag_trace
+    with serving_local_desktop(getattr(transport, "desktop_local", False)), diag_trace.bound(req) as trace:
+        scope = "host" if getattr(authority_connection, "host_scoped", False) else "profile"
+        try:
+            resp = await _authority_or_legacy(authority_connection, req, req_method, transport)
+        except Exception:
+            trace.fail(req, transport=transport, scope=scope)
+            raise
+        return trace.settle(resp, req, transport=transport, scope=scope)
+
+
+async def _authority_or_legacy(authority_connection: Any, req: Any, req_method: Any, transport: WSTransport) -> Any:
+    if authority_connection is None:
+        return await asyncio.to_thread(server.dispatch, req, transport)
+    resp = await authority_connection.dispatch(req)
+    actor = authority_connection.actor
+    if (_is_unknown_method(resp) and req_method in server._methods
+            and legacy_fallback_allowed(actor, req_method)):
+        # Session verbs live on the authority; everything else the sidecar still
+        # registers (pet, wake word, connectors) keeps its legacy handler. A legacy
+        # session writer keeps the authority's -32601 (ws_legacy_fallback), as does a
+        # method neither side knows, which the client's capability fallbacks key on.
+        resp = await asyncio.to_thread(dispatch_legacy, server, req, transport, actor)
+    return resp
 
 
 def _start_backend_liveness() -> None:

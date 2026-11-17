@@ -9,6 +9,10 @@ import pytest
 from tests.gateway.test_session_mutation_model_busy import _owner
 
 
+def _without_trace(data):
+    return {k: v for k, v in data.items() if k not in ('trace', 'gateway_version')}
+
+
 async def _rewind(db, owner, ref, target):
     row = db.get_session(ref.session_id)
     first = db.get_messages(target)[0]['id']
@@ -32,7 +36,7 @@ async def test_rewind_under_a_held_compression_lock_names_the_lock(tmp_path, mon
         with caplog.at_level(logging.DEBUG, logger='gateway.session_controls'):
             reply = await _rewind(db, owner, ref, target)
         assert reply['error']['message'] == 'session_busy', reply
-        assert reply['error']['data'] == {'reason': 'session_busy', 'field': 'compression'}
+        assert _without_trace(reply['error']['data']) == {'reason': 'session_busy', 'field': 'compression'}
         # A retrying client (Desktop's edit retries busy for 6 s) must not flood the log.
         refusals = [r for r in caplog.records if 'session.mutate refused' in r.getMessage()]
         assert refusals and all(r.levelno == logging.DEBUG for r in refusals), refusals
@@ -56,7 +60,7 @@ async def test_rewind_with_an_admitted_turn_stays_a_plain_busy_refusal(tmp_path,
         rt.admit_session_input(db, epoch=authority.epoch, principal_id='human', session_id=ref.session_id,
                                request_id='input', payload={'text': 'go'})
         reply = await _rewind(db, owner, ref, target)
-        assert reply['error']['data'] == {'reason': 'session_busy'}, reply
+        assert _without_trace(reply['error']['data']) == {'reason': 'session_busy'}, reply
     finally:
         await owner.close()
         store.close_all_db_handles()

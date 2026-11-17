@@ -14,6 +14,12 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     case credentialsRequired([String])
     case signInFailed(String)
     case failed
+    case faulted(GatewayFault)
+
+    public var fault: GatewayFault? {
+        if case .faulted(let fault) = self { return fault }
+        return nil
+    }
 }
 
 public struct ConnectAppsTiming: Sendable {
@@ -68,9 +74,14 @@ public struct ConnectAppsService: Sendable {
     func call(_ method: String, _ params: [String: JSONValue] = [:]) async throws -> JSONValue {
         do {
             return try await rawCall(method, params)
-        } catch is GatewayTransportError {
-            throw ConnectAppsError.failed
+        } catch let error as GatewayTransportError {
+            throw Self.map(error, method: method)
         }
+    }
+
+    static func map(_ error: GatewayTransportError, method: String? = nil) -> ConnectAppsError {
+        if case .rpc(let rpc) = error, let method { return .faulted(GatewayFault(rpc, method: method)) }
+        return .failed
     }
 
     public func load() async throws -> ConnectCatalog {
@@ -163,7 +174,7 @@ public struct ConnectAppsService: Sendable {
             _ = try await rawCall("mcp.servers.add", ["name": .string(name), "preset": .string(name)])
             alreadyAdded = false
         } catch let error as GatewayTransportError {
-            guard !requires.isEmpty, case .rpc(let rpc) = error, rpc.code == 4090 else { throw ConnectAppsError.failed }
+            guard !requires.isEmpty, case .rpc(let rpc) = error, rpc.code == 4090 else { throw Self.map(error, method: "mcp.servers.add") }
             alreadyAdded = true
         }
         do {

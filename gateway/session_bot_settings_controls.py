@@ -24,6 +24,8 @@ VERBS = {
     'chat.space.join': Verb('session:control', owner_scoped=True),
     'chat.install.revoke': Verb('session:control', owner_scoped=True),
     'chat.install.update_identity': Verb('session:control', owner_scoped=True),
+    'diag.recent': Verb('session:read', owner_scoped=True),
+    'diag.report': Verb('session:control', owner_scoped=True),
 }
 
 

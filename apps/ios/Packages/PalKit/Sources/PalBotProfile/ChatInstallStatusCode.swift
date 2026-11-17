@@ -1,7 +1,12 @@
 import Foundation
+import PalProtocol
 
 extension ChatInstallModel {
     public static let gatewayOutdatedCode = "gateway_outdated"
+
+    public var loadFailure: ChatFailureReason? { loadError?.reason }
+
+    public var loadFault: GatewayFault? { loadError?.fault }
 
     public var isStatusScreen: Bool {
         switch screen {

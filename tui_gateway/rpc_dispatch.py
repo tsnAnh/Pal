@@ -52,7 +52,18 @@ def dispatch(req: dict, transport: Optional[Transport] = None) -> dict | None:
     response via the bound transport), everything else inline (returns the response dict).
     *transport* pins every write of this request — events included — to that transport;
     omitted → the module stdio transport (``tui_gateway.entry`` behaviour)."""
+    from gateway import diag_trace
     t = transport or _stdio_transport
+    with diag_trace.bound(req) as trace:
+        try:
+            response = _dispatch_traced(req, t, trace)
+        except Exception:
+            trace.fail(req, transport=t)
+            raise
+        return trace.settle(response, req, transport=t)
+
+
+def _dispatch_traced(req: dict, t: Transport, trace) -> dict | None:
     token = bind_transport(t)
     try:
         from tui_gateway import server_requests
@@ -84,7 +95,7 @@ def dispatch(req: dict, transport: Optional[Transport] = None) -> dict | None:
                     logger.exception("pool RPC handler failed for method=%r id=%r", normalized[1], req.get("id"))
                     resp = _err(req.get("id"), -32000, f"handler error: {exc}")
                 if resp is not None:
-                    t.write(resp)
+                    t.write(trace.settle(resp, req, transport=t, final=True))
             future = _pool.submit(lambda: ctx.run(run))
         except BaseException:
             retirement.release()
