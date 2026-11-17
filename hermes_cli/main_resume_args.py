@@ -54,3 +54,42 @@ def recreate_resumed_tui_worktree(args) -> None:
     tree = recreate_tui_worktree(cwd, args.resume)
     if tree:
         print(f"↪ recreated the session's worktree: {tree}")
+
+
+def _coalesce_session_name_args(argv: list) -> list:
+    """Join unquoted multi-word session names after -c/--continue and -r/--resume.
+
+    ``hermes -c Pokemon Agent Dev`` → ``['-c', 'Pokemon Agent Dev']``; tokens
+    are collected until the next flag (``-*``) or known top-level subcommand.
+    """
+    _SUBCOMMANDS = {
+        "chat", "model", "gateway", "setup", "whatsapp", "whatsapp-cloud", "login", "logout",
+        "auth", "status", "cron", "doctor", "config", "pairing", "skills", "tools", "mcp",
+        "sessions", "insights", "update", "uninstall", "profile", "dashboard", "serve", "webapp",
+        "desktop", "gui", "honcho", "claw", "plugins", "security", "acp", "webhook", "peer",
+        "memory", "dump", "debug", "diag", "backup", "import", "completion", "logs", "usage",
+    }
+    _SESSION_FLAGS = {"-c", "--continue", "-r", "--resume"}
+
+    result = []
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token in _SESSION_FLAGS:
+            result.append(token)
+            i += 1
+            # Collect subsequent non-flag, non-subcommand tokens as one name
+            parts: list = []
+            while (
+                i < len(argv)
+                and not argv[i].startswith("-")
+                and argv[i] not in _SUBCOMMANDS
+            ):
+                parts.append(argv[i])
+                i += 1
+            if parts:
+                result.append(" ".join(parts))
+        else:
+            result.append(token)
+            i += 1
+    return result

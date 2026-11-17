@@ -281,6 +281,8 @@ from hermes_cli.subcommands.security import build_security_parser
 from hermes_cli.subcommands.approvals import build_approvals_parser
 from hermes_cli.subcommands.dump import build_dump_parser
 from hermes_cli.subcommands.debug import build_debug_parser
+from hermes_cli.subcommands.diag import build_diag_parser
+from hermes_cli.main_resume_args import _coalesce_session_name_args
 from hermes_cli.subcommands.backup import build_backup_parser
 from hermes_cli.subcommands.import_cmd import build_import_cmd_parser
 from hermes_cli.subcommands.config import build_config_parser
@@ -2344,46 +2346,6 @@ def cmd_update(args):
         _finalize_update_output(_update_io_state)
 
 
-
-def _coalesce_session_name_args(argv: list) -> list:
-    """Join unquoted multi-word session names after -c/--continue and -r/--resume.
-
-    ``hermes -c Pokemon Agent Dev`` → ``['-c', 'Pokemon Agent Dev']``; tokens
-    are collected until the next flag (``-*``) or known top-level subcommand.
-    """
-    _SUBCOMMANDS = {
-        "chat", "model", "gateway", "setup", "whatsapp", "whatsapp-cloud", "login", "logout",
-        "auth", "status", "cron", "doctor", "config", "pairing", "skills", "tools", "mcp",
-        "sessions", "insights", "update", "uninstall", "profile", "dashboard", "serve", "webapp",
-        "desktop", "gui", "honcho", "claw", "plugins", "security", "acp", "webhook", "peer",
-        "memory", "dump", "debug", "backup", "import", "completion", "logs", "usage",
-    }
-    _SESSION_FLAGS = {"-c", "--continue", "-r", "--resume"}
-
-    result = []
-    i = 0
-    while i < len(argv):
-        token = argv[i]
-        if token in _SESSION_FLAGS:
-            result.append(token)
-            i += 1
-            # Collect subsequent non-flag, non-subcommand tokens as one name
-            parts: list = []
-            while (
-                i < len(argv)
-                and not argv[i].startswith("-")
-                and argv[i] not in _SUBCOMMANDS
-            ):
-                parts.append(argv[i])
-                i += 1
-            if parts:
-                result.append(" ".join(parts))
-        else:
-            result.append(token)
-            i += 1
-    return result
-
-
 from hermes_cli.profile_cmd import cmd_profile
 
 
@@ -2647,7 +2609,7 @@ _BUILTIN_SUBCOMMANDS = frozenset(
     {
         "acp", "approvals", "auth", "backup", "bot", "bundles", "catalog", "checkpoints", "codex-runtime", "completion",
         "clipboard", "computer-use", "connectors",
-        "config", "console", "cron", "curator", "dashboard", "serve", "debug", "doctor",
+        "config", "console", "cron", "curator", "dashboard", "serve", "debug", "diag", "doctor",
         "dump", "egress", "fallback", "gateway", "hooks", "import", "insights",
         "gui", "desktop", "kanban", "login", "logout", "logs", "lsp", "mcp", "memory", "migrate", "moa",
         "journey", "memory-graph", "learning",
@@ -3242,6 +3204,7 @@ def _build_cli_parser():
     build_approvals_parser(subparsers, cmd_approvals=cmd_approvals)
     build_dump_parser(subparsers, cmd_dump=cmd_dump)
     build_debug_parser(subparsers, cmd_debug=cmd_debug)
+    build_diag_parser(subparsers)
     build_backup_parser(subparsers, cmd_backup=cmd_backup)
     build_checkpoints_parser(subparsers)
     build_import_cmd_parser(subparsers, cmd_import=cmd_import)

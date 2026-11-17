@@ -129,6 +129,7 @@ hermes secrets bitwarden|onepassword   External secret stores
 hermes moa                  Mixture-of-Agents slots
 hermes hooks / security / backup / import / checkpoints / console
 hermes logs [-f] [errors]   View agent/error logs
+hermes diag recent [--minutes N] [--method M] [--json]   Recent gateway faults (method, code, reason, device, build, trace)
 hermes send                 One-off message through a gateway platform
 hermes pairing / plugins / insights / journey / computer-use
 hermes acp                  ACP server (IDE integration)
