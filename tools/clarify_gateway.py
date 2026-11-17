@@ -100,13 +100,25 @@ def wait_for_response(clarify_id: str, timeout: float) -> Optional[str]:
     return entry.response
 
 
+def _indices_to_labels(entry: _ClarifyEntry, text: str) -> str:
+    """Pal's multi-select Confirm (and older builds) send picked indices as "1,2"; hand the agent
+    the choice labels as a JSON array. Anything else (typed text, out-of-range) passes through."""
+    if not entry.multi_select:
+        return text
+    tokens = [token.strip() for token in text.split(",")]
+    if not all(token.isascii() and token.isdigit() and 0 < int(token) <= len(entry.choices or []) for token in tokens):
+        return text
+    labels = list(dict.fromkeys(str(entry.choices[int(token) - 1]).strip() for token in tokens))
+    return json.dumps(labels, ensure_ascii=False)
+
+
 def resolve_gateway_clarify(clarify_id: str, response: str) -> bool:
     """Unblock the waiter on ``clarify_id``; False if already resolved/expired/unknown."""
     with _lock:
         entry = _entries.get(clarify_id)
         if entry is None or entry.event.is_set():
             return False
-        entry.response = str(response) if response is not None else ""
+        entry.response = _indices_to_labels(entry, str(response)) if response is not None else ""
         entry.event.set()
         return True
 

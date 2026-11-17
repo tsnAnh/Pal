@@ -879,6 +879,12 @@ MIGRATIONS: tuple[tuple[int, Callable[[dict[str, Any], bool], None]], ...] = (
         section="agent", key="clarify_timeout", old=3600, new=90,
         added="agent.clarify_timeout=90",
         message="  ✓ Lowered agent.clarify_timeout from 3600 to 90 seconds (unanswered questions no longer hold the chat for an hour)")),
+    # 53 -> 54: clarify questions no longer time out by default. 90 is the value step 53 wrote into
+    # every config, so it reads as the old default; any other explicit value is kept.
+    (54, _rewrite_stale_default(
+        section="agent", key="clarify_timeout", old=90, new=0,
+        added="agent.clarify_timeout=0",
+        message="  ✓ Set agent.clarify_timeout to 0 (unlimited): clarify questions wait for an answer instead of skipping after 90 seconds. Set a number of seconds to bound it again.")),
 )
 
 #: Steps triggered by a legacy key or identifier (a renamed or retired key, a removed plugin or
