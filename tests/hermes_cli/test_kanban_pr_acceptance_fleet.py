@@ -11,6 +11,7 @@ import pytest
 from hermes_cli import kanban as kanban_cli
 from hermes_cli import kanban_db as kb
 from hermes_cli.kanban_db_connect import connect
+from hermes_cli.kanban_pr_acceptance import decode_pages
 from hermes_cli.kanban_outcomes_store import OutcomeRefusedError
 from tests.hermes_cli.kanban_outcome_support import BOARD, PROFILE, SHA_C, add, claim, complete, merged_payload
 
@@ -19,6 +20,14 @@ pytest_plugins = ["tests.hermes_cli.kanban_outcome_support"]
 REPO = "acme/widget"
 PR = f"https://github.com/{REPO}/pull/7"
 HEAD = "a" * 40
+GH_246 = (
+    "import json,sys,urllib.request\n"
+    "if '--slurp' in sys.argv:\n"
+    "    sys.stderr.write('unknown flag: --slurp\\n'); sys.exit(1)\n"
+    "value = json.loads(urllib.request.urlopen(URL + sys.argv[2]).read())\n"
+    "pages = value if '--paginate' in sys.argv and isinstance(value, list) else [value]\n"
+    "sys.stdout.write(''.join(json.dumps(p) + ('\\n' if i % 2 else '') for i, p in enumerate(pages)))\n"
+)
 
 
 def good_state(head=HEAD):
@@ -97,9 +106,8 @@ def github(coord_env, tmp_path, monkeypatch):
     shim.mkdir()
     envlog = tmp_path / "gh-tokens.log"
     gh = shim / "gh"
-    gh.write_text(f"#!{sys.executable}\nimport os,sys,urllib.request\n"
-                  f"open({str(envlog)!r},'a').write(os.environ.get('GH_TOKEN','-')+'\\n')\n"
-                  f"print(urllib.request.urlopen('http://127.0.0.1:{server.server_port}/'+sys.argv[2]).read().decode())\n")
+    gh.write_text(f"#!{sys.executable}\nimport os\nURL='http://127.0.0.1:{server.server_port}/'\n"
+                  f"open({str(envlog)!r},'a').write(os.environ.get('GH_TOKEN','-')+'\\n')\n" + GH_246)
     gh.chmod(0o755)
     monkeypatch.setenv("PATH", str(shim) + os.pathsep + os.environ["PATH"])
     state["tokens"] = lambda: envlog.read_text().split() if envlog.exists() else []
@@ -393,3 +401,113 @@ def test_evidence_and_acceptance_cannot_name_different_prs_or_heads(github, conn
     assert not complete(conn, tid, run_id, metadata={"published_pr": PR})
     assert receipts(conn, tid)[-1]["classification"] == "mismatch"
     assert kb.get_task(conn, tid).status != "done"
+
+
+
+@pytest.mark.parametrize("text,pages", [
+    ('[1,2][3]\n[4]', [[1, 2], [3], [4]]),
+    ('[{"a": 1}]', [[{"a": 1}]]),
+    ('[]\n', [[]]),
+    ('{"total_count": 1, "check_runs": [5]}\n  {"total_count": 1, "check_runs": []}',
+     [{"total_count": 1, "check_runs": [5]}, {"total_count": 1, "check_runs": []}]),
+    ('\n [1]\n\n\t[2] \n', [[1], [2]]),
+])
+def test_decode_pages_matches_slurp(text, pages):
+    assert decode_pages(text) == pages
+
+
+@pytest.mark.parametrize("text", ["[1]garbage", "[1][", "", "  \n"])
+def test_decode_pages_rejects_garbage(text):
+    with pytest.raises(ValueError):
+        decode_pages(text)
+
+
+PHASES = [
+    ("pull request read", "/pulls/7"),
+    ("repository read", f"repos/{REPO}?"),
+    ("commit-to-PR pages", f"/commits/{HEAD}/pulls"),
+    ("branch PRs", f"repos/{REPO}/pulls?"),
+    ("timeline", "/timeline"),
+    ("workflow runs", "/actions/runs"),
+    ("workflow tree", "/git/trees/"),
+    ("check runs", "/check-runs"),
+    ("statuses", "/statuses"),
+]
+
+
+def failing_gh(github, tmp_path, needle, *, after=0, timeout=False):
+    shim = tmp_path / "bin" / "gh"
+    real = shim.read_text()
+    count = tmp_path / "count"
+    fail = "import time; time.sleep(60)" if timeout else "sys.stderr.write('HTTP 500 secret-host token=abc'); sys.exit(1)"
+    shim.write_text(real.replace(
+        "import json,sys,urllib.request\n",
+        "import json,sys,urllib.request,pathlib\n"
+        f"_e = sys.argv[2] + ('?' if '?' not in sys.argv[2] else '')\n"
+        f"if {needle!r} in _e:\n"
+        f"    _c = pathlib.Path({str(count)!r}); _n = int(_c.read_text()) if _c.exists() else 0; _c.write_text(str(_n + 1))\n"
+        f"    if _n >= {after}:\n        {fail}\n", 1))
+
+
+@pytest.mark.parametrize("name,needle", PHASES, ids=[p[0] for p in PHASES])
+def test_gh_failure_persists_its_phase_without_stderr(github, conn, tmp_path, name, needle):
+    if name == "workflow tree":
+        github["workflow_runs"][0].update(event="push", pull_requests=[])
+    failing_gh(github, tmp_path, needle)
+    tid, done = attempt(conn)
+    receipt = receipts(conn, tid)[-1]
+    assert not done and kb.get_task(conn, tid).status != "done"
+    assert receipt["classification"] == "infra"
+    assert receipt["detail"].startswith("infra: CalledProcessError (gh exited 1 while reading ")
+    assert f"in phase {name};" in receipt["detail"]
+    assert "?" not in receipt["detail"].split(" in phase ")[0]
+    assert not {"secret-host", "token", "HTTP 500"} & set(receipt["detail"].replace(";", " ").replace("=", " ").split())
+    assert "secret-host" not in json.dumps(receipt)
+
+
+def test_final_reread_failure_names_its_phase(github, conn, tmp_path):
+    failing_gh(github, tmp_path, "/pulls/7", after=1)
+    tid, done = attempt(conn)
+    assert not done
+    assert "in phase final re-read;" in receipts(conn, tid)[-1]["detail"]
+
+
+def test_gh_timeout_persists_its_phase(github, conn, tmp_path, monkeypatch):
+    import subprocess
+    real = subprocess.run
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: real(*a, **{**kw, "timeout": 1}))
+    failing_gh(github, tmp_path, "/actions/runs", timeout=True)
+    tid, done = attempt(conn)
+    detail = receipts(conn, tid)[-1]["detail"]
+    assert not done and receipts(conn, tid)[-1]["classification"] == "infra"
+    assert detail.startswith(f"infra: TimeoutExpired (gh timed out (30s) while reading repos/{REPO}/actions/runs) in phase workflow runs;")
+
+
+def test_incomplete_pagination_names_its_phase(github, conn, monkeypatch):
+    import hermes_cli.kanban_pr_acceptance_fleet as fleet
+    real = fleet._api
+
+    def lying(endpoint, **kw):
+        value = real(endpoint, **kw)
+        if "/actions/runs" in endpoint:
+            value[0]["total_count"] += 1
+        return value
+    monkeypatch.setattr(fleet, "_api", lying)
+    tid, done = attempt(conn)
+    assert not done
+    assert receipts(conn, tid)[-1]["detail"].startswith(
+        "infra: ValueError (Incomplete provenance pagination) in phase workflow runs;")
+
+
+def test_head_without_workflow_runs_is_missing_not_infra(github, conn):
+    github.update(workflow_runs=[], check_runs=[])
+    tid, done = attempt(conn)
+    receipt = receipts(conn, tid)[-1]
+    assert not done and receipt["classification"] == "missing"
+    assert receipt["detail"] == "No qualifying CI success on this exact head."
+
+
+def test_missing_profile_login_is_auth_not_infra(github, conn, tmp_path):
+    (tmp_path / "bin" / "gh").write_text(f"#!{sys.executable}\nimport sys\nsys.exit(4)\n")
+    tid, done = attempt(conn)
+    assert not done and receipts(conn, tid)[-1]["classification"] == "auth"

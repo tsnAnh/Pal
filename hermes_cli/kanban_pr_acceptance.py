@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
 from urllib.parse import quote
 
@@ -46,7 +47,8 @@ def _api(endpoint: str, *, query: str | None = None, paginate: bool = False,
     if query is not None:
         command += ["-f", "query=" + query]
     if paginate:
-        command += ["--paginate", "--slurp"]
+        command += ["--paginate"]
+    path = endpoint.split("?")[0]
     try:
         result = subprocess.run(command, stdin=subprocess.DEVNULL, capture_output=True,
                                 text=True, encoding="utf-8", errors="replace", timeout=30,
@@ -57,14 +59,53 @@ def _api(endpoint: str, *, query: str | None = None, paginate: bool = False,
         # code + endpoint, never gh's stderr (credentials/host details).
         denied = re.search(r"HTTP (40[134])", exc.stderr or "")
         if denied:
-            raise _GateAuthError(f"HTTP {denied[1]} on {endpoint.split('?')[0]}") from None
+            raise _GateAuthError(f"HTTP {denied[1]} on {path}") from None
         if exc.returncode == 4:  # gh's authentication-required exit: this profile has no login
-            raise _GateAuthError(f"gh has no login for {endpoint.split('?')[0]}") from None
-        raise
-    value = json.loads(result.stdout)
+            raise _GateAuthError(f"gh has no login for {path}") from None
+        raise _GateInfraError(f"CalledProcessError (gh exited {exc.returncode} while reading {path})") from None
+    except subprocess.TimeoutExpired:
+        raise _GateInfraError(f"TimeoutExpired (gh timed out (30s) while reading {path})") from None
+    try:
+        value = decode_pages(result.stdout) if paginate else json.loads(result.stdout)
+    except ValueError:
+        raise _GateInfraError(f"JSONDecodeError (malformed JSON while reading {path})") from None
     if isinstance(value, dict) and value.get("errors"):
         raise ValueError("GitHub returned incomplete GraphQL evidence")
     return value
+
+
+def decode_pages(text: str) -> list:
+    """``gh api --paginate`` output as the page list ``--slurp`` gives; gh 2.46 has no ``--slurp``."""
+    decoder, pages, index = json.JSONDecoder(), [], 0
+    while (index := len(text) - len(text[index:].lstrip())) < len(text):
+        value, index = decoder.raw_decode(text, index)
+        pages.append(value)
+    if not pages:
+        raise ValueError("empty paginated response")
+    return pages
+
+
+class _GateInfraError(ValueError):
+    """Evidence collection failed outside the auth cases; the message carries no gh stderr."""
+
+
+_INFRA_ERRORS = (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, IndexError)
+
+
+@contextmanager
+def phase(name: str):
+    try:
+        yield
+    except _GateAuthError:
+        raise
+    except _INFRA_ERRORS as exc:
+        if isinstance(exc, _GateInfraError):
+            if " in phase " in str(exc):
+                raise
+            cause = str(exc)
+        else:
+            cause = f"{type(exc).__name__} ({exc})" if type(exc) is ValueError else type(exc).__name__
+        raise _GateInfraError(f"{cause} in phase {name}") from None
 
 
 class _GateAuthError(RuntimeError):
@@ -140,7 +181,8 @@ def collect_acceptance(contract: str, published_pr: str | None,
         receipt["pr_url"] = url
         owner, name = repo.split("/")
         query = f'{{repository(owner:{json.dumps(owner)},name:{json.dumps(name)}){{pullRequest(number:{number:d}){{headRefOid baseRefName state\n            baseRef{{branchProtectionRule{{requiredStatusChecks{{context app{{databaseId}}}}}}}}}}}}}}'
-        repository = _api("graphql", query=query, profile_home=profile_home)["data"]["repository"]
+        with phase("pull request read"):
+            repository = _api("graphql", query=query, profile_home=profile_home)["data"]["repository"]
         if repository is None:
             # A private repo the login cannot read resolves to null, not an error.
             raise _GateAuthError(f"HTTP 404 on graphql {repo}")
@@ -148,11 +190,12 @@ def collect_acceptance(contract: str, published_pr: str | None,
         sha, branch = pr["headRefOid"], pr["baseRefName"]
         receipt["head_sha"] = sha
         if not re.fullmatch(r"[0-9a-f]{40}", sha) or pr["state"] not in {"OPEN", "MERGED"}:
-            raise ValueError("PR is closed or current head is unavailable")
+            raise _GateInfraError("PR is closed or current head is unavailable in phase pull request read")
         protection = (pr.get("baseRef") or {}).get("branchProtectionRule") or {}
         required = {(r["context"], (r.get("app") or {}).get("databaseId")) for r in protection.get("requiredStatusChecks", [])}
-        rules = _api(f"repos/{repo}/rules/branches/{quote(branch, safe='')}?per_page=100",
-                     paginate=True, profile_home=profile_home)
+        with phase("branch rules"):
+            rules = _api(f"repos/{repo}/rules/branches/{quote(branch, safe='')}?per_page=100",
+                         paginate=True, profile_home=profile_home)
         for page in rules:
             for rule in page:
                 if rule["type"] == "required_status_checks":
@@ -162,13 +205,15 @@ def collect_acceptance(contract: str, published_pr: str | None,
         if not required:
             receipt["detail"] = "No repository-required checks are configured; explicitly use a local-only contract for non-CI tasks."
             return receipt
-        pages = _api(f"repos/{repo}/commits/{sha}/check-runs?per_page=100&filter=latest",
-                     paginate=True, profile_home=profile_home)
-        runs = [run for page in pages for run in page["check_runs"]]
-        if len({r["id"] for r in runs}) != pages[0]["total_count"]:
-            raise ValueError("Incomplete check-run pagination")
-        statuses = [{**s, "sha": sha} for page in _api(f"repos/{repo}/commits/{sha}/statuses?per_page=100",
-                                                       paginate=True, profile_home=profile_home) for s in page]
+        with phase("check runs"):
+            pages = _api(f"repos/{repo}/commits/{sha}/check-runs?per_page=100&filter=latest",
+                         paginate=True, profile_home=profile_home)
+            runs = [run for page in pages for run in page["check_runs"]]
+            if len({r["id"] for r in runs}) != pages[0]["total_count"]:
+                raise ValueError("Incomplete check-run pagination")
+        with phase("statuses"):
+            statuses = [{**s, "sha": sha} for page in _api(f"repos/{repo}/commits/{sha}/statuses?per_page=100",
+                                                           paginate=True, profile_home=profile_home) for s in page]
         outcomes = []
         for context, app_id in sorted(required, key=str):
             matching = [r for r in runs if r["name"] == context and
@@ -189,7 +234,8 @@ def collect_acceptance(contract: str, published_pr: str | None,
                     "head_sha": check.get("head_sha", check.get("sha")),
                     "classification": classification, "conclusion": outcome})
         # Re-read after all pages: old-head successes are never transferable.
-        current = _api(f"repos/{repo}/pulls/{number}", profile_home=profile_home)
+        with phase("final re-read"):
+            current = _api(f"repos/{repo}/pulls/{number}", profile_home=profile_home)
         if current["head"]["sha"] != sha or current["base"]["ref"] != branch or (current["state"] == "closed" and not current.get("merged")):
             receipt.update(classification="stale", detail="PR head/base changed while collecting evidence; retry.")
             return receipt
@@ -202,9 +248,11 @@ def collect_acceptance(contract: str, published_pr: str | None,
                        detail=f"GitHub refused the acceptance read ({exc}) as {login}; "
                               "fix that profile's GitHub credentials/access to the repository, then retry completion.")
         return receipt
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, IndexError):
+    except _INFRA_ERRORS as exc:
         # Never persist gh stderr (credentials/host details); the failed phase is actionable.
-        receipt.update(classification="infra", detail="GitHub acceptance evidence unavailable or incomplete; check gh authentication/API access and retry.")
+        cause = str(exc) if isinstance(exc, _GateInfraError) else f"{type(exc).__name__} in phase acceptance"
+        receipt.update(classification="infra", detail=f"infra: {cause}; GitHub acceptance evidence unavailable or "
+                                                      "incomplete, check gh authentication/API access and retry.")
         return receipt
 
 

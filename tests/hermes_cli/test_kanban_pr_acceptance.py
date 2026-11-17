@@ -10,6 +10,15 @@ import pytest
 from hermes_cli import kanban_db as kb
 from hermes_cli.kanban_db_connect import connect
 
+GH_246 = (
+    "import json,sys,urllib.request\n"
+    "if '--slurp' in sys.argv:\n"
+    "    sys.stderr.write('unknown flag: --slurp\\n'); sys.exit(1)\n"
+    "value = json.loads(urllib.request.urlopen(URL + sys.argv[2]).read())\n"
+    "pages = value if '--paginate' in sys.argv and isinstance(value, list) else [value]\n"
+    "sys.stdout.write(''.join(json.dumps(p) + ('\\n' if i % 2 else '') for i, p in enumerate(pages)))\n"
+)
+
 
 @pytest.fixture
 def github(tmp_path, monkeypatch):
@@ -60,9 +69,7 @@ def github(tmp_path, monkeypatch):
     shim = tmp_path / "bin"
     shim.mkdir()
     gh = shim / "gh"
-    gh.write_text(f"#!{sys.executable}\nimport sys,urllib.request\n"
-                  f"u='http://127.0.0.1:{server.server_port}/'+sys.argv[2]\n"
-                  "print(urllib.request.urlopen(u).read().decode())\n")
+    gh.write_text(f"#!{sys.executable}\nURL='http://127.0.0.1:{server.server_port}/'\n" + GH_246)
     gh.chmod(0o755)
     monkeypatch.setenv("PATH", str(shim) + os.pathsep + os.environ["PATH"])
     monkeypatch.setenv("HERMES_HOME", str(tmp_path / "home"))

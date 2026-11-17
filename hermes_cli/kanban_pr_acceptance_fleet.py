@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 
-from hermes_cli.kanban_pr_acceptance import _api, _PR
+from hermes_cli.kanban_pr_acceptance import _api, _PR, phase
 
 _SHA = re.compile(r"[0-9a-f]{40}")
 _WORKFLOW_DIR = ".github/workflows/"
@@ -74,39 +74,49 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
         return receipt
     repo, number = match[1], int(match[2])
     receipt.update(pr_url=url, policy="fleet-ci")
-    pr = _api(f"repos/{repo}/pulls/{number}", profile_home=profile_home)
-    sha, branch, default = pr["head"]["sha"], pr["head"]["ref"], _api(f"repos/{repo}", profile_home=profile_home)["default_branch"]
-    receipt["head_sha"] = sha
-    if not _SHA.fullmatch(sha) or pr["state"] not in {"open", "closed"} or (pr["state"] == "closed" and not pr.get("merged")):
-        raise ValueError("PR is closed or current head is unavailable")
+    with phase("pull request read"):
+        pr = _api(f"repos/{repo}/pulls/{number}", profile_home=profile_home)
+        sha, branch = pr["head"]["sha"], pr["head"]["ref"]
+        receipt["head_sha"] = sha
+        if not _SHA.fullmatch(sha) or pr["state"] not in {"open", "closed"} or (pr["state"] == "closed" and not pr.get("merged")):
+            raise ValueError("PR is closed or current head is unavailable")
+    with phase("repository read"):
+        default = _api(f"repos/{repo}", profile_home=profile_home)["default_branch"]
     if pr["base"]["ref"] != default or any(
             (pr[side].get("repo") or {}).get("full_name", "").lower() != repo.lower() for side in ("head", "base")):
         receipt["detail"] = "PR must be same-repository and target the default branch."
         receipt["classification"] = "provenance"
         return receipt
     owner = repo.split("/")[0]
-    commit_prs = _pages(f"repos/{repo}/commits/{sha}/pulls?per_page=100", None, profile_home)
+    with phase("commit-to-PR pages"):
+        commit_prs = _pages(f"repos/{repo}/commits/{sha}/pulls?per_page=100", None, profile_home)
     same_head = [p for p in commit_prs if p["number"] != number and p["state"] == "open" and p["head"]["sha"] == sha]
     linked = any(p["number"] == number and p["base"]["ref"] == default and p["head"]["sha"] == sha for p in commit_prs)
-    branch_prs = _pages(f"repos/{repo}/pulls?state=all&head={owner}:{branch}&per_page=100", None, profile_home)
-    timeline = [event for n in sorted({number, *(p["number"] for p in branch_prs)})
-                for event in _pages(f"repos/{repo}/issues/{n}/timeline?per_page=100", None, profile_home)]
+    with phase("branch PRs"):
+        branch_prs = _pages(f"repos/{repo}/pulls?state=all&head={owner}:{branch}&per_page=100", None, profile_home)
+    with phase("timeline"):
+        timeline = [event for n in sorted({number, *(p["number"] for p in branch_prs)})
+                    for event in _pages(f"repos/{repo}/issues/{n}/timeline?per_page=100", None, profile_home)]
     problems = (["another open PR shares this head"] if same_head else []) + (
         ["a PR from this branch targeted a non-default base"] if any(p["base"]["ref"] != default for p in branch_prs) else []) + (
         ["the PR base was retargeted"] if any(e.get("event") in _RETARGET_EVENTS for e in timeline) else [])
     if problems:
         receipt.update(classification="provenance", detail="; ".join(problems) + ".")
         return receipt
-    workflow_runs = {r["check_suite_id"]: r for r in _pages(
-        f"repos/{repo}/actions/runs?head_sha={sha}&per_page=100", "workflow_runs", profile_home)}
+    with phase("workflow runs"):
+        workflow_runs = {r["check_suite_id"]: r for r in _pages(
+            f"repos/{repo}/actions/runs?head_sha={sha}&per_page=100", "workflow_runs", profile_home)}
     cache: list[bool] = []
 
     def workflows_match() -> bool:
         if not cache:
-            cache.append(_tree(repo, sha, profile_home) == _tree(repo, default, profile_home))
+            with phase("workflow tree"):
+                cache.append(_tree(repo, sha, profile_home) == _tree(repo, default, profile_home))
         return cache[0]
-    runs = _pages(f"repos/{repo}/commits/{sha}/check-runs?per_page=100&filter=latest", "check_runs", profile_home)
-    statuses = _pages(f"repos/{repo}/commits/{sha}/statuses?per_page=100", None, profile_home)
+    with phase("check runs"):
+        runs = _pages(f"repos/{repo}/commits/{sha}/check-runs?per_page=100&filter=latest", "check_runs", profile_home)
+    with phase("statuses"):
+        statuses = _pages(f"repos/{repo}/commits/{sha}/statuses?per_page=100", None, profile_home)
     latest = {}
     for status in statuses:
         if status["context"] not in latest or status["id"] > latest[status["context"]]["id"]:
@@ -140,10 +150,12 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
         outcomes.append(classification)
         receipt["checks"].append({"name": context, "id": status["id"], "url": status.get("target_url"),
                                   "head_sha": sha, "classification": classification, "conclusion": status["state"]})
-    current = _api(f"repos/{repo}/pulls/{number}", profile_home=profile_home)
-    if (current["head"]["sha"] != sha or current["base"]["ref"] != pr["base"]["ref"]
-            or (current["state"] == "closed" and not current.get("merged"))
-            or _api(f"repos/{repo}", profile_home=profile_home)["default_branch"] != default):
+    with phase("final re-read"):
+        current = _api(f"repos/{repo}/pulls/{number}", profile_home=profile_home)
+        moved = (current["head"]["sha"] != sha or current["base"]["ref"] != pr["base"]["ref"]
+                 or (current["state"] == "closed" and not current.get("merged"))
+                 or _api(f"repos/{repo}", profile_home=profile_home)["default_branch"] != default)
+    if moved:
         receipt.update(classification="stale", detail="PR head/base changed while collecting evidence; retry.")
         return receipt
     failing = next((x for x in outcomes if x != "success"), None)
