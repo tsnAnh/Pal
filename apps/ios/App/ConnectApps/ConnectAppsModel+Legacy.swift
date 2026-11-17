@@ -7,7 +7,7 @@ extension ConnectAppsModel {
         case .connect:
             await connect(app)
         case .signIn:
-            if app.source == .googleWorkspace { googleApp = app } else if app.requiresAppSignIn { upworkApp = app }
+            if app.requiresAppSignIn { upworkApp = app }
         case .needsSetup, .noDirectOption:
             break
         }

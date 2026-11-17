@@ -92,6 +92,13 @@ struct LegacyConnectionsTests {
         #expect(route("mystery", .native) == .noDirectOption)
     }
 
+    @Test func aConnectedOAuthClientGoogleRowHidesTheLegacyGoogleRow() {
+        let item = legacyItem("google-workspace", catalogID: "google-workspace", method: .oauthClient)
+        let result = LegacyConnectionsResult(sourceReadable: true, items: [item])
+        let google = catalogEntry("google-workspace", "Google Workspace", "Files and docs", method: .oauthClient, status: .connected, url: nil)
+        #expect(LegacyReconnect.rows(result, catalog: legacyCatalog(google), dismissed: []).isEmpty)
+    }
+
     @Test func nativeGoogleRoutesToItsSignInWhenTheCatalogHasIt() {
         let google = catalogEntry("google-workspace", "Google Workspace", "Files and docs", method: .native, url: nil)
         let catalog = ConnectCatalog.make(catalog: [google], mcp: [], google: GoogleWorkspaceStatus(state: .needsSignIn))

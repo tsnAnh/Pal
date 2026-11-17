@@ -152,7 +152,7 @@ public enum LegacyReconnect {
     private static func app(for item: LegacyConnectorItem, in catalog: ConnectCatalog) -> ConnectApp? {
         guard let slug = item.catalogID else { return nil }
         let ids = slug == ServiceKind.google.connectorSlug
-            ? [GoogleWorkspaceCatalog.appID] : ["connector:\(slug)", "mcp:\(slug)"]
+            ? [GoogleWorkspaceCatalog.appID, "connector:\(slug)"] : ["connector:\(slug)", "mcp:\(slug)"]
         return catalog.apps.first { ids.contains($0.id) }
     }
 }
