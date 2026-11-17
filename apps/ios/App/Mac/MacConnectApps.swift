@@ -216,7 +216,8 @@ struct MacConnectApps: View {
     @ViewBuilder
     private func icon(for app: ConnectApp) -> some View {
         switch app.source {
-        case .catalog, .mcp, .custom, .googleWorkspace: MacAppTile()
+        case .catalog: MacAppTile(logo: ConnectorLogo.image(for: app))
+        case .mcp, .custom, .googleWorkspace: MacAppTile()
         }
     }
 
@@ -314,6 +315,7 @@ struct MacAppTile: View {
     var size: CGFloat = 38
     var radius: CGFloat = 10
     var glyphSize: CGFloat = 16
+    var logo: Image?
 
     var body: some View {
         glyph
@@ -323,11 +325,20 @@ struct MacAppTile: View {
     }
 
     private var glyph: some View {
-        Image(systemName: "puzzlepiece.extension")
-            .font(.system(size: glyphSize))
-            .foregroundStyle(PalTokens.textPrimary)
+        glyphContent
             .frame(width: size, height: size)
             .background(PalTokens.control)
+    }
+
+    @ViewBuilder
+    private var glyphContent: some View {
+        if let logo {
+            logo.scaledToFit().padding(size * 0.22)
+        } else {
+            Image(systemName: "puzzlepiece.extension")
+                .font(.system(size: glyphSize))
+                .foregroundStyle(PalTokens.textPrimary)
+        }
     }
 }
 #endif
