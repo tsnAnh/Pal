@@ -229,6 +229,8 @@ final class ConnectionModel {
         await connect()
     }
 
+    var negotiatedRuntime: JSONValue? { connection?.negotiatedRuntime }
+
     var chatConnector: PalClientConnector? {
         client.map(PalClientConnector.init(client:))
     }

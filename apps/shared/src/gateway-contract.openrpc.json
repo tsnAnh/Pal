@@ -6433,6 +6433,15 @@
             "const": "account",
             "title": "Type",
             "type": "string"
+          },
+          "source": {
+            "default": "desktop",
+            "enum": [
+              "desktop",
+              "ios"
+            ],
+            "title": "Source",
+            "type": "string"
           }
         },
         "required": [

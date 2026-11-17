@@ -1,6 +1,7 @@
 import Foundation
 import PalAuth
 import PalBotProfile
+import PalClient
 import PalConnect
 import PalDesign
 import PalDevice
@@ -13,6 +14,10 @@ struct ConnectionRPC: ConnectRPC {
 
     func call(_ method: String, _ params: JSONValue) async throws -> JSONValue {
         try await model.rpc(method, params)
+    }
+
+    var sendsAccountSource: Bool {
+        get async { await RuntimeDescription.supports(ConnectAppsService.accountSourceCapability, advertised: model.negotiatedRuntime) }
     }
 }
 

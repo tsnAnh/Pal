@@ -1531,6 +1531,7 @@ export interface SessionOwner {
 }
 export interface AccountOwner {
   type: 'account'
+  source?: 'desktop' | 'ios'
 }
 /** ``methods_connectors._operation_view``: the operation's full snapshot. */
 export interface ConnectionOperationStatus {
