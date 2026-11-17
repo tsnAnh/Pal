@@ -1,3 +1,4 @@
+import PalConnect
 import PalDesign
 import SwiftUI
 
