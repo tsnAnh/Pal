@@ -1650,8 +1650,10 @@ def _(rid, params: dict) -> dict:
     """Begin a session-backed OAuth flow → ``{ok, session_id, auth_url, flow: "pkce"}``; the client
     opens ``auth_url`` and polls ``mcp.servers.oauth.poll``. With ``client_redirect_uri`` the CLIENT
     hosts the loopback and relays the code via ``mcp.servers.oauth.callback`` (desktop and gateway
-    on different machines). Runs on the RPC pool (_LONG_HANDLERS)."""
+    on different machines); with the Pal app's redirect the gateway walks app, https callback, loopback
+    and reports the one used as ``redirect``. Runs on the RPC pool (_LONG_HANDLERS)."""
     client_redirect_uri = _str_arg(params, "client_redirect_uri") or None
+    fallback_redirect_uri = _str_arg(params, "fallback_redirect_uri") or None
     try:
         name, servers, err = _mcp_config_server_or_error(rid, params)
         if err:
@@ -1666,10 +1668,12 @@ def _(rid, params: dict) -> dict:
             return _err(rid, 4063, message)
         hermes_home = str(_tools_mod("hermes_constants").get_hermes_home().expanduser().resolve(strict=False))
         result = _tools_mod("tui_gateway.mcp_oauth_sessions").start_flow(
-            hermes_home, name, cfg, client_redirect_uri=client_redirect_uri)
+            hermes_home, name, cfg, client_redirect_uri=client_redirect_uri,
+            fallback_redirect_uri=fallback_redirect_uri)
     except ValueError as e:
         return _err(rid, 4001, str(e))
-    return _ok(rid, {"ok": True, **{k: result[k] for k in ("session_id", "auth_url", "flow")}})
+    keys = ("session_id", "auth_url", "flow", "redirect", "redirect_uri", "notice")
+    return _ok(rid, {"ok": True, **{k: result[k] for k in keys if k in result}})
 
 
 @_mcp_rpc("oauth.poll", _NAME_SESSION)

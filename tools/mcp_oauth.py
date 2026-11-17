@@ -416,7 +416,7 @@ def _model_json(model: Any) -> dict:
 
 class HermesTokenStorage:
     """Persist OAuth state as ``HERMES_HOME/mcp-tokens/<server_name>`` + ``.json`` (tokens),
-    ``.client.json`` (client info), ``.meta.json`` (server metadata), ``.cimd-off`` (CIMD refused)."""
+    ``.client.json`` (client info), ``.meta.json`` (server metadata), ``.cimd-off`` (CIMD refused), ``.redirect.json`` (app sign-in redirect preference)."""
 
     def __init__(self, server_name: str, *, hermes_home: str | Path | None = None):
         self._server_name = _safe_filename(server_name)
@@ -435,6 +435,7 @@ class HermesTokenStorage:
     _meta_path = partialmethod(_path, ".meta.json")
     _cimd_rejected_path = partialmethod(_path, ".cimd-off")
     _reauth_path = partialmethod(_path, ".reauth")
+    _redirect_pref_path = partialmethod(_path, ".redirect.json")
 
     def _state_paths(self) -> tuple[Path, ...]:
         return self._tokens_path(), self._client_info_path(), self._meta_path(), self._reauth_path()
@@ -590,6 +591,18 @@ class HermesTokenStorage:
     def cimd_rejected(self) -> bool:
         """True when this server has refused our metadata document before."""
         return self._cimd_rejected_path().exists()
+
+    def redirect_pref(self) -> dict:
+        """The sign-in redirect kind that last reached approval and whether the no-secure-address notice was
+        shown. Survives ``remove()``: it describes the server, not a grant."""
+        data = _read_json(self._redirect_pref_path())
+        return data if isinstance(data, dict) else {}
+
+    def update_redirect_pref(self, **fields: Any) -> None:
+        try:
+            _write_json(self._redirect_pref_path(), {**self.redirect_pref(), **fields})
+        except OSError as exc:  # non-fatal: the next sign-in just walks the chain again
+            logger.debug("Could not record redirect preference for %s: %s", self._server_name, exc)
 
     def mark_reauth_required(self) -> None:
         """Durably record that the authorization server rejected the stored refresh token, so no later call,

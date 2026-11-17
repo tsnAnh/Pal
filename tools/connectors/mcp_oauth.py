@@ -206,13 +206,22 @@ def run_worker(
 
 
 def _validate_client_redirect_uri(uri: str) -> str:
-    """Accept only plain-http loopback URLs (RFC 8252)."""
+    """Accept plain-http loopback URLs (RFC 8252) and the Pal app's private-use scheme."""
+    from tools.connectors.mcp_oauth_redirect import is_app_redirect, normalize_app_redirect
+    text = str(uri or "").strip()
+    if is_app_redirect(text):
+        return normalize_app_redirect(text)
+    return validate_loopback_redirect_uri(text)
+
+
+def validate_loopback_redirect_uri(uri: str) -> str:
     parsed = urlparse(str(uri or "").strip())
     host = (parsed.hostname or "").lower()
     if (parsed.scheme != "http" or host not in ("127.0.0.1", "localhost", "::1") or not parsed.port
             or parsed.username is not None or parsed.password is not None):
         raise ValueError(
-            "client_redirect_uri must be a loopback http URL like http://127.0.0.1:<port>/callback")
+            "client_redirect_uri must be a loopback http URL like http://127.0.0.1:<port>/callback "
+            "or the Pal app's redirect")
     return f"http://{'[' + host + ']' if ':' in host else host}:{parsed.port}{parsed.path or '/callback'}"
 
 
