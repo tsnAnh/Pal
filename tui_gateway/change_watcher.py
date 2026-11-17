@@ -457,6 +457,23 @@ def _broadcast_watched_changes(now: float | None = None) -> None:
             _broadcast_global_event(event, payload_fn())
 
 
+_chat_install_seq = None
+
+
+def _broadcast_chat_install_changes() -> None:
+    """The chat install outbox is the one emit path: the redirect route and the Slack adapter may write
+    from another process, so every state move reaches clients as one event, in order, from here."""
+    global _chat_install_seq
+    from gateway.chat_install_store import ChatInstallStore
+    store = ChatInstallStore(_hermes_home)
+    if _chat_install_seq is None:
+        _chat_install_seq = store.latest_seq()
+        return
+    for seq, state in store.events_after(_chat_install_seq):
+        _chat_install_seq = seq
+        _broadcast_global_event("chat.install.changed", {"state": state.model_dump(mode="json")})
+
+
 _skin_watcher_started = False
 
 
@@ -474,6 +491,8 @@ def _ensure_skin_watcher() -> None:
             time.sleep(0.5)
             _broadcast_skin_if_changed()
             _broadcast_watched_changes()
+            with contextlib.suppress(Exception):
+                _broadcast_chat_install_changes()
     threading.Thread(target=_loop, name="hermes-change-watcher", daemon=True).start()
 
 

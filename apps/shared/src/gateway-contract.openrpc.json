@@ -565,6 +565,150 @@
       }
     },
     {
+      "name": "chat.binding.list",
+      "summary": "Channels this bot is bound to and whether it is live in each.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatBindingListResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.advance",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallAdvanceParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.begin",
+      "summary": "Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.revoke",
+      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.status",
+      "summary": "Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.provider.list",
+      "summary": "Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatProviderListResult"
+        }
+      }
+    },
+    {
+      "name": "chat.space.join",
+      "summary": "Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatSpaceJoinParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatSpaceJoinResult"
+        }
+      }
+    },
+    {
+      "name": "chat.spaces.list",
+      "summary": "Channels the installed bot can see, with whether it has joined.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatSpacesListResult"
+        }
+      }
+    },
+    {
       "name": "clarify.lock",
       "summary": "Lock one answer of a batch clarify request (editable until every question is locked).",
       "params": [
@@ -9668,6 +9812,35 @@
         "title": "BillingStepUpVerificationPayload",
         "type": "object"
       },
+      "Binding": {
+        "additionalProperties": false,
+        "properties": {
+          "bot": {
+            "title": "Bot",
+            "type": "string"
+          },
+          "space_id": {
+            "title": "Space Id",
+            "type": "string"
+          },
+          "installation_id": {
+            "title": "Installation Id",
+            "type": "string"
+          },
+          "live": {
+            "title": "Live",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "bot",
+          "space_id",
+          "installation_id",
+          "live"
+        ],
+        "title": "Binding",
+        "type": "object"
+      },
       "BotAboutYouFacts": {
         "additionalProperties": false,
         "description": "``timezone_auto``: the client keeps ``timezone`` in step with its device and pushes it on change.",
@@ -15987,6 +16160,42 @@
         "title": "CanonicalVoiceStopped",
         "type": "object"
       },
+      "Capabilities": {
+        "additionalProperties": false,
+        "properties": {
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "requires_config_credential": {
+            "title": "Requires Config Credential",
+            "type": "boolean"
+          },
+          "creates_app": {
+            "title": "Creates App",
+            "type": "boolean"
+          },
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/tui_gateway_contracts_chat_provider_CapabilityEntry"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "identity_policy": {
+            "$ref": "#/components/schemas/IdentityPolicy"
+          }
+        },
+        "required": [
+          "provider_id",
+          "requires_config_credential",
+          "creates_app",
+          "capabilities",
+          "identity_policy"
+        ],
+        "title": "Capabilities",
+        "type": "object"
+      },
       "CapabilitiesStatusResult": {
         "additionalProperties": false,
         "properties": {
@@ -16009,25 +16218,6 @@
         "title": "CapabilitiesStatusResult",
         "type": "object"
       },
-      "CapabilityEntry": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "enabled": {
-            "default": true,
-            "title": "Enabled",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "title": "CapabilityEntry",
-        "type": "object"
-      },
       "CapabilityId": {
         "enum": [
           "web",
@@ -16037,6 +16227,15 @@
           "browser"
         ],
         "title": "CapabilityId",
+        "type": "string"
+      },
+      "CapabilityMode": {
+        "enum": [
+          "automatic",
+          "guided",
+          "unsupported"
+        ],
+        "title": "CapabilityMode",
         "type": "string"
       },
       "CapabilityRow": {
@@ -16325,6 +16524,251 @@
         "description": "``change_watcher._CHANGE_WATCHES`` payload fn \u2014 ``{}`` for every watch except pet.changed.",
         "properties": {},
         "title": "ChangeSignalPayload",
+        "type": "object"
+      },
+      "ChatBindingListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "bindings": {
+            "items": {
+              "$ref": "#/components/schemas/Binding"
+            },
+            "title": "Bindings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "bindings"
+        ],
+        "title": "ChatBindingListResult",
+        "type": "object"
+      },
+      "ChatInstallAdvanceParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          },
+          "event": {
+            "$ref": "#/components/schemas/SetupEventKind"
+          },
+          "expected_revision": {
+            "minimum": 0,
+            "title": "Expected Revision",
+            "type": "integer"
+          },
+          "manual_step": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProviderCapability"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "vault_item_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Vault Item Id"
+          }
+        },
+        "required": [
+          "provider_id",
+          "event",
+          "expected_revision"
+        ],
+        "title": "ChatInstallAdvanceParams",
+        "type": "object"
+      },
+      "ChatInstallChangedPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/SetupState"
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ChatInstallChangedPayload",
+        "type": "object"
+      },
+      "ChatInstallParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider_id"
+        ],
+        "title": "ChatInstallParams",
+        "type": "object"
+      },
+      "ChatInstallStatusResult": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/SetupState"
+          },
+          "installation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Installation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "state"
+        ],
+        "title": "ChatInstallStatusResult",
+        "type": "object"
+      },
+      "ChatProviderListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/Capabilities"
+            },
+            "title": "Providers",
+            "type": "array"
+          }
+        },
+        "required": [
+          "providers"
+        ],
+        "title": "ChatProviderListResult",
+        "type": "object"
+      },
+      "ChatSpaceJoinParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "provider_id": {
+            "minLength": 1,
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "default": "",
+            "title": "Workspace",
+            "type": "string"
+          },
+          "space_id": {
+            "minLength": 1,
+            "title": "Space Id",
+            "type": "string"
+          },
+          "hello": {
+            "default": false,
+            "title": "Hello",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "provider_id",
+          "space_id"
+        ],
+        "title": "ChatSpaceJoinParams",
+        "type": "object"
+      },
+      "ChatSpaceJoinResult": {
+        "additionalProperties": false,
+        "properties": {
+          "outcome": {
+            "$ref": "#/components/schemas/SpaceJoinOutcome"
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/NextAction"
+          }
+        },
+        "required": [
+          "outcome",
+          "next_action"
+        ],
+        "title": "ChatSpaceJoinResult",
+        "type": "object"
+      },
+      "ChatSpacesListResult": {
+        "additionalProperties": false,
+        "properties": {
+          "spaces": {
+            "items": {
+              "$ref": "#/components/schemas/SpaceRef"
+            },
+            "title": "Spaces",
+            "type": "array"
+          }
+        },
+        "required": [
+          "spaces"
+        ],
+        "title": "ChatSpacesListResult",
         "type": "object"
       },
       "ClarifyLockParams": {
@@ -24849,6 +25293,15 @@
         "title": "FileAttachResult",
         "type": "object"
       },
+      "FixAction": {
+        "enum": [
+          "reenter_credential",
+          "retry",
+          "restart_allow"
+        ],
+        "title": "FixAction",
+        "type": "string"
+      },
       "ForeignSessionRow": {
         "additionalProperties": false,
         "description": "``hermes_cli/foreign_sessions_browser.py::list_foreign_sessions`` \u2014 ``id`` is an opaque\nhandle, never a path.",
@@ -28791,6 +29244,45 @@
         "title": "I18nLanguagesResult",
         "type": "object"
       },
+      "IdentityPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "app_name_max": {
+            "minimum": 1,
+            "title": "App Name Max",
+            "type": "integer"
+          },
+          "display_name_max": {
+            "minimum": 1,
+            "title": "Display Name Max",
+            "type": "integer"
+          },
+          "username_max": {
+            "minimum": 1,
+            "title": "Username Max",
+            "type": "integer"
+          },
+          "avatar_max_bytes": {
+            "minimum": 1,
+            "title": "Avatar Max Bytes",
+            "type": "integer"
+          },
+          "avatar_min_px": {
+            "minimum": 1,
+            "title": "Avatar Min Px",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "app_name_max",
+          "display_name_max",
+          "username_max",
+          "avatar_max_bytes",
+          "avatar_min_px"
+        ],
+        "title": "IdentityPolicy",
+        "type": "object"
+      },
       "ImageAttachBytesParams": {
         "additionalProperties": false,
         "description": "``content_base64`` (or the ``data`` alias) carries the bytes; ``filename`` / ``ext`` only hint\nthe extension \u2014 magic bytes decide.",
@@ -29588,6 +30080,83 @@
           "loading_tools"
         ],
         "title": "InstallPhase",
+        "type": "string"
+      },
+      "Installation": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "bot": {
+            "title": "Bot",
+            "type": "string"
+          },
+          "workspace_id": {
+            "title": "Workspace Id",
+            "type": "string"
+          },
+          "workspace_name": {
+            "title": "Workspace Name",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/InstallationStatus"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "number"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "number"
+          },
+          "vault_item_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Vault Item Ids",
+            "type": "array"
+          },
+          "owner_user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Owner User Id"
+          }
+        },
+        "required": [
+          "id",
+          "provider_id",
+          "bot",
+          "workspace_id",
+          "workspace_name",
+          "status",
+          "created_at",
+          "updated_at",
+          "vault_item_ids"
+        ],
+        "title": "Installation",
+        "type": "object"
+      },
+      "InstallationStatus": {
+        "enum": [
+          "active",
+          "needs_reauth",
+          "revoked"
+        ],
+        "title": "InstallationStatus",
         "type": "string"
       },
       "InstalledHubSkill": {
@@ -36656,6 +37225,59 @@
         "title": "ModelSaveKeyResult",
         "type": "object"
       },
+      "NextAction": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/NextActionKind"
+          },
+          "action_id": {
+            "title": "Action Id",
+            "type": "string"
+          },
+          "link": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Link"
+          },
+          "copy_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Copy Text"
+          }
+        },
+        "required": [
+          "kind",
+          "action_id"
+        ],
+        "title": "NextAction",
+        "type": "object"
+      },
+      "NextActionKind": {
+        "enum": [
+          "none",
+          "paste_credential",
+          "open_link",
+          "copy_text",
+          "button"
+        ],
+        "title": "NextActionKind",
+        "type": "string"
+      },
       "NoticePayload": {
         "additionalProperties": false,
         "description": "``tui_gateway/model_switch.py`` capability-refresh notice.",
@@ -42829,7 +43451,7 @@
           },
           "skills": {
             "items": {
-              "$ref": "#/components/schemas/CapabilityEntry"
+              "$ref": "#/components/schemas/tui_gateway_contracts_profiles_vault_complete_foreign_subagents_CapabilityEntry"
             },
             "title": "Skills",
             "type": "array"
@@ -45749,6 +46371,18 @@
           "redirected"
         ],
         "title": "PromptSubmitStatus",
+        "type": "string"
+      },
+      "ProviderCapability": {
+        "enum": [
+          "set_icon",
+          "app_level_credential",
+          "gateway_redirect",
+          "unattended_refresh",
+          "join_public_space",
+          "join_private_space"
+        ],
+        "title": "ProviderCapability",
         "type": "string"
       },
       "ProviderLimit": {
@@ -53647,6 +54281,50 @@
         "title": "SetupConnectorsCard",
         "type": "object"
       },
+      "SetupError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/components/schemas/SetupErrorCode"
+          },
+          "fix": {
+            "$ref": "#/components/schemas/FixAction"
+          }
+        },
+        "required": [
+          "code",
+          "fix"
+        ],
+        "title": "SetupError",
+        "type": "object"
+      },
+      "SetupErrorCode": {
+        "enum": [
+          "credential_rejected",
+          "credential_expired",
+          "app_create_failed",
+          "allow_denied",
+          "install_failed",
+          "provider_unreachable"
+        ],
+        "title": "SetupErrorCode",
+        "type": "string"
+      },
+      "SetupEventKind": {
+        "enum": [
+          "begin",
+          "credential_saved",
+          "app_created",
+          "manual_step_done",
+          "allow_granted",
+          "installed",
+          "failed",
+          "retry",
+          "revoked"
+        ],
+        "title": "SetupEventKind",
+        "type": "string"
+      },
       "SetupLayoutAnswer": {
         "additionalProperties": false,
         "properties": {
@@ -53992,6 +54670,113 @@
         "title": "SetupRuntimeCheckResult",
         "type": "object"
       },
+      "SetupState": {
+        "additionalProperties": false,
+        "properties": {
+          "bot": {
+            "title": "Bot",
+            "type": "string"
+          },
+          "provider_id": {
+            "title": "Provider Id",
+            "type": "string"
+          },
+          "workspace": {
+            "title": "Workspace",
+            "type": "string"
+          },
+          "step": {
+            "$ref": "#/components/schemas/SetupStep"
+          },
+          "revision": {
+            "minimum": 0,
+            "title": "Revision",
+            "type": "integer"
+          },
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "App Id"
+          },
+          "installation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Installation Id"
+          },
+          "manual_steps_done": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderCapability"
+            },
+            "title": "Manual Steps Done",
+            "type": "array"
+          },
+          "resume_step": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupStep"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "next_action": {
+            "$ref": "#/components/schemas/NextAction"
+          },
+          "fallback_action": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/NextAction"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "number"
+          }
+        },
+        "required": [
+          "bot",
+          "provider_id",
+          "workspace",
+          "step",
+          "revision",
+          "next_action",
+          "updated_at"
+        ],
+        "title": "SetupState",
+        "type": "object"
+      },
       "SetupStatusResult": {
         "additionalProperties": false,
         "description": "``provider_configured`` is the loose answer; the boot record's fields (``ready``,\n``free_tier_account``, ``free_tier_route``, ``other_providers``, ``inference_provider``) ride along\non the launch profile. An unknown ``profile`` answers ``ok=False`` + ``error``.",
@@ -54143,6 +54928,21 @@
         },
         "title": "SetupStatusResult",
         "type": "object"
+      },
+      "SetupStep": {
+        "enum": [
+          "not_started",
+          "needs_credential",
+          "creating_app",
+          "needs_manual_step",
+          "needs_allow",
+          "installing",
+          "ready",
+          "error",
+          "revoked"
+        ],
+        "title": "SetupStep",
+        "type": "string"
       },
       "SetupThemeAnswer": {
         "additionalProperties": false,
@@ -55680,6 +56480,52 @@
           }
         },
         "title": "SlashExecResult",
+        "type": "object"
+      },
+      "SpaceJoinOutcome": {
+        "enum": [
+          "joined",
+          "already_joined",
+          "needs_invite"
+        ],
+        "title": "SpaceJoinOutcome",
+        "type": "string"
+      },
+      "SpaceKind": {
+        "enum": [
+          "public",
+          "private",
+          "direct"
+        ],
+        "title": "SpaceKind",
+        "type": "string"
+      },
+      "SpaceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpaceKind"
+          },
+          "joined": {
+            "title": "Joined",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "joined"
+        ],
+        "title": "SpaceRef",
         "type": "object"
       },
       "SpawnTreeEntry": {
@@ -63070,6 +63916,42 @@
         "title": "_SessionScoped",
         "type": "object"
       },
+      "tui_gateway_contracts_chat_provider_CapabilityEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/ProviderCapability"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/CapabilityMode"
+          }
+        },
+        "required": [
+          "capability",
+          "mode"
+        ],
+        "title": "CapabilityEntry",
+        "type": "object"
+      },
+      "tui_gateway_contracts_profiles_vault_complete_foreign_subagents_CapabilityEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CapabilityEntry",
+        "type": "object"
+      },
       "ConnectorErrorReason": {
         "type": "string",
         "enum": [
@@ -63459,6 +64341,150 @@
         "name": "result",
         "schema": {
           "$ref": "#/components/schemas/CapabilitiesStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.binding.list",
+      "summary": "Channels this bot is bound to and whether it is live in each.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatBindingListResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.advance",
+      "summary": "Send one setup event with the revision the client last saw. stale_revision when another client moved first; invalid_event when the event does not apply. allow_granted with vault_item_id adopts a pasted bot token.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallAdvanceParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.begin",
+      "summary": "Start or resume setup. Answers needs_public_url (with a button next_action in error data) when the gateway has no https public URL.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.revoke",
+      "summary": "Remove the installation, stop the bot's adapter and clear its tokens and allowed users. Keeps the app id for reinstall.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.install.status",
+      "summary": "Persisted setup state for one bot, provider and workspace, plus the installation once ready. A fresh client resumes from it.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatInstallStatusResult"
+        }
+      }
+    },
+    {
+      "name": "chat.provider.list",
+      "summary": "Chat providers this gateway can install a bot into, with what each can do automatically. Owner connections only.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatProviderListResult"
+        }
+      }
+    },
+    {
+      "name": "chat.space.join",
+      "summary": "Join a public channel, or get the invite steps for a private one. hello asks for one short greeting once live.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatSpaceJoinParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatSpaceJoinResult"
+        }
+      }
+    },
+    {
+      "name": "chat.spaces.list",
+      "summary": "Channels the installed bot can see, with whether it has joined.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ChatSpacesListResult"
         }
       }
     },
@@ -66261,6 +67287,18 @@
           "name": "payload",
           "schema": {
             "$ref": "#/components/schemas/SideAgentCompletePayload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "chat.install.changed",
+      "summary": "A chat setup state moved, or a binding went live or not live. Exactly one per setup revision.",
+      "params": [
+        {
+          "name": "payload",
+          "schema": {
+            "$ref": "#/components/schemas/ChatInstallChangedPayload"
           }
         }
       ]
