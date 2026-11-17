@@ -115,6 +115,10 @@ extension ConnectAppsService {
             await discardVaultItems([idItem])
             throw error
         }
+        return try await saveOAuthClientItems(entry, idItem: idItem, secretItem: secretItem)
+    }
+
+    func saveOAuthClientItems(_ entry: PalCatalogEntry, idItem: String, secretItem: String) async throws -> OAuthClientSetup {
         do {
             let saved = try await oauthClientCall(
                 "connectors.oauth_client.save",
@@ -129,7 +133,7 @@ extension ConnectAppsService {
         }
     }
 
-    private func storeVaultSecret(label: String, value: String) async throws -> String {
+    func storeVaultSecret(label: String, value: String) async throws -> String {
         let added: JSONValue
         do {
             added = try await rawCall("vault.add", ["kind": "api_key", "label": .string(label), "secret": .object(["api_key": .string(value)])])
@@ -141,7 +145,7 @@ extension ConnectAppsService {
         return id
     }
 
-    private func discardVaultItems(_ ids: [String]) async {
+    func discardVaultItems(_ ids: [String]) async {
         for id in ids { _ = try? await rawCall("vault.remove", ["id": .string(id)]) }
     }
 

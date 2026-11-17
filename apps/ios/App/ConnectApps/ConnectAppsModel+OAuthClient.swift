@@ -28,6 +28,10 @@ extension ConnectAppsModel {
 
     func presentOAuthClient(_ app: ConnectApp, problem: OAuthClientProblem?) {
         guard let entry = app.oauthClientEntry else { return }
+        if app.setupGuideEntry != nil {
+            presentSetupGuide(app, problem: problem)
+            return
+        }
         oauthClientSheet = OAuthClientSheetModel(
             app: app, entry: entry, service: service, problem: problem,
             connectAgain: { [weak self] in

@@ -26,10 +26,13 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
     public var mcpURL: URL?
     public var status: Status
     public var notes: String?
+    public var setupGuide: SetupGuide?
+    public var setupProgress: SetupProgress?
 
     public init(
         slug: String, name: String, category: String = "", icon: String = "", method: Method,
-        verified: Bool = false, mcpURL: URL? = nil, status: Status = .notConnected, notes: String? = nil
+        verified: Bool = false, mcpURL: URL? = nil, status: Status = .notConnected, notes: String? = nil,
+        setupGuide: SetupGuide? = nil, setupProgress: SetupProgress? = nil
     ) {
         self.slug = slug
         self.name = name
@@ -40,11 +43,15 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         self.mcpURL = mcpURL
         self.status = status
         self.notes = notes
+        self.setupGuide = setupGuide
+        self.setupProgress = setupProgress
     }
 
     enum CodingKeys: String, CodingKey {
         case slug, name, category, icon, method, verified, status, notes
         case mcpURL = "mcp_url"
+        case setupGuide = "setup_guide"
+        case setupProgress = "setup_progress"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -58,6 +65,8 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         status = try container.decode(Status.self, forKey: .status)
         notes = ConnectorCardState.cleaned(try container.decodeIfPresent(String.self, forKey: .notes))
         mcpURL = (try container.decodeIfPresent(String.self, forKey: .mcpURL)).flatMap { URL(string: $0) }.flatMap(Self.secure)
+        setupGuide = try? container.decodeIfPresent(SetupGuide.self, forKey: .setupGuide)
+        setupProgress = try? container.decodeIfPresent(SetupProgress.self, forKey: .setupProgress)
     }
 
     private static func secure(_ url: URL) -> URL? {
@@ -152,6 +161,10 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
     }
 
     public var isConnected: Bool { state == .connected }
+
+    public var setupGuideEntry: PalCatalogEntry? {
+        if case .catalog(let entry) = source, entry.setupGuide != nil { entry } else { nil }
+    }
 
     public var requiresToken: Bool {
         switch source {

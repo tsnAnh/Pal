@@ -96,6 +96,7 @@ final class ConnectAppsModel {
     var showsSkills = false
     var upworkApp: ConnectApp?
     var oauthClientSheet: OAuthClientSheetModel?
+    var setupGuideSheet: SetupGuideModel?
     let google: GoogleWorkspaceModel
     var pasteSession: (any McpPasteSigning)?
     var pastingApp: ConnectApp?
@@ -193,6 +194,7 @@ final class ConnectAppsModel {
     }
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
+        if presentsSetupGuide(app) { return }
         busy.insert(app.id)
         failures[app.id] = nil
         defer { busy.remove(app.id) }

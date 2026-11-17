@@ -1,0 +1,185 @@
+import XCTest
+
+@MainActor
+final class SetupGuideE2ETests: ConnectAppsTestCase {
+    private let googleRedirect = "https://pal.example.test/webapp/google-install/callback"
+
+    private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
+        app.descendants(matching: .any)[id]
+    }
+
+    private func openGuide(_ app: XCUIApplication, name: String, slug: String, action title: String) -> XCUIElement {
+        waitForCatalog(app)
+        search(app, name)
+        let button = action(app, slug)
+        waitFor(button, timeout: 30, "\(name) action")
+        XCTAssertEqual(button.label, title)
+        button.hit()
+        waitFor(element(app, "setupGuide"), timeout: 20, "setup guide")
+        return button
+    }
+
+    private func expectStep(_ app: XCUIApplication, _ id: String, _ position: String) {
+        waitFor(element(app, "setupGuideStep-\(id)"), timeout: 20, "step \(id)")
+        XCTAssertTrue(element(app, "setupGuideProgress").label.contains(position), "step \(id) reads \(position)")
+    }
+
+    private func next(_ app: XCUIApplication) {
+        let button = element(app, "setupGuideNext")
+        waitFor(button, timeout: 10, "next")
+        button.hit()
+    }
+
+    private func enter(_ app: XCUIApplication, _ id: String, _ text: String) {
+        let field = element(app, "setupGuideField-\(id)")
+        waitFor(field, timeout: 10, "field \(id)")
+        field.hit()
+        field.typeText(text)
+    }
+
+    private func submit(_ app: XCUIApplication) -> XCUIElement {
+        let button = element(app, "setupGuideSubmit")
+        waitFor(button, timeout: 10, "submit")
+        for _ in 0..<6 where !button.isHittable { app.swipeUp() }
+        return button
+    }
+
+    private func openedLink(_ app: XCUIApplication, prefix: String) {
+        let opened = element(app, "externalLinkProbe")
+        waitUntil(30, "page handed to the system browser") { opened.label.hasPrefix(prefix) }
+    }
+
+    private func rejectOnce(_ app: XCUIApplication, code: String, shotName: String) {
+        waitFor(element(app, "setupGuideStatus"), timeout: 20, "check failure")
+        element(app, "setupGuideDetails").hit()
+        waitFor(element(app, "setupGuideCopyDetails"), timeout: 10, "copy details")
+        XCTAssertEqual(element(app, "setupGuideReasonCode").label, code, "details name the reason code")
+        shot(app, shotName)
+        element(app, "setupGuidePrimary").hit()
+        waitFor(element(app, "setupGuideSubmit"), timeout: 20, "paste step again")
+    }
+
+    private func returnLoopbackRedirect(_ app: XCUIApplication) {
+        let state = "state=scripted-state"
+        #if os(macOS)
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:27890/callback?code=fake-token-do-not-use&\(state)")!)
+        request.setValue("localhost:27890", forHTTPHeaderField: "Host")
+        let returned = expectation(description: "redirect delivered")
+        URLSession.shared.dataTask(with: request) { _, _, _ in returned.fulfill() }.resume()
+        wait(for: [returned], timeout: 15)
+        #else
+        let paste = element(app, "otherConnectorPaste")
+        waitFor(paste, timeout: 20, "paste sheet")
+        let field = element(app, "other-paste-field")
+        field.hit()
+        field.typeText("http://localhost:27890/callback?code=fake-token-do-not-use&\(state)")
+        element(app, "other-paste-submit").hit()
+        waitGone(paste, timeout: 20, "paste sheet closes")
+        #endif
+    }
+
+    func test1GoogleResumesAtTheConsoleStepChecksTheClientAndConnects() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
+        let button = openGuide(app, name: "Google Workspace", slug: "google-workspace", action: "Set up")
+        expectStep(app, "console", "2 of 4")
+        let redirect = element(app, "setupGuideCopy-0Value")
+        waitFor(redirect, timeout: 10, "redirect URI")
+        XCTAssertEqual(redirect.label, googleRedirect, "the redirect URI is shown exactly")
+        element(app, "setupGuideCopy-0Button").hit()
+        waitLabel(element(app, "setupGuideCopy-0Button"), contains: "Copied", timeout: 10)
+        element(app, "setupGuideLink-0").hit()
+        openedLink(app, prefix: "https://console.cloud.google.com/apis/credentials")
+        element(app, "setupGuideBack").hit()
+        expectStep(app, "address", "1 of 4")
+        XCTAssertEqual(element(app, "setupGuideAddressValue").label, "https://pal.example.test", "the public address is shown")
+        next(app)
+        expectStep(app, "console", "2 of 4")
+        next(app)
+        expectStep(app, "apis", "3 of 4")
+        waitFor(element(app, "setupGuideLink-5"), timeout: 10, "a link for every Google service")
+        shot(app, "setup-guide-google-apis")
+        next(app)
+        expectStep(app, "client", "4 of 4")
+        XCTAssertFalse(submit(app).isEnabled, "Check waits for both fields")
+        enter(app, "client_id", "wrong")
+        waitFor(element(app, "setupGuideHint-client_id"), timeout: 10, "live shape hint")
+        XCTAssertTrue(element(app, "setupGuideHint-client_id").label.contains(".apps.googleusercontent.com"))
+        element(app, "setupGuideField-client_id").typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5))
+        enter(app, "client_id", "fake-client-id.apps.googleusercontent.com")
+        enter(app, "client_secret", "rejected-secret-do-not-use")
+        waitFor(element(app, "setupGuideShapeOK-client_id"), timeout: 10, "shape accepted")
+        XCTAssertTrue(submit(app).isEnabled, "Check is ready with both fields")
+        submit(app).hit()
+        rejectOnce(app, code: "INVALID_CLIENT", shotName: "setup-guide-google-rejected")
+        enter(app, "client_id", "fake-client-id.apps.googleusercontent.com")
+        enter(app, "client_secret", "fake-token-do-not-use")
+        submit(app).hit()
+        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
+        openedLink(app, prefix: "https://accounts.google.com/")
+        waitLabel(button, contains: "Remove", timeout: 45)
+        shot(app, "setup-guide-google-connected")
+    }
+
+    func test2GoogleWithoutAPublicAddressShowsTheGuidedStatus() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client", "-hermes-test-oauth-client-no-public-address"])
+        _ = openGuide(app, name: "Google Workspace", slug: "google-workspace", action: "Set up")
+        let title = app.staticTexts["Public address needed"]
+        waitFor(title, timeout: 20, "status title")
+        let primary = element(app, "setupGuidePrimary")
+        waitFor(primary, timeout: 10, "try again action")
+        XCTAssertGreaterThan(primary.frame.minY, title.frame.maxY, "the action is below the text")
+        XCTAssertFalse(element(app, "setupGuideCopy-0Value").exists, "no redirect URI without a public address")
+        element(app, "setupGuideDetails").hit()
+        waitFor(element(app, "setupGuideCopyDetails"), timeout: 10, "copy button")
+        XCTAssertEqual(element(app, "setupGuideReasonCode").label, "NEEDS_PUBLIC_URL", "details name the reason code")
+        shot(app, "setup-guide-needs-public-address")
+    }
+
+    func test3GitHubChecksTheTokenShapeThenTheTokenAndSavesIt() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
+        let button = openGuide(app, name: "GitHub", slug: "github", action: "Connect")
+        expectStep(app, "token_page", "1 of 2")
+        XCTAssertEqual(element(app, "setupGuideCopy-0Value").label, "Pal", "the token name is ready to copy")
+        element(app, "setupGuideLink-0").hit()
+        openedLink(app, prefix: "https://github.com/settings/personal-access-tokens/new")
+        next(app)
+        expectStep(app, "token", "2 of 2")
+        enter(app, "token", "wrong")
+        waitFor(element(app, "setupGuideHint-token"), timeout: 10, "live shape hint")
+        XCTAssertTrue(element(app, "setupGuideHint-token").label.contains("github_pat_"))
+        XCTAssertFalse(submit(app).isEnabled, "Check waits for a token shaped like GitHub's")
+        element(app, "setupGuideField-token").typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5))
+        enter(app, "token", "github_pat_rejected-do-not-use")
+        submit(app).hit()
+        rejectOnce(app, code: "INVALID_TOKEN", shotName: "setup-guide-github-rejected")
+        enter(app, "token", "github_pat_fake-token-do-not-use")
+        XCTAssertFalse(app.staticTexts["github_pat_fake-token-do-not-use"].exists, "the token is never echoed")
+        submit(app).hit()
+        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
+        waitLabel(button, contains: "Update token", timeout: 30)
+        shot(app, "setup-guide-github-connected")
+    }
+
+    func test4SlackCreatesTheAppChecksTheClientAndConnects() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
+        let button = openGuide(app, name: "Slack", slug: "slack", action: "Set up")
+        expectStep(app, "app", "1 of 2")
+        XCTAssertTrue(element(app, "setupGuideCopy-0Value").label.contains("redirect_urls"), "the manifest is ready to copy")
+        element(app, "setupGuideLink-0").hit()
+        openedLink(app, prefix: "https://api.slack.com/apps")
+        next(app)
+        expectStep(app, "client", "2 of 2")
+        enter(app, "client_id", "fake-client-id")
+        enter(app, "client_secret", "rejected-secret-do-not-use")
+        submit(app).hit()
+        rejectOnce(app, code: "INVALID_CLIENT", shotName: "setup-guide-slack-rejected")
+        enter(app, "client_id", "fake-client-id")
+        enter(app, "client_secret", "fake-token-do-not-use")
+        submit(app).hit()
+        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
+        openedLink(app, prefix: "https://slack.com/")
+        returnLoopbackRedirect(app)
+        waitLabel(button, contains: "Remove", timeout: 45)
+        shot(app, "setup-guide-slack-connected")
+    }
+}

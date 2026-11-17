@@ -35,9 +35,10 @@ struct OAuthClientSheet: View {
     }
 }
 
-private struct OAuthClientProblemView: View {
+struct OAuthClientProblemView: View {
     let problem: OAuthClientProblem
     let name: String
+    var identifierPrefix = "oauthClient"
     let retry: () -> Void
 
     private var genericTitle: String {
@@ -56,7 +57,7 @@ private struct OAuthClientProblemView: View {
 
     var body: some View {
         ChatInstallStatus(
-            copy: copy, primaryTitle: String(localized: "Try again"), isBusy: false, perform: retry, identifierPrefix: "oauthClient"
+            copy: copy, primaryTitle: String(localized: "Try again"), isBusy: false, perform: retry, identifierPrefix: identifierPrefix
         ) { EmptyView() }
         .frame(maxHeight: .infinity)
         .padding(.horizontal, PalMetrics.screenMargin)
