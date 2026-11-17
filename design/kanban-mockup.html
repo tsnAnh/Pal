@@ -1,0 +1,630 @@
+<!doctype html>
+<html lang="en" data-mode="dark" data-palette="tinted" data-density="comfortable">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pal Kanban mockup</title>
+<style>
+:root {
+  --PalMetrics-screenMargin: 16px;
+  --PalMetrics-cardRadius: 12px;
+  --PalMetrics-tileRadius: 15px;
+  --PalMetrics-sheetRadius: 39px;
+  --PalMetrics-chipHeight: 34px;
+  --PalMetrics-chipHorizontalPadding: 13px;
+  --PalMetrics-chipSpacing: 8px;
+  --PalMetrics-pillHeight: 32px;
+  --PalMetrics-rowTextSpacing: 4px;
+  --PalMetrics-captionToCardGap: 8px;
+  --ChatMetrics-linkAvatarSize: 20px;
+  --ChatMetrics-headerAvatarSize: 26px;
+  --ChatMetrics-threadHeaderAvatarSize: 30px;
+  --PalTextStyle-rowTitle: 15px;
+  --PalTextStyle-sheetTitle: 15px;
+  --PalTextStyle-chip: 13px;
+  --PalTextStyle-pill: 12.5px;
+  --PalTextStyle-rowSubtitle: 11px;
+  --PalTextStyle-footnoteCaption: 10.5px;
+  --PalTextStyle-timestamp: 12px;
+  --PalTextStyle-chatBody: 15px;
+  --PalPalette-accentBlue: #1c65cb;
+  --PalPalette-workingDot: #3fa75c;
+  --PalPalette-primaryBadge: #f58903;
+  --SwiftUI-purple: #bf5af2;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, system-ui, sans-serif;
+  --blur: 28px;
+  --saturate: 1.6;
+  --column-width: 268px;
+  --card-pad: 12px;
+  --card-gap: 8px;
+  --title-lines: 3;
+}
+html[data-mode="dark"] {
+  color-scheme: dark;
+  --PalTokens-sidebar: #0e0e0e;
+  --PalTokens-content: #121212;
+  --PalTokens-elevated: #1f1f1f;
+  --PalTokens-control: #272727;
+  --PalTokens-textPrimary: rgb(245 245 245);
+  --PalTokens-textSecondary: rgb(245 245 245 / .66);
+  --PalTokens-textTertiary: rgb(245 245 245 / .54);
+  --PalTokens-chipFill: rgb(245 245 245 / .042);
+  --PalTokens-hover: rgb(245 245 245 / .06);
+  --PalTokens-selected: rgb(245 245 245 / .08);
+  --PalTokens-borderStrong: rgb(245 245 245 / .10);
+  --PalTokens-divider: rgb(245 245 245 / .06);
+  --PalTokens-hairline: rgb(245 245 245 / .03);
+  --PalTokens-panelBorder: #252525;
+  --PalPalette-destructive: #e88b96;
+  --state-todo: rgb(245 245 245 / .54);
+  --state-ready: #4c8fe8;
+  --state-running: #f0a04b;
+  --state-blocked: #e88b96;
+  --state-done: #57c27a;
+  --pr-open: #6fd08c;
+  --pr-merged: #cf8cf6;
+  --pr-failing: #ef98a2;
+  --pr-draft: rgb(245 245 245 / .66);
+  --glass-tint: rgb(31 31 31 / .52);
+  --card-fill: rgb(31 31 31 / .80);
+  --specular: rgb(255 255 255 / .16);
+  --shadow: 0 1px 1px rgb(0 0 0 / .30), 0 10px 30px -10px rgb(0 0 0 / .55);
+  --field-a: #2a3a66;
+  --field-b: #4a2a5e;
+  --field-c: #20483e;
+  --field-opacity: .55;
+}
+html[data-mode="light"] {
+  color-scheme: light;
+  --PalTokens-sidebar: #f5f5f5;
+  --PalTokens-content: #fcfcfc;
+  --PalTokens-elevated: #ffffff;
+  --PalTokens-control: #f0f0f0;
+  --PalTokens-textPrimary: rgb(28 28 28);
+  --PalTokens-textSecondary: rgb(28 28 28 / .68);
+  --PalTokens-textTertiary: rgb(28 28 28 / .56);
+  --PalTokens-chipFill: rgb(28 28 28 / .05);
+  --PalTokens-hover: rgb(28 28 28 / .06);
+  --PalTokens-selected: rgb(28 28 28 / .08);
+  --PalTokens-borderStrong: rgb(28 28 28 / .12);
+  --PalTokens-divider: rgb(28 28 28 / .08);
+  --PalTokens-hairline: rgb(28 28 28 / .05);
+  --PalTokens-panelBorder: rgb(28 28 28 / .12);
+  --PalPalette-destructive: #d70015;
+  --state-todo: rgb(28 28 28 / .56);
+  --state-ready: #1c65cb;
+  --state-running: #b85c00;
+  --state-blocked: #d70015;
+  --state-done: #1f7a3d;
+  --pr-open: #146a31;
+  --pr-merged: #8a3ab9;
+  --pr-failing: #c40014;
+  --pr-draft: rgb(28 28 28 / .68);
+  --glass-tint: rgb(255 255 255 / .56);
+  --card-fill: rgb(255 255 255 / .86);
+  --specular: rgb(255 255 255 / .9);
+  --shadow: 0 1px 1px rgb(0 0 0 / .05), 0 10px 28px -12px rgb(20 30 60 / .22);
+  --field-a: #b9cdf5;
+  --field-b: #e4c6ef;
+  --field-c: #bfe6d6;
+  --field-opacity: .7;
+}
+html[data-palette="graphite"] { --field-opacity: .0; }
+html[data-palette="black"][data-mode="dark"] {
+  --PalTokens-content: #000000;
+  --PalTokens-elevated: #1c1c1e;
+  --PalTokens-panelBorder: #2c2c2e;
+  --glass-tint: rgb(28 28 30 / .55);
+  --card-fill: rgb(28 28 30 / .84);
+  --field-a: #1b2b55;
+  --field-b: #3a1f4a;
+  --field-c: #143a30;
+  --field-opacity: .45;
+}
+html[data-density="compact"] { --card-pad: 9px; --card-gap: 6px; --title-lines: 2; --column-width: 248px; }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: var(--font);
+  background: var(--PalTokens-content);
+  color: var(--PalTokens-textPrimary);
+  -webkit-font-smoothing: antialiased;
+}
+.field {
+  position: fixed; inset: -10%; z-index: 0; pointer-events: none;
+  opacity: var(--field-opacity);
+  background:
+    radial-gradient(40% 50% at 18% 22%, var(--field-a), transparent 70%),
+    radial-gradient(38% 46% at 78% 30%, var(--field-b), transparent 70%),
+    radial-gradient(45% 50% at 55% 92%, var(--field-c), transparent 70%);
+  filter: blur(40px);
+  transition: opacity .4s ease;
+}
+.window { position: relative; z-index: 1; height: 100vh; min-height: 560px; display: flex; flex-direction: column; }
+
+.glass {
+  position: relative;
+  background: var(--glass-tint);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--saturate));
+  backdrop-filter: blur(var(--blur)) saturate(var(--saturate));
+  box-shadow: inset 0 0 0 .5px var(--PalTokens-borderStrong), var(--shadow);
+}
+.glass::before, .card::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(180deg, var(--specular), transparent 1px) top / 100% 1px no-repeat,
+              linear-gradient(180deg, rgb(255 255 255 / .05), transparent 40%);
+  -webkit-mask: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  mask: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass { background: var(--PalTokens-elevated); }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .glass { background: var(--PalTokens-elevated); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .card { background: var(--PalTokens-elevated); }
+  .field { display: none; }
+}
+html[data-transparency="reduced"] .glass { background: var(--PalTokens-elevated); backdrop-filter: none; -webkit-backdrop-filter: none; }
+html[data-transparency="reduced"] .card { background: var(--PalTokens-elevated); }
+html[data-transparency="reduced"] .field { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+
+.toolbar {
+  margin: 12px var(--PalMetrics-screenMargin) 0;
+  height: 52px; border-radius: 26px;
+  display: flex; align-items: center; gap: 12px; padding: 0 10px 0 18px;
+}
+.toolbar h1 { font-size: var(--PalTextStyle-sheetTitle); font-weight: 600; margin: 0; letter-spacing: -.01em; }
+.board-pick { display: inline-flex; align-items: center; gap: 4px; color: var(--PalTokens-textSecondary); font-size: var(--PalTextStyle-chip); }
+.board-pick svg { width: 10px; height: 10px; }
+.toolbar .sep { width: 1px; height: 20px; background: var(--PalTokens-divider); }
+.chips { display: flex; gap: var(--PalMetrics-chipSpacing); overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; }
+.chip {
+  height: 30px; padding: 0 12px 0 4px; border-radius: 15px; border: 0;
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  font: inherit; font-size: var(--PalTextStyle-chip);
+  background: var(--PalTokens-chipFill); color: var(--PalTokens-textPrimary);
+  box-shadow: inset 0 0 0 .5px var(--PalTokens-divider);
+}
+.chip.plain { padding: 0 12px; }
+.chip[aria-pressed="true"] { background: var(--PalTokens-textPrimary); color: var(--PalTokens-content); }
+.search {
+  width: 220px; height: 32px; border-radius: 16px; flex: none;
+  display: flex; align-items: center; gap: 8px; padding: 0 12px;
+  background: var(--PalTokens-chipFill); color: var(--PalTokens-textSecondary);
+  font-size: var(--PalTextStyle-chip);
+  box-shadow: inset 0 0 0 .5px var(--PalTokens-divider);
+}
+.search svg { width: 13px; height: 13px; }
+
+.board {
+  flex: 1; min-height: 0;
+  display: grid; grid-auto-flow: column; grid-auto-columns: minmax(var(--column-width), 1fr);
+  gap: 12px; padding: 14px var(--PalMetrics-screenMargin) 16px;
+  overflow-x: auto; scroll-snap-type: x mandatory;
+}
+.column {
+  border-radius: var(--PalMetrics-tileRadius);
+  display: flex; flex-direction: column; min-height: 0; scroll-snap-align: start;
+}
+.col-head { display: flex; align-items: center; gap: 8px; padding: 13px 14px 9px; }
+.col-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tone); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tone) 18%, transparent); }
+.col-head .name { font-size: var(--PalTextStyle-rowTitle); font-weight: 600; letter-spacing: -.01em; }
+.col-head .count { font-size: var(--PalTextStyle-rowSubtitle); color: var(--PalTokens-textSecondary); font-variant-numeric: tabular-nums; margin-left: auto;
+  min-width: 22px; height: 18px; padding: 0 6px; border-radius: 9px; background: var(--PalTokens-chipFill); display: inline-grid; place-items: center; }
+.stack { flex: 1; overflow-y: auto; padding: 2px 8px 10px; display: flex; flex-direction: column; gap: var(--card-gap); scrollbar-width: thin; }
+
+.card {
+  position: relative; border-radius: var(--PalMetrics-cardRadius);
+  background: var(--card-fill);
+  box-shadow: inset 0 0 0 .5px var(--PalTokens-borderStrong), 0 1px 2px rgb(0 0 0 / .12);
+  padding: var(--card-pad); display: flex; flex-direction: column; gap: 10px;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.card:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 .5px var(--PalTokens-borderStrong), var(--shadow); }
+.card[data-selected] { box-shadow: inset 0 0 0 1.5px var(--PalTokens-textSecondary), var(--shadow); }
+.card .title {
+  font-size: var(--PalTextStyle-chip); line-height: 1.38; margin: 0; font-weight: 500; letter-spacing: -.005em;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--title-lines); overflow: hidden;
+}
+.card .project { font-size: var(--PalTextStyle-footnoteCaption); color: var(--PalTokens-textSecondary); letter-spacing: .02em; text-transform: uppercase; font-weight: 600; margin-bottom: -6px; }
+.card .meta { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.who { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--PalTextStyle-rowSubtitle); color: var(--PalTokens-textSecondary); }
+.who span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meta .spacer { flex: 1; }
+.note { font-size: var(--PalTextStyle-rowSubtitle); color: var(--PalPalette-destructive); display: flex; gap: 6px; align-items: flex-start; line-height: 1.35; }
+.note svg { flex: none; width: 12px; height: 12px; margin-top: 1px; }
+.live { display: inline-flex; align-items: center; gap: 5px; font-size: var(--PalTextStyle-rowSubtitle); color: var(--PalTokens-textSecondary); }
+.live i { width: 6px; height: 6px; border-radius: 50%; background: var(--PalPalette-workingDot); animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.card.done .title { color: var(--PalTokens-textSecondary); }
+
+.avatar { flex: none; display: block; overflow: visible; }
+
+.pr {
+  --c: var(--pr-open);
+  display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px 0 6px; border-radius: 11px;
+  font-size: var(--PalTextStyle-rowSubtitle); font-weight: 600; font-variant-numeric: tabular-nums; text-decoration: none;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 13%, transparent);
+  box-shadow: inset 0 0 0 .5px color-mix(in srgb, var(--c) 34%, transparent), inset 0 1px 0 color-mix(in srgb, white 10%, transparent);
+  white-space: nowrap;
+}
+.pr svg { width: 12px; height: 12px; }
+.pr .state { font-weight: 500; opacity: .92; }
+.pr[data-pr="merged"] { --c: var(--pr-merged); }
+.pr[data-pr="failing"] { --c: var(--pr-failing); }
+.pr[data-pr="draft"] { --c: var(--pr-draft); background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); }
+
+.controls {
+  position: fixed; right: 16px; bottom: 16px; z-index: 5;
+  display: flex; gap: 4px; padding: 4px; border-radius: 18px; opacity: .5; transition: opacity .2s;
+}
+.controls:hover, .controls:focus-within { opacity: 1; }
+.controls button {
+  font: inherit; font-size: 11px; height: 26px; padding: 0 10px; border-radius: 13px; border: 0;
+  background: transparent; color: var(--PalTokens-textSecondary); cursor: pointer;
+}
+.controls button[aria-pressed="true"] { background: var(--PalTokens-selected); color: var(--PalTokens-textPrimary); }
+.controls .sep { width: 1px; background: var(--PalTokens-divider); margin: 4px 2px; }
+html[data-controls="hidden"] .controls { display: none; }
+
+.review { position: relative; z-index: 1; max-width: 1180px; margin: 0 auto; padding: 56px var(--PalMetrics-screenMargin) 96px; display: grid; gap: 44px; }
+.review h2 { font-size: 20px; font-weight: 650; letter-spacing: -.015em; margin: 0 0 4px; }
+.review .lede { color: var(--PalTokens-textSecondary); font-size: 13px; margin: 0 0 18px; max-width: 62ch; line-height: 1.5; }
+.verdict { font-size: 12.5px; color: var(--PalTokens-textPrimary); margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--PalTokens-chipFill); box-shadow: inset 0 0 0 .5px var(--PalTokens-divider); }
+.verdict b { color: var(--PalPalette-workingDot); font-weight: 650; margin-right: 6px; }
+.row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; align-items: start; }
+.label { font-size: var(--PalTextStyle-footnoteCaption); text-transform: uppercase; letter-spacing: .06em; color: var(--PalTokens-textSecondary); font-weight: 600; margin: 0 0 8px; }
+.panel { border-radius: var(--PalMetrics-tileRadius); padding: 16px; }
+.inline { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.sizes { display: flex; gap: 28px; align-items: flex-end; flex-wrap: wrap; }
+.sizes figure { margin: 0; display: grid; justify-items: center; gap: 8px; font-size: 11px; color: var(--PalTokens-textSecondary); }
+
+.detail { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; padding: 24px; border-radius: 22px; }
+.detail h3 { font-size: 19px; line-height: 1.3; margin: 8px 0 14px; font-weight: 650; letter-spacing: -.015em; }
+.detail .body { font-size: var(--PalTextStyle-chatBody); line-height: 1.55; color: var(--PalTokens-textPrimary); max-width: 64ch; }
+.detail .body p { margin: 0 0 12px; }
+.detail .body ul { margin: 0 0 12px; padding-left: 20px; }
+.detail h4 { font-size: var(--PalTextStyle-footnoteCaption); text-transform: uppercase; letter-spacing: .06em; color: var(--PalTokens-textSecondary); margin: 20px 0 8px; font-weight: 600; }
+.detail aside { border-left: 1px solid var(--PalTokens-divider); padding-left: 24px; }
+.kv { display: grid; grid-template-columns: 84px 1fr; gap: 10px 12px; font-size: 12.5px; align-items: center; }
+.kv dt { color: var(--PalTokens-textSecondary); }
+.kv dd { margin: 0; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; }
+.list li { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: baseline; }
+.list small { color: var(--PalTokens-textSecondary); font-size: 11.5px; }
+.tick { width: 12px; height: 12px; color: var(--PalPalette-workingDot); }
+.timeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 1px solid var(--PalTokens-divider); display: grid; gap: 12px; font-size: 12.5px; }
+.timeline li { position: relative; }
+.timeline li::before { content: ""; position: absolute; left: -18.5px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--PalTokens-content); box-shadow: inset 0 0 0 1.5px var(--tone, var(--PalTokens-textTertiary)); }
+.timeline small { display: block; color: var(--PalTokens-textSecondary); font-size: 11.5px; margin-top: 2px; }
+.decision { padding: 10px 12px; border-radius: 10px; background: var(--PalTokens-chipFill); font-size: 13px; line-height: 1.45; margin-bottom: 8px; }
+.decision small { display: block; color: var(--PalTokens-textSecondary); font-size: 11.5px; margin-top: 4px; }
+.gl { height: 120px; border-radius: 15px; display: grid; place-items: center; font-size: 12px; color: var(--PalTokens-textSecondary); }
+.glasslab { position: relative; padding: 18px; border-radius: 18px; overflow: hidden; background: var(--PalTokens-content); }
+.glasslab::before { content: ""; position: absolute; inset: 0; background: radial-gradient(30% 60% at 20% 40%, var(--field-a), transparent 70%), radial-gradient(30% 60% at 80% 60%, var(--field-b), transparent 70%); filter: blur(24px); opacity: .9; }
+.glasslab .row { position: relative; }
+.place { display: grid; gap: 10px; }
+
+@media (max-width: 720px) {
+  .toolbar { height: auto; flex-wrap: wrap; padding: 10px 12px; border-radius: 22px; row-gap: 8px; }
+  .toolbar .sep { display: none; }
+  .search { order: 3; width: 100%; }
+  .chips { order: 4; flex-basis: 100%; }
+  .board { grid-auto-columns: calc(100vw - 2 * var(--PalMetrics-screenMargin) - 28px); }
+  .detail { grid-template-columns: 1fr; padding: 18px; }
+  .detail aside { border-left: 0; padding-left: 0; border-top: 1px solid var(--PalTokens-divider); padding-top: 16px; }
+  .controls { left: 50%; right: auto; transform: translateX(-50%); }
+}
+</style>
+</head>
+<body>
+<div class="field" aria-hidden="true"></div>
+
+<div class="window">
+  <header class="toolbar glass">
+    <h1>Kanban</h1>
+    <span class="board-pick">default <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 3.5 5 6.5 8 3.5"/></svg></span>
+    <span class="sep"></span>
+    <nav class="chips" id="filters" aria-label="Filter by bot"></nav>
+    <label class="search"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="4.5"/><path d="m9.5 9.5 3 3"/></svg>Search cards</label>
+  </header>
+  <main class="board" id="board"></main>
+</div>
+
+<div class="controls glass" role="toolbar" aria-label="Mockup controls">
+  <button data-set="palette" data-value="tinted">Tinted</button>
+  <button data-set="palette" data-value="graphite">Graphite</button>
+  <button data-set="palette" data-value="black">Black</button>
+  <span class="sep"></span>
+  <button data-set="mode" data-value="dark">Dark</button>
+  <button data-set="mode" data-value="light">Light</button>
+  <span class="sep"></span>
+  <button data-set="density" data-value="comfortable">Comfort</button>
+  <button data-set="density" data-value="compact">Compact</button>
+</div>
+
+<div class="review" id="review">
+  <section id="states">
+    <h2>Card states</h2>
+    <p class="lede">The column already says the state, so the card drops the state chip, the Contract chip and the age. A card speaks only when it has something to add: a live dot while running, the reason while blocked, a quieter title when done.</p>
+    <div class="row" id="state-cards"></div>
+  </section>
+
+  <section id="chips">
+    <h2>Pull request chip</h2>
+    <p class="lede">One capsule, glyph plus number, colour carries the state. Draft is an outline because it is not yet a claim.</p>
+    <div class="panel glass inline" id="pr-variants"></div>
+    <p class="label" style="margin-top:20px">Shape experiment</p>
+    <div class="row" id="chip-shapes"></div>
+    <p class="verdict"><b>Verdict</b>Capsule with the number; the glyph changes per state so colour is never the only cue; a blocked card states the reason on its own line. The square badge read as a button; the bare glyph lost the number, which is what people scan for.</p>
+  </section>
+
+  <section id="avatars">
+    <h2>Assignee avatar</h2>
+    <p class="lede">The real Pal avatar, drawn from the same rule as <code>ClassicDrawing</code>: shape and hue come from the bot name hash, eyes pick light or dark ink by body luminance.</p>
+    <div class="panel glass sizes" id="avatar-sizes"></div>
+    <p class="label" style="margin-top:20px">Placement experiment</p>
+    <div class="row" id="avatar-placement"></div>
+    <p class="verdict"><b>Verdict</b>20 pt avatar with the bot name, bottom-leading. 16 pt loses the eyes; 24 pt competes with the title; a top-right avatar pushed long titles into a ragged right edge.</p>
+  </section>
+
+  <section id="glass">
+    <h2>Glass levels</h2>
+    <p class="lede">Glass sits on the navigation layer only: toolbar, columns, controls. Cards are content, so they get a near-solid fill with the same specular edge and no blur of their own.</p>
+    <div class="glasslab"><div class="row" id="glass-levels"></div></div>
+    <p class="verdict"><b>Verdict</b>Blur 28 px, saturate 1.6, tint 52% dark / 56% light. Below 16 px the colour field shows as blotches behind text; above 40 px the column edge turns to fog.</p>
+  </section>
+
+  <section id="density">
+    <h2>Column density</h2>
+    <p class="lede">Comfortable shows three title lines at 268 px; compact shows two at 248 px. Both fit five columns at 1440 px without clipping.</p>
+    <div class="row" id="density-cards"></div>
+    <p class="verdict"><b>Verdict</b>Comfortable by default. Real chief titles run 90 to 140 characters; two lines cut most of them before the verb that says what the work is.</p>
+  </section>
+
+  <section id="palette">
+    <h2>Palette</h2>
+    <p class="lede">Tinted keeps the tokens and adds a soft colour field behind the glass. Graphite is the tokens alone. Black uses <code>PalPalette.derivedBlack</code>. Switch them in the controls, bottom right.</p>
+    <p class="verdict"><b>Recommend</b>Tinted. Graphite is correct but flat, which is the complaint today; Black loses the glass because there is nothing behind it to refract.</p>
+  </section>
+
+  <section id="detail-section">
+    <h2>Card detail</h2>
+    <p class="lede">Opens in the 360 pt inspector on Mac and as a sheet on iPhone. The body is readable prose, not a key dump.</p>
+    <article class="detail glass" id="detail"></article>
+  </section>
+</div>
+
+<script>
+const BOTS = ["chief", "hermes-bot-mobile", "fren", "faker-kit", "smilewallpaper"];
+
+const COLUMNS = [
+  { id: "todo", title: "To do", tone: "var(--state-todo)" },
+  { id: "ready", title: "Ready", tone: "var(--state-ready)" },
+  { id: "running", title: "Running", tone: "var(--state-running)" },
+  { id: "blocked", title: "Blocked", tone: "var(--state-blocked)" },
+  { id: "done", title: "Done", tone: "var(--state-done)" },
+];
+
+const CARDS = [
+  { state: "todo", bot: "chief", title: "Design one annual-plan sale-off flow for Fren as an HTML mockup" },
+  { state: "todo", bot: "chief", title: "Bot screen on the Pi: every bot screen gets a working headed Chromium and the Browser dock icon out of the box" },
+  { state: "todo", bot: "chief", title: "Vault in the bot settings does not work: find why and make it work end to end; add an item type API key" },
+  { state: "todo", bot: "chief", title: "Pal app messages: show images inline; tap opens full-screen viewer; file links open an in-app preview sheet" },
+  { state: "todo", bot: "chief", title: "T3 Code MCP fixes from the owner test: expected refusals must not trip the MCP failure breaker" },
+
+  { state: "ready", bot: "chief", title: "Fren: collect the Firebase Crashlytics crashes and non-fatals of recent versions, group them by root cause, and fix every one that is fixable in code" },
+  { state: "ready", bot: "chief", title: "Init project from the Mac folder SmileWallpaper, create a private GitHub repo and a bot" },
+  { state: "ready", bot: "chief", title: "Pal: Hermes Kanban as the single work record: coordinator-claimed boards without worker spawning, outcome-aware completion with evidence" },
+  { state: "ready", bot: "hermes-bot-mobile", key: "bot-screen-browser", draft: true, title: "Give every bot screen a headed Chromium and a Browser dock icon", pr: { n: 145, s: "open" } },
+  { state: "ready", bot: "hermes-bot-mobile", key: "message-media-viewer", draft: true, title: "Show message images inline with a full-screen viewer and file previews", pr: { n: 147, s: "open" } },
+  { state: "ready", bot: "hermes-bot-mobile", key: "mcp-typed-refusal-config-redaction", draft: true, title: "Keep expected MCP refusals out of the failure breaker and redact config in errors", pr: { n: 148, s: "open" } },
+  { state: "ready", bot: "hermes-bot-mobile", key: "kanban-compact-board", draft: true, title: "Fit the whole board in the window with a compact column layout", pr: { n: 150, s: "open" } },
+  { state: "ready", bot: "fren", key: "sale-mockup", draft: true, title: "Mock up the annual-plan sale screen" },
+  { state: "ready", bot: "fren", key: "annual-sale", draft: true, title: "Build the annual-plan sale-off flow" },
+  { state: "ready", bot: "faker-kit", key: "owner-address-wording", draft: true, title: "Fix how bots address the owner in replies" },
+  { state: "ready", bot: "faker-kit", key: "chief-news-delivery", draft: true, title: "Deliver chief news to the owner reliably" },
+  { state: "ready", bot: "faker-kit", key: "session-closing-summary", draft: true, title: "Post a closing summary when a session ends" },
+  { state: "ready", bot: "faker-kit", key: "card-completion-claims", draft: true, title: "Back every card completion claim with evidence" },
+  { state: "ready", bot: "faker-kit", key: "stuck-session-watch", draft: true, title: "Watch for stuck sessions and report them" },
+
+  { state: "running", illustrative: true, bot: "hermes-bot-mobile", key: "kanban-native-redesign", draft: true, title: "Redesign the native Kanban board with real glass and bot avatars", pr: { n: 149, s: "draft" } },
+  { state: "running", illustrative: true, bot: "faker-kit", key: "guard-failopen-hardblocks", draft: true, title: "Make the guard fail closed on hard blocks instead of failing open" },
+
+  { state: "blocked", illustrative: true, bot: "hermes-bot-mobile", key: "vault-works-api-key", draft: true, title: "Make the bot Vault work end to end and add an API key item type", pr: { n: 146, s: "failing" }, note: "Checks failing on the pull request head" },
+  { state: "blocked", illustrative: true, bot: "fren", key: "sale-debug-force", draft: true, title: "Add a debug switch that forces the sale offer on", note: "Waiting on the sale flow card" },
+
+  { state: "done", illustrative: true, bot: "hermes-bot-mobile", key: "kanban-acceptance-gh-slurp", draft: true, title: "Read pull request acceptance from GitHub in one pass", pr: { n: 151, s: "merged" } },
+  { state: "done", illustrative: true, bot: "faker-kit", key: "readable-card-bodies", draft: true, title: "Write card bodies as readable text, not key dumps" },
+  { state: "done", illustrative: true, bot: "smilewallpaper", key: "repo-setup", draft: true, title: "Set up the SmileWallpaper repository" },
+];
+
+const PROJECTS = { "hermes-bot-mobile": "Pal", fren: "Fren", "faker-kit": "faker-kit", smilewallpaper: "SmileWallpaper" };
+
+function hash31(text) {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (Math.imul(h, 31) + text.charCodeAt(i)) >>> 0;
+  return h;
+}
+const SHAPES = ["circle", "squircle", "pill", "triangle", "hexagon", "cloud", "drop"];
+function hslToRgb(h, s, l) {
+  s /= 100; l /= 100;
+  const q = l < .5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q, hh = h / 360;
+  const at = o => { let t = (hh + o + 1) % 1; if (t < 1/6) return p + (q - p) * 6 * t; if (t < .5) return q; if (t < 2/3) return p + (q - p) * (2/3 - t) * 6; return p; };
+  return [at(1/3) * 255, at(0) * 255, at(-1/3) * 255];
+}
+function radii(shape, a) {
+  const c = Math.cos(a), s = Math.sin(a);
+  if (shape === "squircle") { const d = Math.pow(Math.abs(c) ** 5 + Math.abs(s) ** 5, 1/5); return 16.2 / (d || 1); }
+  if (shape === "pill") { const d = Math.pow(Math.abs(c) ** 8 + Math.abs(s / .72) ** 8, 1/8); return 16 / (d || 1); }
+  if (shape === "triangle") { const u = (a + Math.PI / 2 + Math.PI * 2) % (Math.PI * 2); const sec = (u / (Math.PI * 2 / 3)) % 1; return 13.5 / Math.max(.42, Math.cos((sec - .5) * 1.9)); }
+  if (shape === "hexagon") { const seg = Math.PI / 3; return 16.2 * Math.cos(seg / 2) / Math.cos(a - seg * Math.round(a / seg)); }
+  return 16.2;
+}
+function cubic(p0, p1, p2, p3, t) { const u = 1 - t; return [0, 1].map(k => u*u*u*p0[k] + 3*u*u*t*p1[k] + 3*u*t*t*p2[k] + t*t*t*p3[k]); }
+function ringPath(shape) {
+  if (shape === "cloud") return "M11 32 a7.5 7.5 0 0 1 -1 -14.9 A9.5 9.5 0 0 1 29 12.5 A7 7 0 0 1 30 32 Z";
+  let pts = [];
+  if (shape === "drop") {
+    const n = 17;
+    for (let i = 0; i < n; i++) pts.push(cubic([20,3],[20,3],[6,20],[6,27], i / n));
+    for (let i = 0; i <= n; i++) { const t = i / n * Math.PI; pts.push([20 - 14 * Math.cos(t), 27 + 13.5 * Math.sin(t)]); }
+    for (let i = 1; i <= n; i++) pts.push(cubic([34,27],[34,20],[20,3],[20,3], i / n));
+  } else {
+    for (let i = 0; i < 52; i++) { const a = i / 52 * Math.PI * 2 - Math.PI / 2; const r = radii(shape, a); pts.push([20 + r * Math.cos(a), 20 + r * Math.sin(a)]); }
+  }
+  return "M" + pts.map(p => p[0].toFixed(2) + " " + p[1].toFixed(2)).join("L") + "Z";
+}
+function avatar(name, size) {
+  const hue = hash31(name) % 360;
+  const color = `hsl(${hue} 68% 58%)`;
+  const [r, g, b] = hslToRgb(hue, 68, 58);
+  const eye = (0.2126 * r + 0.7152 * g + 0.0722 * b) < 110 ? "#f3f4fd" : "#1b1b1b";
+  const shape = SHAPES[hash31(name) % SHAPES.length];
+  const line = (shape === "cloud" ? 22 : 17.2) - 1.6;
+  const fig = "rotate(-14 20 20) translate(20 22) scale(.72) translate(-20 -22)";
+  const eyes = [23.4 - 4.7, 23.4 + 4.7].map(x => `<rect x="-2.4" y="-5.7" width="4.8" height="11.4" rx="2.4" fill="${eye}" transform="${fig} translate(${x} ${line}) rotate(-11)"/>`).join("");
+  const dots = [16.4, 20, 23.6].map(x => `<circle cx="${x}" cy="41.2" r="1.15" fill="${color}"/>`).join("");
+  const h = size * 44 / 40;
+  return `<svg class="avatar" width="${size}" height="${h.toFixed(1)}" viewBox="0 0 40 44" role="img" aria-label="${name}" data-shape="${shape}"><g transform="${fig}"><path d="${ringPath(shape)}" fill="${color}" stroke="${color}" stroke-width="13" stroke-linejoin="round"/></g>${eyes}${dots}</svg>`;
+}
+
+const PR_GLYPH = {
+  open: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="4" cy="3.5" r="1.8"/><circle cx="4" cy="12.5" r="1.8"/><circle cx="12" cy="12.5" r="1.8"/><path d="M4 5.3v5.4M12 10.7V6.5a2 2 0 0 0-2-2H7.5M9 3 7.5 4.5 9 6"/></svg>',
+  merged: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="4" cy="3.5" r="1.8"/><circle cx="4" cy="12.5" r="1.8"/><circle cx="12" cy="8" r="1.8"/><path d="M4 5.3v5.4M4.5 5.5C5.5 7.5 8 8 10.2 8"/></svg>',
+  failing: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/></svg>',
+  draft: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-dasharray="2 2.2"><circle cx="4" cy="3.5" r="1.8"/><circle cx="4" cy="12.5" r="1.8"/><circle cx="12" cy="12.5" r="1.8"/><path d="M4 5.3v5.4M12 10.7V7"/></svg>',
+};
+const PR_WORD = { open: "Open", merged: "Merged", failing: "Checks failing", draft: "Draft" };
+function prChip(pr, withWord = false) {
+  const word = withWord ? ` <span class="state">${PR_WORD[pr.s]}</span>` : "";
+  return `<a class="pr" data-pr="${pr.s}" href="https://github.com/tsnAnh/Pal/pull/${pr.n}" title="Pull request #${pr.n}: ${PR_WORD[pr.s]}">${PR_GLYPH[pr.s]}#${pr.n}${word}</a>`;
+}
+const ALERT = '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="6" cy="6" r="5"/><path d="M6 3.4v3.2M6 8.4v.1" stroke-linecap="round"/></svg>';
+
+function card(c, opts = {}) {
+  const attrs = [c.key ? `data-key="${c.key}"` : "", c.draft ? 'data-copy="draft"' : "", c.illustrative ? 'data-state-illustrative="true"' : "", opts.selected ? "data-selected" : ""].join(" ");
+  const project = PROJECTS[c.bot] ? `<div class="project">${PROJECTS[c.bot]}</div>` : "";
+  const note = c.note ? `<div class="note">${ALERT}<span>${c.note}</span></div>` : "";
+  const live = c.state === "running" ? '<span class="live" title="Working"><i></i></span>' : "";
+  const pr = c.pr ? prChip(c.pr, opts.prWord ?? false) : "";
+  const size = opts.avatar ?? 20;
+  const who = opts.placement === "top"
+    ? ""
+    : `<span class="who">${avatar(c.bot, size)}<span>${c.bot}</span></span>`;
+  const title = opts.placement === "top"
+    ? `<div style="display:flex;gap:10px;align-items:flex-start"><p class="title" style="flex:1">${c.title}</p>${avatar(c.bot, size)}</div>`
+    : `<p class="title">${c.title}</p>`;
+  return `<article class="card ${c.state}" ${attrs}>${project}${title}${note}<div class="meta">${who}<span class="spacer"></span>${live}${pr}</div></article>`;
+}
+
+function renderBoard() {
+  document.getElementById("board").innerHTML = COLUMNS.map(col => {
+    const cards = CARDS.filter(c => c.state === col.id);
+    return `<section class="column glass" style="--tone:${col.tone}" aria-label="${col.title}">
+      <header class="col-head"><span class="dot"></span><span class="name">${col.title}</span><span class="count" data-count>${cards.length}</span></header>
+      <div class="stack">${cards.map(c => card(c, { selected: c.key === "kanban-native-redesign" })).join("")}</div>
+    </section>`;
+  }).join("");
+  document.getElementById("filters").innerHTML =
+    `<button class="chip plain" aria-pressed="true">All bots</button>` +
+    BOTS.map(b => `<button class="chip" aria-pressed="false">${avatar(b, 20)}${b}</button>`).join("");
+}
+
+function renderReview() {
+  const pick = s => CARDS.find(c => c.state === s && c.pr) || CARDS.find(c => c.state === s);
+  document.getElementById("state-cards").innerHTML = ["ready", "running", "blocked", "done"].map(s =>
+    `<div><p class="label">${s}</p>${card(pick(s))}</div>`).join("");
+
+  document.getElementById("pr-variants").innerHTML =
+    [{ n: 147, s: "open" }, { n: 151, s: "merged" }, { n: 146, s: "failing" }, { n: 149, s: "draft" }].map(p => prChip(p, true)).join("") +
+    '<span style="width:24px"></span>' +
+    [{ n: 147, s: "open" }, { n: 151, s: "merged" }, { n: 146, s: "failing" }, { n: 149, s: "draft" }].map(p => prChip(p)).join("");
+
+  const sample = CARDS.find(c => c.key === "mcp-typed-refusal-config-redaction");
+  const square = `<span style="display:inline-grid;place-items:center;width:24px;height:24px;border-radius:6px;background:color-mix(in srgb,var(--pr-open) 13%,transparent);color:var(--pr-open)"><span style="width:12px;height:12px;display:block">${PR_GLYPH.open}</span></span>`;
+  const bare = `<span style="color:var(--pr-open);width:14px;height:14px;display:block">${PR_GLYPH.open}</span>`;
+  document.getElementById("chip-shapes").innerHTML = [
+    ["Capsule (recommended)", prChip(sample.pr, true)],
+    ["Square badge", square],
+    ["Bare glyph", bare],
+  ].map(([l, chip]) => `<div><p class="label">${l}</p><article class="card ready"><p class="title">${sample.title}</p><div class="meta"><span class="who">${avatar(sample.bot, 20)}<span>${sample.bot}</span></span><span class="spacer"></span>${chip}</div></article></div>`).join("");
+
+  document.getElementById("avatar-sizes").innerHTML =
+    [[16, "16 filter"], [20, "20 card"], [26, "26 header"], [30, "30 thread"], [44, "44 row"], [88, "88 hero"]].map(([s, l]) =>
+      `<figure>${avatar("chief", s)}<figcaption>${l}</figcaption></figure>`).join("") +
+    '<span style="width:12px"></span>' +
+    BOTS.map(b => `<figure>${avatar(b, 30)}<figcaption>${b}</figcaption></figure>`).join("");
+
+  const longCard = CARDS.find(c => c.title.startsWith("Fren: collect"));
+  document.getElementById("avatar-placement").innerHTML = [
+    ["16 bottom", { avatar: 16 }], ["20 bottom (recommended)", { avatar: 20 }], ["24 bottom", { avatar: 24 }], ["20 top right", { avatar: 20, placement: "top" }],
+  ].map(([l, o]) => `<div><p class="label">${l}</p>${card(longCard, o)}</div>`).join("");
+
+  document.getElementById("glass-levels").innerHTML = [
+    [12, 1.2, .38, "Blur 12, tint 38%"], [28, 1.6, .52, "Blur 28, tint 52% (recommended)"], [44, 1.8, .68, "Blur 44, tint 68%"],
+  ].map(([b, s, t, l]) => `<div class="gl glass" data-tint="${t}" style="--blur:${b}px;--saturate:${s};background:color-mix(in srgb, var(--PalTokens-elevated) ${t * 100}%, transparent)"><span><b style="display:block;color:var(--PalTokens-textPrimary);font-size:13px;margin-bottom:4px">To do 5</b>${l}</span></div>`).join("");
+
+  const dens = CARDS.find(c => c.title.startsWith("Pal: Hermes Kanban"));
+  document.getElementById("density-cards").innerHTML = ["comfortable", "compact"].map(d =>
+    `<div data-density-sample="${d}" style="${d === "compact" ? "--card-pad:9px;--card-gap:6px;--title-lines:2" : "--card-pad:12px;--title-lines:3"};max-width:268px"><p class="label">${d}</p>${card(dens)}</div>`).join("");
+
+  const tick = '<svg class="tick" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2.5 6.2 5 8.6 9.6 3.6"/></svg>';
+  document.getElementById("detail").innerHTML = `
+    <div>
+      <span class="who">${avatar("hermes-bot-mobile", 26)}<span>hermes-bot-mobile · Pal</span></span>
+      <h3>Redesign the native Kanban board with real glass and bot avatars</h3>
+      <div class="body">
+        <p>The Mac board looks flat and noisy. Every card repeats its state, a Contract chip and an age, and unit cards show raw keys instead of a sentence a person can read.</p>
+        <p>Rebuild the board on the PalDesign tokens with native glass on the toolbar and columns, the bot avatar as the assignee, and one pull request chip that carries its state.</p>
+        <ul><li>Open the board full window, never in a small sheet.</li><li>Show the readable first line of the body as the card title.</li><li>Keep the counts equal to the cards in each column.</li></ul>
+      </div>
+      <h4>Decisions</h4>
+      <div class="decision">Bot avatar replaces the bot name chip as the assignee.<small>Owner, via chief</small></div>
+      <div class="decision">State lives in the column header, not on each card.<small>Mockup proposal</small></div>
+      <h4>Evidence</h4>
+      <ul class="list">
+        <li>${tick}<span>Pull request published</span><small>Checked by gateway</small></li>
+        <li>${tick}<span>Execution reference</span><small>Attested by producer</small></li>
+      </ul>
+    </div>
+    <aside>
+      <dl class="kv">
+        <dt>Status</dt><dd><span class="live"><i></i>Running</span></dd>
+        <dt>Assignee</dt><dd>${avatar("hermes-bot-mobile", 20)} hermes-bot-mobile</dd>
+        <dt>Board</dt><dd>default</dd>
+        <dt>Pull request</dt><dd>${prChip({ n: 149, s: "draft" }, true)}</dd>
+        <dt>Outcome</dt><dd>Merged pull request</dd>
+        <dt>CI</dt><dd style="color:var(--PalTokens-textSecondary)">No CI result recorded</dd>
+      </dl>
+      <h4>Timeline</h4>
+      <ol class="timeline" data-times="illustrative">
+        <li style="--tone:var(--state-ready)">Created<small>chief</small></li>
+        <li style="--tone:var(--state-running)">Claimed<small>hermes-bot-mobile</small></li>
+        <li style="--tone:var(--PalPalette-workingDot)">Evidence recorded<small>Pull request published</small></li>
+      </ol>
+    </aside>`;
+}
+
+function setAttr(name, value) {
+  document.documentElement.setAttribute("data-" + name, value);
+  document.querySelectorAll(`.controls [data-set="${name}"]`).forEach(b => b.setAttribute("aria-pressed", String(b.dataset.value === value)));
+}
+document.querySelector(".controls").addEventListener("click", e => {
+  const b = e.target.closest("button[data-set]");
+  if (b) setAttr(b.dataset.set, b.dataset.value);
+});
+const params = new URLSearchParams(location.search);
+renderBoard();
+renderReview();
+for (const k of ["palette", "mode", "density"]) setAttr(k, params.get(k) || document.documentElement.getAttribute("data-" + k));
+if (params.get("controls") === "hidden") document.documentElement.setAttribute("data-controls", "hidden");
+if (params.get("transparency") === "reduced") document.documentElement.setAttribute("data-transparency", "reduced");
+</script>
+</body>
+</html>
