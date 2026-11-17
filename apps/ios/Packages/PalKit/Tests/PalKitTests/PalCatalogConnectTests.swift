@@ -15,7 +15,7 @@ func catalogEntry(
     )
 }
 
-private struct RedirectingBrowser: AuthorizationBrowser {
+private struct CatalogRedirectBrowser: AuthorizationBrowser {
     let code: String
 
     func present(_ url: URL) async throws {
@@ -74,7 +74,7 @@ struct PalCatalogConnectTests {
 
     @Test func anOAuthEntryIsAddedThenSignedInThroughTheGatewayRelay() async throws {
         let rpc = oauthGateway()
-        let browser = RedirectingBrowser(code: "abc")
+        let browser = CatalogRedirectBrowser(code: "abc")
         let notion = catalogEntry("notion", "Notion", "Files and docs", method: .mcpOAuth, url: "https://mcp.notion.com/mcp")
         let signIn = ConnectAppsService(rpc: rpc, profile: nil, browser: browser, timing: ConnectAppsTiming(pollInterval: .milliseconds(5), pollAttempts: 3))
         try await signIn.connect(app(notion))
@@ -86,7 +86,7 @@ struct PalCatalogConnectTests {
 
     @Test func anOAuthEntryThatFailsToSignInIsRemovedAgain() async {
         let rpc = oauthGateway(poll: ["status": "error", "error_message": "access_denied"])
-        let browser = RedirectingBrowser(code: "abc")
+        let browser = CatalogRedirectBrowser(code: "abc")
         let notion = catalogEntry("notion", "Notion", "Files and docs", method: .mcpOAuth, url: "https://mcp.notion.com/mcp")
         let signIn = ConnectAppsService(rpc: rpc, profile: nil, browser: browser, timing: ConnectAppsTiming(pollInterval: .milliseconds(5), pollAttempts: 3))
         await #expect(throws: ConnectAppsError.signInFailed(McpSignInFailure.denied.reason)) { try await signIn.connect(app(notion)) }
@@ -95,7 +95,7 @@ struct PalCatalogConnectTests {
 
     @Test func anOAuthEntryThatWasAlreadyAddedIsKeptWhenSignInFails() async {
         let rpc = oauthGateway(add: { _ in throw GatewayTransportError.rpc(RPCError(code: 4090, message: "exists")) }, poll: ["status": "error"])
-        let browser = RedirectingBrowser(code: "abc")
+        let browser = CatalogRedirectBrowser(code: "abc")
         let notion = catalogEntry("notion", "Notion", "Files and docs", method: .mcpOAuth, status: .needsReconnect, url: "https://mcp.notion.com/mcp")
         let signIn = ConnectAppsService(rpc: rpc, profile: nil, browser: browser, timing: ConnectAppsTiming(pollInterval: .milliseconds(5), pollAttempts: 3))
         await #expect(throws: (any Error).self) { try await signIn.connect(app(notion)) }
