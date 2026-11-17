@@ -114,14 +114,16 @@ class ManagedAddressError(RuntimeError):
 
 
 def save(home: Path, raw: str) -> str | None:
-    """Store the normalised address under ``webapp.public_url``, or clear it for an empty *raw*. The gateway
-    reads the ``webapp:`` block when it starts, so a running listener keeps its earlier hosts until then."""
+    """Store the normalised address under ``webapp.public_url``, or clear it for an empty *raw*. A running
+    gateway picks the new host up within a few seconds (``web_server_boundary.callback_only_hosts``)."""
     from hermes_cli import managed_scope
     from hermes_cli.config_backend import write_config_key
     url = normalise(raw) if raw.strip() else None
     if managed_scope.is_key_managed(PUBLIC_URL_KEY):
         raise ManagedAddressError(PUBLIC_URL_KEY)
     write_config_key(Path(home) / "config.yaml", PUBLIC_URL_KEY, url)
+    from hermes_cli.web_server_boundary import forget_callback_hosts
+    forget_callback_hosts()
     return url
 
 
@@ -129,12 +131,10 @@ class Outcome(StrEnum):
     reachable = "reachable"
     not_reachable = "not_reachable"
     wrong_service = "wrong_service"
-    not_served = "not_served"
     no_address = "no_address"
 
 
 _FAKE_STATE = "pal-address-check"
-_NOT_SERVED_MARKER = "Invalid Host header"
 
 
 def _fetch(url: str) -> tuple[int, str]:
@@ -151,8 +151,8 @@ def _fetch(url: str) -> tuple[int, str]:
 
 def check(url: str | None, fetch: Callable[[str], tuple[int, str]] = _fetch) -> Outcome:
     """One GET of ``<url>/webapp/mcp-oauth/callback`` with a state nobody issued. Pal's own route answers that
-    with its static 400 page; the Host-header guard of a gateway that does not serve the address answers a
-    different 400, and anything else is another service. Redirects are not followed."""
+    with its static 400 page, and anything else, the Host-header guard's 400 included, is another service.
+    Redirects are not followed."""
     from hermes_cli.web_routers.mcp_oauth_callback import REJECTED_MESSAGE
     if not url:
         return Outcome.no_address
@@ -163,6 +163,4 @@ def check(url: str | None, fetch: Callable[[str], tuple[int, str]] = _fetch) -> 
         return Outcome.not_reachable
     if status == 400 and REJECTED_MESSAGE in body:
         return Outcome.reachable
-    if status == 400 and _NOT_SERVED_MARKER in body:
-        return Outcome.not_served
     return Outcome.wrong_service

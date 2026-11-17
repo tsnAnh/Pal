@@ -360,6 +360,7 @@ from hermes_cli.web_server_boundary import (  # re-exported: web_server.<name> s
     _desktop_loopback_auth_exempt,
     _host_header_hostname,
     _is_accepted_host,
+    is_callback_only_request,
     public_hosts_engage_gate,
     public_url_hosts,
     public_url_origins,
@@ -388,7 +389,7 @@ async def host_header_middleware(request: Request, call_next):
     bound_host = getattr(app.state, "bound_host", None)
     if bound_host and not _is_accepted_host(
         request.headers.get("host", ""), bound_host, getattr(app.state, "trusted_public_hosts", frozenset())
-    ):
+    ) and not is_callback_only_request(request.scope, app.state):
         return JSONResponse(
             status_code=400,
             content={

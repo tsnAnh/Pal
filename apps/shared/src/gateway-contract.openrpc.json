@@ -6380,7 +6380,7 @@
     },
     {
       "name": "webapp.public_url.check",
-      "summary": "Owner only. One request from the gateway to <public_url>/webapp/mcp-oauth/callback with a state nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service, not_served (the gateway answers but does not serve this address) or no_address.",
+      "summary": "Owner only. One request from the gateway to <public_url>/webapp/mcp-oauth/callback with a state nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service or no_address.",
       "params": [
         {
           "name": "params",
@@ -6416,7 +6416,7 @@
     },
     {
       "name": "webapp.public_url.set",
-      "summary": "Owner only. Save the address: https only, a host name (never an IP), no userinfo, path beyond /, query or fragment, at most 255 characters; stored lower-cased without a trailing slash. An empty url clears it. A refusal carries data.problem. The gateway reads the address when it starts.",
+      "summary": "Owner only. Save the address: https only, a host name (never an IP), no userinfo, path beyond /, query or fragment, at most 255 characters; stored lower-cased without a trailing slash. An empty url clears it. A refusal carries data.problem. A running gateway applies it within seconds.",
       "params": [
         {
           "name": "params",
@@ -47690,7 +47690,6 @@
           "reachable",
           "not_reachable",
           "wrong_service",
-          "not_served",
           "no_address"
         ],
         "title": "PublicUrlCheckOutcome",
@@ -68337,7 +68336,7 @@
     },
     {
       "name": "webapp.public_url.check",
-      "summary": "Owner only. One request from the gateway to <public_url>/webapp/mcp-oauth/callback with a state nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service, not_served (the gateway answers but does not serve this address) or no_address.",
+      "summary": "Owner only. One request from the gateway to <public_url>/webapp/mcp-oauth/callback with a state nobody issued; Pal's own route answers 400. outcome says reachable, not_reachable, wrong_service or no_address.",
       "params": [
         {
           "name": "params",
@@ -68373,7 +68372,7 @@
     },
     {
       "name": "webapp.public_url.set",
-      "summary": "Owner only. Save the address: https only, a host name (never an IP), no userinfo, path beyond /, query or fragment, at most 255 characters; stored lower-cased without a trailing slash. An empty url clears it. A refusal carries data.problem. The gateway reads the address when it starts.",
+      "summary": "Owner only. Save the address: https only, a host name (never an IP), no userinfo, path beyond /, query or fragment, at most 255 characters; stored lower-cased without a trailing slash. An empty url clears it. A refusal carries data.problem. A running gateway applies it within seconds.",
       "params": [
         {
           "name": "params",

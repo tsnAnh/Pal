@@ -25,3 +25,8 @@ PUBLIC_API_PATHS: frozenset[str] = frozenset({
     # carries its own short-lived NAS-minted JWT (purpose=cron_fire), which the
     # handler verifies — the JWT, not this allowlist, is the security boundary.
     "/api/cron/fire"})
+
+# The gateway's OAuth return routes, matched exactly. Public at the sign-in gate, and the only paths
+# answered on ``webapp.public_url`` while the Webapp is off (``web_server_boundary.is_callback_only_request``).
+OAUTH_CALLBACK_PATHS: tuple[str, ...] = (
+    "/webapp/chat-install/callback", "/webapp/mcp-oauth/callback", "/webapp/google-install/callback")

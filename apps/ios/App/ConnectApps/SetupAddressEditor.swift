@@ -133,13 +133,13 @@ enum SetupAddressStatus {
         case .wrongService:
             ChatStatusCopy(
                 symbol: warning, title: String(localized: "Another service answers"),
-                reason: String(localized: "Something other than your Pal answers at this address."), code: code
+                reason: String(localized: "Something other than your Pal answers here. The address must reach your Pal over https."), code: code
             )
         case .notServed:
             ChatStatusCopy(
                 symbol: warning, title: String(localized: "Address not served yet"),
                 reason: String(
-                    localized: "Your Pal answers, but isn't serving this address yet. Its web access needs to be switched on and your Pal restarted."
+                    localized: "Your Pal answers, but not here yet. The address must reach it over https. Restart your Pal after changing the address."
                 ),
                 code: code
             )
