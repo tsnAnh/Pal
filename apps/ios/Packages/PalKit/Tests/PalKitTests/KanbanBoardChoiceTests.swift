@@ -26,9 +26,9 @@ struct KanbanBoardChoiceTests {
         #expect(KanbanBoardChoice.pick(boards: [], last: "gone") == nil)
     }
 
-    @Test func pickerOnlyWithMoreThanOneBoard() {
+    @Test func pickerWheneverABoardExists() {
         #expect(!KanbanBoardChoice.showsPicker(boards: []))
-        #expect(!KanbanBoardChoice.showsPicker(boards: ["default"]))
+        #expect(KanbanBoardChoice.showsPicker(boards: ["default"]))
         #expect(KanbanBoardChoice.showsPicker(boards: ["default", "ops"]))
     }
 

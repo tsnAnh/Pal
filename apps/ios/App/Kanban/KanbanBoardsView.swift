@@ -83,6 +83,8 @@ struct KanbanBoardPicker: View {
     let boards: [KanbanBoard]
     @Binding var selected: String?
 
+    private var current: String { boards.first { $0.scope.board == selected }?.name ?? "" }
+
     var body: some View {
         Menu {
             Picker("Board", selection: $selected) {
@@ -97,8 +99,22 @@ struct KanbanBoardPicker: View {
             }
             .pickerStyle(.inline)
         } label: {
-            Label("Switch board", systemImage: "rectangle.split.3x1")
+            HStack(spacing: 4) {
+                Text(current).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            }
+            .hermesText(.chip)
+            .foregroundStyle(PalTokens.textPrimary)
+            .padding(.horizontal, 12)
+            .frame(height: PalMetrics.sheetCloseControlSize)
+            .palGlass(Capsule(), interactive: false)
+            .contentShape(Capsule())
         }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel(Text("Board"))
+        .accessibilityValue(Text(current))
         .accessibilityIdentifier("kanbanBoardPicker")
     }
 

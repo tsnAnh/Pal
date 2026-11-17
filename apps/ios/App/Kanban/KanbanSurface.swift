@@ -42,6 +42,7 @@ struct KanbanSurface: View {
                 }
         }
         .tint(.primary)
+        .hermesThemeWithoutBotTint()
         .environment(\.kanbanRoster, kanbanRoster)
         .task(id: target) {
             guard let board = target.followedBoard else { return }
@@ -106,6 +107,7 @@ struct KanbanPage<Content: View>: View {
         SheetChrome(
             title: title,
             leading: back == nil ? .close : .back,
+            headerStyle: .toolbarRow,
             accessibilityIdentifier: identifier,
             onLeading: { (back ?? close)?() },
             trailing: trailing

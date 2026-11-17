@@ -5,7 +5,6 @@ import SwiftUI
 struct KanbanFilterBar: View {
     @Binding var filter: KanbanFilter
     let layout: KanbanBoardLayout
-    let boardName: String
     let compact: Bool
 
     @Environment(\.kanbanRoster) private var roster
@@ -14,14 +13,12 @@ struct KanbanFilterBar: View {
         Group {
             if compact {
                 VStack(alignment: .leading, spacing: 10) {
-                    heading
                     searchField
                     chips
                 }
                 .padding(12)
             } else {
                 HStack(spacing: 12) {
-                    heading
                     chips
                     searchField.frame(width: 220)
                 }
@@ -33,21 +30,6 @@ struct KanbanFilterBar: View {
         .kanbanGlass(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .padding(.horizontal, PalMetrics.screenMargin)
         .padding(.vertical, 10)
-    }
-
-    private var heading: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(KanbanPresentation.surfaceTitle)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(PalTokens.textPrimary)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("kanbanTitle")
-            Text(boardName)
-                .hermesText(.chip)
-                .foregroundStyle(PalTokens.textSecondary)
-                .lineLimit(1)
-        }
-        .fixedSize()
     }
 
     private var chips: some View {

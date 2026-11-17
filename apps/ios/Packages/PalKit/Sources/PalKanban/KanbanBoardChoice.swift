@@ -10,6 +10,6 @@ public enum KanbanBoardChoice {
     }
 
     public static func showsPicker(boards: [String]) -> Bool {
-        boards.count > 1
+        !boards.isEmpty
     }
 }
