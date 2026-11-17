@@ -111,16 +111,26 @@ def connect(request) -> OAuthClientConnectResult:
     return OAuthClientConnectResult(slug=provider, auth_url=link, session_id=None)
 
 
-def remove(slug: str) -> OAuthClientRemoveResult:
-    provider = _provider(slug)
-    if provider != setup_mod.GOOGLE_PROVIDER:
-        from hermes_cli.config import remove_env_value
-        from tui_gateway import mcp_header_secrets as hs
-        removed = hs.remove_server(provider)
-        remove_env_value(setup_mod.mcp_secret_env(provider))
-        return OAuthClientRemoveResult(slug=provider, removed=removed)
-    setup_mod.google_remove(setup_mod.build_store(), _home())
-    return OAuthClientRemoveResult(slug=provider, removed=True)
+def _remove_sign_in(provider: str) -> bool:
+    if provider == setup_mod.GOOGLE_PROVIDER:
+        setup_mod.google_remove(setup_mod.build_store(), _home())
+        return True
+    from hermes_cli.config import remove_env_value
+    from tui_gateway import mcp_header_secrets as hs
+    removed = hs.remove_server(provider)
+    remove_env_value(setup_mod.mcp_secret_env(provider))
+    return removed
+
+
+def remove(request) -> OAuthClientRemoveResult:
+    from tui_gateway.ws_legacy_fallback import connection_profile_home
+    provider = _provider(request.slug)
+    if request.remove_client and connection_profile_home() is not None:
+        raise OAuthClientRpcError(4030, ConnectorErrorReason.not_owner, "Only the owner can remove this app's client.")
+    removed = _remove_sign_in(provider)
+    if request.remove_client:
+        removed = setup_mod.remove_client(setup_mod.build_store(), provider) or removed
+    return OAuthClientRemoveResult(slug=provider, removed=removed)
 
 
 def _legacy_google_signed_in() -> bool:

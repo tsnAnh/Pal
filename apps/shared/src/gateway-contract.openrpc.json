@@ -1106,12 +1106,12 @@
     },
     {
       "name": "connectors.oauth_client.remove",
-      "summary": "Remove the scoped profile's sign-in. The owner's saved OAuth client stays.",
+      "summary": "Remove the scoped profile's sign-in. The owner's saved OAuth client stays unless remove_client is true; then, owner only, the saved client record and its Vault items are deleted too.",
       "params": [
         {
           "name": "params",
           "schema": {
-            "$ref": "#/components/schemas/OAuthClientSlugParams"
+            "$ref": "#/components/schemas/OAuthClientRemoveParams"
           }
         }
       ],
@@ -38258,6 +38258,37 @@
         "title": "OAuthClientConnectResult",
         "type": "object"
       },
+      "OAuthClientRemoveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "remove_client": {
+            "default": false,
+            "title": "Remove Client",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "title": "OAuthClientRemoveParams",
+        "type": "object"
+      },
       "OAuthClientRemoveResult": {
         "additionalProperties": false,
         "properties": {
@@ -55349,6 +55380,33 @@
         "title": "SetupEventKind",
         "type": "string"
       },
+      "SetupFallbackRow": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "body": {
+            "title": "Body",
+            "type": "string"
+          },
+          "links": {
+            "items": {
+              "$ref": "#/components/schemas/SetupLinkRow"
+            },
+            "title": "Links",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "body",
+          "links"
+        ],
+        "title": "SetupFallbackRow",
+        "type": "object"
+      },
       "SetupFieldRow": {
         "additionalProperties": false,
         "properties": {
@@ -55557,6 +55615,14 @@
         ],
         "title": "SetupPluginsCard",
         "type": "object"
+      },
+      "SetupProblemKind": {
+        "enum": [
+          "not_https",
+          "ip_host"
+        ],
+        "title": "SetupProblemKind",
+        "type": "string"
       },
       "SetupProgress": {
         "additionalProperties": false,
@@ -56123,6 +56189,40 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/SetupCheckKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "problem": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupProblemKind"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "problem_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Problem Host"
+          },
+          "fallback": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupFallbackRow"
               },
               {
                 "type": "null"

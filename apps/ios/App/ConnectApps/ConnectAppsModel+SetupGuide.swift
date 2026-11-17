@@ -16,7 +16,8 @@ extension ConnectAppsModel {
                 self?.setupGuideSheet = nil
                 Task { await self?.continueGuidedSetup(app) }
             },
-            finished: { [weak self] in await self?.continueGuidedSetup(app) }
+            finished: { [weak self] in await self?.continueGuidedSetup(app) },
+            removed: { [weak self] in await self?.reload() }
         )
     }
 

@@ -46,6 +46,13 @@ class SetupField:
 
 
 @dataclass(frozen=True)
+class SetupFallback:
+    label: str
+    body: str
+    links: tuple[SetupLink, ...] = ()
+
+
+@dataclass(frozen=True)
 class SetupStep:
     id: str
     kind: str
@@ -55,6 +62,7 @@ class SetupStep:
     copies: tuple[SetupCopy, ...] = ()
     fields: tuple[SetupField, ...] = ()
     check: str | None = None
+    fallback: SetupFallback | None = None
 
 
 @dataclass(frozen=True)
@@ -110,11 +118,21 @@ def _items(raw: dict, key: str, where: str) -> list:
     return items
 
 
+def _parse_fallback(raw: object, cid: str, where: str) -> SetupFallback | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or set(raw) - {"label", "body", "links"}:
+        raise PalCatalogError(f"{where}: fallback needs label, body and optional links")
+    return SetupFallback(
+        _text(raw, "label", where), _text(raw, "body", where),
+        tuple(SetupLink(_text(l, "label", where), _https(l.get("url"), "link", cid)) for l in _items(raw, "links", where)))
+
+
 def _parse_step(raw: object, cid: str) -> SetupStep:
     where = f"{cid}: setup step {raw.get('id') if isinstance(raw, dict) else '?'}"
     if not isinstance(raw, dict):
         raise PalCatalogError(f"{where} must be a mapping")
-    unknown = sorted(set(raw) - {"id", "kind", "title", "body", "links", "copies", "fields", "check"})
+    unknown = sorted(set(raw) - {"id", "kind", "title", "body", "links", "copies", "fields", "check", "fallback"})
     if unknown:
         raise PalCatalogError(f"{where}: unknown {unknown}")
     kind = _text(raw, "kind", where)
@@ -136,7 +154,7 @@ def _parse_step(raw: object, cid: str) -> SetupStep:
         links=tuple(SetupLink(_text(l, "label", where), _https(l.get("url"), "link", cid))
                     for l in _items(raw, "links", where)),
         copies=tuple(SetupCopy(_text(c, "label", where), _text(c, "value", where)) for c in _items(raw, "copies", where)),
-        fields=fields, check=check)
+        fields=fields, check=check, fallback=_parse_fallback(raw.get("fallback"), cid, where))
 
 
 def _parse_setup(raw: object, cid: str) -> SetupGuide:

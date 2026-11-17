@@ -1746,6 +1746,9 @@ export interface SetupStepRow {
   copies: SetupCopyRow[]
   fields: SetupFieldRow[]
   check?: SetupCheckKind | null
+  problem?: SetupProblemKind | null
+  problem_host?: string | null
+  fallback?: SetupFallbackRow | null
 }
 export type SetupStepKind = 'public_url' | 'open_page' | 'paste'
 export interface SetupLinkRow {
@@ -1764,6 +1767,12 @@ export interface SetupFieldRow {
   suffix?: string | null
 }
 export type SetupCheckKind = 'google_client' | 'github_token' | 'slack_client'
+export type SetupProblemKind = 'not_https' | 'ip_host'
+export interface SetupFallbackRow {
+  label: string
+  body: string
+  links: SetupLinkRow[]
+}
 export interface SetupProgress {
   step_id: string
   saved: string[]
@@ -1793,6 +1802,11 @@ export interface OAuthClientConnectResult {
   slug: string
   auth_url: string
   session_id: string | null
+}
+export interface OAuthClientRemoveParams {
+  profile?: string | null
+  slug: string
+  remove_client?: boolean
 }
 export interface OAuthClientRemoveResult {
   slug: string
@@ -8399,8 +8413,8 @@ export interface RpcMethods {
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
   /** Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog. */
   'connectors.oauth_client.connect': { params: OAuthClientConnectParams; result: OAuthClientConnectResult }
-  /** Remove the scoped profile's sign-in. The owner's saved OAuth client stays. */
-  'connectors.oauth_client.remove': { params: OAuthClientSlugParams; result: OAuthClientRemoveResult }
+  /** Remove the scoped profile's sign-in. The owner's saved OAuth client stays unless remove_client is true; then, owner only, the saved client record and its Vault items are deleted too. */
+  'connectors.oauth_client.remove': { params: OAuthClientRemoveParams; result: OAuthClientRemoveResult }
   /** Owner only. Save the OAuth client once for every profile and device: both values are Vault item ids the app wrote with vault.add. */
   'connectors.oauth_client.save': { params: OAuthClientSaveParams; result: OAuthClientSetupResult }
   /** Whether the owner's OAuth client for an oauth_client catalog entry is saved, the console page to register it on and the redirect URL to register; redirect_url is null until the gateway has a public https address. */

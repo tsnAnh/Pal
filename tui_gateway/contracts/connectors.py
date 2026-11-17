@@ -197,6 +197,17 @@ class SetupFieldRow(Result):
     suffix: str | None = None
 
 
+class SetupProblemKind(WireEnum):
+    not_https = "not_https"
+    ip_host = "ip_host"
+
+
+class SetupFallbackRow(Result):
+    label: str
+    body: str
+    links: list[SetupLinkRow]
+
+
 class SetupStepRow(Result):
     id: str
     kind: SetupStepKind
@@ -206,6 +217,9 @@ class SetupStepRow(Result):
     copies: list[SetupCopyRow]
     fields: list[SetupFieldRow]
     check: SetupCheckKind | None = None
+    problem: SetupProblemKind | None = None
+    problem_host: str | None = None
+    fallback: SetupFallbackRow | None = None
 
 
 class SetupGuide(Result):
@@ -258,6 +272,10 @@ class OAuthClientSaveParams(OAuthClientSlugParams):
     client_secret_item: str
 
 
+class OAuthClientRemoveParams(OAuthClientSlugParams):
+    remove_client: bool = False
+
+
 class OAuthClientConnectParams(OAuthClientSlugParams):
     client_redirect_uri: str | None = None
 
@@ -307,9 +325,10 @@ method(
 
 method(
     "connectors.oauth_client.remove",
-    params=OAuthClientSlugParams,
+    params=OAuthClientRemoveParams,
     result=OAuthClientRemoveResult,
-    doc="Remove the scoped profile's sign-in. The owner's saved OAuth client stays.",
+    doc="Remove the scoped profile's sign-in. The owner's saved OAuth client stays unless remove_client is true; "
+        "then, owner only, the saved client record and its Vault items are deleted too.",
 )
 
 

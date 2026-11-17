@@ -4,6 +4,7 @@ import base64
 import contextlib
 import hashlib
 import hmac
+import ipaddress
 import logging
 import os
 import secrets
@@ -14,7 +15,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import Enum
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from gateway.device_registry import install_root
 
@@ -25,6 +26,7 @@ NONCE_TTL_SECONDS = 600.0
 HTTP_TIMEOUT_SECONDS = 15.0
 GOOGLE_REDIRECT_PATH = "/webapp/google-install/callback"
 GOOGLE_PROVIDER = "google-workspace"
+MCP_OAUTH_REDIRECT_PATH = "/webapp/mcp-oauth/callback"
 MCP_REDIRECT_PORT = 27890
 MCP_REDIRECT_URL = f"http://localhost:{MCP_REDIRECT_PORT}/callback"
 GOOGLE_TOKEN_FILE = "google_token.json"
@@ -154,6 +156,14 @@ class OAuthClientStore:
             return None
         return ClientRecord(row["provider_id"], row["vault_home"], row["client_id_item"], row["client_secret_item"])
 
+    def delete_client(self, provider_id: str) -> ClientRecord | None:
+        with self._write() as conn:
+            row = conn.execute("SELECT * FROM clients WHERE provider_id=?", (provider_id,)).fetchone()
+            conn.execute("DELETE FROM clients WHERE provider_id=?", (provider_id,))
+        if row is None:
+            return None
+        return ClientRecord(row["provider_id"], row["vault_home"], row["client_id_item"], row["client_secret_item"])
+
     def connection(self, provider_id: str, profile_home: str) -> tuple[ConnectionStatus, str | None] | None:
         with self._read() as conn:
             row = conn.execute("SELECT status, token_item FROM connections WHERE provider_id=? AND profile_home=?",
@@ -227,10 +237,43 @@ def save_client(store: OAuthClientStore, provider_id: str, vault_home, client_id
                 vault.remove_item(item)
 
 
-def google_redirect_url(public_url: str | None) -> str | None:
+def remove_client(store: OAuthClientStore, provider_id: str) -> bool:
+    record = store.delete_client(provider_id)
+    if record is None:
+        return False
+    vault = vault_for(record.vault_home)
+    for item in {record.client_id_item, record.client_secret_item}:
+        with contextlib.suppress(Exception):
+            vault.remove_item(item)
+    return True
+
+
+def _https_redirect(public_url: str | None, path: str) -> str | None:
     if not (public_url or "").startswith("https://"):
         return None
-    return public_url.rstrip("/") + GOOGLE_REDIRECT_PATH
+    return public_url.rstrip("/") + path
+
+
+def google_redirect_url(public_url: str | None) -> str | None:
+    return _https_redirect(public_url, GOOGLE_REDIRECT_PATH)
+
+
+def mcp_redirect_url(public_url: str | None) -> str | None:
+    return _https_redirect(public_url, MCP_OAUTH_REDIRECT_PATH)
+
+
+def address_problem(public_url: str | None) -> tuple[str, str] | None:
+    raw = (public_url or "").strip()
+    if not raw:
+        return None
+    parts = urlsplit(raw)
+    host = parts.hostname or ""
+    if parts.scheme != "https":
+        return "not_https", host
+    with contextlib.suppress(ValueError):
+        ipaddress.ip_address(host)
+        return "ip_host", host
+    return None
 
 
 def _challenge(verifier: str) -> str:

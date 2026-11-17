@@ -182,4 +182,66 @@ final class SetupGuideE2ETests: ConnectAppsTestCase {
         waitLabel(button, contains: "Remove", timeout: 45)
         shot(app, "setup-guide-slack-connected")
     }
+
+    private func guideThroughClient(_ app: XCUIApplication, name: String, slug: String, page: String, authorize: String) {
+        let button = openGuide(app, name: name, slug: slug, action: "Set up")
+        expectStep(app, "app", "1 of 2")
+        let redirect = "https://pal.example.test/webapp/mcp-oauth/callback"
+        XCTAssertEqual(element(app, "setupGuideCopy-0Value").label, redirect, "the gateway redirect is shown exactly")
+        XCTAssertTrue(element(app, "setupGuideCopy-1Value").label.contains(":read"), "the scopes are ready to copy")
+        element(app, "setupGuideLink-0").hit()
+        openedLink(app, prefix: page)
+        next(app)
+        expectStep(app, "client", "2 of 2")
+        enter(app, "client_id", "fake-client-id")
+        enter(app, "client_secret", "fake-token-do-not-use")
+        waitFor(element(app, "setupGuideShapeOK-client_id"), timeout: 10, "shape accepted")
+        XCTAssertEqual(submit(app).label, "Save", "no test call, so the action only saves")
+        submit(app).hit()
+        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
+        openedLink(app, prefix: authorize)
+        returnLoopbackRedirect(app)
+        waitLabel(button, contains: "Remove", timeout: 45)
+        shot(app, "setup-guide-\(slug)-connected")
+    }
+
+    func test5FigmaGuidesTheAppThenSavesTheClientWithoutATestCall() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
+        guideThroughClient(
+            app, name: "Figma", slug: "figma", page: "https://www.figma.com/developers/apps", authorize: "https://www.figma.com/oauth"
+        )
+    }
+
+    func test6DropboxGuidesTheAppThenSavesTheClientWithoutATestCall() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
+        guideThroughClient(
+            app, name: "Dropbox", slug: "dropbox", page: "https://www.dropbox.com/developers/console/apps",
+            authorize: "https://www.dropbox.com/oauth2/authorize"
+        )
+    }
+
+    func test7GoogleRefusesAnIPAddressAndOffersTheFallbacks() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client", "-hermes-test-oauth-client-ip-address"])
+        _ = openGuide(app, name: "Google Workspace", slug: "google-workspace", action: "Set up")
+        expectStep(app, "address", "1 of 4")
+        let title = app.staticTexts["Google refuses this address"]
+        waitFor(title, timeout: 20, "address problem title")
+        XCTAssertFalse(element(app, "setupGuideAddressValue").exists, "the refused address is not offered for copying")
+        element(app, "setupGuideAddressProblemDetails").hit()
+        waitFor(element(app, "setupGuideAddressProblemCopyDetails"), timeout: 10, "copy details")
+        let details = element(app, "setupGuideAddressProblemReasonCode").label
+        XCTAssertTrue(details.contains("IP_HOST") && details.contains("100.101.102.103"), "details name the rule and the host")
+        shot(app, "setup-guide-google-ip-address")
+        next(app)
+        expectStep(app, "console", "2 of 4")
+        let fallback = element(app, "setupGuideFallback")
+        waitFor(fallback, timeout: 10, "fallback action")
+        XCTAssertEqual(fallback.label, "Google rejected the address")
+        XCTAssertFalse(element(app, "setupGuideFallbackBody").exists, "the fallback is hidden until tapped")
+        fallback.hit()
+        waitFor(element(app, "setupGuideFallbackBody"), timeout: 10, "fallback text")
+        element(app, "setupGuideFallbackLink-0").hit()
+        openedLink(app, prefix: "https://developers.google.com/identity/protocols/oauth2/native-app")
+        shot(app, "setup-guide-google-fallback")
+    }
 }

@@ -9,18 +9,26 @@ enum OAuthClientScript {
     static let withoutPublicAddressArgument = "-hermes-test-oauth-client-no-public-address"
     static let asanaRedirect = "http://localhost:27890/callback"
     static let googleRedirect = "https://pal.example.test/webapp/google-install/callback"
+    static let mcpRedirect = "https://pal.example.test/webapp/mcp-oauth/callback"
+    static let ipAddressArgument = "-hermes-test-oauth-client-ip-address"
     static let state = "scripted-state"
     static let session = "scripted-session"
     static let slackSession = "scripted-session-slack"
     static let loopbackAuthorize = [
         "asana": ("https://app.asana.com/-/oauth_authorize", OAuthClientScript.session),
         "slack": ("https://slack.com/oauth/v2_user/authorize", OAuthClientScript.slackSession),
+        "figma": ("https://www.figma.com/oauth", "scripted-session-figma"),
+        "dropbox": ("https://www.dropbox.com/oauth2/authorize", "scripted-session-dropbox"),
     ]
 
     static var isActive: Bool { ProcessInfo.processInfo.arguments.contains(argument) }
 
     static func wrap(_ rpc: any ConnectRPC) -> any ConnectRPC {
-        isActive ? ScriptedOAuthClientRPC(base: rpc, publicAddress: !ProcessInfo.processInfo.arguments.contains(withoutPublicAddressArgument)) : rpc
+        let arguments = ProcessInfo.processInfo.arguments
+        return isActive
+            ? ScriptedOAuthClientRPC(
+                base: rpc, publicAddress: !arguments.contains(withoutPublicAddressArgument), ipAddress: arguments.contains(ipAddressArgument)
+            ) : rpc
     }
 
     static func browser(_ real: any AuthorizationBrowser) -> any AuthorizationBrowser {
@@ -39,15 +47,18 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
 
     private let base: any ConnectRPC
     private let publicAddress: Bool
+    private let ipAddress: Bool
     private var progress: [String: Progress] = [
-        "asana": Progress(), "google-workspace": Progress(), "github": Progress(), "slack": Progress(),
+        "asana": Progress(), "google-workspace": Progress(), "github": Progress(), "slack": Progress(), "figma": Progress(),
+        "dropbox": Progress(),
     ]
     private var items = 0
     private var vault: [String: String] = [:]
 
-    init(base: any ConnectRPC, publicAddress: Bool) {
+    init(base: any ConnectRPC, publicAddress: Bool, ipAddress: Bool = false) {
         self.base = base
         self.publicAddress = publicAddress
+        self.ipAddress = ipAddress
     }
 
     func call(_ method: String, _ params: JSONValue) async throws -> JSONValue {
@@ -57,7 +68,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         case "connectors.oauth_client.setup": return try setup(slug)
         case "connectors.oauth_client.save": return try save(slug)
         case "connectors.oauth_client.connect": return try connect(slug)
-        case "connectors.oauth_client.remove": return remove(slug)
+        case "connectors.oauth_client.remove": return remove(slug, removeClient: params["remove_client"]?.boolValue == true)
         case "connectors.setup.check": return try check(slug, params)
         default: return try await auxiliary(method, params)
         }
@@ -121,16 +132,16 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
             "slug": "asana", "name": "Asana", "category": "Other", "icon": "plugin_glyph", "method": "oauth_client", "verified": true,
             "mcp_url": "https://mcp.asana.com/v2/mcp", "status": .string(status("asana")),
         ]
-        return ["connectors": .array(kept + [asana, googleRow(), githubRow(), slackRow()])]
+        return ["connectors": .array(kept + [asana, googleRow(), githubRow(), slackRow(), mcpClientRow("figma"), mcpClientRow("dropbox")])]
     }
 
     private func googleRow() -> JSONValue {
         let saved = progress["google-workspace"]?.configured == true
-        let step = publicAddress ? (saved ? "client" : "console") : "address"
+        let step = publicAddress && !ipAddress ? (saved ? "client" : "console") : "address"
         return [
             "slug": "google-workspace", "name": "Google Workspace", "category": "Files and docs", "icon": "plugin_glyph",
             "method": "oauth_client", "verified": true, "status": .string(status("google-workspace")), "notes": .string(Self.googleNotes),
-            "setup_guide": ScriptedSetupGuides.google,
+            "setup_guide": ScriptedSetupGuides.google(addressProblem: ipAddress),
             "setup_progress": ScriptedSetupGuides.progress(step, saved: saved ? ["client_id", "client_secret"] : []),
         ]
     }
@@ -155,10 +166,24 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         ]
     }
 
+    private func mcpClientRow(_ slug: String) -> JSONValue {
+        let saved = progress[slug]?.configured == true
+        let isFigma = slug == "figma"
+        return [
+            "slug": .string(slug), "name": .string(isFigma ? "Figma" : "Dropbox"), "category": "Other", "icon": "plugin_glyph",
+            "method": "oauth_client", "verified": true, "mcp_url": .string("https://mcp.\(slug).com/mcp"), "status": .string(status(slug)),
+            "setup_guide": isFigma ? ScriptedSetupGuides.figma(publicAddress: publicAddress) : ScriptedSetupGuides.dropbox(publicAddress: publicAddress),
+            "setup_progress": ScriptedSetupGuides.progress(saved ? "client" : "app", saved: saved ? ["client_id", "client_secret"] : []),
+        ]
+    }
+
     private func setup(_ slug: String) throws -> JSONValue {
         guard let current = progress[slug] else { throw Self.failure(4041, "CONNECTOR_NOT_FOUND") }
         let loopback = OAuthClientScript.loopbackAuthorize[slug] != nil
-        let consoles = ["asana": "https://app.asana.com/0/my-apps", "slack": "https://api.slack.com/apps"]
+        let consoles = [
+            "asana": "https://app.asana.com/0/my-apps", "slack": "https://api.slack.com/apps",
+            "figma": "https://www.figma.com/developers/apps", "dropbox": "https://www.dropbox.com/developers/console/apps",
+        ]
         let console = consoles[slug] ?? "https://console.cloud.google.com/apis/credentials"
         let redirect = loopback ? OAuthClientScript.asanaRedirect : (publicAddress ? OAuthClientScript.googleRedirect : nil)
         return [
@@ -193,8 +218,9 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         progress["google-workspace"]?.connected = true
     }
 
-    private func remove(_ slug: String) -> JSONValue {
+    private func remove(_ slug: String, removeClient: Bool) -> JSONValue {
         progress[slug]?.connected = false
+        if removeClient { progress[slug]?.configured = false }
         return ["slug": .string(slug), "removed": true]
     }
 

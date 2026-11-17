@@ -62,6 +62,38 @@ struct SetupGuideWireTests {
         #expect(step.links.map(\.label) == ["Good"])
     }
 
+    @Test func anAddressProblemAndAFallbackDecodeOnTheirSteps() throws {
+        let address: JSONValue = [
+            "id": "address", "kind": "public_url", "title": "Address", "problem": "ip_host", "problem_host": "100.101.102.103",
+        ]
+        let console: JSONValue = [
+            "id": "console", "kind": "open_page", "title": "Console",
+            "fallback": [
+                "label": "Google rejected the address", "body": "Use your own domain.",
+                "links": [
+                    ["label": "Desktop app guide", "url": "https://developers.google.com/identity/protocols/oauth2/native-app"],
+                    ["label": "Bad", "url": "nope"],
+                ],
+            ],
+        ]
+        let guide = try #require(try guided([address, console]).decoded(as: PalCatalogEntry.self).setupGuide)
+        let first = try #require(guide.addressStep)
+        #expect(first.problem == .ipHost && first.problemHost == "100.101.102.103")
+        #expect(first.problem?.details(host: first.problemHost) == "IP_HOST, host 100.101.102.103, rule: address must be a domain name, not an IP address")
+        let fallback = try #require(guide.steps.last?.fallback)
+        #expect(fallback.label == "Google rejected the address" && fallback.body == "Use your own domain.")
+        #expect(fallback.links.map(\.label) == ["Desktop app guide"])
+        #expect(guide.steps.last?.problem == nil && first.fallback == nil)
+    }
+
+    @Test func anUnknownProblemOrABrokenFallbackLeavesTheStepReadable() throws {
+        let step: JSONValue = [
+            "id": "address", "kind": "public_url", "title": "Address", "problem": "future_rule", "fallback": ["body": "no label"],
+        ]
+        let parsed = try #require(try guided([step]).decoded(as: PalCatalogEntry.self).setupGuide?.steps.first)
+        #expect(parsed.problem == nil && parsed.fallback == nil && parsed.title == "Address")
+    }
+
     @Test func anUnknownCheckKindLeavesTheStepWithoutACheck() throws {
         var future = tokenStep
         future = .object(future.objectValue!.merging(["check": "future_check"]) { _, new in new })
@@ -244,5 +276,31 @@ struct SetupCheckTests {
         }
         let fallback = SetupCheckResult(slug: "x", ok: false, reason: nil, message: "Try later").failure(appName: "Slack")
         #expect(fallback.code == "CHECK_FAILED" && fallback.reason == "Try later")
+    }
+}
+
+@Suite("Remove saved client")
+struct RemoveSavedClientTests {
+    @Test func removingTheClientAsksTheGatewayToDeleteItAndNotJustTheSignIn() async throws {
+        let rpc = CustomRPC(["connectors.oauth_client.remove": { _ in ["slug": "figma", "removed": true] }])
+        try await customService(rpc, profile: "alpha").removeOAuthClient(slug: "figma")
+        let sent = try #require(rpc.params("connectors.oauth_client.remove").first)
+        #expect(sent["slug"]?.stringValue == "figma" && sent["remove_client"]?.boolValue == true && sent["profile"]?.stringValue == "alpha")
+    }
+
+    @Test func theSignInRollbackNeverDeletesTheClient() async throws {
+        let rpc = CustomRPC(["connectors.oauth_client.remove": { _ in ["slug": "figma", "removed": true] }])
+        try await customService(rpc).removeOAuthClientSignIn(slug: "figma")
+        #expect(rpc.params("connectors.oauth_client.remove").first?["remove_client"] == nil)
+    }
+
+    @Test func aNonOwnerRefusalSurfacesAsNotOwner() async throws {
+        let rpc = CustomRPC(["connectors.oauth_client.remove": rpcFailure(4030, reason: "NOT_OWNER")])
+        do {
+            try await customService(rpc).removeOAuthClient(slug: "figma")
+            Issue.record("expected a failure")
+        } catch {
+            #expect((error as? ConnectAppsError)?.oauthClientFailure == .notOwner)
+        }
     }
 }

@@ -180,3 +180,61 @@ def test_every_guide_check_has_its_fields_declared():
         for step in (entry.setup.steps if entry.setup else ()):
             if step.check:
                 assert tuple(f.id for f in step.fields) == checks.FIELDS[step.check]
+
+
+@pytest.mark.parametrize("slug", ["figma", "dropbox"])
+def test_mcp_guides_copy_the_gateway_redirect_and_skip_the_test_call(root, public_url, provider, slug):
+    steps = {s["id"]: s for s in _row(slug)["setup_guide"]["steps"]}
+    copies = {c["label"]: c["value"] for c in steps["app"]["copies"]}
+    assert copies[next(k for k in copies if k.startswith("Redirect"))] == PUBLIC_URL + "/webapp/mcp-oauth/callback"
+    assert "Scopes" in copies
+    assert steps["client"]["check"] is None
+    assert [f["id"] for f in steps["client"]["fields"]] == ["client_id", "client_secret"]
+    assert _call("connectors.setup.check", slug=slug, values={})["error"]["data"]["reason"] == "CONNECTOR_NOT_FOUND"
+    assert provider["seen"] == []
+
+
+@pytest.mark.parametrize("url", [None, "http://pal.example.ts.net"])
+def test_mcp_redirect_copy_is_omitted_without_an_https_address(root, public_url, url):
+    public_url["url"] = url
+    steps = {s["id"]: s for s in _row("figma")["setup_guide"]["steps"]}
+    assert [c["label"] for c in steps["app"]["copies"]] == ["Scopes"]
+
+
+def test_figma_and_dropbox_save_through_the_owner_client_path(root, public_url):
+    for slug in ("figma", "dropbox"):
+        assert _row(slug)["status"] == "needs_setup"
+        _ok("connectors.oauth_client.save", slug=slug, client_id_item=_item("fake-id"), client_secret_item=_item(SECRET))
+        assert _row(slug)["setup_progress"] == {"step_id": "client", "saved": ["client_id", "client_secret"]}
+        assert _row(slug)["status"] == "not_connected"
+
+
+@pytest.mark.parametrize(("url", "problem", "host"), [
+    ("http://pal.example.ts.net", "not_https", "pal.example.ts.net"),
+    ("https://100.101.102.103:8443", "ip_host", "100.101.102.103"),
+    ("https://[fd7a:115c::1]", "ip_host", "fd7a:115c::1"),
+    (PUBLIC_URL, None, None),
+    (None, None, None),
+])
+def test_address_step_reports_the_host_problem(root, public_url, url, problem, host):
+    public_url["url"] = url
+    steps = {s["id"]: s for s in _row("google-workspace")["setup_guide"]["steps"]}
+    assert steps["address"]["problem"] == problem and steps["address"]["problem_host"] == host
+    assert all(steps[other]["problem"] is None for other in ("console", "apis", "client"))
+
+
+def test_progress_returns_to_the_address_while_google_would_reject_it(root, public_url):
+    public_url["url"] = "https://100.101.102.103"
+    assert _row("google-workspace")["setup_progress"]["step_id"] == "address"
+    public_url["url"] = PUBLIC_URL
+    assert _row("google-workspace")["setup_progress"]["step_id"] == "console"
+
+
+def test_google_console_step_carries_the_rejected_address_fallback(root, public_url):
+    steps = {s["id"]: s for s in _row("google-workspace")["setup_guide"]["steps"]}
+    fallback = steps["console"]["fallback"]
+    assert fallback["label"] == "Google rejected the address"
+    assert "Desktop app" in fallback["body"] and "own domain" in fallback["body"]
+    assert fallback["links"] and all(link["url"].startswith("https://") for link in fallback["links"])
+    assert all(s["fallback"] is None for sid, s in steps.items() if sid != "console")
+    assert _row("slack")["setup_guide"]["steps"][0]["fallback"] is None

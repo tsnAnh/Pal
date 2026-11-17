@@ -43,6 +43,9 @@ def test_setup_guides_parse_with_ordered_steps_and_valid_shapes():
         assert len({s.id for s in entry.setup.steps}) == len(entry.setup.steps)
         assert all(s.fields for s in entry.setup.steps if s.kind == "paste")
     assert guided["slack"].method is ConnectionMethod.OAUTH_CLIENT and guided["slack"].mcp_url
+    for slug in ("figma", "dropbox"):
+        assert guided[slug].method is ConnectionMethod.OAUTH_CLIENT and guided[slug].mcp_url and guided[slug].oauth
+        assert all(s.check is None for s in guided[slug].setup.steps)
 
 
 @pytest.mark.parametrize("step", [
@@ -55,5 +58,23 @@ def test_invalid_setup_step_is_refused(tmp_path, step):
     path = tmp_path / "c.yaml"
     path.write_text("version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: none, verified: false, "
                     f"source: https://x.dev, setup: {{steps: [{step}]}}}}\n")
+    with pytest.raises(PalCatalogError):
+        load_pal_connectors(path)
+
+
+def test_step_fallback_parses_with_links(tmp_path):
+    path = tmp_path / "c.yaml"
+    path.write_text("version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: none, verified: false, "
+                    "source: https://x.dev, setup: {steps: [{id: a, kind: open_page, title: T, body: B, "
+                    "fallback: {label: L, body: FB, links: [{label: x, url: 'https://y.dev'}]}}]}}\n")
+    step = load_pal_connectors(path)[0].setup.steps[0]
+    assert (step.fallback.label, step.fallback.body, step.fallback.links[0].url) == ("L", "FB", "https://y.dev")
+
+
+@pytest.mark.parametrize("fallback", ["{label: L}", "{label: L, body: B, extra: 1}", "nope"])
+def test_invalid_step_fallback_is_refused(tmp_path, fallback):
+    path = tmp_path / "c.yaml"
+    path.write_text("version: 1\nconnectors:\n- {id: a, name: A, icon: i, category: c, method: none, verified: false, "
+                    f"source: https://x.dev, setup: {{steps: [{{id: a, kind: open_page, title: T, body: B, fallback: {fallback}}}]}}}}\n")
     with pytest.raises(PalCatalogError):
         load_pal_connectors(path)

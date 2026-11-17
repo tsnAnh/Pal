@@ -9,9 +9,11 @@ from tui_gateway.contracts.connectors import (
     ConnectorErrorReason,
     ConnectorSetupCheckResult,
     SetupCopyRow,
+    SetupFallbackRow,
     SetupFieldRow,
     SetupGuide,
     SetupLinkRow,
+    SetupProblemKind,
     SetupProgress,
     SetupStepRow,
 )
@@ -39,7 +41,8 @@ def _templates(entry: PalConnector) -> dict[str, str | None]:
     if entry.method is ConnectionMethod.OAUTH_CLIENT and entry.id == setup_mod.GOOGLE_PROVIDER:
         return {"redirect_url": setup_mod.google_redirect_url(_public_url())}
     if entry.method is ConnectionMethod.OAUTH_CLIENT and entry.mcp_url:
-        return {"redirect_url": setup_mod.MCP_REDIRECT_URL}
+        return {"redirect_url": setup_mod.MCP_REDIRECT_URL,
+                "mcp_redirect_url": setup_mod.mcp_redirect_url(_public_url())}
     return {}
 
 
@@ -55,13 +58,19 @@ def _resolve(value: str, templates: dict[str, str | None]) -> str | None:
 
 def _step_row(step: SetupStep, templates: dict[str, str | None]) -> SetupStepRow:
     copies = [(c.label, _resolve(c.value, templates)) for c in step.copies]
+    problem = setup_mod.address_problem(_public_url()) if step.kind == "public_url" else None
+    fallback = step.fallback
     return SetupStepRow(
         id=step.id, kind=step.kind, title=step.title, body=step.body,
         links=[SetupLinkRow(label=l.label, url=l.url) for l in step.links],
         copies=[SetupCopyRow(label=label, value=value) for label, value in copies if value is not None],
         fields=[SetupFieldRow(id=f.id, label=f.label, secret=f.secret, prefixes=list(f.prefixes), suffix=f.suffix)
                 for f in step.fields],
-        check=step.check)
+        check=step.check,
+        problem=SetupProblemKind(problem[0]) if problem else None, problem_host=problem[1] if problem else None,
+        fallback=SetupFallbackRow(label=fallback.label, body=fallback.body,
+                                  links=[SetupLinkRow(label=l.label, url=l.url) for l in fallback.links])
+        if fallback else None)
 
 
 def build_guide(entry: PalConnector) -> SetupGuide | None:
@@ -84,8 +93,9 @@ def derive_progress(entry: PalConnector) -> SetupProgress | None:
     steps = entry.setup.steps
     credentials = _credentials_saved(entry)
     address_set = setup_mod.google_redirect_url(_public_url()) is not None
+    address_ok = address_set and setup_mod.address_problem(_public_url()) is None
     saved = [f.id for step in steps if step.kind == "paste" and credentials for f in step.fields]
-    if not address_set and any(s.kind == "public_url" for s in steps):
+    if not address_ok and any(s.kind == "public_url" for s in steps):
         resume = next(s.id for s in steps if s.kind == "public_url")
     elif credentials:
         resume = next(s.id for s in reversed(steps) if s.kind == "paste")

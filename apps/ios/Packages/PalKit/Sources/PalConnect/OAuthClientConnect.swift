@@ -153,6 +153,10 @@ extension ConnectAppsService {
         _ = try await oauthClientCall("connectors.oauth_client.remove", ["slug": .string(slug)])
     }
 
+    public func removeOAuthClient(slug: String) async throws {
+        _ = try await oauthClientCall("connectors.oauth_client.remove", ["slug": .string(slug), "remove_client": .bool(true)])
+    }
+
     public func connectOAuthClient(_ entry: PalCatalogEntry, route: McpConnectRoute) async throws -> OAuthClientConnectOutcome {
         guard entry.status != .needsSetup else { throw ConnectAppsError.oauthClient(.needsSetup) }
         let setup = try await oauthClientSetup(slug: entry.slug)

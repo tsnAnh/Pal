@@ -205,3 +205,46 @@ def test_asana_connects_through_the_mcp_path_with_the_owner_client(root, public_
     _ok("connectors.oauth_client.remove", slug="asana")
     assert _status("asana") == "not_connected"
     assert _ok("connectors.oauth_client.setup", slug="asana")["configured"] is True
+
+
+def _vault_ids(profile="work"):
+    return {item["id"] for item in _ok("vault.list", profile)["items"]}
+
+
+def test_remove_client_deletes_the_saved_client_and_its_vault_items(root, public_url):
+    _save("asana", ASANA_CLIENT_ID)
+    record = setup_mod.build_store().client("asana")
+    items = {record.client_id_item, record.client_secret_item}
+    assert items <= _vault_ids()
+
+    result = _ok("connectors.oauth_client.remove", slug="asana", remove_client=True)
+
+    assert result["removed"] is True
+    assert _ok("connectors.oauth_client.setup", slug="asana")["configured"] is False
+    assert _status("asana") == "needs_setup"
+    assert not items & _vault_ids()
+    assert _ok("connectors.oauth_client.remove", slug="asana", remove_client=True)["removed"] is False
+
+
+def test_remove_client_drops_the_google_sign_in_with_the_client(root, public_url, exchange, web):
+    _save("google-workspace", GOOGLE_CLIENT_ID)
+    _callback(web, code="fake-code-do-not-use", state=_begin_google())
+    assert (root / "profiles" / "work" / "google_token.json").exists()
+
+    _ok("connectors.oauth_client.remove", slug="google-workspace", remove_client=True)
+
+    assert not (root / "profiles" / "work" / "google_token.json").exists()
+    assert _status("google-workspace") == "needs_setup"
+
+
+def test_remove_client_is_owner_only_and_the_default_keeps_the_client(root, public_url):
+    from tui_gateway.ws_legacy_fallback import _connection_profile_home
+    _save("asana", ASANA_CLIENT_ID)
+    token = _connection_profile_home.set(str(root / "profiles" / "home"))
+    try:
+        response = _call("connectors.oauth_client.remove", "work", slug="asana", remove_client=True)
+        assert response["error"]["data"]["reason"] == "NOT_OWNER"
+        assert "error" not in _call("connectors.oauth_client.remove", "work", slug="asana")
+    finally:
+        _connection_profile_home.reset(token)
+    assert _ok("connectors.oauth_client.setup", slug="asana")["configured"] is True

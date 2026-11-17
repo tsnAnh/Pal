@@ -103,6 +103,45 @@ extension SetupField {
     }
 }
 
+public enum SetupProblem: String, Decodable, Sendable {
+    case notHTTPS = "not_https"
+    case ipHost = "ip_host"
+
+    public var code: String { rawValue.uppercased() }
+
+    public var rule: String {
+        switch self {
+        case .notHTTPS: "address must start with https"
+        case .ipHost: "address must be a domain name, not an IP address"
+        }
+    }
+
+    public func details(host: String?) -> String {
+        [code, host.map { "host \($0)" }, "rule: \(rule)"].compactMap { $0 }.joined(separator: ", ")
+    }
+}
+
+public struct SetupFallback: Decodable, Sendable, Hashable {
+    public var label: String
+    public var body: String
+    public var links: [SetupLink]
+
+    public init(label: String, body: String = "", links: [SetupLink] = []) {
+        self.label = label
+        self.body = body
+        self.links = links
+    }
+
+    enum CodingKeys: String, CodingKey { case label, body, links }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        label = try container.decode(String.self, forKey: .label)
+        body = try container.decodeIfPresent(String.self, forKey: .body) ?? ""
+        links = container.lossyArray(SetupLink.self, forKey: .links)
+    }
+}
+
 public struct SetupStep: Decodable, Sendable, Hashable, Identifiable {
     public enum Kind: String, Decodable, Sendable {
         case publicURL = "public_url"
@@ -124,10 +163,14 @@ public struct SetupStep: Decodable, Sendable, Hashable, Identifiable {
     public var copies: [SetupCopy]
     public var fields: [SetupField]
     public var check: Check?
+    public var problem: SetupProblem?
+    public var problemHost: String?
+    public var fallback: SetupFallback?
 
     public init(
         id: String, kind: Kind, title: String, body: String = "", links: [SetupLink] = [], copies: [SetupCopy] = [],
-        fields: [SetupField] = [], check: Check? = nil
+        fields: [SetupField] = [], check: Check? = nil, problem: SetupProblem? = nil, problemHost: String? = nil,
+        fallback: SetupFallback? = nil
     ) {
         self.id = id
         self.kind = kind
@@ -137,9 +180,12 @@ public struct SetupStep: Decodable, Sendable, Hashable, Identifiable {
         self.copies = copies
         self.fields = fields
         self.check = check
+        self.problem = problem
+        self.problemHost = problemHost
+        self.fallback = fallback
     }
 
-    enum CodingKeys: String, CodingKey { case id, kind, title, body, links, copies, fields, check }
+    enum CodingKeys: String, CodingKey { case id, kind, title, body, links, copies, fields, check, problem, problemHost = "problem_host", fallback }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -151,6 +197,9 @@ public struct SetupStep: Decodable, Sendable, Hashable, Identifiable {
         copies = container.lossyArray(SetupCopy.self, forKey: .copies)
         fields = container.lossyArray(SetupField.self, forKey: .fields)
         check = try? container.decodeIfPresent(Check.self, forKey: .check)
+        problem = try? container.decodeIfPresent(SetupProblem.self, forKey: .problem)
+        problemHost = try? container.decodeIfPresent(String.self, forKey: .problemHost)
+        fallback = try? container.decodeIfPresent(SetupFallback.self, forKey: .fallback)
     }
 }
 
@@ -176,6 +225,8 @@ public struct SetupGuide: Decodable, Sendable, Hashable {
     }
 
     public var needsPublicAddress: Bool { steps.contains { $0.kind == .publicURL } }
+
+    public var addressStep: SetupStep? { steps.first { $0.kind == .publicURL } }
 }
 
 public struct SetupProgress: Decodable, Sendable, Hashable {

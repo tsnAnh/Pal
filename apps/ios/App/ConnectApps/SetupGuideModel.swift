@@ -22,14 +22,16 @@ final class SetupGuideModel: Identifiable {
     private(set) var index: Int
     private(set) var publicAddress: String?
     var confirmsReplace = false
+    var confirmsRemove = false
 
     private let service: ConnectAppsService
     private let finished: () async -> Void
     private let connectAgain: () -> Void
+    private let removed: () async -> Void
 
     init(
         app: ConnectApp, entry: PalCatalogEntry, guide: SetupGuide, service: ConnectAppsService, problem: OAuthClientProblem?,
-        connectAgain: @escaping () -> Void, finished: @escaping () async -> Void
+        connectAgain: @escaping () -> Void, finished: @escaping () async -> Void, removed: @escaping () async -> Void = {}
     ) {
         self.app = app
         id = app.id
@@ -38,6 +40,7 @@ final class SetupGuideModel: Identifiable {
         self.service = service
         self.connectAgain = connectAgain
         self.finished = finished
+        self.removed = removed
         index = guide.index(of: entry.setupProgress?.stepID)
         phase = problem.map(Phase.problem) ?? .loading
     }
@@ -49,6 +52,8 @@ final class SetupGuideModel: Identifiable {
     var showsBack: Bool { phase == .steps && index > 0 }
 
     var isLastStep: Bool { index >= guide.steps.count - 1 }
+
+    var addressProblem: SetupProblem? { guide.addressStep?.problem }
 
     func start() async {
         if phase == .loading { await load() }
@@ -64,7 +69,7 @@ final class SetupGuideModel: Identifiable {
         do {
             let setup = try await service.oauthClientSetup(slug: entry.slug)
             publicAddress = setup.redirectURL.flatMap(Self.origin)
-            if guide.needsPublicAddress, setup.redirectURL == nil {
+            if guide.needsPublicAddress, setup.redirectURL == nil, addressProblem == nil {
                 phase = .problem(OAuthClientProblem(.needsPublicURL, retry: .setup))
             } else {
                 phase = setup.configured && !editing ? .saved : .steps
@@ -85,6 +90,17 @@ final class SetupGuideModel: Identifiable {
     func replaceClient() {
         index = guide.steps.lastIndex { $0.kind == .paste } ?? index
         phase = .steps
+    }
+
+    func removeClient() async {
+        phase = .working
+        do {
+            try await service.removeOAuthClient(slug: entry.slug)
+            await removed()
+            await load(editing: true)
+        } catch {
+            phase = .problem(problem(for: error))
+        }
     }
 
     func connectSaved() {

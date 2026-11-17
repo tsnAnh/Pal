@@ -22,6 +22,12 @@ struct SetupGuideView: View {
         } message: {
             Text("The new client replaces the one saved on your Pal.")
         }
+        .alert(String(localized: "Remove the saved client?"), isPresented: Binding(get: { model.confirmsRemove }, set: { model.confirmsRemove = $0 })) {
+            Button(String(localized: "Remove client"), role: .destructive) { Task { await model.removeClient() } }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("Pal forgets this client and signs out of \(model.app.name). You can set up a new client any time.")
+        }
     }
 
     @ViewBuilder
@@ -74,6 +80,9 @@ private struct SavedClientView: View {
                 }
                 PillButton(String(localized: "Replace"), size: .large, accessibilityIdentifier: "setupGuideReplace") {
                     model.confirmsReplace = true
+                }
+                PillButton(String(localized: "Remove client"), size: .large, accessibilityIdentifier: "setupGuideRemoveClient") {
+                    model.confirmsRemove = true
                 }
             }
             .padding(.horizontal, PalMetrics.screenMargin)
