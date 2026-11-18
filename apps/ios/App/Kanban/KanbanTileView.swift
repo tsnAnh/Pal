@@ -84,6 +84,7 @@ struct KanbanBadges: View {
         KanbanFlow(spacing: 6) {
             KanbanChip(text: KanbanPresentation.statusTitle(row.card.status), tone: row.column.tone)
                 .accessibilityIdentifier("kanbanState-\(row.card.taskID)")
+            if let ref = row.ref { KanbanRefChip(ref: ref) }
             if let project = row.project { KanbanChip(text: project, symbol: "folder") }
             if row.bot != nil {
                 KanbanAssignee(handle: row.bot, size: 16)
@@ -251,6 +252,12 @@ struct KanbanTile: View {
                     .multilineTextAlignment(.leading)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if let ref = row.ref {
+                    Text(ref)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(PalTokens.textTertiary)
+                        .lineLimit(1)
+                }
                 blockedNote
                 footer
             }

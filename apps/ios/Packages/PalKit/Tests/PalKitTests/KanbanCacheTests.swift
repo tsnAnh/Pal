@@ -27,13 +27,17 @@ struct KanbanCacheTests {
         ]
     }
 
+    private func cards(second: String = "ready") -> [JSONValue] {
+        [KanbanJSON.card("t1", title: "Ship the cache"), KanbanJSON.card("t2", status: second, title: "Fix the title")]
+    }
+
     private func titles(_ rows: [KanbanCardRow]?) -> [String: String]? {
         rows.map { Dictionary(uniqueKeysWithValues: $0.map { ($0.card.taskID, $0.displayTitle) }) }
     }
 
     private func warmed() async -> KanbanStore {
         let script = KanbanScript()
-        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1"), KanbanJSON.card("t2")], cursor: "c0"))
+        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot(cards(), cursor: "c0"))
         script.enqueue("kanban.card.get", detail("t1", body: "# Ship the cache"))
         script.enqueue("kanban.card.get", detail("t2", body: "# Fix the title"))
         let first = store(script)
@@ -46,11 +50,11 @@ struct KanbanCacheTests {
     @Test("cold start shows nothing until every card has its detail, then the complete board at once")
     func coldStartGatesOnDetails() async throws {
         let script = KanbanScript()
-        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1"), KanbanJSON.card("t2")], cursor: "c0"))
+        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot(cards(), cursor: "c0"))
         let store = store(script)
         await store.refreshSnapshot(board: "ops")
         #expect(store.session.cache("ops") != nil)
-        #expect(store.visibleRows(board: "ops") == nil, "a card without its detail would show the task id and then change")
+        #expect(store.visibleRows(board: "ops") == nil, "a card without its detail would not be ready to show")
         script.enqueue("kanban.card.get", detail("t1", body: "# Ship the cache"))
         script.enqueue("kanban.card.get", detail("t2", body: "# Fix the title"))
         await store.prefetchDetails(board: "ops")
@@ -90,11 +94,11 @@ struct KanbanCacheTests {
         let store = store(script)
         await store.restore(board: "ops")
         let before = store.session
-        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1"), KanbanJSON.card("t2")], cursor: "c0"))
+        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot(cards(), cursor: "c0"))
         await store.refreshSnapshot(board: "ops")
         #expect(store.session == before)
 
-        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1"), KanbanJSON.card("t2", status: "done")], cursor: "c1"))
+        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot(cards(second: "done"), cursor: "c1"))
         await store.refreshSnapshot(board: "ops")
         let rows = try #require(store.visibleRows(board: "ops"))
         let old = before.cache("ops")?.cards ?? [:]

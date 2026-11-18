@@ -63,10 +63,11 @@ struct KanbanRedesignTests {
         #expect(KanbanBody.title(of: "State of the art\n", fallback: "t") == "State of the art", "a line that only starts like a key is readable")
     }
 
-    @Test("a row titles itself from its body, then its card title, then its key")
+    @Test("a row shows its card title, and a blank title shows its key")
     func rowTitle() throws {
-        #expect(try row("t1", wire: "ready", title: "raw-key", body: "Key: a\n# Real title").displayTitle == "Real title", "body wins")
+        #expect(try row("t1", wire: "ready", title: "setup-slack", body: "/faker-mode\n# Other").displayTitle == "setup-slack", "the title wins over the body")
         #expect(try row("t2", wire: "ready", title: "Card title").displayTitle == "Card title", "no body uses the card title")
         #expect(try row("t3", wire: "ready").displayTitle == "t3", "an empty title falls back to the key")
+        #expect(try row("t4", wire: "ready", title: "  \n", body: "# Real title").displayTitle == "t4", "a blank title shows the key, never a body line")
     }
 }
