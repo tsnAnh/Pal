@@ -1,5 +1,4 @@
 import Foundation
-import Observation
 
 public struct FlowStep: Sendable, Equatable, Identifiable {
     public enum Kind: Sendable, Equatable {
@@ -7,6 +6,7 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
         case copyCard(copies: [SetupCopy])
         case paste(fields: [SetupField])
         case browserRoundTrip(waitingTitle: String, waitingBody: String)
+        case action(waitingTitle: String, waitingBody: String)
         case confirm(items: [SetupConfirmItem])
         case openAndCheck(SetupOpenAndCheck)
         case switches(groups: [SetupSwitchGroup])
@@ -17,30 +17,37 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
 
     public var id: String
     public var title: String
-    public var rowTitle: String?
     public var body: String
     public var kind: Kind
     public var primaryTitle: String?
     public var skipTitle: String?
     public var skipTarget: String?
+    public var heading: String?
+    public var pageLink: SetupLink?
+    public var showsInChecklist: Bool
+    public var allowsBack: Bool
     public var prepares: Bool
     public var inlineRefusal: Bool
     public var workingTitle: String?
     public var workingBody: String
 
     public init(
-        id: String, title: String, rowTitle: String? = nil, body: String = "", kind: Kind, primaryTitle: String? = nil,
-        skipTitle: String? = nil, skipTarget: String? = nil, prepares: Bool = false, inlineRefusal: Bool = false,
+        id: String, title: String, body: String = "", kind: Kind, primaryTitle: String? = nil,
+        skipTitle: String? = nil, skipTarget: String? = nil, heading: String? = nil, pageLink: SetupLink? = nil,
+        showsInChecklist: Bool = true, allowsBack: Bool = true, prepares: Bool = false, inlineRefusal: Bool = false,
         workingTitle: String? = nil, workingBody: String = ""
     ) {
         self.id = id
         self.title = title
-        self.rowTitle = rowTitle
         self.body = body
         self.kind = kind
         self.primaryTitle = primaryTitle
         self.skipTitle = skipTitle
         self.skipTarget = skipTarget
+        self.heading = heading
+        self.pageLink = pageLink
+        self.showsInChecklist = showsInChecklist
+        self.allowsBack = allowsBack
         self.prepares = prepares
         self.inlineRefusal = inlineRefusal
         self.workingTitle = workingTitle
@@ -49,10 +56,13 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
 
     public var isAutomatic: Bool { kind == .automatic }
 
+    public var screenTitle: String { heading ?? title }
+
     public var isChecklistRow: Bool {
+        guard showsInChecklist else { return false }
         switch kind {
-        case .waiting, .success: false
-        default: true
+        case .waiting, .success: return false
+        default: return true
         }
     }
 
@@ -189,14 +199,14 @@ public struct StepFlowEngine: Sendable, Equatable {
         rowSteps.enumerated().map { offset, step in
             let number = offset + 1
             let state: RowState = isFinished || number < stepNumber ? .done : (number == stepNumber ? .current : .upcoming)
-            return Row(id: step.id, number: number, title: step.rowTitle ?? step.title, state: state, isAutomatic: step.isAutomatic)
+            return Row(id: step.id, number: number, title: step.title, state: state, isAutomatic: step.isAutomatic)
         }
     }
 
     public var primaryAction: PrimaryAction {
         switch current.kind {
         case .instruction, .copyCard, .confirm: .advance
-        case .paste, .browserRoundTrip, .openAndCheck, .switches: .work
+        case .paste, .browserRoundTrip, .action, .openAndCheck, .switches: .work
         case .automatic, .waiting: .none
         case .success: .finish
         }
@@ -295,7 +305,7 @@ public struct StepFlowEngine: Sendable, Equatable {
         return (0..<index).last { !steps[$0].isAutomatic && steps[$0].isChecklistRow }
     }
 
-    public var canGoBack: Bool { phase != .working && previousIndex != nil }
+    public var canGoBack: Bool { phase != .working && current.allowsBack && previousIndex != nil }
 
     public var canSkip: Bool {
         guard phase != .working, let target = current.skipTarget else { return false }
@@ -334,12 +344,26 @@ public struct StepFlowEngine: Sendable, Equatable {
         return true
     }
 
-    public mutating func finishWork() {
+    public mutating func finishWork(advance: Bool = true) {
         guard phase == .working else { return }
         saved.formUnion(current.fields.map(\.id))
         for field in current.fields { values[field.id] = nil }
-        index = min(index + 1, steps.count - 1)
+        if advance { index = min(index + 1, steps.count - 1) }
         phase = .ready
+    }
+
+    public func following(steps: [FlowStep], at stepID: String, failure: SetupStatus?) -> StepFlowEngine? {
+        let resume = StepFlowProgress(flowID: flowID, stepID: stepID, saved: saved.sorted())
+        guard var next = StepFlowEngine(flowID: flowID, steps: steps, resume: resume) else { return nil }
+        for field in next.current.fields {
+            if let kept = values[field.id] { next.values[field.id] = kept }
+        }
+        if let failure {
+            next.phase = .failed(failure)
+        } else if phase == .working, next.current.id == current.id {
+            next.phase = .working
+        }
+        return next
     }
 
     public mutating func fail(_ status: SetupStatus) {

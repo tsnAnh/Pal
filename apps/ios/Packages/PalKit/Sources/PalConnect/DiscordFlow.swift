@@ -26,17 +26,19 @@ public enum DiscordFlow {
     public static func steps() -> [FlowStep] {
         [
             FlowStep(
-                id: StepID.bot, title: String(localized: "Create your Discord bot"), rowTitle: String(localized: "Create the bot"),
+                id: StepID.bot, title: String(localized: "Create the bot"),
                 body: String(localized: "You make the bot in Discord's developer portal once. Pal opens the page for you."),
-                kind: .instruction(openPage: SetupLink(label: String(localized: "Open Discord developer portal"), url: developerPortal))
+                kind: .instruction(openPage: SetupLink(label: String(localized: "Open Discord developer portal"), url: developerPortal)),
+                heading: String(localized: "Create your Discord bot")
             ),
             FlowStep(
-                id: StepID.token, title: String(localized: "Paste the bot token"), rowTitle: String(localized: "Paste the token"),
+                id: StepID.token, title: String(localized: "Paste the token"),
                 body: String(localized: "In the portal open **Bot**, then **Reset Token** and copy it."),
-                kind: .paste(fields: [tokenField]), primaryTitle: String(localized: "Check token"), inlineRefusal: true
+                kind: .paste(fields: [tokenField]), primaryTitle: String(localized: "Check token"),
+                heading: String(localized: "Paste the bot token"), inlineRefusal: true
             ),
             FlowStep(
-                id: StepID.intents, title: String(localized: "Turn on Message Content"), rowTitle: String(localized: "Turn on intents"),
+                id: StepID.intents, title: String(localized: "Turn on intents"),
                 body: String(
                     localized: "On the same Bot page, under **Privileged Gateway Intents**, switch it on and save, then tick the box here."
                 ),
@@ -45,21 +47,22 @@ public enum DiscordFlow {
                         id: "message_content", title: String(localized: "Message Content Intent"),
                         subtitle: String(localized: "So Pal can read messages it is shown")
                     ),
-                ])
+                ]),
+                heading: String(localized: "Turn on Message Content")
             ),
             FlowStep(
-                id: StepID.invite, title: String(localized: "Invite your bot to a server"), rowTitle: String(localized: "Invite to servers"),
+                id: StepID.invite, title: String(localized: "Invite to servers"),
                 body: String(localized: "Open the link, choose the server, click **Authorize**. Pal checks that the bot is there."),
                 kind: .openAndCheck(SetupOpenAndCheck(
                     link: SetupLink(label: String(localized: "Open invite link"), url: authorizeBase), recheckTitle: String(localized: "Check again"),
                     waitingTitle: String(localized: "Waiting for Discord"),
                     waitingBody: String(localized: "Choose the server and click Authorize in your browser. Pal checks by itself.")
                 )),
-                prepares: true
+                heading: String(localized: "Invite your bot to a server"), prepares: true
             ),
             FlowStep(
-                id: StepID.access, title: String(localized: "What may the bot do?"), rowTitle: String(localized: "Choose what it may do"),
-                kind: .switches(groups: []), primaryTitle: String(localized: "Finish"), prepares: true,
+                id: StepID.access, title: String(localized: "Choose what it may do"), kind: .switches(groups: []),
+                primaryTitle: String(localized: "Finish"), heading: String(localized: "What may the bot do?"), prepares: true,
                 workingTitle: String(localized: "Starting Discord on your Pal"),
                 workingBody: String(localized: "This takes a moment. You can leave this open.")
             ),

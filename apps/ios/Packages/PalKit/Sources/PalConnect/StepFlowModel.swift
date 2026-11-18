@@ -10,25 +10,44 @@ public final class StepFlowModel {
 
     public private(set) var engine: StepFlowEngine
     public var openPage: @MainActor (URL) -> Void = { _ in }
+    public var recovery: (@MainActor (SetupStatus) async -> Void)?
 
     @ObservationIgnored private let store: any StepFlowProgressStore
     @ObservationIgnored private let runner: Runner
     @ObservationIgnored private let classify: Classifier
     @ObservationIgnored private let prepare: Preparer?
+    @ObservationIgnored private let advancesAfterWork: Bool
     @ObservationIgnored private var work: Task<Void, Never>?
     @ObservationIgnored private var preparedStep: String?
 
     public init(
         engine: StepFlowEngine, store: any StepFlowProgressStore = InMemoryStepFlowProgressStore(),
-        runner: @escaping Runner = { _, _ in },
+        advancesAfterWork: Bool = true, runner: @escaping Runner = { _, _ in },
         classify: @escaping Classifier = { _ in SetupStatus(code: SetupStatusClass.internalFault.rawValue) },
         prepare: Preparer? = nil
     ) {
         self.engine = engine
         self.store = store
+        self.advancesAfterWork = advancesAfterWork
         self.runner = runner
         self.classify = classify
         self.prepare = prepare
+    }
+
+    public func follow(steps: [FlowStep], at stepID: String, failure: SetupStatus?) {
+        if let next = engine.following(steps: steps, at: stepID, failure: failure) { engine = next }
+    }
+
+    public func recover(from failure: SetupStatus) async {
+        if let recovery {
+            await recovery(failure)
+            return
+        }
+        if failure.kind == .vendorRefusedValue {
+            dismissFailure()
+        } else {
+            await retryAfterFailure()
+        }
     }
 
     public func start() async {
@@ -118,7 +137,7 @@ public final class StepFlowModel {
         let task = Task { @MainActor in
             do {
                 try await runner(step, values)
-                if Task.isCancelled { engine.cancelWork() } else { engine.finishWork() }
+                if Task.isCancelled { engine.cancelWork() } else { engine.finishWork(advance: advancesAfterWork) }
             } catch is CancellationError {
                 engine.cancelWork()
             } catch {

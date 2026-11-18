@@ -134,7 +134,7 @@ private struct ConnectAppsPresentations: ViewModifier {
             }
             .sheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, content: mcpSignInSheet)
             .sheet(isPresented: $model.showsSlackPicker) {
-                SlackBotPicker(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
+                SlackBotChoice(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
                     .macSheetFrame()
             }
             .sheet(item: $model.oauthClientSheet) { sheet in

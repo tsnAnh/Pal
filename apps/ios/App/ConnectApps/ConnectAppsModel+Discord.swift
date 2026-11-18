@@ -37,7 +37,8 @@ struct DiscordFlowSheet: ViewModifier {
             content: { session in
                 StepFlowView(
                     model: session.model, title: "Discord",
-                    savedNote: String(localized: "Saved on your Pal. Mac and iPhone show the same step."), close: { model.closeDiscordFlow() }
+                    savedNote: String(localized: "Saved on your Pal. Mac and iPhone show the same step."), close: { model.closeDiscordFlow() },
+                    accessory: { _ in EmptyView() }
                 )
                 .macSheetFrame()
             }

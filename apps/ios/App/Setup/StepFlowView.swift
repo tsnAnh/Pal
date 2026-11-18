@@ -2,16 +2,16 @@ import PalConnect
 import PalDesign
 import SwiftUI
 
-struct StepFlowView: View {
+struct StepFlowView<Accessory: View>: View {
     let model: StepFlowModel
     let title: String
     var savedNote: String?
     let close: () -> Void
+    @ViewBuilder let accessory: (FlowStep) -> Accessory
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
-    @Environment(\.colorScheme) private var colorScheme
 
     private var engine: StepFlowEngine { model.engine }
 
@@ -32,7 +32,7 @@ struct StepFlowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            SetupHeader(title: title, close: close)
             if !showsChecklist { StepFlowSegments(engine: engine) }
             HStack(spacing: 0) {
                 if showsChecklist { StepFlowChecklist(engine: engine, savedNote: savedNote) }
@@ -50,23 +50,6 @@ struct StepFlowView: View {
         .onDisappear { model.cancelWork() }
     }
 
-    private var header: some View {
-        HStack {
-            Text(title)
-                .hermesText(.sheetTitle)
-                .foregroundStyle(PalTokens.textPrimary)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("stepFlowTitle")
-            Spacer()
-            Button(role: .close, action: close)
-                .buttonStyle(.glass(PalGlass.style(interactive: true, colorScheme: colorScheme)))
-                .accessibilityIdentifier("stepFlowClose")
-        }
-        .padding(.horizontal, PalMetrics.screenMargin)
-        .padding(.vertical, PalMetrics.captionToCardGap)
-    }
-
     @ViewBuilder
     private var screen: some View {
         if let failure = engine.failure, inlineRefusal == nil {
@@ -76,7 +59,7 @@ struct StepFlowView: View {
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
-                    Text(engine.current.title)
+                    Text(engine.current.screenTitle)
                         .hermesText(.sheetTitle)
                         .foregroundStyle(PalTokens.textPrimary)
                         .accessibilityAddTraits(.isHeader)
@@ -89,6 +72,7 @@ struct StepFlowView: View {
                             .accessibilityIdentifier("stepFlowStepBody")
                     }
                     stepContent
+                    accessory(engine.current)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(PalMetrics.screenMargin)
@@ -106,7 +90,7 @@ struct StepFlowView: View {
             ForEach(Array(copies.enumerated()), id: \.offset) { offset, copy in
                 StepCopyCard(label: copy.label, value: copy.value, identifier: "stepFlowCopy-\(offset)")
             }
-        case .paste(let fields):
+        case .paste(let fields) where !fields.isEmpty:
             StepPasteFields(model: model, fields: fields, refusal: inlineRefusal)
         case .confirm(let items):
             StepConfirmList(model: model, items: items)
@@ -122,7 +106,7 @@ struct StepFlowView: View {
     }
 
     private var calmCopy: StepFlowCalmCopy? {
-        if engine.phase == .preparing { return StepFlowCalmCopy(mark: .spinner, title: engine.current.title, body: "") }
+        if engine.phase == .preparing { return StepFlowCalmCopy(mark: .spinner, title: engine.current.screenTitle, body: "") }
         if engine.phase == .working, let title = engine.current.workingTitle {
             return StepFlowCalmCopy(mark: .spinner, title: title, body: engine.current.workingBody)
         }
@@ -131,10 +115,12 @@ struct StepFlowView: View {
         case .success(let title, let body): StepFlowCalmCopy(mark: .success, title: title, body: body)
         case .browserRoundTrip(let title, let body) where engine.phase == .working:
             StepFlowCalmCopy(mark: .spinner, title: title, body: body)
+        case .action(let title, let body) where engine.phase == .working:
+            StepFlowCalmCopy(mark: .spinner, title: title, body: body)
         case .openAndCheck(let open) where engine.phase == .working:
             StepFlowCalmCopy(mark: .spinner, title: open.waitingTitle, body: open.waitingBody)
         case .automatic where engine.phase == .working:
-            StepFlowCalmCopy(mark: .spinner, title: engine.current.title, body: engine.current.body)
+            StepFlowCalmCopy(mark: .spinner, title: engine.current.screenTitle, body: engine.current.body)
         default: nil
         }
     }
@@ -152,6 +138,7 @@ struct StepFlowView: View {
                 }
             }
             quiet
+            pageLink
             if !phone { primary }
         }
         .padding(.horizontal, PalMetrics.screenMargin)
@@ -170,6 +157,13 @@ struct StepFlowView: View {
             SetupQuietButton(title: title, identifier: "stepFlowSkip") { Task { await model.skip() } }
         } else if case .openAndCheck(let open) = engine.current.kind, engine.phase == .ready {
             SetupQuietButton(title: open.recheckTitle, identifier: "stepFlowRecheck") { Task { await model.recheck() } }
+        }
+    }
+
+    @ViewBuilder
+    private var pageLink: some View {
+        if let link = engine.current.pageLink, engine.failure == nil, engine.phase != .working {
+            SetupButton(title: link.label, fillsWidth: !showsChecklist, identifier: "stepFlowPage") { model.openPage(link.url) }
         }
     }
 
@@ -200,13 +194,10 @@ struct StepFlowView: View {
     }
 
     private func perform(after failure: SetupStatus) {
-        switch failure.kind {
-        case .forbidden:
+        if failure.kind == .forbidden {
             close()
-        case .vendorRefusedValue:
-            model.dismissFailure()
-        default:
-            Task { await model.retryAfterFailure() }
+        } else {
+            Task { await model.recover(from: failure) }
         }
     }
 
@@ -230,6 +221,6 @@ struct StepFlowView: View {
         FlowStep(id: "done", title: "Connected", kind: .success(title: "Connected", body: "You will not be asked again.")),
     ]
     if let engine = StepFlowEngine(flowID: "preview", steps: steps) {
-        StepFlowView(model: StepFlowModel(engine: engine), title: "Example", close: {})
+        StepFlowView(model: StepFlowModel(engine: engine), title: "Example", close: {}, accessory: { _ in EmptyView() })
     }
 }

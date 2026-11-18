@@ -8,7 +8,7 @@ final class DiagnosticsE2ETests: BotProfileTestCase {
         )
         openProfile(app, Self.primarySlug)
         element(app, "profileSlackRow").tap()
-        waitFor(element(app, "chatInstallStatus"), timeout: 30, "the failing call shows its status")
+        waitFor(element(app, "slackSetupStatusBlock"), timeout: 30, "the failing call shows its status")
         app.terminate()
         app.launch()
         openDiagnostics(app)
