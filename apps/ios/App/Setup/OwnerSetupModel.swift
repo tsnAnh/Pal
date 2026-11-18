@@ -123,7 +123,7 @@ final class OwnerSetupModel: Identifiable {
             resume = StepFlowProgress(flowID: flowID, stepID: pasteID)
         }
         guard let engine = StepFlowEngine(flowID: flowID, steps: steps, resume: resume) else { throw ConnectAppsError.failed }
-        let flow = makeFlow(engine)
+        let flow = makeFlow(engine, gatewaySaved: fresh.setupProgress?.saved ?? [])
         if let failure = pendingStart.failure { flow.follow(steps: steps, at: flow.engine.current.id, failure: failure) }
         pendingStart = OwnerSetupStart()
         entry = fresh
@@ -132,12 +132,14 @@ final class OwnerSetupModel: Identifiable {
         phase = .ready(flow)
     }
 
-    func makeFlow(_ engine: StepFlowEngine) -> StepFlowModel {
+    func makeFlow(_ engine: StepFlowEngine, gatewaySaved: [String]? = nil) -> StepFlowModel {
         let name = app.name
         let valueName = usesClient ? "client" : "token"
         let device = ConnectorPlatform.current.deviceName
         return StepFlowModel(
-            engine: engine,
+            engine: engine, store: GatewayStepFlowProgressStore(
+                service: service, device: .current, gatewaySaved: gatewaySaved ?? entry.setupProgress?.saved ?? []
+            ),
             runner: { @Sendable [weak self] step, values in
                 guard let self else { return }
                 try await self.run(step, values)

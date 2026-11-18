@@ -138,11 +138,6 @@ private struct ConnectAppsPresentations: ViewModifier {
                     .macSheetFrame()
             }
             .modifier(OwnerSetupSheet(model: model))
-            .sheet(
-                item: $model.pastingApp,
-                onDismiss: { Task { await model.cancelPaste() } },
-                content: { app in OtherConnectorPasteSheet(model: model, app: app).macSheetFrame() }
-            )
             .sheet(item: $model.keyRequest) { request in
                 CapabilityKeyEntrySheet(model: model, request: request)
                     .presentationDetents([.medium])

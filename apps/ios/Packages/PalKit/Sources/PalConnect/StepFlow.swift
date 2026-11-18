@@ -112,11 +112,13 @@ public struct StepFlowProgress: Sendable, Equatable, Codable {
     public var flowID: String
     public var stepID: String
     public var saved: [String]
+    public var continuedFrom: SetupDevice?
 
-    public init(flowID: String, stepID: String, saved: [String] = []) {
+    public init(flowID: String, stepID: String, saved: [String] = [], continuedFrom: SetupDevice? = nil) {
         self.flowID = flowID
         self.stepID = stepID
         self.saved = saved
+        self.continuedFrom = continuedFrom
     }
 }
 

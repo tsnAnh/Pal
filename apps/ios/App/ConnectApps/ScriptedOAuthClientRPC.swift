@@ -54,6 +54,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         "dropbox": Progress(), "canva": Progress(), "discord": Progress(),
     ]
     private var discord = ScriptedDiscord()
+    private var setupProgress = ScriptedSetupProgress(seeded: ProcessInfo.processInfo.arguments.contains(ScriptedSetupProgress.seedArgument))
     private var items = 0
     private var vault: [String: String] = [:]
 
@@ -84,6 +85,8 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         case "vault.add": return addItem(params)
         case "connectors.discord.token", "connectors.discord.guilds", "connectors.discord.save":
             return try discord.handle(method, params, vault: vault)
+        case "connectors.setup.progress.get", "connectors.setup.progress.set":
+            return setupProgress.handle(method, params)
         case "vault.remove":
             vault[params["id"]?.stringValue ?? ""] = nil
             return ["ok": true]
