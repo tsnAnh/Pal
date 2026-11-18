@@ -136,10 +136,10 @@ public final class ChatInstallModel {
     public var screen: ChatInstallScreen {
         if unsupported { return .unsupported }
         guard provider != nil else {
-            if loadFailure != nil { return .unavailable }
+            if loadError != nil { return .unavailable }
             return providers.isEmpty ? .loading : .providers
         }
-        guard let state else { return loadFailure != nil ? .unavailable : .loading }
+        guard let state else { return loadError != nil ? .unavailable : .loading }
         switch state.step {
         case .notStarted: return .intro(again: false)
         case .revoked: return .intro(again: true)
