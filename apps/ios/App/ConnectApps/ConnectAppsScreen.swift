@@ -31,6 +31,7 @@ struct ConnectAppsScreen: View {
             if phase == .active { Task { await model.devices.refresh() } }
         }
         .modifier(ConnectAppsPresentations(model: model))
+        .modifier(DiscordFlowSheet(model: model))
     }
 
     @ViewBuilder
