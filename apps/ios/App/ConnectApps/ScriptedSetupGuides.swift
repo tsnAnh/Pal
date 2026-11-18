@@ -41,7 +41,7 @@ enum ScriptedSetupGuides {
         ("People", "people.googleapis.com"), ("Sheets", "sheets.googleapis.com"), ("Docs", "docs.googleapis.com"),
     ]
 
-    static func google(addressProblem: Bool) -> JSONValue {
+    static func google(addressProblem: Bool, redirect: String) -> JSONValue {
         [
             "steps": [
                 step(
@@ -51,7 +51,7 @@ enum ScriptedSetupGuides {
                 step(
                     "console", "open_page", "Create a Google sign-in client", body: "Create an OAuth client ID of type Web application.",
                     links: [link("Open Google Cloud credentials", "https://console.cloud.google.com/apis/credentials")],
-                    copies: [["label": "Redirect URI", "value": .string(OAuthClientScript.googleRedirect)]], fallback: googleFallback
+                    copies: [["label": "Redirect URI", "value": .string(redirect)]], fallback: googleFallback
                 ),
                 step(
                     "apis", "open_page", "Turn on the Google services", body: "Turn on each service, then add yourself as a test user.",

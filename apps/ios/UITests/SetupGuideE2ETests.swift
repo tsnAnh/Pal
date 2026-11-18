@@ -3,242 +3,142 @@ import XCTest
 @MainActor
 final class SetupGuideE2ETests: ConnectAppsTestCase {
     private let googleRedirect = "https://pal.example.test/webapp/google-install/callback"
+    private let clientID = "fake-client-id.apps.googleusercontent.com"
+    private let goodSecret = "fake-token-do-not-use"
+    private let badSecret = "rejected-secret-do-not-use"
 
-    private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
-        app.descendants(matching: .any)[id]
+    private func googleSetup(_ app: XCUIApplication) -> (OwnerSetupDriver, XCUIElement) {
+        let setup = OwnerSetupDriver(test: self, app: app)
+        return (setup, setup.open("Google Workspace", slug: "google-workspace"))
     }
 
-    private func openGuide(_ app: XCUIApplication, name: String, slug: String, action title: String) -> XCUIElement {
-        waitForCatalog(app)
-        search(app, name)
-        let button = action(app, slug)
-        waitFor(button, timeout: 30, "\(name) action")
-        XCTAssertEqual(button.label, title)
-        button.hit()
-        waitFor(element(app, "setupGuide"), timeout: 20, "setup guide")
-        return button
+    private func startGoogle(_ setup: OwnerSetupDriver) {
+        setup.expectIntro("Set up Google Workspace", rows: 5)
+        XCTAssertTrue(setup.el("stepFlowIntroYouDo").label.contains("OAuth client in Google Cloud"), "the intro says what you do")
+        XCTAssertTrue(setup.el("stepFlowIntroPalDoes").label.contains("checks your values"), "the intro says what Pal does")
+        shot(setup.app, "owner-setup-google-intro")
+        setup.primary("Start")
+        setup.expectStep("console", "Open Google Cloud", number: 1, of: 5)
+        XCTAssertTrue(setup.el("stepFlowNote").exists, "the account note shows")
+        XCTAssertFalse(setup.el("stepFlowBack").exists, "no way back to the intro")
     }
 
-    private func expectStep(_ app: XCUIApplication, _ id: String, _ position: String) {
-        waitFor(element(app, "setupGuideStep-\(id)"), timeout: 20, "step \(id)")
-        XCTAssertTrue(element(app, "setupGuideProgress").label.contains(position), "step \(id) reads \(position)")
+    private func enterGoogleClient(_ setup: OwnerSetupDriver) {
+        setup.expectPrimary(enabled: false, "Check and save waits for both fields")
+        setup.enter("client_id", "wrong")
+        setup.expectHint("client_id", contains: ".apps.googleusercontent.com")
+        setup.expectPrimary(enabled: false, "a wrong id shape keeps Check and save off")
+        setup.clear("client_id", removing: "wrong")
+        setup.enter("client_id", clientID)
+        setup.enter("client_secret", badSecret)
+        setup.expectValid("client_id")
+        setup.expectValid("client_secret")
+        setup.expectPrimary(enabled: true, "Check and save is ready with both fields")
+        setup.primary("Check and save")
     }
 
-    private func next(_ app: XCUIApplication) {
-        let button = element(app, "setupGuideNext")
-        waitFor(button, timeout: 10, "next")
-        button.hit()
-    }
-
-    private func enter(_ app: XCUIApplication, _ id: String, _ text: String) {
-        let field = element(app, "setupGuideField-\(id)")
-        waitFor(field, timeout: 10, "field \(id)")
-        field.hit()
-        field.typeText(text)
-    }
-
-    private func submit(_ app: XCUIApplication) -> XCUIElement {
-        let button = element(app, "setupGuideSubmit")
-        waitFor(button, timeout: 10, "submit")
-        for _ in 0..<6 where !button.isHittable { app.swipeUp() }
-        return button
-    }
-
-    private func openedLink(_ app: XCUIApplication, prefix: String) {
-        let opened = element(app, "externalLinkProbe")
-        waitUntil(30, "page handed to the system browser") { opened.label.hasPrefix(prefix) }
-    }
-
-    private func rejectOnce(_ app: XCUIApplication, code: String, shotName: String) {
-        waitFor(element(app, "setupGuideStatus"), timeout: 20, "check failure")
-        element(app, "setupGuideDetails").hit()
-        waitFor(element(app, "setupGuideCopyDetails"), timeout: 10, "copy details")
-        XCTAssertEqual(element(app, "setupGuideReasonCode").label, code, "details name the reason code")
-        shot(app, shotName)
-        element(app, "setupGuidePrimary").hit()
-        waitFor(element(app, "setupGuideSubmit"), timeout: 20, "paste step again")
-    }
-
-    private func returnLoopbackRedirect(_ app: XCUIApplication) {
-        let state = "state=scripted-state"
-        #if os(macOS)
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:27890/callback?code=fake-token-do-not-use&\(state)")!)
-        request.setValue("localhost:27890", forHTTPHeaderField: "Host")
-        let returned = expectation(description: "redirect delivered")
-        URLSession.shared.dataTask(with: request) { _, _, _ in returned.fulfill() }.resume()
-        wait(for: [returned], timeout: 15)
-        #else
-        let paste = element(app, "otherConnectorPaste")
-        waitFor(paste, timeout: 20, "paste sheet")
-        let field = element(app, "other-paste-field")
-        field.hit()
-        field.typeText("http://localhost:27890/callback?code=fake-token-do-not-use&\(state)")
-        element(app, "other-paste-submit").hit()
-        waitGone(paste, timeout: 20, "paste sheet closes")
-        #endif
-    }
-
-    func test1GoogleResumesAtTheConsoleStepChecksTheClientAndConnects() throws {
+    func test1GoogleOpenStepOpensTheConsoleAndSkipLandsOnThePasteStep() throws {
         let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
-        let button = openGuide(app, name: "Google Workspace", slug: "google-workspace", action: "Set up")
-        expectStep(app, "console", "2 of 4")
-        let redirect = element(app, "setupGuideCopy-0Value")
-        waitFor(redirect, timeout: 10, "redirect URI")
-        XCTAssertEqual(redirect.label, googleRedirect, "the redirect URI is shown exactly")
-        element(app, "setupGuideCopy-0Button").hit()
-        waitLabel(element(app, "setupGuideCopy-0Button"), contains: "Copied", timeout: 10)
-        element(app, "setupGuideLink-0").hit()
-        openedLink(app, prefix: "https://console.cloud.google.com/apis/credentials")
-        element(app, "setupGuideBack").hit()
-        expectStep(app, "address", "1 of 4")
-        XCTAssertEqual(element(app, "setupGuideAddressValue").label, "https://pal.example.test", "the public address is shown")
-        next(app)
-        expectStep(app, "console", "2 of 4")
-        next(app)
-        expectStep(app, "apis", "3 of 4")
-        waitFor(element(app, "setupGuideLink-5"), timeout: 10, "a link for every Google service")
-        shot(app, "setup-guide-google-apis")
-        next(app)
-        expectStep(app, "client", "4 of 4")
-        XCTAssertFalse(submit(app).isEnabled, "Check waits for both fields")
-        enter(app, "client_id", "wrong")
-        waitFor(element(app, "setupGuideHint-client_id"), timeout: 10, "live shape hint")
-        XCTAssertTrue(element(app, "setupGuideHint-client_id").label.contains(".apps.googleusercontent.com"))
-        element(app, "setupGuideField-client_id").typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5))
-        enter(app, "client_id", "fake-client-id.apps.googleusercontent.com")
-        enter(app, "client_secret", "rejected-secret-do-not-use")
-        waitFor(element(app, "setupGuideShapeOK-client_id"), timeout: 10, "shape accepted")
-        XCTAssertTrue(submit(app).isEnabled, "Check is ready with both fields")
-        submit(app).hit()
-        rejectOnce(app, code: "INVALID_CLIENT", shotName: "setup-guide-google-rejected")
-        enter(app, "client_id", "fake-client-id.apps.googleusercontent.com")
-        enter(app, "client_secret", "fake-token-do-not-use")
-        submit(app).hit()
-        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
-        openedLink(app, prefix: "https://accounts.google.com/")
-        waitLabel(button, equals: "Connected", timeout: 45)
-        shot(app, "setup-guide-google-connected")
+        let (setup, _) = googleSetup(app)
+        startGoogle(setup)
+        XCTAssertEqual(setup.el("stepFlowSkip").label, "I already have one")
+        XCTAssertEqual(setup.el("stepFlowPrimary").label, "Open Google Cloud")
+        shot(app, "owner-setup-google-open")
+        setup.el("stepFlowSkip").hit()
+        setup.expectStep("client", "Paste the two values Google shows", number: 4, of: 5)
+        setup.expectPrimary(enabled: false, "Check and save waits for both fields")
+        XCTAssertTrue(setup.el("stepFlowBack").exists, "the flow can go back from the paste step")
+        shot(app, "owner-setup-google-skipped")
     }
 
-    func test2GoogleWithoutAPublicAddressOpensTheAddressStep() throws {
-        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client", "-hermes-test-oauth-client-no-public-address"])
-        _ = openGuide(app, name: "Google Workspace", slug: "google-workspace", action: "Set up")
-        expectStep(app, "address", "1 of 4")
-        waitFor(element(app, "setupAddressField"), timeout: 20, "address field")
-        XCTAssertFalse(element(app, "setupGuideAddressValue").exists, "no saved address to copy")
-        XCTAssertFalse(element(app, "setupGuideCopy-0Value").exists, "no redirect URI without a public address")
-        XCTAssertFalse(element(app, "setupAddressSave").isEnabled, "Save waits for an address")
-        shot(app, "setup-guide-needs-public-address")
+    private func walkGoogleToTheClientStep(_ setup: OwnerSetupDriver) {
+        setup.primary("Open Google Cloud")
+        setup.expectOpened("https://console.cloud.google.com/apis/credentials")
+        setup.expectStep("console-copy", "Paste this address into Google", number: 2, of: 5)
+        XCTAssertEqual(setup.el("stepFlowStepBody").label, "Under Authorized redirect URIs, add:")
+        setup.expectCopy(0, equals: googleRedirect)
+        waitFor(setup.el("ownerSetupAddressReachable"), timeout: 20, "reachability note")
+        shot(setup.app, "owner-setup-google-redirect")
+        setup.el("stepFlowBack").hit()
+        setup.expectStep("console", "Open Google Cloud", number: 1, of: 5)
+        setup.primary("Open Google Cloud")
+        setup.expectStep("console-copy", "Paste this address into Google", number: 2, of: 5)
+        setup.primary("Next")
+        setup.expectStep("apis", "Turn on the Google services", number: 3, of: 5)
+        waitFor(setup.el("stepFlowLink-5"), timeout: 10, "a link for every Google service")
+        XCTAssertEqual(setup.el("stepFlowLink-0").label, "Gmail")
+        setup.reveal("stepFlowLink-0").hit()
+        setup.expectOpened("https://console.cloud.google.com/apis/library/gmail.googleapis.com")
+        shot(setup.app, "owner-setup-google-services")
+        setup.primary("Next")
+        setup.expectStep("client", "Paste the two values Google shows", number: 4, of: 5)
+    }
+
+    func test2GoogleGuidesTheRedirectAndServicesThenChecksTheClientAndConnects() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
+        let (setup, button) = googleSetup(app)
+        startGoogle(setup)
+        walkGoogleToTheClientStep(setup)
+        enterGoogleClient(setup)
+        setup.expectRejected(
+            code: "INVALID_CLIENT", title: "Google Workspace did not accept that client", action: "Edit client",
+            shot: "owner-setup-google-rejected"
+        )
+        XCTAssertEqual(setup.el("stepFlowField-client_id").value as? String, clientID, "the id is still there to edit")
+        setup.clear("client_secret", removing: badSecret)
+        setup.enter("client_secret", goodSecret)
+        setup.primary("Check and save")
+
+        setup.expectStep("signin", "Sign in to Google", number: 5, of: 5)
+        XCTAssertTrue(setup.el("ownerSetupReplace").exists && setup.el("ownerSetupRemove").exists, "the saved client can be replaced or removed")
+        shot(app, "owner-setup-google-signin")
+        setup.primary("Sign in with Google")
+        setup.expectWaiting("Waiting for Google")
+        shot(app, "owner-setup-google-waiting")
+        setup.expectOpened("https://accounts.google.com/")
+        setup.expectConnected("Google Workspace is connected")
+        shot(app, "owner-setup-google-connected")
+        setup.finish(button, reads: "Connected")
     }
 
     func test3GitHubChecksTheTokenShapeThenTheTokenAndSavesIt() throws {
         let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
-        let button = openGuide(app, name: "GitHub", slug: "github", action: "Set up")
-        expectStep(app, "token_page", "1 of 2")
-        XCTAssertEqual(element(app, "setupGuideCopy-0Value").label, "Pal", "the token name is ready to copy")
-        element(app, "setupGuideLink-0").hit()
-        openedLink(app, prefix: "https://github.com/settings/personal-access-tokens/new")
-        next(app)
-        expectStep(app, "token", "2 of 2")
-        enter(app, "token", "wrong")
-        waitFor(element(app, "setupGuideHint-token"), timeout: 10, "live shape hint")
-        XCTAssertTrue(element(app, "setupGuideHint-token").label.contains("github_pat_"))
-        XCTAssertFalse(submit(app).isEnabled, "Check waits for a token shaped like GitHub's")
-        element(app, "setupGuideField-token").typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 5))
-        enter(app, "token", "github_pat_rejected-do-not-use")
-        submit(app).hit()
-        rejectOnce(app, code: "INVALID_TOKEN", shotName: "setup-guide-github-rejected")
-        enter(app, "token", "github_pat_fake-token-do-not-use")
-        XCTAssertFalse(app.staticTexts["github_pat_fake-token-do-not-use"].exists, "the token is never echoed")
-        submit(app).hit()
-        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
-        waitLabel(button, contains: "Update token", timeout: 30)
-        shot(app, "setup-guide-github-connected")
-    }
+        let setup = OwnerSetupDriver(test: self, app: app)
+        let button = setup.open("GitHub", slug: "github")
+        setup.expectIntro("Set up GitHub", rows: 3)
+        shot(app, "owner-setup-github-intro")
+        setup.primary("Start")
 
-    private func guideThroughClient(_ app: XCUIApplication, name: String, slug: String, page: String, authorize: String) {
-        let button = openGuide(app, name: name, slug: slug, action: "Set up")
-        expectStep(app, "app", "1 of 2")
-        let redirect = "https://pal.example.test/webapp/mcp-oauth/callback"
-        XCTAssertEqual(element(app, "setupGuideCopy-0Value").label, redirect, "the gateway redirect is shown exactly")
-        XCTAssertTrue(element(app, "setupGuideCopy-1Value").label.contains(":read"), "the scopes are ready to copy")
-        element(app, "setupGuideLink-0").hit()
-        openedLink(app, prefix: page)
-        next(app)
-        expectStep(app, "client", "2 of 2")
-        enter(app, "client_id", "fake-client-id")
-        enter(app, "client_secret", "fake-token-do-not-use")
-        waitFor(element(app, "setupGuideShapeOK-client_id"), timeout: 10, "shape accepted")
-        XCTAssertEqual(submit(app).label, "Save", "no test call, so the action only saves")
-        submit(app).hit()
-        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
-        openedLink(app, prefix: authorize)
-        returnLoopbackRedirect(app)
-        waitLabel(button, equals: "Connected", timeout: 45)
-        shot(app, "setup-guide-\(slug)-connected")
-    }
+        setup.expectStep("token_page", "Open GitHub token page", number: 1, of: 3)
+        XCTAssertEqual(setup.el("stepFlowSkip").label, "I already have one")
+        setup.primary("Open GitHub token page")
+        setup.expectOpened("https://github.com/settings/personal-access-tokens/new")
+        setup.expectStep("token_page-copy", "Pick access", number: 2, of: 3)
+        setup.expectCopy(0, equals: "Pal")
+        shot(app, "owner-setup-github-access")
+        setup.primary("Next")
 
-    func test5FigmaGuidesTheAppThenSavesTheClientWithoutATestCall() throws {
-        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
-        guideThroughClient(
-            app, name: "Figma", slug: "figma", page: "https://www.figma.com/developers/apps", authorize: "https://www.figma.com/oauth"
+        setup.expectStep("token", "Paste your token", number: 3, of: 3)
+        setup.expectPrimary(enabled: false, "Check and save waits for a token")
+        setup.enter("token", "wrong")
+        setup.expectHint("token", contains: "github_pat_")
+        setup.expectPrimary(enabled: false, "Check and save waits for a token shaped like GitHub's")
+        setup.clear("token", removing: "wrong")
+        let rejected = "github_pat_rejected-do-not-use"
+        setup.enter("token", rejected)
+        setup.primary("Check and save")
+        setup.expectRejected(
+            code: "INVALID_TOKEN", title: "GitHub did not accept that token", action: "Edit token", shot: "owner-setup-github-rejected"
         )
-    }
+        let accepted = "github_pat_fake-token-do-not-use"
+        setup.clear("token", removing: rejected)
+        setup.enter("token", accepted)
+        XCTAssertFalse(app.staticTexts[accepted].exists, "the token is never echoed")
+        shot(app, "owner-setup-github-token")
+        setup.primary("Check and save")
 
-    func test6DropboxGuidesTheAppThenSavesTheClientWithoutATestCall() throws {
-        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
-        guideThroughClient(
-            app, name: "Dropbox", slug: "dropbox", page: "https://www.dropbox.com/developers/console/apps",
-            authorize: "https://www.dropbox.com/oauth2/authorize"
-        )
-    }
-
-    func test8CanvaGuidesTheAppRejectsTheClientThenSavesAndConnects() throws {
-        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
-        let button = openGuide(app, name: "Canva", slug: "canva", action: "Set up")
-        expectStep(app, "app", "1 of 2")
-        XCTAssertEqual(element(app, "setupGuideCopy-0Value").label, "https://pal.example.test/webapp/mcp-oauth/callback")
-        XCTAssertTrue(element(app, "setupGuideCopy-1Value").label.contains(":read"), "the scopes are ready to copy")
-        element(app, "setupGuideLink-0").hit()
-        openedLink(app, prefix: "https://www.canva.com/developers/apps")
-        next(app)
-        expectStep(app, "client", "2 of 2")
-        enter(app, "client_id", "fake-client-id")
-        enter(app, "client_secret", "rejected-secret-do-not-use")
-        submit(app).hit()
-        rejectOnce(app, code: "INVALID_CLIENT", shotName: "setup-guide-canva-rejected")
-        enter(app, "client_id", "fake-client-id")
-        enter(app, "client_secret", "fake-token-do-not-use")
-        submit(app).hit()
-        waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
-        openedLink(app, prefix: "https://www.canva.com/api/oauth/authorize")
-        returnLoopbackRedirect(app)
-        waitLabel(button, equals: "Connected", timeout: 45)
-        shot(app, "setup-guide-canva-connected")
-    }
-
-    func test7GoogleRefusesAnIPAddressAndOffersTheFallbacks() throws {
-        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client", "-hermes-test-oauth-client-ip-address"])
-        _ = openGuide(app, name: "Google Workspace", slug: "google-workspace", action: "Set up")
-        expectStep(app, "address", "1 of 4")
-        let title = app.staticTexts["Google refuses this address"]
-        waitFor(title, timeout: 20, "address problem title")
-        XCTAssertFalse(element(app, "setupGuideAddressValue").exists, "the refused address is not offered for copying")
-        element(app, "setupGuideAddressProblemDetails").hit()
-        waitFor(element(app, "setupGuideAddressProblemCopyDetails"), timeout: 10, "copy details")
-        let details = element(app, "setupGuideAddressProblemReasonCode").label
-        XCTAssertTrue(details.contains("IP_HOST") && details.contains("100.101.102.103"), "details name the rule and the host")
-        shot(app, "setup-guide-google-ip-address")
-        next(app)
-        expectStep(app, "console", "2 of 4")
-        let fallback = element(app, "setupGuideFallback")
-        waitFor(fallback, timeout: 10, "fallback action")
-        XCTAssertEqual(fallback.label, "Google rejected the address")
-        XCTAssertFalse(element(app, "setupGuideFallbackBody").exists, "the fallback is hidden until tapped")
-        fallback.hit()
-        waitFor(element(app, "setupGuideFallbackBody"), timeout: 10, "fallback text")
-        element(app, "setupGuideFallbackLink-0").hit()
-        openedLink(app, prefix: "https://developers.google.com/identity/protocols/oauth2/native-app")
-        shot(app, "setup-guide-google-fallback")
+        setup.expectConnected("GitHub is connected")
+        shot(app, "owner-setup-github-connected")
+        setup.finish(button, reads: "Update token", exact: false)
     }
 }

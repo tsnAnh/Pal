@@ -127,6 +127,13 @@ public enum SetupProblem: String, Decodable, Sendable {
         }
     }
 
+    public var plainReason: String {
+        switch self {
+        case .notHTTPS: String(localized: "The saved address must start with https.")
+        case .ipHost: String(localized: "The saved address is an IP address; use a domain name.")
+        }
+    }
+
     public func details(host: String?) -> String {
         [code, host.map { "host \($0)" }, "rule: \(rule)"].compactMap { $0 }.joined(separator: ", ")
     }

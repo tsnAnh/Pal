@@ -8,7 +8,6 @@ enum OAuthClientScript {
     static let argument = "-hermes-test-oauth-client"
     static let withoutPublicAddressArgument = "-hermes-test-oauth-client-no-public-address"
     static let loopbackRedirect = "http://localhost:27890/callback"
-    static let googleRedirect = "https://pal.example.test/webapp/google-install/callback"
     static let mcpRedirect = "https://pal.example.test/webapp/mcp-oauth/callback"
     static let ipAddressArgument = "-hermes-test-oauth-client-ip-address"
     static let state = "scripted-state"
@@ -19,6 +18,8 @@ enum OAuthClientScript {
         "dropbox": ("https://www.dropbox.com/oauth2/authorize", "scripted-session-dropbox"),
         "canva": ("https://www.canva.com/api/oauth/authorize", "scripted-session-canva"),
     ]
+
+    static func googleRedirect(_ address: String) -> String { "\(address)/webapp/google-install/callback" }
 
     static var isActive: Bool { ProcessInfo.processInfo.arguments.contains(argument) }
 
@@ -142,10 +143,11 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     private func googleRow() -> JSONValue {
         let saved = progress["google-workspace"]?.configured == true
         let step = address != nil && !ipAddress ? (saved ? "client" : "console") : "address"
+        let redirect = OAuthClientScript.googleRedirect(address ?? OAuthClientScript.addressSuggestion)
         return [
             "slug": "google-workspace", "name": "Google Workspace", "category": "Docs and files", "icon": "plugin_glyph",
             "method": "oauth_client", "verified": true, "status": .string(status("google-workspace")), "notes": .string(Self.googleNotes),
-            "setup_guide": ScriptedSetupGuides.google(addressProblem: ipAddress),
+            "setup_guide": ScriptedSetupGuides.google(addressProblem: ipAddress, redirect: redirect),
             "setup_progress": ScriptedSetupGuides.progress(step, saved: saved ? ["client_id", "client_secret"] : []),
         ]
     }
@@ -186,7 +188,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         ]
         let console = consoles[slug] ?? "https://console.cloud.google.com/apis/credentials"
         let mcp = addressSaved ? address.map { "\($0)/webapp/mcp-oauth/callback" } : nil
-        let redirect = loopback ? (mcp ?? OAuthClientScript.loopbackRedirect) : address.map { "\($0)/webapp/google-install/callback" }
+        let redirect = loopback ? (mcp ?? OAuthClientScript.loopbackRedirect) : address.map(OAuthClientScript.googleRedirect)
         return [
             "slug": .string(slug), "configured": .bool(current.configured),
             "console_url": "https://console.cloud.google.com/apis/credentials",
@@ -222,7 +224,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     }
 
     private func finishSignIn(_ slug: String) async {
-        try? await Task.sleep(for: .milliseconds(1500))
+        try? await Task.sleep(for: .milliseconds(4000))
         progress[slug]?.connected = true
     }
 

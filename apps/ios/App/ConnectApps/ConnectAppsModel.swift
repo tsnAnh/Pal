@@ -84,13 +84,11 @@ final class ConnectAppsModel {
     var disconnectTarget: ConnectDisconnectTarget?
     var showsSkills = false
     var mcpSignIn: McpSignInController?
-    var oauthClientSheet: OAuthClientSheetModel?
+    var ownerSetup: OwnerSetupModel?
     var showsSlackPicker = false
-    var setupGuideSheet: SetupGuideModel?
     var t3Flow: T3FlowSheet?
     var t3Reach: T3Reach?
     var discordFlow: DiscordFlowSession?
-    let google: GoogleWorkspaceModel
     let slack: SlackBotsModel
     let slackWizard: SlackWizardContext
     var pasteSession: (any McpPasteSigning)?
@@ -135,8 +133,6 @@ final class ConnectAppsModel {
         skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
         capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
         surfaces = connection.surfaces
-        google = GoogleWorkspaceModel(service: GoogleWorkspaceService(rpc: ConnectionRPC(model: connection), diagnostics: .osLog()))
-        google.onChange = { [weak self] in await self?.reload() }
         if let held = surfaces.remembered(ConnectCatalog.self, catalogKey) {
             catalog = held
             phase = .ready
@@ -149,8 +145,6 @@ final class ConnectAppsModel {
     var customConnector: CustomConnectorModel? {
         if case .customConnector(let connector) = mode { connector } else { nil }
     }
-
-    func googleRow(_ app: ConnectApp) -> ConnectApp { app.applyingGoogleAuthRequired(google.authRequired) }
 
     var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
