@@ -148,9 +148,9 @@ extension View {
 }
 
 extension View {
-    func macSheetFrame() -> some View {
+    func macSheetFrame(idealWidth: CGFloat = 560) -> some View {
         #if os(macOS)
-        frame(minWidth: 480, idealWidth: 560, minHeight: 520, idealHeight: 680)
+        frame(minWidth: 480, idealWidth: idealWidth, minHeight: 520, idealHeight: 680)
         #else
         self
         #endif

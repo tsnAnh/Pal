@@ -2,6 +2,7 @@ import Foundation
 
 public struct FlowStep: Sendable, Equatable, Identifiable {
     public enum Kind: Sendable, Equatable {
+        case intro(youDo: String, palDoes: String)
         case instruction(openPage: SetupLink?)
         case copyCard(copies: [SetupCopy])
         case paste(fields: [SetupField])
@@ -26,6 +27,8 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
     public var pageLink: SetupLink?
     public var showsInChecklist: Bool
     public var allowsBack: Bool
+    public var note: String?
+    public var links: [SetupLink]
     public var prepares: Bool
     public var inlineRefusal: Bool
     public var workingTitle: String?
@@ -34,8 +37,8 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
     public init(
         id: String, title: String, body: String = "", kind: Kind, primaryTitle: String? = nil,
         skipTitle: String? = nil, skipTarget: String? = nil, heading: String? = nil, pageLink: SetupLink? = nil,
-        showsInChecklist: Bool = true, allowsBack: Bool = true, prepares: Bool = false, inlineRefusal: Bool = false,
-        workingTitle: String? = nil, workingBody: String = ""
+        showsInChecklist: Bool = true, allowsBack: Bool = true, note: String? = nil, links: [SetupLink] = [],
+        prepares: Bool = false, inlineRefusal: Bool = false, workingTitle: String? = nil, workingBody: String = ""
     ) {
         self.id = id
         self.title = title
@@ -48,6 +51,8 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
         self.pageLink = pageLink
         self.showsInChecklist = showsInChecklist
         self.allowsBack = allowsBack
+        self.note = note
+        self.links = links
         self.prepares = prepares
         self.inlineRefusal = inlineRefusal
         self.workingTitle = workingTitle
@@ -61,9 +66,13 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
     public var isChecklistRow: Bool {
         guard showsInChecklist else { return false }
         switch kind {
-        case .waiting, .success: return false
+        case .intro, .waiting, .success: return false
         default: return true
         }
+    }
+
+    public var isIntro: Bool {
+        if case .intro = kind { true } else { false }
     }
 
     public var isSuccess: Bool {
@@ -169,7 +178,7 @@ public struct StepFlowEngine: Sendable, Equatable {
 
     public init?(flowID: String, steps: [FlowStep], resume: StepFlowProgress? = nil) {
         guard !steps.isEmpty, Set(steps.map(\.id)).count == steps.count, steps.last?.isSuccess == true,
-              steps.dropLast().allSatisfy({ !$0.isSuccess })
+              steps.dropLast().allSatisfy({ !$0.isSuccess }), steps.dropFirst().allSatisfy({ !$0.isIntro })
         else { return nil }
         self.flowID = flowID
         self.steps = steps
@@ -205,7 +214,7 @@ public struct StepFlowEngine: Sendable, Equatable {
 
     public var primaryAction: PrimaryAction {
         switch current.kind {
-        case .instruction, .copyCard, .confirm: .advance
+        case .intro, .instruction, .copyCard, .confirm: .advance
         case .paste, .browserRoundTrip, .action, .openAndCheck, .switches: .work
         case .automatic, .waiting: .none
         case .success: .finish

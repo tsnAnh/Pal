@@ -1,6 +1,7 @@
 import PalConnect
 import PalDevice
 import PalDiagnostics
+import SwiftUI
 
 @MainActor
 private final class GoogleSessions {
@@ -64,5 +65,24 @@ enum GoogleSignIn {
         case .tryAgain(let note): .tryAgain(note)
         case .denied(let reason), .failed(let reason): .failed(reason)
         }
+    }
+}
+
+private struct GoogleSignInReload: ViewModifier {
+    let model: ConnectAppsModel
+
+    @Environment(ServiceSignInCenter.self) private var signIn
+
+    func body(content: Content) -> some View {
+        content.onChange(of: signIn.lastResolution) { _, resolution in
+            guard let resolution, resolution.service == GoogleWorkspaceCatalog.serviceID, resolution.outcome == .signedIn else { return }
+            Task { await model.reload() }
+        }
+    }
+}
+
+extension View {
+    func googleSignInReload(_ model: ConnectAppsModel) -> some View {
+        modifier(GoogleSignInReload(model: model))
     }
 }
