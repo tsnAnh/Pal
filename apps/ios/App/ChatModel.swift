@@ -53,6 +53,7 @@ struct ChatRow: Identifiable, Equatable {
         case approvalAnswered(ApprovalRecord)
         case connection(ConnectionCard)
         case notice(ChatNotice)
+        case routine(RoutineMessage)
         case botThread(BotThreadLink)
         case imageGeneration(ImageGeneration)
     }
@@ -72,6 +73,7 @@ struct ChatRow: Identifiable, Equatable {
         case .user(let text, _): text
         case .assistant(let parsed): parsed.source
         case .notice(.botMessage(_, let body)): body
+        case .routine(let routine): routine.text
         default: nil
         }
     }
@@ -866,6 +868,9 @@ final class ChatModel {
                 return (.notice(.botMessage(senderName: sender.name, body: body)), [], [])
             case .systemNotification:
                 return (.notice(.notification), [], [])
+            case .routineOutput(let jobName, let body, let failed):
+                let routine = RoutineMessage(jobName: jobName, body: body, failed: failed, time: item.timestamp ?? arrivals[item.id])
+                return (.routine(routine), [], [])
             case .processCompletion:
                 return (.notice(.backgroundTaskFinished(count: InboundKind.backgroundTaskCount(in: text), text: text)), [], [])
             }
