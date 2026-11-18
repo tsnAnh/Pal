@@ -9,10 +9,11 @@ struct AvatarMoodClock: Equatable, Sendable {
     var loadingSeed: UInt64
     var reduceMotion: Bool
     var solidClips: Bool
+    var restingBlinks: Bool
 
     init(
         mood: AvatarMood, since: Date, blinkDelay: Double, loadingSeed: UInt64, reduceMotion: Bool,
-        solidClips: Bool = true, from: AvatarPose? = nil
+        solidClips: Bool = true, restingBlinks: Bool = true, from: AvatarPose? = nil
     ) {
         self.mood = mood
         self.since = since
@@ -20,14 +21,19 @@ struct AvatarMoodClock: Equatable, Sendable {
         self.loadingSeed = loadingSeed
         self.reduceMotion = reduceMotion
         self.solidClips = solidClips
+        self.restingBlinks = restingBlinks
         self.from = from
     }
 
     func changing(to mood: AvatarMood, at date: Date) -> AvatarMoodClock {
         AvatarMoodClock(
             mood: mood, since: date, blinkDelay: blinkDelay, loadingSeed: loadingSeed, reduceMotion: reduceMotion,
-            solidClips: solidClips, from: pose(at: date)
+            solidClips: solidClips, restingBlinks: restingBlinks, from: pose(at: date)
         )
+    }
+
+    func isSettling(at date: Date) -> Bool {
+        from != nil && !reduceMotion && date.timeIntervalSince(since) < AvatarMotion.settleDuration
     }
 
     func pose(at date: Date) -> AvatarPose {
@@ -62,14 +68,14 @@ struct AvatarMoodClock: Equatable, Sendable {
 
     private func isMoving(at date: Date) -> Bool {
         let t = date.timeIntervalSince(since)
-        if from != nil, !reduceMotion, t < AvatarMotion.settleDuration { return true }
+        if isSettling(at: date) { return true }
         if AvatarMotion.isLooping(mood) { return true }
         if !reduceMotion, t < oneShotDuration { return true }
         return blinks(at: t) && AvatarBlink.openness(at: date.timeIntervalSinceReferenceDate, delay: blinkDelay) < 1
     }
 
     private func blinks(at t: Double) -> Bool {
-        guard !reduceMotion else { return false }
+        guard !reduceMotion, restingBlinks else { return false }
         return mood == .idle || (mood == .done && t >= oneShotDuration)
     }
 }
