@@ -169,6 +169,35 @@ final class MacModalsE2ETests: BotProfileTestCase {
         closeModal(app, "connectApps-close", gone: "connectApps")
     }
 
+    func test5bGoogleSetupOpensAsAChecklistWindowThatClosesCleanly() throws {
+        let app = signedInApp(extraArguments: ["-hermes-test-oauth-client"])
+        app.typeKey("m", modifierFlags: [.command, .shift])
+        waitFor(element(app, "connectApps"), timeout: 15, "connect apps modal")
+        let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "connectApp-"))
+        waitFor(rows.firstMatch, timeout: 30, "catalog rows")
+        let search = element(app, "connectAppsSearch")
+        search.hit()
+        search.typeText("Google Workspace")
+        let action = app.buttons["connectApp-connector:google-workspace-action"]
+        waitFor(action, timeout: 30, "Google Workspace action")
+        XCTAssertEqual(action.label, "Set up")
+        action.hit()
+        waitFor(element(app, "ownerSetup"), timeout: 20, "owner setup")
+        waitFor(element(app, "stepFlowChecklist"), timeout: 20, "checklist beside the step on Mac")
+        XCTAssertFalse(element(app, "stepFlowPosition").exists, "Mac shows the checklist, not the segments")
+        waitFor(element(app, "stepFlowRow-console"), timeout: 10, "first checklist row")
+        let heading = element(app, "stepFlowStepTitle")
+        waitFor(heading, timeout: 20, "intro title")
+        XCTAssertEqual(heading.label, "Set up Google Workspace")
+        let primary = element(app, "stepFlowPrimary")
+        XCTAssertEqual(primary.label, "Start")
+        primary.hit()
+        waitUntil(10, "open step title") { heading.label == "Open Google Cloud" }
+        element(app, "stepFlowClose").hit()
+        waitGone(element(app, "ownerSetup"), timeout: 10, "setup window closes")
+        closeModal(app, "connectApps-close", gone: "connectApps")
+    }
+
     func test6AccountMenuOpensSettingsAndUsage() throws {
         let app = signedInApp()
         app.buttons["userAvatarButton"].hit()

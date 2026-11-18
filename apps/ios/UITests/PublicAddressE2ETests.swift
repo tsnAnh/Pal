@@ -2,68 +2,111 @@ import XCTest
 
 @MainActor
 final class PublicAddressE2ETests: ConnectAppsTestCase {
-    private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {
-        app.descendants(matching: .any)[id]
+    private let addressTitle = "Your Pal's web address"
+    private let noAddress = ["-hermes-test-oauth-client", "-hermes-test-oauth-client-no-public-address"]
+
+    private func redirect(_ address: String) -> String {
+        "\(address)/webapp/google-install/callback"
     }
 
-    private func reachable(_ app: XCUIApplication, _ id: String) -> XCUIElement {
-        let target = element(app, id)
-        waitFor(target, timeout: 20, id)
-        for _ in 0..<6 where !target.isHittable { app.swipeUp() }
-        return target
+    private func openAddressStep(_ app: XCUIApplication) -> OwnerSetupDriver {
+        let setup = OwnerSetupDriver(test: self, app: app)
+        _ = setup.open("Google Workspace", slug: "google-workspace")
+        setup.expectIntro("Set up Google Workspace", rows: 6)
+        setup.primary("Start")
+        setup.expectStep("address", addressTitle, number: 1, of: 6)
+        return setup
     }
 
-    private func replaceAddress(_ app: XCUIApplication, with text: String) {
-        let field = reachable(app, "setupAddressField")
-        field.hit()
-        let current = (field.value as? String) ?? ""
-        field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
-        field.typeText(text)
+    private func saveAddress(_ setup: OwnerSetupDriver, _ address: String) {
+        setup.enter("address", address)
+        setup.expectValid("address")
+        setup.primary("Check and save")
+        setup.expectStep("console", "Open Google Cloud", number: 2, of: 6)
     }
 
-    private func openAddressStep(_ app: XCUIApplication) {
-        waitForCatalog(app)
-        search(app, "Google Workspace")
-        let button = action(app, "google-workspace")
-        waitFor(button, timeout: 30, "Google Workspace action")
-        button.hit()
-        waitFor(element(app, "setupGuideStep-address"), timeout: 20, "address step")
+    private func openRedirectStep(_ setup: OwnerSetupDriver) {
+        setup.primary("Open Google Cloud")
+        setup.expectOpened("https://console.cloud.google.com/apis/credentials")
+        setup.expectStep("console-copy", "Paste this address into Google", number: 3, of: 6)
     }
 
-    func test1SuggestionSaveAndCheckReportEachOutcome() throws {
-        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client", "-hermes-test-oauth-client-no-public-address"])
-        openAddressStep(app)
-        XCTAssertFalse(element(app, "setupGuideAddressValue").exists, "nothing is saved yet")
-        XCTAssertFalse(reachable(app, "setupAddressSave").isEnabled, "Save waits for an address")
-        XCTAssertFalse(element(app, "setupAddressCheck").isEnabled, "Check waits for a saved address")
+    func test1AddressStepValidatesLiveRefusesAnIPAddressAndSavesTheRedirectBase() throws {
+        let app = launchConnectApps(extraArguments: noAddress)
+        let setup = openAddressStep(app)
+        XCTAssertEqual(setup.el("stepFlowStepBody").label, "Google sends you back to your Pal after you sign in.")
+        XCTAssertFalse(setup.el("stepFlowBack").exists, "no way back from the first step")
+        XCTAssertFalse(setup.el("stepFlowCopy-0").exists, "no redirect address without a public address")
+        setup.expectPrimary(enabled: false, "Check and save waits for an address")
+        shot(app, "owner-setup-google-address")
 
-        replaceAddress(app, with: "http://pal.example.test")
-        waitFor(element(app, "setupAddressHint"), timeout: 10, "live validation message")
-        XCTAssertTrue(element(app, "setupAddressHint").label.contains("https://"), "the message names the https rule")
-        XCTAssertFalse(element(app, "setupAddressSave").isEnabled, "an invalid address cannot be saved")
+        setup.enter("address", "http://pal.example.test")
+        setup.expectHint("address", contains: "https://")
+        setup.expectPrimary(enabled: false, "an address without https cannot be saved")
+        setup.clear("address", removing: "http://pal.example.test")
 
-        waitFor(element(app, "setupAddressSuggestionValue"), timeout: 10, "tailnet suggestion")
-        XCTAssertEqual(element(app, "setupAddressSuggestionValue").label, "https://pal.example.test")
-        reachable(app, "setupAddressUse").hit()
-        waitFor(element(app, "setupAddressOK"), timeout: 10, "shape accepted")
-        XCTAssertEqual(element(app, "setupAddressField").value as? String, "https://pal.example.test", "Use this fills the field")
-        shot(app, "public-address-suggestion")
+        let numeric = "https://203.0.113.9"
+        setup.enter("address", numeric)
+        setup.expectValid("address")
+        setup.primary("Check and save")
+        setup.expectRejected(
+            code: "invalid_token", title: "That address was not accepted", action: "Edit address",
+            reason: "Use a domain name, not an IP address.", shot: "owner-setup-google-address-refused"
+        )
+        XCTAssertEqual(setup.el("stepFlowField-address").value as? String, numeric, "the address is still there to edit")
+        setup.clear("address", removing: numeric)
 
-        reachable(app, "setupAddressSave").hit()
-        waitFor(element(app, "setupGuideAddressValue"), timeout: 30, "saved address")
-        XCTAssertEqual(element(app, "setupGuideAddressValue").label, "https://pal.example.test", "the saved address is shown")
-        reachable(app, "setupAddressCheck").hit()
-        waitFor(app.staticTexts["Address reachable"], timeout: 20, "reachable result")
-        shot(app, "public-address-reachable")
+        saveAddress(setup, "https://pal.example.test")
+        openRedirectStep(setup)
+        setup.expectCopy(0, equals: redirect("https://pal.example.test"))
+        waitFor(setup.el("ownerSetupAddressReachable"), timeout: 20, "reachability note")
+        XCTAssertFalse(setup.el("ownerSetupAddressBlock").exists, "a reachable address shows no problem")
+        shot(app, "owner-setup-google-address-reachable")
+    }
 
-        replaceAddress(app, with: "https://offline.example.test")
-        reachable(app, "setupAddressSave").hit()
-        waitLabel(element(app, "setupGuideAddressValue"), contains: "offline.example.test", timeout: 30)
-        reachable(app, "setupAddressCheck").hit()
-        waitFor(app.staticTexts["Address not served yet"], timeout: 20, "not served result")
-        reachable(app, "setupAddressResultDetails").hit()
-        waitFor(element(app, "setupAddressResultCopyDetails"), timeout: 10, "copy details")
-        XCTAssertEqual(element(app, "setupAddressResultReasonCode").label, "NOT_SERVED", "details name the outcome")
-        shot(app, "public-address-not-served")
+    func test2AnAddressPalDoesNotServeShowsTheReasonAndCanBeFixed() throws {
+        let app = launchConnectApps(extraArguments: noAddress)
+        let setup = openAddressStep(app)
+        let offline = "https://offline.example.test"
+        saveAddress(setup, offline)
+        openRedirectStep(setup)
+        setup.expectCopy(0, equals: redirect(offline))
+
+        waitFor(setup.el("ownerSetupAddressBlock"), timeout: 20, "address problem")
+        waitLabel(setup.el("ownerSetupAddressTitle"), equals: "Pal could not reach this address", timeout: 10)
+        waitLabel(setup.el("ownerSetupAddressReason"), equals: "Your Pal is not serving web sign-in on this address yet.", timeout: 10)
+        XCTAssertEqual(setup.el("ownerSetupAddressAction").label, "Check again")
+        XCTAssertFalse(setup.el("ownerSetupAddressReachable").exists, "an unserved address is not reported as reachable")
+        setup.reveal("ownerSetupAddressDetails").hit()
+        waitFor(setup.el("ownerSetupAddressCopyDetails"), timeout: 10, "copy details")
+        waitLabel(setup.el("ownerSetupAddressDetailsText"), contains: "code: NOT_SERVED", timeout: 10)
+        shot(app, "owner-setup-google-address-not-served")
+
+        setup.reveal("ownerSetupAddressAction").hit()
+        waitFor(setup.el("ownerSetupAddressBlock"), timeout: 20, "the check runs again and still fails")
+
+        setup.el("stepFlowBack").hit()
+        setup.expectStep("console", "Open Google Cloud", number: 2, of: 6)
+        setup.el("stepFlowBack").hit()
+        setup.expectStep("address", addressTitle, number: 1, of: 6)
+        saveAddress(setup, "https://pal.example.test")
+        openRedirectStep(setup)
+        setup.expectCopy(0, equals: redirect("https://pal.example.test"))
+        waitFor(setup.el("ownerSetupAddressReachable"), timeout: 20, "reachability note after the fix")
+        waitGone(setup.el("ownerSetupAddressBlock"), timeout: 10, "the problem clears")
+        shot(app, "owner-setup-google-address-fixed")
+    }
+
+    func test3GoogleNamesTheIPAddressRuleWithoutOfferingTheAddress() throws {
+        let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client", "-hermes-test-oauth-client-ip-address"])
+        let setup = openAddressStep(app)
+        let body = setup.el("stepFlowStepBody")
+        waitLabel(body, contains: "The saved address is an IP address; use a domain name.", timeout: 10)
+        XCTAssertTrue(body.label.hasPrefix("Google sends you back to your Pal after you sign in."), "the rule follows the step's own text")
+        XCTAssertFalse(setup.el("stepFlowCopy-0").exists, "the refused address is not offered for copying")
+        let refusedHost = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "100.101.102.103"))
+        XCTAssertFalse(refusedHost.firstMatch.exists, "the refused address is not shown")
+        setup.expectPrimary(enabled: false, "Check and save waits for a new address")
+        shot(app, "owner-setup-google-ip-address")
     }
 }
