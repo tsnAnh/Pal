@@ -25,15 +25,18 @@ REJECTED_MESSAGE = "This link has expired or was already used. Go back to Pal an
 _REJECTED = (400, REJECTED_MESSAGE)
 
 
-def _deliver(code: str, state: str, error: str, iss: str) -> bool:
+def _deliver(code: str, state: str, error: str, iss: str, description: str) -> bool:
     from tui_gateway.mcp_oauth_sessions import deliver_gateway_callback
-    return deliver_gateway_callback(state, code=code or None, error=error or None, iss=iss or None)
+    return deliver_gateway_callback(
+        state, code=code or None, error=error or None, iss=iss or None, error_description=description or None)
 
 
 @router.get(GATEWAY_CALLBACK_PATH)
-async def mcp_oauth_callback(code: str = "", state: str = "", error: str = "", iss: str = "") -> HTMLResponse:
+async def mcp_oauth_callback(
+    code: str = "", state: str = "", error: str = "", iss: str = "", error_description: str = ""
+) -> HTMLResponse:
     try:
-        delivered = await run_in_threadpool(_deliver, code, state, error, iss) if state else False
+        delivered = await run_in_threadpool(_deliver, code, state, error, iss, error_description) if state else False
     except Exception:  # health: allow BLE001 -- the page must not echo anything, any failure reads as an expired link
         delivered = False
     status, message = _REJECTED if not delivered else _DENIED if error else _DONE

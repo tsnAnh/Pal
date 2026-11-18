@@ -700,10 +700,10 @@ def _authorization_code_result(code: str, state: str | None, iss: str | None = N
 
 
 def _parse_redirect_query(query: str) -> dict[str, Any]:
-    """code/state/error/iss from a redirect query string. ``iss`` (RFC 9207 issuer) is kept: mcp 2.0
+    """code/state/error/error_description/iss from a redirect query string. ``iss`` (RFC 9207 issuer) is kept: mcp 2.0
     rejects a response omitting it when the server advertised ``authorization_response_iss_parameter_supported``."""
     params = parse_qs(query)
-    return {k: params.get(k, [None])[0] for k in ("code", "state", "error", "iss")}
+    return {k: params.get(k, [None])[0] for k in ("code", "state", "error", "error_description", "iss")}
 
 
 def _result_taken(result: dict) -> bool:

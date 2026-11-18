@@ -29,7 +29,7 @@ public enum McpSignInSteps {
     public static func admin(vendor: String) -> (title: String, body: String) {
         (
             String(localized: "Waiting for your admin"),
-            String(localized: "\(vendor) needs an admin of your organisation to approve Pal. You can close this; Pal tells you when it is approved.")
+            String(localized: "\(vendor) needs an admin of your organisation to approve Pal. Come back and tap Connect again once your admin approved it.")
         )
     }
 
@@ -122,6 +122,7 @@ public enum McpSignInStatus {
         }
         switch known {
         case .cancelled: return .dismissed
+        case .adminApprovalPending: return .waitingForAdmin
         case .signInRefused(let failure, let fault): return refused(failure, fault, vendor: vendor, device: device)
         case .faulted(let fault): return .failed(SetupStatus(fault: fault, subject: vendor, device: device))
         case .signInFailed(let reason): return plain(reason, vendor: vendor, device: device)
@@ -132,7 +133,6 @@ public enum McpSignInStatus {
     }
 
     private static func refused(_ failure: McpSignInFailure, _ fault: GatewayFault, vendor: String, device: String) -> McpSignInResolution {
-        if failure == .adminApproval { return .waitingForAdmin }
         let gatewayCode = SetupStatusClass.byCode[fault.reason.lowercased()] == nil ? failure.code : fault.reason
         return .failed(SetupStatus(
             code: gatewayCode, method: fault.method, trace: fault.trace.rawValue, gatewayVersion: fault.gatewayVersion,
@@ -141,7 +141,6 @@ public enum McpSignInStatus {
     }
 
     private static func plain(_ reason: String, vendor: String, device: String) -> McpSignInResolution {
-        if reason == McpSignInFailure.adminApproval.reason { return .waitingForAdmin }
         if reason == McpOAuthError.cancelled.reason { return .dismissed }
         return .failed(SetupStatus(code: code(forReason: reason), subject: vendor, device: device, detail: reason))
     }
@@ -234,6 +233,9 @@ public final class McpSignInController: Identifiable {
         case .failed(let reason):
             pasteSession = nil
             resolve(ConnectAppsError.signInFailed(reason))
+        case .adminApprovalPending:
+            pasteSession = nil
+            resolve(ConnectAppsError.adminApprovalPending)
         }
     }
 

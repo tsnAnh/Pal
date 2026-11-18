@@ -255,7 +255,7 @@ final class ConnectAppsModel {
         case .signInFailed(let reason): failures[app.id] = reason
         case .signInRefused(let failure, _): failures[app.id] = failure.reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
-        case .unavailable, .failed, .faulted, .oauthClient: fail(app, "Couldn't connect \(app.name). Try again.")
+        case .unavailable, .failed, .faulted, .oauthClient, .adminApprovalPending: fail(app, "Couldn't connect \(app.name). Try again.")
         }
     }
 

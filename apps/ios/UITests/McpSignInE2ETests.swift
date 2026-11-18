@@ -116,6 +116,17 @@ final class McpSignInE2ETests: ConnectAppsTestCase {
         expectSheetClosed(app)
     }
 
+    func test3bAdminWordsWithoutTheGatewayStateStayAPlainFailure() throws {
+        let app = openSignIn(mode: "admin-words")
+        let title = element(app, "mcpSignInStatusTitle")
+        waitFor(title, timeout: 30, "failure title")
+        waitLabel(title, equals: "Sign-in did not finish", timeout: 10)
+        XCTAssertFalse(element(app, "stepFlowPending").exists, "no waiting-for-admin state without the gateway saying so")
+        element(app, "mcpSignInStatusDetails").hit()
+        waitLabel(element(app, "mcpSignInStatusDetailsText"), contains: "code: access_denied", timeout: 10)
+        shot(app, "mcp-signin-admin-words")
+    }
+
     func test4CancellingWhileWaitingClosesTheSheetAndLeavesTheRowUnchanged() throws {
         #if os(macOS)
         let app = openSignIn(mode: "wait")

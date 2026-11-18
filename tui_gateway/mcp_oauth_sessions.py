@@ -22,6 +22,7 @@ from tools.connectors.mcp_oauth import (
     validate_loopback_redirect_uri,
 )
 from tools.connectors.mcp_oauth_redirect import (
+    ADMIN_APPROVAL_MESSAGE,
     APP_REDIRECT_URI,
     KIND_APP,
     KIND_GATEWAY,
@@ -30,6 +31,11 @@ from tools.connectors.mcp_oauth_redirect import (
     is_registration_refusal,
 )
 from tui_gateway import mcp_oauth_redirects
+
+
+class AdminApprovalPending(RuntimeError):
+    """The vendor says an admin of the owner's organisation must approve Pal; carries no vendor text."""
+
 
 # session_id -> record wrapping the shared DashboardOAuthFlow bridge plus bookkeeping.
 _sessions: dict[str, dict[str, Any]] = {}
@@ -131,6 +137,8 @@ def _publish(rec: dict[str, Any], url_timeout: float) -> dict[str, Any]:
         from tools.mcp_dashboard_oauth import exception_message
         flow.mark_error(exception_message(exc))  # no-op when the worker already recorded the cause
         _shutdown_listener(rec)
+        if flow.reason:
+            raise AdminApprovalPending(ADMIN_APPROVAL_MESSAGE) from None
         raise
     if rec["redirect"] == KIND_GATEWAY:
         rec["gateway_state"] = parse_qs(urlparse(auth_url).query).get("state", [None])[0]
@@ -218,7 +226,8 @@ def start_gateway_flow(hermes_home: str, server_name: str, cfg: dict, redirect_u
 
 
 def deliver_gateway_callback(
-    state: str, *, code: Optional[str], error: Optional[str] = None, iss: Optional[str] = None) -> bool:
+    state: str, *, code: Optional[str], error: Optional[str] = None, iss: Optional[str] = None,
+    error_description: Optional[str] = None) -> bool:
     """Hand the https callback route's redirect to the flow that minted ``state``. A state works once and
     only while its session lives; True when delivered."""
     cutoff = time.time() - _SESSION_TTL_SECONDS
@@ -231,7 +240,8 @@ def deliver_gateway_callback(
     if match is None:
         return False
     try:
-        match["flow"].deliver_callback(code=code, state=state, error=error, iss=iss)
+        match["flow"].deliver_callback(
+            code=code, state=state, error=error, iss=iss, error_description=error_description)
     except ValueError:
         return False
     return True
@@ -254,9 +264,10 @@ def _lookup(
 
 
 def poll_flow(session_id: str, server_name: str) -> dict[str, Any]:
-    """Poll a session → ``{status, error_message?, auth_url?, tools?}``; ``status`` is
+    """Poll a session → ``{status, error_message?, reason?, auth_url?, tools?}``; ``status`` is
     ``pending`` | ``approved`` | ``error`` (the bridge's ``authorization_required`` maps to
-    ``pending``)."""
+    ``pending``). ``reason`` is ``ADMIN_APPROVAL_PENDING`` with a fixed ``error_message`` when an admin
+    must approve; the vendor's own text never leaves the gateway then."""
     rec, err = _lookup(session_id, server_name)
     if rec is None:
         return {"status": "error", "error_message": err}
@@ -267,6 +278,8 @@ def poll_flow(session_id: str, server_name: str) -> dict[str, Any]:
     out: dict[str, Any] = {
         "session_id": session_id, "status": status, "error_message": snap.get("error"),
         "auth_url": snap.get("authorization_url"), "redirect": rec.get("redirect", KIND_LOOPBACK)}
+    if status == "error" and flow.reason:
+        out.update(reason=flow.reason, error_message=ADMIN_APPROVAL_MESSAGE)
     if status == "approved":
         out["tools"] = list(getattr(flow, "tools", []) or [])
     return out
@@ -285,7 +298,8 @@ def cancel_flow(session_id: str, server_name: str, hermes_home: str) -> dict[str
 
 def deliver_callback_flow(
     session_id: str, server_name: str, *, code: Optional[str], state: Optional[str],
-    error: Optional[str] = None, iss: Optional[str] = None) -> dict[str, Any]:
+    error: Optional[str] = None, iss: Optional[str] = None,
+    error_description: Optional[str] = None) -> dict[str, Any]:
     """Relay a client-captured OAuth redirect into a session's flow (remote-backend companion
     to ``start_flow(client_redirect_uri=...)``); ``deliver_callback`` still verifies ``state``
     and rejects replays. Returns ``{ok: true}`` or ``{ok: false, error_message}``."""
@@ -293,7 +307,8 @@ def deliver_callback_flow(
     if rec is None:
         return {"ok": False, "error_message": err}
     try:
-        rec["flow"].deliver_callback(code=code, state=state, error=error, iss=iss)
+        rec["flow"].deliver_callback(
+            code=code, state=state, error=error, iss=iss, error_description=error_description)
     except ValueError as exc:
         return {"ok": False, "error_message": str(exc)}
     return {"ok": True, "session_id": session_id}

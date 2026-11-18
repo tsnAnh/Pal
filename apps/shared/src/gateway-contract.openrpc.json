@@ -20273,7 +20273,8 @@
           "CLIENT_UNREADABLE",
           "CONNECT_FAILED",
           "INVALID_TOKEN",
-          "CHECK_UNAVAILABLE"
+          "CHECK_UNAVAILABLE",
+          "ADMIN_APPROVAL_PENDING"
         ]
       },
       "ConnectorPolicyAllowBody": {
@@ -34666,6 +34667,18 @@
             "default": null,
             "title": "Error"
           },
+          "error_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error Description"
+          },
           "iss": {
             "anyOf": [
               {
@@ -34827,6 +34840,17 @@
             ],
             "default": null,
             "title": "Error Message"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConnectorErrorReason"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           },
           "auth_url": {
             "anyOf": [

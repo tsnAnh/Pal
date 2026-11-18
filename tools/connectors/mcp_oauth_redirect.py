@@ -1,4 +1,4 @@
-"""Redirect kinds for the Pal app's MCP sign-in, the app redirect URI, and the registration-refusal classifier."""
+"""Redirect kinds for the Pal app's MCP sign-in, the app redirect URI, and the refusal classifiers."""
 
 from __future__ import annotations
 
@@ -43,3 +43,24 @@ def is_registration_refusal(text: str | None) -> bool:
     if "400" in lowered and any(code in lowered for code in _REFUSAL_CODES):
         return True
     return bool(_ONLY_SECURE_REDIRECT.search(lowered))
+
+
+ADMIN_APPROVAL_PENDING = "ADMIN_APPROVAL_PENDING"
+ADMIN_APPROVAL_MESSAGE = "An admin of your organisation needs to approve Pal."
+_ADMIN_CODES = ("consent_required", "interaction_required")
+_ADMIN_WORDS = re.compile(
+    r"\baadsts(90094|90095|65001)\b"
+    r"|\badmin(istrator)?s?\b.{0,80}\b(approv\w*|consent\w*|authori[sz]\w*)"
+    r"|\b(approv\w*|consent\w*|authori[sz]\w*)\b.{0,80}\badmin", re.DOTALL)
+
+
+def is_admin_approval_pending(error: str | None, description: str | None = None) -> bool:
+    """True when the authorization server says a person in the owner's organisation must approve the app,
+    not the owner: ``consent_required`` / ``interaction_required`` (the sign-in is already interactive, so
+    the owner cannot resolve them), or any other error whose text or ``error_description`` asks for an
+    admin's approval, consent or authorization (Entra AADSTS90094, Atlassian "site admin must authorize",
+    Notion "workspace owner or admin to approve"). A plain ``access_denied`` is the owner saying no."""
+    code = str(error or "").strip().lower()
+    if code in _ADMIN_CODES:
+        return True
+    return bool(_ADMIN_WORDS.search(f"{code} {str(description or '').lower()}"))
