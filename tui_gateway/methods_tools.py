@@ -1506,13 +1506,16 @@ def _(rid, params: dict) -> dict:
 def _(rid, params: dict) -> dict:
     """Add ``name`` from ``preset`` (catalog id) and/or ``config`` (url/command/args/env/headers/auth/
     tools). ``headers`` {Key: Value} and ``bearer_token`` go to the profile's .env (only ``${VAR}`` templates
-    persist); ``client_id`` is stored as ``oauth.client_id``. Dup → 4090."""
+    persist); ``client_id`` is stored as ``oauth.client_id``. Dup → 4090, except a saved entry that lost its
+    endpoint or is off, which the add repairs and enables."""
     mc = _tools_mod("hermes_cli.mcp_config")
     name, preset = _str_arg(params, "name"), _str_arg(params, "preset")
     servers, plugins = _mcp_server_rows()
     if err := _mcp_plugin_write_error(rid, name, plugins):
         return err
-    if name in servers:
+    helpers = _tools_mod("tui_gateway.mcp_rpc_helpers")
+    existing = servers.get(name)
+    if existing is not None and not helpers.needs_repair(existing):
         return _err(rid, 4090, f"server '{name}' already exists")
     raw_cfg = params.get("config")
     server_config: dict = dict(raw_cfg) if isinstance(raw_cfg, dict) else {}
@@ -1538,7 +1541,10 @@ def _(rid, params: dict) -> dict:
                 return _err(rid, 4063, f"Unknown MCP catalog entry or preset: {preset}")
     if not server_config.get("url") and not server_config.get("command"):
         return _err(rid, 4063, "config must specify a 'url' (http) or 'command' (stdio), or a valid 'preset'")
-    helpers = _tools_mod("tui_gateway.mcp_rpc_helpers")
+    if existing is not None:
+        server_config = helpers.repaired_config(existing, server_config)
+        if server_config is None:
+            return _err(rid, 4090, f"server '{name}' already exists")
     if message := helpers.endpoint_error(server_config):
         return _err(rid, 4063, message)
     env_writes, failure = helpers.plan_add_headers(name, server_config, params)
@@ -1659,6 +1665,7 @@ def _(rid, params: dict) -> dict:
         if err:
             return err
         cfg = dict(servers[name])
+        cfg = _tools_mod("tui_gateway.mcp_rpc_helpers").repair_connector_stub(name, cfg) or cfg
         if not cfg.get("url"):
             return _err(rid, 4001, "stdio servers authenticate via env keys, not OAuth")
         if cfg.get("headers") and cfg.get("auth") != "oauth":

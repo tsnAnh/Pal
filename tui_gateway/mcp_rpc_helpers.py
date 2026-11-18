@@ -154,6 +154,36 @@ def add_server(name: str, server_config: dict, writes: Mapping[str, str]) -> boo
     return hs.commit(name, server_config, writes, [])
 
 
+def _has_endpoint(cfg: Mapping[str, Any]) -> bool:
+    return bool(cfg.get("url") or cfg.get("command"))
+
+
+def needs_repair(entry: Mapping[str, Any]) -> bool:
+    """The app's rollback after a failed sign-in removes the bot entry but the shared definition stays, so a retry finds an off or endpointless entry."""
+    from tools.mcp_tool_common import mcp_server_enabled
+
+    return not _has_endpoint(entry) or not mcp_server_enabled(dict(entry))
+
+
+def repaired_config(existing: Mapping[str, Any], requested: dict) -> dict | None:
+    """``None`` when the request names a different endpoint: a real name clash, not a retry."""
+    if _has_endpoint(existing) and existing.get("url") != requested.get("url"):
+        return None
+    return {**requested, **{k: v for k, v in existing.items() if k != "enabled"}, "enabled": True}
+
+
+def repair_connector_stub(name: str, cfg: dict) -> dict | None:
+    from hermes_cli.pal_connectors import load_pal_connectors
+
+    if _has_endpoint(cfg):
+        return None
+    entry = next((e for e in load_pal_connectors() if e.id == name and e.mcp_url), None)
+    if entry is None:
+        return None
+    repaired = {"transport": "http", **cfg, "url": entry.mcp_url, "enabled": True}
+    return repaired if add_server(name, repaired, {}) else None
+
+
 def update_server(name: str, entry: dict, params: Mapping[str, Any]) -> tuple[dict | None, Failure | None]:
     """Edit a saved url server (endpoint, auth, headers, client id) → ``(saved entry, None)`` or
     ``(None, (code, message))``. Everything is validated before the first write so a refused edit
