@@ -9,12 +9,14 @@ struct ClarifyCard: View {
     let answer: (String) -> Void
 
     @State private var selection: Set<Int> = []
-    @State private var typingOther = false
     @State private var otherText = ""
     @FocusState private var otherFocused: Bool
 
     private var isMulti: Bool { prompt.multiSelect == true }
     private var question: String { prompt.question ?? String(localized: "Question") }
+    private var typedAnswer: String? {
+        ClarifyAnswer.compose(choices: prompt.choices, selection: [], typed: otherText, multiSelect: false)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -28,21 +30,13 @@ struct ClarifyCard: View {
                 .accessibilityAddTraits(selection.contains(index) ? .isSelected : [])
                 .accessibilityIdentifier("clarifyChoice-\(index)")
             }
-            Button { openOther() } label: {
-                ClarifyRow(letter: ClarifyRow.letter(prompt.choices.count), text: String(localized: "Something else"), style: typingOther ? .chosen : .freeText)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text(verbatim: "\(ClarifyRow.letter(prompt.choices.count)), \(String(localized: "Something else"))"))
-            .accessibilityHint(Text("Type your own answer"))
-            .accessibilityAddTraits(typingOther ? .isSelected : [])
-            .accessibilityIdentifier("clarifyOther")
-            if typingOther {
-                otherField
+            ClarifyInputRow(letter: ClarifyRow.letter(prompt.choices.count), text: $otherText, focused: $otherFocused, hasText: typedAnswer != nil) {
+                submitTyped()
             }
             if isMulti, !prompt.choices.isEmpty {
-                Button("Confirm and continue") { confirm() }
+                Button("Confirm and continue") { submitTyped() }
                     .buttonStyle(.glass(PalGlass.style(interactive: false, colorScheme: colorScheme)))
-                    .disabled(selection.isEmpty)
+                    .disabled(composedAnswer == nil)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
                     .accessibilityIdentifier("clarifyConfirm")
@@ -57,56 +51,22 @@ struct ClarifyCard: View {
         .accessibilityIdentifier("clarifyCard")
     }
 
-    private var trimmedOther: String { otherText.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    private var otherField: some View {
-        VStack(alignment: .trailing, spacing: 8) {
-            TextField("Type your answer", text: $otherText)
-                .textFieldStyle(.roundedBorder)
-                .focused($otherFocused)
-                .submitLabel(.send)
-                .onSubmit { sendOther() }
-                .onAppear { otherFocused = true }
-                .accessibilityIdentifier("clarifyOtherField")
-            HStack(spacing: 12) {
-                Button("Cancel") { closeOther() }
-                    .accessibilityIdentifier("clarifyOtherCancel")
-                Button("Send") { sendOther() }
-                    .buttonStyle(.glass(PalGlass.style(interactive: false, colorScheme: colorScheme)))
-                    .disabled(trimmedOther.isEmpty)
-                    .accessibilityIdentifier("clarifyOtherSend")
-            }
-        }
-        .padding(.top, 4)
+    private var composedAnswer: String? {
+        ClarifyAnswer.compose(choices: prompt.choices, selection: selection, typed: otherText, multiSelect: isMulti)
     }
 
-    private func openOther() {
-        typingOther = true
-    }
-
-    private func closeOther() {
-        typingOther = false
-        otherFocused = false
-    }
-
-    private func sendOther() {
-        let text = trimmedOther
-        guard !text.isEmpty else { return }
-        answer(text)
+    private func submitTyped() {
+        guard let composed = composedAnswer else { return }
+        answer(composed)
     }
 
     private func tap(_ index: Int, _ choice: String) {
-        closeOther()
         if isMulti {
             if selection.contains(index) { selection.remove(index) } else { selection.insert(index) }
         } else {
             selection = [index]
             answer(choice)
         }
-    }
-
-    private func confirm() {
-        answer(selection.sorted().map { String($0 + 1) }.joined(separator: ","))
     }
 }
 
@@ -128,7 +88,7 @@ struct ClarifyAnsweredCard: View {
         VStack(alignment: .leading, spacing: 4) {
             ClarifyHeadline(text: question)
             if picks.isEmpty {
-                ClarifyRow(letter: nil, text: String(localized: "Skipped"), style: .freeText)
+                ClarifyRow(letter: nil, text: String(localized: "Skipped"), style: .choice)
             } else {
                 ForEach(Array(picks.enumerated()), id: \.offset) { _, pick in
                     ClarifyRow(letter: nil, text: pick, style: .chosen)
@@ -157,38 +117,59 @@ private struct ClarifyHeadline: View {
     }
 }
 
-private struct ClarifyRow: View {
-    enum Style { case choice, chosen, freeText }
-
+private struct ClarifyRowShell<Content: View>: View {
     let letter: String?
-    let text: String
-    let style: Style
-
-    @Environment(\.hermesTheme) private var theme
-    @ScaledMetric(relativeTo: .body) private var badgeSide: CGFloat = 26
+    let style: ClarifyRowStyle
+    @ViewBuilder let content: Content
 
     var body: some View {
         HStack(spacing: 14) {
-            badge
-            Text(text)
-                .font(.body)
-                .foregroundStyle(Color(style == .freeText ? theme.palette.textSecondary : theme.palette.textPrimary))
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            ClarifyBadge(letter: letter, style: style)
+            content
         }
         .padding(.vertical, 6)
         .frame(minHeight: ChatMetrics.minimumHitTarget)
         .contentShape(Rectangle())
     }
+}
 
-    private var badge: some View {
-        let chosen = style == .chosen
-        return ZStack {
+private struct ClarifyRow: View {
+    let letter: String?
+    let text: String
+    let style: ClarifyRowStyle
+
+    @Environment(\.hermesTheme) private var theme
+
+    var body: some View {
+        ClarifyRowShell(letter: letter, style: style) {
+            Text(text)
+                .font(.body)
+                .foregroundStyle(Color(style.text(in: theme.palette)))
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    static func letter(_ index: Int) -> String {
+        String(Character(UnicodeScalar(UInt8(ascii: "A") + UInt8(index % 26))))
+    }
+}
+
+private struct ClarifyBadge: View {
+    let letter: String?
+    let style: ClarifyRowStyle
+
+    @Environment(\.hermesTheme) private var theme
+    @ScaledMetric(relativeTo: .body) private var badgeSide: CGFloat = 26
+
+    var body: some View {
+        let fill = style.badgeFill(in: theme.palette)
+        ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(chosen ? Color(theme.palette.chipSelectedFill) : PalTokens.hairline)
+                .fill(fill.map { Color($0) } ?? PalTokens.hairline)
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .strokeBorder(Color(theme.palette.cardStroke), lineWidth: chosen ? 0 : 1)
-            if chosen, letter == nil {
+                .strokeBorder(Color(theme.palette.cardStroke), lineWidth: fill == nil ? 1 : 0)
+            if style == .chosen, letter == nil {
                 Image(systemName: "checkmark")
                     .font(.caption.weight(.bold))
             } else if let letter {
@@ -196,13 +177,44 @@ private struct ClarifyRow: View {
                     .font(.footnote.weight(.medium))
             }
         }
-        .foregroundStyle(Color(chosen ? theme.palette.chipSelectedText : theme.palette.textSecondary))
+        .foregroundStyle(Color(style.badgeText(in: theme.palette)))
         .frame(width: badgeSide, height: badgeSide)
         .accessibilityHidden(true)
     }
+}
 
-    static func letter(_ index: Int) -> String {
-        String(Character(UnicodeScalar(UInt8(ascii: "A") + UInt8(index % 26))))
+private struct ClarifyInputRow: View {
+    let letter: String
+    @Binding var text: String
+    var focused: FocusState<Bool>.Binding
+    let hasText: Bool
+    let onSubmit: () -> Void
+
+    @Environment(\.hermesTheme) private var theme
+
+    var body: some View {
+        let style: ClarifyRowStyle = hasText || focused.wrappedValue ? .chosen : .choice
+        let placeholder = String(localized: "Something else")
+        ClarifyRowShell(letter: letter, style: style) {
+            TextField(
+                "",
+                text: $text,
+                prompt: Text(placeholder).foregroundStyle(Color(style.placeholder(in: theme.palette)))
+            )
+            .textFieldStyle(.plain)
+            .focusEffectDisabled()
+            .font(.body)
+            .foregroundStyle(Color(style.typedText(in: theme.palette)))
+            .focused(focused)
+            .submitLabel(.send)
+            .onSubmit(onSubmit)
+            .accessibilityLabel(Text(verbatim: placeholder))
+            .accessibilityIdentifier("clarifyOtherField")
+        }
+        .onTapGesture { focused.wrappedValue = true }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(style == .chosen ? .isSelected : [])
+        .accessibilityIdentifier("clarifyOther")
     }
 }
 

@@ -3,13 +3,15 @@ import XCTest
 @MainActor
 final class ClarifyOtherAnswerE2ETests: E2ETestCase {
     @discardableResult
-    private func openOther(_ app: XCUIApplication) -> XCUIElement {
-        app.buttons["clarifyOther"].hit()
+    private func focusOther(_ app: XCUIApplication) -> XCUIElement {
         let field = app.textFields["clarifyOtherField"]
-        waitFor(field, timeout: 10, "Something else opens a field in the card")
+        waitFor(field, timeout: 10, "Something else is an inline input in the card")
+        XCTAssertEqual(field.placeholderValue, "Something else", "the input carries the placeholder")
+        app.descendants(matching: .any)["clarifyOther"].hit()
         let focused = NSPredicate { element, _ in ((element as? XCUIElement)?.value(forKey: "hasKeyboardFocus") as? Bool) == true }
         let focus = expectation(for: focused, evaluatedWith: field)
         wait(for: [focus], timeout: 5)
+        XCTAssertTrue(app.descendants(matching: .any)["clarifyOther"].isSelected, "focus shows the chosen treatment, not a system ring")
         return field
     }
 
@@ -23,7 +25,7 @@ final class ClarifyOtherAnswerE2ETests: E2ETestCase {
         signInIfNeeded(app)
         openBot(app, "bot-beta")
         ask(app, "CLARIFY other " + UUID().uuidString.prefix(4))
-        openOther(app)
+        focusOther(app)
         shot(app, "chat-clarify-other-field")
         app.typeText("mint\n")
         waitFor(bubbles(app, "assistantBubble", containing: "Got it, mint").firstMatch, timeout: 60, "typed answer completes the turn")
@@ -31,26 +33,21 @@ final class ClarifyOtherAnswerE2ETests: E2ETestCase {
         XCTAssertEqual(bubbles(app, "userBubble", containing: "mint").count, 0, "typed answer is not a new chat message")
     }
 
-    func test2BlankIsNotSentAndOptionsCloseTheField() throws {
+    func test2BlankIsNotSentAndTypedTextJoinsSelections() throws {
         let app = launch()
         signInIfNeeded(app)
         openBot(app, "bot-beta")
         ask(app, "CLARIFYMULTI other " + UUID().uuidString.prefix(4))
         app.buttons["clarifyChoice-0"].hit()
-        openOther(app)
-        XCTAssertFalse(app.buttons["clarifyOtherSend"].isEnabled, "Send is off while the field is blank")
+        focusOther(app)
         app.typeText("   \n")
         XCTAssertFalse(app.descendants(matching: .any)["clarifyAnswered"].waitForExistence(timeout: 3), "a blank answer is not sent")
         app.buttons["clarifyChoice-1"].hit()
-        waitGone(app.textFields["clarifyOtherField"], timeout: 5, "choosing an option closes the field")
         XCTAssertTrue(app.buttons["clarifyChoice-0"].isSelected, "earlier selection kept")
         XCTAssertTrue(app.buttons["clarifyChoice-1"].isSelected, "new selection made")
-        openOther(app)
-        app.buttons["clarifyOtherCancel"].hit()
-        waitGone(app.textFields["clarifyOtherField"], timeout: 5, "Cancel closes the field")
-        XCTAssertTrue(app.buttons["clarifyChoice-0"].isSelected && app.buttons["clarifyChoice-1"].isSelected, "Cancel keeps the selections")
-        openOther(app).typeText("mint")
-        app.buttons["clarifyOtherSend"].hit()
+        focusOther(app).typeText("mint")
+        XCTAssertTrue(app.descendants(matching: .any)["clarifyOther"].isSelected, "typing marks the row chosen")
+        app.buttons["clarifyConfirm"].hit()
         waitFor(bubbles(app, "assistantBubble", containing: "Got it, mint").firstMatch, timeout: 60, "multi-select typed answer completes the turn")
     }
 
@@ -59,11 +56,11 @@ final class ClarifyOtherAnswerE2ETests: E2ETestCase {
         signInIfNeeded(app)
         openBot(app, "bot-beta")
         ask(app, "CLARIFYBATCH other " + UUID().uuidString.prefix(4))
-        openOther(app)
+        focusOther(app)
         app.typeText("mint\n")
         waitFor(app.staticTexts["Which size?"], timeout: 60, "second question of the batch")
-        openOther(app).typeText("huge")
-        app.buttons["clarifyOtherSend"].hit()
+        focusOther(app)
+        app.typeText("huge\n")
         waitFor(bubbles(app, "assistantBubble", containing: "Got it, mint, huge").firstMatch, timeout: 60, "both typed answers reach the turn")
     }
 }
