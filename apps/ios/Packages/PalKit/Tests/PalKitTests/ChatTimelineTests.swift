@@ -82,12 +82,12 @@ struct ChatTimelineTests {
         #expect(result.map(\.showsNewDivider) == [true, false])
     }
 
-    @Test func botMessagesAndNotificationsCountAsUnread() {
+    @Test func botMessagesCountAsUnreadAndInternalNoticesAreDropped() {
         var bot = user("b", at: 500)
         bot.inbound = .botMessage(BotSender(name: "A", handle: "a"), body: "hi")
         var done = user("c", at: 600)
-        done.inbound = .systemNotification
-        #expect(entries([assistant("a", at: 0), bot, done], lastSeen: Self.base.addingTimeInterval(100)).map(\.showsNewDivider) == [false, true, false])
-        #expect(entries([assistant("a", at: 0), done], lastSeen: Self.base.addingTimeInterval(100)).map(\.showsNewDivider) == [false, true])
+        done.inbound = .internalNotice
+        #expect(entries([assistant("a", at: 0), bot, done], lastSeen: Self.base.addingTimeInterval(100)).map(\.showsNewDivider) == [false, true])
+        #expect(entries([assistant("a", at: 0), done], lastSeen: Self.base.addingTimeInterval(100)).map(\.showsNewDivider) == [false])
     }
 }

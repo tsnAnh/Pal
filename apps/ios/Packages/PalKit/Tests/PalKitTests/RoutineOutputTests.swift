@@ -63,10 +63,10 @@ struct RoutineOutputTests {
         #expect(body.count >= 29_000)
     }
 
-    @Test func noticesWithoutABodyKeepTheBell() {
-        #expect(kind("tick", kind: "internal_notification") == .systemNotification)
-        #expect(kind("", kind: "routine_output", metadata: ["job_name": "j"]) == .systemNotification)
-        #expect(kind(wrap("j", ""), kind: "internal_notification") == .systemNotification)
+    @Test func noticesWithoutABodyAreInternal() {
+        #expect(kind("tick", kind: "internal_notification") == .internalNotice)
+        #expect(kind("", kind: "routine_output", metadata: ["job_name": "j"]) == .internalNotice)
+        #expect(kind(wrap("j", ""), kind: "internal_notification") == .internalNotice)
     }
 
     @Test func peopleAreUnchanged() {
