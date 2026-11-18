@@ -85,6 +85,9 @@ struct ChatRowView: View {
             ConnectionRequestCard(card: card, answering: model.answeringConnections) { target, decision in
                 model.answerConnection(opID: card.operation.opID, target: target.name, decision: decision)
             }
+        case .routine(let routine):
+            RoutineOutputRow(routine: routine, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+                .environment(\.messageActions, messageActions(for: routine.text))
         case .notice(let notice):
             NoticeRow(notice: notice, highlight: findQuery, isCurrentMatch: isCurrentMatch)
         case .botThread(let link):
@@ -102,19 +105,34 @@ struct AssistantBubble: View {
     var images: [ImageReference] = []
     var files: [FileReference] = []
     var filesPending = false
+    var failureLead: String?
     let highlight: String
     let isCurrentMatch: Bool
     var isStreaming: Bool = false
 
     @Environment(\.chatFileOpener) private var openFile
 
+    @ViewBuilder
+    private var bubbleContent: some View {
+        let markdown = document ?? MarkdownDocument(parsing: text, isStreaming: isStreaming)
+        if let failureLead {
+            VStack(alignment: .leading, spacing: 8) {
+                FailureLead(text: failureLead, highlight: highlight, isCurrentMatch: isCurrentMatch)
+                if !markdown.blocks.isEmpty {
+                    MarkdownView(document: markdown, highlight: highlight, isCurrentMatch: isCurrentMatch)
+                }
+            }
+        } else {
+            MarkdownView(document: markdown, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             if !images.isEmpty { ChatImageGrid(images: images) }
             if !text.isEmpty {
                 ChatBubble(style: BubblePalette.agentBubble) {
-                    MarkdownView(document: document ?? MarkdownDocument(parsing: text, isStreaming: isStreaming), highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
-                        .bubbleTextSelection()
+                    bubbleContent.bubbleTextSelection()
                 }
                 .bubbleAccessibility(text: text, identifier: "assistantBubble")
                 .messageActions(side: .assistant)
