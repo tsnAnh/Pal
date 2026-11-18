@@ -10,9 +10,13 @@ let package = Package(
     products: [
         .library(name: "PalDesign", targets: ["PalDesign"]),
     ],
+    dependencies: [
+        .package(path: "../PalKit"),
+    ],
     targets: [
         .target(
             name: "PalDesign",
+            dependencies: [.product(name: "PalDiagnostics", package: "PalKit")],
             resources: [.process("Resources")],
             swiftSettings: [.swiftLanguageMode(.v6)]
         ),

@@ -34,7 +34,7 @@ public final class CacheStore: Sendable {
     }
 
     public func load<Value: Codable & Sendable>(_ type: Value.Type, name: String, account: String) -> Value? {
-        queue.sync { read(type, name: name, account: account) }
+        queue.sync { PalPerf.interval("disk.cache.load") { read(type, name: name, account: account) } }
     }
 
     private func read<Value: Codable & Sendable>(_ type: Value.Type, name: String, account: String) -> Value? {

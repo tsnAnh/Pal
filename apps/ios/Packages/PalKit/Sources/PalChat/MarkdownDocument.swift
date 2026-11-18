@@ -1,4 +1,5 @@
 import Foundation
+import PalDiagnostics
 
 public struct ListMarker: Sendable, Hashable {
     public enum Style: Sendable, Hashable {
@@ -69,6 +70,7 @@ public struct MarkdownDocument: Sendable, Equatable {
     public private(set) var blocks: [MarkdownBlock]
 
     public init(parsing source: String, isStreaming: Bool = false) {
+        let perf = PalPerf.begin("markdown.parse"); defer { perf.end() }
         guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             blocks = []
             return

@@ -187,6 +187,7 @@ public actor RosterLiveFeed {
     }
 
     private func refresh(_ connection: GatewayConnection) async {
+        let perf = PalPerf.begin("roster.refetch"); defer { perf.end() }
         do {
             let snapshot = try await RosterSnapshotFetcher.fetch(on: connection)
             busy = snapshot.live.values.contains { state in

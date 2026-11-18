@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import PalDesign
+import PalDiagnostics
 import SwiftUI
 
 @MainActor
@@ -115,6 +116,10 @@ struct MacShellView<Destination: View>: View {
     }
 
     var body: some View {
+        PalPerf.interval("shell.body") { shellContent }
+    }
+
+    private var shellContent: some View {
         HStack(spacing: 0) {
             MacSidebar(roster: roster, connection: connection, router: router)
                 .frame(width: shell.isCompact ? MacMetrics.railWidth : sidebarWidth)

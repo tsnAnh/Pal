@@ -91,6 +91,7 @@ struct PalApp: App {
                 }
                 .task { await model.restore() }
                 .task { await offers.listen() }
+                .task { await FrameMonitor.startIfRequested() }
                 .task {
                     appDelegate.push.attach(presence: model.presence) { target in
                         router.openChat(from: target, in: roster)
