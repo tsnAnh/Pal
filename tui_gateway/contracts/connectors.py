@@ -349,6 +349,62 @@ class ConnectorSetupCheckResult(Result):
     account: str | None = None
 
 
+class SetupProgressDevice(WireEnum):
+    mac = "mac"
+    iphone = "iphone"
+    ipad = "ipad"
+
+
+class SetupProgressGetParams(ProfileParams):
+    connector: str | None = None
+    bot: str | None = None
+
+
+class SetupProgressSetParams(ProfileParams):
+    connector: str
+    bot: str | None = None
+    step_id: str
+    completed: list[str]
+    device: SetupProgressDevice
+    finished: bool = False
+
+
+class SetupProgressRecordRow(Result):
+    connector: str
+    bot: str | None = None
+    step_id: str
+    completed: list[str]
+    device: SetupProgressDevice
+    updated_at: float
+
+
+class SetupProgressGetResult(Result):
+    records: list[SetupProgressRecordRow]
+
+
+class SetupProgressSetResult(Result):
+    record: SetupProgressRecordRow | None = None
+
+
+method(
+    "connectors.setup.progress.get",
+    params=SetupProgressGetParams,
+    result=SetupProgressGetResult,
+    doc="Where each connector's guided setup stands, newest first: the step to resume at, the step ids already "
+        "done and the kind of device that last moved it. connector and bot narrow the list. Holds step ids only, "
+        "never a value the owner pasted. A connection that is not the owner's gets an empty list.",
+)
+
+method(
+    "connectors.setup.progress.set",
+    params=SetupProgressSetParams,
+    result=SetupProgressSetResult,
+    doc="Owner only. Record that the guided setup of connector (and bot, where the setup is per bot) is at step_id "
+        "with completed done. Every id must be a short slug; anything else is refused. finished true removes the "
+        "record and answers with none.",
+)
+
+
 class DiscordTokenParams(ProfileParams):
     item: str
 

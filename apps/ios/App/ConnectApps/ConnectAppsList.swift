@@ -11,6 +11,7 @@ struct ConnectAppsList: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                resumeBanner
                 FloatingSearchBar(
                     text: $model.query,
                     prompt: String(localized: "Search \(model.catalog.apps.count) apps"),
@@ -28,6 +29,15 @@ struct ConnectAppsList: View {
         }
         .scrollIndicators(.automatic)
         .scrollDismissesKeyboard(.interactively)
+    }
+
+    @ViewBuilder
+    private var resumeBanner: some View {
+        if model.trimmedQuery.isEmpty, let offer = model.resumeOffer {
+            SetupResumeBanner(offer: offer) { model.continueSetup(offer) }
+                .padding(.horizontal, PalMetrics.screenMargin)
+                .padding(.bottom, PalMetrics.captionToCardGap)
+        }
     }
 
     @ViewBuilder

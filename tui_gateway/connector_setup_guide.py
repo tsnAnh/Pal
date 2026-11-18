@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from gateway import connector_setup_checks as checks
+from gateway import connector_setup_progress as progress_mod
 from gateway import oauth_client_setup as setup_mod
 from hermes_cli.pal_connectors import ConnectionMethod, PalConnector, SetupStep
 from tui_gateway.contracts.connectors import (
@@ -15,6 +16,10 @@ from tui_gateway.contracts.connectors import (
     SetupLinkRow,
     SetupProblemKind,
     SetupProgress,
+    SetupProgressDevice,
+    SetupProgressGetResult,
+    SetupProgressRecordRow,
+    SetupProgressSetResult,
     SetupStepRow,
 )
 
@@ -157,3 +162,33 @@ def run_setup_check(request) -> ConnectorSetupCheckResult:
         slug=entry.id, ok=outcome.ok, reason=ConnectorErrorReason[outcome.reason] if outcome.reason else None,
         message=outcome.message, account=outcome.account)
 
+
+
+def _progress_row(record) -> SetupProgressRecordRow:
+    return SetupProgressRecordRow(
+        connector=record.connector, bot=record.bot, step_id=record.step_id, completed=list(record.completed),
+        device=SetupProgressDevice(record.device), updated_at=record.updated_at)
+
+
+def get_setup_progress(request) -> SetupProgressGetResult:
+    from tui_gateway.ws_legacy_fallback import connection_profile_home
+    if connection_profile_home() is not None:
+        return SetupProgressGetResult(records=[])
+    store = progress_mod.build_store()
+    return SetupProgressGetResult(records=[_progress_row(r) for r in store.get(request.connector, request.bot)])
+
+
+def set_setup_progress(request) -> SetupProgressSetResult:
+    from tui_gateway.ws_legacy_fallback import connection_profile_home
+    if connection_profile_home() is not None:
+        raise SetupCheckRpcError(4030, ConnectorErrorReason.not_owner, "Only the owner can set up this app.")
+    store = progress_mod.build_store()
+    try:
+        if request.finished:
+            store.clear(request.connector, request.bot)
+            return SetupProgressSetResult(record=None)
+        record = store.set(request.connector, request.bot, request.step_id, request.completed, request.device.value)
+    except progress_mod.InvalidProgress:
+        raise SetupCheckRpcError(4000, ConnectorErrorReason.invalid_params,
+                                 "Setup progress holds step ids only.") from None
+    return SetupProgressSetResult(record=_progress_row(record))

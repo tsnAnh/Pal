@@ -15,7 +15,8 @@ extension ConnectAppsModel {
         let flow = DiscordFlowRunner(service: service, entry: entry)
         discordFlow = DiscordFlowSession(
             model: StepFlowModel(
-                engine: engine, runner: { step, values in try await flow.run(step, values: values) },
+                engine: engine, store: GatewayStepFlowProgressStore(service: service, device: .current, gatewaySaved: entry.setupProgress?.saved ?? []),
+                runner: { step, values in try await flow.run(step, values: values) },
                 classify: { flow.classify($0) }, prepare: { try await flow.prepare($0) }
             )
         )

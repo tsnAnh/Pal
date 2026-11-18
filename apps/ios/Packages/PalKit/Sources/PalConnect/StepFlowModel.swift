@@ -9,6 +9,7 @@ public final class StepFlowModel {
     public typealias Preparer = @Sendable (FlowStep) async throws -> FlowStep.Kind?
 
     public private(set) var engine: StepFlowEngine
+    public private(set) var continuation: SetupContinuation?
     public var openPage: @MainActor (URL) -> Void = { _ in }
     public var recovery: (@MainActor (SetupStatus) async -> Void)?
 
@@ -54,6 +55,7 @@ public final class StepFlowModel {
         if engine.index == 0, let progress = await store.load(flowID: engine.flowID),
            let restored = StepFlowEngine(flowID: engine.flowID, steps: engine.steps, resume: progress) {
             engine = restored
+            continuation = SetupContinuation(device: progress.continuedFrom, stepID: restored.current.id, doneSteps: restored.stepNumber - 1)
         }
         await runAutomaticSteps()
     }
