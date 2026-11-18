@@ -92,6 +92,9 @@ extension OwnerSetupModel {
         case .failed(let reason):
             pasteSession = nil
             throw ConnectAppsError.signInFailed(reason)
+        case .adminApprovalPending:
+            pasteSession = nil
+            throw ConnectAppsError.adminApprovalPending
         }
     }
 }
