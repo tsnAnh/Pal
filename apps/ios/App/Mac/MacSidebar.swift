@@ -24,7 +24,7 @@ struct MacSidebar: View {
     }
 
     private var expanded: some View {
-        ZStack(alignment: .top) {
+        VStack(spacing: 0) {
             let hero = MacShell.hero(in: roster)
             ScrollView {
                 VStack(spacing: 3) {
@@ -45,27 +45,17 @@ struct MacSidebar: View {
                 }
                 .padding(.horizontal, 11)
                 .padding(.top, MacMetrics.topBarHeight + 7)
-                .padding(.bottom, MacMetrics.footerHeight + 8)
+                .padding(.bottom, 8)
             }
             .scrollIndicators(.never)
-            .mask(
-                VStack(spacing: 0) {
-                    Rectangle()
-                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                        .frame(height: MacMetrics.footerHeight - 6)
-                }
-            )
             .accessibilityIdentifier("rosterScreen")
             .overlay {
                 if roster.isLoaded, roster.bots.isEmpty {
                     ContentUnavailableView("No bots yet", systemImage: "face.smiling", description: Text("Bots you create appear here."))
                 }
             }
-            VStack(spacing: 0) {
-                topBar
-                Spacer(minLength: 0)
-                MacSidebarFooter(connection: connection, roster: roster, router: router)
-            }
+            .overlay(alignment: .top) { topBar }
+            MacSidebarFooter(connection: connection, roster: roster, router: router)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sidebarExpanded")
@@ -442,6 +432,8 @@ private struct MacSidebarFooter: View {
         .padding(.leading, 15)
         .padding(.trailing, 14)
         .frame(height: MacMetrics.footerHeight)
+        .background(PalTokens.sidebar)
+        .overlay(alignment: .top) { PalHairline() }
     }
 }
 
