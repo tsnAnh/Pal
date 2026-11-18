@@ -236,32 +236,3 @@ public struct ConnectSectionHeader: View {
         .contentShape(Rectangle())
     }
 }
-
-public struct ConnectedCountButton: View {
-    public let title: String
-    public let accessibilityIdentifier: String
-    public let action: () -> Void
-
-    @Environment(\.hermesTheme) private var theme
-
-    public init(_ title: String, accessibilityIdentifier: String, action: @escaping () -> Void) {
-        self.title = title
-        self.accessibilityIdentifier = accessibilityIdentifier
-        self.action = action
-    }
-
-    public var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 18.5))
-                .foregroundStyle(Color(theme.palette.textPrimary))
-                .padding(.horizontal, 16)
-                .frame(height: PalMetrics.circleButtonDiameter)
-                .background(Color(theme.palette.circleButtonFill), in: Capsule())
-                .overlay(Capsule().strokeBorder(Color(theme.palette.circleButtonStroke), lineWidth: PalMetrics.circleButtonStrokeWidth))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier(accessibilityIdentifier)
-    }
-}

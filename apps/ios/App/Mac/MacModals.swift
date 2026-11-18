@@ -112,7 +112,7 @@ struct MacModalHost: View {
             }
         case .connectApps:
             MacModalPanel(width: 825, height: 643, identifier: "connectAppsPanel", closeIdentifier: "connectApps-close", close: { router.dismissSheet() }) {
-                MacConnectApps(
+                ConnectAppsScreen(
                     model: ConnectAppsModel(
                         connection: connection,
                         pool: hostPool,
@@ -122,7 +122,7 @@ struct MacModalHost: View {
                         bots: roster.customConnectorBots,
                         currentBot: roster.currentBotName(forProfile: router.connectAppsProfile)
                     )
-                )
+                ) { router.dismissSheet() }
                 .id(router.connectAppsProfile ?? "")
             }
         case .kanban:
