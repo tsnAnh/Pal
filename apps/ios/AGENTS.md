@@ -42,6 +42,26 @@ Any unit that adds or changes what a person sees in the Pal app (macOS, iPhone, 
 - A coding session cannot ask the owner, so the gate sits before the session is launched. A session launched for a UI change with no approved mockup in its brief makes no UI code: it writes the mockup file instead and reports.
 - Exempt: changes with no visible effect (logic, gateway, data, CI); the brief says so.
 
+## Rule 5: Liquid Glass design rules are lint-enforced
+
+Glass is a control and navigation layer floating above content, never the content layer. Run `python scripts/check --only swift-glass,swift-nav-chrome,swift-bot-tint` on every UI change before calling it ready; a finding names the file, line, rule id and the fix. Today's findings sit in `apps/ios/.glass-lint-baseline.json`: new code never adds to it, units that fix a finding delete its entry (`python scripts/ci/check_swift_glass.py --write-baseline`). Exception: `// glass-lint: ok` on the line.
+
+| Apple rule | Pal decision | Lint id |
+|---|---|---|
+| Custom glass only sparingly, via `glassEffect(_:in:)` | `glassEffect` and `NSGlassEffectView` live in PalDesign only; screens use `PalGlass`, `.palGlass(...)` or the system `.glass` styles | `glass-hand-rolled` |
+| Tint marks prominence, never darkens | No black or dark tint on glass on iOS, iPadOS or Mac (PAL-3 removes `PalGlass.darkTint`) | `glass-dark-tint` |
+| Buttons take system styles | Neutral Liquid Glass capsule buttons, no blue; `.glass`, and `.glassProminent` for the one primary action. No `PillButton`, `PillButtonStyle`, `.pill(`, `.palPill`, blue Button (PAL-8 adds the capsule style) | `glass-pill-button` |
+| Group nearby custom glass in `GlassEffectContainer` | Two or more `.palGlass` in one view sit in one container | `glass-container` |
+| Sheets: standard Close on the leading side | `SheetChrome` hosts every sheet; Close is `Button(role: .close)` on the leading side; bottom inset comes from SheetChrome, never `.padding(.bottom, N)` | `glass-sheet-chrome`, `swift-nav-chrome` |
+| Search is `.searchable` | `.searchable`, the plain system field or PalDesign `FloatingSearchBar`; no bezel, border, background or custom search view | `glass-search-field` |
+| Bars over scrolling content use system insets (`safeAreaBar`, scroll edge effect) | A bar over a ScrollView uses `safeAreaInset` or `contentMargins` (measured height) and owns a background; no overlay or ZStack with fixed padding (PAL-4) | `glass-floating-bar` |
+| System colours with light, dark and increased-contrast variants | Colours come from `PalTokens`, `theme.palette` or system colours; no raw hex, `Color(red:`, `Color(white:` in `App/` | `glass-raw-color` |
+| Bot accents stay on small shapes | Surfaces use the neutral palette | `swift-bot-tint` |
+| One design system | Mac and iOS share PalDesign components; no Electron (`apps/desktop` is not Pal) | review |
+| Design first | UI changes start from an owner-approved mockup (Rule 4) | review |
+
+Apple sources: HIG Materials, Toolbars, Search fields, Color; "Adopting Liquid Glass"; "Applying Liquid Glass to custom views"; `ButtonRole.close`; WWDC25 219, 323, 356. Reduce Transparency and Increase Contrast are automatic for system glass: never branch on them to swap glass.
+
 ## Tests
 
 - `swift test` in `apps/ios/Packages/PalKit` covers `ConnectedServices` and the source scan.
