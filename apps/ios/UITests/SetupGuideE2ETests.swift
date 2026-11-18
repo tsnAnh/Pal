@@ -116,7 +116,7 @@ final class SetupGuideE2ETests: ConnectAppsTestCase {
         submit(app).hit()
         waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
         openedLink(app, prefix: "https://accounts.google.com/")
-        waitLabel(button, contains: "Remove", timeout: 45)
+        waitLabel(button, equals: "Connected", timeout: 45)
         shot(app, "setup-guide-google-connected")
     }
 
@@ -133,7 +133,7 @@ final class SetupGuideE2ETests: ConnectAppsTestCase {
 
     func test3GitHubChecksTheTokenShapeThenTheTokenAndSavesIt() throws {
         let app = launchConnectApps(extraArguments: ["-hermes-test-oauth-client"])
-        let button = openGuide(app, name: "GitHub", slug: "github", action: "Connect")
+        let button = openGuide(app, name: "GitHub", slug: "github", action: "Set up")
         expectStep(app, "token_page", "1 of 2")
         XCTAssertEqual(element(app, "setupGuideCopy-0Value").label, "Pal", "the token name is ready to copy")
         element(app, "setupGuideLink-0").hit()
@@ -174,7 +174,7 @@ final class SetupGuideE2ETests: ConnectAppsTestCase {
         waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
         openedLink(app, prefix: authorize)
         returnLoopbackRedirect(app)
-        waitLabel(button, contains: "Remove", timeout: 45)
+        waitLabel(button, equals: "Connected", timeout: 45)
         shot(app, "setup-guide-\(slug)-connected")
     }
 
@@ -213,7 +213,7 @@ final class SetupGuideE2ETests: ConnectAppsTestCase {
         waitGone(element(app, "setupGuide"), timeout: 30, "guide closes after saving")
         openedLink(app, prefix: "https://www.canva.com/api/oauth/authorize")
         returnLoopbackRedirect(app)
-        waitLabel(button, contains: "Remove", timeout: 45)
+        waitLabel(button, equals: "Connected", timeout: 45)
         shot(app, "setup-guide-canva-connected")
     }
 

@@ -146,24 +146,26 @@ final class MacModalsE2ETests: BotProfileTestCase {
         waitGone(element(app, "searchScreen"), timeout: 10, "Escape closes the palette")
     }
 
-    func test5ShiftCommandMOpensConnectAppsAndChipsFilter() throws {
+    func test5ShiftCommandMOpensConnectAppsWithOneListOfSections() throws {
         let app = signedInApp()
         app.typeKey("m", modifierFlags: [.command, .shift])
         waitFor(element(app, "connectApps"), timeout: 15, "connect apps modal")
-        waitFor(app.buttons["connectAppsChips-all"], timeout: 30, "All chip")
-        waitFor(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "connectApp-")).firstMatch, timeout: 30, "catalog rows in All")
+        let catalogRows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "connectApp-"))
+        waitFor(catalogRows.firstMatch, timeout: 30, "catalog rows")
         XCTAssertFalse(element(app, "connectAppsSection-iphone").exists, "no device section")
-        waitFor(app.buttons["connectedCountButton"], timeout: 10, "connected count")
-        let category = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND NOT identifier ENDSWITH %@ AND NOT identifier ENDSWITH %@", "connectAppsChips-", "-all", "-iphone")).firstMatch
-        waitFor(category, timeout: 30, "a catalog category chip")
-        let categoryID = category.identifier.replacingOccurrences(of: "connectAppsChips-", with: "")
-        category.hit()
-        let heading = element(app, "connectAppsSectionTitle")
-        waitFor(heading, timeout: 15, "category heading")
-        XCTAssertEqual(heading.label, categoryID)
-        XCTAssertFalse(element(app, "connectAppsSection-iphone").exists, "the category chip narrows the list")
-        let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@ AND NOT identifier ENDSWITH %@", "connectApp-", "-action"))
-        waitFor(rows.firstMatch, timeout: 20, "rows in \(categoryID)")
+        XCTAssertFalse(app.buttons["connectAppsChips-all"].exists, "sections replace the filter chips")
+        XCTAssertFalse(app.buttons["connectedCountButton"].exists, "the Connected section replaces the count button")
+        waitFor(app.staticTexts["Connect Apps"], timeout: 10, "list title")
+        let buttons = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND identifier ENDSWITH %@", "connectApp-", "-action"))
+        let allowed: Set<String> = ["Connect", "Set up", "Connected", "Reconnect"]
+        waitFor(buttons.firstMatch, timeout: 20, "a row action")
+        for index in 0..<min(buttons.count, 12) {
+            XCTAssertTrue(allowed.contains(buttons.element(boundBy: index).label), "row action \(buttons.element(boundBy: index).label)")
+        }
+        let search = app.descendants(matching: .any)["connectAppsSearch"]
+        search.hit()
+        search.typeText("zzzz no such app")
+        waitFor(element(app, "connectAppsNoMatches"), timeout: 10, "no matches")
         closeModal(app, "connectApps-close", gone: "connectApps")
     }
 

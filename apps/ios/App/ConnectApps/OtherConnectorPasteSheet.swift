@@ -3,18 +3,6 @@ import PalConnect
 import PalDesign
 import SwiftUI
 
-enum OtherConnectorCardText {
-    static func summary(_ state: ConnectorCardState, fallback: String) -> String {
-        if case .failed(let reason) = state { return reason }
-        return fallback
-    }
-
-    static func connectTitle(_ state: ConnectorCardState) -> String {
-        if case .failed = state { return String(localized: "Retry") }
-        return String(localized: "Connect")
-    }
-}
-
 struct OtherConnectorPasteSheet: View {
     let model: ConnectAppsModel
     let app: ConnectApp

@@ -318,7 +318,7 @@ struct RootView: View {
                     case .createBot:
                         CreateBotSheet(model: createBot, importer: templateImport, roster: roster, router: router)
                     case .connectApps:
-                        ConnectAppsSheet(
+                        ConnectAppsScreen(
                             model: ConnectAppsModel(
                                 connection: model,
                                 pool: hostPool,

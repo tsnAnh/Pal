@@ -32,29 +32,4 @@ final class ParityConnectApps: ConnectAppsTestCase {
         for _ in 0..<5 { app.scrollViews.firstMatch.swipeUp(velocity: .slow) }
         parityShot("05-connect-apps-scroll2")
     }
-
-    func test07Communication() throws {
-        let app = readyCatalog()
-        tapChip(app, "Communication")
-        parityShot("07-connect-apps-communication")
-    }
-
-    func test08Design() throws {
-        let app = readyCatalog()
-        tapChip(app, "Design and web")
-        parityShot("08-connect-apps-design")
-    }
-
-    func test09Code() throws {
-        let app = readyCatalog()
-        tapChip(app, "Developer tools")
-        parityShot("09-connect-apps-code")
-    }
-
-    func test10YourPlugins() throws {
-        let app = readyCatalog()
-        app.buttons["connectedCountButton"].tap()
-        waitFor(app.descendants(matching: .any)["connectApps-title"], timeout: 10, "Your plugins page")
-        parityShot("10-your-plugins")
-    }
 }

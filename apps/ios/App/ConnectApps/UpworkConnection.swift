@@ -3,24 +3,6 @@ import PalDesign
 import SwiftUI
 
 enum UpworkCardText {
-    static func summary(_ state: ConnectorCardState, fallback: String) -> String {
-        switch state {
-        case .failed(let reason): reason
-        case .reconnect: String(localized: "Sign in again to keep using Upwork")
-        case .connecting: String(localized: "Signing in…")
-        case .connect, .connected: fallback
-        }
-    }
-
-    static func actionTitle(_ state: ConnectorCardState) -> String {
-        switch state {
-        case .connect, .connecting: String(localized: "Connect")
-        case .connected: String(localized: "Manage")
-        case .failed: String(localized: "Try again")
-        case .reconnect: String(localized: "Reconnect")
-        }
-    }
-
     static func status(_ state: ConnectorCardState) -> String {
         switch state {
         case .connect: String(localized: "Not connected")
