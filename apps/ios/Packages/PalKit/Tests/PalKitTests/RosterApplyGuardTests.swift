@@ -131,7 +131,7 @@ struct RosterApplyGuardTests {
 @Suite("Roster refresh schedule")
 struct RosterRefreshScheduleTests {
     private func timing() -> RosterFeedTiming {
-        RosterFeedTiming(idleRefresh: .seconds(60), busyRefresh: .seconds(3), busyBackoffLimit: .seconds(12))
+        RosterFeedTiming(idleRefresh: .seconds(60), busyRefresh: .seconds(3), busyBackoffLimit: .seconds(6))
     }
 
     private func refetches(over seconds: Int, busy: Bool = true, changing: Bool) -> Int {
@@ -148,7 +148,7 @@ struct RosterRefreshScheduleTests {
 
     @Test func busyPollWithUnchangedResultsBacksOffToTheLimit() {
         #expect(refetches(over: 60, changing: true) == 20)
-        #expect(refetches(over: 60, changing: false) == 7)
+        #expect(refetches(over: 60, changing: false) == 11)
     }
 
     @Test func aChangedResultResetsTheBackoff() {
@@ -156,7 +156,7 @@ struct RosterRefreshScheduleTests {
         let calm = snapshot()
         schedule.record(calm)
         for _ in 0..<5 { schedule.record(calm) }
-        #expect(schedule.interval(busy: true) == .seconds(12))
+        #expect(schedule.interval(busy: true) == .seconds(6))
         schedule.record(snapshot(live: ["a": BotLiveState(sessions: [.working])]))
         #expect(schedule.unchangedStreak == 0)
         #expect(schedule.interval(busy: true) == .seconds(3))
@@ -166,7 +166,7 @@ struct RosterRefreshScheduleTests {
         var schedule = RosterRefreshSchedule(timing: timing())
         for _ in 0..<40 { schedule.record(snapshot()) }
         #expect(schedule.interval(busy: false) == .seconds(60))
-        #expect(schedule.interval(busy: true) == .seconds(12))
+        #expect(schedule.interval(busy: true) == .seconds(6))
     }
 }
 

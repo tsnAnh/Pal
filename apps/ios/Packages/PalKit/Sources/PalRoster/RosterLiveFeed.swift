@@ -35,7 +35,7 @@ public struct RosterFeedTiming: Sendable {
         offlineAfterFailures: Int = 2,
         idleRefresh: Duration = .seconds(60),
         busyRefresh: Duration = .seconds(3),
-        busyBackoffLimit: Duration = .seconds(12),
+        busyBackoffLimit: Duration = .seconds(6),
         pingInterval: Duration = .seconds(20)
     ) {
         self.backoff = backoff.isEmpty ? [.seconds(1)] : backoff
