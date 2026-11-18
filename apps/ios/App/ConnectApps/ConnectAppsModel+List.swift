@@ -54,9 +54,7 @@ extension ConnectAppsModel {
 
     func performRowAction(_ app: ConnectApp, state: ConnectRowState) {
         guard state.actionTitle != nil else { return }
-        if app.requiresAppSignIn {
-            upworkApp = app
-        } else if case .custom = app.source {
+        if case .custom = app.source {
             manage(app)
         } else if app.isBotApp {
             showsSlackPicker = true

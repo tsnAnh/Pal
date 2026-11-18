@@ -171,7 +171,12 @@ struct McpGatewayPasteSessionTests {
             _ = try await pasteSession(customService(refusing), preset())
             Issue.record("expected a failure")
         } catch {
-            #expect(error as? ConnectAppsError == .signInFailed(McpSignInFailure.registrationRejected.reason))
+            if case .signInRefused(let failure, let fault)? = error as? ConnectAppsError {
+                #expect(failure == .registrationRejected)
+                #expect(fault.method == "mcp.servers.oauth.start")
+            } else {
+                Issue.record("expected a refused start, got \(error)")
+            }
         }
         #expect(refusing.methods().last == "mcp.servers.remove")
     }
