@@ -78,6 +78,24 @@ def deliver_to_local_chat(home, chat_id, text, *, diagnostic=False):
     return None if admitted else f"local chat {chat_id}: delivery refused: the chat has no committed route"
 
 
+def cron_session_job_id(authority, session_id):
+    """The scheduled job a cron-owned local session of *authority* runs, from its frozen launch policy
+    (None for any other session, or one whose policy is not mounted)."""
+    live = authority.sessions.get(session_id)
+    if getattr(getattr(live, 'source', None), 'user_id', None) != CRON_PRINCIPAL_ID:
+        return None
+    from gateway.config import Platform
+    from gateway.session_local_recovery import local_adapter_map
+    adapter = local_adapter_map(authority).get(Platform.LOCAL)
+    policy = getattr(adapter, 'policies', {}).get(session_id)
+    if getattr(policy, 'source', None) != 'cron':
+        return None
+    try:
+        return json.loads(policy.request_json)['cron_job']['id']
+    except (ValueError, KeyError, TypeError):
+        return None
+
+
 def current_execution():
     return _execution.get()
 
