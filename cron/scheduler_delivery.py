@@ -728,6 +728,7 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
     """
     import hashlib
     import json
+    import time
     import uuid
     from hermes_constants import get_hermes_home
     from hermes_cli.profiles import get_profile_dir
@@ -738,6 +739,9 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
     job_id = job.get("id", "?")
     profile_label = profile or "(own)"
     message = bot_chat_message(job, content)
+    from cron.scheduler_delivery_routine import bot_chat_routine
+    routine = bot_chat_routine(
+        job, content, for_failure=for_failure, finished_at=job.setdefault("_bot_chat_finished_at", time.time()))
     try:
         source_home = get_hermes_home().resolve()
         home = (get_profile_dir(profile) if profile else source_home).resolve()
@@ -777,7 +781,7 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
             if owner is None:
                 return f"bot-chat delivery to profile '{profile_label}' unverified: no canonical Bot Chat"
             # A failure notice rides as ``diagnostic`` so the target's reply stays muted.
-            receipt = deliver_to_live_owner(home, owner, message, delivery_id=key,
+            receipt = deliver_to_live_owner(home, owner, message, delivery_id=key, routine=routine,
                 **({"notification_category": "diagnostic"} if for_failure else {}))
         if (receipt["message"] != message
                 or receipt.get("notification_category", "result") != ("diagnostic" if for_failure else "result")):
