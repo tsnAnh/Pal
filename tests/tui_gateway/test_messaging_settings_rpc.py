@@ -41,7 +41,7 @@ def gateway(monkeypatch):
             row["gateway_running"] = state["running"]
         return rows
 
-    def hot(profile):
+    def hot(profile, platform_id):
         state["hot_calls"].append(profile)
         return state["hot"]
 

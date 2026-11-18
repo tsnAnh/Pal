@@ -106,6 +106,24 @@ def format_ingress_url_lines(urls: dict[str, str], indent: str = "  ") -> list[s
     return [f"{indent}{platform}: {url}" for platform, url in sorted(urls.items())]
 
 
+def reload_platform_live(profile_home: Path, platform_id: str, env_keys: list[str]) -> bool:
+    """True when a live gateway rebuilt ``platform_id``'s adapter for the profile owning ``profile_home``
+    in place (no process restart). The profile's own gateway answers first, then the default root's
+    host gateway, which serves a named profile or is the ``default`` profile itself. False when no
+    gateway answered or it predates the verb. Never raises."""
+    try:
+        from hermes_constants import get_default_hermes_root
+        from gateway.control_socket import reload_gateway_platform
+        for gateway_home in dict.fromkeys([Path(profile_home), get_default_hermes_root()]):
+            answer = reload_gateway_platform(
+                gateway_home, profile_home=profile_home, platform=platform_id, env_keys=env_keys)
+            if isinstance(answer, dict) and answer.get("reloaded") is True:
+                return True
+    except Exception:
+        logger.debug("gateway platform reload failed for %r", platform_id, exc_info=True)
+    return False
+
+
 def notify_multiplexer_profiles_changed(profile_name: str, *, timeout: float = 8.0) -> Optional[list[str]]:
     """Tell the live default multiplexer that ``profiles/`` changed (``profile_name`` was created or
     deleted) so it hot-serves / unroutes it now instead of at its next periodic rescan. Returns the

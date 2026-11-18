@@ -70,7 +70,6 @@ struct SlackTokensView: View {
         switch model.connection {
         case .connected: statusLine(String(localized: "Connected"), "slackStatusConnected")
         case .starting: statusLine(String(localized: "Connecting…"), "slackStatusStarting")
-        case .restartNeeded: statusLine(String(localized: "Restart needed"), "slackStatusRestart")
         case .failed:
             statusLine(String(localized: "Couldn't connect"), "slackStatusFailed")
             if let failure = model.failure {
@@ -192,13 +191,6 @@ struct SlackTokensView: View {
             SetupButton(title: String(localized: "Disconnect"), fillsWidth: true, identifier: "slackDisconnectButton") {
                 model.confirmsDisconnect = true
             }
-        case .restartNeeded:
-            SetupButton(title: String(localized: "Restart now"), kind: .primary, fillsWidth: true, identifier: "slackRestartNowButton") {
-                Task { await model.restartNow() }
-            }
-            SetupButton(title: String(localized: "Check again"), fillsWidth: true, identifier: "slackRecheckButton") {
-                Task { await model.recheck() }
-            }
         case .starting:
             SetupButton(title: String(localized: "Connecting…"), kind: .primary, isBusy: true, fillsWidth: true, identifier: "slackStartingButton") {}
         }
@@ -208,7 +200,6 @@ struct SlackTokensView: View {
         switch activity {
         case .preparing, .checking: String(localized: "Loading")
         case .connecting: String(localized: "Connecting…")
-        case .restarting: String(localized: "Restarting…")
         case .disconnecting: String(localized: "Disconnecting…")
         }
     }

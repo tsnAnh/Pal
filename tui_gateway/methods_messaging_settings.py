@@ -182,7 +182,7 @@ def _(rid, params: dict) -> dict:
                         platform_id, profile_arg or "current", sorted(changes), toggle[1] if toggle else None)
         running, after = _settings_snapshot(params, platform_id)
         changed = bool(changes or toggle)
-        hot_served = bool(changed and running and messaging._notify_multiplexer_hot_serve(profile_arg))
+        hot_served = bool(changed and running and messaging._notify_multiplexer_hot_serve(profile_arg, platform_id))
         return _ok(rid, {"profile": _bot_settings_profile_name(params), "gateway_running": running,
                          "settings": after[0], "changed": changed, "hot_served": hot_served,
                          "restart_needed": bool(changed and running and not hot_served)})
