@@ -1772,12 +1772,18 @@ class GatewayNotificationsMixin(GatewayUpdateNotificationsMixin, GatewayNotifica
         _raw = transform_process_output(_raw, command=_command, returncode=session.exit_code,
                                         task_id=getattr(session, "task_id", "") or "") if _raw else _raw
         _raw = redact_terminal_output(_raw, _command)
-        # Keep the last ~2000 chars snapped to a line boundary, with a marker when cut.
-        _LIMIT = 2000
+        from gateway.bot_reply import delivery_wake_text
+        _delivery = delivery_wake_text(_command, _raw)
+        # Keep the last ~2000 chars snapped to a line boundary, with a marker when cut. A spawner whose
+        # output IS the payload sized its completion (``completion_output_chars``); a delivery receipt is
+        # read from the whole buffer first, since cutting its JSON from the front leaves no reply to parse.
+        _LIMIT = getattr(session, "completion_output_chars", 0) or 2000
         # Truncate at line boundaries so notifications never start mid-line (fixes #23284). Keep the last
         # ~2000 chars but snap to the nearest preceding newline, then prepend a truncation marker when
         # output was cut.
-        if len(_raw) > _LIMIT:
+        if _delivery is not None:
+            _out = _delivery
+        elif len(_raw) > _LIMIT:
             _tail = _raw[-_LIMIT:]
             _nl = _tail.find("\n")
             # A single long line (a delivery receipt's JSON) has only its trailing newline: snapping
