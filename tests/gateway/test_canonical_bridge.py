@@ -219,7 +219,7 @@ async def test_a_slack_connect_never_echoes_or_logs_the_tokens(bots, monkeypatch
     saved = {}
     monkeypatch.setattr(messaging, '_apply_platform_update',
                         lambda platform, entry, rules, env, remove, enabled: saved.update(env))
-    monkeypatch.setattr(messaging, '_notify_multiplexer_hot_serve', lambda profile: True)
+    monkeypatch.setattr(messaging, '_notify_multiplexer_hot_serve', lambda profile, platform_id: True)
     params = {'bot_token': 'xoxb-SECRET-bot', 'app_token': 'xapp-SECRET-app'}
     response = await call(bots.connect(), 'messaging.slack.connect', params)
     assert 'error' not in response, response
@@ -237,7 +237,7 @@ async def test_a_telegram_connect_never_echoes_or_logs_the_token_and_needs_contr
     monkeypatch.setattr(server, '_telegram_probe', lambda token: 'accepted')
     monkeypatch.setattr(messaging, '_apply_platform_update',
                         lambda platform, entry, rules, env, remove, enabled: saved.update(env))
-    monkeypatch.setattr(messaging, '_notify_multiplexer_hot_serve', lambda profile: True)
+    monkeypatch.setattr(messaging, '_notify_multiplexer_hot_serve', lambda profile, platform_id: True)
     params = {'bot_token': '123456789:SECRET' + 'a' * 30}
     response = await call(bots.connect(), 'messaging.telegram.connect', params)
     assert 'error' not in response, response

@@ -52,7 +52,7 @@ def _telegram_status_payload(params):
 
 def _telegram_reload(profile_arg):
     messaging = _telegram_messaging()
-    if bool(messaging._notify_multiplexer_hot_serve(profile_arg)):
+    if bool(messaging._notify_multiplexer_hot_serve(profile_arg, "telegram")):
         return {"hot_served": True, "restart_started": False}
     outcome = messaging._restart_gateway_after(profile_arg, what="Telegram connect", label="Telegram connect")
     return {"hot_served": False, "restart_started": bool(outcome.get("restart_started")),
