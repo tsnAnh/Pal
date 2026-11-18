@@ -154,7 +154,7 @@ def test_horizontal_scroll_and_lazy_stacks_are_not_eager_stacks(tmp_path: Path) 
 
 
 def test_allowlist_exempts_a_file_and_requires_a_reason(tmp_path: Path) -> None:
-    body = "TimelineView(.animation) { _ in Text(\"x\") }\nTimelineView(.periodic(from: .now, by: 1)) { _ in Text(\"y\") }\n"
+    body = "TimelineView(.animation(minimumInterval: 1.0 / 30)) { _ in Text(\"x\") }\nTimelineView(.periodic(from: .now, by: 1)) { _ in Text(\"y\") }\n"
     root = _tree(tmp_path, {SCREEN: body, "App/Other.swift": body})
     allow = root / csp.ALLOWLIST_NAME
     allow.write_text(json.dumps([{"rule": "perf-timeline-unlisted", "file": SCREEN, "reason": "bounded ticker"}]), encoding="utf-8")
@@ -210,10 +210,8 @@ REAL_SITES = [
     ("perf-main-disk-read", "App/Chat/FilePreviewSheet.swift"),
     ("perf-main-json", "App/RosterModel.swift"),
     ("perf-queue-sync", "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"),
-    ("perf-timeline-interval", "Packages/PalDesign/Sources/PalDesign/BotAvatarView.swift"),
-    ("perf-hover-unlisted", "Packages/PalDesign/Sources/PalDesign/BotAvatarView.swift"),
     ("perf-animation-container", "App/Mac/MacShell.swift"),
-    ("perf-eager-stack", "App/Mac/MacSidebar.swift"),
+    ("perf-eager-stack", "App/Mac/MacSidebarRail.swift"),
     ("perf-monitor-per-view", "App/Mac/MacMessageActions.swift"),
     ("perf-geometry-per-row", "App/ChatView.swift"),
     ("perf-state-model-init", "App/Mac/MacInspector.swift"),
@@ -259,3 +257,60 @@ def test_pre_fix_roster_apply_fails_and_the_real_roster_model_passes(tmp_path: P
     assert [f.text.split("=")[0].strip() for f in old] == ["live", "capabilities", "isLoaded", "bots"]
     current = (REPO / "apps" / "ios" / ROSTER).read_text(encoding="utf-8")
     assert not [f for f in csp.scan(_tree(tmp_path / "new", {ROSTER: current})) if f.rule == "perf-unguarded-write"]
+
+
+AVATAR = "Packages/PalDesign/Sources/PalDesign/BotAvatarView.swift"
+SIDEBAR = "App/Mac/MacSidebar.swift"
+
+PRE_FIX_AVATAR = """    public var body: some View {
+        AvatarStage(
+            clock: animated ? resolvedClock(solid: content.isSolid) : nil,
+            frameInterval: reduceMotion ? 1.0 / 20 : 1.0 / 60,
+        )
+    }
+
+    var stage: some View {
+        TimelineView(AvatarSchedule(clock: clock, frameInterval: frameInterval)) { context in
+            frame(pose: clock.pose(at: context.date))
+        }
+    }
+
+    func body(content: Content) -> some View {
+        content.background {
+            Color.clear.onContinuousHover { phase in look(phase) }
+        }
+    }
+"""
+
+PRE_FIX_SIDEBAR = """struct MacSidebar: View {
+    var expanded: some View {
+        ScrollView {
+            VStack(spacing: 3) {
+                ForEach(MacShell.ordered(roster)) { bot in MacBotRow(bot: bot) }
+            }
+        }
+    }
+}
+"""
+
+
+def test_pre_fix_avatar_and_sidebar_fail_and_the_real_files_pass() -> None:
+    ios = REPO / "apps" / "ios"
+    allow = csp.load_allowlist(ios / csp.ALLOWLIST_NAME)
+    old = {f.rule for f in csp.violations(Path(AVATAR), PRE_FIX_AVATAR, None)}
+    assert {"perf-timeline-unlisted", "perf-timeline-interval", "perf-hover-unlisted"} <= old
+    assert "perf-timeline-interval" in {f.rule for f in csp.violations(Path(AVATAR), PRE_FIX_AVATAR, allow)}
+    assert "perf-eager-stack" in {f.rule for f in csp.violations(Path(SIDEBAR), PRE_FIX_SIDEBAR, allow)}
+    for rel in (AVATAR, SIDEBAR):
+        current = (ios / rel).read_text(encoding="utf-8")
+        assert not csp.violations(Path(rel), current, allow), rel
+    entries = json.loads((ios / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
+    assert not [e for e in entries if e["file"] in (AVATAR, SIDEBAR)]
+
+
+def test_allowlisted_timeline_file_still_fails_the_minimum_interval(tmp_path: Path) -> None:
+    body = "TimelineView(AvatarSchedule(frameInterval: 1.0 / 60)) { _ in Text(\"x\") }\n"
+    root = _tree(tmp_path, {AVATAR: body})
+    (root / csp.ALLOWLIST_NAME).write_text(
+        json.dumps([{"rule": "perf-timeline-unlisted", "file": AVATAR, "reason": "bounded"}]), encoding="utf-8")
+    assert [f.rule for f in csp.scan(root)] == ["perf-timeline-interval"]

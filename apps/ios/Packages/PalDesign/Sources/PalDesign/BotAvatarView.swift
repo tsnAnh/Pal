@@ -43,14 +43,20 @@ public struct BotAvatarView: View {
         ))
     }
 
+    private var activity: AvatarActivity {
+        AvatarActivity(mood: mood, size: size, animated: animated, reduceMotion: reduceMotion)
+    }
+
     public var body: some View {
         let content = cache.resolve(spec, colorScheme, eyeInk: eyeInk)
+        let activity = self.activity
+        let resolved = resolvedClock(solid: content.isSolid)
         AvatarStage(
             content: content,
             size: size,
-            clock: animated ? resolvedClock(solid: content.isSolid) : nil,
+            clock: activity.ticks(settling: resolved.isSettling(at: Date())) ? resolved : nil,
             staticPose: AvatarMotion.staticPose(mood),
-            frameInterval: reduceMotion ? 1.0 / 20 : 1.0 / 60,
+            frameInterval: activity.frameInterval,
             outline: outline,
             reduceMotion: reduceMotion,
             look: look
@@ -58,7 +64,7 @@ public struct BotAvatarView: View {
         .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.7), value: look)
         .allowsHitTesting(false)
         .frame(width: size, height: size)
-        .modifier(PointerLook(look: $look, size: size, reach: pointerReach))
+        .modifier(PointerLook(look: $look, size: size, reach: pointerReach, tracks: activity.tracksPointer))
         .accessibilityHidden(true)
         .onChange(of: mood) { _, next in
             clock = resolvedClock(solid: cache.isSolid).changing(to: next, at: Date())
@@ -68,6 +74,7 @@ public struct BotAvatarView: View {
     private func resolvedClock(solid: Bool) -> AvatarMoodClock {
         var resolved = clock
         resolved.solidClips = solid
+        resolved.restingBlinks = activity.blinksAtRest
         resolved.blinkDelay = AvatarBlink.delaySeconds(for: spec.blinkKey)
         resolved.loadingSeed = LoadingSequence.seed(for: spec.blinkKey)
         resolved.reduceMotion = reduceMotion
@@ -75,18 +82,22 @@ public struct BotAvatarView: View {
     }
 }
 
-private final class AvatarContentCache {
+final class AvatarContentCache {
+    private let store: AvatarContentStore
     private var spec: BotAvatarSpec?
     private var scheme: ColorScheme?
     private var eyeInk: AvatarColor?
     private var content: AvatarContent?
 
+    init(store: AvatarContentStore = .shared) {
+        self.store = store
+    }
+
     var isSolid: Bool { content?.isSolid ?? false }
 
     func resolve(_ spec: BotAvatarSpec, _ scheme: ColorScheme, eyeInk: AvatarColor?) -> AvatarContent {
         if let content, self.spec == spec, self.scheme == scheme, self.eyeInk == eyeInk { return content }
-        var built = AvatarContent(spec).toned(for: scheme)
-        if let eyeInk { built = built.eyeInked(eyeInk) }
+        let built = store.content(for: spec, scheme: scheme, eyeInk: eyeInk)
         self.spec = spec
         self.scheme = scheme
         self.eyeInk = eyeInk
@@ -99,19 +110,24 @@ private struct PointerLook: ViewModifier {
     @Binding var look: AvatarLook
     let size: CGFloat
     let reach: CGFloat
+    let tracks: Bool
 
     func body(content: Content) -> some View {
         #if os(macOS)
-        content.background {
-            Color.clear
-                .frame(width: size + 2 * reach, height: size + 2 * reach)
-                .contentShape(Rectangle())
-                .onContinuousHover { phase in
-                    switch phase {
-                    case .active(let point): look = .toward(point, size: size, reach: reach)
-                    case .ended: look = look.released
+        if tracks {
+            content.background {
+                Color.clear
+                    .frame(width: size + 2 * reach, height: size + 2 * reach)
+                    .contentShape(Rectangle())
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let point): look = .toward(point, size: size, reach: reach)
+                        case .ended: look = look.released
+                        }
                     }
-                }
+            }
+        } else {
+            content
         }
         #else
         content
@@ -266,8 +282,10 @@ private struct AvatarCanvas: View {
         let inset = (size * 0.3).rounded()
         let side = size + 2 * inset
         Canvas { context, _ in
-            AvatarPainter(rig: rig, size: size, inset: inset, look: look, outline: outline)
-                .paint(rig.posed(pose, look: look, reduceMotion: reduceMotion), in: &context)
+            PalPerf.interval("avatar.canvas.draw") {
+                AvatarPainter(rig: rig, size: size, inset: inset, look: look, outline: outline)
+                    .paint(rig.posed(pose, look: look, reduceMotion: reduceMotion), in: &context)
+            }
         }
         .frame(width: side, height: side)
         .frame(width: size, height: size)

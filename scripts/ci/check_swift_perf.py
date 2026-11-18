@@ -162,7 +162,6 @@ LINE_RULES = (
         anywhere,
         "unbounded or faster-than-30 fps animation schedule. Use TimelineView(.animation(minimumInterval: 1.0 / 30)) "
         "or slower (1.0 / 20 for small avatars), and pause it when idle",
-        allowlisted=True,
     ),
     LineRule(
         "perf-hover-unlisted",
@@ -350,9 +349,7 @@ def violations(rel: Path, source: str, allowlist: Allowlist | None = None) -> li
     for lr in LINE_RULES:
         if not lr.applies(rel.parts, source):
             continue
-        exempt = lr.allowlisted and allowlist.allows(
-            "perf-timeline-unlisted" if lr.rule.startswith("perf-timeline") else lr.rule, rel)
-        if exempt:
+        if lr.allowlisted and allowlist.allows(lr.rule, rel):
             continue
         for i in range(len(src.lines)):
             code = src.lines[i] if lr.keeps_strings else src.plain[i]

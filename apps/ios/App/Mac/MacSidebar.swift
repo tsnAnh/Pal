@@ -28,7 +28,7 @@ struct MacSidebar: View {
         VStack(spacing: 0) {
             let hero = MacShell.hero(in: roster)
             ScrollView {
-                VStack(spacing: 3) {
+                LazyVStack(spacing: 3) {
                     if !hero.isEmpty {
                         MacHeroGrid(bots: hero, roster: roster, router: router)
                             .padding(.bottom, 11)
