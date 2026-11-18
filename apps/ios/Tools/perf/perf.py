@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import perf_backend
 import perf_common
+import perf_hitch
 import perf_host
 import perf_ios
 import perf_report
@@ -209,12 +210,22 @@ def main():
     compare = commands.add_parser("compare", help="print metric deltas between two results.json files")
     compare.add_argument("before")
     compare.add_argument("after")
+    hitch = commands.add_parser("hitch", help="summarize one hitch report, or compare two (JSON file or captured stdout holding a PAL_HITCH line)")
+    hitch.add_argument("report")
+    hitch.add_argument("after", nargs="?")
     arguments = sys.argv[1:]
     if not arguments or arguments[0].startswith("-"):
         arguments = ["run", *arguments]
     args = parser.parse_args(arguments)
     if args.command == "compare":
         print(perf_report.compare(args.before, args.after))
+        return 0
+    if args.command == "hitch":
+        try:
+            print(perf_hitch.render(args.report, args.after), end="")
+        except perf_hitch.HitchReportError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
         return 0
     args.phases = [name for name in args.phases.split(",") if name]
     unknown = set(args.phases) - set(PHASES)

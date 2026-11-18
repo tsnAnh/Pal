@@ -50,6 +50,10 @@ COMMENTARY = ["Pal đã nhận việc ", "145 nhưng cần ", "xem hàng đợi 
 COMMENTARY_DELAY = 0.1
 TOOL_PREAMBLES = {"NARRATE": COMMENTARY}
 NARRATED_CLARIFY_TRIGGER = "NARRASK"
+STREAM_MARKDOWN_TRIGGER = "STREAM-LONG-MARKDOWN"
+STREAM_MARKDOWN_SECTIONS = 14
+STREAM_MARKDOWN_DELAY = 0.012
+STREAM_MARKDOWN_PIECE = re.compile(r"\S+\s*|\s+")
 
 log_lock = threading.Lock()
 
@@ -237,6 +241,8 @@ def plan(body):
         return "final", iphone_answer(text_of(last.get("content"))), NORMAL_DELAY
     if "iphone" in names and last_role == "user" and IPHONE_TRIGGER in last_user and (call := iphone_arguments(last_user)):
         return "iphone", call, 0
+    if names and last_role == "user" and STREAM_MARKDOWN_TRIGGER in last_user:
+        return "text", stream_markdown_pieces(), STREAM_MARKDOWN_DELAY
     tool_trigger = next((key for key in TOOL_COMMANDS if key in last_user), None)
     if "terminal" in names and tool_trigger and last_role == "tool":
         return "text", [TOOL_FINAL_PREFIX + text_of(last.get("content"))], NORMAL_DELAY
@@ -282,6 +288,53 @@ def clarify_reply(tool_result):
 
 def preamble_of(content):
     return content.get("preamble", []) if isinstance(content, dict) else []
+
+
+def stream_markdown_section(number):
+    topic = f"Subsystem {number:02d}"
+    return "\n".join([
+        f"## {topic}: render budget notes",
+        "",
+        f"The {topic.lower()} keeps a **steady frame budget** while the reply streams in, and each pass re-parses only the *tail* of the document. "
+        "Long replies mix prose, lists and code, so a renderer has to stay cheap per token and avoid rebuilding rows that did not change.",
+        "",
+        f"### Checklist for {topic.lower()}",
+        "",
+        "- Parse the growing tail instead of the whole reply on every chunk",
+        "- Reuse identity for rows that already finished streaming",
+        "- Keep image and avatar work off the main thread",
+        f"- Record a signpost around pass {number:02d} so the trace shows its cost",
+        "",
+        "1. Receive the next delta from the gateway",
+        "2. Append it to the live message and mark the tail dirty",
+        "3. Rebuild only the dirty block and publish one update per frame",
+        "",
+        "```swift",
+        f"func applyDelta{number:02d}(_ delta: String, to message: inout LiveMessage) {{",
+        "    message.text += delta",
+        "    message.dirtyTail = message.text.index(message.text.endIndex, offsetBy: -min(delta.count + 64, message.text.count))",
+        "}",
+        "```",
+        "",
+        "```python",
+        f"def budget_{number:02d}(frame_ms: float, threshold_ms: float = 16.7) -> float:",
+        "    return max(0.0, frame_ms - threshold_ms)",
+        "```",
+        "",
+        "> A hitch is any frame that overruns the budget, and a severe hitch overruns it twice over.",
+        "",
+        "| Pass | Work | Budget |",
+        "| --- | --- | --- |",
+        f"| {number:02d}a | parse tail | 2 ms |",
+        f"| {number:02d}b | diff rows | 3 ms |",
+        "",
+    ])
+
+
+def stream_markdown_pieces():
+    document = "# Streaming render stress reply\n\nThis reply is long on purpose so a client has to render markdown while it grows.\n\n"
+    document += "\n".join(stream_markdown_section(number) for number in range(1, STREAM_MARKDOWN_SECTIONS + 1))
+    return STREAM_MARKDOWN_PIECE.findall(document)
 
 
 def words(prefix, count):

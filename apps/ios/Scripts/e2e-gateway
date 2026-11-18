@@ -7,10 +7,11 @@ PYTHON="${HERMES_IOS_PYTHON:-$REPO/.venv/bin/python}"
 GATEWAY_REPO="${HERMES_IOS_GATEWAY_REPO:-$REPO}"
 PROFILES=(bot-alpha bot-beta)
 SEED=""
+BOT_COUNT=""
 
 usage() {
   cat <<USAGE
-usage: e2e-gateway [--seed parity|perf] [-- command...]
+usage: e2e-gateway [--seed parity|perf] [--bots N] [-- command...]
 Starts a stub LLM and an isolated, auth-gated gateway in a temp HERMES_HOME with two bot
 profiles, then runs the command with HERMES_IOS_E2E_* exported (or prints them and waits
 for SIGINT when no command is given). Everything is torn down on exit. bot-alpha also carries
@@ -20,6 +21,9 @@ the disabled stdio MCP server fixture-tools (default seed only).
                   plus 7 bots, Vietnamese bot chats, avatar looks and recency spread) through
                   the real profile and session stores; HERMES_IOS_E2E_PROFILES lists its slugs,
                   default first. See Tools/seed-parity/seed_parity.py.
+  --bots N        with --seed parity, grow the roster to N bots (default 8). Above 8 it adds stream-bot,
+                  which streams a long markdown reply when prompted with STREAM-LONG-MARKDOWN, and
+                  perf-bot-NN fillers. See Scripts/perf-mac.
   --seed perf     keep bot-alpha and bot-beta and seed their Bot Chats with long marked transcripts
                   (600 and 2000 rows: unique visible markers, hidden rows, tall replies, tool-heavy turns);
                   HERMES_IOS_E2E_PERF_MANIFEST names the JSON listing each profile's ordered markers.
@@ -33,16 +37,23 @@ while [ "$#" -gt 0 ]; do
     --seed)
       [ "$#" -ge 2 ] || { echo "--seed needs a value (parity or perf)" >&2; exit 2; }
       SEED="$2"; shift 2 ;;
+    --bots)
+      [ "$#" -ge 2 ] || { echo "--bots needs a number" >&2; exit 2; }
+      BOT_COUNT="$2"; shift 2 ;;
     --) shift; break ;;
     *) break ;;
   esac
 done
 
+[ -z "$BOT_COUNT" ] || [ "$SEED" = "parity" ] || { echo "--bots needs --seed parity" >&2; exit 2; }
+BOTS_ARGS=()
+[ -z "$BOT_COUNT" ] || BOTS_ARGS=(--bots "$BOT_COUNT")
+
 case "$SEED" in
   "") ;;
   parity)
     SEED_TOOL="$IOS_DIR/Tools/seed-parity/seed_parity.py"
-    SEED_SLUGS="$("$PYTHON" -I "$SEED_TOOL" slugs)"
+    SEED_SLUGS="$("$PYTHON" -I "$SEED_TOOL" slugs ${BOTS_ARGS[@]+"${BOTS_ARGS[@]}"})"
     IFS=, read -r -a PROFILES <<<"$SEED_SLUGS" ;;
   perf) ;;
   *) echo "unknown seed: $SEED (supported: parity, perf)" >&2; exit 2 ;;
@@ -174,7 +185,7 @@ export HERMES_IOS_E2E_STUB_URL="$STUB_URL"
 export HERMES_IOS_E2E_GATEWAY_LOG="$GATEWAY_LOG"
 
 if [ "$SEED" = "parity" ]; then
-  "$PYTHON" -I "$SEED_TOOL" seed --home "$HOME_DIR" --repo "$GATEWAY_REPO" --dm-replies "$DM_REPLIES" >"$WORK_DIR/seed.log" 2>&1 \
+  "$PYTHON" -I "$SEED_TOOL" seed --home "$HOME_DIR" --repo "$GATEWAY_REPO" --dm-replies "$DM_REPLIES" ${BOTS_ARGS[@]+"${BOTS_ARGS[@]}"} >"$WORK_DIR/seed.log" 2>&1 \
     || { echo "seed parity failed" >&2; cat "$WORK_DIR/seed.log" >&2; exit 1; }
 fi
 

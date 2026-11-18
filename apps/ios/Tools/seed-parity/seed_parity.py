@@ -267,6 +267,39 @@ EXCHANGES = (
 
 DM_WAIT_SECONDS = 120
 
+STREAM_BOT_SLUG = "stream-bot"
+STREAM_BOT_TITLE = "Stream Bot"
+EXTRA_BOT_SHAPES = ("round", "organic", "capsule", "hexagon", "triangle")
+EXTRA_BOT_COLORS = ("#ed0a37", "#10dc69", "#ee0d8f", "#f15105", "#833cf8", "#0ec79b")
+EXTRA_BOT_MINUTES_APART = 47
+EXTRA_BOT_FIRST_MINUTES_AGO = 90
+
+
+def extra_bot(index, slug, title, minutes_ago):
+    return Bot(
+        slug=slug,
+        title=title,
+        look=Look(shape=f"blobatar:{slug}:{EXTRA_BOT_SHAPES[index % len(EXTRA_BOT_SHAPES)]}", color=EXTRA_BOT_COLORS[index % len(EXTRA_BOT_COLORS)]),
+        last_message=Recency(minutes_ago=minutes_ago),
+        conversation=(
+            ("user", f"Status check for {title}."),
+            ("assistant", f"All good. {title} has nothing waiting on you."),
+        ),
+    )
+
+
+def roster(total=len(BOTS)):
+    if total < len(BOTS):
+        raise SystemExit(f"--bots must be at least {len(BOTS)}, the size of the parity roster")
+    if total == len(BOTS):
+        return BOTS
+    stream = extra_bot(0, STREAM_BOT_SLUG, STREAM_BOT_TITLE, 5)
+    fillers = tuple(
+        extra_bot(index, f"perf-bot-{index:02d}", f"Perf Bot {index:02d}", EXTRA_BOT_FIRST_MINUTES_AGO + index * EXTRA_BOT_MINUTES_APART)
+        for index in range(1, total - len(BOTS))
+    )
+    return BOTS + (stream,) + fillers
+
 ProviderAccount = namedtuple("ProviderAccount", "provider label auth_type base_path spend")
 
 PROVIDER_ACCOUNTS = (
@@ -284,8 +317,8 @@ OTHER_DEVICES = (
 )
 
 
-def slugs():
-    return [bot.slug for bot in BOTS]
+def slugs(bots=BOTS):
+    return [bot.slug for bot in bots]
 
 
 def message_times(bot, now):
@@ -419,7 +452,7 @@ async def create_routines(rpc, bot):
             raise SystemExit(f"cron.manage add refused for {bot.slug}: {json.dumps(result)}")
 
 
-async def seed_through_gateway(home, now):
+async def seed_through_gateway(home, now, bots):
     client = load_gateway_client()
     environment = os.environ
     gateway = client.Gateway(environment["HERMES_IOS_TEST_BASE_URL"], environment["HERMES_IOS_TEST_USERNAME"],
@@ -431,7 +464,7 @@ async def seed_through_gateway(home, now):
         pump = asyncio.create_task(rpc.pump())
         await events.get()
         session_ids = {}
-        for bot in BOTS:
+        for bot in bots:
             await configure_bot(rpc, bot)
             session_ids[bot.slug] = await create_bot_chat(rpc, bot)
             write_transcript(profile_directory(home, bot), session_ids[bot.slug], bot, now)
@@ -482,44 +515,47 @@ def seed_other_devices(home, now):
             app_version="1.0", now=(now - timedelta(days=device.days_ago)).timestamp())
 
 
-def require_sandbox_home(home):
+def require_sandbox_home(home, bots):
     resolved = home.resolve()
     if not any(part.startswith(HOME_MARKER) for part in resolved.parts):
         raise SystemExit(f"refusing to seed {resolved}: not an e2e sandbox home")
     if not (resolved / "config.yaml").is_file():
         raise SystemExit(f"refusing to seed {resolved}: no config.yaml")
-    for bot in BOTS:
+    for bot in bots:
         profile_dir = profile_directory(resolved, bot)
         if not profile_dir.is_dir():
             raise SystemExit(f"profile {bot.slug} missing at {profile_dir}")
     return resolved
 
 
-def seed(home, repo, dm_replies):
-    home = require_sandbox_home(home)
+def seed(home, repo, dm_replies, bots):
+    home = require_sandbox_home(home, bots)
     os.environ["HERMES_HOME"] = str(home)
     write_dm_replies(dm_replies)
     sys.path.insert(0, str(repo))
     now = datetime.now().astimezone()
-    asyncio.run(seed_through_gateway(home, now))
+    asyncio.run(seed_through_gateway(home, now, bots))
     seed_provider_accounts(home, os.environ["HERMES_IOS_E2E_STUB_URL"])
     seed_other_devices(home, now)
-    print(",".join(slugs()))
+    print(",".join(slugs(bots)))
 
 
 def main():
     parser = argparse.ArgumentParser(description="Seed the parity roster into an e2e sandbox home")
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("slugs", help="print the comma separated slugs, primary first")
+    slugs_parser = commands.add_parser("slugs", help="print the comma separated slugs, primary first")
     seed_parser = commands.add_parser("seed", help="through the running gateway (HERMES_IOS_TEST_* env) write titles and looks, mint each Bot Chat, then write its transcript; profiles must already exist")
     seed_parser.add_argument("--home", required=True, type=Path)
     seed_parser.add_argument("--repo", required=True, type=Path)
     seed_parser.add_argument("--dm-replies", required=True, type=Path)
+    for sub_parser in (slugs_parser, seed_parser):
+        sub_parser.add_argument("--bots", type=int, default=len(BOTS), help=f"roster size; above {len(BOTS)} adds {STREAM_BOT_SLUG} (streams long markdown, see stub_llm) and perf-bot-NN fillers")
     args = parser.parse_args()
+    bots = roster(args.bots)
     if args.command == "slugs":
-        print(",".join(slugs()))
+        print(",".join(slugs(bots)))
     else:
-        seed(args.home, args.repo, args.dm_replies)
+        seed(args.home, args.repo, args.dm_replies, bots)
 
 
 if __name__ == "__main__":
