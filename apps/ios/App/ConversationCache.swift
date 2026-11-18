@@ -1,5 +1,6 @@
 import Foundation
 import PalChat
+import PalDiagnostics
 import PalProtocol
 
 struct ConversationCache: Sendable {
@@ -35,7 +36,7 @@ extension RosterModel {
     }
 
     var lastOpenedBot: String? {
-        connection.cache.load(LastOpenedBot.self, name: LastOpenedBot.cacheName, account: connection.accountKey)?.name
+        PalPerf.mainDiskRead { connection.cache.load(LastOpenedBot.self, name: LastOpenedBot.cacheName, account: connection.accountKey)?.name }
     }
 }
 

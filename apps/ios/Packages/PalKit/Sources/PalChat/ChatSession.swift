@@ -521,7 +521,7 @@ public actor ChatSession: OutboxSubmitter {
             return true
         }
         let frame = SessionEventFrame(event)
-        _ = timeline.apply(frame)
+        _ = PalPerf.interval("chat.timeline.apply") { timeline.apply(frame) }
         switch transcript.apply(frame) {
         case .applied:
             publishLive()

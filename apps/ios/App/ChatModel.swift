@@ -770,6 +770,7 @@ final class ChatModel {
     }
 
     private func rebuild() {
+        let perf = PalPerf.begin("chat.rebuild"); defer { perf.end() }
         let now = Date()
         let sources = sourceItems()
         for source in sources where hasBaseline && source.item.timestamp == nil && arrivals[source.item.id] == nil {

@@ -1,5 +1,6 @@
 import CoreGraphics
 import ImageIO
+import PalDiagnostics
 import SwiftUI
 
 public struct BotAvatarView: View {
@@ -136,7 +137,7 @@ struct AvatarStage: View, @MainActor Animatable {
     var body: some View {
         if let clock {
             TimelineView(AvatarSchedule(clock: clock, frameInterval: frameInterval)) { context in
-                frame(pose: clock.pose(at: context.date))
+                PalPerf.interval("avatar.frame") { frame(pose: clock.pose(at: context.date)) }
             }
         } else {
             frame(pose: staticPose)

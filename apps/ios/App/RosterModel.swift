@@ -96,7 +96,7 @@ final class RosterModel {
 
     private func hydrateFromCache() {
         guard !connection.baseURLText.isEmpty,
-              let entry = connection.cache.load(RosterCacheEntry.self, name: RosterCache.name, account: connection.accountKey)
+              let entry = PalPerf.mainDiskRead({ connection.cache.load(RosterCacheEntry.self, name: RosterCache.name, account: connection.accountKey) })
         else { return }
         let cached = entry.profiles.compactMap(RosterProfile.init)
         guard !cached.isEmpty else { return }
@@ -378,7 +378,7 @@ final class RosterModel {
         let profiles = snapshot.profiles.compactMap(RosterProfile.init)
         let avatarNames = Set(profiles.filter(\.hasAvatar).map(\.name))
         let uncached = avatarNames.filter { photos[$0] == nil }.sorted()
-        let fetched = await fetchAvatars(uncached)
+        let fetched = await fetchAvatars(uncached); let perf = PalPerf.begin("roster.apply"); defer { perf.end() }
         photoChecked.formUnion(fetched.keys)
         photos.merge(fetched) { _, fresh in fresh }
         photos = photos.filter { avatarNames.contains($0.key) }
