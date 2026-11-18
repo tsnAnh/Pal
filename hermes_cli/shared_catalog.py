@@ -7,7 +7,7 @@ import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Iterator, TypeVar
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 
 import hermes_yaml as yaml
 from hermes_cli.profile_admin_guard import require_profile_admin_grant
@@ -131,7 +131,10 @@ def _has_url_secret(text: str) -> bool:
         parts.port
     except ValueError:
         return True
-    return bool(parts.username or parts.password or parts.query or parts.fragment)
+    query_secret = any(
+        _SECRET_NAME_RE.search(key) or _token_shaped(value)
+        for key, value in parse_qsl(parts.query, keep_blank_values=True))
+    return bool(parts.username or parts.password or query_secret or parts.fragment)
 
 
 def _token_shaped(text: str) -> bool:

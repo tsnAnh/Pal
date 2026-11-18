@@ -144,6 +144,7 @@ extension ConnectAppsService {
             default: try await Task.sleep(for: timing.pollInterval)
             }
         }
+        _ = try? await call("mcp.servers.oauth.cancel", ["name": .string(name), "session_id": .string(flow)])
         throw ConnectAppsError.signInFailed(McpSignInFailure.expired.reason)
     }
 

@@ -177,7 +177,7 @@ public struct ConnectAppsService: Sendable {
             _ = try await rawCall("mcp.servers.add", params)
             return true
         } catch let error as GatewayTransportError {
-            guard case .rpc(let rpc) = error, rpc.code == 4090 else { throw ConnectAppsError.failed }
+            guard case .rpc(let rpc) = error, rpc.code == 4090 else { throw Self.map(error, method: "mcp.servers.add") }
             return false
         }
     }

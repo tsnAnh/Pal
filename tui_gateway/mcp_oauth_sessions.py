@@ -149,6 +149,15 @@ def _retire(rec: dict[str, Any]) -> None:
         _sessions.pop(flow.flow_id, None)
 
 
+def _supersede_active(server_name: str, hermes_home: str) -> None:
+    """An abandoned attempt (closed browser, killed app) holds the slot until its callback wait times out."""
+    with _sessions_lock:
+        stale = [r for r in _sessions.values()
+                 if r["server_name"] == server_name and r["hermes_home"] == hermes_home and not r["flow"].worker_done]
+    for rec in stale:
+        _retire(rec)
+
+
 def _run_chain(
     hermes_home: str, server_name: str, cfg: dict, reconnect_live: bool, url_timeout: float,
     fallback: Optional[str]) -> dict[str, Any]:
@@ -192,6 +201,7 @@ def start_flow(
         client_redirect_uri = _validate_client_redirect_uri(client_redirect_uri)
     if fallback_redirect_uri is not None:
         fallback_redirect_uri = validate_loopback_redirect_uri(fallback_redirect_uri)
+    _supersede_active(server_name, hermes_home)
     _gc_and_check_capacity(server_name, hermes_home)
     if client_redirect_uri is not None and is_app_redirect(client_redirect_uri) and not _pinned_loopback(cfg):
         return _run_chain(hermes_home, server_name, cfg, reconnect_live, url_timeout, fallback_redirect_uri)
