@@ -187,7 +187,7 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         waitFor(bot, timeout: 30, "default bot in the picker")
         XCTAssertTrue(app.staticTexts["Not installed"].exists, "the bot reads not installed")
         bot.hit()
-        waitFor(app.descendants(matching: .any)["chatInstallScreen"], timeout: 30, "Slack wizard for the chosen bot")
+        waitFor(app.descendants(matching: .any)["stepFlow"], timeout: 30, "Slack setup for the chosen bot")
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
     }
 

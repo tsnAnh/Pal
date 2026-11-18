@@ -128,16 +128,16 @@ public enum OwnerSetupFlow {
                 note: text.note, links: Array(step.links.dropFirst())
             )
             let copy = FlowStep(
-                id: StepID.copy(of: step.id), title: text.copyTitle ?? step.title, body: text.copyBody ?? step.body,
-                kind: .copyCard(copies: step.copies), rowTitle: text.copyRowTitle
+                id: StepID.copy(of: step.id), title: text.copyRowTitle, body: text.copyBody ?? step.body,
+                kind: .copyCard(copies: step.copies), heading: text.copyTitle ?? step.title
             )
             return [open, copy]
         }
         if !step.links.isEmpty {
             return [
                 FlowStep(
-                    id: step.id, title: step.title, body: step.body, kind: .instruction(openPage: nil),
-                    primaryTitle: String(localized: "Next"), rowTitle: text.linksRowTitle, links: step.links
+                    id: step.id, title: text.linksRowTitle ?? step.title, body: step.body, kind: .instruction(openPage: nil),
+                    primaryTitle: String(localized: "Next"), heading: step.title, links: step.links
                 )
             ]
         }
@@ -149,31 +149,31 @@ public enum OwnerSetupFlow {
 
     private static func pasteStep(_ step: SetupStep, text: Wording, usesClient: Bool) -> FlowStep {
         FlowStep(
-            id: step.id, title: text.pasteTitle ?? step.title, body: step.body, kind: .paste(fields: step.fields),
-            rowTitle: usesClient ? String(localized: "Paste id and secret") : String(localized: "Paste token")
+            id: step.id, title: usesClient ? String(localized: "Paste id and secret") : String(localized: "Paste token"),
+            body: step.body, kind: .paste(fields: step.fields), heading: text.pasteTitle ?? step.title
         )
     }
 
     private static func signInStep(vendor: String) -> FlowStep {
         FlowStep(
-            id: StepID.signIn, title: String(localized: "Sign in to \(vendor)"),
+            id: StepID.signIn, title: String(localized: "Sign in"),
             body: String(localized: "A browser window opens. Choose the account Pal should use, then allow access. You come straight back here."),
             kind: .browserRoundTrip(
                 waitingTitle: String(localized: "Waiting for \(vendor)"),
                 waitingBody: String(localized: "Finish in the browser. You can close this window; Pal keeps going and tells you when it is done.")
             ),
-            primaryTitle: String(localized: "Sign in with \(vendor)"), rowTitle: String(localized: "Sign in")
+            primaryTitle: String(localized: "Sign in with \(vendor)"), heading: String(localized: "Sign in to \(vendor)")
         )
     }
 
     private static func callbackStep() -> FlowStep {
         let field = SetupField(id: StepID.callback, label: String(localized: "Address from your browser"), prefixes: ["http://", "https://"])
         return FlowStep(
-            id: StepID.callback, title: String(localized: "Paste the address your browser ended on"),
+            id: StepID.callback, title: String(localized: "Paste the address"),
             body: String(
                 localized: "After you allow access, the browser cannot open the last page. Copy that address from the browser bar and paste it here."
             ),
-            kind: .paste(fields: [field]), rowTitle: String(localized: "Paste the address")
+            kind: .paste(fields: [field]), heading: String(localized: "Paste the address your browser ended on")
         )
     }
 }

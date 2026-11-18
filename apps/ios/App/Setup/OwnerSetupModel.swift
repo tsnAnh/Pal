@@ -124,7 +124,7 @@ final class OwnerSetupModel: Identifiable {
         }
         guard let engine = StepFlowEngine(flowID: flowID, steps: steps, resume: resume) else { throw ConnectAppsError.failed }
         let flow = makeFlow(engine)
-        if let failure = pendingStart.failure { flow.presentFailure(failure) }
+        if let failure = pendingStart.failure { flow.follow(steps: steps, at: flow.engine.current.id, failure: failure) }
         pendingStart = OwnerSetupStart()
         entry = fresh
         context = built
@@ -174,7 +174,7 @@ final class OwnerSetupModel: Identifiable {
     func apply(_ next: OwnerSetupContext) throws {
         guard let steps = OwnerSetupFlow.steps(next) else { throw ConnectAppsError.failed }
         context = next
-        if case .ready(let flow) = phase { flow.replaceSteps(steps) }
+        if case .ready(let flow) = phase { flow.follow(steps: steps, at: flow.engine.current.id, failure: nil) }
     }
 
     func restart(at stepID: String?) {

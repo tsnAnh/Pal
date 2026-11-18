@@ -1,4 +1,5 @@
 import PalBotProfile
+import PalConnect
 import PalDesign
 import SwiftUI
 
@@ -31,16 +32,15 @@ struct SlackWizardContext {
     }
 }
 
-struct SlackBotPicker: View {
+struct SlackBotChoice: View {
     let model: SlackBotsModel
     let wizard: SlackWizardContext
     let close: () -> Void
 
-    @Environment(\.hermesTheme) private var theme
-
     var body: some View {
         NavigationStack {
             content
+                .background(PalTokens.content)
                 .navigationTitle(Text("Slack"))
                 .toolbarTitleDisplayMode(.inline)
                 .toolbar {
@@ -57,10 +57,9 @@ struct SlackBotPicker: View {
         case .loading:
             DelayedReveal { ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity) }
         case .failed(let error):
-            ChatInstallStatus(
-                copy: ChatStatusCopy(failure: error), primaryTitle: String(localized: "Try again"), isBusy: false,
-                perform: { Task { await model.load() } }, identifierPrefix: "slackPicker", secondary: { EmptyView() }
-            )
+            StatusBlock(status: SetupStatus(chatError: error), identifierPrefix: "slackPicker") {
+                Task { await model.load() }
+            }
         case .ready:
             List(model.rows) { row in
                 NavigationLink {
@@ -69,10 +68,8 @@ struct SlackBotPicker: View {
                     }
                 } label: {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(row.displayName).hermesText(.rowTitle)
-                        Text(row.state.detail)
-                            .hermesText(.rowSubtitle)
-                            .foregroundStyle(Color(theme.palette.textSecondary))
+                        Text(row.displayName).hermesText(.rowTitle).foregroundStyle(PalTokens.textPrimary)
+                        Text(row.state.detail).hermesText(.rowSubtitle).foregroundStyle(PalTokens.textSecondary)
                     }
                 }
                 .accessibilityIdentifier("slackBot-\(row.name)")

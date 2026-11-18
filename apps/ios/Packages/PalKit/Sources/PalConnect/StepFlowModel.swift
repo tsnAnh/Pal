@@ -9,21 +9,37 @@ public final class StepFlowModel {
 
     public private(set) var engine: StepFlowEngine
     public var openPage: @MainActor (URL) -> Void = { _ in }
+    public var recovery: (@MainActor (SetupStatus) async -> Void)?
 
     @ObservationIgnored private let store: any StepFlowProgressStore
     @ObservationIgnored private let runner: Runner
     @ObservationIgnored private let classify: Classifier
+    @ObservationIgnored private let advancesAfterWork: Bool
     @ObservationIgnored private var work: Task<Void, Never>?
 
     public init(
         engine: StepFlowEngine, store: any StepFlowProgressStore = InMemoryStepFlowProgressStore(),
-        runner: @escaping Runner = { _, _ in },
+        advancesAfterWork: Bool = true, runner: @escaping Runner = { _, _ in },
         classify: @escaping Classifier = { _ in SetupStatus(code: SetupStatusClass.internalFault.rawValue) }
     ) {
         self.engine = engine
         self.store = store
+        self.advancesAfterWork = advancesAfterWork
         self.runner = runner
         self.classify = classify
+    }
+
+    public func follow(steps: [FlowStep], at stepID: String, failure: SetupStatus?) {
+        if let next = engine.following(steps: steps, at: stepID, failure: failure) { engine = next }
+    }
+
+    public func recover(from failure: SetupStatus) async {
+        if let recovery {
+            await recovery(failure)
+            return
+        }
+        dismissFailure()
+        if failure.kind != .vendorRefusedValue { await performPrimary() }
     }
 
     public func start() async {
@@ -65,15 +81,6 @@ public final class StepFlowModel {
         await persist()
     }
 
-    public func replaceSteps(_ steps: [FlowStep]) {
-        guard let next = engine.replacingSteps(steps) else { return }
-        engine = next
-    }
-
-    public func presentFailure(_ status: SetupStatus) {
-        engine.presentFailure(status)
-    }
-
     public func cancelWork() {
         work?.cancel()
         engine.cancelWork()
@@ -91,7 +98,7 @@ public final class StepFlowModel {
         let task = Task { @MainActor in
             do {
                 try await runner(step, values)
-                if Task.isCancelled { engine.cancelWork() } else { engine.finishWork() }
+                if Task.isCancelled { engine.cancelWork() } else { engine.finishWork(advance: advancesAfterWork) }
             } catch is CancellationError {
                 engine.cancelWork()
             } catch {

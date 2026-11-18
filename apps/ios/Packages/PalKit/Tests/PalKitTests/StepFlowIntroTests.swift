@@ -8,7 +8,7 @@ private let intro = FlowStep(
 
 private func flow(_ steps: [FlowStep]) -> [FlowStep] { [intro] + steps }
 
-@Suite("Step flow intro and replacement")
+@Suite("Step flow intro and following")
 struct StepFlowIntroTests {
     static let body = StepFlowEngineTests.steps
 
@@ -48,20 +48,22 @@ struct StepFlowIntroTests {
         #expect(StepFlowEngine(flowID: "x", steps: [intro, StepFlowEngineTests.steps[6]]) != nil)
     }
 
-    @Test func aRowTitleOverridesTheScreenTitleInTheChecklistOnly() throws {
+    @Test func aHeadingOverridesTheRowTitleOnTheScreenOnly() throws {
         var step = StepFlowEngineTests.steps[0]
-        step.rowTitle = "Open the console"
+        let rowTitle = step.title
+        step.title = "Open the console"
+        step.heading = rowTitle
         let engine = try #require(StepFlowEngine(flowID: "x", steps: [step, StepFlowEngineTests.steps[6]]))
         #expect(engine.checklist.map(\.title) == ["Open the console"])
-        #expect(engine.current.title == "Open Google Cloud")
+        #expect(engine.current.screenTitle == rowTitle)
     }
 
     @Test func newStepFieldsDefaultToNothing() {
         let step = FlowStep(id: "a", title: "A", kind: .automatic)
-        #expect(step.rowTitle == nil && step.note == nil && step.links.isEmpty)
+        #expect(step.heading == nil && step.note == nil && step.links.isEmpty)
     }
 
-    @Test func replacingStepsKeepsTheCurrentStepSavedValuesAndPhase() throws {
+    @Test func followingKeepsTheCurrentStepSavedValuesAndPhase() throws {
         var engine = try makeEngine(resume: "paste")
         engine.setValue("1234-abc.apps.googleusercontent.com", for: "client_id")
         engine.setValue(fakeClientSecretForTests, for: "secret")
@@ -69,7 +71,7 @@ struct StepFlowIntroTests {
         #expect(started)
         var swapped = flow(Self.body)
         swapped.insert(FlowStep(id: "extra", title: "Extra", kind: .instruction(openPage: nil)), at: 1)
-        let next = try #require(engine.replacingSteps(swapped))
+        let next = try #require(engine.following(steps: swapped, at: "paste", failure: nil))
         #expect(next.current.id == "paste")
         #expect(next.phase == .working)
         #expect(next.steps.count == engine.steps.count + 1)
@@ -77,57 +79,35 @@ struct StepFlowIntroTests {
         #expect(next.flowID == "google")
     }
 
-    @Test func replacingStepsFailsWhenTheCurrentStepIsGoneOrTheListIsInvalid() throws {
+    @Test func followingFailsWhenTheListIsInvalid() throws {
         let engine = try makeEngine(resume: "copy")
-        let withoutCopy = Self.body.filter { $0.id != "copy" }
-        #expect(engine.replacingSteps(flow(withoutCopy)) == nil)
-        #expect(engine.replacingSteps([]) == nil)
-        #expect(engine.replacingSteps(flow(Array(Self.body.dropLast()))) == nil)
+        #expect(engine.following(steps: [], at: "copy", failure: nil) == nil)
+        #expect(engine.following(steps: flow(Array(Self.body.dropLast())), at: "copy", failure: nil) == nil)
     }
 
-    @Test func presentingAFailureShowsItOnAnyStepAndEditingClearsIt() throws {
-        var engine = try makeEngine(resume: "paste")
-        engine.presentFailure(SetupStatus(code: "offline"))
-        #expect(engine.failure?.kind == .offline)
-        engine.setValue("x", for: "client_id")
-        #expect(engine.failure == nil)
-    }
-
-    @Test func presentingAFailureDuringWorkIsIgnored() throws {
-        var engine = try makeEngine(resume: "signin")
-        let started = engine.startWork()
-        #expect(started)
-        engine.presentFailure(SetupStatus(code: "offline"))
-        #expect(engine.phase == .working)
+    @Test func followingWithAFailureShowsItOnTheStepAndEditingClearsIt() throws {
+        let engine = try makeEngine(resume: "paste")
+        var next = try #require(engine.following(steps: flow(Self.body), at: "paste", failure: SetupStatus(code: "offline")))
+        #expect(next.failure?.kind == .offline)
+        next.setValue("x", for: "client_id")
+        #expect(next.failure == nil)
     }
 }
 
 private let fakeClientSecretForTests = "GOCSPX-" + String(repeating: "x", count: 28)
 
-@Suite("Step flow model replacement")
+@Suite("Step flow model following")
 @MainActor
-struct StepFlowModelReplacementTests {
-    @Test func replacingStepsKeepsTheCurrentStep() throws {
+struct StepFlowModelFollowTests {
+    @Test func followingKeepsTheNamedStepAndTakesTheNewTitles() throws {
         let engine = try #require(
             StepFlowEngine(flowID: "google", steps: StepFlowEngineTests.steps, resume: StepFlowProgress(flowID: "google", stepID: "copy"))
         )
         let model = StepFlowModel(engine: engine)
         var steps = StepFlowEngineTests.steps
         steps[1].title = "Create the client again"
-        model.replaceSteps(steps)
+        model.follow(steps: steps, at: "copy", failure: nil)
         #expect(model.engine.current.id == "copy")
         #expect(model.engine.current.title == "Create the client again")
-        let withoutCopy = steps.filter { $0.id != "copy" }
-        model.replaceSteps(withoutCopy)
-        #expect(model.engine.current.title == "Create the client again")
-    }
-
-    @Test func presentingAFailureShowsItOnTheModel() throws {
-        let engine = try #require(StepFlowEngine(flowID: "google", steps: StepFlowEngineTests.steps))
-        let model = StepFlowModel(engine: engine)
-        model.presentFailure(SetupStatus(code: "gateway_outdated"))
-        #expect(model.engine.failure?.kind == .gatewayOutdated)
-        model.dismissFailure()
-        #expect(model.engine.failure == nil)
     }
 }

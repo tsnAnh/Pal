@@ -2,30 +2,6 @@ import PalConnect
 import PalDesign
 import SwiftUI
 
-struct StepFlowHeader: View {
-    let title: String
-    let close: () -> Void
-
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        HStack {
-            Text(title)
-                .hermesText(.sheetTitle)
-                .foregroundStyle(PalTokens.textPrimary)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("stepFlowTitle")
-            Spacer()
-            Button(role: .close, action: close)
-                .buttonStyle(.glass(PalGlass.style(interactive: true, colorScheme: colorScheme)))
-                .accessibilityIdentifier("stepFlowClose")
-        }
-        .padding(.horizontal, PalMetrics.screenMargin)
-        .padding(.vertical, PalMetrics.captionToCardGap)
-    }
-}
-
 struct StepIntroCard: View {
     let youDo: String
     let palDoes: String

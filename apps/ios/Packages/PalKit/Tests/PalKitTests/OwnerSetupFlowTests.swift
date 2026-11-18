@@ -136,12 +136,12 @@ struct OwnerSetupFlowTests {
         #expect(open.skipTitle == "I already have one")
         #expect(open.skipTarget == "client")
         let copy = try #require(steps.first { $0.id == "app-copy" })
-        #expect(copy.rowTitle == "Create the app")
-        #expect(copy.title == "Create the app and paste the redirect address")
+        #expect(copy.title == "Create the app")
+        #expect(copy.heading == "Create the app and paste the redirect address")
         #expect(copy.body == "Create a new app, name it and pick your team.")
         let paste = try #require(steps.first { $0.id == "client" })
-        #expect(paste.title == "Paste the two values Figma shows")
-        #expect(paste.rowTitle == "Paste id and secret")
+        #expect(paste.heading == "Paste the two values Figma shows")
+        #expect(paste.title == "Paste id and secret")
     }
 
     @Test func anUnknownSlugFallsBackToTheAppName() throws {
@@ -152,7 +152,7 @@ struct OwnerSetupFlowTests {
         let token = OwnerSetupContext(slug: "acme", appName: "Acme", guide: githubGuide, usesClient: false)
         let tokenSteps = try #require(OwnerSetupFlow.steps(token))
         let paste = try #require(tokenSteps.first { $0.id == "token" })
-        #expect(paste.rowTitle == "Paste token")
+        #expect(paste.title == "Paste token")
     }
 
     @Test func googleOpensTheConsoleThenShowsTheAddressToCopy() throws {
@@ -166,8 +166,8 @@ struct OwnerSetupFlowTests {
         #expect(open.links.isEmpty)
         let copy = try #require(steps.first { $0.id == "console-copy" })
         #expect(copy.kind == .copyCard(copies: [SetupCopy(label: "Redirect URI", value: "https://pal.example.com/oauth/callback")]))
-        #expect(copy.rowTitle == "Create the client")
-        #expect(copy.title == "Paste this address into Google")
+        #expect(copy.title == "Create the client")
+        #expect(copy.heading == "Paste this address into Google")
         #expect(copy.body == "Under Authorized redirect URIs, add:")
     }
 
@@ -175,9 +175,9 @@ struct OwnerSetupFlowTests {
         let steps = try #require(OwnerSetupFlow.steps(google()))
         let apis = try #require(steps.first { $0.id == "apis" })
         #expect(apis.kind == .instruction(openPage: nil))
-        #expect(apis.title == "Turn on the Google services")
+        #expect(apis.heading == "Turn on the Google services")
         #expect(apis.body == "Turn on each service Pal should use.")
-        #expect(apis.rowTitle == "Turn on services")
+        #expect(apis.title == "Turn on services")
         #expect(apis.primaryTitle == "Next")
         #expect(apis.links.map(\.label) == ["Gmail", "Drive"])
         #expect(apis.skipTarget == nil)
@@ -203,17 +203,17 @@ struct OwnerSetupFlowTests {
         #expect(open.skipTarget == "token")
         #expect(open.note == nil)
         let pick = try #require(steps.first { $0.id == "token_page-copy" })
-        #expect(pick.title == "Pick access" && pick.rowTitle == "Pick access")
+        #expect(pick.title == "Pick access" && pick.heading == "Pick access")
         #expect(pick.body == "Create a fine-grained token with these permissions.")
         let paste = try #require(steps.first { $0.id == "token" })
-        #expect(paste.title == "Paste your token" && paste.rowTitle == "Paste token")
+        #expect(paste.heading == "Paste your token" && paste.title == "Paste token")
         #expect(paste.fields == githubGuide.steps[1].fields)
     }
 
     @Test func theSignInStepNamesTheVendor() throws {
         let steps = try #require(OwnerSetupFlow.steps(google()))
         let signIn = try #require(steps.first { $0.id == "signin" })
-        #expect(signIn.title == "Sign in to Google" && signIn.rowTitle == "Sign in" && signIn.primaryTitle == "Sign in with Google")
+        #expect(signIn.heading == "Sign in to Google" && signIn.title == "Sign in" && signIn.primaryTitle == "Sign in with Google")
         #expect(signIn.kind == .browserRoundTrip(
             waitingTitle: "Waiting for Google",
             waitingBody: "Finish in the browser. You can close this window; Pal keeps going and tells you when it is done."
@@ -223,8 +223,8 @@ struct OwnerSetupFlowTests {
     @Test func theCallbackStepAcceptsAnAddressOnly() throws {
         let steps = try #require(OwnerSetupFlow.steps(google(pasteRoute: true)))
         let callback = try #require(steps.first { $0.id == "callback" })
-        #expect(callback.rowTitle == "Paste the address")
-        #expect(callback.title == "Paste the address your browser ended on")
+        #expect(callback.title == "Paste the address")
+        #expect(callback.heading == "Paste the address your browser ended on")
         let field = try #require(callback.fields.first)
         #expect(field.id == "callback" && field.prefixes == ["http://", "https://"])
         #expect(field.shape(of: "code=abc") == .wrongStart(["http://", "https://"]))
