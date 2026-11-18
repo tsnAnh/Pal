@@ -52,20 +52,20 @@ private func admission(_ text: String, kind: String?, status: String = "queued",
         let (text, kind) = Self.machine[index]
         var chat = try Machine()
         chat.send("session.info", ["running": true, "pending": [admission(text, kind: kind)]])
-        #expect(chat.inbound(of: text) == .processCompletion)
+        #expect(chat.inbound(of: text) == .internalNotice)
     }
 
     @Test(arguments: [0, 1]) func startedAdmissionEchoOfAMachineTurnIsNeverTheOwnersBubble(_ index: Int) throws {
         let (text, kind) = Self.machine[index]
         var chat = try Machine()
         chat.send("session.info", ["running": true, "pending": [admission(text, kind: kind, status: "started")]])
-        #expect(chat.inbound(of: text) == .processCompletion)
+        #expect(chat.inbound(of: text) == .internalNotice)
     }
 
     @Test(arguments: [0, 1]) func snapshotPendingMachineTurnIsNeverTheOwnersBubble(_ index: Int) throws {
         let (text, kind) = Self.machine[index]
         let chat = try Machine(pending: [admission(text, kind: kind)])
-        #expect(chat.inbound(of: text) == .processCompletion)
+        #expect(chat.inbound(of: text) == .internalNotice)
     }
 
     @Test func absorbedMachineRemainderIsNeverTheOwnersBubble() throws {
@@ -73,7 +73,7 @@ private func admission(_ text: String, kind: String?, status: String = "queued",
         chat.send("input.absorbed", [
             "turn_id": "t1", "admission_ids": ["a9"], "message_uid": "m1", "text": .string(delegation),
         ])
-        #expect(chat.inbound(of: delegation.trimmingCharacters(in: .whitespacesAndNewlines)) == .processCompletion)
+        #expect(chat.inbound(of: delegation.trimmingCharacters(in: .whitespacesAndNewlines)) == .internalNotice)
     }
 
     @Test func absorbedOwnerSteerStaysTheOwnersBubble() throws {
@@ -87,13 +87,13 @@ private func admission(_ text: String, kind: String?, status: String = "queued",
     @Test func oldServerDelegationHeaderWithoutKindIsAProcessCompletion() throws {
         var chat = try Machine()
         chat.send("session.info", ["running": true, "pending": [admission(delegation, kind: nil)]])
-        #expect(chat.inbound(of: delegation) == .processCompletion)
+        #expect(chat.inbound(of: delegation) == .internalNotice)
     }
 
     @Test func internalNotificationAdmissionIsANotice() throws {
         var chat = try Machine()
         chat.send("session.info", ["running": true, "pending": [admission("[heartbeat] tick", kind: "internal_notification")]])
-        #expect(chat.inbound(of: "[heartbeat] tick") == .systemNotification)
+        #expect(chat.inbound(of: "[heartbeat] tick") == .internalNotice)
     }
 
     @Test func hiddenAdmissionIsNeverShown() throws {
