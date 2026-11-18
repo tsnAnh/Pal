@@ -16,7 +16,8 @@ struct KanbanCardView: View {
     let openCard: (String) -> Void
     let back: () -> Void
 
-    @Environment(\.kanbanRoster) private var roster
+    @Environment(\.kanbanRoster) var roster
+    @State private var showsAllEvidence = false
 
     private var detail: KanbanCardDetail? { store.session.detail(board: board, taskID: taskID) }
     private var load: KanbanLoad { store.cardLoad(board: board, taskID: taskID) }
@@ -35,21 +36,36 @@ struct KanbanCardView: View {
             }
         }
         .task(id: taskID) { await store.loadCard(board: board, taskID: taskID) }
+        .onChange(of: taskID) { showsAllEvidence = false }
         .refreshable { await store.loadCard(board: board, taskID: taskID) }
     }
 
     private var pane: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                Text(title).hermesText(.rowTitle).foregroundStyle(PalTokens.textPrimary).lineLimit(1)
-                Spacer(minLength: 0)
+                #if os(iOS)
+                Button(role: .close, action: back)
+                    .buttonStyle(.palGlass)
+                    .accessibilityIdentifier("kanbanCard-close")
+                #endif
+                Text(title)
+                    .hermesText(.rowTitle)
+                    .foregroundStyle(PalTokens.textPrimary)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityAddTraits(.isHeader)
+                #if os(macOS)
                 Button(action: back) { // nav-chrome: ok
                     Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(PalTokens.textSecondary)
                         .frame(width: 28, height: 28)
+                        .palGlass(Circle())
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Close card"))
                 .accessibilityIdentifier("kanbanCard-close")
+                #endif
             }
             .padding(.horizontal, PalMetrics.screenMargin)
             .padding(.vertical, 10)
@@ -90,10 +106,13 @@ struct KanbanCardView: View {
 
     @ViewBuilder
     private func sections(_ detail: KanbanCardDetail) -> some View {
-        header(detail)
-        bodySection(detail)
+        let row = cardRow(detail)
+        let document = KanbanBody.parse(detail.body, title: row.displayTitle)
+        header(row)
+        ticket(document)
         text("Result", detail.result, identifier: "kanbanResult")
         evidence(detail)
+        details(document)
         activity
         lifecycle(detail)
         runs(detail)
@@ -104,61 +123,69 @@ struct KanbanCardView: View {
         links("Dependents", detail.dependents, identifier: "kanbanDependents")
     }
 
-    private func header(_ detail: KanbanCardDetail) -> some View {
-        let row = KanbanCardRow(card: detail.card, project: store.session.cache(board)?.board?.projectID, detail: detail)
-        return VStack(alignment: .leading, spacing: 10) {
-            Text(row.displayTitle)
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(PalTokens.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("kanbanCardTitle")
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                KanbanBadges(row: row, now: context.date)
-            }
+    private func cardRow(_ detail: KanbanCardDetail) -> KanbanCardRow {
+        KanbanCardRow(card: detail.card, project: store.session.cache(board)?.board?.projectID, detail: detail)
+    }
+
+    private func header(_ row: KanbanCardRow) -> some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            KanbanBadges(row: row, now: context.date)
         }
         .padding(.horizontal, PalMetrics.screenMargin)
     }
 
+    private var knownRefs: [String: String] {
+        KanbanRef.index(rows: KanbanBoardLayout.rows(session: store.session, board: board))
+            .filter { $0.value != taskID }
+    }
+
     @ViewBuilder
-    private func bodySection(_ detail: KanbanCardDetail) -> some View {
-        let document = KanbanBody.parse(detail.body)
-        if !document.isEmpty || !document.metadata.isEmpty {
-            section("Description", identifier: "kanbanBody") {
-                KanbanBodyView(document: document)
+    private func ticket(_ document: KanbanBodyDocument) -> some View {
+        if !document.isEmpty {
+            let refs = knownRefs
+            VStack(alignment: .leading, spacing: PalMetrics.cardGap) {
+                if !document.intro.isEmpty {
+                    GroupedCard(accessibilityIdentifier: "kanbanBodyIntro") {
+                        KanbanBodyView(blocks: document.intro, refs: refs, openCard: openCard)
+                    }
+                }
+                ForEach(document.parts) { part in
+                    ticketPart(part, refs: refs)
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("kanbanBody")
+        }
+    }
+
+    private func ticketPart(_ part: KanbanBodyPart, refs: [String: String]) -> some View {
+        section(part.label.title, identifier: "kanbanPart-\(part.label.identifier)") {
+            if !part.blocks.isEmpty {
+                KanbanBodyView(blocks: part.blocks, refs: refs, openCard: openCard)
+            }
+            ForEach(Array(part.links.enumerated()), id: \.offset) { index, url in
+                let pullRequest = KanbanPresentation.pullRequestRow(url)
+                SettingsRow(
+                    title: pullRequest.title,
+                    subtitle: pullRequest.subtitle,
+                    trailing: .external,
+                    accessibilityIdentifier: "kanbanPullRequestLink-\(index)"
+                ) { ExternalLink.open(url) }
             }
         }
     }
 
-    private func section<Rows: View>(_ title: String, identifier: String, @ViewBuilder rows: () -> Rows) -> some View {
+    @ViewBuilder
+    private func details(_ document: KanbanBodyDocument) -> some View {
+        if !document.footer.isEmpty {
+            KanbanDetailsView(lines: document.footer)
+        }
+    }
+
+    func section<Rows: View>(_ title: String, identifier: String, @ViewBuilder rows: () -> Rows) -> some View {
         VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             SectionCaption(title, accessibilityIdentifier: "\(identifier)-caption")
             GroupedCard(accessibilityIdentifier: identifier, content: rows)
-        }
-    }
-
-    private func lifecycle(_ detail: KanbanCardDetail) -> some View {
-        let state = detail.lifecycle
-        return section("Lifecycle", identifier: "kanbanLifecycle") {
-            SettingsRow.value("Status", value: KanbanPresentation.statusTitle(state.status), accessibilityIdentifier: "kanbanLifecycleStatus")
-            if let assignee = state.assignee, !assignee.isEmpty {
-                SettingsRow.value("Assignee", value: roster.names.name(for: assignee) ?? assignee, accessibilityIdentifier: "kanbanLifecycleAssignee")
-            }
-            if let kind = state.blockKind, !kind.isEmpty {
-                SettingsRow.value("Blocked by", value: kind, accessibilityIdentifier: "kanbanLifecycleBlock")
-            }
-            if let branch = detail.branchName, !branch.isEmpty {
-                SettingsRow.value("Branch", value: branch, accessibilityIdentifier: "kanbanLifecycleBranch")
-            }
-            if let created = KanbanTime.text(state.createdAt) {
-                SettingsRow.value("Created", value: created, accessibilityIdentifier: "kanbanLifecycleCreated")
-            }
-            if let started = KanbanTime.text(state.startedAt) {
-                SettingsRow.value("Started", value: started, accessibilityIdentifier: "kanbanLifecycleStarted")
-            }
-            if let completed = KanbanTime.text(state.completedAt) {
-                SettingsRow.value("Completed", value: completed, accessibilityIdentifier: "kanbanLifecycleCompleted")
-            }
         }
     }
 
@@ -177,148 +204,41 @@ struct KanbanCardView: View {
     }
 
     @ViewBuilder
-    private func runs(_ detail: KanbanCardDetail) -> some View {
-        if !detail.execution.runs.isEmpty {
-            section("Execution runs", identifier: "kanbanRuns") {
-                ForEach(detail.execution.runs) { run in
-                    SettingsRow.value(
-                        runTitle(run, current: detail.execution.currentRunID),
-                        value: run.status,
-                        subtitle: runSubtitle(run),
-                        accessibilityIdentifier: "kanbanRun-\(run.runID)"
-                    )
-                }
-            }
-        }
-    }
-
-    private func runTitle(_ run: KanbanRun, current: Int?) -> String {
-        run.runID == current ? "Run \(run.runID) (live)" : "Run \(run.runID)"
-    }
-
-    private func runSubtitle(_ run: KanbanRun) -> String? {
-        var parts: [String] = []
-        if let profile = roster.names.name(for: run.profile) { parts.append(profile) }
-        if let executor = run.executor, !executor.isEmpty { parts.append(executor) }
-        if let session = run.executorSession, !session.isEmpty { parts.append("session \(session)") }
-        if let outcome = run.outcome, !outcome.isEmpty { parts.append(outcome) }
-        if let started = KanbanTime.text(run.startedAt) { parts.append(started) }
-        if let summary = run.summary, !summary.isEmpty { parts.append(summary) }
-        if let error = run.error, !error.isEmpty { parts.append(error) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-
-    private func proofCaption(_ title: String, _ detail: KanbanCardDetail) -> String {
-        detail.proofRunID.map { "\(title) · run \($0)" } ?? title
-    }
-
-    private func ciAcceptance(_ detail: KanbanCardDetail) -> some View {
-        let ci = detail.ciAcceptance
-        return section(proofCaption("CI acceptance", detail), identifier: "kanbanCi") {
-            SettingsRow(
-                title: KanbanPresentation.ciLabel(ci),
-                subtitle: [ci.classification, KanbanTime.text(ci.observedAt)].compactMap { $0 }.joined(separator: " · ").nonEmpty,
-                accessibilityIdentifier: "kanbanCiState"
-            )
-        }
-    }
-
-    private func outcome(_ detail: KanbanCardDetail) -> some View {
-        let verification = detail.outcomeVerification
-        let contract = detail.outcomeContract.map(KanbanPresentation.contractTitle)
-        return section(proofCaption("Outcome verification", detail), identifier: "kanbanOutcome") {
-            SettingsRow(
-                title: KanbanPresentation.outcomeLabel(verification),
-                subtitle: [contract, KanbanTime.text(verification.observedAt)].compactMap { $0 }.joined(separator: " · ").nonEmpty,
-                accessibilityIdentifier: "kanbanOutcomeState"
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func earlierProofs(_ detail: KanbanCardDetail) -> some View {
-        if !detail.proofHistory.isEmpty {
-            section("Earlier runs' proofs", identifier: "kanbanProofHistory") {
-                ForEach(Array(detail.proofHistory.enumerated()), id: \.offset) { _, proof in
-                    SettingsRow(
-                        title: KanbanPresentation.proofLabel(proof),
-                        subtitle: [proof.runID.map { "Run \($0)" }, KanbanTime.text(proof.observedAt)].compactMap { $0 }.joined(separator: " · ").nonEmpty,
-                        accessibilityIdentifier: "kanbanProof-\(proof.eventID ?? 0)"
-                    )
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
     private func evidence(_ detail: KanbanCardDetail) -> some View {
-        if !detail.evidence.isEmpty {
+        let groups = KanbanEvidenceGroup.groups(detail.evidence)
+        if !groups.isEmpty {
+            let hidden = showsAllEvidence ? 0 : max(groups.count - KanbanEvidenceGroup.visibleLimit, 0)
             section("Evidence", identifier: "kanbanEvidence") {
-                ForEach(detail.evidence) { item in
-                    if let url = item.url {
-                        SettingsRow.external(
-                            KanbanPresentation.evidenceTitle(item.kind),
-                            subtitle: url.absoluteString,
-                            accessibilityIdentifier: "kanbanEvidence-\(item.evidenceID)"
-                        ) { ExternalLink.open(url) }
-                    } else {
-                        SettingsRow.value(
-                            KanbanPresentation.evidenceTitle(item.kind),
-                            value: KanbanPresentation.evidenceSource(item.source),
-                            subtitle: evidenceSubtitle(item),
-                            accessibilityIdentifier: "kanbanEvidence-\(item.evidenceID)"
-                        )
+                ForEach(showsAllEvidence ? groups : Array(groups.prefix(KanbanEvidenceGroup.visibleLimit))) { group in
+                    evidenceRow(group)
+                }
+                if hidden > 0 {
+                    HStack {
+                        Button("Show all \(groups.count)") { showsAllEvidence = true }
+                            .buttonStyle(.palGlass)
+                            .accessibilityIdentifier("kanbanEvidenceShowAll")
+                        Spacer(minLength: 0)
                     }
+                    .padding(.horizontal, PalMetrics.rowInset)
+                    .padding(.vertical, 6)
                 }
             }
         }
     }
 
-    private func evidenceSubtitle(_ item: KanbanEvidence) -> String? {
-        var parts: [String] = []
-        if let producer = roster.names.name(for: item.producerProfile) { parts.append(producer) }
-        if let session = item.producerSession { parts.append("session \(session)") }
-        if let runID = item.runID { parts.append("run \(runID)") }
-        if let time = KanbanTime.text(item.observedAt) { parts.append(time) }
-        if let summary = item.summary { parts.append(summary) }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    private func evidenceRow(_ group: KanbanEvidenceGroup) -> SettingsRow {
+        let detail = group.url.map { KanbanPresentation.pullRequestRow($0).title } ?? group.summary
+        let last = KanbanTime.text(group.latest.observedAt).map { String(localized: "last \($0)") }
+        let subtitle = [detail, last].compactMap { $0 }.joined(separator: " · ").nonEmpty
+        var open: (() -> Void)?
+        if let url = group.url { open = { ExternalLink.open(url) } }
+        return SettingsRow(
+            title: KanbanPresentation.evidenceTitle(group.kind),
+            subtitle: subtitle,
+            value: "\u{00D7}\(group.count)",
+            trailing: group.url == nil ? .none : .external,
+            accessibilityIdentifier: "kanbanEvidence-\(group.latest.evidenceID)",
+            action: open
+        )
     }
-
-    @ViewBuilder
-    private func links(_ title: String, _ taskIDs: [String], identifier: String) -> some View {
-        if !taskIDs.isEmpty {
-            section(title, identifier: identifier) {
-                ForEach(taskIDs, id: \.self) { id in
-                    SettingsRow.navigate(
-                        linkedTitle(id), subtitle: id, accessibilityIdentifier: "\(identifier)-\(id)"
-                    ) { openCard(id) }
-                }
-            }
-        }
-    }
-
-    private func linkedTitle(_ taskID: String) -> String {
-        store.session.cache(board)?.cards.values.first { $0.taskID == taskID }?.title ?? taskID
-    }
-
-    @ViewBuilder
-    private var activity: some View {
-        let events = store.events(board: board, taskID: taskID)
-        if !events.isEmpty {
-            section("Timeline", identifier: "kanbanActivity") {
-                ForEach(events) { event in
-                    SettingsRow.value(
-                        KanbanPresentation.eventTitle(event.kind),
-                        value: KanbanTime.text(event.createdAt) ?? "",
-                        subtitle: event.note,
-                        accessibilityIdentifier: "kanbanEvent-\(event.eventID)"
-                    )
-                }
-            }
-        }
-    }
-}
-
-private extension String {
-    var nonEmpty: String? { isEmpty ? nil : self }
 }
