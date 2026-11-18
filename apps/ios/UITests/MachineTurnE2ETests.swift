@@ -8,36 +8,41 @@ final class MachineTurnE2ETests: E2ETestCase {
         XCTAssertEqual(bubbles(app, "userBubble", containing: marker).count, 0, "\(moment): a machine turn painted as the owner's bubble\n\(app.debugDescription)")
     }
 
-    private func waitForFollowUp(_ app: XCUIApplication, timeout: TimeInterval) {
-        let notice = app.descendants(matching: .any).matching(identifier: "inboundNotice").firstMatch
-        waitFor(notice, timeout: timeout, "the delegation completion lands as a notice")
+    private func noRowShowsTheCompletion(_ app: XCUIApplication, _ moment: String) {
+        let notices = app.descendants(matching: .any).matching(identifier: "inboundNotice")
+        XCTAssertEqual(notices.count, 0, "\(moment): a delegation completion painted as a row\n\(app.debugDescription)")
+        noOwnerBubbleCarriesTheMarker(app, moment)
+    }
+
+    private func waitForFollowUp(_ app: XCUIApplication, after before: Int, timeout: TimeInterval) {
+        let replies = app.descendants(matching: .any).matching(identifier: "assistantBubble")
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            let replies = app.descendants(matching: .any).matching(identifier: "assistantBubble")
-            if replies.count > 0, replies.element(boundBy: replies.count - 1).frame.minY > notice.frame.minY { return }
-            noOwnerBubbleCarriesTheMarker(app, "while the completion runs")
+            if replies.count > before { return }
+            noRowShowsTheCompletion(app, "while the completion runs")
             Thread.sleep(forTimeInterval: 0.25)
         }
         XCTFail("the bot's follow-up reply to the completion never appeared\n\(app.debugDescription)")
     }
 
-    func test1DelegationCompletionIsANoticeLiveAndAfterReopening() throws {
+    func test1DelegationCompletionHasNoRowLiveAndAfterReopening() throws {
         let app = launch(resetCredentials: true)
         signInIfNeeded(app)
         openBot(app, "bot-alpha")
         shot(app, "machine-turn-1-open")
 
+        let repliesBefore = app.descendants(matching: .any).matching(identifier: "assistantBubble").count
         try control("external-delegate-alpha")
-        waitForFollowUp(app, timeout: 120)
-        noOwnerBubbleCarriesTheMarker(app, "live")
+        waitForFollowUp(app, after: repliesBefore, timeout: 120)
+        noRowShowsTheCompletion(app, "live")
         shot(app, "machine-turn-2-live")
 
         app.terminate()
         let reopened = launch()
         signInIfNeeded(reopened)
         openBot(reopened, "bot-alpha")
-        waitFor(reopened.descendants(matching: .any).matching(identifier: "inboundNotice").firstMatch, timeout: 30, "notice after reopening")
-        noOwnerBubbleCarriesTheMarker(reopened, "after reopening")
+        waitFor(reopened.descendants(matching: .any).matching(identifier: "assistantBubble").firstMatch, timeout: 30, "the bot's reply after reopening")
+        noRowShowsTheCompletion(reopened, "after reopening")
         shot(reopened, "machine-turn-3-reopened")
         try control("stop-external")
     }

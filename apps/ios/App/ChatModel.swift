@@ -15,8 +15,6 @@ enum BubbleDelivery: Equatable {
 
 enum ChatNotice: Equatable {
     case botMessage(senderName: String, body: String)
-    case notification
-    case backgroundTaskFinished(count: Int, text: String)
 }
 
 struct ReplyTarget: Equatable {
@@ -889,13 +887,9 @@ final class ChatModel {
                 return (.user(text: content.text, delivery: state), content.images, [])
             case .botMessage(let sender, let body):
                 return (.notice(.botMessage(senderName: sender.name, body: body)), [], [])
-            case .systemNotification:
-                return (.notice(.notification), [], [])
             case .routineOutput(let jobName, let body, let failed):
-                let routine = RoutineMessage(jobName: jobName, body: body, failed: failed, time: item.timestamp ?? arrivals[item.id])
-                return (.routine(routine), [], [])
-            case .processCompletion:
-                return (.notice(.backgroundTaskFinished(count: InboundKind.backgroundTaskCount(in: text), text: text)), [], [])
+                return (.routine(RoutineMessage(jobName: jobName, body: body, failed: failed, time: item.timestamp ?? arrivals[item.id])), [], [])
+            case .internalNotice: return nil
             }
         case .assistant(let text, _, let streaming):
             let content = MessageImages.extract(from: text, role: .assistant, isStreaming: streaming)

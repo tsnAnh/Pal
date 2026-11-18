@@ -68,7 +68,7 @@ final class SeededChatE2ETests: E2ETestCase {
         waitFor(notice, timeout: 20, "system notice rows")
         let labels = app.descendants(matching: .any).matching(identifier: "inboundNotice").allElementsBoundByIndex.map(\.label)
         XCTAssertTrue(labels.contains("Message from chó ai image gen"), "\(labels)")
-        XCTAssertTrue(labels.contains("Background task finished"), "\(labels)")
+        XCTAssertFalse(labels.contains { $0.contains("Background task") || $0.contains("background tasks") }, "\(labels)")
         XCTAssertEqual(bubbles(app, "userBubble", containing: "Message from").count, 0, "bot-to-bot rows are not the human's bubbles")
         XCTAssertEqual(bubbles(app, "userBubble", containing: "IMPORTANT: Background process").count, 0)
         shot(app, "inbound-rows")

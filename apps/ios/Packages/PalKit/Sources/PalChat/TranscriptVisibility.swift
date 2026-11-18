@@ -9,11 +9,17 @@ public enum TranscriptVisibility {
         case .assistant(let text, _, _):
             text.trimmingCharacters(in: .whitespacesAndNewlines) == silentReply
         case .user(let text, _):
-            item.inbound == .processCompletion
-                ? InboundKind.isSuccessfulCompletion(text)
-                : botChat && text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(cronjobTurnPrefix)
+            isHiddenUserTurn(text, inbound: item.inbound, botChat: botChat)
         default:
             false
+        }
+    }
+
+    private static func isHiddenUserTurn(_ text: String, inbound: InboundKind, botChat: Bool) -> Bool {
+        switch inbound {
+        case .internalNotice: true
+        case .person: botChat && text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(cronjobTurnPrefix)
+        case .botMessage, .routineOutput: false
         }
     }
 
