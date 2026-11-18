@@ -41,6 +41,7 @@ final class ConnectionModel {
     private var connection: GatewayConnection?
     private var reopening: Task<GatewayConnection, any Error>?
     private var attentionChain: Task<Void, Never>?
+    @ObservationIgnored private var attention: AttentionReporter?
     private var methodProbe: Task<Void, Never>?
     private var pendingRestore = false
 
@@ -52,7 +53,8 @@ final class ConnectionModel {
         presence: ReachPresence,
         localDeviceID: String? = nil,
         keychainUnavailable: Bool = false,
-        cache: CacheStore? = nil
+        cache: CacheStore? = nil,
+        appActivity: (any AppActivity)? = nil
     ) {
         self.localDeviceID = localDeviceID
         self.auth = auth
@@ -70,6 +72,7 @@ final class ConnectionModel {
             phase = .connecting
             client = makeClient()
         }
+        attention = AttentionReporter(activity: appActivity) { [weak self] in self?.send(attention: $0) }
     }
 
     private func adopt(userName userID: String?) {
@@ -112,8 +115,17 @@ final class ConnectionModel {
             initialBaseURL: "",
             presence: ReachPresence(identity: identity, diagnostics: diagnostics),
             localDeviceID: identity.deviceID,
-            keychainUnavailable: keychainUnavailable
+            keychainUnavailable: keychainUnavailable,
+            appActivity: Self.liveAppActivity
         )
+    }
+
+    private static var liveAppActivity: (any AppActivity)? {
+        #if os(macOS)
+        MacAppActivity()
+        #else
+        nil
+        #endif
     }
 
     private static func keychainSession(
@@ -133,7 +145,11 @@ final class ConnectionModel {
         keychainUnavailable = false
     }
 
-    func report(attention: ReachAttention) {
+    func report(attention scene: ReachAttention) {
+        attention?.sceneChanged(isActive: scene == .foreground)
+    }
+
+    private func send(attention: ReachAttention) {
         let presence = presence
         let previous = attentionChain
         attentionChain = Task {
