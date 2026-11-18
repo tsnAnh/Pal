@@ -94,7 +94,8 @@ struct KanbanCacheTests {
         await store.refreshSnapshot(board: "ops")
         #expect(store.session == before)
 
-        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1", title: ""), KanbanJSON.card("t2", status: "done", title: "")], cursor: "c1"))
+        let changedCards = [KanbanJSON.card("t1", title: ""), KanbanJSON.card("t2", status: "done", title: "")]
+        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot(changedCards, cursor: "c1"))
         await store.refreshSnapshot(board: "ops")
         let rows = try #require(store.visibleRows(board: "ops"))
         let old = before.cache("ops")?.cards ?? [:]

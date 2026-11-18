@@ -69,9 +69,11 @@ struct KanbanRedesignTests {
         #expect(try row("t1", wire: "ready", title: "raw-key", body: "Key: a\n# Real title").displayTitle == "raw-key", "the card title wins over the body")
         #expect(try row("t2", wire: "ready", title: "Card title").displayTitle == "Card title", "no body uses the card title")
         #expect(try row("t3", wire: "ready").displayTitle == "t3", "an empty title falls back to the key")
-        #expect(try row("t4", wire: "ready", title: "  ", body: "/faker-mode\n# Real heading").displayTitle == "Real heading", "a blank title skips a leading slash command")
+        let skipped = try row("t4", wire: "ready", title: "  ", body: "/faker-mode\n# Real heading")
+        #expect(skipped.displayTitle == "Real heading", "a blank title skips a leading slash command")
         #expect(try row("t5", wire: "ready", title: "", body: "/faker-mode").displayTitle == "t5", "a body of only a slash command falls back to the key")
-        #expect(try row("t6", wire: "ready", title: "", body: "  /faker-mode unit\n\nPlain words").displayTitle == "Plain words", "an indented slash command is skipped")
+        let indented = try row("t6", wire: "ready", title: "", body: "  /faker-mode unit\n\nPlain words")
+        #expect(indented.displayTitle == "Plain words", "an indented slash command is skipped")
         #expect(try row("t7", wire: "ready", title: "", body: "/ not a command").displayTitle == "/ not a command", "a lone slash is readable text")
     }
 
