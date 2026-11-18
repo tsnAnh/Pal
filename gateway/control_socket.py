@@ -552,6 +552,16 @@ def rescan_gateway_profiles(home: Path, *, timeout: float = 8.0) -> Optional[dic
     return query_gateway_control(home, "rescan-profiles", timeout=timeout)
 
 
+def reload_gateway_platform(home: Path, *, profile_home: Path, platform: str, env_keys: list[str],
+                            timeout: float = 25.0) -> Optional[dict[str, Any]]:
+    """Ask the gateway serving ``home`` to rebuild ``platform``'s adapter for the profile owning
+    ``profile_home`` from its saved ``.env``/config now, with no process restart. Returns
+    ``{"reloaded", "connecting"}`` (or ``{"reloaded": False, "error"}``), or None when no gateway
+    answers / it predates the verb."""
+    params = {"home": str(profile_home), "platform": platform, "env_keys": list(env_keys)}
+    return query_gateway_control(home, "reload-platform", params=params, timeout=timeout)
+
+
 def request_unserve_profile(home: Path, name: str) -> Optional[dict[str, Any]]:
     return query_gateway_control(home, "unserve-profile", params={"name": name}, timeout=8.0)
 

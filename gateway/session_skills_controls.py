@@ -2,7 +2,7 @@ from gateway.session_legacy_bridge import Verb, action_scope, bridged
 
 
 VERBS = {
-    'skills.manage': Verb(action_scope({'list', 'search', 'browse', 'inspect'}, set())),
+    'skills.manage': Verb(action_scope({'list', 'search', 'browse', 'inspect', 'installed', 'check'}, set())),
 }
 
 

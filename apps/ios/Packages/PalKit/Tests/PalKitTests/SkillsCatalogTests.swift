@@ -86,15 +86,34 @@ struct SkillsCatalogServiceTests {
         #expect(SkillsCatalog(hub: hubItems, state: state).rows.first { $0.name == "weather" }?.state == .updateAvailable)
     }
 
-    @Test func aFailedUpdateCheckStillReturnsWhatIsInstalled() async throws {
+    @Test(arguments: ["list", "check"]) func aFailedReadFailsTheLoadInsteadOfShowingAnEmptyList(_ failing: String) async {
         let rpc = CustomRPC(["skills.manage": { params in
-            switch params["action"]?.stringValue {
+            if params["action"]?.stringValue == failing { throw GatewayTransportError.timedOut }
+            return [:]
+        }])
+        await #expect(throws: SkillsCatalogError.unavailable) { try await skillsService(rpc).installState() }
+    }
+
+    @Test func theLoadSendsOnlyActionsTheNativeSocketServesAndSucceedsAgainstThem() async throws {
+        let served: Set<String> = ["list", "search", "browse", "inspect", "installed", "check"]
+        let rpc = CustomRPC(["skills.manage": { params in
+            guard let action = params["action"]?.stringValue, served.contains(action) else {
+                throw GatewayTransportError.rpc(RPCError(code: 4001, message: "invalid_params"))
+            }
+            switch action {
             case "installed": return ["installed_skills": [["name": "weather"]]]
-            default: throw GatewayTransportError.timedOut
+            case "browse": return ["items": [["name": "pdf", "description": "PDFs", "identifier": "o/pdf"]], "page": 1, "total_pages": 1]
+            default: return [:]
             }
         }])
-        let state = try await skillsService(rpc).installState()
-        #expect(state.hubInstalled.map(\.name) == ["weather"] && state.updates.isEmpty && state.bundled.isEmpty)
+        let service = skillsService(rpc)
+        let page = try await service.browse(page: 1)
+        let state = try await service.installState()
+        #expect(page.items.map(\.name) == ["pdf"])
+        #expect(state.hubInstalled.map(\.name) == ["weather"])
+        let actions = Set(rpc.params("skills.manage").compactMap { $0["action"]?.stringValue })
+        #expect(actions == ["browse", "installed", "list", "check"])
+        #expect(rpc.params("skills.manage").allSatisfy { $0["profile"]?.stringValue == "alpha" })
     }
 
     @Test func aFailedInstalledReadFailsTheLoadInsteadOfGuessingAvailable() async {

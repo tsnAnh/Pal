@@ -19,6 +19,7 @@ struct MacCreateBot: View {
                 .foregroundStyle(PalTokens.textPrimary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 15)
+                .padding(.leading, PalMetrics.macPanelTitleClearance)
                 .frame(height: 49)
                 .accessibilityAddTraits(.isHeader)
             PalHairline(color: PalTokens.panelBorder)

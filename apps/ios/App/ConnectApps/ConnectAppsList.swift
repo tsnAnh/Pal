@@ -5,6 +5,25 @@ import PalDevice
 import PalProtocol
 import SwiftUI
 
+struct ConnectAppsSearchField: View {
+    @Binding var text: String
+    let prompt: String
+
+    var body: some View {
+        TextField(prompt, text: $text)
+            .textFieldStyle(.roundedBorder)
+            .autocorrectionDisabled()
+            #if os(iOS)
+            .textInputAutocapitalization(.never)
+            .submitLabel(.search)
+            #endif
+            .accessibilityLabel(Text("Search apps and skills"))
+            .accessibilityIdentifier("connectAppsSearch")
+            .padding(.horizontal, PalMetrics.screenMargin)
+            .padding(.bottom, PalMetrics.captionToCardGap)
+    }
+}
+
 struct ConnectAppsList: View {
     @Bindable var model: ConnectAppsModel
 
@@ -12,12 +31,7 @@ struct ConnectAppsList: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 resumeBanner
-                FloatingSearchBar(
-                    text: $model.query,
-                    prompt: String(localized: "Search \(model.catalog.apps.count) apps"),
-                    accessibilityLabel: String(localized: "Search apps and skills"),
-                    accessibilityIdentifier: "connectAppsSearch"
-                )
+                ConnectAppsSearchField(text: $model.query, prompt: String(localized: "Search \(model.catalog.apps.count) apps"))
                 content
                 SetupButton(
                     title: String(localized: "Add a custom connector"), fillsWidth: true, identifier: "addCustomConnectorButton"

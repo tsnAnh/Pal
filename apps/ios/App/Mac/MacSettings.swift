@@ -102,7 +102,7 @@ struct MacSettingsModal: View {
             }
             Spacer()
         }
-        .padding(.top, 15)
+        .padding(.top, MacMetrics.topBarHeight)
         .padding(.leading, 11)
         .frame(width: 181, alignment: .leading)
     }

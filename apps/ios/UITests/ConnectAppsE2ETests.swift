@@ -143,8 +143,7 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         let keyboard = app.keyboards.firstMatch
         if keyboard.exists { XCTAssertLessThanOrEqual(add.frame.maxY, keyboard.frame.minY, "add button not under the keyboard") }
 
-        app.buttons["connectAppsSearch-clear"].tap()
-        search.tap()
+        search.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: "zzzz no such app".count))
         for _ in 0..<20 where !(add.exists && add.isHittable) { app.swipeUp() }
         XCTAssertTrue(add.isHittable, "long list scrolls to the add button with search focused")
         if keyboard.exists { XCTAssertLessThanOrEqual(add.frame.maxY, keyboard.frame.minY, "add button not under the keyboard") }

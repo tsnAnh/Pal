@@ -1111,18 +1111,26 @@ async def update_messaging_platform(platform_id: str, body: MessagingPlatformUpd
         )
         # A live multiplexer serving this named profile builds the adapter from the new token now
         # (its periodic rescan would otherwise pick it up within a cycle); no gateway restart.
-        hot_served = await asyncio.to_thread(_notify_multiplexer_hot_serve, target_profile)
+        hot_served = await asyncio.to_thread(_notify_multiplexer_hot_serve, target_profile, platform_id)
         return {"ok": True, "platform": platform_id, "hot_served": hot_served}
 
 
-def _notify_multiplexer_hot_serve(profile: Optional[str]) -> bool:
-    """True when a live multiplexer serves the written profile and was told to rebuild its adapters.
+def _notify_multiplexer_hot_serve(profile: Optional[str], platform_id: str) -> bool:
+    """True when a live gateway applied the saved ``platform_id`` credentials to the written profile
+    now, with no process restart. The gateway that owns the profile rebuilds just that platform's
+    adapter (the launch ``default`` profile, a standalone profile and a multiplexed one alike); a
+    gateway that predates the verb still hot-serves a named profile through the periodic rescan.
     Unscoped (no ``?profile=``) means THIS process's profile: Desktop routes a pooled
     ``hermes --profile X serve`` without the query (#109088), so X must resolve here too."""
     from hermes_cli.gateway import _current_profile_name, named_profile_served_by_running_multiplexer
-    from hermes_cli.gateway_multiplex_served import notify_multiplexer_profiles_changed
+    from hermes_cli.gateway_multiplex_served import notify_multiplexer_profiles_changed, reload_platform_live
+    from hermes_cli.profiles import get_profile_dir
     name = (profile or "").strip() or _current_profile_name()
-    if not name or name == "default" or not named_profile_served_by_running_multiplexer(name):
+    if not name:
+        return False
+    if reload_platform_live(get_profile_dir(name), platform_id, list(_require_platform(platform_id)["env_vars"])):
+        return True
+    if name == "default" or not named_profile_served_by_running_multiplexer(name):
         return False
     return notify_multiplexer_profiles_changed(name) is not None
 

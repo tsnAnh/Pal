@@ -37,7 +37,7 @@ def gateway_reload(monkeypatch):
     calls = {"hot": [], "restart": []}
     hot_served = {"value": False}
 
-    def hot(profile):
+    def hot(profile, platform_id):
         calls["hot"].append(profile)
         return hot_served["value"]
 

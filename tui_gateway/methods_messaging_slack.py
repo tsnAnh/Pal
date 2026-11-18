@@ -59,7 +59,7 @@ def _slack_allowed_users(rid, raw):
 
 def _slack_reload(profile_arg):
     messaging = _slack_messaging()
-    hot_served = bool(messaging._notify_multiplexer_hot_serve(profile_arg))
+    hot_served = bool(messaging._notify_multiplexer_hot_serve(profile_arg, "slack"))
     if hot_served:
         return {"hot_served": True, "restart_started": False}
     outcome = messaging._restart_gateway_after(profile_arg, what="Slack connect", label="Slack connect")

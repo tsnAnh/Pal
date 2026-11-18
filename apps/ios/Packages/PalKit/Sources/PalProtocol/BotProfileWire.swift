@@ -184,8 +184,6 @@ public struct SlackStatusWire: Codable, Sendable, Hashable {
     public var errorMessage: String?
     public var neededScope: String?
     public var providedScope: String?
-    public var restartStarted: Bool?
-    public var restartBusy: Bool?
     public var restartError: String?
     public var hotServed: Bool?
 
@@ -196,8 +194,6 @@ public struct SlackStatusWire: Codable, Sendable, Hashable {
         case errorMessage = "error_message"
         case neededScope = "needed_scope"
         case providedScope = "provided_scope"
-        case restartStarted = "restart_started"
-        case restartBusy = "restart_busy"
         case restartError = "restart_error"
         case hotServed = "hot_served"
     }
