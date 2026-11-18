@@ -1,3 +1,4 @@
+import PalDiagnostics
 import SwiftUI
 
 nonisolated struct ChatViewport: Equatable {
@@ -83,6 +84,7 @@ final class ChatScrollController {
     }
 
     func rowMoved(_ id: String, contentMinY: CGFloat) {
+        PalPerf.event("chat.scroll.rowMoved")
         guard var current = pin, current.id == id else { return }
         let previous = current.contentMinY
         current.contentMinY = contentMinY

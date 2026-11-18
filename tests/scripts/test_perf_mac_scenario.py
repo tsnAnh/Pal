@@ -10,6 +10,7 @@ IOS_DIR = Path(__file__).resolve().parents[2] / "apps" / "ios"
 INTERVALS = (
     "roster.apply", "roster.refetch", "chat.rebuild", "chat.timeline.apply", "markdown.parse",
     "avatar.frame", "avatar.canvas.draw", "shell.body", "disk.cache.load", "disk.sync.main", "roster.row.body", "roster.apply.skipped",
+    "chat.row.body", "chat.scroll.rowMoved", "chat.snapshot.coalesced",
 )
 TEMPLATES = ("Time Profiler", "SwiftUI", "Animation Hitches")
 

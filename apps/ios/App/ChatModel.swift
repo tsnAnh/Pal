@@ -667,10 +667,10 @@ final class ChatModel {
     }
 
     private func consumeTimeline(_ session: ChatSession) async {
-        for await next in session.timelineSnapshots {
+        await TimelinePacer.consume(session.timelineSnapshots, apply: { next in
             apply(next)
             if next.sessionID != nil { scheduleCacheSave() }
-        }
+        })
     }
 
     private func apply(_ next: TimelineSnapshot) {
