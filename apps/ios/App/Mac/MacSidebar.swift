@@ -24,7 +24,7 @@ struct MacSidebar: View {
     }
 
     private var expanded: some View {
-        ZStack(alignment: .top) {
+        VStack(spacing: 0) {
             let hero = MacShell.hero(in: roster)
             ScrollView {
                 VStack(spacing: 3) {
@@ -45,27 +45,17 @@ struct MacSidebar: View {
                 }
                 .padding(.horizontal, 11)
                 .padding(.top, MacMetrics.topBarHeight + 7)
-                .padding(.bottom, MacMetrics.footerHeight + 8)
+                .padding(.bottom, 8)
             }
             .scrollIndicators(.never)
-            .mask(
-                VStack(spacing: 0) {
-                    Rectangle()
-                    LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                        .frame(height: MacMetrics.footerHeight - 6)
-                }
-            )
             .accessibilityIdentifier("rosterScreen")
             .overlay {
                 if roster.isLoaded, roster.bots.isEmpty {
                     ContentUnavailableView("No bots yet", systemImage: "face.smiling", description: Text("Bots you create appear here."))
                 }
             }
-            VStack(spacing: 0) {
-                topBar
-                Spacer(minLength: 0)
-                MacSidebarFooter(connection: connection, roster: roster, router: router)
-            }
+            .overlay(alignment: .top) { topBar }
+            MacSidebarFooter(connection: connection, roster: roster, router: router)
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("sidebarExpanded")
@@ -132,71 +122,6 @@ struct MacConnectAppsGlyph: View {
         }
         .frame(width: size, height: size, alignment: .topLeading)
         .accessibilityHidden(true)
-    }
-}
-
-private struct MacHeroGrid: View {
-    let bots: [BotRow]
-    let roster: RosterModel
-    let router: AppRouter
-
-    private static let perRow = 2
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ForEach(Array(stride(from: 0, to: bots.count, by: Self.perRow)), id: \.self) { start in
-                HStack(spacing: 8) {
-                    ForEach(bots[start..<min(start + Self.perRow, bots.count)]) { bot in
-                        MacPrimaryTile(bot: bot, roster: roster, router: router)
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("pinnedHero")
-    }
-}
-
-private struct MacPrimaryTile: View {
-    let bot: BotRow
-    let roster: RosterModel
-    let router: AppRouter
-
-    @State private var hovering = false
-
-    private var isSelected: Bool { router.currentBotName == bot.name }
-
-    var body: some View {
-        let activity = roster.activity(for: bot.name)
-        Button { router.openChat(botName: bot.name) } label: {
-            VStack(spacing: 4) {
-                AvatarBadge(diameter: 53, showsPrimaryBadge: bot.isPrimary, accessibilityIdentifier: "heroAvatar-\(bot.name)") {
-                    BotAvatarView(spec: bot.spec, size: 53 * 1.25, mood: roster.avatarMood(for: bot.name))
-                        .opacity(activity.avatarOpacity)
-                }
-                .frame(width: 53, height: 53)
-                Text(bot.displayName)
-                    .hermesText(.heroName)
-                    .foregroundStyle(PalTokens.textPrimary.opacity(0.9))
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 6)
-            .frame(width: 87, height: 84)
-            .overlay(alignment: .topTrailing) { MacUnreadDot(bot: bot).padding(8) }
-            .background(
-                isSelected ? PalTokens.selected : hovering ? PalTokens.hover : Color.clear,
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Text(MacBotAccessibility.label(bot)))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .botContextMenu(bot, roster: roster, router: router)
-        .accessibilityIdentifier("botRow-\(bot.name)")
-        .accessibilityValue(Text(activity.accessibilityValue))
     }
 }
 
@@ -442,126 +367,9 @@ private struct MacSidebarFooter: View {
         .padding(.leading, 15)
         .padding(.trailing, 14)
         .frame(height: MacMetrics.footerHeight)
+        .background(PalTokens.sidebar)
+        .overlay(alignment: .top) { PalHairline() }
     }
 }
 
-private struct MacRail: View {
-    @Bindable var roster: RosterModel
-    let connection: ConnectionModel
-    let router: AppRouter
-
-    @Environment(MacShell.self) private var shell
-
-    var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 3) {
-                    ForEach(Array(MacShell.ordered(roster).enumerated()), id: \.element.id) { index, bot in
-                        MacRailItem(bot: bot, roster: roster, router: router)
-                            .padding(.bottom, index == 0 ? 21 : 0)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.top, 44)
-                .padding(.bottom, 8)
-            }
-            .scrollIndicators(.never)
-            .accessibilityIdentifier("rosterScreen")
-            VStack(spacing: 0) {
-                VStack(spacing: 3) {
-                    MacRailAction(systemName: "plus", label: String(localized: "Create New Bot"), identifier: "createBotButton") { router.present(.createBot) }
-                    if router.capabilities.contains(.connectApps) {
-                        Button { router.presentConnectApps() } label: {
-                            MacConnectAppsGlyph(size: 15)
-                                .foregroundStyle(PalTokens.textSecondary)
-                                .frame(width: 28, height: 28)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(String(localized: "Connect apps"))
-                        .accessibilityLabel(Text("Connect apps"))
-                        .accessibilityIdentifier("connectAppsButton")
-                    }
-                    if router.capabilities.contains(.kanban) {
-                        Button { router.presentKanban() } label: {
-                            Image(systemName: "rectangle.split.3x1")
-                                .font(.system(size: 15))
-                                .foregroundStyle(PalTokens.textSecondary)
-                                .frame(width: 28, height: 28)
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(String(localized: "Pal Kanban"))
-                        .accessibilityLabel(Text("Pal Kanban"))
-                        .accessibilityIdentifier("kanbanButton")
-                    }
-                }
-                Button { shell.showsAccountMenu.toggle() } label: {
-                    MacAccountAvatar(connection: connection, roster: roster, diameter: 33)
-                }
-                .padding(.top, 10)
-                .buttonStyle(.plain)
-                .help(connection.userName.isEmpty ? String(localized: "Account and settings") : connection.userName)
-                .accessibilityLabel(Text("Account and settings"))
-                .accessibilityIdentifier("userAvatarButton")
-            }
-            .padding(.bottom, 17)
-        }
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("sidebarRail")
-    }
-}
-
-private struct MacRailAction: View {
-    let systemName: String
-    let label: String
-    let identifier: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(PalTokens.textSecondary)
-                .frame(width: 28, height: 28)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(label)
-        .accessibilityLabel(Text(label))
-        .accessibilityIdentifier(identifier)
-    }
-}
-
-private struct MacRailItem: View {
-    let bot: BotRow
-    let roster: RosterModel
-    let router: AppRouter
-
-    @State private var hovering = false
-
-    private var isSelected: Bool { router.currentBotName == bot.name }
-
-    var body: some View {
-        let activity = roster.activity(for: bot.name)
-        Button { router.openChat(botName: bot.name) } label: {
-            MacBotAvatar(bot: bot, roster: roster, diameter: 34, showsPrimaryBadge: true)
-                .frame(width: 50, height: 50)
-                .overlay(alignment: .topTrailing) { MacUnreadDot(bot: bot).padding(7) }
-                .background(
-                    isSelected ? PalTokens.selected : hovering ? PalTokens.hover : Color.clear,
-                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-                )
-                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Text(MacBotAccessibility.label(bot)))
-        }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .help(bot.displayName)
-        .botContextMenu(bot, roster: roster, router: router)
-        .accessibilityIdentifier("botRow-\(bot.name)")
-        .accessibilityValue(Text(activity.accessibilityValue))
-    }
-}
 #endif
