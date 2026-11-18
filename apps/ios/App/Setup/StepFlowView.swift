@@ -2,16 +2,27 @@ import PalConnect
 import PalDesign
 import SwiftUI
 
-struct StepFlowView: View {
+struct StepFlowView<Accessory: View>: View {
     let model: StepFlowModel
     let title: String
-    var savedNote: String?
+    let savedNote: String?
     let close: () -> Void
+    let accessory: (FlowStep) -> Accessory
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
-    @Environment(\.colorScheme) private var colorScheme
+
+    init(
+        model: StepFlowModel, title: String, savedNote: String? = nil, close: @escaping () -> Void,
+        @ViewBuilder accessory: @escaping (FlowStep) -> Accessory
+    ) {
+        self.model = model
+        self.title = title
+        self.savedNote = savedNote
+        self.close = close
+        self.accessory = accessory
+    }
 
     private var engine: StepFlowEngine { model.engine }
 
@@ -25,7 +36,7 @@ struct StepFlowView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            StepFlowHeader(title: title, close: close)
             if !showsChecklist { StepFlowSegments(engine: engine) }
             HStack(spacing: 0) {
                 if showsChecklist { StepFlowChecklist(engine: engine, savedNote: savedNote) }
@@ -36,28 +47,11 @@ struct StepFlowView: View {
         .background(PalTokens.content)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("stepFlow")
-        .task {
+        .task(id: ObjectIdentifier(model)) {
             model.openPage = { _ = ExternalLink.open($0) }
             await model.start()
         }
         .onDisappear { model.cancelWork() }
-    }
-
-    private var header: some View {
-        HStack {
-            Text(title)
-                .hermesText(.sheetTitle)
-                .foregroundStyle(PalTokens.textPrimary)
-                .lineLimit(1)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilityIdentifier("stepFlowTitle")
-            Spacer()
-            Button(role: .close, action: close)
-                .buttonStyle(.glass(PalGlass.style(interactive: true, colorScheme: colorScheme)))
-                .accessibilityIdentifier("stepFlowClose")
-        }
-        .padding(.horizontal, PalMetrics.screenMargin)
-        .padding(.vertical, PalMetrics.captionToCardGap)
     }
 
     @ViewBuilder
@@ -81,7 +75,16 @@ struct StepFlowView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("stepFlowStepBody")
                     }
+                    if let note = engine.current.note {
+                        Text(note)
+                            .hermesText(.rowSubtitle)
+                            .foregroundStyle(PalTokens.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityIdentifier("stepFlowNote")
+                    }
                     stepContent
+                    if !engine.current.links.isEmpty { StepFlowLinks(links: engine.current.links) }
+                    accessory(engine.current)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(PalMetrics.screenMargin)
@@ -95,6 +98,8 @@ struct StepFlowView: View {
     @ViewBuilder
     private var stepContent: some View {
         switch engine.current.kind {
+        case .intro(let youDo, let palDoes):
+            StepIntroCard(youDo: youDo, palDoes: palDoes)
         case .copyCard(let copies):
             ForEach(Array(copies.enumerated()), id: \.offset) { offset, copy in
                 StepCopyCard(label: copy.label, value: copy.value, identifier: "stepFlowCopy-\(offset)")
@@ -167,6 +172,7 @@ struct StepFlowView: View {
         let step = engine.current
         if let title = step.primaryTitle { return title }
         switch step.kind {
+        case .intro: return String(localized: "Start")
         case .instruction(let link?): return link.label
         case .paste: return String(localized: "Check and save")
         case .browserRoundTrip: return String(localized: "Continue")
@@ -185,6 +191,12 @@ struct StepFlowView: View {
             model.dismissFailure()
             Task { await model.performPrimary() }
         }
+    }
+}
+
+extension StepFlowView where Accessory == EmptyView {
+    init(model: StepFlowModel, title: String, savedNote: String? = nil, close: @escaping () -> Void) {
+        self.init(model: model, title: title, savedNote: savedNote, close: close) { _ in EmptyView() }
     }
 }
 

@@ -25,7 +25,7 @@ struct ConnectAppsScreen: View {
             }
         }
         .task { await model.start() }
-        .googleAuthTracking(model.google)
+        .googleSignInReload(model)
         .onDisappear { Task { await model.stop() } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await model.devices.refresh() } }
@@ -134,10 +134,7 @@ private struct ConnectAppsPresentations: ViewModifier {
                 SlackBotPicker(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
                     .macSheetFrame()
             }
-            .sheet(item: $model.oauthClientSheet) { sheet in
-                OAuthClientSheet(model: sheet)
-                    .macSheetFrame()
-            }
+            .modifier(OwnerSetupSheet(model: model))
             .sheet(item: $model.setupGuideSheet) { guide in
                 SetupGuideView(model: guide)
                     .macSheetFrame()
@@ -158,6 +155,18 @@ private struct ConnectAppsPresentations: ViewModifier {
                 }
                 .macSheetFrame()
             }
+    }
+}
+
+private struct OwnerSetupSheet: ViewModifier {
+    @Bindable var model: ConnectAppsModel
+
+    func body(content: Content) -> some View {
+        content.sheet(
+            item: $model.ownerSetup,
+            onDismiss: { Task { await model.reload() } },
+            content: { setup in OwnerSetupView(model: setup).macSheetFrame(idealWidth: 680) }
+        )
     }
 }
 

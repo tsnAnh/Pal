@@ -1,65 +1,18 @@
 import Foundation
-import PalBotProfile
 import PalConnect
-import PalDesign
 
 extension ConnectAppsModel {
     func oauthClientAction(_ app: ConnectApp) {
         switch app.state {
-        case .needsSetup: presentOAuthClient(app, problem: nil)
-        case .disconnected, .needsAuthorization: Task { await connectOAuthClient(app) }
+        case .needsSetup, .disconnected, .needsAuthorization: presentOwnerSetup(app)
         case .connected: disconnectTarget = .app(app)
         }
     }
 
-    func presentOAuthClient(_ app: ConnectApp, problem: OAuthClientProblem?) {
-        guard let entry = app.oauthClientEntry else { return }
-        if app.setupGuideEntry != nil {
-            presentSetupGuide(app, problem: problem)
-            return
-        }
-        oauthClientSheet = OAuthClientSheetModel(
-            app: app, entry: entry, service: service, problem: problem,
-            connectAgain: { [weak self] in
-                self?.oauthClientSheet = nil
-                Task { await self?.connectOAuthClient(app) }
-            },
-            finished: { [weak self] in
-                self?.oauthClientSheet = nil
-                await self?.reload()
-            }
-        )
-    }
-
-    func connectOAuthClient(_ app: ConnectApp) async {
-        guard let entry = app.oauthClientEntry, !busy.contains(app.id) else { return }
-        busy.insert(app.id)
-        defer { busy.remove(app.id) }
-        do {
-            let route = McpConnectRoute.decide(requires: [], platform: ConnectorPlatform.current)
-            if case .paste(let session) = try await service.connectOAuthClient(entry, route: route) {
-                await presentOAuthClientPaste(session, app: app)
-            }
-        } catch {
-            if (error as? ConnectAppsError) != .cancelled { presentOAuthClient(app, problem: OAuthClientProblem(connecting: error)) }
-        }
-        await reload()
-    }
-
-    private func presentOAuthClientPaste(_ session: any McpPasteSigning, app: ConnectApp) async {
-        guard pasteSession == nil else {
-            await session.cancel()
-            return
-        }
-        guard ExternalLink.open(session.authorizeURL) else {
-            await session.cancel()
-            let unavailable = ConnectAppsError.signInFailed(McpOAuthError.browserUnavailable.reason)
-            presentOAuthClient(app, problem: OAuthClientProblem(unavailable, retry: .connect))
-            return
-        }
-        pasteSession = session
-        pasteTargetID = app.id
-        pasteState = .idle
-        pastingApp = app
+    func presentOwnerSetup(_ app: ConnectApp, failure: SetupStatus? = nil, startAtClient: Bool = false) {
+        guard let entry = app.oauthClientEntry ?? app.setupGuideEntry, ownerSetup == nil else { return }
+        ownerSetup = OwnerSetupModel(
+            app: app, entry: entry, service: service, start: OwnerSetupStart(failure: failure, atClient: startAtClient)
+        ) { [weak self] in self?.ownerSetup = nil }
     }
 }

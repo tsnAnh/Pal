@@ -13,10 +13,8 @@ struct SetupGuideStepView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: PalMetrics.cardGap) {
                 header(step)
-                if step.kind == .publicURL { address }
                 if !step.links.isEmpty { links(step.links) }
                 if !step.copies.isEmpty { copies(step.copies) }
-                if let fallback = step.fallback { SetupFallbackCard(fallback: fallback).id(step.id) }
                 if step.kind == .serverPicker { SetupServerPicker(model: model) }
                 if step.kind == .paste {
                     SetupPasteFields(model: model, step: step).id(step.id)
@@ -65,16 +63,6 @@ struct SetupGuideStepView: View {
         .padding(.horizontal, PalMetrics.screenMargin)
     }
 
-    @ViewBuilder
-    private var address: some View {
-        if let problem = model.step.problem {
-            SetupAddressProblem(problem: problem, host: model.step.problemHost)
-        } else if let address = model.publicAddress {
-            SetupCopyCard(label: String(localized: "Web address"), value: address, identifier: "setupGuideAddress")
-        }
-        SetupAddressEditor(model: model)
-    }
-
     private func copies(_ copies: [SetupCopy]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(copies.enumerated()), id: \.offset) { offset, copy in
@@ -87,50 +75,6 @@ struct SetupGuideStepView: View {
         VStack(spacing: 10) {
             ForEach(Array(links.enumerated()), id: \.offset) { offset, link in
                 PillButton(link.label, size: .large, accessibilityIdentifier: "setupGuideLink-\(offset)") { ExternalLink.open(link.url) }
-            }
-        }
-        .padding(.horizontal, PalMetrics.screenMargin)
-    }
-}
-
-private struct SetupAddressProblem: View {
-    let problem: SetupProblem
-    let host: String?
-
-    var body: some View {
-        ChatInstallStatus(
-            copy: ChatStatusCopy(
-                symbol: "exclamationmark.triangle", title: String(localized: "Google refuses this address"),
-                reason: String(
-                    localized: "Use your own domain for your Pal's address, or create a Desktop app client in Google Cloud, which needs no public address."
-                ),
-                code: problem.details(host: host)
-            ),
-            primaryTitle: nil, isBusy: false, perform: {}, identifierPrefix: "setupGuideAddressProblem",
-            secondary: { EmptyView() }
-        )
-        .padding(.horizontal, PalMetrics.screenMargin)
-    }
-}
-
-private struct SetupFallbackCard: View {
-    let fallback: SetupFallback
-
-    @State private var revealed = false
-    @Environment(\.hermesTheme) private var theme
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            PillButton(fallback.label, size: .large, accessibilityIdentifier: "setupGuideFallback") { revealed.toggle() }
-            if revealed {
-                Text(fallback.body)
-                    .hermesText(.rowTitle)
-                    .foregroundStyle(Color(theme.palette.textSecondary))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("setupGuideFallbackBody")
-                ForEach(Array(fallback.links.enumerated()), id: \.offset) { offset, link in
-                    PillButton(link.label, size: .large, accessibilityIdentifier: "setupGuideFallbackLink-\(offset)") { ExternalLink.open(link.url) }
-                }
             }
         }
         .padding(.horizontal, PalMetrics.screenMargin)
