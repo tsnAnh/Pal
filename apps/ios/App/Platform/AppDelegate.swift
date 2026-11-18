@@ -1,4 +1,5 @@
 import Foundation
+import PalClient
 
 #if os(iOS)
 import UIKit
@@ -8,6 +9,8 @@ enum PlatformApplication {
     static func registerForRemoteNotifications() {
         UIApplication.shared.registerForRemoteNotifications()
     }
+
+    static func followActivity(of presence: ReachPresence) {}
 }
 
 @MainActor
@@ -29,6 +32,12 @@ import AppKit
 enum PlatformApplication {
     static func registerForRemoteNotifications() {
         NSApplication.shared.registerForRemoteNotifications()
+    }
+
+    private static let activity = MacAppActivity()
+
+    static func followActivity(of presence: ReachPresence) {
+        activity.follow(presence)
     }
 }
 

@@ -21,7 +21,8 @@ public actor ReachPresence {
     private let diagnostics: Diagnostics
     private let offerContinuation: AsyncStream<ReachOffer>.Continuation
     private nonisolated let ledger = Mutex(OfferLedger(capacity: 256))
-    private var attention: ReachAttention
+    private var sceneAttention: ReachAttention
+    private var appIsFrontmost = true
     private var routes: [Route] = []
     private var flushing = false
     private var reported: [String: ReachOutcome] = [:]
@@ -30,14 +31,16 @@ public actor ReachPresence {
     public init(identity: DeviceIdentity, attention: ReachAttention = .foreground, diagnostics: Diagnostics = .silent) {
         self.identity = identity
         deviceID = identity.deviceID
-        self.attention = attention
+        sceneAttention = attention
         self.diagnostics = diagnostics
         (offers, offerContinuation) = AsyncStream.makeStream(bufferingPolicy: .unbounded)
     }
 
+    private var attention: ReachAttention { appIsFrontmost ? sceneAttention : .background }
+
     public var currentAttention: ReachAttention { attention }
 
-    public var canPresentOffers: Bool { attention == .foreground }
+    public var canPresentOffers: Bool { sceneAttention == .foreground }
 
     @discardableResult
     public func declare(on connection: GatewayConnection, acceptsOffers: Bool, deviceTools: Bool = false) async -> Bool {
@@ -123,8 +126,12 @@ public actor ReachPresence {
     }
 
     public func setAttention(_ next: ReachAttention) async {
-        guard next != attention else { return }
-        attention = next
+        sceneAttention = next
+        await flush()
+    }
+
+    public func setAppFrontmost(_ frontmost: Bool) async {
+        appIsFrontmost = frontmost
         await flush()
     }
 
