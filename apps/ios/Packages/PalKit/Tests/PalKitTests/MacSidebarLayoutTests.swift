@@ -23,7 +23,7 @@ struct MacSidebarLayoutTests {
     }
 
     @Test func footerHasItsOwnSidebarBackgroundAndKeepsGlassButtons() throws {
-        let footer = try region(from: "private struct MacSidebarFooter", to: "private struct MacRail:")
+        let footer = try region(from: "private struct MacSidebarFooter", to: "#endif")
         #expect(footer.contains(".background(PalTokens.sidebar)"), "the footer needs an opaque sidebar background")
         #expect(footer.components(separatedBy: ".palGlass(Circle())").count - 1 == 2, "both round buttons stay Liquid Glass")
     }
