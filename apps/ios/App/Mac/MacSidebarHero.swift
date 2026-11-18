@@ -1,5 +1,6 @@
 #if os(macOS)
 import PalDesign
+import PalDiagnostics
 import PalRoster
 import SwiftUI
 
@@ -36,6 +37,8 @@ private struct MacPrimaryTile: View {
     private var isSelected: Bool { router.currentBotName == bot.name }
 
     var body: some View {
+        // swiftlint:disable:next redundant_discardable_let
+        let _ = PalPerf.event("roster.row.body")
         let activity = roster.activity(for: bot.name)
         Button { router.openChat(botName: bot.name) } label: {
             VStack(spacing: 4) {

@@ -25,7 +25,7 @@ struct BotEntity: AppEntity, IndexedEntity {
     }
 
     init(_ profile: RosterProfile) {
-        self.init(id: profile.name, name: RosterModel.displayName(of: profile), isDefault: profile.isDefault)
+        self.init(id: profile.name, name: profile.resolvedDisplayName, isDefault: profile.isDefault)
     }
 
     init(_ row: BotRow) {
