@@ -20,6 +20,8 @@ struct KanbanCacheTests {
         KanbanStore(service: KanbanService(gateway: script.gateway), disk: disk ?? self.disk(), sleep: { _ in })
     }
 
+    private static let cards = [KanbanJSON.card("t1", title: "Ship the cache"), KanbanJSON.card("t2", title: "Fix the title")]
+
     private func detail(_ task: String, body: String, status: String = "ready") -> JSONValue {
         [
             "state": "present", "scope": KanbanJSON.scope("gw"),
@@ -33,7 +35,7 @@ struct KanbanCacheTests {
 
     private func warmed() async -> KanbanStore {
         let script = KanbanScript()
-        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1", title: "Ship the cache"), KanbanJSON.card("t2", title: "Fix the title")], cursor: "c0"))
+        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot(Self.cards, cursor: "c0"))
         script.enqueue("kanban.card.get", detail("t1", body: "# Ship the cache"))
         script.enqueue("kanban.card.get", detail("t2", body: "# Fix the title"))
         let first = store(script)
@@ -46,7 +48,7 @@ struct KanbanCacheTests {
     @Test("cold start shows nothing until every card has its detail, then the complete board at once")
     func coldStartGatesOnDetails() async throws {
         let script = KanbanScript()
-        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1", title: "Ship the cache"), KanbanJSON.card("t2", title: "Fix the title")], cursor: "c0"))
+        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot(Self.cards, cursor: "c0"))
         let store = store(script)
         await store.refreshSnapshot(board: "ops")
         #expect(store.session.cache("ops") != nil)
@@ -90,7 +92,7 @@ struct KanbanCacheTests {
         let store = store(script)
         await store.restore(board: "ops")
         let before = store.session
-        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot([KanbanJSON.card("t1", title: "Ship the cache"), KanbanJSON.card("t2", title: "Fix the title")], cursor: "c0"))
+        script.enqueue("kanban.board.snapshot", KanbanJSON.snapshot(Self.cards, cursor: "c0"))
         await store.refreshSnapshot(board: "ops")
         #expect(store.session == before)
 
