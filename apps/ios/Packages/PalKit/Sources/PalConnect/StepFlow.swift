@@ -3,6 +3,7 @@ import Observation
 
 public struct FlowStep: Sendable, Equatable, Identifiable {
     public enum Kind: Sendable, Equatable {
+        case intro(youDo: String, palDoes: String)
         case instruction(openPage: SetupLink?)
         case copyCard(copies: [SetupCopy])
         case paste(fields: [SetupField])
@@ -19,10 +20,14 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
     public var primaryTitle: String?
     public var skipTitle: String?
     public var skipTarget: String?
+    public var rowTitle: String?
+    public var note: String?
+    public var links: [SetupLink]
 
     public init(
         id: String, title: String, body: String = "", kind: Kind, primaryTitle: String? = nil,
-        skipTitle: String? = nil, skipTarget: String? = nil
+        skipTitle: String? = nil, skipTarget: String? = nil, rowTitle: String? = nil, note: String? = nil,
+        links: [SetupLink] = []
     ) {
         self.id = id
         self.title = title
@@ -31,15 +36,22 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
         self.primaryTitle = primaryTitle
         self.skipTitle = skipTitle
         self.skipTarget = skipTarget
+        self.rowTitle = rowTitle
+        self.note = note
+        self.links = links
     }
 
     public var isAutomatic: Bool { kind == .automatic }
 
     public var isChecklistRow: Bool {
         switch kind {
-        case .waiting, .success: false
+        case .intro, .waiting, .success: false
         default: true
         }
+    }
+
+    public var isIntro: Bool {
+        if case .intro = kind { true } else { false }
     }
 
     public var isSuccess: Bool {
@@ -132,7 +144,7 @@ public struct StepFlowEngine: Sendable, Equatable {
 
     public init?(flowID: String, steps: [FlowStep], resume: StepFlowProgress? = nil) {
         guard !steps.isEmpty, Set(steps.map(\.id)).count == steps.count, steps.last?.isSuccess == true,
-              steps.dropLast().allSatisfy({ !$0.isSuccess })
+              steps.dropLast().allSatisfy({ !$0.isSuccess }), steps.dropFirst().allSatisfy({ !$0.isIntro })
         else { return nil }
         self.flowID = flowID
         self.steps = steps
@@ -161,13 +173,13 @@ public struct StepFlowEngine: Sendable, Equatable {
         rowSteps.enumerated().map { offset, step in
             let number = offset + 1
             let state: RowState = isFinished || number < stepNumber ? .done : (number == stepNumber ? .current : .upcoming)
-            return Row(id: step.id, number: number, title: step.title, state: state, isAutomatic: step.isAutomatic)
+            return Row(id: step.id, number: number, title: step.rowTitle ?? step.title, state: state, isAutomatic: step.isAutomatic)
         }
     }
 
     public var primaryAction: PrimaryAction {
         switch current.kind {
-        case .instruction, .copyCard: .advance
+        case .intro, .instruction, .copyCard: .advance
         case .paste, .browserRoundTrip: .work
         case .automatic, .waiting: .none
         case .success: .finish
@@ -269,6 +281,23 @@ public struct StepFlowEngine: Sendable, Equatable {
         if isFailed { phase = .ready }
     }
 
+    public mutating func presentFailure(_ status: SetupStatus) {
+        guard phase != .working else { return }
+        phase = .failed(status)
+    }
+
+    public func replacingSteps(_ steps: [FlowStep]) -> StepFlowEngine? {
+        guard var next = StepFlowEngine(flowID: flowID, steps: steps),
+              let target = steps.firstIndex(where: { $0.id == current.id })
+        else { return nil }
+        let known = Set(steps.flatMap(\.fields).map(\.id))
+        next.index = target
+        next.phase = phase
+        next.saved = saved.intersection(known)
+        next.values = values.filter { known.contains($0.key) }
+        return next
+    }
+
     public var progress: StepFlowProgress {
         StepFlowProgress(flowID: flowID, stepID: current.id, saved: saved.sorted())
     }
@@ -336,6 +365,15 @@ public final class StepFlowModel {
     public func back() async {
         guard engine.back() else { return }
         await persist()
+    }
+
+    public func replaceSteps(_ steps: [FlowStep]) {
+        guard let next = engine.replacingSteps(steps) else { return }
+        engine = next
+    }
+
+    public func presentFailure(_ status: SetupStatus) {
+        engine.presentFailure(status)
     }
 
     public func cancelWork() {
