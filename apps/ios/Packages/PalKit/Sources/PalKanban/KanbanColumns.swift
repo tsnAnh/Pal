@@ -56,7 +56,7 @@ public struct KanbanCardRow: Sendable, Hashable, Identifiable {
     public var column: KanbanColumn { KanbanColumn(status: card.status) }
     public var displayTitle: String {
         let title = card.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty ? KanbanBody.title(of: body, fallback: card.taskID) : title
+        return title.isEmpty ? card.taskID : title
     }
     public var bot: String? { card.assignee.flatMap { $0.isEmpty ? nil : $0 } }
     public var body: String? { detail?.body }
@@ -93,7 +93,7 @@ public struct KanbanFilter: Sendable, Equatable {
         if let bot, row.bot != bot { return false }
         if let column, row.column != column { return false }
         return terms.allSatisfy { term in
-            row.card.title.localizedStandardContains(term) || (row.body?.localizedStandardContains(term) ?? false)
+            row.displayTitle.localizedStandardContains(term) || (row.body?.localizedStandardContains(term) ?? false)
         }
     }
 }
