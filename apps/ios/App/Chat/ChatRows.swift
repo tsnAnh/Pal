@@ -1,5 +1,6 @@
 import PalChat
 import PalDesign
+import PalDiagnostics
 import PalProtocol
 import SwiftUI
 
@@ -22,6 +23,7 @@ struct ChatRowView: View {
     }
 
     var body: some View {
+        let _ = PalPerf.event("chat.row.body") // swiftlint:disable:this redundant_discardable_let
         VStack(alignment: .leading, spacing: 0) {
             if row.showsUnreadDivider {
                 UnreadDivider(label: String(localized: "New"), ink: BubblePalette.ink(accent: model.chatAccent))

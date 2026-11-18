@@ -23,6 +23,7 @@ INTERVALS = (
     "roster.apply", "roster.refetch", "chat.rebuild", "chat.timeline.apply", "markdown.parse",
     "avatar.frame", "shell.body", "disk.cache.load", "disk.sync.main",
 )
+EVENTS = ("chat.row.body", "chat.scroll.rowMoved", "chat.snapshot.coalesced")
 TEMPLATES = ("Time Profiler", "SwiftUI", "Animation Hitches")
 SIGNPOST_SCHEMAS = ("os-signpost-interval", "os-signpost")
 TRACE_SLACK_SECONDS = 20
@@ -139,7 +140,7 @@ def plain_command(app, out):
 def xtrace_text(app, out, time_limit):
     lines = [
         f"Run the scenario (perf-mac steps) once under each command below, on the Mac that has {app}. Each run writes its own directory under {output_dir(out)}.",
-        f"Signposts: subsystem {SIGNPOST_SUBSYSTEM}, category {SIGNPOST_CATEGORY}; intervals {', '.join(INTERVALS)}.",
+        f"Signposts: subsystem {SIGNPOST_SUBSYSTEM}, category {SIGNPOST_CATEGORY}; intervals {', '.join(INTERVALS)}; events {', '.join(EVENTS)} (count them; chat.snapshot.coalesced carries the snapshots merged into each applied one).",
         "",
         "Plain run, no profiler. Use this one for before/after hitch numbers; a profiler adds its own overhead:",
         f"  {plain_command(app, out)}",

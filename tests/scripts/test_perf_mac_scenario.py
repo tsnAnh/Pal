@@ -11,6 +11,7 @@ INTERVALS = (
     "roster.apply", "roster.refetch", "chat.rebuild", "chat.timeline.apply", "markdown.parse",
     "avatar.frame", "shell.body", "disk.cache.load", "disk.sync.main",
 )
+EVENTS = ("chat.row.body", "chat.scroll.rowMoved", "chat.snapshot.coalesced")
 TEMPLATES = ("Time Profiler", "SwiftUI", "Animation Hitches")
 
 
@@ -94,7 +95,7 @@ def test_scroll_step_outlasts_the_stream():
 
 def test_xtrace_names_every_interval_template_and_the_signpost_source():
     text = scenario.xtrace_text("/Applications/Pal.app", "/work/perf", 170)
-    for name in (*INTERVALS, *TEMPLATES):
+    for name in (*INTERVALS, *EVENTS, *TEMPLATES):
         assert name in text
     assert "app.pal" in text
     assert "PAL_PERF=1" in text

@@ -35,6 +35,11 @@ public enum PalPerf {
         signposter.emitEvent(name)
     }
 
+    public static func event(_ name: StaticString, count: Int) {
+        guard signposter.isEnabled else { return }
+        signposter.emitEvent(name, "\(count)")
+    }
+
     fileprivate static func end(_ name: StaticString, _ state: OSSignpostIntervalState) {
         signposter.endInterval(name, state)
     }
