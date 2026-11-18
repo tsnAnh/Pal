@@ -120,14 +120,13 @@ public struct SkillsCatalogService: Sendable {
 
     public func installState() async throws -> SkillsInstallState {
         async let hub = manage("installed")
-        async let local = bestEffort { InstalledSkill.parse(try await manage("list")) }
-        async let updates = bestEffort { SkillUpdateStatus.parse(try await manage("check")) }
-        let installed = HubInstalledSkill.parse(try await hub)
-        return SkillsInstallState(hubInstalled: installed, bundled: await local ?? [], updates: await updates ?? [])
-    }
-
-    private func bestEffort<T: Sendable>(_ work: () async throws -> T) async -> T? {
-        try? await work()
+        async let local = manage("list")
+        async let updates = manage("check")
+        let (hubReply, localReply, updatesReply) = try await (hub, local, updates)
+        return SkillsInstallState(
+            hubInstalled: HubInstalledSkill.parse(hubReply), bundled: InstalledSkill.parse(localReply),
+            updates: SkillUpdateStatus.parse(updatesReply)
+        )
     }
 
     public func install(_ target: String) async throws {

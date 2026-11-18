@@ -2,26 +2,6 @@
 import PalDesign
 import SwiftUI
 
-struct MacPlainCloseButton: View {
-    let identifier: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) { // nav-chrome: ok
-            Image(systemName: "xmark")
-                .font(.system(size: 10, weight: .regular))
-                .foregroundStyle(PalTokens.textSecondary)
-                .frame(width: 24, height: 24)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .keyboardShortcut(.cancelAction)
-        .help(String(localized: "Close"))
-        .accessibilityLabel(Text("Close"))
-        .accessibilityIdentifier(identifier)
-    }
-}
-
 struct MacSwitchStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {

@@ -45,6 +45,7 @@ struct ConnectAppsScreen: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(PalTokens.textPrimary)
                     .accessibilityAddTraits(.isHeader)
+                    .padding(.leading, PalMetrics.macPanelTitleClearance)
                 Spacer()
             }
             .padding(.horizontal, PalMetrics.cardGap)
@@ -81,6 +82,7 @@ struct ConnectAppsScreen: View {
                 .help(String(localized: "Back"))
                 .accessibilityLabel(Text("Back"))
                 .accessibilityIdentifier("customConnectorBackButton")
+                .padding(.leading, PalMetrics.macPanelTitleClearance)
                 Spacer()
             }
             .padding(.horizontal, PalMetrics.cardGap)

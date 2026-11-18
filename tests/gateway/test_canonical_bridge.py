@@ -92,10 +92,23 @@ async def test_a_cron_action_is_authorized_by_what_it_does(bots):
 
 
 @pytest.mark.asyncio
-async def test_skills_only_lists_and_never_installs_over_the_socket(bots):
-    connection = bots.connect()
-    assert 'error' not in await call(connection, 'skills.manage', {'action': 'list'})
-    refused = failure(await call(connection, 'skills.manage', {'action': 'install', 'query': 'anything'}))
+@pytest.mark.parametrize('params', [
+    {'action': 'list'},
+    {'action': 'installed'},
+    {'action': 'check'},
+    {'action': 'installed', 'profile': 'alpha'},
+    {'action': 'check', 'profile': 'alpha'},
+])
+async def test_the_skills_sheet_reads_are_served_to_a_read_grant(bots, params):
+    response = await call(bots.connect(params.get('profile', 'default'), capabilities=READ), 'skills.manage', params)
+    assert 'error' not in response, response
+    CANONICAL_METHODS['skills.manage'].result.model_validate(response['result'])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('action', ['install', 'update', 'uninstall', 'set_key'])
+async def test_skills_changes_are_never_served_over_the_socket(bots, action):
+    refused = failure(await call(bots.connect(), 'skills.manage', {'action': action, 'query': 'anything'}))
     assert refused['data']['field'] == 'action'
 
 

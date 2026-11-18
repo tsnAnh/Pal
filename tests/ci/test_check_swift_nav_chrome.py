@@ -62,7 +62,6 @@ def test_custom_back_or_close_fails(tmp_path: Path, body: str) -> None:
     'ToolbarItem(placement: .cancellationAction) {\n    Button(role: .close, action: close)\n        .accessibilityIdentifier("kanbanBoards-close")\n}\n',
     'Button { query = "" } label: { Image(systemName: "xmark.circle.fill") }\n    .accessibilityLabel(Text("Clear search"))\n',
     'Button(action: remove) {\n    Image(systemName: "xmark")\n}\n.accessibilityLabel(Text("Remove attachment"))\n',
-    'Button(action: back) { // nav-chrome: ok\n    Image(systemName: "xmark")\n}\n.accessibilityLabel(Text("Close"))\n',
     'Label("Back", systemImage: "chevron.left")\n.accessibilityIdentifier("back")\n',
 ])
 def test_system_controls_and_in_content_glyphs_pass(tmp_path: Path, body: str) -> None:
@@ -138,3 +137,77 @@ def test_full_window_overlay_with_title_bar_inset_passes(tmp_path: Path) -> None
         ".background(PalTokens.content)", ".padding(.top, MacMetrics.topBarHeight)\n                .background(PalTokens.content)"
     )
     assert cnc.scan(_tree(tmp_path, {"App/Mac/Modals.swift": fixed})) == []
+
+
+PRE_FIX_MAC_PANEL = '''
+            .overlayPreferenceValue(MacPanelCloseIdentifierKey.self, alignment: .topTrailing) { override in
+                MacPlainCloseButton(identifier: override ?? closeIdentifier, action: close)
+            }
+'''
+FIXED_MAC_PANEL = '''
+            .overlayPreferenceValue(MacPanelCloseIdentifierKey.self, alignment: .topLeading) { override in
+                SheetGlassButton(accessibilityIdentifier: override ?? closeIdentifier, action: close)
+            }
+'''
+PRE_FIX_PLAIN_CLOSE = '''
+        Button(action: action) { // nav-chrome: ok
+            Image(systemName: "xmark")
+        }
+        .accessibilityLabel(Text("Close"))
+'''
+SEARCH_FIELD = '''
+struct ConnectAppsSearchField: View {
+    var body: some View {
+        TextField(prompt, text: $text)
+            .textFieldStyle(.roundedBorder)%s
+    }
+}
+
+struct ConnectAppsList: View {
+    var body: some View { Text("x") }
+}
+'''
+
+
+def test_mac_panel_close_on_the_trailing_side_with_a_plain_button_fails(tmp_path: Path) -> None:
+    found = cnc.scan(_tree(tmp_path, {"App/Mac/MacModalSupport.swift": PRE_FIX_MAC_PANEL}))
+    assert [f.split(": ", 1)[1] for f in found] == ["Mac panel close must be SheetGlassButton at .topLeading, not .topTrailing"]
+
+
+def test_mac_panel_close_as_the_shared_leading_glass_button_passes(tmp_path: Path) -> None:
+    assert cnc.scan(_tree(tmp_path, {"App/Mac/MacModalSupport.swift": FIXED_MAC_PANEL})) == []
+
+
+def test_an_opt_out_cannot_waive_a_hand_drawn_close(tmp_path: Path) -> None:
+    found = cnc.scan(_tree(tmp_path, {"App/Mac/MacControls.swift": PRE_FIX_PLAIN_CLOSE}))
+    assert len(found) == 1 and "cannot waive" in found[0]
+
+
+def test_sheet_chrome_without_the_shared_bottom_inset_fails(tmp_path: Path) -> None:
+    body = "content\n"
+    found = cnc.scan(_tree(tmp_path, {"Packages/PalDesign/Sources/PalDesign/Components/SheetChrome.swift": body}))
+    assert len(found) == 1 and "sheetBottomInset" in found[0]
+    ok = cnc.scan(_tree(tmp_path, {"Packages/PalDesign/Sources/PalDesign/Components/SheetChrome.swift": "content.safeAreaPadding(.bottom, PalMetrics.sheetBottomInset)\n"}))
+    assert ok == []
+
+
+@pytest.mark.parametrize("modifier", [".background(Color.red)", ".palGlass(Capsule())", ".overlay(Capsule())"])
+def test_a_styled_connect_apps_search_field_fails(tmp_path: Path, modifier: str) -> None:
+    source = SEARCH_FIELD % f"\n            {modifier}"
+    found = cnc.scan(_tree(tmp_path, {"App/ConnectApps/ConnectAppsList.swift": source}))
+    assert len(found) == 1 and "plain system field" in found[0]
+
+
+def test_the_plain_connect_apps_search_field_passes(tmp_path: Path) -> None:
+    assert cnc.scan(_tree(tmp_path, {"App/ConnectApps/ConnectAppsList.swift": SEARCH_FIELD % ""})) == []
+
+
+def test_the_floating_search_bar_in_the_connect_apps_list_fails(tmp_path: Path) -> None:
+    source = SEARCH_FIELD % "" + "\nFloatingSearchBar(text: $q)\n"
+    found = cnc.scan(_tree(tmp_path, {"App/ConnectApps/ConnectAppsList.swift": source}))
+    assert len(found) == 1
+
+
+def test_an_opt_out_still_waives_the_allowlisted_in_content_dismisses(tmp_path: Path) -> None:
+    body = 'Button(action: back) { // nav-chrome: ok\n    Image(systemName: "xmark")\n}\n.accessibilityLabel(Text("Close"))\n'
+    assert cnc.scan(_tree(tmp_path, {"App/Chat/VoiceModeView.swift": body})) == []
