@@ -1303,6 +1303,42 @@
       }
     },
     {
+      "name": "connectors.setup.progress.get",
+      "summary": "Where each connector's guided setup stands, newest first: the step to resume at, the step ids already done and the kind of device that last moved it. connector and bot narrow the list. Holds step ids only, never a value the owner pasted. A connection that is not the owner's gets an empty list.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/SetupProgressGetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SetupProgressGetResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.setup.progress.set",
+      "summary": "Owner only. Record that the guided setup of connector (and bot, where the setup is per bot) is at step_id with completed done. Every id must be a short slug; anything else is refused. finished true removes the record and answers with none.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/SetupProgressSetParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/SetupProgressSetResult"
+        }
+      }
+    },
+    {
       "name": "connectors.tools",
       "summary": "The scoped profile's cached or current tool list for one connector.",
       "params": [
@@ -56091,6 +56127,201 @@
           "saved"
         ],
         "title": "SetupProgress",
+        "type": "object"
+      },
+      "SetupProgressDevice": {
+        "enum": [
+          "mac",
+          "iphone",
+          "ipad"
+        ],
+        "title": "SetupProgressDevice",
+        "type": "string"
+      },
+      "SetupProgressGetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "connector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Connector"
+          },
+          "bot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bot"
+          }
+        },
+        "title": "SetupProgressGetParams",
+        "type": "object"
+      },
+      "SetupProgressGetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/SetupProgressRecordRow"
+            },
+            "title": "Records",
+            "type": "array"
+          }
+        },
+        "required": [
+          "records"
+        ],
+        "title": "SetupProgressGetResult",
+        "type": "object"
+      },
+      "SetupProgressRecordRow": {
+        "additionalProperties": false,
+        "properties": {
+          "connector": {
+            "title": "Connector",
+            "type": "string"
+          },
+          "bot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bot"
+          },
+          "step_id": {
+            "title": "Step Id",
+            "type": "string"
+          },
+          "completed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Completed",
+            "type": "array"
+          },
+          "device": {
+            "$ref": "#/components/schemas/SetupProgressDevice"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "number"
+          }
+        },
+        "required": [
+          "connector",
+          "step_id",
+          "completed",
+          "device",
+          "updated_at"
+        ],
+        "title": "SetupProgressRecordRow",
+        "type": "object"
+      },
+      "SetupProgressSetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "connector": {
+            "title": "Connector",
+            "type": "string"
+          },
+          "bot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bot"
+          },
+          "step_id": {
+            "title": "Step Id",
+            "type": "string"
+          },
+          "completed": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Completed",
+            "type": "array"
+          },
+          "device": {
+            "$ref": "#/components/schemas/SetupProgressDevice"
+          },
+          "finished": {
+            "default": false,
+            "title": "Finished",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "connector",
+          "step_id",
+          "completed",
+          "device"
+        ],
+        "title": "SetupProgressSetParams",
+        "type": "object"
+      },
+      "SetupProgressSetResult": {
+        "additionalProperties": false,
+        "properties": {
+          "record": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SetupProgressRecordRow"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "title": "SetupProgressSetResult",
         "type": "object"
       },
       "SetupReadyPayload": {
