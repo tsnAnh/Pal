@@ -46,20 +46,20 @@ struct ChatView: View {
     private var chat: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
+                let accent = model.chatAccent
                 footer
                     .newestFirst()
-                ForEach(model.rows.reversed()) { row in
-                    ChatRowView(row: row, model: model) { link in
+                ForEach(model.rowsNewestFirst) { row in
+                    ChatRowView(row: row, context: model.rowContext(for: row, accent: accent), model: model) { link in
                         router.push(.botThread(BotThreadRoute(
                             botName: model.bot.name,
                             threadID: link.threadID,
                             focusExchangeID: link.exchangeID
                         )))
                     }
+                    .equatable()
                     .newestFirst()
-                    .onGeometryChange(for: CGFloat.self) {
-                        $0.frame(in: .named(ChatScrollController.contentSpace)).minY
-                    } action: { scroll.rowMoved(row.id, contentMinY: $0) }
+                    .background { ChatPinProbe(id: row.id, scroll: scroll) }
                 }
                 if !model.rows.isEmpty {
                     OlderHistoryRow(state: model.olderHistory, ink: ink) { model.wantOlder() }
@@ -91,7 +91,7 @@ struct ChatView: View {
         .onScrollPhaseChange { _, phase in scroll.observe(phase) }
         .onScrollTargetVisibilityChange(idType: String.self, threshold: 0.01) { scroll.visibleRowsChanged($0) }
         .onChange(of: chrome) { scroll.contentGrew() }
-        .onChange(of: model.rows.map(\.id), initial: true) { _, ids in scroll.rowsChanged(ids) }
+        .onChange(of: model.rowIDs, initial: true) { _, ids in scroll.rowsChanged(ids) }
         .task(id: OlderDemand(wants: scroll.wantsOlder, state: model.olderHistory)) {
             guard scroll.wantsOlder, model.olderHistory.canLoad else { return }
             while !Task.isCancelled {

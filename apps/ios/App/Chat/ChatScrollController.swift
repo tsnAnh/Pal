@@ -39,6 +39,7 @@ final class ChatScrollController {
     private(set) var mode = Mode.following
     private(set) var unseen = 0
     private(set) var wantsOlder = false
+    private(set) var pinnedID: String?
     @ObservationIgnored private var phase = ScrollPhase.idle
     @ObservationIgnored private var distanceFromNewest: CGFloat = 0
     @ObservationIgnored private var viewportHeight: CGFloat = 0
@@ -80,7 +81,10 @@ final class ChatScrollController {
     func visibleRowsChanged(_ ids: [String]) {
         visibleIDs = Set(ids)
         guard let first = ids.first else { return }
-        if pin?.id != first { pin = Pin(id: first, contentMinY: nil) }
+        if pin?.id != first {
+            pin = Pin(id: first, contentMinY: nil)
+            pinnedID = first
+        }
     }
 
     func rowMoved(_ id: String, contentMinY: CGFloat) {
@@ -155,4 +159,17 @@ final class ChatScrollController {
 
 private extension ScrollPhase {
     var isMoving: Bool { self == .interacting || self == .decelerating || self == .tracking }
+}
+
+struct ChatPinProbe: View {
+    let id: String
+    let scroll: ChatScrollController
+
+    var body: some View {
+        if scroll.pinnedID == id {
+            Color.clear.onGeometryChange(for: CGFloat.self) {
+                $0.frame(in: .named(ChatScrollController.contentSpace)).minY
+            } action: { scroll.rowMoved(id, contentMinY: $0) }
+        }
+    }
 }

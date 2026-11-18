@@ -61,24 +61,20 @@ private struct MacHoverTracker: NSViewRepresentable {
         var onChange: (Bool) -> Void = { _ in }
         var openMenu: (CGPoint) -> Void = { _ in }
         var actions: MessageActions?
-        private var monitor: Any?
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
-            if let monitor { NSEvent.removeMonitor(monitor) }
-            monitor = nil
-            guard window != nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [weak self] event in
-                guard let self, self.opensMenu(event) else { return event }
-                self.showMenu(for: event)
-                return nil
+            if window == nil {
+                MessageMenuMonitor.shared.remove(self)
+            } else {
+                MessageMenuMonitor.shared.add(self)
             }
         }
 
         isolated deinit {
-            if let monitor { NSEvent.removeMonitor(monitor) }
+            MessageMenuMonitor.shared.remove(ObjectIdentifier(self))
         }
 
         override func updateTrackingAreas() {
@@ -95,7 +91,7 @@ private struct MacHoverTracker: NSViewRepresentable {
         override func mouseEntered(with event: NSEvent) { onChange(true) }
         override func mouseExited(with event: NSEvent) { onChange(false) }
 
-        private func opensMenu(_ event: NSEvent) -> Bool {
+        func opensMenu(_ event: NSEvent) -> Bool {
             guard event.window === window, actions != nil else { return false }
             let isMenuClick = event.type == .rightMouseDown
                 || (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
@@ -105,10 +101,46 @@ private struct MacHoverTracker: NSViewRepresentable {
             return Bundle(for: type(of: hit)) != Bundle.main
         }
 
-        private func showMenu(for event: NSEvent) {
+        func showMenu(for event: NSEvent) {
             guard let height = window?.contentView?.bounds.height else { return }
             openMenu(CGPoint(x: event.locationInWindow.x, y: height - event.locationInWindow.y))
         }
+    }
+}
+
+@MainActor
+private final class MessageMenuMonitor {
+    static let shared = MessageMenuMonitor()
+
+    private struct Entry {
+        weak var view: MacHoverTracker.TrackingView?
+    }
+
+    private var entries: [ObjectIdentifier: Entry] = [:]
+    private var monitor: Any?
+
+    func add(_ view: MacHoverTracker.TrackingView) {
+        entries[ObjectIdentifier(view)] = Entry(view: view)
+        guard monitor == nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [weak self] event in
+            guard let self else { return event }
+            for case let view? in self.entries.values.map(\.view) where view.opensMenu(event) {
+                view.showMenu(for: event)
+                return nil
+            }
+            return event
+        }
+    }
+
+    func remove(_ view: MacHoverTracker.TrackingView) {
+        remove(ObjectIdentifier(view))
+    }
+
+    func remove(_ id: ObjectIdentifier) {
+        entries[id] = nil
+        guard entries.isEmpty, let monitor else { return }
+        NSEvent.removeMonitor(monitor)
+        self.monitor = nil
     }
 }
 

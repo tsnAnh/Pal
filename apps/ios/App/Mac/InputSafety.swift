@@ -34,7 +34,7 @@ final class InputSafety: NSObject {
             Task { @MainActor in self?.pressedEscape(at: time) }
         }
         if let global = NSEvent.addGlobalMonitorForEvents(matching: .keyDown, handler: escape) { monitors.append(global) }
-        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { event in
+        if let local = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { event in // perf-lint: ok app-lifetime monitor installed once
             escape(event)
             return event
         }) { monitors.append(local) }
