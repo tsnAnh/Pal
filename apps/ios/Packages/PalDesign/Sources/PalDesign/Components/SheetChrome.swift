@@ -26,6 +26,33 @@ public enum SheetLeadingButton: Sendable {
     }
 }
 
+public struct SheetGlassButton: View {
+    public let leading: SheetLeadingButton
+    public let accessibilityIdentifier: String
+    public let action: () -> Void
+
+    public init(leading: SheetLeadingButton = .close, accessibilityIdentifier: String, action: @escaping () -> Void) {
+        self.leading = leading
+        self.accessibilityIdentifier = accessibilityIdentifier
+        self.action = action
+    }
+
+    public var body: some View {
+        Button(action: action) {
+            Image(systemName: leading.systemName)
+                .font(.system(size: 14, weight: .regular))
+                .foregroundStyle(PalTokens.textSecondary)
+                .frame(width: PalMetrics.sheetGlassButtonSize, height: PalMetrics.sheetGlassButtonSize)
+                .palGlass(Circle())
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut(.cancelAction)
+        .accessibilityLabel(Text(leading.accessibilityLabel))
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
 public enum SheetTitleAlignment: Sendable {
     case centered
     case afterLeadingButton
@@ -101,7 +128,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
         #else
         VStack(spacing: 0) {
             header
-            content
+            content.safeAreaPadding(.bottom, PalMetrics.sheetBottomInset)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(background.ignoresSafeArea())
@@ -161,18 +188,11 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
                 titleText(title)
             }
             HStack(spacing: 0) {
-                Button(action: onLeading) {
-                    Image(systemName: leading.systemName)
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(PalTokens.textSecondary)
-                        .frame(width: 33, height: 33)
-                        .palGlass(Circle())
-                        .contentShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .keyboardShortcut(.cancelAction)
-                .accessibilityLabel(Text(leading.accessibilityLabel))
-                .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-\(leading.identifierSuffix)")
+                SheetGlassButton(
+                    leading: leading,
+                    accessibilityIdentifier: leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-\(leading.identifierSuffix)",
+                    action: onLeading
+                )
                 if let title, inlineTitle {
                     titleText(title).padding(.leading, 16)
                 }

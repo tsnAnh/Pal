@@ -133,6 +133,7 @@ struct MacShortcutsSheet: View {
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(PalTokens.textPrimary)
                 .accessibilityAddTraits(.isHeader)
+                .padding(.leading, PalMetrics.macPanelTitleClearance)
                 .padding(.top, 19.5)
                 .padding(.bottom, 17)
             HStack(alignment: .top, spacing: 58) {

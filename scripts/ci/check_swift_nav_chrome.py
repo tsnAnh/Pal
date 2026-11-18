@@ -17,6 +17,12 @@ full-window overlay in a view that ignores the top safe area
 without the shell's ``MacMetrics.topBarHeight`` or ``MacMetrics.trafficLightCenter`` inset. Text matching sees these
 shapes only; it cannot see where a control is drawn at run time.
 
+Sheet chrome rules (the Connect Apps and Skills bugs): an opt-out never waives a hand-drawn xmark
+close outside ``XMARK_OPT_OUT_ALLOWED``; the Mac modal panel draws its close with the shared
+``SheetGlassButton`` at ``.topLeading``; ``SheetChrome`` applies ``PalMetrics.sheetBottomInset`` on
+macOS; the Connect Apps search field is the plain system field (no ``FloatingSearchBar``, no custom
+border, background, ring or glass).
+
 Run: python scripts/ci/check_swift_nav_chrome.py [apps_ios_root]
 """
 
@@ -38,6 +44,13 @@ IF_OS = re.compile(r"#if\s+os\((macOS|iOS)\)\s*$")
 TOP_UNSAFE = ".ignoresSafeArea(.container, edges: .top)"
 FULL_FRAME = ".frame(maxWidth: .infinity, maxHeight: .infinity)"
 OVERLAY_CHAIN = 4
+XMARK_OPT_OUT_ALLOWED = {"App/Kanban/KanbanCardView.swift", "App/Chat/VoiceModeView.swift"}
+PANEL_OVERLAY = re.compile(r"overlayPreferenceValue\(MacPanelCloseIdentifierKey\.self,\s*alignment:\s*(\.\w+)")
+SEARCH_FIELD_STRUCT = "struct ConnectAppsSearchField"
+SEARCH_FIELD_FORBIDDEN = (
+    ".background(", ".overlay(", ".palGlass", ".glassEffect", ".clipShape(", ".strokeBorder(", ".border(", ".cornerRadius(",
+    ".textFieldStyle(.plain)", "FloatingSearchBar(",
+)
 
 
 def violations(path: Path, source: str) -> list[str]:
@@ -51,6 +64,8 @@ def violations(path: Path, source: str) -> list[str]:
         if button is None:
             continue
         if OPT_OUT in line or OPT_OUT in lines[button]:
+            if glyph.group(1) == "xmark" and path.as_posix() not in XMARK_OPT_OUT_ALLOWED:
+                found.append(f"{path}:{i + 1}: nav-chrome opt-out cannot waive a hand-drawn close; use SheetChrome or SheetGlassButton")
             continue
         if not any(ROLE.search(lines[k]) for k in range(i, min(len(lines), i + LOOKAHEAD + 1))):
             continue
@@ -97,6 +112,28 @@ def mac_chrome_violations(path: Path, source: str) -> list[str]:
     return found
 
 
+def sheet_chrome_violations(path: Path, source: str) -> list[str]:
+    name = path.as_posix()
+    found = []
+    if match := PANEL_OVERLAY.search(source):
+        if match.group(1) != ".topLeading" or "SheetGlassButton(" not in source:
+            found.append(f"{path}: Mac panel close must be SheetGlassButton at .topLeading, not {match.group(1)}")
+    if name.endswith("Components/SheetChrome.swift") and "PalMetrics.sheetBottomInset" not in source:
+        found.append(f"{path}: SheetChrome must apply PalMetrics.sheetBottomInset to its macOS content")
+    if name.endswith("ConnectApps/ConnectAppsList.swift"):
+        found += search_field_violations(path, source)
+    return found
+
+
+def search_field_violations(path: Path, source: str) -> list[str]:
+    if SEARCH_FIELD_STRUCT not in source:
+        return [f"{path}: ConnectAppsSearchField is missing"]
+    block = source.split(SEARCH_FIELD_STRUCT, 1)[1].split("\nstruct ", 1)[0]
+    rest = source.replace(block, "")
+    return [f"{path}: Connect Apps search field must be the plain system field, found {token}"
+            for token in SEARCH_FIELD_FORBIDDEN if token in block or (token == "FloatingSearchBar(" and token in rest)]
+
+
 def scan(root: Path) -> list[str]:
     found = []
     for path in sorted(root.rglob("*.swift")):
@@ -104,7 +141,7 @@ def scan(root: Path) -> list[str]:
         if SKIP_DIRS.intersection(rel.parts):
             continue
         source = path.read_text(encoding="utf-8-sig")
-        found += violations(rel, source) + mac_chrome_violations(rel, source)
+        found += violations(rel, source) + mac_chrome_violations(rel, source) + sheet_chrome_violations(rel, source)
     return found
 
 

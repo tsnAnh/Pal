@@ -167,7 +167,10 @@ final class SkillsCatalogModel {
             return
         } catch {
             diagnostics.info("skills", "search failed: \(Diagnostics.describe(error))")
-            if trimmedQuery == needle { searchHits = [] }
+            if trimmedQuery == needle {
+                searchHits = []
+                outcome = Outcome(message: Self.message(error), isSuccess: false)
+            }
         }
     }
 

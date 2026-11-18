@@ -38,10 +38,10 @@ struct MacModalPanel<Content: View>: View {
             .frame(width: width, height: height)
             .background(background, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
-            .overlayPreferenceValue(MacPanelCloseIdentifierKey.self, alignment: .topTrailing) { override in
-                MacPlainCloseButton(identifier: override ?? closeIdentifier, action: close)
-                    .padding(.top, 12)
-                    .padding(.trailing, 13)
+            .overlayPreferenceValue(MacPanelCloseIdentifierKey.self, alignment: .topLeading) { override in
+                SheetGlassButton(accessibilityIdentifier: override ?? closeIdentifier, action: close)
+                    .padding(.top, PalMetrics.macPanelCloseTopInset)
+                    .padding(.leading, PalMetrics.macPanelCloseLeadingInset)
             }
             .clipShape(shape)
             .shadow(color: .black.opacity(0.35), radius: 40, y: 18)
