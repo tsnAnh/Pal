@@ -108,6 +108,11 @@ struct ConnectAppsScreen: View {
 private struct ConnectAppsPresentations: ViewModifier {
     @Bindable var model: ConnectAppsModel
 
+    private func mcpSignInSheet(_ controller: McpSignInController) -> some View {
+        McpSignInSheet(controller: controller) { model.mcpSignIn = nil }
+            .macSheetFrame()
+    }
+
     func body(content: Content) -> some View {
         content
             .alert(item: $model.notice) { notice in
@@ -127,10 +132,7 @@ private struct ConnectAppsPresentations: ViewModifier {
                 SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
                     .macSheetFrame()
             }
-            .sheet(item: $model.upworkApp) { app in
-                UpworkConnectionSheet(model: model, app: app)
-                    .macSheetFrame()
-            }
+            .sheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, content: mcpSignInSheet)
             .sheet(isPresented: $model.showsSlackPicker) {
                 SlackBotPicker(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
                     .macSheetFrame()

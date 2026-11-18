@@ -13,6 +13,7 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     case cancelled
     case credentialsRequired([String])
     case signInFailed(String)
+    case signInRefused(McpSignInFailure, GatewayFault)
     case oauthClient(OAuthClientFailure, GatewayFault? = nil)
     case failed
     case faulted(GatewayFault)
@@ -20,6 +21,7 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     public var fault: GatewayFault? {
         switch self {
         case .faulted(let fault): fault
+        case .signInRefused(_, let fault): fault
         case .oauthClient(_, let fault): fault
         default: nil
         }

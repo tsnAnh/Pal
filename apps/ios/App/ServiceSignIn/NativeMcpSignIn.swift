@@ -21,7 +21,7 @@ private final class PasteSessions {
 }
 
 @MainActor
-enum UpworkSignIn {
+enum NativeMcpSignIn {
     static func native(connection: ConnectionModel) -> McpNativeSignIn {
         return McpNativeSignIn(
             flow: McpOAuthFlow(

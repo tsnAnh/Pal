@@ -83,7 +83,7 @@ final class ConnectAppsModel {
     var keyState: SecretEntryState = .idle
     var disconnectTarget: ConnectDisconnectTarget?
     var showsSkills = false
-    var upworkApp: ConnectApp?
+    var mcpSignIn: McpSignInController?
     var oauthClientSheet: OAuthClientSheetModel?
     var showsSlackPicker = false
     var setupGuideSheet: SetupGuideModel?
@@ -124,8 +124,9 @@ final class ConnectAppsModel {
         self.bots = bots
         self.currentBot = currentBot
         let connectService = ConnectAppsService(
-            rpc: OAuthClientScript.wrap(ConnectionRPC(model: connection)), profile: profile, browser: OAuthClientScript.browser(browser),
-            systemBrowser: SystemBrowserAuthorization(), nativeSignIn: UpworkSignIn.native(connection: connection), diagnostics: .osLog()
+            rpc: OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection))), profile: profile,
+            browser: McpSignInScript.browser(OAuthClientScript.browser(browser)),
+            systemBrowser: SystemBrowserAuthorization(), nativeSignIn: NativeMcpSignIn.native(connection: connection), diagnostics: .osLog()
         )
         service = connectService
         legacy = LegacyConnectionsModel(service: connectService, profile: profile)
@@ -179,20 +180,15 @@ final class ConnectAppsModel {
         }
     }
 
-    func cardState(_ app: ConnectApp) -> ConnectorCardState {
-        return .resolve(ConnectorCardInput(app: app, isBusy: busy.contains(app.id), failureReason: failures[app.id]))
-    }
-
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
         if presentsDiscordFlow(app) || presentsSetupGuide(app) { return }
+        if app.usesMcpSignIn {
+            beginMcpSignIn(app)
+            return
+        }
         busy.insert(app.id)
         failures[app.id] = nil
         defer { busy.remove(app.id) }
-        if usesPasteSignIn(app) {
-            await beginOtherPaste(app)
-            await reload()
-            return
-        }
         do {
             try await service.connect(app, credentials: credentials)
             if let failure = await service.tokenFailure(app) {
@@ -206,21 +202,17 @@ final class ConnectAppsModel {
         await reload()
     }
 
-    private func usesPasteSignIn(_ app: ConnectApp) -> Bool {
-        let requires: [String]
-        switch app.source {
-        case .mcp(_, let needed) where !app.requiresAppSignIn: requires = needed
-        case .catalog(let entry) where entry.method == .mcpOAuth: requires = []
-        default: return false
-        }
-        return McpConnectRoute.decide(requires: requires, platform: ConnectorPlatform.current) == .pasteAddress
+    func beginMcpSignIn(_ app: ConnectApp) {
+        guard mcpSignIn == nil else { return }
+        failures[app.id] = nil
+        mcpSignIn = McpSignInController(
+            app: app, service: service, platform: ConnectorPlatform.current,
+            openLink: { ExternalLink.open($0) },
+            finished: { [weak self] in await self?.reload() }
+        )
     }
 
     func manageAccounts(_ app: ConnectApp) {
-        if app.requiresAppSignIn {
-            upworkApp = app
-            return
-        }
         disconnectTarget = .app(app)
     }
 
@@ -262,6 +254,7 @@ final class ConnectAppsModel {
         case .cancelled:
             if app.requiresAppSignIn { failures[app.id] = McpOAuthError.cancelled.reason }
         case .signInFailed(let reason): failures[app.id] = reason
+        case .signInRefused(let failure, _): failures[app.id] = failure.reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
         case .unavailable, .failed, .faulted, .oauthClient: fail(app, "Couldn't connect \(app.name). Try again.")
         }
