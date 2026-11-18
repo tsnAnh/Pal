@@ -43,7 +43,7 @@ def _public_url() -> str | None:
 
 
 def providers() -> frozenset[str]:
-    return frozenset({setup_mod.GOOGLE_PROVIDER, *setup_mod.preregistered_mcp_entries()})
+    return frozenset({*setup_mod.GOOGLE_PROVIDERS, *setup_mod.preregistered_mcp_entries()})
 
 
 def _provider(slug: str) -> str:
@@ -53,7 +53,7 @@ def _provider(slug: str) -> str:
 
 
 def redirect_url(provider: str) -> str | None:
-    if provider == setup_mod.GOOGLE_PROVIDER:
+    if provider in setup_mod.GOOGLE_PROVIDERS:
         return setup_mod.google_redirect_url(_public_url())
     return setup_mod.mcp_redirect_url(_public_url()) or setup_mod.MCP_REDIRECT_URL
 
@@ -61,7 +61,7 @@ def redirect_url(provider: str) -> str | None:
 def setup(slug: str) -> OAuthClientSetupResult:
     provider = _provider(slug)
     store = setup_mod.build_store()
-    return OAuthClientSetupResult(slug=provider, configured=store.client(provider) is not None,
+    return OAuthClientSetupResult(slug=provider, configured=store.client(setup_mod.client_provider(provider)) is not None,
                                   console_url=setup_mod.console_url(provider), redirect_url=redirect_url(provider))
 
 
@@ -71,8 +71,8 @@ def save(request) -> OAuthClientSetupResult:
     if connection_profile_home() is not None:
         raise OAuthClientRpcError(4030, ConnectorErrorReason.not_owner, "Only the owner can set up this app.")
     try:
-        setup_mod.save_client(setup_mod.build_store(), provider, _home(), request.client_id_item,
-                              request.client_secret_item)
+        setup_mod.save_client(setup_mod.build_store(), setup_mod.client_provider(provider), _home(),
+                              request.client_id_item, request.client_secret_item)
     except setup_mod.SetupError as exc:
         _raise(exc.reason)
     return setup(provider)
@@ -102,9 +102,9 @@ def connect(request) -> OAuthClientConnectResult:
     provider = _provider(request.slug)
     store = setup_mod.build_store()
     try:
-        if provider != setup_mod.GOOGLE_PROVIDER:
+        if provider not in setup_mod.GOOGLE_PROVIDERS:
             return _connect_mcp(provider, store, request.client_redirect_uri)
-        link = setup_mod.google_begin(store, _home(), _public_url())
+        link = setup_mod.google_begin(store, _home(), _public_url(), provider)
     except setup_mod.SetupError as exc:
         _raise(exc.reason)
     except OAuthClientRpcError:
@@ -116,6 +116,10 @@ def connect(request) -> OAuthClientConnectResult:
 
 
 def _remove_sign_in(provider: str) -> bool:
+    if provider == setup_mod.ADS_PROVIDER:
+        from tui_gateway import google_ads_connector
+        google_ads_connector.sign_out()
+        return True
     if provider == setup_mod.GOOGLE_PROVIDER:
         setup_mod.google_remove(setup_mod.build_store(), _home())
         return True
@@ -149,6 +153,13 @@ def oauth_client_status(entry) -> ConnectorCatalogStatus:
     from hermes_cli import mcp_catalog
     from tools.mcp_oauth import pending_reauth_reason
     store = setup_mod.build_store()
+    if entry.id == setup_mod.ADS_PROVIDER:
+        if store.client(setup_mod.GOOGLE_PROVIDER) is None:
+            return ConnectorCatalogStatus.needs_setup
+        status = setup_mod.google_status(store, _home(), entry.id)
+        if status is setup_mod.ConnectionStatus.connected:
+            return ConnectorCatalogStatus.connected
+        return ConnectorCatalogStatus.needs_reconnect if status is not None else ConnectorCatalogStatus.not_connected
     if entry.id == setup_mod.GOOGLE_PROVIDER:
         status = setup_mod.google_status(store, _home())
         if status is setup_mod.ConnectionStatus.connected:

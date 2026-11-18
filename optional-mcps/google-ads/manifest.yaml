@@ -1,0 +1,33 @@
+manifest_version: 1
+
+name: google-ads
+description: >-
+  Read-only Google Ads: list the accounts you can reach, read campaign stats with GAQL and look up field metadata.
+source: https://github.com/googleads/google-ads-mcp
+
+# google-ads-mcp 0.0.6 reads GOOGLE_ADS_DEVELOPER_TOKEN only when set, so it starts without one. Its tool config
+# registers the customers, search and metadata namespaces only; the labels and assets namespaces (the only tools
+# that change an account) stay off. Pal writes GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_ADS_MCP_TOOLS_CONFIG
+# for the owner's sign-in when the connector is saved (tui_gateway/google_ads_connector.py).
+transport:
+  type: stdio
+  command: uv
+  args:
+    - tool
+    - run
+    - google-ads-mcp==0.0.6
+  version: 0.0.6
+
+# The sign-in is owned by the Google Ads wizard (connectors.google_ads.*), not the MCP auth flow, so no env is prompted.
+auth:
+  type: none
+
+tools:
+  default_enabled:
+    - customers_list_accessible_customers
+    - metadata_get_resource_metadata
+    - search_search
+
+post_install: |
+  Set up Google Ads from Connect Apps in the Pal app: it reuses the Google sign-in client saved for Google Workspace.
+  Saving it from the command line is not supported because the credentials file needs the owner's sign-in.

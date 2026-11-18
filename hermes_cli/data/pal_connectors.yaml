@@ -351,6 +351,24 @@ connectors:
   mcp_url: https://gitlab.com/api/v4/mcp
   verified: true
   source: https://docs.gitlab.com/user/model_context_protocol/mcp_server/
+- id: google-ads
+  name: Google Ads
+  icon: plugin_glyph
+  category: Monitoring and analytics
+  method: oauth_client
+  oauth:
+    authorization_url: https://accounts.google.com/o/oauth2/v2/auth
+    token_url: https://oauth2.googleapis.com/token
+  scopes:
+  - https://www.googleapis.com/auth/adwords
+  verified: true
+  source: https://github.com/googleads/google-ads-mcp
+  notes: Runs on your Pal with your own Google sign-in client. Read only, so Pal reads campaign stats and never changes
+    a campaign. Google ends the sign-in after 7 days while your Google app is in Testing mode.
+  stdio:
+    command: uv
+    args: [tool, run, "google-ads-mcp==0.0.6"]
+    env: {}
 - id: google-workspace
   name: Google Workspace
   icon: plugin_glyph

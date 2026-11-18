@@ -27,6 +27,8 @@ NONCE_TTL_SECONDS = 600.0
 HTTP_TIMEOUT_SECONDS = 15.0
 GOOGLE_REDIRECT_PATH = "/webapp/google-install/callback"
 GOOGLE_PROVIDER = "google-workspace"
+ADS_PROVIDER = "google-ads"
+GOOGLE_PROVIDERS = frozenset({GOOGLE_PROVIDER, ADS_PROVIDER})
 MCP_REDIRECT_PORT = 27890
 MCP_REDIRECT_URL = f"http://localhost:{MCP_REDIRECT_PORT}/callback"
 GOOGLE_TOKEN_FILE = "google_token.json"
@@ -34,6 +36,7 @@ GOOGLE_IDENTITY_SCOPES = ("openid", "email")
 
 CONSOLE_URLS = {
     GOOGLE_PROVIDER: "https://console.cloud.google.com/apis/credentials",
+    ADS_PROVIDER: "https://console.cloud.google.com/apis/credentials",
 }
 
 SCHEMA = """
@@ -102,6 +105,10 @@ def _digest(raw: str) -> str:
 
 def profile_key(home) -> str:
     return str(Path(home).expanduser().resolve(strict=False))
+
+
+def client_provider(provider_id: str) -> str:
+    return GOOGLE_PROVIDER if provider_id == ADS_PROVIDER else provider_id
 
 
 def vault_for(home):
@@ -278,25 +285,29 @@ def _challenge(verifier: str) -> str:
     return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
 
 
-def google_begin(store: OAuthClientStore, profile_home, public_url: str | None) -> str:
+def google_begin(store: OAuthClientStore, profile_home, public_url: str | None,
+                 provider: str = GOOGLE_PROVIDER) -> str:
     from hermes_cli.pal_connectors import load_pal_connectors
     redirect_uri = google_redirect_url(public_url)
     if redirect_uri is None:
         raise SetupError("needs_public_url")
-    record = store.client(GOOGLE_PROVIDER)
+    record = store.client(client_provider(provider))
     if record is None:
         raise SetupError("needs_setup")
     client_id, _ = resolve_client(record)
-    entry = next(e for e in load_pal_connectors() if e.id == GOOGLE_PROVIDER)
+    entry = next(e for e in load_pal_connectors() if e.id == provider)
     verifier = secrets.token_urlsafe(64)
-    state = store.issue_nonce(PendingSignIn(GOOGLE_PROVIDER, profile_key(profile_home), verifier, redirect_uri))
-    query = urlencode({
+    state = store.issue_nonce(PendingSignIn(provider, profile_key(profile_home), verifier, redirect_uri))
+    scopes = list(entry.scopes) if provider == ADS_PROVIDER else [*GOOGLE_IDENTITY_SCOPES, *entry.scopes]
+    params = {
         "client_id": client_id, "redirect_uri": redirect_uri, "response_type": "code",
-        "scope": " ".join(dict.fromkeys([*GOOGLE_IDENTITY_SCOPES, *entry.scopes])), "state": state,
+        "scope": " ".join(dict.fromkeys(scopes)), "state": state,
         "code_challenge": _challenge(verifier), "code_challenge_method": "S256", "access_type": "offline",
-        "include_granted_scopes": "true", "prompt": "consent",
-    })
-    return f"{entry.oauth.authorization_url}?{query}"
+        "prompt": "consent",
+    }
+    if provider != ADS_PROVIDER:
+        params["include_granted_scopes"] = "true"
+    return f"{entry.oauth.authorization_url}?{urlencode(params)}"
 
 
 def exchange_code(token_url: str, data: dict[str, str]) -> dict:
@@ -308,10 +319,7 @@ def exchange_code(token_url: str, data: dict[str, str]) -> dict:
     return reply
 
 
-def _store_google_token(pending: PendingSignIn, client_id: str, client_secret: str, reply: dict,
-                        previous_item: str | None) -> str:
-    from tui_gateway.google_workspace import EXPIRY_FORMAT, TOKEN_URI
-    from utils import atomic_json_write
+def _store_refresh_token(pending: PendingSignIn, reply: dict, previous_item: str | None, label: str) -> tuple[str, str]:
     vault = vault_for(pending.profile_home)
     refresh = reply.get("refresh_token")
     if not refresh and previous_item:
@@ -320,9 +328,23 @@ def _store_google_token(pending: PendingSignIn, client_id: str, client_secret: s
         raise SetupError("no_refresh_token")
     if previous_item:
         vault.update_item(previous_item, secret={"api_key": refresh})
-        item_id = previous_item
-    else:
-        item_id = vault.add_item("api_key", "Google Workspace sign-in", {"api_key": refresh}).id
+        return refresh, previous_item
+    return refresh, vault.add_item("api_key", label, {"api_key": refresh}).id
+
+
+def _store_ads_token(pending: PendingSignIn, client_id: str, client_secret: str, reply: dict,
+                     previous_item: str | None) -> str:
+    from tui_gateway import google_ads_connector
+    refresh, item_id = _store_refresh_token(pending, reply, previous_item, "Google Ads sign-in")
+    google_ads_connector.write_credentials(Path(pending.profile_home), client_id, client_secret, refresh)
+    return item_id
+
+
+def _store_google_token(pending: PendingSignIn, client_id: str, client_secret: str, reply: dict,
+                        previous_item: str | None) -> str:
+    from tui_gateway.google_workspace import EXPIRY_FORMAT, TOKEN_URI
+    from utils import atomic_json_write
+    refresh, item_id = _store_refresh_token(pending, reply, previous_item, "Google Workspace sign-in")
     expiry = datetime.now(UTC) + timedelta(seconds=int(reply.get("expires_in") or 3600))
     atomic_json_write(Path(pending.profile_home) / GOOGLE_TOKEN_FILE, {
         "token": reply["access_token"], "refresh_token": refresh, "token_uri": TOKEN_URI,
@@ -335,44 +357,50 @@ def _store_google_token(pending: PendingSignIn, client_id: str, client_secret: s
 def google_complete(store: OAuthClientStore, raw_state: str, code: str | None, error: str | None,
                     exchange: Callable[[str, dict[str, str]], dict] | None = None) -> RedirectOutcome:
     pending = store.consume_nonce(raw_state) if raw_state else None
-    if pending is None or pending.provider_id != GOOGLE_PROVIDER:
+    if pending is None or pending.provider_id not in GOOGLE_PROVIDERS:
         return RedirectOutcome.rejected
+    provider = pending.provider_id
     if error:
         return RedirectOutcome.denied
     if not code:
         return RedirectOutcome.rejected
     from hermes_cli.pal_connectors import load_pal_connectors
-    record = store.client(GOOGLE_PROVIDER)
-    previous = store.connection(GOOGLE_PROVIDER, pending.profile_home)
+    record = store.client(client_provider(provider))
+    previous = store.connection(provider, pending.profile_home)
     try:
         if record is None:
             raise SetupError("needs_setup")
         client_id, client_secret = resolve_client(record)
-        entry = next(e for e in load_pal_connectors() if e.id == GOOGLE_PROVIDER)
+        entry = next(e for e in load_pal_connectors() if e.id == provider)
         reply = (exchange or exchange_code)(entry.oauth.token_url, {
             "client_id": client_id, "client_secret": client_secret, "code": code, "code_verifier": pending.verifier,
             "grant_type": "authorization_code", "redirect_uri": pending.redirect_uri})
-        item = _store_google_token(pending, client_id, client_secret, reply, previous[1] if previous else None)
+        store_token = _store_ads_token if provider == ADS_PROVIDER else _store_google_token
+        item = store_token(pending, client_id, client_secret, reply, previous[1] if previous else None)
     except Exception as exc:  # health: allow BLE001 -- provider and vault errors may carry the code, so only the type is logged
-        logger.warning("google install exchange failed error=%s", type(exc).__name__)
-        store.set_connection(GOOGLE_PROVIDER, pending.profile_home, ConnectionStatus.needs_reconnect,
+        logger.warning("google install exchange failed provider=%s error=%s", provider, type(exc).__name__)
+        store.set_connection(provider, pending.profile_home, ConnectionStatus.needs_reconnect,
                              previous[1] if previous else None)
         return RedirectOutcome.denied
-    store.set_connection(GOOGLE_PROVIDER, pending.profile_home, ConnectionStatus.connected, item)
+    store.set_connection(provider, pending.profile_home, ConnectionStatus.connected, item)
     return RedirectOutcome.completed
 
 
-def google_remove(store: OAuthClientStore, profile_home) -> None:
+def google_remove(store: OAuthClientStore, profile_home, provider: str = GOOGLE_PROVIDER) -> None:
     key = profile_key(profile_home)
-    item = store.delete_connection(GOOGLE_PROVIDER, key)
+    item = store.delete_connection(provider, key)
     if item:
         with contextlib.suppress(Exception):
             vault_for(key).remove_item(item)
-    (Path(key) / GOOGLE_TOKEN_FILE).unlink(missing_ok=True)
+    if provider == ADS_PROVIDER:
+        from tui_gateway import google_ads_connector
+        google_ads_connector.delete_credentials(Path(key))
+    else:
+        (Path(key) / GOOGLE_TOKEN_FILE).unlink(missing_ok=True)
 
 
-def google_status(store: OAuthClientStore, profile_home) -> ConnectionStatus | None:
-    row = store.connection(GOOGLE_PROVIDER, profile_key(profile_home))
+def google_status(store: OAuthClientStore, profile_home, provider: str = GOOGLE_PROVIDER) -> ConnectionStatus | None:
+    row = store.connection(provider, profile_key(profile_home))
     return row[0] if row else None
 
 

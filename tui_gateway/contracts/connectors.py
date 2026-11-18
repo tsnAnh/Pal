@@ -406,6 +406,68 @@ method(
 )
 
 
+class GoogleAdsSaveParams(ProfileParams):
+    login_customer_id: str | None = None
+
+
+class GoogleAdsState(WireEnum):
+    needs_setup = "needs_setup"
+    needs_sign_in = "needs_sign_in"
+    signed_in = "signed_in"
+    needs_reconnect = "needs_reconnect"
+
+
+class GoogleAdsStatusResult(Result):
+    state: GoogleAdsState
+    configured: bool
+    login_customer_id: str | None
+
+
+class GoogleAdsSaveResult(Result):
+    tools: int
+    login_customer_id: str | None
+
+
+class GoogleAdsCheck(WireEnum):
+    ready = "ready"
+    explorer_access_needed = "explorer_access_needed"
+    needs_reauth = "needs_reauth"
+    unreachable = "unreachable"
+
+
+class GoogleAdsVerifyResult(Result):
+    check: GoogleAdsCheck
+    accounts: int | None
+
+
+method(
+    "connectors.google_ads.status",
+    params=ProfileParams,
+    result=GoogleAdsStatusResult,
+    doc="Owner only. Where the Google Ads sign-in stands: needs_setup (no Google client saved yet), needs_sign_in, "
+        "signed_in or needs_reconnect, whether the read-only Ads server is saved, and the saved manager account id. "
+        "Never returns a token.",
+)
+
+method(
+    "connectors.google_ads.save",
+    params=GoogleAdsSaveParams,
+    result=GoogleAdsSaveResult,
+    doc="Owner only. Write the Google Ads credentials file from the saved Google client and the Ads sign-in, save "
+        "the read-only Ads stdio server with the optional manager account id (digits only, else INVALID_PARAMS), then "
+        "run the MCP handshake. A failed handshake restores the previous config and is an error.",
+)
+
+method(
+    "connectors.google_ads.verify",
+    params=ProfileParams,
+    result=GoogleAdsVerifyResult,
+    doc="Owner only. One live Google Ads call with the signed-in account. A refusal is a check value, never an RPC "
+        "error: explorer_access_needed when Google has not approved the owner's Cloud project, needs_reauth when the "
+        "refresh token was revoked or expired, unreachable when Google did not answer.",
+)
+
+
 method(
     "connectors.setup.check",
     params=ConnectorSetupCheckParams,

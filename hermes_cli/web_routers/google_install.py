@@ -11,7 +11,7 @@ router = APIRouter()
 
 _PAGES = {
     RedirectOutcome.completed: (200, "Done. Go back to Pal to finish.", _RETURN),
-    RedirectOutcome.denied: (200, "Google Workspace isn't connected. Go back to Pal to try again.", _RETURN),
+    RedirectOutcome.denied: (200, "Google isn't connected. Go back to Pal to try again.", _RETURN),
     RedirectOutcome.rejected: (400, "This link has expired or was already used. Go back to Pal and start again.", ""),
 }
 
