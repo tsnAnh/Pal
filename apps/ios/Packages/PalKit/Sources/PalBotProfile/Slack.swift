@@ -6,28 +6,22 @@ public enum SlackConnection: Sendable, Equatable, Codable {
     case notConnected
     case starting
     case connected
-    case restartNeeded
     case failed
 
     public init(_ wire: SlackStatusWire) {
-        if wire.restartBusy == true {
-            self = .restartNeeded
-        } else if wire.restartError?.isEmpty == false {
+        if wire.restartError?.isEmpty == false {
             self = .failed
         } else if !wire.configured {
             self = .notConnected
         } else {
-            self = Self.configured(
-                state: wire.state, hasErrorCode: wire.errorCode?.isEmpty == false, restartStarted: wire.restartStarted == true
-            )
+            self = Self.configured(state: wire.state, hasErrorCode: wire.errorCode?.isEmpty == false)
         }
     }
 
-    private static func configured(state: String?, hasErrorCode: Bool, restartStarted: Bool) -> SlackConnection {
+    private static func configured(state: String?, hasErrorCode: Bool) -> SlackConnection {
         switch state {
         case "connected": .connected
         case "not_configured", "disabled": .notConnected
-        case "pending_restart", "gateway_stopped": restartStarted ? .starting : .restartNeeded
         case "startup_failed": .failed
         case "fatal", "retrying": hasErrorCode ? .failed : .starting
         default: .starting
@@ -37,14 +31,14 @@ public enum SlackConnection: Sendable, Equatable, Codable {
     public var isSettled: Bool {
         switch self {
         case .starting: false
-        case .notConnected, .connected, .restartNeeded, .failed: true
+        case .notConnected, .connected, .failed: true
         }
     }
 
     public var allowsTokenUpdate: Bool {
         switch self {
         case .failed, .connected: true
-        case .notConnected, .starting, .restartNeeded: false
+        case .notConnected, .starting: false
         }
     }
 }

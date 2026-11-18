@@ -128,8 +128,6 @@ struct SlackTests {
     private func status(
         configured: Bool = true,
         state: String? = nil,
-        restartStarted: Bool? = nil,
-        restartBusy: Bool? = nil,
         restartError: String? = nil,
         errorCode: String? = nil,
         neededScope: String? = nil,
@@ -137,8 +135,6 @@ struct SlackTests {
     ) throws -> SlackStatus {
         var object: [String: JSONValue] = ["enabled": .bool(configured), "configured": .bool(configured), "gateway_running": true]
         if let state { object["state"] = .string(state) }
-        if let restartStarted { object["restart_started"] = .bool(restartStarted) }
-        if let restartBusy { object["restart_busy"] = .bool(restartBusy) }
         if let restartError { object["restart_error"] = .string(restartError) }
         if let errorCode { object["error_code"] = .string(errorCode) }
         if let neededScope { object["needed_scope"] = .string(neededScope) }
@@ -154,16 +150,14 @@ struct SlackTests {
         try status(configured: configured, state: state, errorCode: errorCode).connection
     }
 
-    @Test("status maps to connected, not connected, restart needed and failed")
+    @Test("status maps to connected, not connected, connecting and failed")
     func mapping() throws {
         #expect(try connection("connected") == .connected)
         #expect(try connection("not_configured", configured: false) == .notConnected)
         #expect(try connection("disabled") == .notConnected)
-        #expect(try connection("pending_restart") == .restartNeeded)
-        #expect(try connection("gateway_stopped") == .restartNeeded)
-        #expect(try status(state: "pending_restart", restartStarted: true).connection == .starting)
+        #expect(try connection("pending_restart") == .starting)
+        #expect(try connection("gateway_stopped") == .starting)
         #expect(try connection("startup_failed") == .failed)
-        #expect(try status(state: "pending_restart", restartBusy: true).connection == .restartNeeded)
         #expect(try status(state: "connected", restartError: "boom").connection == .failed)
         #expect(try connection("something_new") == .starting)
     }
@@ -183,7 +177,7 @@ struct SlackTests {
     @Test("token update is offered only for failed and connected")
     func updateRule() {
         let offered: [SlackConnection] = [.failed, .connected]
-        let hidden: [SlackConnection] = [.notConnected, .starting, .restartNeeded]
+        let hidden: [SlackConnection] = [.notConnected, .starting]
         for connection in offered { #expect(connection.allowsTokenUpdate) }
         for connection in hidden { #expect(!connection.allowsTokenUpdate) }
     }
@@ -253,7 +247,7 @@ struct SlackTests {
     @Test("only the starting state keeps polling")
     func settled() {
         #expect(SlackConnection.starting.isSettled == false)
-        for settled in [SlackConnection.connected, .notConnected, .restartNeeded, .failed] { #expect(settled.isSettled) }
+        for settled in [SlackConnection.connected, .notConnected, .failed] { #expect(settled.isSettled) }
     }
 
     @Test("tokens need the xoxb and xapp prefixes and no whitespace")
@@ -299,11 +293,11 @@ struct SlackTests {
         let bots = ScriptedBots()
         bots.script("messaging.slack.connect", [
             "profile": "a", "enabled": true, "configured": true, "gateway_running": true, "state": "pending_restart",
-            "hot_served": false, "restart_started": false, "restart_busy": true,
+            "hot_served": true,
         ])
         let tokens = try #require(SlackTokenUpdate(bot: "xoxb-secret-one", app: "xapp-secret-two"))
         let state = try await SlackService(gateway: bots.gateway).connect(profile: "a", tokens: tokens)
-        #expect(state.connection == .restartNeeded)
+        #expect(state.connection == .starting)
         #expect(bots.calls.first?.params == ["bot_token": "xoxb-secret-one", "app_token": "xapp-secret-two", "profile": "a"])
     }
 
