@@ -1,5 +1,6 @@
 """Physical worker liveness and cooperative Stop across every served authority."""
 import asyncio
+from pathlib import Path
 
 from gateway.session_authorities import all_authorities
 
@@ -12,14 +13,37 @@ def executing_sessions(authority):
             yield sid, live, execution['execution_generation']
 
 
+def scheduler_counted_job_id(authority, sid):
+    """The job id of a cron fire this process's scheduler already counts in the restart wait, else None.
+
+    A cron fire's session turn and its scheduler in-flight claim are one unit of work: the scheduler
+    classifies it per run (awaitable, wedged or restart-safe in its own scope), so the session side must
+    not count it again. Keyed by the authority's own home, never the job id alone: two profiles carry
+    the same job id. A fire the scheduler here does not know (``hermes cron run`` from another process)
+    is no one's but the session's, which keeps counting it."""
+    from gateway.session_cron import cron_session_job_id
+    job_id = cron_session_job_id(authority, sid)
+    if job_id is None:
+        return None
+    from cron.scheduler import is_job_running
+    return job_id if is_job_running(job_id, home=Path(authority.db.db_path).resolve().parent) else None
+
+
+def unmapped_executing_sessions(runner, authority):
+    """``(sid, live)`` per executing session of *authority* that no ordinary agent slot, managed worker or
+    scheduler claim accounts for."""
+    running = getattr(runner, '_running_agents', {})
+    managed = getattr(authority, '_managed_workers', {})
+    return [(sid, live) for sid, live, _ in executing_sessions(authority)
+            if live.route not in running and sid not in managed and scheduler_counted_job_id(authority, sid) is None]
+
+
 def uncounted_runtime_work(runner):
     """Count claims absent from the ordinary agent map, including pre-bootstrap managed turns."""
-    running = getattr(runner, '_running_agents', {})
     authorities = all_authorities(runner)
     managed = sum(not worker.closed.is_set() for authority in authorities
                   for worker in getattr(authority, '_managed_workers', {}).values())
-    return (managed + sum(live.route not in running and sid not in getattr(authority, '_managed_workers', {})
-                for authority in authorities for sid, live, _ in executing_sessions(authority))
+    return (managed + sum(len(unmapped_executing_sessions(runner, authority)) for authority in authorities)
             + sum(len(mutation_tasks(authority)) + len(side_agents(authority)) for authority in authorities))
 
 
@@ -29,10 +53,24 @@ def managed_worker_units(authority):
             for sid, worker in list(getattr(authority, '_managed_workers', {}).items()) if not worker.closed.is_set()]
 
 
+def executing_session_units(runner, authority, pid):
+    """One entry per unmapped executing session, naming it and, for a cron fire, its job."""
+    from gateway.session_cron import cron_session_job_id
+    units = []
+    for sid, _ in unmapped_executing_sessions(runner, authority):
+        unit = {'kind': 'managed', 'session': sid, 'pid': pid}
+        if (job_id := cron_session_job_id(authority, sid)) is not None:
+            unit['cron_job_id'] = job_id
+        units.append(unit)
+    return units
+
+
 def uncounted_runtime_work_units(runner, pid):
-    """One ``active_work`` entry per unit ``uncounted_runtime_work`` counts. Managed workers are named
-    (``managed_worker_units``); the rest of that work carries only the gateway's *pid*."""
-    units = [unit for authority in all_authorities(runner) for unit in managed_worker_units(authority)]
+    """One ``active_work`` entry per unit ``uncounted_runtime_work`` counts. Managed workers and executing
+    sessions are named; mutations and side agents carry only the gateway's *pid*."""
+    authorities = all_authorities(runner)
+    units = [unit for authority in authorities for unit in managed_worker_units(authority)]
+    units += [unit for authority in authorities for unit in executing_session_units(runner, authority, pid)]
     return units + [{'kind': 'managed', 'pid': pid}] * max(0, uncounted_runtime_work(runner) - len(units))
 
 
