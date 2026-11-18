@@ -1674,9 +1674,13 @@ def _(rid, params: dict) -> dict:
         if message := _tools_mod("tui_gateway.mcp_rpc_helpers").apply_client_id(cfg, params.get("client_id")):
             return _err(rid, 4063, message)
         hermes_home = str(_tools_mod("hermes_constants").get_hermes_home().expanduser().resolve(strict=False))
-        result = _tools_mod("tui_gateway.mcp_oauth_sessions").start_flow(
-            hermes_home, name, cfg, client_redirect_uri=client_redirect_uri,
-            fallback_redirect_uri=fallback_redirect_uri)
+        sessions = _tools_mod("tui_gateway.mcp_oauth_sessions")
+        try:
+            result = sessions.start_flow(
+                hermes_home, name, cfg, client_redirect_uri=client_redirect_uri,
+                fallback_redirect_uri=fallback_redirect_uri)
+        except sessions.AdminApprovalPending as e:
+            return _err(rid, 4033, str(e), data={"reason": "ADMIN_APPROVAL_PENDING"})
     except ValueError as e:
         return _err(rid, 4001, str(e))
     keys = ("session_id", "auth_url", "flow", "redirect", "redirect_uri", "notice")
@@ -1701,11 +1705,12 @@ def _(rid, params: dict) -> dict:
 @_mcp_rpc("oauth.callback", _NAME_SESSION)
 def _(rid, params: dict) -> dict:
     """Relay a client-captured redirect (``code``/``state``/``error``/``iss``) into a ``client_redirect_uri`` flow."""
-    code, state, error, iss = (str(params.get(k) or "") or None for k in ("code", "state", "error", "iss"))
+    code, state, error, iss, description = (
+        str(params.get(k) or "") or None for k in ("code", "state", "error", "iss", "error_description"))
     deliver = _tools_mod("tui_gateway.mcp_oauth_sessions").deliver_callback_flow
     return _ok(rid, deliver(
         _str_arg(params, "session_id"), _str_arg(params, "name"), code=code, state=state, error=error,
-        iss=iss))
+        iss=iss, error_description=description))
 
 
 # ─── Plugins ─────────────────────────────────────────────────────────────────

@@ -14,6 +14,7 @@ public enum ConnectAppsError: Error, Sendable, Equatable {
     case credentialsRequired([String])
     case signInFailed(String)
     case signInRefused(McpSignInFailure, GatewayFault)
+    case adminApprovalPending
     case oauthClient(OAuthClientFailure, GatewayFault? = nil)
     case failed
     case faulted(GatewayFault)

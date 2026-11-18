@@ -78,6 +78,9 @@ enum NativeMcpSignIn {
                 case .failed(let reason):
                     _ = sessions.remove(service)
                     return .failed(reason)
+                case .adminApprovalPending:
+                    _ = sessions.remove(service)
+                    return .failed(McpAdminApproval.message)
                 }
             },
             cancel: { service in

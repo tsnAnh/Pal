@@ -16,6 +16,7 @@ enum McpSignInScript {
         case refuseRedirect = "refuse-redirect"
         case staleThenConnect = "stale-then-connect"
         case admin
+        case adminWords = "admin-words"
         case connect
         case wait
     }
@@ -69,7 +70,12 @@ actor ScriptedMcpSignInRPC: ConnectRPC {
         case .staleThenConnect where starts == 1:
             throw Self.refusal(message: "a sign-in is already open", reason: "oauth_in_progress")
         case .admin:
-            throw GatewayTransportError.rpc(RPCError(code: 5000, message: "Admin approval is required for this application"))
+            throw GatewayTransportError.rpc(RPCError(
+                code: 4033, message: "An admin of your organisation needs to approve Pal.",
+                data: ["trace": "scriptedtr", "reason": "ADMIN_APPROVAL_PENDING"]
+            ))
+        case .adminWords:
+            throw Self.refusal(message: "Admin approval is required for this application", reason: "access_denied")
         default:
             break
         }
