@@ -68,6 +68,7 @@ public enum McpPasteOutcome: Sendable, Equatable {
     case signedIn
     case tryAgain(String)
     case failed(String)
+    case adminApprovalPending
 }
 
 public final class McpPasteSession: Sendable, CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {

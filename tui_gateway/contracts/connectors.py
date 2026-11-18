@@ -48,6 +48,7 @@ class ConnectorErrorReason(WireEnum):
     connect_failed = "CONNECT_FAILED"
     invalid_token = "INVALID_TOKEN"
     check_unavailable = "CHECK_UNAVAILABLE"
+    admin_approval_pending = "ADMIN_APPROVAL_PENDING"
 
 
 class ConnectorsListParams(ProfileParams):

@@ -31,6 +31,7 @@ struct ConnectAppsScreen: View {
             if phase == .active { Task { await model.devices.refresh() } }
         }
         .modifier(ConnectAppsPresentations(model: model))
+        .modifier(DiscordFlowSheet(model: model))
     }
 
     @ViewBuilder
@@ -137,10 +138,6 @@ private struct ConnectAppsPresentations: ViewModifier {
                     .macSheetFrame()
             }
             .modifier(OwnerSetupSheet(model: model))
-            .sheet(item: $model.setupGuideSheet) { guide in
-                SetupGuideView(model: guide)
-                    .macSheetFrame()
-            }
             .sheet(
                 item: $model.pastingApp,
                 onDismiss: { Task { await model.cancelPaste() } },

@@ -86,7 +86,7 @@ final class ConnectAppsModel {
     var mcpSignIn: McpSignInController?
     var ownerSetup: OwnerSetupModel?
     var showsSlackPicker = false
-    var setupGuideSheet: SetupGuideModel?
+    var discordFlow: DiscordFlowSession?
     let slack: SlackBotsModel
     let slackWizard: SlackWizardContext
     var pasteSession: (any McpPasteSigning)?
@@ -175,7 +175,7 @@ final class ConnectAppsModel {
     }
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
-        if presentsSetupGuide(app) { return }
+        if presentsDiscordFlow(app) || presentsSetupGuide(app) { return }
         if app.usesMcpSignIn {
             beginMcpSignIn(app)
             return
@@ -250,7 +250,7 @@ final class ConnectAppsModel {
         case .signInFailed(let reason): failures[app.id] = reason
         case .signInRefused(let failure, _): failures[app.id] = failure.reason
         case .credentialsRequired(let keys): credentialPrompt = CredentialPrompt(app: app, keys: keys)
-        case .unavailable, .failed, .faulted, .oauthClient: fail(app, "Couldn't connect \(app.name). Try again.")
+        case .unavailable, .failed, .faulted, .oauthClient, .adminApprovalPending: fail(app, "Couldn't connect \(app.name). Try again.")
         }
     }
 

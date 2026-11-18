@@ -88,6 +88,11 @@ extension SetupStatus {
                 code: known ? fault.reason : failure.code, method: fault.method, trace: fault.trace.rawValue,
                 gatewayVersion: fault.gatewayVersion, subject: subject, valueName: valueName, device: device, detail: failure.reason
             )
+        case .adminApprovalPending:
+            return SetupStatus(
+                code: SetupStatusClass.signInIncomplete.rawValue, subject: subject, valueName: valueName, device: device,
+                detail: McpAdminApproval.message
+            )
         case .unavailable:
             return SetupStatus(code: "unavailable", subject: subject, valueName: valueName, device: device)
         case .cancelled:

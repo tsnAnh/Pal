@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 from typing import Iterator
 from urllib.parse import parse_qs, urlparse
 
+from tools.connectors.mcp_oauth_redirect import ADMIN_APPROVAL_PENDING, is_admin_approval_pending
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +48,7 @@ class DashboardOAuthFlow:
     status: str = "starting"
     authorization_url: str | None = None
     error: str | None = None
+    reason: str | None = None
     tools: list[dict] = field(default_factory=list)
     discovery_error: str = ""
     # The user abandoned this flow: terminal for good, never re-minted (see publish_authorization_url).
@@ -102,7 +105,8 @@ class DashboardOAuthFlow:
         return self.authorization_url
 
     def deliver_callback(
-        self, *, code: str | None, state: str | None, error: str | None, iss: str | None = None
+        self, *, code: str | None, state: str | None, error: str | None, iss: str | None = None,
+        error_description: str | None = None,
     ) -> None:
         """Hand the browser redirect to the waiting flow; ``state`` must match exactly.
 
@@ -115,6 +119,8 @@ class DashboardOAuthFlow:
                 raise ValueError("OAuth callback state mismatch")
             if error:
                 self._callback_error = error
+                if is_admin_approval_pending(error, error_description):
+                    self.reason = ADMIN_APPROVAL_PENDING  # the vendor's description is judged here and never kept
             elif code:
                 self._callback = (code, state, iss)
             else:
@@ -152,6 +158,8 @@ class DashboardOAuthFlow:
             if self.status in {"approved", "error"}:
                 return
             self.status = "error"
+            if self.reason is None and not cancelled and is_admin_approval_pending(None, error):
+                self.reason = ADMIN_APPROVAL_PENDING
             self.error = error or "MCP OAuth flow failed before the callback was received (empty error message)"
             # The SDK's callback waiter reads _callback_error, not error — without
             # this copy, a failure marked before any browser redirect (worker

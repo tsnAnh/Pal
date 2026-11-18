@@ -24,13 +24,16 @@ private func refusal(_ message: String, reason: String? = nil) -> CustomRPC.Repl
     }
 }
 
-private func gateway(start: @escaping CustomRPC.Reply = { _ in ["session_id": "s1", "auth_url": .string(authLink)] }) -> CustomRPC {
+private func gateway(
+    start: @escaping CustomRPC.Reply = { _ in ["session_id": "s1", "auth_url": .string(authLink)] },
+    poll: @escaping CustomRPC.Reply = { _ in ["status": "approved"] }
+) -> CustomRPC {
     CustomRPC([
         "mcp.servers.add": { _ in ["ok": true] },
         "mcp.servers.remove": { _ in ["ok": true] },
         "mcp.servers.oauth.start": start,
         "mcp.servers.oauth.callback": { _ in ["ok": true] },
-        "mcp.servers.oauth.poll": { _ in ["status": "approved"] },
+        "mcp.servers.oauth.poll": poll,
         "mcp.servers.oauth.cancel": { _ in ["ok": true] },
     ])
 }
@@ -117,12 +120,57 @@ struct McpSignInControllerTests {
         #expect(rpc.methods().filter { $0 == "mcp.servers.oauth.start" }.count == 1)
     }
 
-    @Test func anAdminApprovalWaitIsCalmAndRemovesTheServerItAdded() async {
-        let rpc = gateway(start: refusal("Admin approval is required for this application"))
+    @Test func theGatewayStateAdminApprovalPendingIsCalmAndRemovesTheServerItAdded() async {
+        let rpc = gateway(start: refusal("An admin of your organisation needs to approve Pal.", reason: "ADMIN_APPROVAL_PENDING"))
         let sheet = makeController(rpc, probe: Probe())
         await sheet.start()
         #expect(sheet.phase == .waitingForAdmin)
         #expect(rpc.methods().last == "mcp.servers.remove")
+    }
+
+    @Test func adminWordsWithoutTheGatewayStateAreAPlainFailureWithDetails() async throws {
+        let rpc = gateway(start: refusal("Admin approval is required for this application", reason: "access_denied"))
+        let sheet = makeController(rpc, probe: Probe())
+        await sheet.start()
+        let status = try #require(failure(sheet.phase))
+        #expect(status.code == "access_denied")
+        #expect(status.method == "mcp.servers.oauth.start")
+        #expect(status.trace == "is6jx82q")
+    }
+
+    @Test func anOrdinaryDenialFromThePollIsAPlainFailure() async throws {
+        let rpc = gateway(poll: { _ in ["status": "error", "error_message": "OAuth authorization failed: access_denied"] })
+        let sheet = makeController(rpc, probe: Probe())
+        await sheet.start()
+        await sheet.submit(pasted)
+        let status = try #require(failure(sheet.phase))
+        #expect(status.code == "access_denied")
+    }
+
+    @Test func theGatewayStateFromThePollWaitsForTheAdminAndRemovesTheServer() async {
+        let rpc = gateway(poll: { _ in
+            ["status": "error", "reason": "ADMIN_APPROVAL_PENDING", "error_message": "An admin of your organisation needs to approve Pal."]
+        })
+        let sheet = makeController(rpc, probe: Probe())
+        await sheet.start()
+        await sheet.submit(pasted)
+        #expect(sheet.phase == .waitingForAdmin)
+        #expect(rpc.methods().contains("mcp.servers.remove"))
+    }
+
+    @Test func aPollErrorWordedAboutAdminsWithoutTheStateStaysAFailure() async throws {
+        let rpc = gateway(poll: { _ in ["status": "error", "error_message": "AADSTS90094: admin consent required"] })
+        let sheet = makeController(rpc, probe: Probe())
+        await sheet.start()
+        await sheet.submit(pasted)
+        #expect(failure(sheet.phase) != nil)
+        #expect(sheet.phase != .waitingForAdmin)
+    }
+
+    @Test func theWaitingCopyOnlyPromisesWhatThePalDoes() {
+        let copy = McpSignInSteps.admin(vendor: "Supabase")
+        #expect(copy.title == "Waiting for your admin")
+        #expect(copy.body == "Supabase needs an admin of your organisation to approve Pal. Come back and tap Connect again once your admin approved it.")
     }
 
     @Test func aGatewayReasonWeHaveNoWordsForStillShowsItsCode() async throws {
@@ -258,14 +306,13 @@ struct McpSignInStatusTests {
         let codes = McpSignInFailure.allCases.map(\.code) + [
             McpOAuthError.discoveryFailed, .listenerFailed, .stateMismatch, .tokenExchangeFailed, .rejectedByGateway(nil), .serverAddFailed(nil),
         ].map(\.code)
-        for code in codes where code != "admin_approval_required" {
+        for code in codes {
             #expect(SetupStatusClass.classify(code: code) != .internalFault, "\(code)")
         }
     }
 
-    @Test func adminWordsInTheProviderTextMeanAWaitNotAFailure() {
-        #expect(McpSignInFailure.classify("AADSTS90094: admin consent required") == .adminApproval)
-        #expect(McpSignInFailure.classify("Needs admin approval") == .adminApproval)
+    @Test func providerTextNeverDecidesAnAdminWait() {
+        #expect(McpSignInFailure.classify("AADSTS90094: admin consent required") == .other)
         #expect(McpSignInFailure.classify("administrator rights are not required") == .other)
         #expect(McpSignInFailure.classify("access_denied") == .denied)
     }

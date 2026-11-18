@@ -25,6 +25,11 @@ extension ConnectAppsModel {
             pastingApp = nil
             pasteState = .idle
             failures[pasteTargetID] = reason
+        case .adminApprovalPending:
+            pasteSession = nil
+            pastingApp = nil
+            pasteState = .idle
+            failures[pasteTargetID] = McpAdminApproval.message
         }
         await reload()
     }

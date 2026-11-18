@@ -64,6 +64,12 @@ struct SetupStatusConnectTests {
         #expect(status.trace == "gj43o07j")
     }
 
+    @Test func anAdminApprovalPendingSignInTellsTheOwnerToAskTheAdmin() {
+        let status = SetupStatus(error: ConnectAppsError.adminApprovalPending, subject: "Figma")
+        #expect(status.kind == .signInIncomplete)
+        #expect(status.reason == McpAdminApproval.message)
+    }
+
     @Test(arguments: [ConnectAppsError.unavailable, .failed, .cancelled, .credentialsRequired(["token"])])
     func theRemainingConnectErrorsAreInternal(error: ConnectAppsError) {
         #expect(SetupStatus(error: error, subject: "Figma").kind == .internalFault)

@@ -1851,7 +1851,7 @@ export interface ConnectorSetupCheckResult {
   message?: string | null
   account?: string | null
 }
-export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN' | 'NEEDS_SETUP' | 'NEEDS_PUBLIC_URL' | 'INVALID_CLIENT' | 'CLIENT_UNREADABLE' | 'CONNECT_FAILED' | 'INVALID_TOKEN' | 'CHECK_UNAVAILABLE'
+export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN' | 'NEEDS_SETUP' | 'NEEDS_PUBLIC_URL' | 'INVALID_CLIENT' | 'CLIENT_UNREADABLE' | 'CONNECT_FAILED' | 'INVALID_TOKEN' | 'CHECK_UNAVAILABLE' | 'ADMIN_APPROVAL_PENDING'
 export interface ConnectorsLegacyResult {
   source_readable: boolean
   items: LegacyConnectorRow[]
@@ -5856,6 +5856,7 @@ export interface McpOauthPollResult {
   status: McpOauthPollStatus
   session_id?: string | null
   error_message?: string | null
+  reason?: ConnectorErrorReason | null
   auth_url?: string | null
   redirect?: McpOauthRedirect | null
   tools?: McpProbeTool[] | null
@@ -5873,6 +5874,7 @@ export interface McpOauthCallbackParams {
   code?: string | null
   state?: string | null
   error?: string | null
+  error_description?: string | null
   iss?: string | null
 }
 export interface McpOauthCallbackResult {
