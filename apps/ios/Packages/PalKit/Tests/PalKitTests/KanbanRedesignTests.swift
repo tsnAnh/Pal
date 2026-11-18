@@ -61,12 +61,28 @@ struct KanbanRedesignTests {
         #expect(KanbanBody.title(of: nil, fallback: "t_1") == "t_1", "no body falls back")
         #expect(KanbanBody.title(of: "Key: PAL-1\nState: ready", fallback: "Card title") == "Card title", "a body of machine lines falls back")
         #expect(KanbanBody.title(of: "State of the art\n", fallback: "t") == "State of the art", "a line that only starts like a key is readable")
+        #expect(KanbanBody.title(of: "/faker-mode\n# Real heading", fallback: "t") == "Real heading", "a leading slash command is skipped")
     }
 
-    @Test("a row titles itself from its body, then its card title, then its key")
+    @Test("a row shows its card title, then the first readable body line, then its key")
     func rowTitle() throws {
-        #expect(try row("t1", wire: "ready", title: "raw-key", body: "Key: a\n# Real title").displayTitle == "Real title", "body wins")
+        #expect(try row("t1", wire: "ready", title: "raw-key", body: "Key: a\n# Real title").displayTitle == "raw-key", "the card title wins over the body")
         #expect(try row("t2", wire: "ready", title: "Card title").displayTitle == "Card title", "no body uses the card title")
         #expect(try row("t3", wire: "ready").displayTitle == "t3", "an empty title falls back to the key")
+        let skipped = try row("t4", wire: "ready", title: "  ", body: "/faker-mode\n# Real heading")
+        #expect(skipped.displayTitle == "Real heading", "a blank title skips a leading slash command")
+        #expect(try row("t5", wire: "ready", title: "", body: "/faker-mode").displayTitle == "t5", "a body of only a slash command falls back to the key")
+        let indented = try row("t6", wire: "ready", title: "", body: "  /faker-mode unit\n\nPlain words")
+        #expect(indented.displayTitle == "Plain words", "an indented slash command is skipped")
+        #expect(try row("t7", wire: "ready", title: "", body: "/ not a command").displayTitle == "/ not a command", "a lone slash is readable text")
+    }
+
+    @Test("a card titled setup-slack with a slash-command body shows setup-slack on the tile, the detail and in search")
+    func titleSurvivesSlashBody() throws {
+        let setup = try row("t_1", wire: "ready", title: "setup-slack", body: "/faker-mode\nUnit: setup-slack")
+        #expect(setup.displayTitle == "setup-slack", "the tile and the detail both render displayTitle")
+        #expect(KanbanFilter(text: "setup-slack").matches(setup), "search finds the card by its title")
+        let plain = try row("t_2", wire: "ready", title: "Fix login", body: "Key: PAL-2\n# Fix login\nmore")
+        #expect(plain.displayTitle == "Fix login", "a normal card is unchanged")
     }
 }

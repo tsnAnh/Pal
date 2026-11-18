@@ -31,7 +31,7 @@ public enum KanbanBody {
     public static func title(of body: String?, fallback: String) -> String {
         for line in (body ?? "").split(whereSeparator: \.isNewline) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty || trimmed.hasPrefix("```") || isMachineLine(trimmed) { continue }
+            if trimmed.isEmpty || trimmed.hasPrefix("```") || isMachineLine(trimmed) || isSlashCommand(trimmed) { continue }
             let text = trimmed.drop { $0 == "#" }
                 .replacingOccurrences(of: "**", with: "")
                 .replacingOccurrences(of: "`", with: "")
@@ -39,6 +39,10 @@ public enum KanbanBody {
             if !text.isEmpty { return text }
         }
         return fallback
+    }
+
+    static func isSlashCommand(_ trimmed: String) -> Bool {
+        trimmed.first == "/" && trimmed.dropFirst().first?.isLetter == true
     }
 
     static func isMachineLine(_ trimmed: String) -> Bool {
