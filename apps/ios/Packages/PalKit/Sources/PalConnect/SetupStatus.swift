@@ -11,6 +11,7 @@ public enum SetupStatusClass: String, Sendable, CaseIterable, Equatable {
     case serverUnreachable = "server_unreachable"
     case notMcpServer = "not_mcp"
     case signInIncomplete = "sign_in_failed"
+    case explorerAccessNeeded = "explorer_access_needed"
     case internalFault = "internal"
 
     private static let incompleteCodes = [
@@ -29,6 +30,7 @@ public enum SetupStatusClass: String, Sendable, CaseIterable, Equatable {
             "oauth_in_progress": .signInInProgress, "handshake_used": .signInInProgress,
             "invalid_redirect_uri": .invalidRedirect, "invalid_client_metadata": .invalidRedirect,
             "server_unreachable": .serverUnreachable, "mcp_unreachable": .serverUnreachable, "not_mcp": .notMcpServer,
+            "explorer_access_needed": .explorerAccessNeeded,
         ]
         for code in incompleteCodes { table[code] = .signInIncomplete }
         return table
@@ -90,9 +92,9 @@ public struct SetupStatus: Sendable, Equatable {
             title = String(localized: "\(name) would not accept this \(device)'s address")
             reason = String(localized: "\(name) only allows sign-in on your own computer, and Pal could not open one here.")
             actionTitle = String(localized: "Try again")
-        case .serverUnreachable, .notMcpServer:
+        case .serverUnreachable, .notMcpServer, .explorerAccessNeeded:
             let copy = Self.serverCopy(kind, name: name)
-            (title, reason, actionTitle) = (copy.title, copy.reason, String(localized: "Enter the address again"))
+            (title, reason, actionTitle) = (copy.title, copy.reason, copy.actionTitle)
         case .signInIncomplete:
             title = String(localized: "Sign-in did not finish")
             reason = detail ?? String(localized: "The sign-in could not be completed. Try again.")
@@ -107,9 +109,17 @@ public struct SetupStatus: Sendable, Equatable {
     private struct ServerCopy {
         var title: String
         var reason: String
+        var actionTitle = String(localized: "Enter the address again")
     }
 
     private static func serverCopy(_ kind: SetupStatusClass, name: String) -> ServerCopy {
+        if kind == .explorerAccessNeeded {
+            return ServerCopy(
+                title: String(localized: "Apply for Explorer access"),
+                reason: String(localized: "Google has not approved this project yet. The review is automatic and takes minutes. Apply, then check again."),
+                actionTitle: String(localized: "Open Google Cloud")
+            )
+        }
         if kind == .serverUnreachable {
             return ServerCopy(
                 title: String(localized: "Pal could not reach \(name)"),

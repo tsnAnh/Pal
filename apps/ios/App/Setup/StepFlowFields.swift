@@ -65,7 +65,8 @@ struct StepPasteFields: View {
     }
 
     private var savedNote: String {
-        fields.count == 1
+        if !fields.contains(where: \.secret) { return String(localized: "Saved on your Pal.") }
+        return fields.count == 1
             ? String(localized: "Saved on your Pal. It can't be read back.")
             : String(localized: "Saved on your Pal for every device. They can't be read back.")
     }

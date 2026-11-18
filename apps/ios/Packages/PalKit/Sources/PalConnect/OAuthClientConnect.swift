@@ -84,7 +84,7 @@ public enum OAuthClientConnectOutcome: Sendable {
     case paste(any McpPasteSigning)
 }
 
-private struct OAuthClientStart {
+struct OAuthClientStart {
     var authURL: URL
     var sessionID: String?
 }
@@ -216,7 +216,7 @@ extension ConnectAppsService {
         return { @Sendable in _ = try? await service.rawCall("connectors.oauth_client.remove", ["slug": .string(slug)]) }
     }
 
-    private func startOAuthClient(_ slug: String, redirect: String?) async throws -> OAuthClientStart {
+    func startOAuthClient(_ slug: String, redirect: String?) async throws -> OAuthClientStart {
         var params: [String: JSONValue] = ["slug": .string(slug)]
         if let redirect { params["client_redirect_uri"] = .string(redirect) }
         let result = try await oauthClientCall("connectors.oauth_client.connect", params)
@@ -244,8 +244,8 @@ extension ConnectAppsService {
         case browserReturned
     }
 
-    private func awaitOAuthClientConnected(slug: String, url: URL) async throws {
-        let browser = self.browser
+    func awaitOAuthClientConnected(slug: String, url: URL, browser override: (any AuthorizationBrowser)? = nil) async throws {
+        let browser = override ?? self.browser
         let outcome: ConsentStep
         do {
             outcome = try await withThrowingTaskGroup(of: ConsentStep.self, returning: ConsentStep.self) { group in

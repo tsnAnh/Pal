@@ -27,7 +27,8 @@ enum OAuthClientScript {
         let arguments = ProcessInfo.processInfo.arguments
         return isActive
             ? ScriptedOAuthClientRPC(
-                base: rpc, publicAddress: !arguments.contains(withoutPublicAddressArgument), ipAddress: arguments.contains(ipAddressArgument)
+                base: rpc, publicAddress: !arguments.contains(withoutPublicAddressArgument), ipAddress: arguments.contains(ipAddressArgument),
+                googleAdsExplorerPending: arguments.contains(ScriptedGoogleAds.explorerArgument)
             ) : rpc
     }
 
@@ -54,11 +55,13 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         "dropbox": Progress(), "canva": Progress(), "discord": Progress(),
     ]
     private var discord = ScriptedDiscord()
+    private var googleAds: ScriptedGoogleAds
     private var items = 0
     private var vault: [String: String] = [:]
 
-    init(base: any ConnectRPC, publicAddress: Bool, ipAddress: Bool = false) {
+    init(base: any ConnectRPC, publicAddress: Bool, ipAddress: Bool = false, googleAdsExplorerPending: Bool = false) {
         self.base = base
+        googleAds = ScriptedGoogleAds(explorerPending: googleAdsExplorerPending)
         address = publicAddress ? OAuthClientScript.addressSuggestion : nil
         self.ipAddress = ipAddress
     }
@@ -84,6 +87,8 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         case "vault.add": return addItem(params)
         case "connectors.discord.token", "connectors.discord.guilds", "connectors.discord.save":
             return try discord.handle(method, params, vault: vault)
+        case "connectors.google_ads.status", "connectors.google_ads.save", "connectors.google_ads.verify":
+            return try googleAds.handle(method, params)
         case "vault.remove":
             vault[params["id"]?.stringValue ?? ""] = nil
             return ["ok": true]
@@ -135,9 +140,12 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
 
     private func catalog(_ params: JSONValue) async throws -> JSONValue {
         let live = try await base.call("connectors.catalog", params)
-        let kept = (live["connectors"]?.arrayValue ?? []).filter { progress[$0["slug"]?.stringValue ?? ""] == nil }
+        let kept = (live["connectors"]?.arrayValue ?? []).filter {
+            let slug = $0["slug"]?.stringValue ?? ""
+            return progress[slug] == nil && slug != ScriptedGoogleAds.slug
+        }
         let guided = ["figma", "dropbox", "canva"].map(mcpClientRow)
-        return ["connectors": .array(kept + [googleRow(), githubRow(), discord.row()] + guided)]
+        return ["connectors": .array(kept + [googleRow(), githubRow(), discord.row(), googleAds.row()] + guided)]
     }
 
     private func googleRow() -> JSONValue {
@@ -203,6 +211,10 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     }
 
     private func connect(_ slug: String) throws -> JSONValue {
+        if slug == ScriptedGoogleAds.slug {
+            Task { await self.finishGoogleAdsSignIn() }
+            return googleAds.connectReply()
+        }
         guard let current = progress[slug], current.configured else { throw Self.failure(4090, "NEEDS_SETUP") }
         if let (authorize, session) = OAuthClientScript.loopbackAuthorize[slug] {
             guard !addressSaved else { return gatewayConnect(slug) }
@@ -221,6 +233,11 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
         Task { await self.finishSignIn(slug) }
         let link = "\(OAuthClientScript.loopbackAuthorize[slug]?.0 ?? "")?state=\(OAuthClientScript.state)"
         return ["slug": .string(slug), "auth_url": .string(link), "session_id": .string("scripted-gateway-\(slug)")]
+    }
+
+    private func finishGoogleAdsSignIn() async {
+        try? await Task.sleep(for: .milliseconds(3000))
+        googleAds.signIn()
     }
 
     private func finishSignIn(_ slug: String) async {
@@ -255,6 +272,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     }
 
     private func remove(_ slug: String, removeClient: Bool) -> JSONValue {
+        if slug == ScriptedGoogleAds.slug { googleAds.signOut() }
         progress[slug]?.connected = false
         if removeClient { progress[slug]?.configured = false }
         return ["slug": .string(slug), "removed": true]

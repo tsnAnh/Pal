@@ -89,6 +89,7 @@ final class ConnectAppsModel {
     var t3Flow: T3FlowSheet?
     var t3Reach: T3Reach?
     var discordFlow: DiscordFlowSession?
+    var googleAdsFlow: GoogleAdsFlowSession?
     let slack: SlackBotsModel
     let slackWizard: SlackWizardContext
     var pasteSession: (any McpPasteSigning)?
@@ -179,6 +180,10 @@ final class ConnectAppsModel {
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
         if presentsDiscordFlow(app) || presentsSetupGuide(app) { return }
+        if app.isGoogleAds {
+            await openGoogleAds(app)
+            return
+        }
         if app.usesMcpSignIn {
             beginMcpSignIn(app)
             return

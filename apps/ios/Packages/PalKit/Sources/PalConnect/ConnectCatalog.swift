@@ -306,6 +306,9 @@ public struct ConnectCatalog: Sendable, Equatable {
 
     private static func setupSummary(for entry: PalCatalogEntry) -> String {
         if !entry.method.isSupported { return String(localized: "Needs a newer Pal") }
+        if entry.slug == GoogleAdsConnector.slug {
+            return entry.status == .needsSetup ? String(localized: "Save your Google sign-in under Google Workspace first.") : (entry.notes ?? "")
+        }
         if entry.hasGuidedSetup {
             if let notes = entry.notes { return notes }
             return entry.status == .needsSetup ? String(localized: "Save your OAuth client once to connect.") : ""
