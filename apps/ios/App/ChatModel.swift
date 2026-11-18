@@ -866,10 +866,8 @@ final class ChatModel {
             case .botMessage(let sender, let body):
                 return (.notice(.botMessage(senderName: sender.name, body: body)), [], [])
             case .routineOutput(let jobName, let body, let failed):
-                let routine = RoutineMessage(jobName: jobName, body: body, failed: failed, time: item.timestamp ?? arrivals[item.id])
-                return (.routine(routine), [], [])
-            case .internalNotice:
-                return nil
+                return (.routine(RoutineMessage(jobName: jobName, body: body, failed: failed, time: item.timestamp ?? arrivals[item.id])), [], [])
+            case .internalNotice: return nil
             }
         case .assistant(let text, _, let streaming):
             let content = MessageImages.extract(from: text, role: .assistant, isStreaming: streaming)
