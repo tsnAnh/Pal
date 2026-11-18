@@ -62,6 +62,7 @@ final class RosterModel {
     private var pendingIntros: [String: BotIntro] = [:]
     private var photoChecked: Set<String> = []
     private var lastSnapshot: RosterSnapshot?
+    @ObservationIgnored private var appliedActivities: [String: BotActivity] = [:]
     private var lastPersisted: RosterCacheEntry?
     private var profiles: [RosterProfile] = []
 
@@ -73,7 +74,7 @@ final class RosterModel {
     var hasContent: Bool { !bots.isEmpty }
 
     func reset() {
-        bots = []
+        assignIfChanged(\.bots, [])
         serverBots = []
         provisional = [:]
         pinOverrides = [:]
@@ -89,9 +90,10 @@ final class RosterModel {
         profiles = []
         lastSnapshot = nil
         lastPersisted = nil
-        live = [:]
+        appliedActivities = [:]
+        assignIfChanged(\.live, [:])
         drafts = [:]
-        isLoaded = false
+        assignIfChanged(\.isLoaded, false)
     }
 
     private func hydrateFromCache() {
@@ -101,7 +103,7 @@ final class RosterModel {
         let cached = entry.profiles.compactMap(RosterProfile.init)
         guard !cached.isEmpty else { return }
         photos = entry.photos
-        capabilities = entry.capabilities
+        assignIfChanged(\.capabilities, entry.capabilities)
         lastPersisted = entry
         syncMarks()
         profiles = cached
@@ -111,7 +113,7 @@ final class RosterModel {
     }
 
     private func rebuildServerBots() {
-        let senders = profiles.map { PreviewSender(name: $0.name, displayName: Self.displayName(of: $0)) }
+        let senders = profiles.map { PreviewSender(name: $0.name, displayName: $0.resolvedDisplayName) }
         serverBots = profiles.map { row(from: $0, senders: senders) }
     }
 
@@ -375,29 +377,42 @@ final class RosterModel {
     }
 
     private func apply(_ snapshot: RosterSnapshot) async {
-        let profiles = snapshot.profiles.compactMap(RosterProfile.init)
+        let change = RosterSnapshotChange(from: lastSnapshot, to: snapshot)
+        let profiles = change.profiles
+            ? snapshot.profiles.compactMap(RosterProfile.init) : self.profiles
         let avatarNames = Set(profiles.filter(\.hasAvatar).map(\.name))
         let uncached = avatarNames.filter { photos[$0] == nil }.sorted()
-        let fetched = await fetchAvatars(uncached); let perf = PalPerf.begin("roster.apply"); defer { perf.end() }
+        let fetched = await fetchAvatars(uncached)
+        let previous = currentActivities()
+        let activityShifted = previous != appliedActivities
+        if change.isEmpty, fetched.isEmpty, !activityShifted {
+            PalPerf.event("roster.apply.skipped")
+            return
+        }
+
+        let perf = PalPerf.begin("roster.apply"); defer { perf.end() }
         photoChecked.formUnion(fetched.keys)
         photos.merge(fetched) { _, fresh in fresh }
-        photos = photos.filter { avatarNames.contains($0.key) }
-        let previous = Dictionary(uniqueKeysWithValues: bots.map { ($0.name, activity(for: $0.name)) })
-        live = snapshot.live
-        capabilities = snapshot.capabilities
-        reconcileOverrides(with: profiles)
-        syncMarks()
-        LocalBotMarks(account: connection.accountKey).prune(keeping: Set(profiles.map(\.name)))
-        unread.formIntersection(profiles.map(\.name))
+        if change.profiles { photos = photos.filter { avatarNames.contains($0.key) } }
+        assignIfChanged(\.live, snapshot.live, force: activityShifted)
+        assignIfChanged(\.capabilities, snapshot.capabilities)
         celebrateFinishedWork(previous: previous)
-        self.profiles = profiles
-        rebuildServerBots()
-        for name in serverBots.map(\.name) { provisional[name] = nil }
-        publish()
+        let rebuild = change.profiles || !fetched.isEmpty
+        if rebuild {
+            reconcileOverrides(with: profiles)
+            syncMarks()
+            LocalBotMarks(account: connection.accountKey).prune(keeping: Set(profiles.map(\.name)))
+            unread.formIntersection(profiles.map(\.name))
+            self.profiles = profiles
+            rebuildServerBots()
+            for name in serverBots.map(\.name) { provisional[name] = nil }
+            publish()
+        }
         let firstSnapshot = !isLoaded
-        isLoaded = true
+        assignIfChanged(\.isLoaded, true)
         lastSnapshot = snapshot
-        persist(snapshot)
+        appliedActivities = currentActivities()
+        if rebuild || change.capabilities { persist(snapshot) }
         if firstSnapshot {
             LaunchClock.mark("roster live snapshot applied (\(profiles.count) bots)", on: .osLog())
             if !profiles.isEmpty {
@@ -412,6 +427,10 @@ final class RosterModel {
         revalidatePhotos(avatarNames.subtracting(photoChecked).sorted())
     }
 
+    private func currentActivities() -> [String: BotActivity] {
+        Dictionary(uniqueKeysWithValues: bots.map { ($0.name, activity(for: $0.name)) })
+    }
+
     private func syncMarks() {
         let account = connection.accountKey
         guard marksAccount != account else { return }
@@ -423,7 +442,7 @@ final class RosterModel {
         for profile in profiles {
             if pinOverrides[profile.name] == profile.botMeta.isPinned { pinOverrides[profile.name] = nil }
             if hideOverrides[profile.name] == profile.botMeta.isHidden { hideOverrides[profile.name] = nil }
-            if titleOverrides[profile.name] == Self.displayName(of: profile) { titleOverrides[profile.name] = nil }
+            if titleOverrides[profile.name] == profile.resolvedDisplayName { titleOverrides[profile.name] = nil }
         }
         if let name = primaryOverride, profiles.first(where: { $0.name == name })?.isPrimary == true {
             primaryOverride = nil
@@ -433,7 +452,7 @@ final class RosterModel {
 
     private func publish() {
         let combined = serverBots + provisional.values.filter { extra in !serverBots.contains { $0.name == extra.name } }
-        bots = combined.filter { !deleted.contains($0.name) }.map(applyingOverrides).sorted { lhs, rhs in
+        let next = combined.filter { !deleted.contains($0.name) }.map(applyingOverrides).sorted { lhs, rhs in
             switch (lhs.lastActive, rhs.lastActive) {
             case let (l?, r?): l > r
             case (_?, nil): true
@@ -453,25 +472,6 @@ final class RosterModel {
         return row
     }
 
-    nonisolated static func displayName(name: String, displayName: String?, uiMeta: [String: Any]?) -> String {
-        let botMeta = uiMeta?["hermes-bots"] as? [String: Any]
-        if let title = (botMeta?["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty {
-            return title
-        }
-        if let display = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !display.isEmpty {
-            return display
-        }
-        let slug = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if slug.lowercased() == "default" { return "Pal" }
-        let words = slug.replacingOccurrences(of: "[-_]+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespaces)
-        return words.split(separator: " ").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
-    }
-
-    nonisolated static func displayName(of profile: RosterProfile) -> String {
-        displayName(name: profile.name, displayName: profile.displayName, uiMeta: profile.uiMeta.flatMap(dictionary(from:)))
-    }
-
     private func row(from profile: RosterProfile, senders: [PreviewSender]) -> BotRow {
         let uiMeta = profile.uiMeta.flatMap(Self.dictionary(from:))
         let lastActive = profile.canonical?.lastActive.map { Date(timeIntervalSince1970: $0) }
@@ -481,7 +481,7 @@ final class RosterModel {
             isPrimary: profile.isPrimary,
             isPinned: profile.botMeta.isPinned,
             isHidden: profile.botMeta.isHidden,
-            displayName: Self.displayName(of: profile),
+            displayName: profile.resolvedDisplayName,
             conversationID: profile.canonical?.resolvedID ?? profile.canonical?.id,
             preview: PreviewClassifier.classify(profile.canonical?.preview, senders: senders),
             lastActive: lastActive,

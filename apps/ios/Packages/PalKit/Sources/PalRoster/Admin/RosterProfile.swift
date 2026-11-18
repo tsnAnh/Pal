@@ -80,6 +80,18 @@ public struct RosterProfile: Sendable, Equatable {
         }
     }
 
+    public var resolvedDisplayName: String {
+        if let title = botMeta.title { return title }
+        if let display = displayName?.trimmingCharacters(in: .whitespacesAndNewlines), !display.isEmpty {
+            return display
+        }
+        let slug = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if slug.lowercased() == "default" { return "Pal" }
+        let words = slug.replacingOccurrences(of: "[-_]+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespaces)
+        return words.split(separator: " ").map { $0.prefix(1).uppercased() + $0.dropFirst() }.joined(separator: " ")
+    }
+
     public var botMeta: BotMeta {
         let fields = uiMeta?[BotMeta.namespace]?.objectValue ?? [:]
         let revision = uiMetaRevisions.map { max(0, $0[BotMeta.namespace] ?? 0) }

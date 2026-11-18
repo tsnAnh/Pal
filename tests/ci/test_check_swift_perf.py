@@ -19,6 +19,7 @@ SCREEN = "App/View.swift"
 MAC_SHELL = "App/Mac/MacShell.swift"
 DESIGN = "Packages/PalDesign/Sources/PalDesign/Part.swift"
 CACHE = "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"
+ROSTER = "App/RosterModel.swift"
 
 
 def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -83,6 +84,9 @@ CASES = [
     ("perf-model-in-body", SCREEN,
      "struct Host: View {\n    @ViewBuilder\n    private func destination() -> some View {\n        ChatView(model: ChatModel(bot: bot), router: router)\n    }\n}\n",
      "struct Host: View {\n    @ViewBuilder\n    private func destination() -> some View {\n        ChatView(model: model, router: router)\n    }\n}\n"),
+    ("perf-unguarded-write", ROSTER, "        live = snapshot.live\n", "        assignIfChanged(\\.live, snapshot.live)\n"),
+    ("perf-unguarded-write", ROSTER, "        self.bots = next\n", "        let bots = next\n"),
+    ("perf-unguarded-write", ROSTER, "        isLoaded = true\n", "        let isLoaded = true\n"),
     ("perf-shadow-radius", SCREEN, ".shadow(color: .black.opacity(0.35), radius: 40, y: 18)\n", ".shadow(color: .black.opacity(0.2), radius: 12, y: 4)\n"),
     ("perf-shadow-radius", SCREEN, ".shadow(color: .black, radius: 24)\n", ".shadow(color: .black, radius: 23)\n"),
     ("perf-glass-over-fill", DESIGN,
@@ -116,6 +120,7 @@ def test_messages_name_the_replacement() -> None:
         "perf-queue-sync": "loadDetached",
         "perf-monitor-per-view": "shared monitor",
         "perf-state-model-init": "@State private var model",
+        "perf-unguarded-write": "assignIfChanged",
         "perf-timeline-unlisted": csp.ALLOWLIST_NAME,
         "perf-hover-unlisted": csp.ALLOWLIST_NAME,
         "perf-monitor-per-view": csp.ALLOWLIST_NAME,
@@ -229,3 +234,28 @@ def test_real_tree_fails_without_baseline_and_passes_with_it() -> None:
     assert csp.new_findings(found, csp.load_baseline(root / csp.BASELINE_NAME))[0] == []
     entries = json.loads((root / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
     assert all(set(e) == {"rule", "file", "text"} for e in entries)
+
+
+def test_unguarded_write_only_applies_to_the_guarded_model_file(tmp_path: Path) -> None:
+    assert "perf-unguarded-write" not in _rules(tmp_path, SCREEN, "        live = snapshot.live\n")
+    assert "perf-unguarded-write" not in _rules(tmp_path / "cmp", ROSTER, "        if live == snapshot.live { return }\n")
+
+
+PRE_FIX_ROSTER_APPLY = """    private func apply(_ snapshot: RosterSnapshot) async {
+        live = snapshot.live
+        capabilities = snapshot.capabilities
+        publish()
+        isLoaded = true
+    }
+
+    private func publish() {
+        bots = combined.sorted()
+    }
+"""
+
+
+def test_pre_fix_roster_apply_fails_and_the_real_roster_model_passes(tmp_path: Path) -> None:
+    old = [f for f in csp.scan(_tree(tmp_path / "old", {ROSTER: PRE_FIX_ROSTER_APPLY})) if f.rule == "perf-unguarded-write"]
+    assert [f.text.split("=")[0].strip() for f in old] == ["live", "capabilities", "isLoaded", "bots"]
+    current = (REPO / "apps" / "ios" / ROSTER).read_text(encoding="utf-8")
+    assert not [f for f in csp.scan(_tree(tmp_path / "new", {ROSTER: current})) if f.rule == "perf-unguarded-write"]
