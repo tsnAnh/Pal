@@ -111,6 +111,8 @@ enum OlderHistory: Equatable {
 @Observable
 final class ChatModel {
     private(set) var rows: [ChatRow] = []
+    private(set) var rowsNewestFirst: [ChatRow] = []
+    private(set) var rowIDs: [String] = []
     private(set) var connection: ChatConnectionState = .connecting
     private(set) var isRunning = false
     private(set) var workingStatus: String?
@@ -181,8 +183,6 @@ final class ChatModel {
     }
 
     var pendingDraft: String? { roster.drafts[bot.name] }
-    var isOffline: Bool { connection != .live }
-    var chatAccent: BotAccent? { bot.usesPrimaryLook ? nil : bot.accent }
     var avatars: ParticipantAvatars { ParticipantAvatars(roster: roster) }
     var activity: BotActivity { roster.activity(for: bot.name) }
     var avatarMood: AvatarMood { roster.avatarMood(for: bot.name) }
@@ -806,7 +806,7 @@ final class ChatModel {
         for index in next.indices {
             next[index].gap = Self.gap(for: next[index], after: index > 0 ? next[index - 1] : nil)
         }
-        if next != rows { rows = next }
+        if next != rows { rows = next; rowsNewestFirst = Array(next.reversed()); rowIDs = next.map(\.id) }
         isRunning = snapshot?.isRunning ?? false
         workingStatus = snapshot?.runningToolName.map(ToolActivity.label(for:))
         hasPendingClarify = pendingClarify != nil

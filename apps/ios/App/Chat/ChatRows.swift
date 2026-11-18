@@ -6,13 +6,14 @@ import SwiftUI
 
 struct ChatRowView: View {
     let row: ChatRow
+    let context: ChatRowContext
     let model: ChatModel
     let openThread: (BotThreadLink) -> Void
 
     @Environment(\.hermesTheme) private var theme
 
-    private var findQuery: String { model.isFinding && model.findMatchIDs.contains(row.id) ? model.findQuery : "" }
-    private var isCurrentMatch: Bool { model.currentFindRowID == row.id }
+    private var findQuery: String { context.findQuery }
+    private var isCurrentMatch: Bool { context.isCurrentMatch }
 
     private var leadingGap: CGFloat {
         switch row.gap {
@@ -26,7 +27,7 @@ struct ChatRowView: View {
         let _ = PalPerf.event("chat.row.body") // swiftlint:disable:this redundant_discardable_let
         VStack(alignment: .leading, spacing: 0) {
             if row.showsUnreadDivider {
-                UnreadDivider(label: String(localized: "New"), ink: BubblePalette.ink(accent: model.chatAccent))
+                UnreadDivider(label: String(localized: "New"), ink: BubblePalette.ink(accent: context.accent))
                     .accessibilityIdentifier("unreadDivider")
             }
             if let separator = row.separator {
@@ -50,7 +51,7 @@ struct ChatRowView: View {
         return MessageActions(
             rowID: id,
             text: text,
-            reaction: model.reactions[id],
+            reaction: context.reaction,
             canReact: { model.canReact(to: id) },
             react: { model.react(to: id, with: $0) },
             reply: { model.beginReply(to: id) }
@@ -61,7 +62,7 @@ struct ChatRowView: View {
     private var content: some View {
         switch row.kind {
         case .user(let text, let delivery):
-            UserBubble(text: text, images: row.images, delivery: delivery, accent: model.chatAccent, highlight: findQuery, isCurrentMatch: isCurrentMatch) { id in
+            UserBubble(text: text, images: row.images, delivery: delivery, accent: context.accent, highlight: findQuery, isCurrentMatch: isCurrentMatch) { id in
                 model.retry(id)
             }
             .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
@@ -81,13 +82,13 @@ struct ChatRowView: View {
             ClarifyCard(prompt: prompt) { answer in model.answer(prompt, with: answer) }
                 .bubbleWidth(.leading)
         case .approval(let prompt):
-            ApprovalCard(prompt: prompt, ink: BubblePalette.ink(accent: model.chatAccent), inkText: BubblePalette.inkText(accent: model.chatAccent)) { choice in
+            ApprovalCard(prompt: prompt, ink: BubblePalette.ink(accent: context.accent), inkText: BubblePalette.inkText(accent: context.accent)) { choice in
                 model.answerApproval(prompt, choice: choice)
             }
         case .approvalAnswered(let record):
             ApprovalAnsweredCard(record: record)
         case .connection(let card):
-            ConnectionRequestCard(card: card, answering: model.answeringConnections) { target, decision in
+            ConnectionRequestCard(card: card, answering: context.answeringConnections) { target, decision in
                 model.answerConnection(opID: card.operation.opID, target: target.name, decision: decision)
             }
         case .routine(let routine):
@@ -101,6 +102,12 @@ struct ChatRowView: View {
             GeneratedImageRow(generation: generation)
                 .environment(\.chatImageLoader, model.imageLoader)
         }
+    }
+}
+
+extension ChatRowView: @preconcurrency Equatable {
+    static func == (lhs: ChatRowView, rhs: ChatRowView) -> Bool {
+        lhs.row == rhs.row && lhs.context == rhs.context
     }
 }
 

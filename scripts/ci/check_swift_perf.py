@@ -12,7 +12,8 @@ exception carries ``perf-lint: ok`` on the flagged line.
 Rules: perf-body-parse, perf-body-format, perf-redraw-per-call, perf-main-disk-read, perf-main-json,
 perf-queue-sync, perf-timeline-unlisted, perf-timeline-interval, perf-hover-unlisted,
 perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry-per-row,
-perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write.
+perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write,
+perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired.
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -48,6 +49,7 @@ ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted", "perf-moni
 SHADOW_MAX_RADIUS = 24
 OWNED_TYPE = r"[A-Z]\w*(?:Model|Store|Hub|Conversation|Controller)(?:\.\w+)?"
 SHELL_FILES = {("App", "Mac", "MacShell.swift")}
+ROW_FILES = {("App", "Chat", "ChatRows.swift")}
 GUARDED_WRITE_FIELDS = {("App", "RosterModel.swift"): ("live", "capabilities", "bots", "isLoaded")}
 
 
@@ -69,6 +71,10 @@ def view_file(parts: tuple[str, ...], text: str) -> bool:
 
 def mac_shell(parts: tuple[str, ...], text: str) -> bool:
     return parts in SHELL_FILES
+
+
+def row_file(parts: tuple[str, ...], text: str) -> bool:
+    return parts in ROW_FILES
 
 
 def guarded_model(parts: tuple[str, ...], text: str) -> bool:
@@ -125,6 +131,28 @@ LINE_RULES = (
         in_app,
         "image redrawn on every call (and every view body). Round it once when it is stored in the cache "
         "(FaviconCache keeps the finished PlatformImage per size) and return that",
+    ),
+    LineRule(
+        "perf-body-array-work",
+        re.compile(r"\bForEach\([^\n]*\.reversed\(\)|\.onChange\(of:[^\n]*\.map\(\\\.id\)"),
+        in_app,
+        "array rebuilt in a View body on every pass (reversed rows, mapped ids). Compute it once when the rows change, "
+        "in the model (ChatModel.rowsNewestFirst, ChatModel.rowIDs), and read the stored array",
+        in_view=True,
+    ),
+    LineRule(
+        "perf-row-reads-model",
+        re.compile(r"\bmodel\.(?:chatAccent|reactions|isFinding|findMatchIDs|findQuery|currentFindRowID|answeringConnections)\b"),
+        row_file,
+        "a chat row reads shared model state, so any change to it re-evaluates every visible row. Read it once in the "
+        "list (ChatModel.rowContext) and pass it in the row's Equatable ChatRowContext",
+    ),
+    LineRule(
+        "perf-observed-image-dictionary",
+        re.compile(r"\bvar\s+\w+\s*:\s*\[\s*String\s*:\s*PlatformImage\s*\]"),
+        in_app,
+        "one dictionary of images on an observed type: every key finishing notifies every reader. Keep one @Observable "
+        "slot per key (FaviconCache.Slot) so only the readers of that key update",
     ),
     LineRule(
         "perf-main-disk-read",
@@ -300,10 +328,19 @@ def glass_over_fill(src: Source) -> Iterator[tuple[int, str]]:
                          "frame. Drop the fill and let the glass be the surface, or pass interactive: false")
 
 
+def monitor_unpaired(src: Source) -> Iterator[tuple[int, str]]:
+    if "removeMonitor" in src.text:
+        return
+    for m in re.finditer(r"\bNSEvent\.addLocalMonitorForEvents\(", src.text):
+        yield src.line_of(m.start()), ("NSEvent monitor added with no removal in the file: every monitor needs a paired "
+                                       "NSEvent.removeMonitor (on teardown or when the last user leaves)")
+
+
 BLOCK_RULES: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[Source], Iterator[tuple[int, str]]]], ...] = (
     ("perf-eager-stack", in_app, eager_stack),
     ("perf-geometry-per-row", in_app, geometry_per_row),
     ("perf-glass-over-fill", anywhere, glass_over_fill),
+    ("perf-monitor-unpaired", in_app, monitor_unpaired),
 )
 
 

@@ -20,6 +20,7 @@ MAC_SHELL = "App/Mac/MacShell.swift"
 DESIGN = "Packages/PalDesign/Sources/PalDesign/Part.swift"
 CACHE = "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"
 ROSTER = "App/RosterModel.swift"
+ROWS = "App/Chat/ChatRows.swift"
 
 
 def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
@@ -78,6 +79,18 @@ CASES = [
     ("perf-geometry-per-row", SCREEN,
      "LazyVStack {\n    ForEach(rows) { row in\n        RowView(row)\n            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { moved(row.id, $0) }\n    }\n}\n",
      "LazyVStack {\n    ForEach(rows) { row in RowView(row) }\n}\n.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }\n"),
+    ("perf-body-array-work", SCREEN,
+     "struct Chat: View {\n    var chat: some View {\n        ForEach(model.rows.reversed()) { row in Row(row) }\n    }\n}\n",
+     "struct Chat: View {\n    var chat: some View {\n        ForEach(model.rowsNewestFirst) { row in Row(row) }\n    }\n}\n"),
+    ("perf-body-array-work", SCREEN,
+     "struct Chat: View {\n    var chat: some View {\n        content\n            .onChange(of: model.rows.map(\\.id), initial: true) { _, ids in seen(ids) }\n    }\n}\n",
+     "struct Chat: View {\n    var chat: some View {\n        content\n            .onChange(of: model.rowIDs, initial: true) { _, ids in seen(ids) }\n    }\n}\n"),
+    ("perf-row-reads-model", ROWS, "ink: BubblePalette.ink(accent: model.chatAccent)\n", "ink: BubblePalette.ink(accent: context.accent)\n"),
+    ("perf-row-reads-model", ROWS, "reaction: model.reactions[id],\n", "reaction: context.reaction,\n"),
+    ("perf-observed-image-dictionary", SCREEN, "    private var images: [String: PlatformImage] = [:]\n", "    private var slots: [String: Slot] = [:]\n"),
+    ("perf-monitor-unpaired", SCREEN,
+     "final class V {\n    func install() { monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { $0 } }\n}\n",
+     "final class V {\n    func install() { monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { $0 } }\n    deinit { NSEvent.removeMonitor(monitor) }\n}\n"),
     ("perf-state-model-init", SCREEN,
      "struct Inspector: View {\n    init(name: String) {\n        _profile = State(initialValue: BotProfileModel(botName: name))\n    }\n}\n",
      "struct Inspector: View {\n    @State private var profile = BotProfileModel()\n}\n"),
@@ -124,6 +137,9 @@ def test_messages_name_the_replacement() -> None:
         "perf-timeline-unlisted": csp.ALLOWLIST_NAME,
         "perf-hover-unlisted": csp.ALLOWLIST_NAME,
         "perf-monitor-per-view": csp.ALLOWLIST_NAME,
+        "perf-body-array-work": "rowsNewestFirst",
+        "perf-row-reads-model": "ChatRowContext",
+        "perf-observed-image-dictionary": "Slot",
     }
     messages = {lr.rule: lr.message for lr in csp.LINE_RULES}
     for rule, needle in wanted.items():
@@ -166,7 +182,7 @@ def test_allowlist_exempts_a_file_and_requires_a_reason(tmp_path: Path) -> None:
 
 
 def test_allowlisted_monitor_file_passes_but_a_per_row_monitor_elsewhere_fails(tmp_path: Path) -> None:
-    body = "monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { $0 }\n"
+    body = "monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { $0 }\nNSEvent.removeMonitor(monitor)\n"
     root = _tree(tmp_path, {"App/Mac/Window.swift": body, "App/Mac/Bubble.swift": body})
     (root / csp.ALLOWLIST_NAME).write_text(
         json.dumps([{"rule": "perf-monitor-per-view", "file": "App/Mac/Window.swift", "reason": "window-scoped"}]), encoding="utf-8")
@@ -205,15 +221,12 @@ def test_planted_violation_is_reported_with_file_line_rule_and_fix(tmp_path: Pat
 
 REAL_SITES = [
     ("perf-body-parse", "App/Chat/RoutineOutputRow.swift"),
-    ("perf-redraw-per-call", "App/Chat/FaviconStore.swift"),
     ("perf-main-disk-read", "App/Chat/Rich/MermaidRenderer.swift"),
     ("perf-main-disk-read", "App/Chat/FilePreviewSheet.swift"),
     ("perf-main-json", "App/RosterModel.swift"),
     ("perf-queue-sync", "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"),
     ("perf-animation-container", "App/Mac/MacShell.swift"),
     ("perf-eager-stack", "App/Mac/MacSidebarRail.swift"),
-    ("perf-monitor-per-view", "App/Mac/MacMessageActions.swift"),
-    ("perf-geometry-per-row", "App/ChatView.swift"),
     ("perf-state-model-init", "App/Mac/MacInspector.swift"),
     ("perf-model-in-body", "App/Mac/MacModals.swift"),
     ("perf-model-in-body", "App/PalApp.swift"),
@@ -314,3 +327,88 @@ def test_allowlisted_timeline_file_still_fails_the_minimum_interval(tmp_path: Pa
     (root / csp.ALLOWLIST_NAME).write_text(
         json.dumps([{"rule": "perf-timeline-unlisted", "file": AVATAR, "reason": "bounded"}]), encoding="utf-8")
     assert [f.rule for f in csp.scan(root)] == ["perf-timeline-interval"]
+
+
+CHAT_VIEW = "App/ChatView.swift"
+FAVICONS = "App/Chat/FaviconStore.swift"
+MESSAGE_ACTIONS = "App/Mac/MacMessageActions.swift"
+
+PRE_FIX_CHAT_VIEW = """struct ChatView: View {
+    private var chat: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                ForEach(model.rows.reversed()) { row in
+                    ChatRowView(row: row, model: model) { link in open(link) }
+                        .newestFirst()
+                        .onGeometryChange(for: CGFloat.self) {
+                            $0.frame(in: .named(ChatScrollController.contentSpace)).minY
+                        } action: { scroll.rowMoved(row.id, contentMinY: $0) }
+                }
+            }
+        }
+        .onChange(of: model.rows.map(\\.id), initial: true) { _, ids in scroll.rowsChanged(ids) }
+    }
+}
+"""
+
+PRE_FIX_ROWS = """struct ChatRowView: View {
+    var body: some View {
+        UnreadDivider(label: "New", ink: BubblePalette.ink(accent: model.chatAccent))
+        UserBubble(text: text, accent: model.chatAccent, highlight: findQuery)
+        MessageActions(reaction: model.reactions[id])
+    }
+    private var findQuery: String { model.isFinding && model.findMatchIDs.contains(row.id) ? model.findQuery : "" }
+    private var isCurrentMatch: Bool { model.currentFindRowID == row.id }
+    ConnectionRequestCard(card: card, answering: model.answeringConnections)
+}
+"""
+
+PRE_FIX_FAVICONS = """@MainActor
+@Observable
+final class FaviconCache {
+    private var images: [String: PlatformImage] = [:]
+
+    func image(for url: URL, pointSize: CGFloat) -> PlatformImage? {
+        if let image = images[host] { return image.roundedIcon(points: pointSize) }
+        return nil
+    }
+}
+"""
+
+PRE_FIX_MESSAGE_ACTIONS = """final class TrackingView: NSView {
+    override func viewDidMoveToWindow() {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [weak self] event in
+            return event
+        }
+    }
+}
+"""
+
+
+def test_pre_fix_chat_view_rows_favicons_and_monitors_fail_and_the_real_files_pass() -> None:
+    ios = REPO / "apps" / "ios"
+    allow = csp.load_allowlist(ios / csp.ALLOWLIST_NAME)
+    pre_fix = {
+        CHAT_VIEW: (PRE_FIX_CHAT_VIEW, {"perf-geometry-per-row", "perf-body-array-work"}),
+        ROWS: (PRE_FIX_ROWS, {"perf-row-reads-model"}),
+        FAVICONS: (PRE_FIX_FAVICONS, {"perf-redraw-per-call", "perf-observed-image-dictionary"}),
+        MESSAGE_ACTIONS: (PRE_FIX_MESSAGE_ACTIONS, {"perf-monitor-per-view", "perf-monitor-unpaired"}),
+    }
+    for rel, (body, rules) in pre_fix.items():
+        assert rules <= {f.rule for f in csp.violations(Path(rel), body, None)}, rel
+        current = (ios / rel).read_text(encoding="utf-8")
+        assert not [f for f in csp.violations(Path(rel), current, allow) if f.rule in rules], rel
+    entries = json.loads((ios / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
+    removed = {"perf-geometry-per-row", "perf-redraw-per-call", "perf-monitor-per-view"}
+    assert not [e for e in entries if e["file"] in pre_fix and e["rule"] in removed]
+
+
+def test_row_reads_model_only_applies_to_the_chat_rows_file(tmp_path: Path) -> None:
+    body = "let accent = model.chatAccent\n"
+    assert _rules(tmp_path / "a", SCREEN, body) == []
+    assert _rules(tmp_path / "b", ROWS, body) == ["perf-row-reads-model"]
+
+
+def test_monitor_with_a_removal_in_the_file_is_paired(tmp_path: Path) -> None:
+    body = "monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { $0 }\nNSEvent.removeMonitor(monitor)\n"
+    assert "perf-monitor-unpaired" not in _rules(tmp_path, SCREEN, body)

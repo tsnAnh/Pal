@@ -139,22 +139,35 @@ actor FaviconFetcher {
 }
 
 @MainActor
-@Observable
 final class FaviconCache {
     static let shared = FaviconCache()
 
-    private var images: [String: PlatformImage] = [:]
-    @ObservationIgnored private var requested: Set<String> = []
+    @MainActor @Observable
+    final class Slot {
+        fileprivate(set) var image: PlatformImage?
+        @ObservationIgnored fileprivate var rounded: [CGFloat: PlatformImage] = [:]
+    }
+
+    private var slots: [String: Slot] = [:]
 
     func image(for url: URL, pointSize: CGFloat) -> PlatformImage? {
         guard let host = FaviconOrigin.host(of: url) else { return nil }
-        if let image = images[host] { return image.roundedIcon(points: pointSize) }
-        if requested.insert(host).inserted {
-            Task {
-                guard let data = await FaviconFetcher.shared.iconData(forHost: host), let image = PlatformImage(data: data) else { return }
-                images[host] = image
-            }
+        let slot = entry(for: host)
+        guard let image = slot.image else { return nil }
+        if let cached = slot.rounded[pointSize] { return cached }
+        let icon = image.roundedIcon(points: pointSize) // perf-lint: ok drawn once per host and size, then cached
+        slot.rounded[pointSize] = icon
+        return icon
+    }
+
+    private func entry(for host: String) -> Slot {
+        if let existing = slots[host] { return existing }
+        let slot = Slot()
+        slots[host] = slot
+        Task {
+            guard let data = await FaviconFetcher.shared.iconData(forHost: host), let image = PlatformImage(data: data) else { return }
+            slot.image = image
         }
-        return nil
+        return slot
     }
 }
