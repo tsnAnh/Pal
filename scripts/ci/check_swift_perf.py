@@ -5,8 +5,8 @@ Same mechanism as ``check_swift_glass.py`` (text only, no Swift toolchain; its b
 ``Source`` scanner and baseline helpers are reused). Findings already on main sit in
 ``apps/ios/.perf-lint-baseline.json`` (matched by rule, file and line text); only a NEW finding
 fails, and a fix that removes one leaves a stale entry that is reported and harmless
-(``--write-baseline`` rewrites the file). Files that may use ``TimelineView`` or
-``onContinuousHover`` are listed with a reason in ``apps/ios/.perf-lint-allowlist.json``. A justified
+(``--write-baseline`` rewrites the file). Files that may use ``TimelineView``, ``onContinuousHover`` or a
+single-instance ``NSEvent`` monitor are listed with a reason in ``apps/ios/.perf-lint-allowlist.json``. A justified
 exception carries ``perf-lint: ok`` on the flagged line.
 
 Rules: perf-body-parse, perf-body-format, perf-redraw-per-call, perf-main-disk-read, perf-main-json,
@@ -44,7 +44,7 @@ OPT_OUT = "perf-lint: ok"
 BASELINE_NAME = ".perf-lint-baseline.json"
 ALLOWLIST_NAME = ".perf-lint-allowlist.json"
 SKIP = SKIP_DIRS | {"Tools"}
-ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted")
+ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted", "perf-monitor-per-view")
 SHADOW_MAX_RADIUS = 24
 OWNED_TYPE = r"[A-Z]\w*(?:Model|Store|Hub|Conversation|Controller)(?:\.\w+)?"
 SHELL_FILES = {("App", "Mac", "MacShell.swift")}
@@ -178,8 +178,10 @@ LINE_RULES = (
         "perf-monitor-per-view",
         re.compile(r"\bNSEvent\.addLocalMonitorForEvents\("),
         in_app,
-        "one NSEvent local monitor per view runs for every event and every bubble. Install one shared monitor "
-        "(MacMessageMenuHost owns it) and route events to the view that wants them",
+        f"one NSEvent local monitor per view runs for every event and every bubble. Install one shared monitor "
+        f"(MacMessageMenuHost owns it) and route events to the view that wants them; a single-instance, window-scoped "
+        f"monitor goes in apps/ios/{ALLOWLIST_NAME} with a reason",
+        allowlisted=True,
     ),
     LineRule(
         "perf-state-model-init",

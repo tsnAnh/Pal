@@ -118,6 +118,7 @@ def test_messages_name_the_replacement() -> None:
         "perf-state-model-init": "@State private var model",
         "perf-timeline-unlisted": csp.ALLOWLIST_NAME,
         "perf-hover-unlisted": csp.ALLOWLIST_NAME,
+        "perf-monitor-per-view": csp.ALLOWLIST_NAME,
     }
     messages = {lr.rule: lr.message for lr in csp.LINE_RULES}
     for rule, needle in wanted.items():
@@ -157,6 +158,14 @@ def test_allowlist_exempts_a_file_and_requires_a_reason(tmp_path: Path) -> None:
     allow.write_text(json.dumps([{"rule": "perf-timeline-unlisted", "file": SCREEN, "reason": " "}]), encoding="utf-8")
     with pytest.raises(SystemExit):
         csp.scan(root)
+
+
+def test_allowlisted_monitor_file_passes_but_a_per_row_monitor_elsewhere_fails(tmp_path: Path) -> None:
+    body = "monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { $0 }\n"
+    root = _tree(tmp_path, {"App/Mac/Window.swift": body, "App/Mac/Bubble.swift": body})
+    (root / csp.ALLOWLIST_NAME).write_text(
+        json.dumps([{"rule": "perf-monitor-per-view", "file": "App/Mac/Window.swift", "reason": "window-scoped"}]), encoding="utf-8")
+    assert {f.path for f in csp.scan(root)} == {"App/Mac/Bubble.swift"}
 
 
 def test_opt_out_marker_and_test_targets_are_exempt(tmp_path: Path) -> None:
