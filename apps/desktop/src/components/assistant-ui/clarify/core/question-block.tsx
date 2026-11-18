@@ -1,13 +1,11 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { useI18n } from '@/i18n'
 import { Loader2, X } from '@/lib/icons'
-import { cn } from '@/lib/utils'
 import type { ClarifyQuestion } from '@/store/clarify'
 
-import { badgeFor, ChoiceButton, letterFor } from './choice-row'
+import { badgeFor, ChoiceButton, letterFor, OtherChoiceRow } from './choice-row'
 
 interface QuestionBlockProps {
   cursor: null | number
@@ -92,23 +90,31 @@ export function QuestionBlock({
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          aria-current={otherActive || undefined}
-          aria-keyshortcuts={cursor === null || choices.length >= 26 ? undefined : `${letterFor(choices.length)} ${choices.length + 1}`}
-          className={cn(
-            'h-10 flex-[1_1_12rem] rounded-xl px-4 text-sm leading-5',
-            otherActive && 'ring-1 ring-(--ui-stroke-secondary)'
-          )}
-          data-clarify-other=""
-          data-highlighted={otherActive || undefined}
-          disabled={disabled}
-          onChange={event => onDraft(event.target.value)}
-          onFocus={onOtherFocus}
-          onKeyDown={send ? undefined : event => event.key === 'Enter' && event.preventDefault()}
-          placeholder={choices.length > 0 ? copy.other : copy.placeholder}
-          type="text"
-          value={staged.draft}
-        />
+        <div className="min-w-0 flex-[1_1_12rem]">
+          <OtherChoiceRow
+            active={otherActive}
+            char={badgeFor(choices.length)}
+            selected={staged.draft.trim() !== ''}
+          >
+            <input
+              aria-current={otherActive || undefined}
+              aria-keyshortcuts={cursor === null || choices.length >= 26 ? undefined : `${letterFor(choices.length)} ${choices.length + 1}`}
+              autoCapitalize="off"
+              autoComplete="off"
+              autoCorrect="off"
+              className="min-w-0 flex-1 appearance-none border-0 bg-transparent p-0 text-(--ui-text-primary) shadow-none ring-0 outline-none placeholder:text-(--ui-text-secondary) focus:ring-0 focus:outline-none focus-visible:ring-0 focus-visible:outline-none disabled:cursor-default"
+              data-clarify-other=""
+              data-highlighted={otherActive || undefined}
+              disabled={disabled}
+              onChange={event => onDraft(event.target.value)}
+              onFocus={onOtherFocus}
+              onKeyDown={send ? undefined : event => event.key === 'Enter' && event.preventDefault()}
+              placeholder={choices.length > 0 ? copy.other : copy.placeholder}
+              type="text"
+              value={staged.draft}
+            />
+          </OtherChoiceRow>
+        </div>
         {send ? (
           <Button
             className="h-10 shrink-0 rounded-full px-5 text-sm @max-xs:flex-1"
