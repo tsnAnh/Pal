@@ -92,11 +92,8 @@ final class ConnectAppsModel {
     var googleAdsFlow: GoogleAdsFlowSession?
     let slack: SlackBotsModel
     let slackWizard: SlackWizardContext
-    var pasteSession: (any McpPasteSigning)?
-    var pastingApp: ConnectApp?
-    var pasteTargetID = UpworkConnector.service
-    var pasteState: SecretEntryState = .idle
     var failures: [String: String] = [:]
+    var setupRecords: [SetupProgressRecord] = []
     private(set) var mode: Mode = .list
 
     let botName: String
@@ -172,6 +169,7 @@ final class ConnectAppsModel {
             catalog = try await service.load()
             phase = .ready
             surfaces.remember(catalog, catalogKey)
+            setupRecords = (try? await service.setupProgress()) ?? []
             Task { await probeT3Code() }
         } catch {
             if catalog.apps.isEmpty { phase = .unavailable }

@@ -82,6 +82,9 @@ struct StepFlowView<Accessory: View>: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .accessibilityIdentifier("stepFlowStepBody")
                     }
+                    if let continuation = model.continuation, continuation.stepID == engine.current.id {
+                        SetupBanner(title: continuation.title, detail: continuation.detail, identifier: "stepFlowContinued")
+                    }
                     if let note = engine.current.note {
                         Text(note)
                             .hermesText(.rowSubtitle)

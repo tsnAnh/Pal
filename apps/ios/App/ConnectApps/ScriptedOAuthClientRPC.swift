@@ -56,6 +56,7 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
     ]
     private var discord = ScriptedDiscord()
     private var googleAds: ScriptedGoogleAds
+    private var setupProgress = ScriptedSetupProgress(seeded: ProcessInfo.processInfo.arguments.contains(ScriptedSetupProgress.seedArgument))
     private var items = 0
     private var vault: [String: String] = [:]
 
@@ -89,6 +90,8 @@ actor ScriptedOAuthClientRPC: ConnectRPC {
             return try discord.handle(method, params, vault: vault)
         case "connectors.google_ads.status", "connectors.google_ads.save", "connectors.google_ads.verify":
             return try googleAds.handle(method, params)
+        case "connectors.setup.progress.get", "connectors.setup.progress.set":
+            return setupProgress.handle(method, params)
         case "vault.remove":
             vault[params["id"]?.stringValue ?? ""] = nil
             return ["ok": true]

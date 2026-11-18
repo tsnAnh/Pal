@@ -16,8 +16,8 @@ extension ConnectAppsModel {
         guard let engine = GoogleAdsFlow.engine(status: status) else { return }
         let runner = GoogleAdsFlowRunner(service: service)
         let flow = StepFlowModel(
-            engine: engine, runner: { step, values in try await runner.run(step, values: values) },
-            classify: { runner.classify($0) }
+            engine: engine, store: GatewayStepFlowProgressStore(service: service, device: .current),
+            runner: { step, values in try await runner.run(step, values: values) }, classify: { runner.classify($0) }
         )
         flow.recovery = { [weak flow] failure in
             guard let flow else { return }

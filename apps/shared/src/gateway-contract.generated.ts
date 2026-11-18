@@ -1812,6 +1812,35 @@ export interface OAuthClientRemoveResult {
   slug: string
   removed: boolean
 }
+export interface SetupProgressGetParams {
+  profile?: string | null
+  connector?: string | null
+  bot?: string | null
+}
+export interface SetupProgressGetResult {
+  records: SetupProgressRecordRow[]
+}
+export interface SetupProgressRecordRow {
+  connector: string
+  bot?: string | null
+  step_id: string
+  completed: string[]
+  device: SetupProgressDevice
+  updated_at: number
+}
+export type SetupProgressDevice = 'mac' | 'iphone' | 'ipad'
+export interface SetupProgressSetParams {
+  profile?: string | null
+  connector: string
+  bot?: string | null
+  step_id: string
+  completed: string[]
+  device: SetupProgressDevice
+  finished?: boolean
+}
+export interface SetupProgressSetResult {
+  record?: SetupProgressRecordRow | null
+}
 export interface DiscordTokenParams {
   profile?: string | null
   item: string
@@ -8475,6 +8504,10 @@ export interface RpcMethods {
   'connectors.policy.set': { params: ConnectorPolicySetParams; result: ConnectorPolicySetResult }
   /** Owner only. Test a guided-setup paste step with one call to the provider. values maps each field id to the Vault item id the app wrote with vault.add. A provider rejection is ok false with a reason, never an RPC error; the secret is never returned or logged. */
   'connectors.setup.check': { params: ConnectorSetupCheckParams; result: ConnectorSetupCheckResult }
+  /** Where each connector's guided setup stands, newest first: the step to resume at, the step ids already done and the kind of device that last moved it. connector and bot narrow the list. Holds step ids only, never a value the owner pasted. A connection that is not the owner's gets an empty list. */
+  'connectors.setup.progress.get': { params: SetupProgressGetParams; result: SetupProgressGetResult }
+  /** Owner only. Record that the guided setup of connector (and bot, where the setup is per bot) is at step_id with completed done. Every id must be a short slug; anything else is refused. finished true removes the record and answers with none. */
+  'connectors.setup.progress.set': { params: SetupProgressSetParams; result: SetupProgressSetResult }
   /** The scoped profile's cached or current tool list for one connector. */
   'connectors.tools': { params: ConnectorToolsParams; result: ConnectorToolsResult }
   /** List/add/remove/pause/resume/run cron jobs, read run history, preview a schedule and manage a routine's webhook trigger in the (optionally profile-scoped) cron store. */
@@ -9137,6 +9170,8 @@ export const RPC_METHODS = [
   'connectors.policy.get',
   'connectors.policy.set',
   'connectors.setup.check',
+  'connectors.setup.progress.get',
+  'connectors.setup.progress.set',
   'connectors.tools',
   'cron.manage',
   'delegation.pause',

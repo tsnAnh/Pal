@@ -170,6 +170,38 @@ def _(rid, params):
         return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
 
 
+def _setup_progress_call(params_model, action):
+    def handler(rid, params):
+        from pydantic import ValidationError
+        from tui_gateway.connector_setup_guide import SetupCheckRpcError
+        from tui_gateway.contracts.connectors import ConnectorErrorReason
+        try:
+            request = params_model.model_validate(params)
+        except ValidationError:
+            return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "Setup progress holds step ids only.")
+        try:
+            return _ok(rid, action(request).model_dump(mode="json"))
+        except SetupCheckRpcError as exc:
+            return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
+    return handler
+
+
+@method("connectors.setup.progress.get")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.connector_setup_guide import get_setup_progress
+    from tui_gateway.contracts.connectors import SetupProgressGetParams
+    return _setup_progress_call(SetupProgressGetParams, get_setup_progress)(rid, params)
+
+
+@method("connectors.setup.progress.set")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.connector_setup_guide import set_setup_progress
+    from tui_gateway.contracts.connectors import SetupProgressSetParams
+    return _setup_progress_call(SetupProgressSetParams, set_setup_progress)(rid, params)
+
+
 def _discord_call(params_model, action):
     def handler(rid, params):
         from pydantic import ValidationError
