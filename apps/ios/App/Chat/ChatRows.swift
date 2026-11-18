@@ -65,7 +65,10 @@ struct ChatRowView: View {
             .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
             .environment(\.chatImageLoader, model.imageLoader)
         case .assistant(let parsed):
-            AssistantBubble(text: parsed.source, parsed: parsed, images: row.images, files: row.files, filesPending: row.isStreaming, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+            AssistantBubble(
+                text: parsed.source, parsed: parsed, images: row.images, files: row.files, filesPending: row.isStreaming,
+                highlight: findQuery, isCurrentMatch: isCurrentMatch
+            )
                 .environment(\.messageActions, messageActions(for: parsed.source))
                 .environment(\.chatImageLoader, model.imageLoader)
                 .environment(\.chatFileActions, model.fileActions)
