@@ -7,6 +7,9 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
         case paste(fields: [SetupField])
         case browserRoundTrip(waitingTitle: String, waitingBody: String)
         case action(waitingTitle: String, waitingBody: String)
+        case confirm(items: [SetupConfirmItem])
+        case openAndCheck(SetupOpenAndCheck)
+        case switches(groups: [SetupSwitchGroup])
         case automatic
         case waiting(title: String, body: String)
         case success(title: String, body: String)
@@ -23,11 +26,16 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
     public var pageLink: SetupLink?
     public var showsInChecklist: Bool
     public var allowsBack: Bool
+    public var prepares: Bool
+    public var inlineRefusal: Bool
+    public var workingTitle: String?
+    public var workingBody: String
 
     public init(
         id: String, title: String, body: String = "", kind: Kind, primaryTitle: String? = nil,
         skipTitle: String? = nil, skipTarget: String? = nil, heading: String? = nil, pageLink: SetupLink? = nil,
-        showsInChecklist: Bool = true, allowsBack: Bool = true
+        showsInChecklist: Bool = true, allowsBack: Bool = true, prepares: Bool = false, inlineRefusal: Bool = false,
+        workingTitle: String? = nil, workingBody: String = ""
     ) {
         self.id = id
         self.title = title
@@ -40,6 +48,10 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
         self.pageLink = pageLink
         self.showsInChecklist = showsInChecklist
         self.allowsBack = allowsBack
+        self.prepares = prepares
+        self.inlineRefusal = inlineRefusal
+        self.workingTitle = workingTitle
+        self.workingBody = workingBody
     }
 
     public var isAutomatic: Bool { kind == .automatic }
@@ -64,6 +76,13 @@ public struct FlowStep: Sendable, Equatable, Identifiable {
 }
 
 extension SetupFieldShape {
+    private static func spelledOut(_ count: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .spellOut
+        formatter.locale = Locale(identifier: "en")
+        return formatter.string(from: NSNumber(value: count)) ?? String(count)
+    }
+
     public func message(label: String) -> String? {
         let name = label.prefix(1).lowercased() + label.dropFirst()
         switch self {
@@ -73,6 +92,9 @@ extension SetupFieldShape {
         case .wrongStart(let prefixes):
             return String(localized: "That is not a \(name). It starts with \(prefixes.joined(separator: String(localized: " or "))). Copy it again.")
         case .wrongEnd(let suffix): return String(localized: "That is not a \(name). It ends with \(suffix). Copy it again.")
+        case .wrongParts(let count):
+            let spelled = Self.spelledOut(count)
+            return String(localized: "That is not a \(name). A \(name) is \(spelled) parts joined by dots. Copy it again.")
         }
     }
 }
@@ -110,6 +132,7 @@ public actor InMemoryStepFlowProgressStore: StepFlowProgressStore {
 public struct StepFlowEngine: Sendable, Equatable {
     public enum Phase: Sendable, Equatable {
         case ready
+        case preparing
         case working
         case failed(SetupStatus)
     }
@@ -141,6 +164,8 @@ public struct StepFlowEngine: Sendable, Equatable {
     public private(set) var phase: Phase = .ready
     public private(set) var saved: Set<String>
     public private(set) var values: [String: String] = [:]
+    public private(set) var confirmed: Set<String> = []
+    public private(set) var switches: [String: Bool] = [:]
 
     public init?(flowID: String, steps: [FlowStep], resume: StepFlowProgress? = nil) {
         guard !steps.isEmpty, Set(steps.map(\.id)).count == steps.count, steps.last?.isSuccess == true,
@@ -152,6 +177,7 @@ public struct StepFlowEngine: Sendable, Equatable {
         saved = Set(resume?.saved ?? []).intersection(known)
         let restored = resume.flatMap { progress in steps.firstIndex { $0.id == progress.stepID } } ?? 0
         index = min(restored, max(steps.count - 2, 0))
+        for step in steps { seedSwitches(step.kind) }
     }
 
     public var current: FlowStep { steps[index] }
@@ -179,8 +205,8 @@ public struct StepFlowEngine: Sendable, Equatable {
 
     public var primaryAction: PrimaryAction {
         switch current.kind {
-        case .instruction, .copyCard: .advance
-        case .paste, .browserRoundTrip, .action: .work
+        case .instruction, .copyCard, .confirm: .advance
+        case .paste, .browserRoundTrip, .action, .openAndCheck, .switches: .work
         case .automatic, .waiting: .none
         case .success: .finish
         }
@@ -190,8 +216,16 @@ public struct StepFlowEngine: Sendable, Equatable {
         guard phase == .ready || isFailed else { return false }
         switch primaryAction {
         case .none: return false
-        case .advance, .finish: return true
-        case .work: return current.fields.allSatisfy { shape(of: $0.id) == .valid }
+        case .finish: return true
+        case .advance, .work: return isStepComplete
+        }
+    }
+
+    private var isStepComplete: Bool {
+        switch current.kind {
+        case .confirm(let items): items.allSatisfy { confirmed.contains($0.id) }
+        case .switches(let groups): !groups.isEmpty && groups.allSatisfy { !$0.needsOneOn || $0.switches.contains { isOn($0.id) } }
+        default: current.fields.allSatisfy { shape(of: $0.id) == .valid }
         }
     }
 
@@ -205,6 +239,14 @@ public struct StepFlowEngine: Sendable, Equatable {
 
     public func value(for fieldID: String) -> String { values[fieldID] ?? "" }
 
+    public func isConfirmed(_ id: String) -> Bool { confirmed.contains(id) }
+
+    public func isOn(_ id: String) -> Bool { switches[id] ?? false }
+
+    public var workValues: [String: String] {
+        values.merging(switches.mapValues { $0 ? "1" : "0" }) { field, _ in field }
+    }
+
     public func shape(of fieldID: String) -> SetupFieldShape {
         guard let field = current.fields.first(where: { $0.id == fieldID }) else { return .empty }
         return field.shape(of: value(for: fieldID))
@@ -214,6 +256,48 @@ public struct StepFlowEngine: Sendable, Equatable {
         guard current.fields.contains(where: { $0.id == fieldID }) else { return }
         values[fieldID] = text
         if isFailed { phase = .ready }
+    }
+
+    public mutating func setConfirmed(_ id: String, _ on: Bool) {
+        guard case .confirm(let items) = current.kind, items.contains(where: { $0.id == id }) else { return }
+        if on { confirmed.insert(id) } else { confirmed.remove(id) }
+        if isFailed { phase = .ready }
+    }
+
+    public mutating func setSwitch(_ id: String, _ on: Bool) {
+        guard case .switches(let groups) = current.kind, groups.contains(where: { $0.switches.contains { $0.id == id } }) else { return }
+        switches[id] = on
+        if isFailed { phase = .ready }
+    }
+
+    private mutating func seedSwitches(_ kind: FlowStep.Kind) {
+        guard case .switches(let groups) = kind else { return }
+        for group in groups { for item in group.switches { switches[item.id] = item.isOn } }
+    }
+
+    @discardableResult
+    public mutating func replaceKind(of stepID: String, with kind: FlowStep.Kind) -> Bool {
+        guard let position = steps.firstIndex(where: { $0.id == stepID }) else { return false }
+        var replaced = steps[position]
+        replaced.kind = kind
+        guard replaced.isSuccess == steps[position].isSuccess, replaced.isChecklistRow == steps[position].isChecklistRow else { return false }
+        if case .switches(let old) = steps[position].kind {
+            for item in old.flatMap(\.switches) { switches[item.id] = nil }
+        }
+        steps[position] = replaced
+        seedSwitches(kind)
+        return true
+    }
+
+    @discardableResult
+    public mutating func beginPreparing() -> Bool {
+        guard phase == .ready else { return false }
+        phase = .preparing
+        return true
+    }
+
+    public mutating func finishPreparing() {
+        if phase == .preparing { phase = .ready }
     }
 
     private var previousIndex: Int? {
@@ -255,7 +339,7 @@ public struct StepFlowEngine: Sendable, Equatable {
     @discardableResult
     public mutating func startWork() -> Bool {
         let works = primaryAction == .work || current.isAutomatic
-        guard works, phase != .working, current.isAutomatic || isPrimaryEnabled else { return false }
+        guard works, phase != .working, phase != .preparing, current.isAutomatic || isPrimaryEnabled else { return false }
         phase = .working
         return true
     }
@@ -283,7 +367,7 @@ public struct StepFlowEngine: Sendable, Equatable {
     }
 
     public mutating func fail(_ status: SetupStatus) {
-        guard phase == .working else { return }
+        guard phase == .working || phase == .preparing else { return }
         phase = .failed(status)
     }
 

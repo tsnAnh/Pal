@@ -42,18 +42,32 @@ struct StepCopyCard: View {
 struct StepPasteFields: View {
     let model: StepFlowModel
     let fields: [SetupField]
+    var refusal: SetupStatus?
 
     @State private var clipboardMark: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
             ForEach(fields) { field in entry(field) }
-            Text("Saved on your Pal for every device. They can't be read back.")
+            if let refusal {
+                Text(verbatim: "\(refusal.title). \(refusal.reason)")
+                    .hermesText(.rowSubtitle)
+                    .foregroundStyle(Color.red)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("stepFlowRefusal")
+            }
+            Text(savedNote)
                 .hermesText(.rowSubtitle)
                 .foregroundStyle(PalTokens.textTertiary)
                 .accessibilityIdentifier("stepFlowFieldsNote")
         }
         .onDisappear { scrubClipboard() }
+    }
+
+    private var savedNote: String {
+        fields.count == 1
+            ? String(localized: "Saved on your Pal. It can't be read back.")
+            : String(localized: "Saved on your Pal for every device. They can't be read back.")
     }
 
     private func binding(_ field: SetupField) -> Binding<String> {
@@ -72,9 +86,9 @@ struct StepPasteFields: View {
                 .background(PalTokens.control, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
-                        .strokeBorder(border(shape), lineWidth: 1.5)
+                        .strokeBorder(refusal == nil ? border(shape) : Color.red, lineWidth: 1.5)
                 }
-            if let message = shape.message(label: field.label) {
+            if refusal == nil, let message = shape.message(label: field.label) {
                 Text(message)
                     .hermesText(.rowSubtitle)
                     .foregroundStyle(shape.isValid ? Color.green : Color.red)

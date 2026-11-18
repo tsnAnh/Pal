@@ -87,6 +87,7 @@ final class ConnectAppsModel {
     var oauthClientSheet: OAuthClientSheetModel?
     var showsSlackPicker = false
     var setupGuideSheet: SetupGuideModel?
+    var discordFlow: DiscordFlowSession?
     let google: GoogleWorkspaceModel
     let slack: SlackBotsModel
     let slackWizard: SlackWizardContext
@@ -180,7 +181,7 @@ final class ConnectAppsModel {
     }
 
     func connect(_ app: ConnectApp, credentials: [String: String] = [:]) async {
-        if presentsSetupGuide(app) { return }
+        if presentsDiscordFlow(app) || presentsSetupGuide(app) { return }
         if app.usesMcpSignIn {
             beginMcpSignIn(app)
             return

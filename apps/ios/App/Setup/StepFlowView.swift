@@ -15,6 +15,13 @@ struct StepFlowView<Accessory: View>: View {
 
     private var engine: StepFlowEngine { model.engine }
 
+    private var inlineRefusal: SetupStatus? {
+        guard let failure = engine.failure, failure.kind == .vendorRefusedValue, engine.current.inlineRefusal,
+              case .paste = engine.current.kind
+        else { return nil }
+        return failure
+    }
+
     private var showsChecklist: Bool {
         #if os(macOS)
         true
@@ -45,7 +52,7 @@ struct StepFlowView<Accessory: View>: View {
 
     @ViewBuilder
     private var screen: some View {
-        if let failure = engine.failure {
+        if let failure = engine.failure, inlineRefusal == nil {
             StatusBlock(status: failure, identifierPrefix: "stepFlowStatus") { perform(after: failure) }
         } else if let calm = calmCopy {
             StepFlowCalmView(copy: calm)
@@ -58,7 +65,7 @@ struct StepFlowView<Accessory: View>: View {
                         .accessibilityAddTraits(.isHeader)
                         .accessibilityIdentifier("stepFlowStepTitle")
                     if !engine.current.body.isEmpty {
-                        Text(engine.current.body)
+                        Text(Self.inlineMarkdown(engine.current.body))
                             .hermesText(.rowTitle)
                             .foregroundStyle(PalTokens.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -84,20 +91,34 @@ struct StepFlowView<Accessory: View>: View {
                 StepCopyCard(label: copy.label, value: copy.value, identifier: "stepFlowCopy-\(offset)")
             }
         case .paste(let fields) where !fields.isEmpty:
-            StepPasteFields(model: model, fields: fields)
+            StepPasteFields(model: model, fields: fields, refusal: inlineRefusal)
+        case .confirm(let items):
+            StepConfirmList(model: model, items: items)
+        case .openAndCheck(let open):
+            ForEach(Array(open.copies.enumerated()), id: \.offset) { offset, copy in
+                StepCopyCard(label: copy.label, value: copy.value, identifier: "stepFlowCopy-\(offset)")
+            }
+        case .switches(let groups):
+            StepSwitchGroups(model: model, groups: groups)
         default:
             EmptyView()
         }
     }
 
     private var calmCopy: StepFlowCalmCopy? {
-        switch engine.current.kind {
+        if engine.phase == .preparing { return StepFlowCalmCopy(mark: .spinner, title: engine.current.screenTitle, body: "") }
+        if engine.phase == .working, let title = engine.current.workingTitle {
+            return StepFlowCalmCopy(mark: .spinner, title: title, body: engine.current.workingBody)
+        }
+        return switch engine.current.kind {
         case .waiting(let title, let body): StepFlowCalmCopy(mark: .spinner, title: title, body: body)
         case .success(let title, let body): StepFlowCalmCopy(mark: .success, title: title, body: body)
         case .browserRoundTrip(let title, let body) where engine.phase == .working:
             StepFlowCalmCopy(mark: .spinner, title: title, body: body)
         case .action(let title, let body) where engine.phase == .working:
             StepFlowCalmCopy(mark: .spinner, title: title, body: body)
+        case .openAndCheck(let open) where engine.phase == .working:
+            StepFlowCalmCopy(mark: .spinner, title: open.waitingTitle, body: open.waitingBody)
         case .automatic where engine.phase == .working:
             StepFlowCalmCopy(mark: .spinner, title: engine.current.screenTitle, body: engine.current.body)
         default: nil
@@ -134,6 +155,8 @@ struct StepFlowView<Accessory: View>: View {
             SetupQuietButton(title: String(localized: "Cancel"), identifier: "stepFlowCancel") { Task { await model.back() } }
         } else if engine.canSkip, let title = engine.current.skipTitle {
             SetupQuietButton(title: title, identifier: "stepFlowSkip") { Task { await model.skip() } }
+        } else if case .openAndCheck(let open) = engine.current.kind, engine.phase == .ready {
+            SetupQuietButton(title: open.recheckTitle, identifier: "stepFlowRecheck") { Task { await model.recheck() } }
         }
     }
 
@@ -146,11 +169,11 @@ struct StepFlowView<Accessory: View>: View {
 
     @ViewBuilder
     private var primary: some View {
-        if engine.failure == nil, engine.phase != .working, engine.primaryAction != .none {
+        if engine.failure == nil || inlineRefusal != nil, engine.phase != .working, engine.phase != .preparing, engine.primaryAction != .none {
             SetupButton(title: primaryTitle, kind: .primary, fillsWidth: !showsChecklist, identifier: "stepFlowPrimary") {
                 if engine.primaryAction == .finish { close() } else { Task { await model.performPrimary() } }
             }
-            .disabled(!engine.isPrimaryEnabled)
+            .disabled(!engine.isPrimaryEnabled || inlineRefusal != nil)
             #if os(iOS)
             .controlSize(.large)
             #endif
@@ -162,6 +185,7 @@ struct StepFlowView<Accessory: View>: View {
         if let title = step.primaryTitle { return title }
         switch step.kind {
         case .instruction(let link?): return link.label
+        case .openAndCheck(let open): return open.link.label
         case .paste: return String(localized: "Check and save")
         case .browserRoundTrip: return String(localized: "Continue")
         case .success: return String(localized: "Done")
@@ -175,6 +199,11 @@ struct StepFlowView<Accessory: View>: View {
         } else {
             Task { await model.recover(from: failure) }
         }
+    }
+
+    private static func inlineMarkdown(_ text: String) -> AttributedString {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
     }
 }
 

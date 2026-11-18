@@ -17,17 +17,13 @@ struct SetupGuideStepView: View {
                 if !step.links.isEmpty { links(step.links) }
                 if !step.copies.isEmpty { copies(step.copies) }
                 if let fallback = step.fallback { SetupFallbackCard(fallback: fallback).id(step.id) }
-                if step.kind == .serverPicker { SetupServerPicker(model: model) }
                 if step.kind == .paste {
                     SetupPasteFields(model: model, step: step).id(step.id)
-                } else if step.kind == .access {
-                    SetupAccessChoice(model: model)
                 } else {
                     PillButton(
                         model.isLastStep ? String(localized: "Done") : String(localized: "Next"), kind: .accent, size: .large,
                         accessibilityIdentifier: "setupGuideNext"
                     ) { Task { await model.advance() } }
-                    .disabled(!model.canAdvance)
                     .padding(.horizontal, PalMetrics.screenMargin)
                 }
                 if model.showsBack {
