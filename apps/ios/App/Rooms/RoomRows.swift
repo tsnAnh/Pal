@@ -25,7 +25,7 @@ struct RoomEventRow: View {
             if event.isFromMember {
                 RoomAuthorLabel(name: event.author(in: room) ?? "", member: room.member(event.actorID), roster: roster)
                     .padding(.top, 10)
-                if !event.text.isEmpty { AssistantBubble(text: event.text, highlight: "", isCurrentMatch: false) }
+                if !event.text.isEmpty { AssistantBubble(text: event.text, parsed: ParsedMarkdown.cached(event.text), highlight: "", isCurrentMatch: false) }
             } else if !event.text.isEmpty {
                 UserBubble(text: event.text, delivery: .sent, accent: nil, highlight: "", isCurrentMatch: false, retry: { _ in })
                     .padding(.top, 10)

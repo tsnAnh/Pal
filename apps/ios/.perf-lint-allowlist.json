@@ -1,0 +1,9 @@
+[
+  {"file": "App/Kanban/KanbanCardView.swift", "reason": "periodic every 30 s: relative timestamp label", "rule": "perf-timeline-unlisted"},
+  {"file": "App/Computer/TeachViews.swift", "reason": "periodic every 1 s: recording elapsed clock", "rule": "perf-timeline-unlisted"},
+  {"file": "App/Mac/MacSettings.swift", "reason": "everyMinute: usage reset countdown", "rule": "perf-timeline-unlisted"},
+  {"file": "App/Settings/UsageScreen.swift", "reason": "everyMinute: usage reset countdown", "rule": "perf-timeline-unlisted"},
+  {"file": "App/ConnectionView.swift", "reason": "animation capped at 1/30 s and paused under Reduce Motion: connecting indicator", "rule": "perf-timeline-unlisted"},
+  {"file": "App/Chat/ChatWorkingRow.swift", "reason": "animation capped at 1/30 s and paused when not animated: working dots", "rule": "perf-timeline-unlisted"},
+  {"file": "App/Chat/VoiceModeView.swift", "reason": "animation capped at 1/30 s and paused under Reduce Motion: voice level meter", "rule": "perf-timeline-unlisted"}
+]

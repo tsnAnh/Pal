@@ -65,7 +65,7 @@ struct ChatRowView: View {
             .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
             .environment(\.chatImageLoader, model.imageLoader)
         case .assistant(let parsed):
-            AssistantBubble(text: parsed.source, document: parsed.document, images: row.images, files: row.files, filesPending: row.isStreaming, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+            AssistantBubble(text: parsed.source, parsed: parsed, images: row.images, files: row.files, filesPending: row.isStreaming, highlight: findQuery, isCurrentMatch: isCurrentMatch)
                 .environment(\.messageActions, messageActions(for: parsed.source))
                 .environment(\.chatImageLoader, model.imageLoader)
                 .environment(\.chatFileActions, model.fileActions)
@@ -101,7 +101,7 @@ struct ChatRowView: View {
 
 struct AssistantBubble: View {
     let text: String
-    var document: MarkdownDocument?
+    let parsed: ParsedMarkdown
     var images: [ImageReference] = []
     var files: [FileReference] = []
     var filesPending = false
@@ -114,16 +114,15 @@ struct AssistantBubble: View {
 
     @ViewBuilder
     private var bubbleContent: some View {
-        let markdown = document ?? MarkdownDocument(parsing: text, isStreaming: isStreaming)
         if let failureLead {
             VStack(alignment: .leading, spacing: 8) {
                 FailureLead(text: failureLead, highlight: highlight, isCurrentMatch: isCurrentMatch)
-                if !markdown.blocks.isEmpty {
-                    MarkdownView(document: markdown, highlight: highlight, isCurrentMatch: isCurrentMatch)
+                if !parsed.document.blocks.isEmpty {
+                    MarkdownView(parsed: parsed, highlight: highlight, isCurrentMatch: isCurrentMatch)
                 }
             }
         } else {
-            MarkdownView(document: markdown, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+            MarkdownView(parsed: parsed, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
         }
     }
 

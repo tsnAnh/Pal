@@ -1,0 +1,222 @@
+"""scripts/ci/check_swift_perf.py: Pal Swift code does not repeat the Mac performance mistakes."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[2]
+SCRIPT = REPO / "scripts" / "ci" / "check_swift_perf.py"
+sys.path.insert(0, str(SCRIPT.parent))
+
+import check_swift_perf as csp
+
+SCREEN = "App/View.swift"
+MAC_SHELL = "App/Mac/MacShell.swift"
+DESIGN = "Packages/PalDesign/Sources/PalDesign/Part.swift"
+CACHE = "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"
+
+
+def _tree(tmp_path: Path, files: dict[str, str]) -> Path:
+    for rel, body in files.items():
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+    return tmp_path
+
+
+def _rules(tmp_path: Path, rel: str, body: str) -> list[str]:
+    return [f.rule for f in csp.scan(_tree(tmp_path, {rel: body}))]
+
+
+CASES = [
+    ("perf-body-parse", SCREEN,
+     "struct Row: View {\n    var body: some View {\n        MarkdownView(document: MarkdownDocument(parsing: text))\n    }\n}\n",
+     "struct Row: View {\n    var body: some View {\n        MarkdownView(parsed: ParsedMarkdown.cached(text))\n    }\n}\n"),
+    ("perf-body-parse", SCREEN,
+     "struct Row: View {\n    @ViewBuilder\n    private var content: some View {\n        let md = document ?? MarkdownDocument(parsing: text)\n        Text(\"x\")\n    }\n}\n",
+     "struct Model {\n    init(text: String) {\n        parsed = ParsedMarkdown(source: text, document: MarkdownDocument(parsing: text))\n    }\n}\n"),
+    ("perf-body-parse", SCREEN,
+     "struct Row: View {\n    var body: some View {\n        Text(try! AttributedString(markdown: text))\n    }\n}\n",
+     "struct Row: View {\n    let text: AttributedString\n    var body: some View { Text(text) }\n}\n"),
+    ("perf-body-format", SCREEN,
+     "struct Row: View {\n    var body: some View {\n        Text(\"Next run \\(next.formatted(date: .abbreviated, time: .shortened))\")\n    }\n}\n",
+     "struct Row: View {\n    let label: String\n    var body: some View { Text(label) }\n}\nfunc label(_ d: Date) -> String { d.formatted() }\n"),
+    ("perf-body-format", SCREEN,
+     "struct Row: View {\n    var body: some View {\n        let day = Calendar.current.startOfDay(for: date)\n        Text(\"\\(day)\")\n    }\n}\n",
+     "struct Row: View {\n    let day: Date\n    var body: some View { Text(\"\\(day)\") }\n}\n"),
+    ("perf-redraw-per-call", SCREEN,
+     "if let image = images[host] { return image.roundedIcon(points: pointSize) }\n",
+     "if let image = rounded[host] { return image }\n"),
+    ("perf-main-disk-read", SCREEN, "let text = try? String(contentsOf: url, encoding: .utf8)\n", "let text = await loader.text(at: url)\n"),
+    ("perf-main-disk-read", SCREEN, "let data = try? Data(contentsOf: url)\n", "let data = await loader.data(at: url)\n"),
+    ("perf-main-disk-read", DESIGN, "@MainActor\nfinal class M {\n    func f() { _ = try? Data(contentsOf: url) }\n}\n",
+     "final class M {\n    func f() { _ = try? Data(contentsOf: url) }\n}\n"),
+    ("perf-main-json", SCREEN, "guard let data = try? JSONEncoder().encode(value) else { return nil }\n",
+     "guard let data = try? Self.encoder.encode(value) else { return nil }\n"),
+    ("perf-main-json", SCREEN, "return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]\n", "return decoded\n"),
+    ("perf-queue-sync", CACHE,
+     "public func load() -> Value? {\n    queue.sync { read() }\n}\n",
+     "public func load() async -> Value? {\n    await withCheckedContinuation { c in queue.async { c.resume(returning: read()) } }\n}\n"),
+    ("perf-timeline-unlisted", SCREEN, "TimelineView(.periodic(from: .now, by: 30)) { _ in Text(\"x\") }\n", "Text(\"x\")\n"),
+    ("perf-timeline-interval", DESIGN, "TimelineView(.animation) { _ in Text(\"x\") }\n", "Text(\"x\")\n"),
+    ("perf-timeline-interval", DESIGN, "frameInterval: reduceMotion ? 1.0 / 20 : 1.0 / 60,\n", "frameInterval: reduceMotion ? 1.0 / 20 : 1.0 / 30,\n"),
+    ("perf-hover-unlisted", DESIGN, "content.background { Color.clear.onContinuousHover { phase in look(phase) } }\n",
+     "content.onHover { inside in look(inside) }\n"),
+    ("perf-animation-container", MAC_SHELL, "HStack { sidebar }\n    .animation(.snappy(duration: 0.22), value: shell.isCompact)\n",
+     "HStack { sidebar }\n    .onChange(of: shell.isCompact) { withAnimation(.snappy) { apply() } }\n"),
+    ("perf-eager-stack", SCREEN,
+     "ScrollView {\n    VStack(spacing: 3) {\n        ForEach(roster.bots) { bot in Row(bot) }\n    }\n}\n",
+     "ScrollView {\n    LazyVStack(spacing: 3) {\n        ForEach(roster.bots) { bot in Row(bot) }\n    }\n}\n"),
+    ("perf-monitor-per-view", SCREEN, "monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { $0 }\n",
+     "MessageMenuHost.shared.register(self)\n"),
+    ("perf-geometry-per-row", SCREEN,
+     "LazyVStack {\n    ForEach(rows) { row in\n        RowView(row)\n            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { moved(row.id, $0) }\n    }\n}\n",
+     "LazyVStack {\n    ForEach(rows) { row in RowView(row) }\n}\n.onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }\n"),
+    ("perf-state-model-init", SCREEN,
+     "struct Inspector: View {\n    init(name: String) {\n        _profile = State(initialValue: BotProfileModel(botName: name))\n    }\n}\n",
+     "struct Inspector: View {\n    @State private var profile = BotProfileModel()\n}\n"),
+    ("perf-model-in-body", SCREEN,
+     "struct Host: View {\n    @ViewBuilder\n    private func destination() -> some View {\n        ChatView(model: ChatModel(bot: bot), router: router)\n    }\n}\n",
+     "struct Host: View {\n    @ViewBuilder\n    private func destination() -> some View {\n        ChatView(model: model, router: router)\n    }\n}\n"),
+    ("perf-shadow-radius", SCREEN, ".shadow(color: .black.opacity(0.35), radius: 40, y: 18)\n", ".shadow(color: .black.opacity(0.2), radius: 12, y: 4)\n"),
+    ("perf-shadow-radius", SCREEN, ".shadow(color: .black, radius: 24)\n", ".shadow(color: .black, radius: 23)\n"),
+    ("perf-glass-over-fill", DESIGN,
+     "configuration.label\n    .background(fill ?? PalTokens.control, in: Capsule())\n    .palGlass(Capsule())\n",
+     "configuration.label\n    .palGlass(Capsule())\n"),
+]
+
+
+@pytest.mark.parametrize(("rule", "rel", "bad", "good"), CASES)
+def test_violation_fails_and_clean_passes(tmp_path: Path, rule: str, rel: str, bad: str, good: str) -> None:
+    assert rule in _rules(tmp_path / "red", rel, bad)
+    assert rule not in _rules(tmp_path / "green", rel, good)
+
+
+def test_non_interactive_glass_over_a_fill_is_allowed(tmp_path: Path) -> None:
+    body = "label\n    .background(fill, in: Capsule())\n    .palGlass(Capsule(), interactive: false)\n"
+    assert _rules(tmp_path, DESIGN, body) == []
+
+
+def test_every_rule_has_a_fixture() -> None:
+    covered = {rule for rule, *_ in CASES}
+    declared = {lr.rule for lr in csp.LINE_RULES} | {rule for rule, _, _ in csp.BLOCK_RULES}
+    assert declared == covered
+
+
+def test_messages_name_the_replacement() -> None:
+    wanted = {
+        "perf-body-parse": "ParsedMarkdown",
+        "perf-main-disk-read": "loadDetached",
+        "perf-main-json": "loadDetached",
+        "perf-queue-sync": "loadDetached",
+        "perf-monitor-per-view": "shared monitor",
+        "perf-state-model-init": "@State private var model",
+        "perf-timeline-unlisted": csp.ALLOWLIST_NAME,
+        "perf-hover-unlisted": csp.ALLOWLIST_NAME,
+    }
+    messages = {lr.rule: lr.message for lr in csp.LINE_RULES}
+    for rule, needle in wanted.items():
+        assert needle in messages[rule], rule
+
+
+def test_eager_stack_message_names_lazyvstack(tmp_path: Path) -> None:
+    body = "ScrollView {\n    VStack {\n        ForEach(rows) { Row($0) }\n    }\n}\n"
+    found = csp.scan(_tree(tmp_path, {SCREEN: body}))
+    assert [f.rule for f in found] == ["perf-eager-stack"] and "LazyVStack" in found[0].message
+
+
+def test_parse_outside_a_view_body_is_allowed(tmp_path: Path) -> None:
+    body = "struct Model {\n    func make() -> MarkdownDocument { MarkdownDocument(parsing: text) }\n}\n"
+    assert _rules(tmp_path, SCREEN, body) == []
+
+
+def test_state_model_init_ignores_non_view_types_and_plain_parameters(tmp_path: Path) -> None:
+    app = "struct PalApp: App {\n    init() {\n        _rooms = State(initialValue: RoomsModel(services: s))\n    }\n}\n"
+    param = "struct Screen: View {\n    init(model: ScreenModel) {\n        _model = State(initialValue: model)\n    }\n}\n"
+    assert _rules(tmp_path / "a", SCREEN, app) == []
+    assert _rules(tmp_path / "b", SCREEN, param) == []
+
+
+def test_horizontal_scroll_and_lazy_stacks_are_not_eager_stacks(tmp_path: Path) -> None:
+    horizontal = "ScrollView(.horizontal) {\n    VStack {\n        ForEach(chips) { Chip($0) }\n    }\n}\n"
+    assert _rules(tmp_path, SCREEN, horizontal) == []
+
+
+def test_allowlist_exempts_a_file_and_requires_a_reason(tmp_path: Path) -> None:
+    body = "TimelineView(.animation) { _ in Text(\"x\") }\nTimelineView(.periodic(from: .now, by: 1)) { _ in Text(\"y\") }\n"
+    root = _tree(tmp_path, {SCREEN: body, "App/Other.swift": body})
+    allow = root / csp.ALLOWLIST_NAME
+    allow.write_text(json.dumps([{"rule": "perf-timeline-unlisted", "file": SCREEN, "reason": "bounded ticker"}]), encoding="utf-8")
+    files = {f.path for f in csp.scan(root)}
+    assert files == {"App/Other.swift"}
+    allow.write_text(json.dumps([{"rule": "perf-timeline-unlisted", "file": SCREEN, "reason": " "}]), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        csp.scan(root)
+
+
+def test_opt_out_marker_and_test_targets_are_exempt(tmp_path: Path) -> None:
+    marked = ".shadow(color: .black, radius: 40) // perf-lint: ok\n"
+    assert _rules(tmp_path / "a", SCREEN, marked) == []
+    assert _rules(tmp_path / "b", "UITests/View.swift", ".shadow(color: .black, radius: 40)\n") == []
+    assert _rules(tmp_path / "c", "Tools/Spike/View.swift", ".shadow(color: .black, radius: 40)\n") == []
+
+
+def test_comments_do_not_trigger(tmp_path: Path) -> None:
+    assert _rules(tmp_path, SCREEN, "// .shadow(color: .black, radius: 40)\n/* queue.sync { } */\n") == []
+
+
+def test_baseline_absorbs_known_findings_but_not_new_ones(tmp_path: Path) -> None:
+    root = _tree(tmp_path, {SCREEN: ".shadow(color: .black, radius: 40)\n"})
+    found = csp.scan(root)
+    csp.write_baseline(root / csp.BASELINE_NAME, found)
+    baseline = csp.load_baseline(root / csp.BASELINE_NAME)
+    assert csp.new_findings(found, baseline) == ([], 0)
+    (root / SCREEN).write_text("\n.shadow(color: .black, radius: 40)\n.shadow(color: .red, radius: 60)\n", encoding="utf-8")
+    fresh, stale = csp.new_findings(csp.scan(root), baseline)
+    assert [f.text for f in fresh] == [".shadow(color: .red, radius: 60)"] and stale == 0
+
+
+def test_planted_violation_is_reported_with_file_line_rule_and_fix(tmp_path: Path) -> None:
+    root = _tree(tmp_path, {"App/Planted.swift": "import SwiftUI\n\nlet m = try? Data(contentsOf: url)\n"})
+    proc = subprocess.run([sys.executable, str(SCRIPT), str(root)], capture_output=True, text=True, check=False)
+    assert proc.returncode == 1
+    assert "App/Planted.swift:3: [perf-main-disk-read]" in proc.stdout
+    assert "CacheStore.loadDetached" in proc.stdout
+
+
+REAL_SITES = [
+    ("perf-body-parse", "App/Chat/RoutineOutputRow.swift"),
+    ("perf-redraw-per-call", "App/Chat/FaviconStore.swift"),
+    ("perf-main-disk-read", "App/Chat/Rich/MermaidRenderer.swift"),
+    ("perf-main-disk-read", "App/Chat/FilePreviewSheet.swift"),
+    ("perf-main-json", "App/RosterModel.swift"),
+    ("perf-queue-sync", "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"),
+    ("perf-timeline-interval", "Packages/PalDesign/Sources/PalDesign/BotAvatarView.swift"),
+    ("perf-hover-unlisted", "Packages/PalDesign/Sources/PalDesign/BotAvatarView.swift"),
+    ("perf-animation-container", "App/Mac/MacShell.swift"),
+    ("perf-eager-stack", "App/Mac/MacSidebar.swift"),
+    ("perf-monitor-per-view", "App/Mac/MacMessageActions.swift"),
+    ("perf-geometry-per-row", "App/ChatView.swift"),
+    ("perf-state-model-init", "App/Mac/MacInspector.swift"),
+    ("perf-model-in-body", "App/Mac/MacModals.swift"),
+    ("perf-model-in-body", "App/PalApp.swift"),
+    ("perf-shadow-radius", "App/Mac/MacModalSupport.swift"),
+    ("perf-shadow-radius", "App/Mac/MacPalette.swift"),
+    ("perf-glass-over-fill", "Packages/PalDesign/Sources/PalDesign/Components/PalControls.swift"),
+]
+
+
+def test_real_tree_fails_without_baseline_and_passes_with_it() -> None:
+    root = REPO / "apps" / "ios"
+    without = {(f.rule, f.path) for f in csp.scan(root)}
+    for site in REAL_SITES:
+        assert site in without, site
+    found = csp.scan(root)
+    assert csp.new_findings(found, csp.load_baseline(root / csp.BASELINE_NAME))[0] == []
+    entries = json.loads((root / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
+    assert all(set(e) == {"rule", "file", "text"} for e in entries)

@@ -1,0 +1,396 @@
+#!/usr/bin/env python3
+"""Fail when Pal Swift code repeats a Mac performance mistake (table in apps/ios/AGENTS.md, "Performance").
+
+Same mechanism as ``check_swift_glass.py`` (text only, no Swift toolchain; its bracket-aware
+``Source`` scanner and baseline helpers are reused). Findings already on main sit in
+``apps/ios/.perf-lint-baseline.json`` (matched by rule, file and line text); only a NEW finding
+fails, and a fix that removes one leaves a stale entry that is reported and harmless
+(``--write-baseline`` rewrites the file). Files that may use ``TimelineView`` or
+``onContinuousHover`` are listed with a reason in ``apps/ios/.perf-lint-allowlist.json``. A justified
+exception carries ``perf-lint: ok`` on the flagged line.
+
+Rules: perf-body-parse, perf-body-format, perf-redraw-per-call, perf-main-disk-read, perf-main-json,
+perf-queue-sync, perf-timeline-unlisted, perf-timeline-interval, perf-hover-unlisted,
+perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry-per-row,
+perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill.
+
+Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+from collections import Counter
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from check_swift_glass import (
+    DECL,
+    SKIP_DIRS,
+    Finding,
+    Source,
+    _decls,
+    load_baseline,
+    new_findings,
+    write_baseline,
+)
+
+OPT_OUT = "perf-lint: ok"
+BASELINE_NAME = ".perf-lint-baseline.json"
+ALLOWLIST_NAME = ".perf-lint-allowlist.json"
+SKIP = SKIP_DIRS | {"Tools"}
+ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted")
+SHADOW_MAX_RADIUS = 24
+OWNED_TYPE = r"[A-Z]\w*(?:Model|Store|Hub|Conversation|Controller)(?:\.\w+)?"
+SHELL_FILES = {("App", "Mac", "MacShell.swift")}
+
+
+def in_app(parts: tuple[str, ...], text: str) -> bool:
+    return parts[0] == "App"
+
+
+def anywhere(parts: tuple[str, ...], text: str) -> bool:
+    return True
+
+
+def main_isolated(parts: tuple[str, ...], text: str) -> bool:
+    return parts[0] == "App" or "@MainActor" in text
+
+
+def view_file(parts: tuple[str, ...], text: str) -> bool:
+    return parts[0] == "App" and bool(re.search(r":\s*(?:View|ViewModifier)\b", text))
+
+
+def mac_shell(parts: tuple[str, ...], text: str) -> bool:
+    return parts in SHELL_FILES
+
+
+@dataclass(frozen=True)
+class LineRule:
+    rule: str
+    pattern: re.Pattern[str]
+    applies: Callable[[tuple[str, ...], str], bool]
+    message: str
+    in_view: bool = False
+    in_view_type: bool = False
+    skip: re.Pattern[str] | None = None
+    keeps_strings: bool = False
+    allowlisted: bool = False
+
+
+def view_spans(src: Source) -> list[tuple[int, int]]:
+    spans = []
+    for open_index, close_index in _decls(src):
+        line = src.lines[src.line_of(open_index) - 1]
+        header = line[: open_index - src.starts[src.line_of(open_index) - 1] + 1]
+        before = src.lines[src.line_of(open_index) - 2] if src.line_of(open_index) > 1 else ""
+        is_decl = DECL.match(header) or header.lstrip().startswith(")")
+        is_view = re.search(r"\bsome\s+View\b", header) or re.search(r"\bvar\s+body\b", header) or "@ViewBuilder" in before
+        if is_decl and is_view:
+            spans.append((open_index, close_index))
+    return spans
+
+
+LINE_RULES = (
+    LineRule(
+        "perf-body-parse",
+        re.compile(r"\bMarkdownDocument\(\s*parsing:|\bParsedMarkdown\(\s*source:|\bAttributedString\(\s*markdown:"),
+        anywhere,
+        "markdown parsed inside a View body, on every body pass. Take a cached ParsedMarkdown: build it once in the "
+        "model (ChatModel) or call ParsedMarkdown.cached(text), and pass it to MarkdownView(parsed:)",
+        in_view=True,
+    ),
+    LineRule(
+        "perf-body-format",
+        re.compile(r"\bCalendar\.current\b|\.formatted\(|\bDateFormatter\(\)|\bNumberFormatter\(\)|\bISO8601DateFormatter\(\)"),
+        anywhere,
+        "date or number formatting inside a View body, on every body pass. Format once in the model, or keep a "
+        "static formatter and reuse it",
+        in_view=True,
+        keeps_strings=True,
+    ),
+    LineRule(
+        "perf-redraw-per-call",
+        re.compile(r"\.roundedIcon\(\s*points:"),
+        in_app,
+        "image redrawn on every call (and every view body). Round it once when it is stored in the cache "
+        "(FaviconCache keeps the finished PlatformImage per size) and return that",
+    ),
+    LineRule(
+        "perf-main-disk-read",
+        re.compile(r"\bData\(\s*contentsOf:|\bString\(\s*contentsOf:|\bcontentsOfFile:"),
+        main_isolated,
+        "synchronous disk read on the main actor. Load off the main actor (CacheStore.loadDetached, or an actor / "
+        "Task.detached loader) and apply the result on return",
+    ),
+    LineRule(
+        "perf-main-json",
+        re.compile(r"\bJSONEncoder\(\)|\bJSONDecoder\(\)|\bJSONSerialization\."),
+        main_isolated,
+        "JSON encode or decode on the main actor (and a new coder each call). Decode in the detached loader "
+        "(CacheStore.loadDetached) and share one static coder",
+    ),
+    LineRule(
+        "perf-queue-sync",
+        re.compile(r"\bqueue\.sync\b"),
+        anywhere,
+        "queue.sync blocks the caller; from the main actor that is a main-thread stall. Use the async API "
+        "(CacheStore.loadDetached: queue.async plus a continuation) and await it",
+    ),
+    LineRule(
+        "perf-timeline-unlisted",
+        re.compile(r"\bTimelineView\("),
+        anywhere,
+        f"TimelineView outside the allowlist. A ticking view re-renders its subtree on every tick: add the file to "
+        f"apps/ios/{ALLOWLIST_NAME} with a reason, or drive the change from state instead",
+        allowlisted=True,
+    ),
+    LineRule(
+        "perf-timeline-interval",
+        re.compile(r"\bTimelineView\(\s*\.animation\s*\)|\bTimelineView\(\s*\.animation\(\s*paused|"
+                   r"\b(?:frameInterval|minimumInterval)\b[^\n]*\b1(?:\.0)?\s*/\s*(?:3[1-9]|[4-9]\d|\d{3,})\b"),
+        anywhere,
+        "unbounded or faster-than-30 fps animation schedule. Use TimelineView(.animation(minimumInterval: 1.0 / 30)) "
+        "or slower (1.0 / 20 for small avatars), and pause it when idle",
+        allowlisted=True,
+    ),
+    LineRule(
+        "perf-hover-unlisted",
+        re.compile(r"\.onContinuousHover\b"),
+        anywhere,
+        f"onContinuousHover outside the allowlist. Continuous tracking fires per mouse move for every row: use .onHover, "
+        f"or add the file to apps/ios/{ALLOWLIST_NAME} with a reason",
+        allowlisted=True,
+    ),
+    LineRule(
+        "perf-animation-container",
+        re.compile(r"\.animation\(.*\bvalue:"),
+        mac_shell,
+        "implicit .animation(_, value:) on the whole Mac shell animates and re-diffs every child. Animate the view "
+        "that changes (withAnimation, or .animation on that leaf)",
+    ),
+    LineRule(
+        "perf-monitor-per-view",
+        re.compile(r"\bNSEvent\.addLocalMonitorForEvents\("),
+        in_app,
+        "one NSEvent local monitor per view runs for every event and every bubble. Install one shared monitor "
+        "(MacMessageMenuHost owns it) and route events to the view that wants them",
+    ),
+    LineRule(
+        "perf-state-model-init",
+        re.compile(rf"\bState\(\s*initialValue:\s*{OWNED_TYPE}\(|\bStateObject\(\s*wrappedValue:\s*{OWNED_TYPE}\("),
+        in_app,
+        "model built in a View init: every parent body builds and discards one. Declare "
+        "`@State private var model = ...` (or take the model as a parameter) and load it in .task",
+        in_view_type=True,
+    ),
+    LineRule(
+        "perf-model-in-body",
+        re.compile(r"\b\w+:\s*[A-Z]\w*(?:Model|Store)(?:\.\w+)?\("),
+        view_file,
+        "model constructed while building a view. Every parent body builds and discards one: hold it in "
+        "`@State private var model = ...` on the screen that owns it and load it in .task",
+        in_view=True,
+    ),
+    LineRule(
+        "perf-shadow-radius",
+        re.compile(r"\.shadow\([^\n]*\bradius:\s*(?:2[4-9]|[3-9]\d|\d{3,})(?:\.\d+)?\b"),
+        anywhere,
+        f"blur radius of {SHADOW_MAX_RADIUS}+ on a large surface is re-rendered offscreen on every frame. Use a radius "
+        f"under {SHADOW_MAX_RADIUS}, or a pre-rendered shadow asset",
+    ),
+)
+
+FOREACH = "ForEach"
+EAGER_STACKS = ("VStack",)
+VIEW_TYPE_HEADER = re.compile(r"\b(?:struct|class|extension)\s+\w+[^{]*:[^{]*\b(?:View|ViewModifier)\b|\bextension\s+View\b")
+GLASS_CALL = re.compile(r"\.(?:palGlass|glassEffect)\(")
+OPAQUE_BACKGROUND = re.compile(r"\.background\(\s*(?!\.clear|Color\.clear|\.(?:ultraThin|thin|regular|thick)?Material|\.bar\b|in:)")
+
+
+def block_regions(src: Source, name: str, skip_horizontal: bool = False) -> list[tuple[int, int]]:
+    """(start, end) of each ``name(...) { ... }`` or ``name { ... }`` container."""
+    regions = []
+    for m in re.finditer(rf"(?<![A-Za-z0-9_]){name}\b", src.text):
+        cursor = m.end()
+        args = re.compile(r"\s*\(").match(src.text, cursor)
+        if args:
+            paren = args.end() - 1
+            if paren not in src.close:
+                continue
+            if skip_horizontal and ".horizontal" in src.text[paren:src.close[paren]] and ".vertical" not in src.text[paren:src.close[paren]]:
+                continue
+            cursor = src.close[paren] + 1
+        body = re.compile(r"\s*\{").match(src.text, cursor)
+        if body and (body.end() - 1) in src.close:
+            regions.append((m.start(), src.close[body.end() - 1]))
+    return regions
+
+
+def eager_stack(src: Source) -> Iterator[tuple[int, str]]:
+    scrolls = block_regions(src, "ScrollView", skip_horizontal=True)
+    if not scrolls:
+        return
+    for name in EAGER_STACKS:
+        for start, end in block_regions(src, name):
+            if not any(s < start and end <= e for s, e in scrolls):
+                continue
+            for fe_start, _, _ in src.calls(FOREACH):
+                if start < fe_start < end and _direct_child(src, fe_start, start):
+                    yield src.line_of(start), (f"{name} over a ForEach inside a ScrollView builds every row up front. "
+                                               "Use LazyVStack (or LazyHStack) so only visible rows are built")
+                    break
+
+
+def _direct_child(src: Source, index: int, stack_start: int) -> bool:
+    for opener in src.enclosing(index):
+        if src.text[opener] != "{":
+            continue
+        header = src.lines[src.line_of(opener) - 1].strip()
+        if re.match(r"(?:\}\s*)?(?:if|else|switch|case|guard)\b", header):
+            continue
+        return stack_start < opener and src.line_of(opener) >= src.line_of(stack_start) and bool(
+            re.search(r"\b(?:VStack|HStack)\b", header)
+        )
+    return False
+
+
+def geometry_per_row(src: Source) -> Iterator[tuple[int, str]]:
+    rows = [(s, e) for s, _, e in src.calls(FOREACH)]
+    for m in re.finditer(r"\.onGeometryChange\(", src.text):
+        if any(s < m.start() < e for s, e in rows):
+            yield src.line_of(m.start()), ("onGeometryChange on every row of a ForEach measures each row on every layout. "
+                                           "Measure once on the container (one onGeometryChange on the scroll content), "
+                                           "or use scrollPosition / scrollTargetLayout")
+
+
+def glass_over_fill(src: Source) -> Iterator[tuple[int, str]]:
+    for m in GLASS_CALL.finditer(src.text):
+        open_index = m.end() - 1
+        args = src.text[open_index:src.close.get(open_index, open_index) + 1]
+        if "interactive: false" in args:
+            continue
+        line = src.line_of(m.start())
+        chain = [src.lines[line - 1][: m.start() - src.starts[line - 1]]]
+        for prior in reversed(src.lines[max(0, line - 13): line - 1]):
+            chain.append(prior)
+            if not prior.strip().startswith("."):
+                break
+        if OPAQUE_BACKGROUND.search("\n".join(chain)):
+            yield line, ("interactive glass over an opaque .background(...) fill: the glass samples the fill on every "
+                         "frame. Drop the fill and let the glass be the surface, or pass interactive: false")
+
+
+BLOCK_RULES: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[Source], Iterator[tuple[int, str]]]], ...] = (
+    ("perf-eager-stack", in_app, eager_stack),
+    ("perf-geometry-per-row", in_app, geometry_per_row),
+    ("perf-glass-over-fill", anywhere, glass_over_fill),
+)
+
+
+@dataclass(frozen=True)
+class Allowlist:
+    entries: frozenset[tuple[str, str]]
+
+    def allows(self, rule: str, rel: Path) -> bool:
+        return (rule, rel.as_posix()) in self.entries
+
+
+def load_allowlist(path: Path) -> Allowlist:
+    if not path.is_file():
+        return Allowlist(frozenset())
+    entries = set()
+    for entry in json.loads(path.read_text(encoding="utf-8-sig")):
+        rule, file, reason = entry.get("rule"), entry.get("file"), str(entry.get("reason", "")).strip()
+        if rule not in ALLOWLISTED_RULES or not file or not reason:
+            raise SystemExit(f"{path.name}: every entry needs a rule in {ALLOWLISTED_RULES}, a file and a reason: {entry}")
+        entries.add((rule, file))
+    return Allowlist(frozenset(entries))
+
+
+def _in_view_type(src: Source, index: int) -> bool:
+    for opener in src.enclosing(index):
+        header = src.text[src.starts[src.line_of(opener) - 1]:opener]
+        if re.search(r"\b(?:struct|class|enum|extension)\s", header):
+            return bool(VIEW_TYPE_HEADER.search(header + " {"))
+    return False
+
+
+def violations(rel: Path, source: str, allowlist: Allowlist | None = None) -> list[Finding]:
+    allowlist = allowlist or Allowlist(frozenset())
+    src = Source(source)
+    found: list[Finding] = []
+    views = view_spans(src)
+
+    def add(rule: str, line: int, message: str) -> None:
+        text = src.original[line - 1]
+        if OPT_OUT not in text:
+            found.append(Finding(rule, rel.as_posix(), line, text.strip(), message))
+
+    for lr in LINE_RULES:
+        if not lr.applies(rel.parts, source):
+            continue
+        exempt = lr.allowlisted and allowlist.allows(
+            "perf-timeline-unlisted" if lr.rule.startswith("perf-timeline") else lr.rule, rel)
+        if exempt:
+            continue
+        for i in range(len(src.lines)):
+            code = src.lines[i] if lr.keeps_strings else src.plain[i]
+            m = lr.pattern.search(code)
+            if not m or (lr.skip and lr.skip.search(code)):
+                continue
+            at = src.starts[i] + m.start()
+            if lr.in_view and not any(s < at < e for s, e in views):
+                continue
+            if lr.in_view_type and not _in_view_type(src, at):
+                continue
+            add(lr.rule, i + 1, lr.message)
+    for rule, applies, fn in BLOCK_RULES:
+        if applies(rel.parts, source):
+            for line, message in fn(src):
+                add(rule, line, message)
+    return found
+
+
+def scan(root: Path, allowlist: Allowlist | None = None) -> list[Finding]:
+    allowlist = allowlist if allowlist is not None else load_allowlist(root / ALLOWLIST_NAME)
+    found: list[Finding] = []
+    for path in sorted(root.rglob("*.swift")):
+        rel = path.relative_to(root)
+        if SKIP.intersection(rel.parts):
+            continue
+        found += violations(rel, path.read_text(encoding="utf-8-sig"), allowlist)
+    return found
+
+
+def main(argv: list[str]) -> int:
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    root = Path(args[0]) if args else Path(__file__).resolve().parents[2] / "apps" / "ios"
+    baseline_path = root / BASELINE_NAME
+    found = scan(root)
+    if "--write-baseline" in argv:
+        write_baseline(baseline_path, found)
+        print(f"wrote {len(found)} entries to {baseline_path}")
+        return 0
+    baseline = Counter() if "--no-baseline" in argv else load_baseline(baseline_path)
+    fresh, stale = new_findings(found, baseline)
+    for finding in fresh:
+        print(finding.render())
+    if fresh:
+        print(f"\n{len(fresh)} Mac performance finding(s) (rules: apps/ios/AGENTS.md, Performance). Fix the code; "
+              f'for a justified exception add "// {OPT_OUT}" on the line. Existing findings live in {BASELINE_NAME}; '
+              "never add new ones there.")
+        return 1
+    if stale:
+        print(f"swift-perf: ok; {stale} baseline entr{'y is' if stale == 1 else 'ies are'} fixed "
+              "(run --write-baseline to drop them)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
