@@ -343,15 +343,4 @@ struct ChatInstallModelTests {
         await model.load()
         #expect(model.screen == .unsupported)
     }
-
-    @Test func credentialShapesAndIdentityPreview() throws {
-        #expect(ChatCredentialKind.classify(" \(fakeSecret)\n") == .configAccess)
-        #expect(ChatCredentialKind.classify(fakeRefresh) == .configRefresh)
-        #expect(ChatCredentialKind.classify(fakeAppKey) == .appLevel)
-        #expect(ChatCredentialKind.classify("hello world xoxe-") == nil)
-        let preview = ChatIdentityPreview(name: "Pal the Very Helpful Assistant Bot!", policy: try chatProvider().identityPolicy)
-        #expect(preview.displayName == "Pal the Very Helpful Assistant Bot!")
-        #expect(preview.username == "pal-the-very-helpful")
-        #expect(preview.username.count <= 21)
-    }
 }

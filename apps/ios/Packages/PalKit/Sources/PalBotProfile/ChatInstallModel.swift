@@ -80,22 +80,6 @@ public enum ChatInstallNotice: Hashable, Sendable {
     case notSaved
 }
 
-public enum ChatCredentialKind: Hashable, Sendable {
-    case configAccess
-    case configRefresh
-    case appLevel
-
-    private static let prefixes: [(String, ChatCredentialKind)] = [
-        ("xoxe.xoxp-", .configAccess), ("xoxe-", .configRefresh), ("xapp-", .appLevel),
-    ]
-
-    public static func classify(_ text: String) -> ChatCredentialKind? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count >= 16, !trimmed.contains(where: \.isWhitespace) else { return nil }
-        return prefixes.first { trimmed.hasPrefix($0.0) }?.1
-    }
-}
-
 public struct ChatSetupChecklistItem: Hashable, Sendable, Identifiable {
     public enum Kind: Hashable, Sendable {
         case workspace, createApp, manual(ChatProviderCapability), allow, install
@@ -119,22 +103,6 @@ public struct ChatSpaceRow: Hashable, Sendable, Identifiable {
     public var id: String { space.id }
 }
 
-public struct ChatIdentityPreview: Hashable, Sendable {
-    public var displayName: String
-    public var username: String
-
-    public init(name: String, policy: ChatIdentityPolicyWire) {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        displayName = String(trimmed.prefix(policy.displayNameMax))
-        let slug = trimmed.lowercased().unicodeScalars
-            .map { CharacterSet.alphanumerics.contains($0) && $0.isASCII ? String($0) : "-" }
-            .joined()
-            .split(separator: "-", omittingEmptySubsequences: true)
-            .joined(separator: "-")
-        username = String(slug.prefix(policy.usernameMax)).trimmingCharacters(in: CharacterSet(charactersIn: "-"))
-    }
-}
-
 @MainActor
 @Observable
 public final class ChatInstallModel {
@@ -147,6 +115,7 @@ public final class ChatInstallModel {
     public private(set) var spaces: [ChatSpaceRow] = []
     public private(set) var isWorking = false
     public private(set) var notice: ChatInstallNotice?
+    public private(set) var noticeError: ChatInstallClientError?
     public private(set) var identityUpdate: ChatIdentityUpdateResult?
     public private(set) var loadError: ChatInstallClientError?
     private var unsupported = false
@@ -217,33 +186,6 @@ public final class ChatInstallModel {
         state?.step == .needsAllow && state?.fallbackAction?.actionId == Self.botTokenActionId
     }
 
-    public var checklist: [ChatSetupChecklistItem] {
-        guard let provider, let state else { return [] }
-        let guided = Self.guidedSteps.filter { step in provider.capabilities.contains { $0.capability == step && $0.mode == .guided } }
-        var kinds: [ChatSetupChecklistItem.Kind] = []
-        if provider.requiresConfigCredential { kinds.append(.workspace) }
-        if provider.createsApp { kinds.append(.createApp) }
-        kinds += guided.map { .manual($0) }
-        kinds += [.allow, .install]
-        let current = activeKind(state)
-        let currentIndex = current.flatMap(kinds.firstIndex(of:)) ?? (state.step == .ready ? kinds.count : 0)
-        return kinds.enumerated().map { index, kind in
-            let status: ChatSetupChecklistItem.Status
-            if case .manual(let step) = kind, state.manualStepsDone.contains(step) {
-                status = .done
-            } else if index < currentIndex {
-                status = .done
-            } else {
-                status = index == currentIndex ? .active : .pending
-            }
-            return ChatSetupChecklistItem(kind: kind, status: status)
-        }
-    }
-
-    public func identityPreview(name: String) -> ChatIdentityPreview? {
-        provider.map { ChatIdentityPreview(name: name, policy: $0.identityPolicy) }
-    }
-
     public func load() async {
         loadError = nil
         do {
@@ -276,7 +218,7 @@ public final class ChatInstallModel {
             loadError = nil
         } catch is CancellationError {
         } catch {
-            if snapshot == nil { loadError = ChatInstallClientError(error) } else { notice = .offline }
+            if snapshot == nil { loadError = ChatInstallClientError(error) } else { setNotice(error, as: .offline) }
         }
         if state?.step == .ready { await refreshSpaces() }
     }
@@ -330,15 +272,13 @@ public final class ChatInstallModel {
     public func updateIdentity() async {
         guard let scope, state?.step == .ready else { return }
         isWorking = true
-        notice = nil
+        setNotice()
         defer { isWorking = false }
         do {
             identityUpdate = try await client.updateIdentity(scope)
         } catch is CancellationError {
-        } catch let error as ChatInstallClientError where error.isUnreachable {
-            notice = .offline
         } catch {
-            notice = .notSaved
+            setNotice(error)
         }
     }
 
@@ -374,7 +314,7 @@ public final class ChatInstallModel {
             if result.outcome == .needsInvite { invites[spaceId] = result.nextAction } else { invites[spaceId] = nil }
         } catch is CancellationError {
         } catch {
-            notice = .notSaved
+            setNotice(error, as: .notSaved)
         }
         await refreshSpaces()
     }
@@ -399,11 +339,17 @@ public final class ChatInstallModel {
             }
         } catch is CancellationError {
         } catch {
-            notice = .offline
+            setNotice(error, as: .offline)
         }
     }
 
-    public func dismissNotice() { notice = nil }
+    public func dismissNotice() { setNotice() }
+
+    private func setNotice(_ error: (any Error)? = nil, as fixed: ChatInstallNotice? = nil) {
+        let known = error.map { ChatInstallClientError($0) }
+        noticeError = known
+        notice = known.map { fixed ?? ($0.isUnreachable ? .offline : .notSaved) }
+    }
 
     private var scope: ChatInstallScope? {
         provider.map { ChatInstallScope(provider: $0.providerId, workspace: state?.workspace ?? "") }
@@ -414,27 +360,6 @@ public final class ChatInstallModel {
         return "\(provider) setup for \(botName)"
     }
 
-    private var pendingTask: ChatProviderCapability? {
-        guard let state else { return nil }
-        if let id = ChatProviderCapability(rawValue: state.nextAction.actionId), Self.guidedSteps.contains(id) { return id }
-        return checklist.lazy.compactMap { item -> ChatProviderCapability? in
-            if case .manual(let step) = item.kind, item.status != .done { return step }
-            return nil
-        }.first
-    }
-
-    private func activeKind(_ state: ChatSetupStateWire) -> ChatSetupChecklistItem.Kind? {
-        switch state.step {
-        case .needsCredential: .workspace
-        case .creatingApp: .createApp
-        case .needsManualStep:
-            ChatProviderCapability(rawValue: state.nextAction.actionId).map { .manual($0) }
-        case .needsAllow, .needsOwner: .allow
-        case .installing: .install
-        default: nil
-        }
-    }
-
     private func adopt(_ result: ChatInstallStatusResult) {
         if let current = state, result.state.revision < current.revision { return }
         snapshot = result
@@ -442,17 +367,15 @@ public final class ChatInstallModel {
 
     private func mutate(_ work: @escaping @MainActor () async throws -> Void) async {
         isWorking = true
-        notice = nil
+        setNotice()
         defer { isWorking = false }
         do {
             try await work()
         } catch is CancellationError {
             return
         } catch ChatInstallClientError.staleRevision {
-        } catch let error as ChatInstallClientError where error.isUnreachable {
-            notice = .offline
         } catch {
-            notice = .notSaved
+            setNotice(error)
         }
         await refresh()
     }

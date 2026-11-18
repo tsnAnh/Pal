@@ -131,7 +131,7 @@ private struct ConnectAppsPresentations: ViewModifier {
                     .macSheetFrame()
             }
             .sheet(isPresented: $model.showsSlackPicker) {
-                SlackBotPicker(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
+                SlackBotChoice(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
                     .macSheetFrame()
             }
             .sheet(item: $model.oauthClientSheet) { sheet in

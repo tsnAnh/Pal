@@ -61,11 +61,18 @@ struct StepFlowChecklist: View {
     private func checklistRow(_ row: StepFlowEngine.Row) -> some View {
         HStack(spacing: 9) {
             marker(row)
-            Text(row.title)
-                .hermesText(.rowSubtitle)
-                .fontWeight(row.state == .current ? .semibold : .regular)
-                .foregroundStyle(row.state == .upcoming ? PalTokens.textTertiary : row.state == .done ? PalTokens.textSecondary : PalTokens.textPrimary)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(row.title)
+                    .hermesText(.rowSubtitle)
+                    .fontWeight(row.state == .current ? .semibold : .regular)
+                    .foregroundStyle(row.state == .upcoming ? PalTokens.textTertiary : row.state == .done ? PalTokens.textSecondary : PalTokens.textPrimary)
+                    .lineLimit(2)
+                if row.isAutomatic {
+                    Text("Pal does this")
+                        .font(.system(size: 11))
+                        .foregroundStyle(PalTokens.textTertiary)
+                }
+            }
             Spacer(minLength: 0)
         }
         .padding(8)
@@ -141,5 +148,29 @@ struct StepFlowCalmView: View {
         .padding(PalMetrics.screenMargin)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(copy.mark == .success ? "stepFlowSuccess" : "stepFlowWaiting")
+    }
+}
+
+struct SetupHeader: View {
+    let title: String
+    let close: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .hermesText(.sheetTitle)
+                .foregroundStyle(PalTokens.textPrimary)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("stepFlowTitle")
+            Spacer()
+            Button(role: .close, action: close)
+                .buttonStyle(.glass(PalGlass.style(interactive: true, colorScheme: colorScheme)))
+                .accessibilityIdentifier("stepFlowClose")
+        }
+        .padding(.horizontal, PalMetrics.screenMargin)
+        .padding(.vertical, PalMetrics.captionToCardGap)
     }
 }
