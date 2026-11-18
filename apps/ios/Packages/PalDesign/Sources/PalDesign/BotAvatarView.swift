@@ -50,11 +50,11 @@ public struct BotAvatarView: View {
     public var body: some View {
         let content = cache.resolve(spec, colorScheme, eyeInk: eyeInk)
         let activity = self.activity
-        let clock = resolvedClock(solid: content.isSolid)
+        let resolved = resolvedClock(solid: content.isSolid)
         AvatarStage(
             content: content,
             size: size,
-            clock: activity.ticks(settling: clock.isSettling(at: Date())) ? clock : nil,
+            clock: activity.ticks(settling: resolved.isSettling(at: Date())) ? resolved : nil,
             staticPose: AvatarMotion.staticPose(mood),
             frameInterval: activity.frameInterval,
             outline: outline,
