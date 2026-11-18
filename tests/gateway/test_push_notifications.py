@@ -13,6 +13,7 @@ import pytest
 
 from agent import secret_scope
 from gateway import device_registry, push_apns, push_notify
+from gateway.reach_presence import AttentionState, slot_of
 from gateway.session_controls import AuthorityConnection
 from hermes_state_keys import CRON_PRINCIPAL_ID
 from tests.gateway.devices_harness import (
@@ -148,6 +149,21 @@ async def test_a_mac_app_with_a_push_token_is_alerted_like_a_phone_and_suppresse
     await finish_turn(authority, mac, "turn-2")
     assert len(stub.requests) == 1
     assert [target.device_id for target in device_registry.push_targets(root)] == [MAC_APP["device_id"]]
+    await mac.close()
+
+
+@pytest.mark.asyncio
+async def test_a_mac_reporting_background_is_alerted_even_with_recent_input(root, stub):
+    write_profile_config(root, ENABLED)
+    configure_apns(root, stub)
+    authority = await make_authority(root, answer=answer)
+    mac = await phone_with_push(authority, device=MAC_APP)
+    await call(mac, "client.attention", {"state": "foreground"}, rid=5)
+    await call(mac, "client.attention", {"state": "background"}, rid=6)
+    await finish_turn(authority, mac)
+    slot = slot_of(next(iter(authority.events.values())))
+    assert slot.last_input_at is not None and slot.attention is AttentionState.BACKGROUND
+    assert len(stub.requests) == 1
     await mac.close()
 
 

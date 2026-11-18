@@ -29,6 +29,7 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
     func attach(presence: ReachPresence, open: @escaping (PushTarget) -> Void) {
         self.presence = presence
         self.open = open
+        PlatformApplication.followActivity(of: presence)
         if let pendingTap {
             self.pendingTap = nil
             open(pendingTap)
