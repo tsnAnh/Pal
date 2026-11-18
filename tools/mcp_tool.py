@@ -27,7 +27,6 @@ from tools.mcp_tool_config import _npx_cached_bin, _packaged_npx_entry
 from tools.mcp_tool_sampling import ElicitationHandler, SamplingHandler
 from tools.mcp_tool_transport import MCPServerTransportMixin
 from tools.mcp_tool_server_run import MCPServerRunMixin
-from tools.mcp_tool_device import MCPServerDeviceMixin
 from tools.mcp_tool_health import MCPServerHealthMixin
 
 
@@ -309,7 +308,7 @@ async def _paginate_full_list(list_method, items_attr: str, server_name: str,
 
 # ---- Server task -- each MCP server lives in one long-lived asyncio Task ----
 
-class MCPServerTask(MCPServerRunMixin, MCPServerTransportMixin, MCPServerDeviceMixin, MCPServerHealthMixin):
+class MCPServerTask(MCPServerRunMixin, MCPServerTransportMixin, MCPServerHealthMixin):
     """One MCP server connection in one long-lived asyncio Task (the transport's anyio cancel
     scopes must enter/exit in the same Task). Run state machine, transport bring-up and
     keepalive/liveness live in the three mixins."""
@@ -540,10 +539,7 @@ def _bump_server_error(server_name: str, *, application: bool = False) -> None:
     """Count a failure; at the threshold (re)stamp the breaker-open time. Keyed by the calling
     scope's connection so one profile's failing server never opens another profile's breaker.
     *application*: the call completed and the payload was an error (transport is fine)."""
-    from tools.mcp_tool_device import device_offline
     from tools.mcp_tool_scope import _resolve_server_key
-    if device_offline(server_name):
-        return
     key = _resolve_server_key(server_name)
     n = _server_error_counts.get(key, 0) + 1
     _server_error_counts[key] = n

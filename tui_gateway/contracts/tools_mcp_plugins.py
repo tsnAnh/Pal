@@ -567,6 +567,7 @@ class McpProbeTool(Result):
 class McpTestFailureReason(WireEnum):
     unreachable = "unreachable"
     auth_refused = "auth_refused"
+    not_mcp = "not_mcp"
     server_error = "server_error"
 
 

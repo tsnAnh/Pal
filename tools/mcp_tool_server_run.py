@@ -64,7 +64,7 @@ class MCPServerRunMixin:
         below the server's session TTL) so idle TCP/session state never goes stale (#17003);
         stdio does so only when explicitly configured. A keepalive failure triggers a reconnect.
         """
-        is_remote = self._transport_kind() != "stdio"
+        is_remote = self._is_http()
         configured = self._config.get("keepalive_interval")
         keepalive_interval = None
         if is_remote or configured is not None:
@@ -356,7 +356,7 @@ class MCPServerRunMixin:
                             reset_secret_scope(scope_token)
                 rebuild = True
                 self._auth_park = None
-                run_transport = self._transport_runner()
+                run_transport = self._run_http if self._is_http() else self._run_stdio
                 self._resolved_identity = None  # the transport publishes the inputs it connects with
                 if not await self._on_clean_return(await run_transport(config), budget):
                     break
@@ -536,10 +536,7 @@ class MCPServerRunMixin:
         if not _errors._is_auth_error(root):
             return
         from hermes_constants import get_hermes_home
-        if self._is_device():
-            from tools.mcp_tool_device import DeviceAuth
-            storage = DeviceAuth(get_hermes_home(), self.name)
-        elif self._auth_type == "oauth":
+        if self._auth_type == "oauth":
             from tools.mcp_oauth import HermesTokenStorage
             storage = HermesTokenStorage(self.name, hermes_home=get_hermes_home())
         else:

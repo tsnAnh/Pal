@@ -167,14 +167,6 @@ private extension View {
     }
 }
 
-extension DeviceMcpServer {
-    var displayName: String {
-        switch self {
-        case .t3code: String(localized: "T3 Code")
-        }
-    }
-}
-
 struct ConnectionRequestCard: View {
     @Environment(\.hermesTheme) private var theme
 
@@ -211,12 +203,8 @@ struct ConnectionRequestCard: View {
         }
     }
 
-    private static func name(of target: ConnectionTarget) -> String {
-        DeviceMcpServer(rawValue: target.name)?.displayName ?? target.name
-    }
-
     private func prompt(for target: ConnectionTarget) -> String {
-        let name = Self.name(of: target)
+        let name = target.name
         return target.action == "enable" ? String(localized: "Let this bot use \(name)?") : String(localized: "Set up \(name)?")
     }
 
@@ -290,7 +278,7 @@ struct ConnectionRequestCard: View {
         let decisions = card.decisions(for: target, now: now)
         let busy = answering.contains(Self.answerKey(opID: card.operation.opID, target: target.name))
         return VStack(alignment: .leading, spacing: 8) {
-            Text(decisions.contains(.allow) || decisions.contains(.deny) ? prompt(for: target) : Self.name(of: target))
+            Text(decisions.contains(.allow) || decisions.contains(.deny) ? prompt(for: target) : target.name)
                 .font(.body)
                 .foregroundStyle(Color(theme.palette.textPrimary))
                 .accessibilityIdentifier("connectionState-\(target.name)")

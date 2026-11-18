@@ -18,7 +18,6 @@ let package = Package(
         .library(name: "PalDevice", targets: ["PalDevice"]),
         .library(name: "PalConnect", targets: ["PalConnect"]),
         .library(name: "PalSettings", targets: ["PalSettings"]),
-        .library(name: "PalT3Code", targets: ["PalT3Code"]),
         .library(name: "PalKanban", targets: ["PalKanban"]),
     ],
     targets: [
@@ -47,15 +46,11 @@ let package = Package(
         ),
         .target(name: "PalSettings", dependencies: ["PalProtocol", "PalTransport"]),
         .target(name: "PalKanban", dependencies: ["PalProtocol", "PalTransport"]),
-        .target(
-            name: "PalT3Code",
-            dependencies: ["PalProtocol", "PalDiagnostics", "PalREST", "PalAuth", "PalConnect", "PalDevice"]
-        ),
         .testTarget(
             name: "PalKitTests",
             dependencies: [
                 "PalProtocol", "PalDiagnostics", "PalREST", "PalAuth", "PalTransport", "PalClient",
-                "PalChat", "PalRoster", "PalBotProfile", "PalRFB", "PalDevice", "PalConnect", "PalSettings", "PalT3Code", "PalKanban",
+                "PalChat", "PalRoster", "PalBotProfile", "PalRFB", "PalDevice", "PalConnect", "PalSettings", "PalKanban",
             ]
         ),
     ],

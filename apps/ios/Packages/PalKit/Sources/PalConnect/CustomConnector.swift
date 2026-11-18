@@ -279,31 +279,6 @@ public struct ValidatedConnector: Sendable, Equatable {
     public var clientID: String?
 }
 
-enum PrivateHost {
-    static func isPrivate(_ rawHost: String) -> Bool {
-        let host = rawHost.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "[]"))
-        if host == "localhost" || host.hasSuffix(".local") { return true }
-        if host == "::1" || host == "0:0:0:0:0:0:0:1" { return true }
-        guard let octets = ipv4(host) else { return false }
-        switch (octets[0], octets[1]) {
-        case (127, _), (10, _), (192, 168): return true
-        case (172, 16...31): return true
-        default: return false
-        }
-    }
-
-    private static func ipv4(_ host: String) -> [Int]? {
-        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 4 else { return nil }
-        var octets: [Int] = []
-        for part in parts {
-            guard !part.isEmpty, part.count <= 3, part.allSatisfy(\.isASCII), part.allSatisfy(\.isNumber), let value = Int(part), value <= 255 else { return nil }
-            octets.append(value)
-        }
-        return octets
-    }
-}
-
 public enum ConnectorFailure: Error, Sendable, Equatable, CustomStringConvertible {
     case unreachable
     case authRefused
@@ -366,7 +341,7 @@ extension ConnectorFailure {
         }
         if let reason = result["reason"]?.stringValue?.lowercased() {
             switch reason {
-            case "unreachable": return .unreachable
+            case "unreachable", "not_mcp": return .unreachable
             case "auth_refused": return .authRefused
             case "server_error": return .serverError
             default: break
@@ -396,59 +371,5 @@ extension ConnectorFailure {
             guard let name = entry["name"]?.stringValue, !name.isEmpty else { return nil }
             return ConnectorTool(name: name, description: entry["description"]?.stringValue ?? "")
         }
-    }
-}
-
-public enum CustomConnectorPhase: Sendable, Equatable {
-    case idle
-    case validating
-    case saving
-    case connecting
-    case connected([ConnectorTool])
-    case failed(ConnectorFailure)
-
-    public var isInFlight: Bool {
-        switch self {
-        case .validating, .saving, .connecting: true
-        case .idle, .connected, .failed: false
-        }
-    }
-}
-
-public enum CustomConnectorEvent: Sendable, Equatable {
-    case submit
-    case validated
-    case saved
-    case connected([ConnectorTool])
-    case failed(ConnectorFailure)
-    case reset
-}
-
-public struct CustomConnectorMachine: Sendable, Equatable {
-    public private(set) var phase: CustomConnectorPhase
-
-    public init(phase: CustomConnectorPhase = .idle) {
-        self.phase = phase
-    }
-
-    @discardableResult
-    public mutating func send(_ event: CustomConnectorEvent) -> Bool {
-        switch (phase, event) {
-        case (.idle, .submit), (.failed, .submit), (.connected, .submit):
-            phase = .validating
-        case (.validating, .validated):
-            phase = .saving
-        case (.saving, .saved):
-            phase = .connecting
-        case (.connecting, .connected(let tools)):
-            phase = .connected(tools)
-        case (.validating, .failed(let failure)), (.saving, .failed(let failure)), (.connecting, .failed(let failure)):
-            phase = .failed(failure)
-        case (.idle, .reset), (.failed, .reset), (.connected, .reset):
-            phase = .idle
-        default:
-            return false
-        }
-        return true
     }
 }

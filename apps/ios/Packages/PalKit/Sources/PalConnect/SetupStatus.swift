@@ -8,6 +8,8 @@ public enum SetupStatusClass: String, Sendable, CaseIterable, Equatable {
     case forbidden
     case signInInProgress = "oauth_in_progress"
     case invalidRedirect = "invalid_redirect_uri"
+    case serverUnreachable = "server_unreachable"
+    case notMcpServer = "not_mcp"
     case internalFault = "internal"
 
     static let byCode: [String: SetupStatusClass] = [
@@ -19,6 +21,8 @@ public enum SetupStatusClass: String, Sendable, CaseIterable, Equatable {
         "forbidden": .forbidden, "not_owner": .forbidden,
         "oauth_in_progress": .signInInProgress,
         "invalid_redirect_uri": .invalidRedirect, "invalid_client_metadata": .invalidRedirect,
+        "server_unreachable": .serverUnreachable, "mcp_unreachable": .serverUnreachable,
+        "not_mcp": .notMcpServer,
     ]
 
     public static func classify(code: String) -> SetupStatusClass {
@@ -77,6 +81,14 @@ public struct SetupStatus: Sendable, Equatable {
             title = String(localized: "\(name) would not accept this \(device)'s address")
             reason = String(localized: "\(name) only allows sign-in on your own computer, and Pal could not open one here.")
             actionTitle = String(localized: "Try again")
+        case .serverUnreachable:
+            title = String(localized: "Pal could not reach \(name)")
+            reason = String(localized: "Check that it is running and that its address is still right.")
+            actionTitle = String(localized: "Enter the address again")
+        case .notMcpServer:
+            title = String(localized: "\(name) did not answer like an MCP server")
+            reason = String(localized: "Check the address and the port.")
+            actionTitle = String(localized: "Enter the address again")
         case .internalFault:
             title = String(localized: "Pal could not finish")
             reason = String(localized: "Something on your Pal failed. The code below helps support find it.")
@@ -86,7 +98,7 @@ public struct SetupStatus: Sendable, Equatable {
 
     public var symbol: String {
         switch kind {
-        case .offline: "wifi.slash"
+        case .offline, .serverUnreachable: "wifi.slash"
         case .gatewayOutdated: "arrow.down.circle"
         case .forbidden: "lock"
         default: "exclamationmark.triangle"

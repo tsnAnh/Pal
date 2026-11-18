@@ -107,8 +107,6 @@ async def respond(connection, ref, params):
 
 
 def handlers(connection):
-    from gateway.session_device_mcp_controls import handlers as mcp_handlers
     return {'device_connectors.list': partial(list_connectors, connection),
             'device_connectors.set': partial(set_connector, connection),
-            'device.tool.respond': partial(respond, connection),
-            **mcp_handlers(connection)}
+            'device.tool.respond': partial(respond, connection)}

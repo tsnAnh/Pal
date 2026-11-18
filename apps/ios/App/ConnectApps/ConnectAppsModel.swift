@@ -87,6 +87,8 @@ final class ConnectAppsModel {
     var oauthClientSheet: OAuthClientSheetModel?
     var showsSlackPicker = false
     var setupGuideSheet: SetupGuideModel?
+    var t3Flow: T3FlowSheet?
+    var t3Reach: T3Reach?
     let google: GoogleWorkspaceModel
     let slack: SlackBotsModel
     let slackWizard: SlackWizardContext
@@ -173,6 +175,7 @@ final class ConnectAppsModel {
             catalog = try await service.load()
             phase = .ready
             surfaces.remember(catalog, catalogKey)
+            Task { await probeT3Code() }
         } catch {
             if catalog.apps.isEmpty { phase = .unavailable }
         }

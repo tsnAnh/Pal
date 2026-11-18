@@ -208,10 +208,30 @@ def _print_tools(tools: list[tuple[str, str]], width: int, desc_max: int) -> Non
         print(f"    {color(tool_name, Colors.GREEN):{width}s} {short}")
 
 
+RETIRED_DEVICE_TRANSPORT = "device"
+
+
+def drop_retired_device_servers(config: dict) -> dict:
+    from hermes_cli.shared_catalog import effective_mcp_servers
+
+    retired = [name for name, cfg in effective_mcp_servers(config.get("mcp_servers")).items()
+               if isinstance(cfg, dict) and cfg.get("transport") == RETIRED_DEVICE_TRANSPORT and "url" not in cfg]
+    if not retired:
+        return config
+    # A leftover entry would lend its transport to a fresh add of the same name (mcp.servers.add repairs it in place).
+    try:
+        dropped = sum(_remove_mcp_server(name, everywhere=True) for name in retired)
+    except ProfileAdminDenied:
+        logger.warning("Retired device MCP servers stay in config: this bot cannot change shared servers")
+        return config
+    logger.info("Removed %d retired device MCP server entries from config", dropped)
+    return load_config()
+
+
 def _get_mcp_servers(config: Optional[dict] = None) -> dict[str, dict]:
     """Return the ``mcp_servers`` dict from config, or empty dict."""
     if config is None:
-        config = load_config()
+        config = drop_retired_device_servers(load_config())
     from hermes_cli.shared_catalog import visible_mcp_servers
     return visible_mcp_servers(config.get("mcp_servers"))
 

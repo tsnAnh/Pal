@@ -179,7 +179,7 @@ struct StepFlowView: View {
         switch failure.kind {
         case .forbidden:
             close()
-        case .vendorRefusedValue:
+        case .vendorRefusedValue, .serverUnreachable, .notMcpServer:
             model.dismissFailure()
         default:
             model.dismissFailure()
