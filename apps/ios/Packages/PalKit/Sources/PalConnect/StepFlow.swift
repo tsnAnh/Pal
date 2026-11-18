@@ -69,6 +69,7 @@ extension SetupFieldShape {
     private static func spelledOut(_ count: Int) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .spellOut
+        formatter.locale = Locale(identifier: "en")
         return formatter.string(from: NSNumber(value: count)) ?? String(count)
     }
 
@@ -213,7 +214,7 @@ public struct StepFlowEngine: Sendable, Equatable {
     private var isStepComplete: Bool {
         switch current.kind {
         case .confirm(let items): items.allSatisfy { confirmed.contains($0.id) }
-        case .switches(let groups): groups.allSatisfy { !$0.needsOneOn || $0.switches.contains { isOn($0.id) } }
+        case .switches(let groups): !groups.isEmpty && groups.allSatisfy { !$0.needsOneOn || $0.switches.contains { isOn($0.id) } }
         default: current.fields.allSatisfy { shape(of: $0.id) == .valid }
         }
     }
@@ -270,6 +271,9 @@ public struct StepFlowEngine: Sendable, Equatable {
         var replaced = steps[position]
         replaced.kind = kind
         guard replaced.isSuccess == steps[position].isSuccess, replaced.isChecklistRow == steps[position].isChecklistRow else { return false }
+        if case .switches(let old) = steps[position].kind {
+            for item in old.flatMap(\.switches) { switches[item.id] = nil }
+        }
         steps[position] = replaced
         seedSwitches(kind)
         return true

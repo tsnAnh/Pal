@@ -59,7 +59,9 @@ public final class StepFlowModel {
             await persist()
         case .work:
             if case .openAndCheck(let open) = engine.current.kind, engine.isPrimaryEnabled { openPage(open.link.url) }
+            let before = engine.index
             await runCurrentStep()
+            guard engine.index != before else { return }
         case .finish:
             return
         case .none:
@@ -82,7 +84,9 @@ public final class StepFlowModel {
 
     public func recheck() async {
         guard case .openAndCheck = engine.current.kind else { return }
+        let before = engine.index
         await runCurrentStep()
+        guard engine.index != before else { return }
         await runAutomaticSteps()
     }
 

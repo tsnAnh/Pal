@@ -122,6 +122,18 @@ struct DiscordFlowStepTests {
         #expect(!engine.isOn("elsewhere"))
     }
 
+    @Test func theSwitchesStepCannotFinishBeforeItsServersLoadAndForgetsServersTheBotLeft() throws {
+        var engine = try #require(DiscordFlow.engine(resume: SetupProgress(stepID: "access", saved: ["token"])))
+        #expect(!engine.isPrimaryEnabled)
+        let first = SetupSwitchGroup(id: "servers", switches: [SetupSwitch(id: "guild.111", title: "Team", isOn: true)], needsOneOn: true)
+        engine.replaceKind(of: "access", with: .switches(groups: [first]))
+        #expect(engine.isPrimaryEnabled)
+        let second = SetupSwitchGroup(id: "servers", switches: [SetupSwitch(id: "guild.222", title: "Friends")], needsOneOn: true)
+        engine.replaceKind(of: "access", with: .switches(groups: [second]))
+        #expect(engine.workValues["guild.111"] == nil && engine.workValues["guild.222"] == "0")
+        #expect(!engine.isPrimaryEnabled)
+    }
+
     @Test func aStepCannotBeTurnedIntoTheEndScreenOrChangeTheRowCount() throws {
         var engine = try #require(DiscordFlow.engine(resume: nil))
         let toEnd = engine.replaceKind(of: "bot", with: .success(title: "x", body: ""))
@@ -223,7 +235,10 @@ struct DiscordFlowRunnerTests {
         let rpc = CustomRPC(["connectors.catalog": { _ in ["connectors": [discordFlowRow()]] }])
         let step = try #require(DiscordFlow.steps().first { $0.id == DiscordFlow.StepID.invite })
         let kind = try #require(try await discordFlowRunner(rpc).prepare(step))
-        guard case .openAndCheck(let open) = kind else { return Issue.record("expected an invite step") }
+        guard case .openAndCheck(let open) = kind else {
+            Issue.record("expected an invite step")
+            return
+        }
         #expect(open.link.url.absoluteString == discordInviteRead && open.link.label == "Open invite link")
         #expect(open.copies.map(\.value) == [discordInviteRead, discordInvitePost])
     }
@@ -244,7 +259,10 @@ struct DiscordFlowRunnerTests {
         let rpc = CustomRPC(["connectors.discord.guilds": { _ in discordGuilds }])
         let step = try #require(DiscordFlow.steps().first { $0.id == DiscordFlow.StepID.access })
         let kind = try #require(try await discordFlowRunner(rpc).prepare(step))
-        guard case .switches(let groups) = kind else { return Issue.record("expected switches") }
+        guard case .switches(let groups) = kind else {
+            Issue.record("expected switches")
+            return
+        }
         let readOnly = try #require(groups.first?.switches.first)
         #expect(readOnly.isOn && readOnly.confirmTurningOff?.title == "Let the bot post?" && readOnly.confirmTurningOff?.confirmTitle == "Allow posting")
         let servers = try #require(groups.last)

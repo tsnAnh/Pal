@@ -126,7 +126,7 @@ struct StepFlowView: View {
         if engine.phase == .working, let title = engine.current.workingTitle {
             return StepFlowCalmCopy(mark: .spinner, title: title, body: engine.current.workingBody)
         }
-        switch engine.current.kind {
+        return switch engine.current.kind {
         case .waiting(let title, let body): StepFlowCalmCopy(mark: .spinner, title: title, body: body)
         case .success(let title, let body): StepFlowCalmCopy(mark: .success, title: title, body: body)
         case .browserRoundTrip(let title, let body) where engine.phase == .working:
