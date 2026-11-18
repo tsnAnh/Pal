@@ -62,6 +62,23 @@ Glass is a control and navigation layer floating above content, never the conten
 
 Apple sources: HIG Materials, Toolbars, Search fields, Color; "Adopting Liquid Glass"; "Applying Liquid Glass to custom views"; `ButtonRole.close`; WWDC25 219, 323, 356. Reduce Transparency and Increase Contrast are automatic for system glass: never branch on them to swap glass.
 
+## Rule 6: Mac performance mistakes are lint-enforced
+
+A mistake found while tuning the Mac app becomes a type, a lint rule or a test, never only a note. Run `python scripts/check --only swift-perf` on every change under `apps/ios` before calling it ready; a finding names the file, line, rule id and the replacement. Today's findings sit in `apps/ios/.perf-lint-baseline.json`: new code never adds to it, and the unit that fixes a finding deletes its entry (`python scripts/ci/check_swift_perf.py --write-baseline`). Files allowed to use `TimelineView`, `onContinuousHover` or a single-instance window-scoped `NSEvent` monitor, each with a reason, sit in `apps/ios/.perf-lint-allowlist.json`. Exception: `// perf-lint: ok <reason>` on the line. Each perf fix unit carries the rule for its own class in the same PR.
+
+| Class | Rule | Enforced by | Status |
+|---|---|---|---|
+| A. Parse or format in a View body | Markdown is parsed once and passed as `ParsedMarkdown` (`ParsedMarkdown.cached(_:)` or the model) | type: `MarkdownView(parsed:)` takes no raw String or `MarkdownDocument` | enforced now |
+| A | No `MarkdownDocument(parsing:)`, `AttributedString(markdown:)`, `Calendar.current`, `.formatted(` in a body or `@ViewBuilder` | lint `perf-body-parse`, `perf-body-format` | enforced now |
+| A | Round or redraw an image once, when it is cached | lint `perf-redraw-per-call` | enforced now |
+| C. Sync disk, JSON or queue on the main actor | `Data(contentsOf:)`, `String(contentsOf:)`, `JSONEncoder()`, `JSONDecoder()`, `JSONSerialization` in `App/` or `@MainActor` files; `queue.sync` | lint `perf-main-disk-read`, `perf-main-json`, `perf-queue-sync`; use `CacheStore.loadDetached` | enforced now |
+| E. Unbounded animation or tracking | `TimelineView` and `onContinuousHover` only in the allowlist; schedule no faster than 1/30 s; no `.animation(_, value:)` on the Mac shell root | lint `perf-timeline-unlisted`, `perf-timeline-interval`, `perf-hover-unlisted`, `perf-animation-container` | enforced now |
+| F. Non-lazy or per-row machinery | `LazyVStack` for rows in a `ScrollView`; one shared `NSEvent` monitor; one `onGeometryChange` on the container; `@State private var model = ...` plus `.task`, not a model built in a View init or body | lint `perf-eager-stack`, `perf-monitor-per-view`, `perf-geometry-per-row`, `perf-state-model-init`, `perf-model-in-body` | enforced now |
+| G. Expensive static effects | `shadow` radius under 24; no interactive `palGlass` over an opaque `.background(` | lint `perf-shadow-radius`, `perf-glass-over-fill` | enforced now |
+| B. Observable model written without an equality guard | one guarded setter or snapshot-diff helper; no direct snapshot-field assignment in an `@Observable` model (`RosterModel.apply` live, capabilities, bots; `ChatModel.recomputeFind`) | lint plus test: applying the same snapshot twice causes zero observation notifications | pending: lands with perf-roster |
+| D. Work per event instead of per frame | snapshot coalescing in one place (streaming text re-parsed per delta, per-token copy in `Transcript.appendDelta`, full rebuild per snapshot) | call-count test | pending: lands with perf-streaming |
+| H. Resource lifetimes | per-request sleeping Tasks cancelled (`GatewayConnection`); every observer or monitor added has a paired removal | lint or test | pending: lands with perf-disk-shell |
+
 ## Tests
 
 - `swift test` in `apps/ios/Packages/PalKit` covers `ConnectedServices` and the source scan.

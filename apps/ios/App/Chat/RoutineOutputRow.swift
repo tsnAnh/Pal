@@ -29,7 +29,7 @@ struct RoutineOutputRow: View {
         VStack(alignment: .leading, spacing: 4) {
             RoutineSenderLine(jobName: routine.jobName, time: routine.time)
             AssistantBubble(
-                text: routine.text, document: routine.body.document, failureLead: routine.failureLead,
+                text: routine.text, parsed: routine.body, failureLead: routine.failureLead,
                 highlight: highlight, isCurrentMatch: isCurrentMatch
             )
         }

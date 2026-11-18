@@ -3,7 +3,7 @@ import PalDesign
 import SwiftUI
 
 struct MarkdownView: View {
-    let document: MarkdownDocument
+    let parsed: ParsedMarkdown
     let highlight: String
     let isCurrentMatch: Bool
     var isStreaming: Bool = false
@@ -12,7 +12,7 @@ struct MarkdownView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(document.layoutItems) { item in
+            ForEach(parsed.document.layoutItems) { item in
                 switch item {
                 case .block(let block):
                     blockView(block)
