@@ -45,14 +45,6 @@ public enum KanbanPresentation {
         }
     }
 
-    public static func evidenceSource(_ source: String) -> String {
-        switch source {
-        case "github", "local-file": "Checked by gateway"
-        case "attestation": "Attested by producer"
-        default: source.isEmpty ? unknown : source
-        }
-    }
-
     public static func evidenceTitle(_ kind: KanbanEvidenceKind) -> String {
         switch kind {
         case .executionRef: "Execution reference"
@@ -117,6 +109,15 @@ public enum KanbanPresentation {
             if days < 365 { return "\(days / 30)mo" }
             return "\(days / 365)y"
         }
+    }
+
+    public static func pullRequestRow(_ url: URL) -> (title: String, subtitle: String) {
+        let parts = url.pathComponents.filter { $0 != "/" }
+        if url.host?.lowercased() == "github.com", parts.count >= 4, parts[2] == "pull", parts[3].allSatisfy(\.isNumber) {
+            return ("#\(parts[3]) · \(parts[1])", "\(parts[0])/\(parts[1])")
+        }
+        let path = url.path.drop { $0 == "/" }
+        return (url.host ?? url.absoluteString, path.isEmpty ? url.absoluteString : String(path))
     }
 
     public static func ageSource(_ card: KanbanCard) -> Int? {

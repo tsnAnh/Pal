@@ -1,35 +1,31 @@
 import XCTest
-#if os(macOS)
-import AppKit
-#else
-import UIKit
-#endif
 
 @MainActor
 final class ChatInstallE2ETests: BotProfileTestCase {
     private static let scripted = ["-hermes-test-chat-install"]
     private static let filler = String(repeating: "TEST", count: 4)
+    private static let access = ["xoxe.xoxp", "1", filler].joined(separator: "-")
+    private static let refresh = ["xoxe", "1", filler].joined(separator: "-")
+    private static let appKey = ["xapp", "1", filler].joined(separator: "-")
 
-    private func copyToClipboard(_ parts: [String], separator: String) {
-        let text = parts.joined(separator: separator)
-        #if os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        #else
-        UIPasteboard.general.string = text
-        #endif
-    }
-
-    private func openWizard(_ app: XCUIApplication) {
+    private func openSetup(_ app: XCUIApplication) {
         openProfile(app, Self.primarySlug)
         element(app, "profileSlackRow").tap()
-        waitFor(element(app, "chatInstallScreen"), timeout: 30, "wizard screen")
+        waitFor(element(app, "stepFlow"), timeout: 30, "setup screen")
     }
 
     private func primary(_ app: XCUIApplication, _ label: String) {
-        let button = element(app, "chatInstallPrimary")
+        let button = element(app, "stepFlowPrimary")
         waitUntil(20, "primary reads \(label)") { button.exists && button.label.contains(label) && button.isEnabled }
         button.hit()
+    }
+
+    private func type(_ app: XCUIApplication, _ field: String, _ text: String) {
+        let input = app.secureTextFields["stepFlowField-\(field)"]
+        waitFor(input, timeout: 20, "\(field) field")
+        input.tap()
+        input.typeText(text)
+        waitUntil(10, "\(field) reads as valid") { element(app, "stepFlowHint-\(field)").label == "Looks right" }
     }
 
     private func assertOneWayOut(_ app: XCUIApplication, _ screen: String) {
@@ -39,81 +35,86 @@ final class ChatInstallE2ETests: BotProfileTestCase {
             XCTAssertLessThanOrEqual(bar.buttons.count, 1, "\(screen) has one back or close control")
         }
         #endif
-        XCTAssertFalse(app.buttons["xmark"].exists, "\(screen) draws no custom close")
         XCTAssertFalse(app.buttons["chevron.left"].exists, "\(screen) draws no custom back")
     }
 
-    func testWizardWalksFromNotStartedToReadyWithResumeAndPrivateInvite() throws {
+    func testSetupWalksFromFirstRunToTheSettingsPageWithResumeAndPrivateInvite() throws {
         var app = signedInApp(connectedServices: ["slack"], extraArguments: Self.scripted + ["-hermes-test-chat-install-reset"])
-        openWizard(app)
-        waitFor(element(app, "chatInstallIntroSteps"), timeout: 20, "intro steps")
-        XCTAssertTrue(element(app, "chatInstallPreview").exists, "bot preview")
-        XCTAssertTrue(element(app, "chatInstallAdvanced").exists, "advanced paste tokens fallback")
-        assertOneWayOut(app, "intro")
-        shot(app, "chat-install-intro")
-        primary(app, "Create")
-
-        waitFor(element(app, "chatInstallCredentialSteps"), timeout: 20, "credential steps")
-        element(app, "chatInstallOpenSlackApps").hit()
-        let opened = element(app, "externalLinkProbe")
-        waitUntil(20, "slack apps page opened") { opened.label.hasPrefix("https://api.slack.com/apps") }
-        assertOneWayOut(app, "credential")
-        copyToClipboard(["xoxe.xoxp", "1", Self.filler], separator: "-")
-        element(app, "chatInstallPasteCredential").hit()
-        waitUntil(10, "access token slot filled") { element(app, "chatInstallAccessSlot").value as? String == "Added" }
-        copyToClipboard(["xoxe", "1", Self.filler], separator: "-")
-        element(app, "chatInstallPasteCredential").hit()
-        waitUntil(10, "refresh token slot filled") { element(app, "chatInstallRefreshSlot").value as? String == "Added" }
-        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", Self.filler)).firstMatch.exists, "no token text on screen")
-        shot(app, "chat-install-credential")
-        primary(app, "Use these tokens")
-
-        waitFor(element(app, "chatInstallCheck-createApp"), timeout: 20, "checklist")
-        waitFor(element(app, "chatInstallTask-set_icon"), timeout: 20, "avatar task after app created event")
-        XCTAssertEqual(element(app, "chatInstallCheck-workspace").value as? String, "Done")
-        XCTAssertTrue(element(app, "chatInstallSaveAvatar").exists)
-        assertOneWayOut(app, "avatar task")
-        shot(app, "chat-install-avatar")
-        primary(app, "Done")
-        waitFor(element(app, "chatInstallTask-app_level_credential"), timeout: 20, "app key task")
-
+        openSetup(app)
+        walkToTheAppKey(app)
         app.terminate()
         app = signedInApp(connectedServices: ["slack"], extraArguments: Self.scripted)
-        openWizard(app)
-        waitFor(element(app, "chatInstallTask-app_level_credential"), timeout: 20, "resumed on app key task")
-        XCTAssertEqual(element(app, "chatInstallCheck-set_icon").value as? String, "Done", "avatar step stays done")
-        copyToClipboard(["xapp", "1", Self.filler], separator: "-")
-        element(app, "chatInstallPasteAppKey").hit()
-        waitUntil(10, "app key slot filled") { element(app, "chatInstallAppKeySlot").value as? String == "Added" }
-        shot(app, "chat-install-app-key")
+        openSetup(app)
+        resumeThroughAllow(app)
+        pickChannels(app)
+        finishAndDisconnect(app)
+    }
+
+    private func walkToTheAppKey(_ app: XCUIApplication) {
+        waitFor(element(app, "slackIntroCard"), timeout: 20, "what you do and what Pal does")
+        XCTAssertTrue(element(app, "slackSetupAdvanced").exists, "advanced paste tokens fallback")
+        assertOneWayOut(app, "intro")
+        shot(app, "slack-setup-intro")
+        primary(app, "Start")
+
+        let opened = element(app, "externalLinkProbe")
+        element(app, "stepFlowPage").hit()
+        waitUntil(20, "slack apps page opened") { opened.label.hasPrefix("https://api.slack.com/apps") }
+        XCTAssertFalse(element(app, "stepFlowPrimary").isEnabled, "the tokens are needed first")
+        type(app, "access", Self.access)
+        type(app, "refresh", Self.refresh)
+        XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", Self.filler)).firstMatch.exists, "no token text on screen")
+        assertOneWayOut(app, "credential")
+        shot(app, "slack-setup-credential")
+        primary(app, "Use these tokens")
+
+        waitFor(element(app, "slackSaveAvatar"), timeout: 30, "picture step after the app is created")
+        assertOneWayOut(app, "picture")
+        shot(app, "slack-setup-picture")
+        primary(app, "Done")
+        waitFor(app.secureTextFields["stepFlowField-app_key"], timeout: 20, "app key step")
+    }
+
+    private func resumeThroughAllow(_ app: XCUIApplication) {
+        waitFor(app.secureTextFields["stepFlowField-app_key"], timeout: 30, "resumed on the app key step")
+        let position = element(app, "stepFlowPosition")
+        if position.exists { XCTAssertEqual(position.label, "Step 4 of 7", "the step bar shows where you are") }
+        type(app, "app_key", Self.appKey)
+        shot(app, "slack-setup-app-key")
         primary(app, "Done")
 
-        waitFor(element(app, "chatInstallAllowBody"), timeout: 20, "allow step")
-        XCTAssertTrue(element(app, "chatInstall-CopyAdminMessage").exists, "admin message")
+        waitFor(element(app, "slackCopyAdminMessage"), timeout: 20, "allow step")
         assertOneWayOut(app, "allow")
-        shot(app, "chat-install-allow")
-        primary(app, "Add to Slack")
+        shot(app, "slack-setup-allow")
+        primary(app, "Open Slack to allow")
+        let opened = element(app, "externalLinkProbe")
         waitUntil(20, "authorize link opened in the system browser") { opened.label.contains("oauth/v2/authorize") }
-        element(app, "chatInstall-CheckAgain").hit()
+    }
 
-        waitFor(element(app, "chatInstallReady"), timeout: 30, "ready")
-        waitFor(element(app, "chatInstallJoin-C1"), timeout: 20, "public channel row")
-        element(app, "chatInstallJoin-C1").hit()
-        waitFor(element(app, "chatInstallSpaceLive-C1"), timeout: 20, "public channel live")
-        element(app, "chatInstallJoin-G1").hit()
-        waitFor(element(app, "chatInstallSpaceWaiting-G1"), timeout: 20, "private channel waits for invite")
-        XCTAssertTrue(element(app, "chatInstallCopyInvite-G1").exists)
-        XCTAssertTrue(element(app, "chatInstallOpenChannel-G1").exists)
-        shot(app, "chat-install-private-invite")
-        element(app, "chatInstallRefreshChannels").hit()
-        waitFor(element(app, "chatInstallSpaceLive-G1"), timeout: 20, "private channel live after invite")
-        assertOneWayOut(app, "ready")
-        shot(app, "chat-install-ready")
+    private func pickChannels(_ app: XCUIApplication) {
+        waitFor(element(app, "slackChannel-C1"), timeout: 40, "channels after Slack finished")
+        element(app, "slackChannel-C1").hit()
+        waitUntil(20, "public channel joined") { element(app, "slackChannel-C1").value as? String == "On" }
+        element(app, "slackChannel-G1").hit()
+        waitFor(element(app, "slackInvite-G1Button"), timeout: 20, "private channel shows its invite message")
+        XCTAssertTrue(element(app, "slackOpenChannel-G1").exists)
+        shot(app, "slack-setup-private-invite")
+        element(app, "slackRefreshChannels").hit()
+        waitUntil(20, "private channel on after invite") { element(app, "slackChannel-G1").value as? String == "On" }
+        primary(app, "Finish")
+    }
 
-        element(app, "chatInstallDisconnect").hit()
-        let confirm = element(app, "chatInstallDisconnectConfirm")
+    private func finishAndDisconnect(_ app: XCUIApplication) {
+        waitFor(element(app, "slackSettings"), timeout: 20, "settings page")
+        XCTAssertTrue(element(app, "slackSettingsWorkspace").exists)
+        XCTAssertTrue(element(app, "slackUpdateIdentity").exists)
+        assertOneWayOut(app, "settings")
+        shot(app, "slack-setup-settings")
+
+        element(app, "slackDisconnect").hit()
+        let confirm = element(app, "slackDisconnectConfirm")
         waitFor(confirm, timeout: 10, "disconnect confirmation")
         confirm.hit()
-        waitFor(element(app, "chatInstallIntroSteps"), timeout: 20, "back to intro after disconnect")
+        waitFor(element(app, "slackIntroCard"), timeout: 20, "back to the start after disconnect")
     }
 }

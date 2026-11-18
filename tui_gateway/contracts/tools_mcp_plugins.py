@@ -14,6 +14,7 @@ from pydantic import Field
 
 from .base import JsonValue, Params, Result, WireEnum
 from .common import OpenModel, ProfileParams, SessionLiveInfo
+from .connectors import ConnectorErrorReason
 from .connectors_operation import CatalogAppState, CatalogTier
 from .registry import method
 
@@ -644,6 +645,7 @@ class McpOauthPollResult(Result):
     status: McpOauthPollStatus
     session_id: str | None = None
     error_message: str | None = None
+    reason: ConnectorErrorReason | None = None
     auth_url: str | None = None
     redirect: McpOauthRedirect | None = None
     tools: list[McpProbeTool] | None = None
@@ -667,6 +669,7 @@ class McpOauthCallbackParams(McpOauthFlowParams):
     code: str | None = None
     state: str | None = None
     error: str | None = None
+    error_description: str | None = None
     # RFC 9207 issuer; extra="forbid" would otherwise 4000 the desktop relay that always sends it.
     iss: str | None = None
 

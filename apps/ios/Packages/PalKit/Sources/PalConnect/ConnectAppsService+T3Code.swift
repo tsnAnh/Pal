@@ -74,10 +74,11 @@ extension ConnectAppsService {
             if reason == McpSignInFailure.redirectRefused.reason {
                 return T3CodeFailure(status: SetupStatus(code: "invalid_redirect_uri", method: method, subject: T3CodeConnector.name))
             }
-            var status = SetupStatus(code: SetupStatusClass.internalFault.rawValue, method: method, subject: T3CodeConnector.name)
+            var status = SetupStatus(code: SetupStatusClass.needsReauth.rawValue, method: method, subject: T3CodeConnector.name)
+            status.title = String(localized: "Sign-in did not finish")
             status.reason = reason
             return T3CodeFailure(status: status)
-        case .unavailable, .credentialsRequired, .oauthClient:
+        case .unavailable, .credentialsRequired, .oauthClient, .signInRefused, .adminApprovalPending:
             return T3CodeFailure(status: SetupStatus(code: SetupStatusClass.internalFault.rawValue, method: method, subject: T3CodeConnector.name))
         }
     }

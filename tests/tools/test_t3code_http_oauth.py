@@ -16,10 +16,12 @@ import pytest
 
 from hermes_constants import get_hermes_home
 from tests.tools.t3code_double import (
+    T3_REFUSAL,
     TOOLS,
     T3CodeDouble,
     accepts_loopback_only,
     accepts_nothing,
+    accepts_what_t3_accepts,
 )
 from tests.waiting import wait_until
 from tools.connectors.mcp_oauth_redirect import (
@@ -166,6 +168,22 @@ def test_a_server_that_takes_https_gets_the_gateway_callback_before_loopback(dou
     assert [r["redirect_uris"] for r in double.registrations] == [[APP_REDIRECT_URI], [GATEWAY_URI]]
     assert (started["redirect"], started["redirect_uri"]) == ("gateway", GATEWAY_URI)
     assert auth_query(started)["code_challenge_method"] == "S256"
+
+
+@pytest.mark.parametrize(("public", "route", "uri"), [(PUBLIC, "gateway", GATEWAY_URI), (None, "loopback", LOOPBACK_FALLBACK)])
+def test_the_app_scheme_refusal_t3_sends_falls_through_to_https_then_loopback(double, public, route, uri):
+    double.accepts = accepts_what_t3_accepts
+    double.refusal = T3_REFUSAL
+    add_server(double)
+    if public:
+        set_public_url(public)
+
+    started = rpc("mcp.servers.oauth.start", name=NAME, client_redirect_uri=APP_REDIRECT_URI,
+                  fallback_redirect_uri=LOOPBACK_FALLBACK)
+
+    assert double.registrations[0]["redirect_uris"] == [APP_REDIRECT_URI]
+    assert [r["redirect_uris"] for r in double.registrations][-1] == [uri]
+    assert (started["redirect"], started["redirect_uri"]) == (route, uri)
 
 
 def test_a_registration_refusal_is_reported_as_a_redirect_refusal_after_every_redirect_was_tried(double):

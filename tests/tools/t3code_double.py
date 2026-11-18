@@ -26,11 +26,19 @@ def accepts_nothing(uri: str) -> bool:
     return False
 
 
+T3_REFUSAL = "Redirect URIs must be https, or http on localhost, 127.0.0.1 or [::1]"
+
+
+def accepts_what_t3_accepts(uri: str) -> bool:
+    return uri.startswith(("https://", "http://localhost", "http://127.0.0.1", "http://[::1]"))
+
+
 class T3CodeDouble:
     """A plain-http stand-in that answers like T3 Code's MCP endpoint and OAuth server."""
 
     def __init__(self, *, accepts=accepts_everything, mcp_behaviour="mcp"):
         self.accepts = accepts
+        self.refusal = None
         self.mcp_behaviour = mcp_behaviour
         self.registrations: list[dict] = []
         self.requests: list[tuple[str, str]] = []
@@ -118,7 +126,8 @@ class T3CodeDouble:
         refused = [u for u in body.get("redirect_uris", []) if not self.accepts(u)]
         if refused:
             return self._send(h, 400, {
-                "error": "invalid_redirect_uri", "error_description": f"redirect_uri not allowed: {refused[0]}"})
+                "error": "invalid_redirect_uri",
+                "error_description": self.refusal or f"redirect_uri not allowed: {refused[0]}"})
         self._send(h, 201, {**body, "client_id": f"client-{secrets.token_hex(4)}",
                             "token_endpoint_auth_method": "none"})
 

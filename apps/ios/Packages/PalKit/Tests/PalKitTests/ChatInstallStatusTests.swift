@@ -30,23 +30,34 @@ struct ChatInstallStatusTests {
         let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
         await model.load()
         #expect(model.screen == .unavailable)
-        #expect(model.loadFailure == reason)
+        #expect(model.loadError?.reason == reason)
         #expect(model.primaryAction == .reload)
-        #expect(model.statusCode == reason.rawValue)
-        #expect(model.isStatusScreen)
         await client.failProviders(.unsupported)
         await model.load()
         #expect(model.screen == .unsupported)
-        #expect(model.loadFailure == nil)
-        #expect(model.statusCode == ChatInstallModel.gatewayOutdatedCode)
-        #expect(model.isStatusScreen)
+        #expect(model.loadError == nil)
     }
 
-    @Test func aSetupErrorIsAStatusScreenWithItsCode() async throws {
-        let failed = try chatState("error", 3, error: ["code": "credential_expired", "fix": "reenter_credential"])
-        let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: FakeChatInstallClient([try chatProvider()], failed))
+    @Test func aFailedCallKeepsItsErrorForTheStatusBlock() async throws {
+        let (model, client) = try await readyModel()
+        let fault = GatewayFault(
+            code: 4403, reason: "owner_only", trace: TraceID("7f3k2m9a")!, method: "chat.install.update_identity", source: .gateway,
+            gatewayVersion: "291aaa2b"
+        )
+        await client.setIdentity(nil, error: .faulted(.forbidden, fault))
+        await model.updateIdentity()
+        #expect(model.notice == .notSaved)
+        #expect(model.noticeError?.reason == .forbidden)
+        #expect(model.noticeError?.fault?.method == "chat.install.update_identity")
+        model.dismissNotice()
+        #expect(model.notice == nil)
+        #expect(model.noticeError == nil)
+    }
+
+    private func readyModel() async throws -> (ChatInstallModel, FakeChatInstallClient) {
+        let client = FakeChatInstallClient([try chatProvider()], try chatState("ready", 7))
+        let model = ChatInstallModel(botName: "pal", preferredProvider: "slack", client: client)
         await model.load()
-        #expect(model.isStatusScreen)
-        #expect(model.statusCode == "credential_expired")
+        return (model, client)
     }
 }

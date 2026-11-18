@@ -7,7 +7,7 @@ extension ConnectAppsModel {
         case .connect:
             await connect(app)
         case .signIn:
-            if app.requiresAppSignIn { upworkApp = app }
+            if app.requiresAppSignIn { beginMcpSignIn(app) }
         case .needsSetup, .noDirectOption:
             break
         }

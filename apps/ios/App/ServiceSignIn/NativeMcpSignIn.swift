@@ -21,7 +21,7 @@ private final class PasteSessions {
 }
 
 @MainActor
-enum UpworkSignIn {
+enum NativeMcpSignIn {
     static func native(connection: ConnectionModel) -> McpNativeSignIn {
         return McpNativeSignIn(
             flow: McpOAuthFlow(
@@ -78,6 +78,9 @@ enum UpworkSignIn {
                 case .failed(let reason):
                     _ = sessions.remove(service)
                     return .failed(reason)
+                case .adminApprovalPending:
+                    _ = sessions.remove(service)
+                    return .failed(McpAdminApproval.message)
                 }
             },
             cancel: { service in

@@ -57,8 +57,6 @@ extension ConnectAppsModel {
         guard state.actionTitle != nil else { return }
         if app.isT3Code, state != .connected {
             openT3Code()
-        } else if app.requiresAppSignIn {
-            upworkApp = app
         } else if case .custom = app.source {
             manage(app)
         } else if app.isBotApp {

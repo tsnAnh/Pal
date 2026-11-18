@@ -228,7 +228,8 @@ struct T3CodeServiceTests {
         let rpc = CustomRPC(["mcp.servers.oauth.start": rpcFailure(4002, message: "access_denied")])
         let error = await thrownError { try await customService(rpc, system: IdleBrowser()).signInT3Code() }
         let result = status(error)
-        #expect(result?.kind == .internalFault)
+        #expect(result?.kind == .needsReauth)
+        #expect(result?.actionTitle == "Reconnect")
         #expect(result?.reason == "Access was not granted.")
     }
 

@@ -10,20 +10,29 @@ public enum SetupStatusClass: String, Sendable, CaseIterable, Equatable {
     case invalidRedirect = "invalid_redirect_uri"
     case serverUnreachable = "server_unreachable"
     case notMcpServer = "not_mcp"
+    case signInIncomplete = "sign_in_failed"
     case internalFault = "internal"
 
-    static let byCode: [String: SetupStatusClass] = [
-        "offline": .offline, "timed_out": .offline, "unreachable": .offline, "provider_unreachable": .offline,
-        "gateway_outdated": .gatewayOutdated, "unsupported": .gatewayOutdated,
-        "invalid_token": .vendorRefusedValue, "credential_rejected": .vendorRefusedValue,
-        "credential_expired": .vendorRefusedValue, "invalid_client": .vendorRefusedValue,
-        "needs_reauth": .needsReauth, "revoked": .needsReauth, "auth_required": .needsReauth,
-        "forbidden": .forbidden, "not_owner": .forbidden,
-        "oauth_in_progress": .signInInProgress,
-        "invalid_redirect_uri": .invalidRedirect, "invalid_client_metadata": .invalidRedirect,
-        "server_unreachable": .serverUnreachable, "mcp_unreachable": .serverUnreachable,
-        "not_mcp": .notMcpServer,
+    private static let incompleteCodes = [
+        "sign_in_failed", "access_denied", "sign_in_expired", "sign_in_timed_out", "browser_unavailable", "discovery_failed", "listener_failed",
+        "state_mismatch", "token_exchange_failed", "unsupported_grant_type", "gateway_rejected", "server_add_failed",
     ]
+
+    static let byCode: [String: SetupStatusClass] = {
+        var table: [String: SetupStatusClass] = [
+            "offline": .offline, "timed_out": .offline, "unreachable": .offline, "provider_unreachable": .offline,
+            "gateway_outdated": .gatewayOutdated, "unsupported": .gatewayOutdated,
+            "invalid_token": .vendorRefusedValue, "credential_rejected": .vendorRefusedValue,
+            "credential_expired": .vendorRefusedValue, "invalid_client": .vendorRefusedValue,
+            "needs_reauth": .needsReauth, "revoked": .needsReauth, "auth_required": .needsReauth,
+            "forbidden": .forbidden, "not_owner": .forbidden,
+            "oauth_in_progress": .signInInProgress, "handshake_used": .signInInProgress,
+            "invalid_redirect_uri": .invalidRedirect, "invalid_client_metadata": .invalidRedirect,
+            "server_unreachable": .serverUnreachable, "mcp_unreachable": .serverUnreachable, "not_mcp": .notMcpServer,
+        ]
+        for code in incompleteCodes { table[code] = .signInIncomplete }
+        return table
+    }()
 
     public static func classify(code: String) -> SetupStatusClass {
         byCode[code.lowercased()] ?? .internalFault
@@ -42,7 +51,7 @@ public struct SetupStatus: Sendable, Equatable {
 
     public init(
         code: String, method: String? = nil, trace: String? = nil, gatewayVersion: String? = nil,
-        subject: String? = nil, valueName: String = "token", device: String = "device"
+        subject: String? = nil, valueName: String = "token", device: String = "device", detail: String? = nil
     ) {
         let kind = SetupStatusClass.classify(code: code)
         let name = subject ?? String(localized: "This app")
@@ -81,19 +90,36 @@ public struct SetupStatus: Sendable, Equatable {
             title = String(localized: "\(name) would not accept this \(device)'s address")
             reason = String(localized: "\(name) only allows sign-in on your own computer, and Pal could not open one here.")
             actionTitle = String(localized: "Try again")
-        case .serverUnreachable:
-            title = String(localized: "Pal could not reach \(name)")
-            reason = String(localized: "Check that it is running and that its address is still right.")
-            actionTitle = String(localized: "Enter the address again")
-        case .notMcpServer:
-            title = String(localized: "\(name) did not answer like an MCP server")
-            reason = String(localized: "Check the address and the port.")
-            actionTitle = String(localized: "Enter the address again")
+        case .serverUnreachable, .notMcpServer:
+            let copy = Self.serverCopy(kind, name: name)
+            (title, reason, actionTitle) = (copy.title, copy.reason, String(localized: "Enter the address again"))
+        case .signInIncomplete:
+            title = String(localized: "Sign-in did not finish")
+            reason = detail ?? String(localized: "The sign-in could not be completed. Try again.")
+            actionTitle = String(localized: "Try again")
         case .internalFault:
             title = String(localized: "Pal could not finish")
             reason = String(localized: "Something on your Pal failed. The code below helps support find it.")
             actionTitle = String(localized: "Try again")
         }
+    }
+
+    private struct ServerCopy {
+        var title: String
+        var reason: String
+    }
+
+    private static func serverCopy(_ kind: SetupStatusClass, name: String) -> ServerCopy {
+        if kind == .serverUnreachable {
+            return ServerCopy(
+                title: String(localized: "Pal could not reach \(name)"),
+                reason: String(localized: "Check that it is running and that its address is still right.")
+            )
+        }
+        return ServerCopy(
+            title: String(localized: "\(name) did not answer like an MCP server"),
+            reason: String(localized: "Check the address and the port.")
+        )
     }
 
     public var symbol: String {

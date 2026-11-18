@@ -195,7 +195,7 @@ final class BotProfileE2ETests: BotProfileTestCase {
         let opened = element(app, "externalLinkProbe")
         waitUntil(30, "slack create page handed to the system browser opener") { opened.value as? String == "1" }
         XCTAssertTrue(opened.label.hasPrefix("https://api.slack.com/apps"), "opened \(opened.label)")
-        waitFor(element(app, "slackTokenSheet"), timeout: 15, "token sheet")
+        waitFor(element(app, "slackTokenEntry"), timeout: 15, "token entry")
         let submit = element(app, "slackTokenSubmit")
         XCTAssertFalse(submit.isEnabled)
         let bot = app.secureTextFields["slackBotToken"]

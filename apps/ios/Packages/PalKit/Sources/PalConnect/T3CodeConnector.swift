@@ -17,7 +17,8 @@ public enum T3AddressError: Error, Sendable, Equatable {
         case .credentials: "Remove the username and password from the address."
         case .invalidPort: "The port must be a number from 1 to 65535."
         case .wrongPath: "Leave off everything after the port. Pal adds the rest."
-        case .insecure: CustomConnectorValidationError.insecureURL.message
+        case .insecure:
+            "Use your Mac's full Tailscale name, like your-mac.your-tailnet.ts.net, or its Tailscale address, like 100.64.0.5. Short names are not accepted."
         }
     }
 

@@ -29,6 +29,8 @@ struct OAuthClientProblem: Equatable {
         switch error {
         case ConnectAppsError.oauthClient(let failure, let fault): self.init(failure, retry: retry, fault: fault)
         case ConnectAppsError.signInFailed(let reason): self.init(code: "SIGN_IN_FAILED", reason: reason, retry: retry)
+        case ConnectAppsError.signInRefused(let failure, let fault):
+            self.init(code: "SIGN_IN_FAILED", reason: failure.reason, retry: retry, fault: fault)
         default: self.init(.unreachable, retry: retry)
         }
     }

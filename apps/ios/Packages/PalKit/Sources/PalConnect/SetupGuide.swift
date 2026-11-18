@@ -52,13 +52,15 @@ public struct SetupField: Decodable, Sendable, Hashable, Identifiable {
     public var secret: Bool
     public var prefixes: [String]
     public var suffix: String?
+    public var dottedParts: Int?
 
-    public init(id: String, label: String, secret: Bool = false, prefixes: [String] = [], suffix: String? = nil) {
+    public init(id: String, label: String, secret: Bool = false, prefixes: [String] = [], suffix: String? = nil, dottedParts: Int? = nil) {
         self.id = id
         self.label = label
         self.secret = secret
         self.prefixes = prefixes
         self.suffix = suffix
+        self.dottedParts = dottedParts
     }
 
     enum CodingKeys: String, CodingKey { case id, label, secret, prefixes, suffix }
@@ -70,6 +72,7 @@ public struct SetupField: Decodable, Sendable, Hashable, Identifiable {
         secret = try container.decodeIfPresent(Bool.self, forKey: .secret) ?? false
         prefixes = try container.decodeIfPresent([String].self, forKey: .prefixes) ?? []
         suffix = try container.decodeIfPresent(String.self, forKey: .suffix).flatMap { $0.isEmpty ? nil : $0 }
+        dottedParts = nil
     }
 }
 
@@ -79,6 +82,7 @@ public enum SetupFieldShape: Sendable, Equatable {
     case hasSpaces
     case wrongStart([String])
     case wrongEnd(String)
+    case wrongParts(Int)
 
     public var isValid: Bool { self == .valid }
 
@@ -88,17 +92,24 @@ public enum SetupFieldShape: Sendable, Equatable {
         case .hasSpaces: String(localized: "Remove the spaces.")
         case .wrongStart(let prefixes): String(localized: "Should start with \(prefixes.joined(separator: String(localized: " or ")))")
         case .wrongEnd(let suffix): String(localized: "Should end with \(suffix)")
+        case .wrongParts(let count): String(localized: "Should be \(count) parts joined by dots")
         }
     }
 }
 
 extension SetupField {
+    private static func hasDottedParts(_ value: String, count: Int) -> Bool {
+        let pieces = value.split(separator: ".", omittingEmptySubsequences: false)
+        return pieces.count == count && pieces.allSatisfy { !$0.isEmpty }
+    }
+
     public func shape(of raw: String) -> SetupFieldShape {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.isEmpty { return .empty }
         if value.rangeOfCharacter(from: .whitespacesAndNewlines) != nil { return .hasSpaces }
         if !prefixes.isEmpty, !prefixes.contains(where: { value.hasPrefix($0) }) { return .wrongStart(prefixes) }
         if let suffix, !value.hasSuffix(suffix) { return .wrongEnd(suffix) }
+        if let parts = dottedParts, !Self.hasDottedParts(value, count: parts) { return .wrongParts(parts) }
         return .valid
     }
 }

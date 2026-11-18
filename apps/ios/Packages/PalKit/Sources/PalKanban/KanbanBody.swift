@@ -8,11 +8,62 @@ public enum KanbanBodyBlock: Sendable, Equatable {
     case code(String)
 }
 
-public struct KanbanBodyDocument: Sendable, Equatable {
-    public let blocks: [KanbanBodyBlock]
-    public let metadata: [String]
+public enum KanbanBodyLabel: String, Sendable, CaseIterable {
+    case goal
+    case doneMeans
+    case currentStatus
+    case ownerDecisions
+    case pullRequests
 
-    public var isEmpty: Bool { blocks.isEmpty }
+    public var title: String {
+        switch self {
+        case .goal: String(localized: "Goal")
+        case .doneMeans: String(localized: "Done means")
+        case .currentStatus: String(localized: "Current status")
+        case .ownerDecisions: String(localized: "Owner decisions")
+        case .pullRequests: String(localized: "Pull requests")
+        }
+    }
+
+    public var identifier: String {
+        switch self {
+        case .goal: "goal"
+        case .doneMeans: "done-means"
+        case .currentStatus: "current-status"
+        case .ownerDecisions: "owner-decisions"
+        case .pullRequests: "pull-requests"
+        }
+    }
+}
+
+public struct KanbanBodyPart: Sendable, Equatable, Identifiable {
+    public let label: KanbanBodyLabel
+    public let blocks: [KanbanBodyBlock]
+    public let links: [URL]
+
+    public var id: KanbanBodyLabel { label }
+
+    public init(label: KanbanBodyLabel, blocks: [KanbanBodyBlock], links: [URL] = []) {
+        self.label = label
+        self.blocks = blocks
+        self.links = links
+    }
+}
+
+public struct KanbanBodyDocument: Sendable, Equatable {
+    public let intro: [KanbanBodyBlock]
+    public let parts: [KanbanBodyPart]
+    public let footer: [String]
+    public let ref: String?
+
+    public var isEmpty: Bool { intro.isEmpty && parts.isEmpty }
+
+    public init(intro: [KanbanBodyBlock] = [], parts: [KanbanBodyPart], footer: [String] = [], ref: String? = nil) {
+        self.intro = intro
+        self.parts = parts
+        self.footer = footer
+        self.ref = ref
+    }
 }
 
 public enum KanbanBody {
@@ -20,29 +71,19 @@ public enum KanbanBody {
         "Key", "Kind", "Project", "Bot", "Outcome", "State", "Added", "Updated", "History",
     ]
 
-    public static func parse(_ text: String?) -> KanbanBodyDocument {
-        var reader = Reader()
-        for line in (text ?? "").split(separator: "\n", omittingEmptySubsequences: false) {
-            reader.read(String(line).trimmingCharacters(in: CharacterSet(charactersIn: "\r")))
-        }
-        return reader.finish()
+    public static func parse(_ text: String?, title: String? = nil) -> KanbanBodyDocument {
+        let lines = (text ?? "").split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
+        let split = KanbanTicket.splitFooter(lines)
+        let sections = KanbanTicket.sections(split.ticket, title: title)
+        let parts = KanbanBodyLabel.allCases.compactMap { label in sections.byLabel[label].flatMap { KanbanTicket.part(label, lines: $0) } }
+        return KanbanBodyDocument(intro: KanbanTicket.blocks(sections.intro), parts: parts, footer: split.footer, ref: ref(in: text))
     }
 
-    public static func title(of body: String?, fallback: String) -> String {
-        for line in (body ?? "").split(whereSeparator: \.isNewline) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty || trimmed.hasPrefix("```") || isMachineLine(trimmed) || isSlashCommand(trimmed) { continue }
-            let text = trimmed.drop { $0 == "#" }
-                .replacingOccurrences(of: "**", with: "")
-                .replacingOccurrences(of: "`", with: "")
-                .trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { return text }
+    public static func ref(in body: String?) -> String? {
+        for line in (body ?? "").split(whereSeparator: \.isNewline).reversed() {
+            if let value = refValue(line) { return value }
         }
-        return fallback
-    }
-
-    static func isSlashCommand(_ trimmed: String) -> Bool {
-        trimmed.first == "/" && trimmed.dropFirst().first?.isLetter == true
+        return nil
     }
 
     static func isMachineLine(_ trimmed: String) -> Bool {
@@ -53,7 +94,23 @@ public enum KanbanBody {
         return machineKeys.contains(key)
     }
 
-    private struct Reader {
+    static func isFooterMarker<S: StringProtocol>(_ line: S) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        return trimmed.hasPrefix("----") && trimmed.lowercased().contains("machine fields")
+    }
+
+    private static func refValue(_ line: Substring) -> String? {
+        var rest = KanbanTicket.stripListMarker(Substring(line.trimmingCharacters(in: .whitespaces)))
+        if rest.hasPrefix("**") { rest = rest.dropFirst(2) }
+        guard rest.hasPrefix("Ref:") else { return nil }
+        rest = rest.dropFirst(4)
+        if rest.hasPrefix("**") { rest = rest.dropFirst(2) }
+        guard rest.first == " " else { return nil }
+        let value = rest.trimmingCharacters(in: .whitespaces)
+        return KanbanRef.isRef(value) ? value.uppercased() : nil
+    }
+
+    struct Reader {
         enum Items {
             case none
             case bullets([String])
@@ -61,7 +118,6 @@ public enum KanbanBody {
         }
 
         var blocks: [KanbanBodyBlock] = []
-        var metadata: [String] = []
         var paragraph: [String] = []
         var items: Items = .none
         var fence: [String]?
@@ -77,9 +133,6 @@ public enum KanbanBody {
                 fence = []
             } else if trimmed.isEmpty {
                 flush()
-            } else if KanbanBody.isMachineLine(trimmed) {
-                flush()
-                metadata.append(trimmed)
             } else if let heading = Self.heading(trimmed) {
                 flush()
                 blocks.append(heading)
@@ -99,13 +152,13 @@ public enum KanbanBody {
             }
         }
 
-        mutating func finish() -> KanbanBodyDocument {
+        mutating func finish() -> [KanbanBodyBlock] {
             if let fence {
                 blocks.append(.code(fence.joined(separator: "\n")))
                 self.fence = nil
             }
             flush()
-            return KanbanBodyDocument(blocks: blocks, metadata: metadata)
+            return blocks
         }
 
         private mutating func readFenced(_ line: String) {

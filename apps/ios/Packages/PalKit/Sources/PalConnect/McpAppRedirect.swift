@@ -61,8 +61,9 @@ extension ConnectAppsService {
     }
 
     private static func startFailure(_ error: GatewayTransportError) -> ConnectAppsError {
-        if case .rpc(let rpc) = error { return .signInFailed(McpSignInFailure.classify(rpc.message).reason) }
-        return .failed
+        guard case .rpc(let rpc) = error else { return .failed }
+        if McpAdminApproval.isPending(rpc.data?["reason"]?.stringValue) { return .adminApprovalPending }
+        return .signInRefused(McpSignInFailure.classify(rpc.message), GatewayFault(rpc, method: "mcp.servers.oauth.start"))
     }
 
     func signInMcp(

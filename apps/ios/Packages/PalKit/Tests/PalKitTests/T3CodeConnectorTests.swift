@@ -65,8 +65,11 @@ struct T3CodeAddressTests {
         #expect(failure(input) == expected, "\(input)")
     }
 
-    @Test func aPublicHostOverPlainHttpUsesTheCustomConnectorReason() {
-        #expect(failure("http://example.com/mcp")?.message == CustomConnectorValidationError.insecureURL.message)
+    @Test func aHostOverPlainHttpIsToldToUseTheFullTailscaleNameOrAddress() {
+        for input in ["http://example.com/mcp", "http://mac:3773/mcp", "mac"] {
+            let message = failure(input)?.message ?? ""
+            #expect(message.contains(".ts.net") && message.contains("100.64.0.5"), "\(input)")
+        }
     }
 
     @Test func everyAddressErrorSaysWhatToDoInPlainWords() {

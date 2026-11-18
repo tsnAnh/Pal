@@ -61,11 +61,18 @@ struct StepFlowChecklist: View {
     private func checklistRow(_ row: StepFlowEngine.Row) -> some View {
         HStack(spacing: 9) {
             marker(row)
-            Text(row.title)
-                .hermesText(.rowSubtitle)
-                .fontWeight(row.state == .current ? .semibold : .regular)
-                .foregroundStyle(row.state == .upcoming ? PalTokens.textTertiary : row.state == .done ? PalTokens.textSecondary : PalTokens.textPrimary)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(row.title)
+                    .hermesText(.rowSubtitle)
+                    .fontWeight(row.state == .current ? .semibold : .regular)
+                    .foregroundStyle(row.state == .upcoming ? PalTokens.textTertiary : row.state == .done ? PalTokens.textSecondary : PalTokens.textPrimary)
+                    .lineLimit(2)
+                if row.isAutomatic {
+                    Text("Pal does this")
+                        .font(.system(size: 11))
+                        .foregroundStyle(PalTokens.textTertiary)
+                }
+            }
             Spacer(minLength: 0)
         }
         .padding(8)
@@ -99,6 +106,7 @@ struct StepFlowCalmCopy {
     enum Mark {
         case spinner
         case success
+        case pending
     }
 
     let mark: Mark
@@ -109,6 +117,14 @@ struct StepFlowCalmCopy {
 struct StepFlowCalmView: View {
     let copy: StepFlowCalmCopy
 
+    private var identifier: String {
+        switch copy.mark {
+        case .spinner: "stepFlowWaiting"
+        case .success: "stepFlowSuccess"
+        case .pending: "stepFlowPending"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 14) {
             switch copy.mark {
@@ -118,6 +134,13 @@ struct StepFlowCalmView: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 24))
                     .foregroundStyle(.green)
+                    .frame(width: 54, height: 54)
+                    .background(PalTokens.control, in: Circle())
+                    .accessibilityHidden(true)
+            case .pending:
+                Image(systemName: "clock")
+                    .font(.system(size: 24))
+                    .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: 54, height: 54)
                     .background(PalTokens.control, in: Circle())
                     .accessibilityHidden(true)
@@ -140,6 +163,30 @@ struct StepFlowCalmView: View {
         .frame(maxWidth: 420)
         .padding(PalMetrics.screenMargin)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(copy.mark == .success ? "stepFlowSuccess" : "stepFlowWaiting")
+        .accessibilityIdentifier(identifier)
+    }
+}
+
+struct SetupHeader: View {
+    let title: String
+    let close: () -> Void
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .hermesText(.sheetTitle)
+                .foregroundStyle(PalTokens.textPrimary)
+                .lineLimit(1)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("stepFlowTitle")
+            Spacer()
+            Button(role: .close, action: close)
+                .buttonStyle(.glass(PalGlass.style(interactive: true, colorScheme: colorScheme)))
+                .accessibilityIdentifier("stepFlowClose")
+        }
+        .padding(.horizontal, PalMetrics.screenMargin)
+        .padding(.vertical, PalMetrics.captionToCardGap)
     }
 }

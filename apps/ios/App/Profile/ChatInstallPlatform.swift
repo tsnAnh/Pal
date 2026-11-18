@@ -1,4 +1,3 @@
-import PalBotProfile
 import PalDesign
 import SwiftUI
 #if os(macOS)
@@ -6,37 +5,6 @@ import AppKit
 #else
 import Photos
 #endif
-
-struct ChatCredentialPaste: View {
-    let accepts: Set<ChatCredentialKind>
-    let identifier: String
-    let onToken: @MainActor (ChatCredentialKind, String) -> Void
-
-    #if os(macOS)
-    var body: some View {
-        PillButton(String(localized: "Paste from clipboard"), accessibilityIdentifier: identifier) { readClipboard() }
-            .onAppear { readClipboard() }
-    }
-
-    private func readClipboard() {
-        guard let text = Pasteboard.string, let kind = ChatCredentialKind.classify(text), accepts.contains(kind) else { return }
-        onToken(kind, text.trimmingCharacters(in: .whitespacesAndNewlines))
-    }
-    #else
-    var body: some View {
-        PasteButton(payloadType: String.self) { strings in
-            Task { @MainActor in
-                for text in strings {
-                    guard let kind = ChatCredentialKind.classify(text), accepts.contains(kind) else { continue }
-                    onToken(kind, text.trimmingCharacters(in: .whitespacesAndNewlines))
-                }
-            }
-        }
-        .buttonBorderShape(.capsule)
-        .accessibilityIdentifier(identifier)
-    }
-    #endif
-}
 
 enum ChatAvatarExport {
     static let pixels: CGFloat = 1024
@@ -71,7 +39,9 @@ enum ChatAvatarExport {
     }
     #else
     static let actionTitle = String(localized: "Save picture to Photos")
-    static let explanation = String(localized: "Pal adds the picture to your Photos. It only asks to add, never to see your photos. Then upload it on the Slack page.")
+    static let explanation = String(
+        localized: "Pal adds the picture to your Photos. It only asks to add, never to see your photos. Then upload it on the Slack page."
+    )
 
     @MainActor
     static func deliver(_ image: CGImage, name: String) async -> Bool {

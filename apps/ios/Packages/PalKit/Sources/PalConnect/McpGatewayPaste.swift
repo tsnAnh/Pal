@@ -34,6 +34,17 @@ public enum McpSignInFailure: Sendable, Equatable, CaseIterable {
         }
     }
 
+    public var code: String {
+        switch self {
+        case .registrationRejected: "invalid_client_metadata"
+        case .redirectRefused: "invalid_redirect_uri"
+        case .denied: "access_denied"
+        case .expired: "sign_in_expired"
+        case .unsupportedGrant: "unsupported_grant_type"
+        case .other: "sign_in_failed"
+        }
+    }
+
     public static func classify(_ gatewayText: String?) -> McpSignInFailure {
         let text = (gatewayText ?? "").lowercased()
         if text.contains("unsupported") { return .unsupportedGrant }
@@ -43,6 +54,13 @@ public enum McpSignInFailure: Sendable, Equatable, CaseIterable {
         if ["registration", "invalid_client", "client"].contains(where: text.contains) { return .registrationRejected }
         return .other
     }
+}
+
+public enum McpAdminApproval {
+    public static let message = "An admin of your organisation needs to approve Pal."
+    static let wireReason = "ADMIN_APPROVAL_PENDING"
+
+    static func isPending(_ reason: String?) -> Bool { reason == wireReason }
 }
 
 public protocol McpPasteSigning: Sendable {
@@ -117,6 +135,7 @@ public final class McpGatewayPasteSession: McpPasteSigning, CustomStringConverti
             return .signedIn
         } catch {
             await abandon()
+            if case ConnectAppsError.adminApprovalPending = error { return .adminApprovalPending }
             if case ConnectAppsError.signInFailed(let reason) = error { return .failed(reason) }
             return .failed(McpSignInFailure.other.reason)
         }
@@ -140,7 +159,9 @@ extension ConnectAppsService {
             let poll = try await call("mcp.servers.oauth.poll", ["name": .string(name), "session_id": .string(flow)])
             switch poll["status"]?.stringValue {
             case "approved": return
-            case "error": throw ConnectAppsError.signInFailed(McpSignInFailure.classify(poll["error_message"]?.stringValue).reason)
+            case "error":
+                if McpAdminApproval.isPending(poll["reason"]?.stringValue) { throw ConnectAppsError.adminApprovalPending }
+                throw ConnectAppsError.signInFailed(McpSignInFailure.classify(poll["error_message"]?.stringValue).reason)
             default: try await Task.sleep(for: timing.pollInterval)
             }
         }
