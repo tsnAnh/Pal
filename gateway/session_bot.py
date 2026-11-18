@@ -616,8 +616,9 @@ async def _maybe_retry(authority, home, path, record):
         return
     event = MessageEvent(text=record['message'], source=live.source, internal=True,
         message_id=identity, metadata={'gateway_session_key': live.route, 'gateway_session_id': entry.session_id})
-    from gateway.session_automation import automation_notification_metadata
+    from gateway.session_automation import automation_notification_metadata, routine_display_metadata
     event.metadata.update(automation_notification_metadata(record))
+    event.metadata.update(routine_display_metadata(record.get('routine')))
     if record.get('author') is not None:
         event.metadata['turn_author'] = dict(record['author'])
     record['retry'] = {'identity': identity}
@@ -809,7 +810,7 @@ def _delivery_params(authority, actor, params):
     """``(home, key, message, author, category)`` of one ``deliver``/``settle`` request: the
     delivery's full identity, validated the same way for both verbs."""
     home = _home(authority, actor, params.get('profile'))
-    if set(params) - {'id', 'profile', 'message', 'session_id', 'author', 'notification_category'}:
+    if set(params) - {'id', 'profile', 'message', 'session_id', 'author', 'notification_category', 'routine'}:
         raise RuntimeStoreError('invalid_params')
     from gateway.session_automation import automation_notification_metadata
     notification = automation_notification_metadata(params)
@@ -876,7 +877,7 @@ async def _deliver(connection, params):
             if pinned != entry.session_id and not _moved_aside_by_this_door(authority, holder, pinned):
                 raise RuntimeStoreError('admission_conflict')
             return await _admit(authority, actor, home, root, key, message, ref, live, entry, author=author,
-                                notification_category=category)
+                                notification_category=category, routine=params.get('routine'))
         except RuntimeStoreError as exc:
             raise await _held_by_another_writer(home, key, exc) or exc
 
@@ -956,14 +957,15 @@ async def _held_by_another_writer(home, key, exc):
 
 
 async def _admit(authority, actor, home, root, key, message, ref, live, entry, author=None, legacy=None,
-                 notification_category='result'):
-    from gateway.session_automation import automation_notification_metadata
+                 notification_category='result', routine=None):
+    from gateway.session_automation import automation_notification_metadata, routine_display_metadata
     notification = automation_notification_metadata({'notification_category': notification_category})
+    card = routine_display_metadata(routine)
     path = root / f'{key}.json'
     event = MessageEvent(text=message, source=live.source, internal=True,
         message_id='bot:' + key, metadata={'gateway_session_key': live.route,
                                          'gateway_session_id': entry.session_id})
-    event.metadata.update(notification)
+    event.metadata.update(notification | card)
     if author is not None:
         event.metadata['turn_author'] = dict(author)
     # Pin the physical target before committing. A process death in this
@@ -971,6 +973,8 @@ async def _admit(authority, actor, home, root, key, message, ref, live, entry, a
     record = dict(legacy or {}, delivery_id=key, profile_home=str(home), session_id=ref.session_id,
         principal_id=actor.subject, message=message, status='ambiguous')
     record.update(notification)
+    if card:
+        record['routine'] = dict(routine)
     if 'session:operator' in actor.capabilities:
         record['operator'] = True  # admitted on operator access: its one retry keeps it (``_maybe_retry``)
     if author is not None:

@@ -64,6 +64,7 @@ def _malformed(record: dict) -> str:
 def _dispose(path: Path, record: dict) -> bool:
     """Decide one queued record in place; False leaves it queued for a later tick."""
     from cron.scheduler_delivery import BOT_CHAT_POLICY_PLATFORM, bot_chat_message
+    from cron.scheduler_delivery_routine import bot_chat_routine
     from gateway.warning_notifications import warning_notifications_enabled
     from hermes_cli.config_effective import load_user_config_effective
     from tools.bot_live_delivery import deliver_to_live_owner, find_canonical_live_owner
@@ -86,9 +87,12 @@ def _dispose(path: Path, record: dict) -> bool:
         if owner is None:
             return False
         try:
+            job = record.get("job") or {}
             receipt = deliver_to_live_owner(
-                home, owner, bot_chat_message(record.get("job") or {}, record["content"]),
-                delivery_id=record["id"], notification_category="diagnostic" if for_failure else "result")
+                home, owner, bot_chat_message(job, record["content"]), delivery_id=record["id"],
+                notification_category="diagnostic" if for_failure else "result",
+                routine=bot_chat_routine(job, record["content"], for_failure=for_failure,
+                                         finished_at=record.get("sequence", 0) / 1e9))
         except Exception as exc:
             # The door is idempotent per id (a replay returns the existing receipt), so the
             # record stays queued for the next tick; log loudly once, quietly after.

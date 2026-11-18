@@ -109,8 +109,8 @@ def test_deliver_message_carries_cron_attribution(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     captured = {}
 
-    def fake_deliver(home, owner, message, *, delivery_id, notification_category="result"):
-        captured["message"] = message
+    def fake_deliver(home, owner, message, *, delivery_id, notification_category="result", routine=None):
+        captured["message"], captured["routine"] = message, routine
         return {"status": "settled", "message": message, "delivery_id": delivery_id}
 
     monkeypatch.setattr(mailbox, "find_canonical_live_owner", lambda home: {"session_id": "local-bot"})
@@ -119,6 +119,9 @@ def test_deliver_message_carries_cron_attribution(tmp_path, monkeypatch):
     assert 'Cronjob "Daily digest" output' in captured["message"]
     assert "not the user" in captured["message"]
     assert "the payload" in captured["message"]
+    routine = captured["routine"]
+    assert (routine["job_name"], routine["status"], routine["text"]) == ("Daily digest", "ok", "the payload")
+    assert "not the user" not in routine["text"] and routine["finished_at"] > 0
 
 
 def test_failure_notice_reaches_the_owner_as_a_diagnostic(tmp_path, monkeypatch):
@@ -129,8 +132,8 @@ def test_failure_notice_reaches_the_owner_as_a_diagnostic(tmp_path, monkeypatch)
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     seen = []
 
-    def fake_deliver(home, owner, message, *, delivery_id, notification_category="result"):
-        seen.append(notification_category)
+    def fake_deliver(home, owner, message, *, delivery_id, notification_category="result", routine=None):
+        seen.append((notification_category, routine["status"]))
         return {"status": "settled", "message": message, "delivery_id": delivery_id,
                 "notification_category": notification_category}
 
@@ -140,7 +143,7 @@ def test_failure_notice_reaches_the_owner_as_a_diagnostic(tmp_path, monkeypatch)
     job = {"id": "j1", "name": "n", "execution_id": "r1"}
     assert _deliver_to_bot_chat(job, "boom", "", for_failure=True) is None
     assert _deliver_to_bot_chat(dict(job, execution_id="r2"), "ok", "") is None
-    assert seen == ["diagnostic", "result"]
+    assert seen == [("diagnostic", "failed"), ("result", "ok")]
 
 
 def test_deliver_without_authority_is_parked_not_a_second_writer(tmp_path, monkeypatch):
@@ -166,7 +169,7 @@ def test_failure_notice_to_a_profile_hiding_warnings_is_suppressed_not_sent(tmp_
     (tmp_path / "config.yaml").write_text("display: {suppress_warning_notifications: true}\n")
     admitted = []
 
-    def fake_deliver(home, owner, message, *, delivery_id, notification_category="result"):
+    def fake_deliver(home, owner, message, *, delivery_id, notification_category="result", routine=None):
         admitted.append(message)
         return {"status": "queued", "message": message, "delivery_id": delivery_id}
 
@@ -231,7 +234,7 @@ def test_tick_hands_legacy_pending_records_to_the_live_owner_once(tmp_path, monk
             profile="", home=str(tmp_path), sequence=1, for_failure=True)))
     admitted = []
 
-    def fake_deliver(home, owner, message, *, delivery_id, notification_category="result"):
+    def fake_deliver(home, owner, message, *, delivery_id, notification_category="result", routine=None):
         admitted.append((delivery_id, message, notification_category))
         return {"status": "queued", "message": message, "delivery_id": delivery_id}
 

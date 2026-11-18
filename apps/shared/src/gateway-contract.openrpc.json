@@ -12175,6 +12175,19 @@
             ],
             "default": null,
             "title": "Notification Category"
+          },
+          "routine": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Routine"
           }
         },
         "required": [

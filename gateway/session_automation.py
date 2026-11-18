@@ -404,19 +404,42 @@ def automation_notification_metadata(metadata):
 
 
 _DISPLAY_TEXT_LIMIT = 2000
+_ROUTINE_TEXT_LIMIT = 1024 * 1024
+_ROUTINE_STATUSES = frozenset({'ok', 'failed'})
+_ROUTINE_FIELDS = frozenset({'job_name', 'status', 'finished_at'})
+
+
+def _valid_routine(routine):
+    return (isinstance(routine, dict) and set(routine) == _ROUTINE_FIELDS
+            and isinstance(routine['job_name'], str) and 0 < len(routine['job_name'].strip()) <= 200
+            and routine['status'] in _ROUTINE_STATUSES
+            and type(routine['finished_at']) in (int, float) and routine['finished_at'] > 0)
 
 
 def automation_display_metadata(metadata):
     """Validate a producer's card (an async result, or a liveness tick's one-line receipt): both keys
-    or neither, kind from the closed producer set."""
+    or neither, kind from the closed producer set. A routine's card also names its job, status and
+    finish time, and holds the job's whole output (bounded as the door bounds the model text)."""
     if 'display_kind' not in metadata and 'display_text' not in metadata:
         return {}
-    from gateway.response_filters import PRODUCER_CARD_KINDS
+    from gateway.response_filters import PRODUCER_CARD_KINDS, ROUTINE_OUTPUT_DISPLAY_KIND
     kind, text = metadata.get('display_kind'), metadata.get('display_text')
+    routine = kind == ROUTINE_OUTPUT_DISPLAY_KIND
     if (kind not in PRODUCER_CARD_KINDS or not isinstance(text, str) or not text.strip()
-            or len(text) > _DISPLAY_TEXT_LIMIT):
+            or len(text) > (_ROUTINE_TEXT_LIMIT if routine else _DISPLAY_TEXT_LIMIT)
+            or routine != ('routine' in metadata) or (routine and not _valid_routine(metadata['routine']))):
         raise RuntimeStoreError('invalid_params')
-    return {'display_kind': kind, 'display_text': text}
+    return {'display_kind': kind, 'display_text': text, **({'routine': dict(metadata['routine'])} if routine else {})}
+
+
+def routine_display_metadata(routine):
+    if routine is None:
+        return {}
+    from gateway.response_filters import ROUTINE_OUTPUT_DISPLAY_KIND
+    if not isinstance(routine, dict) or set(routine) != _ROUTINE_FIELDS | {'text'}:
+        raise RuntimeStoreError('invalid_params')
+    return automation_display_metadata({'display_kind': ROUTINE_OUTPUT_DISPLAY_KIND, 'display_text': routine['text'],
+                                        'routine': {key: routine[key] for key in _ROUTINE_FIELDS}})
 
 # notification_origin / original_trigger_message_id are producer debug context (#52694) and are not
 # persisted; notification_category="diagnostic" rides the snapshot so the replayed wake still mutes,
@@ -428,7 +451,7 @@ def automation_display_metadata(metadata):
 # proof at execution from the target the pre-claim check validated, and the turn's resolver reads it.
 _AUTOMATION_METADATA = frozenset({'gateway_session_key', 'gateway_session_id', 'automation_identities',
     'turn_author', 'notification_origin', 'original_trigger_message_id', 'notification_category',
-    'display_kind', 'display_text', 'gateway_proven_session_id', 'gateway_completion_ids', 'heartbeat_tick'})
+    'display_kind', 'display_text', 'routine', 'gateway_proven_session_id', 'gateway_completion_ids', 'heartbeat_tick'})
 
 
 def admission_display(payload):
@@ -438,7 +461,9 @@ def admission_display(payload):
     surface would. ``{}`` for every other input."""
     descriptor = payload.get('local_automation_v1') or (payload.get('native_text_v1') or {}).get('automation') or {}
     kind, text = descriptor.get('display_kind'), descriptor.get('display_text')
-    if not kind or not isinstance(text, str) or not text.strip():
+    from gateway.response_filters import ROUTINE_OUTPUT_DISPLAY_KIND
+    # A routine's whole output stays out of the live frame: its row carries it.
+    if not kind or kind == ROUTINE_OUTPUT_DISPLAY_KIND or not isinstance(text, str) or not text.strip():
         return {}
     card = {'display_kind': kind, 'display_text': text, 'text': str(payload.get('text') or '')}
     if descriptor.get('notification_category') == 'diagnostic':
