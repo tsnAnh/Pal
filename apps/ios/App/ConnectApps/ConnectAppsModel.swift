@@ -123,7 +123,8 @@ final class ConnectAppsModel {
         self.bots = bots
         self.currentBot = currentBot
         let connectService = ConnectAppsService(
-            rpc: OAuthClientScript.wrap(ConnectionRPC(model: connection)), profile: profile, browser: OAuthClientScript.browser(browser),
+            rpc: OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection))), profile: profile,
+            browser: McpSignInScript.browser(OAuthClientScript.browser(browser)),
             systemBrowser: SystemBrowserAuthorization(), nativeSignIn: NativeMcpSignIn.native(connection: connection), diagnostics: .osLog()
         )
         service = connectService
