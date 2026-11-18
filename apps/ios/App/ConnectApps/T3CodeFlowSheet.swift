@@ -6,7 +6,7 @@ struct T3CodeFlowSheet: View {
     let close: () -> Void
 
     var body: some View {
-        StepFlowView(model: flow.model, title: T3CodeConnector.name, close: close)
+        StepFlowView(model: flow.model, title: T3CodeConnector.name, close: close, accessory: { _ in EmptyView() })
             .task(id: flow.model.engine.current.id) { prefillAddress() }
     }
 
