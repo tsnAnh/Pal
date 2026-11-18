@@ -8,18 +8,28 @@ public enum SetupStatusClass: String, Sendable, CaseIterable, Equatable {
     case forbidden
     case signInInProgress = "oauth_in_progress"
     case invalidRedirect = "invalid_redirect_uri"
+    case signInIncomplete = "sign_in_failed"
     case internalFault = "internal"
 
-    static let byCode: [String: SetupStatusClass] = [
-        "offline": .offline, "timed_out": .offline, "unreachable": .offline, "provider_unreachable": .offline,
-        "gateway_outdated": .gatewayOutdated, "unsupported": .gatewayOutdated,
-        "invalid_token": .vendorRefusedValue, "credential_rejected": .vendorRefusedValue,
-        "credential_expired": .vendorRefusedValue, "invalid_client": .vendorRefusedValue,
-        "needs_reauth": .needsReauth, "revoked": .needsReauth, "auth_required": .needsReauth,
-        "forbidden": .forbidden, "not_owner": .forbidden,
-        "oauth_in_progress": .signInInProgress,
-        "invalid_redirect_uri": .invalidRedirect, "invalid_client_metadata": .invalidRedirect,
+    private static let incompleteCodes = [
+        "sign_in_failed", "access_denied", "sign_in_expired", "sign_in_timed_out", "browser_unavailable", "discovery_failed", "listener_failed",
+        "state_mismatch", "token_exchange_failed", "unsupported_grant_type", "gateway_rejected", "server_add_failed",
     ]
+
+    static let byCode: [String: SetupStatusClass] = {
+        var table: [String: SetupStatusClass] = [
+            "offline": .offline, "timed_out": .offline, "unreachable": .offline, "provider_unreachable": .offline,
+            "gateway_outdated": .gatewayOutdated, "unsupported": .gatewayOutdated,
+            "invalid_token": .vendorRefusedValue, "credential_rejected": .vendorRefusedValue,
+            "credential_expired": .vendorRefusedValue, "invalid_client": .vendorRefusedValue,
+            "needs_reauth": .needsReauth, "revoked": .needsReauth, "auth_required": .needsReauth,
+            "forbidden": .forbidden, "not_owner": .forbidden,
+            "oauth_in_progress": .signInInProgress, "handshake_used": .signInInProgress,
+            "invalid_redirect_uri": .invalidRedirect, "invalid_client_metadata": .invalidRedirect,
+        ]
+        for code in incompleteCodes { table[code] = .signInIncomplete }
+        return table
+    }()
 
     public static func classify(code: String) -> SetupStatusClass {
         byCode[code.lowercased()] ?? .internalFault
@@ -38,7 +48,7 @@ public struct SetupStatus: Sendable, Equatable {
 
     public init(
         code: String, method: String? = nil, trace: String? = nil, gatewayVersion: String? = nil,
-        subject: String? = nil, valueName: String = "token", device: String = "device"
+        subject: String? = nil, valueName: String = "token", device: String = "device", detail: String? = nil
     ) {
         let kind = SetupStatusClass.classify(code: code)
         let name = subject ?? String(localized: "This app")
@@ -76,6 +86,10 @@ public struct SetupStatus: Sendable, Equatable {
         case .invalidRedirect:
             title = String(localized: "\(name) would not accept this \(device)'s address")
             reason = String(localized: "\(name) only allows sign-in on your own computer, and Pal could not open one here.")
+            actionTitle = String(localized: "Try again")
+        case .signInIncomplete:
+            title = String(localized: "Sign-in did not finish")
+            reason = detail ?? String(localized: "The sign-in could not be completed. Try again.")
             actionTitle = String(localized: "Try again")
         case .internalFault:
             title = String(localized: "Pal could not finish")

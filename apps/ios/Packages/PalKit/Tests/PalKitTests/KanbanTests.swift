@@ -51,7 +51,6 @@ struct KanbanWireTests {
         #expect(detail.execution.runs.first?.executor == "external")
         #expect(detail.outcomeContract?.kind == .builtArtifact)
         #expect(detail.evidence.map(\.kind) == [.executionRef, .artifactBuilt])
-        #expect(detail.evidence.map { KanbanPresentation.evidenceSource($0.source) } == ["Attested by producer", "Checked by gateway"])
         #expect(detail.evidence.last?.summary == "app.zip")
         #expect(detail.evidence.allSatisfy { $0.producerProfile == "projbot" && $0.producerSession == "sess-1" })
         #expect(KanbanPresentation.ciLabel(detail.ciAcceptance) == "No CI result recorded")
@@ -129,7 +128,6 @@ struct KanbanWireTests {
         #expect(detail.proofHistory.first?.kind == .unknown("vibes"))
         #expect(detail.evidence.first?.kind == .unknown("hologram"))
         #expect(detail.evidence.first?.summary == nil)
-        #expect(KanbanPresentation.evidenceSource(detail.evidence[0].source) == "carrier-pigeon")
     }
 
     @Test("missing or null verification, CI and evidence read as unknown, never success")

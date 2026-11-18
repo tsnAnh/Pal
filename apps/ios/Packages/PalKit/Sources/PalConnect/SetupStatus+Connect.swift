@@ -79,11 +79,15 @@ extension SetupStatus {
         case .faulted(let fault):
             return SetupStatus(fault: fault, subject: subject, valueName: valueName, device: device)
         case .signInFailed(let reason):
-            var status = SetupStatus(code: "sign_in_failed", subject: subject, valueName: valueName, device: device)
-            status.title = String(localized: "Sign-in did not finish")
-            status.reason = reason
-            status.actionTitle = String(localized: "Try again")
-            return status
+            return SetupStatus(
+                code: McpSignInStatus.code(forReason: reason), subject: subject, valueName: valueName, device: device, detail: reason
+            )
+        case .signInRefused(let failure, let fault):
+            let known = SetupStatusClass.byCode[fault.reason.lowercased()] != nil
+            return SetupStatus(
+                code: known ? fault.reason : failure.code, method: fault.method, trace: fault.trace.rawValue,
+                gatewayVersion: fault.gatewayVersion, subject: subject, valueName: valueName, device: device, detail: failure.reason
+            )
         case .unavailable:
             return SetupStatus(code: "unavailable", subject: subject, valueName: valueName, device: device)
         case .cancelled:

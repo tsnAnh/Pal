@@ -135,7 +135,7 @@ final class OwnerSetupModel: Identifiable {
     func makeFlow(_ engine: StepFlowEngine) -> StepFlowModel {
         let name = app.name
         let valueName = usesClient ? "client" : "token"
-        let device = ConnectorPlatform.current.deviceWord
+        let device = ConnectorPlatform.current.deviceName
         return StepFlowModel(
             engine: engine,
             runner: { @Sendable [weak self] step, values in
@@ -149,7 +149,7 @@ final class OwnerSetupModel: Identifiable {
     }
 
     func status(for error: any Error) -> SetupStatus {
-        Self.classify(error, appName: app.name, valueName: usesClient ? "client" : "token", device: ConnectorPlatform.current.deviceWord)
+        Self.classify(error, appName: app.name, valueName: usesClient ? "client" : "token", device: ConnectorPlatform.current.deviceName)
     }
 
     nonisolated static func classify(_ error: any Error, appName: String, valueName: String, device: String) -> SetupStatus {
@@ -183,15 +183,5 @@ final class OwnerSetupModel: Identifiable {
         let resume = stepID.map { StepFlowProgress(flowID: flowID, stepID: $0) }
         guard let engine = StepFlowEngine(flowID: flowID, steps: steps, resume: resume) else { return }
         phase = .ready(makeFlow(engine))
-    }
-}
-
-private extension ConnectorPlatform {
-    var deviceWord: String {
-        switch self {
-        case .mac: "Mac"
-        case .iPhone: "iPhone"
-        case .iPad: "iPad"
-        }
     }
 }

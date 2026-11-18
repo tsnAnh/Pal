@@ -10,31 +10,6 @@ import PalProtocol
 import Observation
 
 extension ConnectAppsModel {
-    var isPastingAddress: Bool { pasteSession != nil }
-
-    func beginPaste(_ app: ConnectApp) async {
-        guard pasteSession == nil else { return }
-        busy.insert(app.id)
-        failures[app.id] = nil
-        defer { busy.remove(app.id) }
-        do {
-            let session = try await service.beginUpworkPaste(app)
-            guard ExternalLink.open(session.authorizeURL) else {
-                await session.cancel()
-                failures[app.id] = McpOAuthError.browserUnavailable.reason
-                return
-            }
-            pasteSession = session
-            pasteTargetID = app.id
-            pasteState = .idle
-        } catch let error as ConnectAppsError {
-            handle(error, app: app)
-        } catch {
-            fail(app, "Couldn't connect \(app.name). Try again.")
-        }
-        await reload()
-    }
-
     func submitPastedAddress(_ value: String) async {
         guard let session = pasteSession, pasteState.acceptsInput else { return }
         pasteState = .submitting
@@ -65,25 +40,5 @@ extension ConnectAppsModel {
         pasteState = .idle
         await session.cancel()
         await reload()
-    }
-
-    func beginOtherPaste(_ app: ConnectApp) async {
-        guard pasteSession == nil else { return }
-        do {
-            guard case .paste(let session) = try await service.signInMcp(app, platform: ConnectorPlatform.current) else { return }
-            guard ExternalLink.open(session.authorizeURL) else {
-                await session.cancel()
-                failures[app.id] = McpOAuthError.browserUnavailable.reason
-                return
-            }
-            pasteSession = session
-            pasteTargetID = app.id
-            pasteState = .idle
-            pastingApp = app
-        } catch let error as ConnectAppsError {
-            handle(error, app: app)
-        } catch {
-            fail(app, "Couldn't connect \(app.name). Try again.")
-        }
     }
 }

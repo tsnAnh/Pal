@@ -99,6 +99,7 @@ struct StepFlowCalmCopy {
     enum Mark {
         case spinner
         case success
+        case pending
     }
 
     let mark: Mark
@@ -109,6 +110,14 @@ struct StepFlowCalmCopy {
 struct StepFlowCalmView: View {
     let copy: StepFlowCalmCopy
 
+    private var identifier: String {
+        switch copy.mark {
+        case .spinner: "stepFlowWaiting"
+        case .success: "stepFlowSuccess"
+        case .pending: "stepFlowPending"
+        }
+    }
+
     var body: some View {
         VStack(spacing: 14) {
             switch copy.mark {
@@ -118,6 +127,13 @@ struct StepFlowCalmView: View {
                 Image(systemName: "checkmark")
                     .font(.system(size: 24))
                     .foregroundStyle(.green)
+                    .frame(width: 54, height: 54)
+                    .background(PalTokens.control, in: Circle())
+                    .accessibilityHidden(true)
+            case .pending:
+                Image(systemName: "clock")
+                    .font(.system(size: 24))
+                    .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: 54, height: 54)
                     .background(PalTokens.control, in: Circle())
                     .accessibilityHidden(true)
@@ -140,6 +156,6 @@ struct StepFlowCalmView: View {
         .frame(maxWidth: 420)
         .padding(PalMetrics.screenMargin)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier(copy.mark == .success ? "stepFlowSuccess" : "stepFlowWaiting")
+        .accessibilityIdentifier(identifier)
     }
 }

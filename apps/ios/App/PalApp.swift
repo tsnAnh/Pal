@@ -47,10 +47,10 @@ struct PalApp: App {
         let signIn = ServiceSignInCenter(
             call: { method, params in try await model.rpc(method, params) },
             openBrowser: { _ = ExternalLink.open($0) },
-            nativeSignIn: UpworkSignIn.serviceHandler(connection: model),
+            nativeSignIn: NativeMcpSignIn.serviceHandler(connection: model),
             pasteSignIn: .routing(
                 [GoogleWorkspaceCatalog.serviceID: GoogleSignIn.servicePasteRoute(connection: model)],
-                fallback: UpworkSignIn.servicePasteRoute(connection: model)
+                fallback: NativeMcpSignIn.servicePasteRoute(connection: model)
             ),
             pasteOnlyServices: [GoogleWorkspaceCatalog.serviceID]
         )

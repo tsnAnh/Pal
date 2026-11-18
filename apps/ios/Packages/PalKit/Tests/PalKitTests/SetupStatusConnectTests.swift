@@ -49,10 +49,19 @@ struct SetupStatusConnectTests {
     @Test func aSignInThatDidNotFinishCarriesItsReason() {
         let status = SetupStatus(error: ConnectAppsError.signInFailed("Google closed the window."), subject: "Google")
         #expect(status.code == "sign_in_failed")
-        #expect(status.kind == .internalFault)
+        #expect(status.kind == .signInIncomplete)
         #expect(status.title == "Sign-in did not finish")
         #expect(status.reason == "Google closed the window.")
         #expect(status.actionTitle == "Try again")
+    }
+
+    @Test func aRefusedSignInKeepsTheServicesReasonAndTheFaultDetails() throws {
+        let refused = try fault("sign_in_refused", method: "mcp.servers.oauth.start")
+        let status = SetupStatus(error: ConnectAppsError.signInRefused(.denied, refused), subject: "Figma")
+        #expect(status.kind == .signInIncomplete)
+        #expect(status.reason == McpSignInFailure.denied.reason)
+        #expect(status.method == "mcp.servers.oauth.start")
+        #expect(status.trace == "gj43o07j")
     }
 
     @Test(arguments: [ConnectAppsError.unavailable, .failed, .cancelled, .credentialsRequired(["token"])])

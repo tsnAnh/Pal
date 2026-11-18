@@ -21,6 +21,7 @@ public enum McpSignInFailure: Sendable, Equatable, CaseIterable {
     case denied
     case expired
     case unsupportedGrant
+    case adminApproval
     case other
 
     public var reason: String {
@@ -30,12 +31,26 @@ public enum McpSignInFailure: Sendable, Equatable, CaseIterable {
         case .denied: "Access was not granted."
         case .expired: "This sign-in expired. Try again."
         case .unsupportedGrant: "The sign-in service doesn't support this kind of sign-in."
+        case .adminApproval: "An admin of your organisation needs to approve Pal."
         case .other: "The sign-in couldn't be completed. Try again."
+        }
+    }
+
+    public var code: String {
+        switch self {
+        case .registrationRejected: "invalid_client_metadata"
+        case .redirectRefused: "invalid_redirect_uri"
+        case .denied: "access_denied"
+        case .expired: "sign_in_expired"
+        case .unsupportedGrant: "unsupported_grant_type"
+        case .adminApproval: "admin_approval_required"
+        case .other: "sign_in_failed"
         }
     }
 
     public static func classify(_ gatewayText: String?) -> McpSignInFailure {
         let text = (gatewayText ?? "").lowercased()
+        if text.contains("admin"), text.contains("approv") || text.contains("consent") { return .adminApproval }
         if text.contains("unsupported") { return .unsupportedGrant }
         if text.contains("redirect") { return .redirectRefused }
         if text.contains("denied") { return .denied }
