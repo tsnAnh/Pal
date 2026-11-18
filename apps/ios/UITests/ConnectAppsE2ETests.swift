@@ -19,13 +19,20 @@ class ConnectAppsTestCase: E2ETestCase {
         app.descendants(matching: .any)["connectApps"]
     }
 
-    func chip(_ app: XCUIApplication, _ id: String) -> XCUIElement {
-        app.buttons["connectAppsChips-\(id)"]
-    }
-
     func waitLabel(_ element: XCUIElement, contains text: String, timeout: TimeInterval = 30, file: StaticString = #filePath, line: UInt = #line) {
         let match = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label CONTAINS %@", text), object: element)
-        XCTAssertEqual(XCTWaiter().wait(for: [match], timeout: timeout), .completed, "\(element.identifier) never read '\(text)'\n" + XCUIApplication().debugDescription, file: file, line: line)
+        let result = XCTWaiter().wait(for: [match], timeout: timeout)
+        XCTAssertEqual(result, .completed, "\(element.identifier) never read '\(text)'\n" + XCUIApplication().debugDescription, file: file, line: line)
+    }
+
+    func waitLabel(_ element: XCUIElement, equals text: String, timeout: TimeInterval = 30, file: StaticString = #filePath, line: UInt = #line) {
+        let match = XCTNSPredicateExpectation(predicate: NSPredicate(format: "label == %@", text), object: element)
+        let result = XCTWaiter().wait(for: [match], timeout: timeout)
+        XCTAssertEqual(result, .completed, "\(element.identifier) never read '\(text)'\n" + XCUIApplication().debugDescription, file: file, line: line)
+    }
+
+    func actionButtons(_ app: XCUIApplication) -> XCUIElementQuery {
+        app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND identifier ENDSWITH %@", "connectApp-", "-action"))
     }
 
     func waitForCatalog(_ app: XCUIApplication, timeout: TimeInterval = 40) {
@@ -51,23 +58,6 @@ class ConnectAppsTestCase: E2ETestCase {
         openBot(app, "default")
     }
 
-    func tapChip(_ app: XCUIApplication, _ id: String) {
-        let target = chip(app, id)
-        waitFor(target, timeout: 10, "\(id) chip")
-        let row = app.descendants(matching: .any)["connectAppsChips"]
-        let screen = app.windows.firstMatch.frame
-        let leading = row.coordinate(withNormalizedOffset: CGVector(dx: 0.2, dy: 0.5))
-        let trailing = row.coordinate(withNormalizedOffset: CGVector(dx: 0.8, dy: 0.5))
-        for _ in 0..<10 where !screen.contains(target.frame) {
-            if target.frame.minX < screen.minX {
-                leading.press(forDuration: 0.1, thenDragTo: trailing)
-            } else {
-                trailing.press(forDuration: 0.1, thenDragTo: leading)
-            }
-        }
-        target.tap()
-    }
-
     func assistantReply(_ app: XCUIApplication, containing text: String, timeout: TimeInterval = 90) {
         waitFor(bubbles(app, "assistantBubble", containing: text).firstMatch, timeout: timeout, "assistant reply containing '\(text)'")
     }
@@ -86,30 +76,37 @@ class ConnectAppsTestCase: E2ETestCase {
 
 @MainActor
 final class ConnectAppsE2ETests: ConnectAppsTestCase {
-    func test1ChipsSearchAndNoDeviceSwitches() throws {
+    func test1SectionsSearchAndNoDeviceSwitches() throws {
         let app = launchConnectApps()
-        waitFor(chip(app, "all"), timeout: 30, "All chip")
         waitForCatalog(app)
-        XCTAssertTrue(app.staticTexts["Connect apps"].exists)
-        XCTAssertTrue(app.buttons["connectedCountButton"].label.hasSuffix("connected"), app.buttons["connectedCountButton"].label)
-        XCTAssertFalse(chip(app, "iphone").exists, "no device chip")
+        XCTAssertTrue(app.staticTexts["Connect Apps"].exists)
+        XCTAssertFalse(app.buttons["connectedCountButton"].exists, "the Connected section replaces the count button")
+        XCTAssertFalse(app.buttons["connectAppsChips-all"].exists, "sections replace the filter chips")
         XCTAssertFalse(app.descendants(matching: .any)["connectAppsSection-iphone"].exists, "no device section")
         XCTAssertFalse(app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "deviceConnector-")).firstMatch.exists, "no device rows")
+        let headerFormat = "identifier BEGINSWITH %@ AND NOT identifier BEGINSWITH %@"
+        let headers = app.descendants(matching: .any).matching(NSPredicate(format: headerFormat, "connectAppsSection-", "connectAppsSection-device"))
+        waitFor(headers.firstMatch, timeout: 30, "a section header")
         shot(app, "connect-apps-all")
-
-        let category = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND NOT identifier ENDSWITH %@", "connectAppsChips-", "-all")).firstMatch
-        waitFor(category, timeout: 30, "a catalog category chip")
-        let categoryID = category.identifier.replacingOccurrences(of: "connectAppsChips-", with: "")
-        category.tap()
-        let rows = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@ AND NOT identifier ENDSWITH %@", "connectApp-", "-action"))
-        waitFor(rows.firstMatch, timeout: 20, "rows in \(categoryID)")
-        XCTAssertTrue(app.descendants(matching: .any)["connectAppsSectionTitle"].exists)
-        shot(app, "connect-apps-category")
 
         let search = app.descendants(matching: .any)["connectAppsSearch"]
         search.tap()
         search.typeText("Calendar")
         XCTAssertFalse(app.descendants(matching: .any)["deviceConnector-calendar"].exists, "search finds no device connector")
+    }
+
+    func test1dEveryRowShowsOneStateWithOneGlassAction() throws {
+        let app = launchConnectApps()
+        waitForCatalog(app)
+        let allowed: Set<String> = ["Connect", "Set up", "Connected", "Reconnect"]
+        let buttons = actionButtons(app)
+        XCTAssertGreaterThan(buttons.count, 0, "rows offer actions")
+        for index in 0..<min(buttons.count, 12) {
+            let label = buttons.element(boundBy: index).label
+            XCTAssertTrue(allowed.contains(label), "unexpected row action '\(label)'")
+        }
+        XCTAssertFalse(app.buttons.matching(NSPredicate(format: "label == %@", "Try again")).firstMatch.exists, "no bare Try again in the list")
+        shot(app, "connect-apps-row-states")
     }
 
     func test1bCapabilitiesListShowsEachCapabilityRow() throws {
@@ -164,13 +161,13 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         XCTAssertEqual(connect.label, "Connect")
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
         connect.hit()
-        waitLabel(connect, contains: "Manage")
+        waitLabel(connect, equals: "Connected")
         shot(app, "connect-apps-direct-connected")
         connect.hit()
         let disconnect = app.buttons["Disconnect"]
         waitFor(disconnect, timeout: 10, "disconnect confirmation")
         disconnect.hit()
-        waitLabel(connect, contains: "Connect")
+        waitLabel(connect, equals: "Connect")
     }
 
     func test4TheSlackRowOpensTheBotPickerAndTheWizardForTheChosenBot() throws {
@@ -179,7 +176,7 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         search(app, "Slack")
         let row = app.descendants(matching: .any)["connectApp-connector:slack"]
         waitFor(row, timeout: 30, "Slack row")
-        waitFor(app.staticTexts["Not set up"], timeout: 30, "Slack row status")
+        waitFor(app.staticTexts["Per bot · one-time setup"], timeout: 30, "Slack row status")
         XCTAssertFalse(app.staticTexts["Needs setup on your Pal before it can connect."].exists, "no Client ID sheet copy")
         let open = action(app, "slack")
         waitFor(open, timeout: 10, "Slack action")
@@ -216,7 +213,7 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         } else {
             notice.buttons.firstMatch.tap()
         }
-        waitLabel(connect, contains: "Connect")
+        waitLabel(connect, equals: "Connect")
         XCTAssertFalse(app.staticTexts.containing(NSPredicate(format: "label CONTAINS[c] %@", "Nous")).firstMatch.exists, "no Nous Portal sign-in copy")
         #endif
     }
@@ -237,12 +234,12 @@ final class ConnectAppsE2ETests: ConnectAppsTestCase {
         search(app, "Context7")
         let manage = action(app, "context7")
         waitFor(manage, timeout: 30, "Context7 action")
-        waitLabel(manage, contains: "Manage")
+        waitLabel(manage, equals: "Connected")
         manage.hit()
         let disconnect = app.buttons["Disconnect"]
         waitFor(disconnect, timeout: 10, "disconnect confirmation")
         disconnect.hit()
-        waitLabel(manage, contains: "Connect")
+        waitLabel(manage, equals: "Connect")
     }
 
     func test2TheBotReadsTodaysEventsWithNoSwitch() async throws {

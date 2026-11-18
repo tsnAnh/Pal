@@ -28,15 +28,19 @@ struct CapabilitySetKeyButton: View {
     let row: CapabilityRow
     let onSelect: (String) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         let keys = row.settableKeys
         if keys.count == 1, let key = keys.first {
-            Button(String(localized: "Set key")) { onSelect(key) }
-                .accessibilityIdentifier("capabilitySetKey-\(row.id)")
+            SetupButton(title: String(localized: "Set key"), identifier: "capabilitySetKey-\(row.id)") { onSelect(key) }
+                .controlSize(.small)
         } else if keys.count > 1 {
             Menu(String(localized: "Set key")) {
                 ForEach(keys, id: \.self) { key in Button(key) { onSelect(key) } }
             }
+            .buttonStyle(.glass(PalGlass.style(interactive: true, colorScheme: colorScheme)))
+            .controlSize(.small)
             .accessibilityIdentifier("capabilitySetKey-\(row.id)")
         }
     }

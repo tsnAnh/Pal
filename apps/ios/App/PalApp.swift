@@ -236,6 +236,14 @@ struct RootView: View {
                 title: bot?.displayName ?? name,
                 spec: bot?.spec
             )
+        default:
+            channelDestination(route)
+        }
+    }
+
+    @ViewBuilder
+    private func channelDestination(_ route: AppRoute) -> some View {
+        switch route {
         case .slack(let name):
             SlackEntryView(
                 botName: name,
@@ -267,6 +275,8 @@ struct RootView: View {
                 displayName: roster.bot(named: name)?.displayName ?? name,
                 services: bots.services
             ))
+        default:
+            EmptyView()
         }
     }
 
@@ -318,7 +328,7 @@ struct RootView: View {
                     case .createBot:
                         CreateBotSheet(model: createBot, importer: templateImport, roster: roster, router: router)
                     case .connectApps:
-                        ConnectAppsSheet(
+                        ConnectAppsScreen(
                             model: ConnectAppsModel(
                                 connection: model,
                                 pool: hostPool,

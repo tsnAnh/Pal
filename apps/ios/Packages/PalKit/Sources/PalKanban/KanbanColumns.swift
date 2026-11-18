@@ -94,7 +94,7 @@ public struct KanbanFilter: Sendable, Equatable {
         if let bot, row.bot != bot { return false }
         if let column, row.column != column { return false }
         return terms.allSatisfy { term in
-            row.card.title.localizedStandardContains(term)
+            row.displayTitle.localizedStandardContains(term)
                 || (row.body?.localizedStandardContains(term) ?? false)
                 || Self.refMatches(row.ref, term: term)
         }

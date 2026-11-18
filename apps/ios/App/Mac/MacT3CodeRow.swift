@@ -34,8 +34,11 @@ struct MacT3CodeRow: View {
             if look.isBusy {
                 ProgressView().controlSize(.small)
             } else if let title = look.buttonTitle, let action = look.action {
-                MacRowAction(title: String(localized: String.LocalizationValue(title)), prominent: action != .disconnect) { perform(action) }
-                    .view(identifier: "deviceConnector-t3code-action")
+                SetupButton(
+                    title: String(localized: String.LocalizationValue(title)), kind: action == .disconnect ? .secondary : .primary,
+                    identifier: "deviceConnector-t3code-action"
+                ) { perform(action) }
+                .controlSize(.small)
             }
         }
         .frame(height: 60.5)

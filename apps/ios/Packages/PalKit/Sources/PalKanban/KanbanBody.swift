@@ -86,19 +86,6 @@ public enum KanbanBody {
         return nil
     }
 
-    public static func title(of body: String?, fallback: String) -> String {
-        for line in (body ?? "").split(whereSeparator: \.isNewline) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.isEmpty || trimmed.hasPrefix("```") || isMachineLine(trimmed) { continue }
-            let text = trimmed.drop { $0 == "#" }
-                .replacingOccurrences(of: "**", with: "")
-                .replacingOccurrences(of: "`", with: "")
-                .trimmingCharacters(in: .whitespaces)
-            if !text.isEmpty { return text }
-        }
-        return fallback
-    }
-
     static func isMachineLine(_ trimmed: String) -> Bool {
         var rest = Substring(trimmed)
         if rest.hasPrefix("- ") || rest.hasPrefix("* ") { rest = rest.suffix(from: rest.index(rest.startIndex, offsetBy: 2)) }

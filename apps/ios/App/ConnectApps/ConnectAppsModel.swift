@@ -51,10 +51,6 @@ enum ConnectDisconnectTarget: Identifiable {
     }
 }
 
-enum ConnectChip {
-    static let all = "all"
-}
-
 @MainActor
 @Observable
 final class ConnectAppsModel {
@@ -62,11 +58,6 @@ final class ConnectAppsModel {
         case loading
         case ready
         case unavailable
-    }
-
-    enum Page {
-        case catalog
-        case yourPlugins
     }
 
     enum Mode {
@@ -85,9 +76,7 @@ final class ConnectAppsModel {
     var capabilitiesPhase: CapabilitiesPhase = .hidden
     private(set) var catalog = ConnectCatalog()
     var busy: Set<String> = []
-    var selection = ConnectChip.all
     var query = ""
-    var page: Page = .catalog
     var notice: ConnectNotice?
     var credentialPrompt: CredentialPrompt?
     var keyRequest: CapabilityKeyRequest?
@@ -158,12 +147,6 @@ final class ConnectAppsModel {
     }
 
     func googleRow(_ app: ConnectApp) -> ConnectApp { app.applyingGoogleAuthRequired(google.authRequired) }
-
-    var connectedCount: Int { catalog.connectedApps.count }
-
-    var connectedApps: [ConnectApp] { catalog.connectedApps }
-
-    var chips: [String] { [ConnectChip.all] + catalog.categories }
 
     var trimmedQuery: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
 
