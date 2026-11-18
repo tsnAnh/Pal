@@ -53,28 +53,12 @@ struct KanbanRedesignTests {
         #expect(filtered.columns.contains { $0.column == .done }, "done stays while a filter matches nothing")
     }
 
-    @Test("the title is the first readable body line")
-    func titleFromBody() {
-        let body = "\n\n  \nKey: PAL-1\nKind: part\n- Project: pal\n**Bot**: alpha\nOutcome: x\nState: ready\nAdded: 1\nUpdated: 2\nHistory: created\n## Ship the **beta** build\nmore text\n"
-        #expect(KanbanBody.title(of: body, fallback: "t_1") == "Ship the beta build", "headings lose markers and machine lines are skipped")
-        #expect(KanbanBody.title(of: "```\nKey: x\n", fallback: "t_1") == "t_1", "only machine lines and fences fall back")
-        #expect(KanbanBody.title(of: nil, fallback: "t_1") == "t_1", "no body falls back")
-        #expect(KanbanBody.title(of: "Key: PAL-1\nState: ready", fallback: "Card title") == "Card title", "a body of machine lines falls back")
-        #expect(KanbanBody.title(of: "State of the art\n", fallback: "t") == "State of the art", "a line that only starts like a key is readable")
-        #expect(KanbanBody.title(of: "/faker-mode\n# Real heading", fallback: "t") == "Real heading", "a leading slash command is skipped")
-    }
-
-    @Test("a row shows its card title, then the first readable body line, then its key")
+    @Test("a row shows its card title, or its task id when the title is blank")
     func rowTitle() throws {
         #expect(try row("t1", wire: "ready", title: "raw-key", body: "Key: a\n# Real title").displayTitle == "raw-key", "the card title wins over the body")
-        #expect(try row("t2", wire: "ready", title: "Card title").displayTitle == "Card title", "no body uses the card title")
-        #expect(try row("t3", wire: "ready").displayTitle == "t3", "an empty title falls back to the key")
-        let skipped = try row("t4", wire: "ready", title: "  ", body: "/faker-mode\n# Real heading")
-        #expect(skipped.displayTitle == "Real heading", "a blank title skips a leading slash command")
-        #expect(try row("t5", wire: "ready", title: "", body: "/faker-mode").displayTitle == "t5", "a body of only a slash command falls back to the key")
-        let indented = try row("t6", wire: "ready", title: "", body: "  /faker-mode unit\n\nPlain words")
-        #expect(indented.displayTitle == "Plain words", "an indented slash command is skipped")
-        #expect(try row("t7", wire: "ready", title: "", body: "/ not a command").displayTitle == "/ not a command", "a lone slash is readable text")
+        #expect(try row("t2", wire: "ready").displayTitle == "t2", "an empty title shows the task id")
+        let blank = try row("t3", wire: "ready", title: "  \n", body: "/faker-mode\n# Real heading")
+        #expect(blank.displayTitle == "t3", "a whitespace title shows the task id, never a body line")
     }
 
     @Test("a card titled setup-slack with a slash-command body shows setup-slack on the tile, the detail and in search")
