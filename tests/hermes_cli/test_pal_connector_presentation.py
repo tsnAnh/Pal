@@ -26,6 +26,7 @@ LOGO_FALLBACK = {
     "motherduck": "no brand kit or terms",
     "semgrep": "no brand kit or terms",
     "slack": "Slack terms require a written licence for the logo",
+    "t3code": "no T3 Code brand kit or terms",
     "twilio-docs": "Twilio logos need express written permission",
 }
 

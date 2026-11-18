@@ -8,6 +8,8 @@ public enum SetupStatusClass: String, Sendable, CaseIterable, Equatable {
     case forbidden
     case signInInProgress = "oauth_in_progress"
     case invalidRedirect = "invalid_redirect_uri"
+    case serverUnreachable = "server_unreachable"
+    case notMcpServer = "not_mcp"
     case signInIncomplete = "sign_in_failed"
     case internalFault = "internal"
 
@@ -26,6 +28,7 @@ public enum SetupStatusClass: String, Sendable, CaseIterable, Equatable {
             "forbidden": .forbidden, "not_owner": .forbidden,
             "oauth_in_progress": .signInInProgress, "handshake_used": .signInInProgress,
             "invalid_redirect_uri": .invalidRedirect, "invalid_client_metadata": .invalidRedirect,
+            "server_unreachable": .serverUnreachable, "mcp_unreachable": .serverUnreachable, "not_mcp": .notMcpServer,
         ]
         for code in incompleteCodes { table[code] = .signInIncomplete }
         return table
@@ -87,6 +90,9 @@ public struct SetupStatus: Sendable, Equatable {
             title = String(localized: "\(name) would not accept this \(device)'s address")
             reason = String(localized: "\(name) only allows sign-in on your own computer, and Pal could not open one here.")
             actionTitle = String(localized: "Try again")
+        case .serverUnreachable, .notMcpServer:
+            let copy = Self.serverCopy(kind, name: name)
+            (title, reason, actionTitle) = (copy.title, copy.reason, String(localized: "Enter the address again"))
         case .signInIncomplete:
             title = String(localized: "Sign-in did not finish")
             reason = detail ?? String(localized: "The sign-in could not be completed. Try again.")
@@ -98,9 +104,27 @@ public struct SetupStatus: Sendable, Equatable {
         }
     }
 
+    private struct ServerCopy {
+        var title: String
+        var reason: String
+    }
+
+    private static func serverCopy(_ kind: SetupStatusClass, name: String) -> ServerCopy {
+        if kind == .serverUnreachable {
+            return ServerCopy(
+                title: String(localized: "Pal could not reach \(name)"),
+                reason: String(localized: "Check that it is running and that its address is still right.")
+            )
+        }
+        return ServerCopy(
+            title: String(localized: "\(name) did not answer like an MCP server"),
+            reason: String(localized: "Check the address and the port.")
+        )
+    }
+
     public var symbol: String {
         switch kind {
-        case .offline: "wifi.slash"
+        case .offline, .serverUnreachable: "wifi.slash"
         case .gatewayOutdated: "arrow.down.circle"
         case .forbidden: "lock"
         default: "exclamationmark.triangle"

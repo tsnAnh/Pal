@@ -108,7 +108,7 @@ extension ConnectAppsService {
         }
     }
 
-    private func removeQuietly(_ name: String) async {
+    func removeQuietly(_ name: String) async {
         let service = self
         await Task { _ = try? await service.rawCall("mcp.servers.remove", ["name": .string(name)]) }.value
     }

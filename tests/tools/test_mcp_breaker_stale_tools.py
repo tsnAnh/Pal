@@ -150,21 +150,3 @@ def test_transport_failures_still_open_the_breaker(fake_t3, monkeypatch):
     assert list(counts.values()) == [3] and len(opened) == 1
     assert mcp_tool._CIRCUIT_BREAKER_COOLDOWN_SEC == 60.0
     assert "unreachable after 3 consecutive failures" in _call(names["t3_thread_list"])["error"]
-
-
-def test_offline_device_does_not_count(fake_t3, monkeypatch):
-    from hermes_constants import get_hermes_home
-    from tools import mcp_tool
-    from tools.mcp_tool_device import DeviceUnreachableError, clear_failure, note_failure
-
-    monkeypatch.setattr(mcp_tool, "_STDIO_RESPAWN_WAIT_SEC", 2)
-    names = _names()
-    fake_t3.write_text("down")
-    _call(names["restart"])
-    note_failure(get_hermes_home(), "faket3", DeviceUnreachableError("That Mac is offline."))
-    try:
-        for _ in range(4):
-            assert "error" in _call(names["t3_thread_list"])
-    finally:
-        clear_failure(get_hermes_home(), "faket3")
-    assert _breaker_state() == ({}, {})

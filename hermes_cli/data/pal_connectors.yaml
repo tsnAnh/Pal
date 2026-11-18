@@ -585,6 +585,14 @@ connectors:
   replaces_portal_slug: supabase
   verified: true
   source: https://supabase.com/docs/guides/ai-tools/mcp
+- id: t3code
+  name: T3 Code
+  icon: plugin_glyph
+  category: Developer tools
+  method: mcp_oauth
+  verified: false
+  source: https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md
+  notes: Runs on your own computer. Turn on Network access in T3 Code first.
 - id: todoist
   name: Todoist
   icon: todoist

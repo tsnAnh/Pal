@@ -12,14 +12,14 @@ OWNER_PICKS = frozenset({
     "linear", "atlassian", "clickup", "monday", "todoist", "notion", "airtable", "craft", "miro",
     "google-workspace", "dropbox", "figma", "canva", "gamma", "cloudinary", "comfy-cloud", "webflow", "wordpress-com",
     "stripe", "intercom", "calendly",
-    "slack", "clickhouse", "mintlify", "upwork", "discord",
+    "slack", "clickhouse", "mintlify", "upwork", "discord", "t3code",
 })
 
 
 def test_shipped_catalog_is_exactly_the_owner_picks():
     ids = {e.id for e in load_pal_connectors()}
     assert ids == OWNER_PICKS
-    assert len(ids) == 51
+    assert len(ids) == 52
 
 
 def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():
@@ -28,7 +28,23 @@ def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():
     assert len(ids) == len(set(ids))
     assert all(e.source.startswith("https://") for e in entries if e.verified)
     assert {e.method for e in entries} <= set(ConnectionMethod)
-    assert all(e.mcp_url or e.oauth for e in entries if e.method is ConnectionMethod.MCP_OAUTH)
+    assert all(e.mcp_url or e.oauth for e in entries if e.method is ConnectionMethod.MCP_OAUTH and e.id != "t3code")
+
+
+def test_t3code_is_a_per_user_address_mcp_oauth_connector():
+    entry = next(e for e in load_pal_connectors() if e.id == "t3code")
+
+    assert (entry.name, entry.icon, entry.category, entry.method, entry.verified) == (
+        "T3 Code", "plugin_glyph", "Developer tools", ConnectionMethod.MCP_OAUTH, False)
+    assert entry.mcp_url is None and entry.oauth is None and entry.setup is None and entry.stdio is None
+    assert entry.source == "https://github.com/pingdotgg/t3code/blob/main/docs/user/remote-access.md"
+    assert entry.notes == "Runs on your own computer. Turn on Network access in T3 Code first."
+
+
+def test_only_t3code_is_an_mcp_oauth_entry_without_an_address():
+    addressless = {e.id for e in load_pal_connectors() if e.method is ConnectionMethod.MCP_OAUTH and not e.mcp_url}
+
+    assert addressless == {"t3code"}
 
 
 def test_a_bot_app_entry_needs_no_endpoint_and_slack_is_one():

@@ -39,8 +39,6 @@ def summarize_server(name: str, cfg: dict, plugin: str | None = None) -> dict[st
     cfg = cfg if isinstance(cfg, dict) else {}
     if cfg.get("url"):
         transport = "sse" if cfg.get("transport") == "sse" else "http"
-    elif cfg.get("transport") == "device":
-        transport = "device"
     else:
         transport = "stdio" if cfg.get("command") else "unknown"
     auth = cfg.get("auth")
@@ -264,16 +262,29 @@ def _http_statuses(nodes: list[BaseException]) -> set[int]:
     return found
 
 
+def _answers_without_mcp(nodes: list[BaseException]) -> bool:
+    """A web page in place of MCP, or the SDK's no-session 404, which it reports as JSON-RPC method not found."""
+    from mcp.shared.exceptions import MCPError
+    from mcp.types import METHOD_NOT_FOUND
+    from tools.mcp_tool_errors import NonMcpEndpointError
+
+    return any(isinstance(node, NonMcpEndpointError) or (isinstance(node, MCPError) and node.code == METHOD_NOT_FOUND)
+               for node in nodes)
+
+
 def classify_probe_failure(exc: BaseException) -> str:
-    """``auth_refused`` (HTTP 401/403 anywhere in the failure), else ``server_error`` for any other HTTP
-    status, ``unreachable`` for a connect/DNS/TLS/timeout failure, ``server_error`` for the rest. The
-    transport wraps a rejection in a plain ``ConnectionError``, so the status is read from the text too."""
+    """``auth_refused`` (HTTP 401/403 anywhere in the failure), ``not_mcp`` for an address that answers with a web
+    page or a 404 instead of MCP, else ``server_error`` for any other HTTP status, ``unreachable`` for a
+    connect/DNS/TLS/timeout failure, ``server_error`` for the rest. The transport wraps a rejection in a plain
+    ``ConnectionError``, so the status is read from the text too."""
     from tools.mcp_tool_errors import _iter_exception_nodes
 
     nodes = _iter_exception_nodes(exc)
     statuses = _http_statuses(nodes)
     if statuses & {401, 403}:
         return "auth_refused"
+    if _answers_without_mcp(nodes):
+        return "not_mcp"
     if statuses:
         return "server_error"
     unreachable = any(isinstance(node, (TimeoutError, OSError)) or type(node).__name__ in _TRANSPORT_FAILURES

@@ -53,7 +53,7 @@ def flow_for(home: Path, service: str) -> SigninFlow:
 def classify_mcp_server(cfg: object) -> str:
     if not isinstance(cfg, dict):
         return "manual"
-    if cfg.get("auth") == "oauth" or cfg.get("transport") == "device":
+    if cfg.get("auth") == "oauth":
         return "oauth"
     headers = cfg.get("headers")
     if isinstance(headers, dict) and headers:
@@ -446,7 +446,7 @@ class McpServerFlow:
         kind = classify_mcp_server(cfg)
         if kind == "header" and await asyncio.to_thread(self._catalog_declares_api_key):
             kind = "api_key"
-        if kind == "oauth" and (signs_in_on_owner_app(cfg) or cfg.get("transport") == "device"):
+        if kind == "oauth" and signs_in_on_owner_app(cfg):
             self._inner = OwnerComputerFlow(self._server)
         elif kind == "oauth":
             paste = McpPasteFlow(self._home, self._server)

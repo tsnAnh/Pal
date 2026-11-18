@@ -101,3 +101,23 @@ def test_an_oauth_entry_with_a_rejected_token_needs_reconnect_and_a_disabled_one
     (work_home / "config.yaml").write_text(yaml.safe_dump(config))
 
     assert _rows()[entry.id]["status"] == "not_connected"
+
+
+T3_URL = "http://100.101.102.103:3773/mcp"
+
+
+def test_t3code_is_not_connected_until_a_t3code_server_is_configured(work_home):
+    row = _rows()["t3code"]
+
+    assert (row["method"], row["mcp_url"], row["status"], row["icon"]) == ("mcp_oauth", None, "not_connected", "plugin_glyph")
+
+
+def test_t3code_shows_connected_once_its_http_server_is_added_and_needs_reconnect_when_sign_in_expired(
+        work_home, monkeypatch):
+    _ok("mcp.servers.add", name="t3code", config={"url": T3_URL, "transport": "http"})
+
+    assert _rows()["t3code"]["status"] == "connected"
+
+    monkeypatch.setattr("tools.mcp_oauth.pending_reauth_reason", lambda name: "expired" if name == "t3code" else None)
+
+    assert _rows()["t3code"]["status"] == "needs_reconnect"

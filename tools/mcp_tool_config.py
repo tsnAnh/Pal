@@ -718,7 +718,8 @@ def _load_mcp_config(*, interpolate: bool = True) -> dict[str, dict]:
         from utils import env_var_enabled as _env_enabled
         if _env_enabled("HERMES_SAFE_MODE"):
             return {}
-        servers = load_config().get("mcp_servers")
+        from hermes_cli.mcp_config import drop_retired_device_servers
+        servers = drop_retired_device_servers(load_config()).get("mcp_servers")
         if interpolate:
             try:  # ensure .env vars are available for interpolation
                 from hermes_cli.env_loader import load_hermes_dotenv
