@@ -168,7 +168,7 @@ def test_the_server_env_points_at_the_files_and_carries_no_secret_developer_toke
         "GOOGLE_ADS_MCP_TOOLS_CONFIG": str(ads.tools_config_path(work)),
         "GOOGLE_ADS_LOGIN_CUSTOMER_ID": MANAGER_ID,
     }
-    assert cfg["tools"] == {"include": list(ads.READ_ONLY_TOOLS)}
+    assert cfg["tools"] == {"include": list(ads.READ_ONLY_TOOLS)} and cfg["connect_timeout"] == ads.FIRST_START_TIMEOUT_SECONDS
     assert "GOOGLE_ADS_LOGIN_CUSTOMER_ID" not in ads.server_config(work, None)["env"]
 
 

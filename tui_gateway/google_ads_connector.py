@@ -36,6 +36,7 @@ LOGIN_CUSTOMER_ID = re.compile(r"^[0-9]{1,20}$")
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 ACCESSIBLE_CUSTOMERS_URL = "https://googleads.googleapis.com/v25/customers:listAccessibleCustomers"
 HTTP_TIMEOUT_SECONDS = 15.0
+FIRST_START_TIMEOUT_SECONDS = 120
 NOT_APPROVED_CODES = ("CLOUD_PROJECT_NOT_APPROVED_FOR_PRODUCTION", "DEVELOPER_TOKEN_NOT_APPROVED")
 REAUTH_ERRORS = ("invalid_grant", "invalid_client", "unauthorized_client")
 
@@ -144,7 +145,8 @@ def server_config(home, login_customer_id: str | None) -> dict:
     env = {**dict(recipe.env), CREDENTIALS_ENV: str(credentials_path(home)), TOOLS_CONFIG_ENV: str(tools_config_path(home))}
     if login_customer_id:
         env[LOGIN_CUSTOMER_ENV] = login_customer_id
-    return {"command": recipe.command, "args": list(recipe.args), "env": env, "tools": {"include": list(READ_ONLY_TOOLS)}}
+    return {"command": recipe.command, "args": list(recipe.args), "env": env, "connect_timeout": FIRST_START_TIMEOUT_SECONDS,
+            "tools": {"include": list(READ_ONLY_TOOLS)}}
 
 
 def _saved_server() -> dict | None:
