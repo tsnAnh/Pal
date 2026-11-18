@@ -8,10 +8,6 @@ import SwiftUI
 struct ConnectAppsList: View {
     @Bindable var model: ConnectAppsModel
 
-    #if os(macOS)
-    @State private var confirmsT3Disconnect = false
-    #endif
-
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -33,14 +29,6 @@ struct ConnectAppsList: View {
         }
         .scrollIndicators(.automatic)
         .scrollDismissesKeyboard(.interactively)
-        #if os(macOS)
-        .alert(String(localized: "Disconnect T3 Code?"), isPresented: $confirmsT3Disconnect) {
-            Button(String(localized: "Disconnect"), role: .destructive) { Task { await model.devices.t3.controller.disconnect() } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(model.botName) can no longer send coding work to T3 Code on this Mac.")
-        }
-        #endif
     }
 
     @ViewBuilder
@@ -141,18 +129,9 @@ struct ConnectAppsList: View {
     @ViewBuilder
     private func deviceSection(_ section: DeviceSection) -> some View {
         ConnectSectionHeader(section.title, accessibilityIdentifier: "connectAppsSection-device-\(section.id)")
-        #if os(macOS)
-        card {
-            ForEach(section.rows) { deviceRow($0) }
-            MacT3CodeRow(host: model.devices.t3) { confirmsT3Disconnect = true }
-                .padding(.horizontal, PalMetrics.screenMargin)
-                .padding(.vertical, ConnectRowMetrics.verticalPadding)
-        }
-        #else
         if !section.rows.isEmpty {
             card { ForEach(section.rows) { deviceRow($0) } }
         }
-        #endif
     }
 
     private func deviceRow(_ row: DeviceConnectorRow) -> some View {

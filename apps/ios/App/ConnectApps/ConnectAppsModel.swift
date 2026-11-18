@@ -86,6 +86,8 @@ final class ConnectAppsModel {
     var mcpSignIn: McpSignInController?
     var ownerSetup: OwnerSetupModel?
     var showsSlackPicker = false
+    var t3Flow: T3FlowSheet?
+    var t3Reach: T3Reach?
     var discordFlow: DiscordFlowSession?
     let slack: SlackBotsModel
     let slackWizard: SlackWizardContext
@@ -167,6 +169,7 @@ final class ConnectAppsModel {
             phase = .ready
             surfaces.remember(catalog, catalogKey)
             setupRecords = (try? await service.setupProgress()) ?? []
+            Task { await probeT3Code() }
         } catch {
             if catalog.apps.isEmpty { phase = .unavailable }
         }

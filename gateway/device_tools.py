@@ -248,11 +248,10 @@ async def respond(authority, transport, request_id: str, *, ok: bool, result: An
 
 
 def forget_transport(transport) -> int:
-    from gateway import device_mcp_relay
     dropped = [pending for pending in _pending.values() if pending.transport is transport]
     for pending in dropped:
         _settle(pending, Outcome(failure=Failure.DISCONNECTED, device=pending.label))
-    return len(dropped) + device_mcp_relay.forget_transport(transport)
+    return len(dropped)
 
 
 def preflight(home: Path, spec: ActionSpec) -> Outcome | None:

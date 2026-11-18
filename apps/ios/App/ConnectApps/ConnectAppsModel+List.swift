@@ -31,7 +31,8 @@ extension ConnectAppsModel {
         return .notInstalled
     }
 
-    func listRow(for app: ConnectApp) -> ConnectListRow {
+    func listRow(for listed: ConnectApp) -> ConnectListRow {
+        let app = listed.applying(t3Reach: t3Reach)
         let bot = app.isBotApp ? botInstall : nil
         let state = ConnectRowState.resolve(ConnectRowInput(app: app, isBusy: busy.contains(app.id), bot: bot))
         var botSummary: String?
@@ -54,7 +55,9 @@ extension ConnectAppsModel {
 
     func performRowAction(_ app: ConnectApp, state: ConnectRowState) {
         guard state.actionTitle != nil else { return }
-        if case .custom = app.source {
+        if app.isT3Code, state != .connected {
+            openT3Code()
+        } else if case .custom = app.source {
             manage(app)
         } else if app.isBotApp {
             showsSlackPicker = true

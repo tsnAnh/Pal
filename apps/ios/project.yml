@@ -104,8 +104,6 @@ targets:
       - package: PalKit
         product: PalSettings
       - package: PalKit
-        product: PalT3Code
-      - package: PalKit
         product: PalKanban
       - package: PalDesign
         product: PalDesign

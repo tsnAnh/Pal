@@ -16,9 +16,6 @@ final class DeviceConnectorsModel {
     private(set) var thisDevice: DeviceSection
     private(set) var busy: Set<DeviceConnectorID> = []
 
-    #if os(macOS)
-    let t3: T3CodeHost
-    #endif
     private let pool: DeviceHostPool
     private let profile: String?
     private let permissions: any DevicePermissions
@@ -32,9 +29,6 @@ final class DeviceConnectorsModel {
         self.profile = profile
         self.permissions = permissions
         self.surfaces = surfaces
-        #if os(macOS)
-        t3 = pool.t3Code
-        #endif
         thisDevice = surfaces.remembered(DeviceSection.self, Self.surfaceKey)
             ?? Self.localSection(kind: DeviceKind.current, reports: [:])
     }
@@ -44,9 +38,6 @@ final class DeviceConnectorsModel {
     }
 
     func refresh() async {
-        #if os(macOS)
-        await t3.controller.refresh()
-        #endif
         thisDevice = Self.localSection(kind: localKind, reports: await localReports())
         surfaces.remember(thisDevice, Self.surfaceKey)
     }

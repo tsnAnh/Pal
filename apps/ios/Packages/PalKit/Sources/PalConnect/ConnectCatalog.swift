@@ -188,6 +188,10 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
         if case .catalog(let entry) = source, entry.setupGuide != nil { entry } else { nil }
     }
 
+    public var isT3Code: Bool {
+        if case .catalog(let entry) = source { entry.slug == T3CodeConnector.slug } else { false }
+    }
+
     public var requiresToken: Bool {
         switch source {
         case .mcp(_, let requires): !requires.isEmpty

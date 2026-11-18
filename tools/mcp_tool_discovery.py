@@ -823,10 +823,7 @@ def is_mcp_tool_parallel_safe(tool_name: str) -> bool:
 
 
 def _transport_label(cfg: dict) -> str:
-    from tools.mcp_tool_device import DEVICE_TRANSPORT, is_device_config
-    if "url" in cfg:
-        return cfg.get("transport", "http")
-    return DEVICE_TRANSPORT if is_device_config(cfg) else "stdio"
+    return cfg.get("transport", "http") if "url" in cfg else "stdio"
 
 
 def get_mcp_status(configured: Optional[dict[str, dict]] = None, *, include_runtime: bool = True) -> list[dict]:

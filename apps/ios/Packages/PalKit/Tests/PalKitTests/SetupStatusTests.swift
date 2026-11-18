@@ -9,7 +9,9 @@ struct SetupStatusTests {
         ("gateway_outdated", .gatewayOutdated), ("invalid_token", .vendorRefusedValue), ("credential_rejected", .vendorRefusedValue),
         ("INVALID_CLIENT", .vendorRefusedValue), ("needs_reauth", .needsReauth), ("revoked", .needsReauth),
         ("forbidden", .forbidden), ("NOT_OWNER", .forbidden), ("oauth_in_progress", .signInInProgress),
-        ("invalid_redirect_uri", .invalidRedirect), ("internal", .internalFault), ("something_new", .internalFault), ("decode", .internalFault),
+        ("invalid_redirect_uri", .invalidRedirect), ("server_unreachable", .serverUnreachable), ("mcp_unreachable", .serverUnreachable),
+        ("MCP_UNREACHABLE", .serverUnreachable), ("not_mcp", .notMcpServer), ("internal", .internalFault),
+        ("something_new", .internalFault), ("decode", .internalFault),
     ])
     func everyReasonCodeLandsInOneClass(code: String, expected: SetupStatusClass) {
         #expect(SetupStatusClass.classify(code: code) == expected)
@@ -42,6 +44,15 @@ struct SetupStatusTests {
         #expect(SetupStatus(code: "gateway_outdated").actionTitle == "Check again")
         #expect(SetupStatus(code: "forbidden").actionTitle == "Close")
         #expect(SetupStatus(code: "oauth_in_progress").actionTitle == "Connect")
+        let unreachable = SetupStatus(code: "server_unreachable", subject: "T3 Code")
+        #expect(unreachable.title == "Pal could not reach T3 Code")
+        #expect(unreachable.reason == "Check that it is running and that its address is still right.")
+        #expect(unreachable.actionTitle == "Enter the address again")
+        #expect(unreachable.symbol == SetupStatus(code: "offline").symbol)
+        let notMcp = SetupStatus(code: "not_mcp", subject: "T3 Code")
+        #expect(notMcp.title == "T3 Code did not answer like an MCP server")
+        #expect(notMcp.reason == "Check the address and the port.")
+        #expect(notMcp.actionTitle == "Enter the address again")
     }
 
     @Test func aMissingSubjectStillReadsAsAPlainSentence() {

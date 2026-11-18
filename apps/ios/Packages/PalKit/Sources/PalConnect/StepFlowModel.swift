@@ -44,7 +44,7 @@ public final class StepFlowModel {
             await recovery(failure)
             return
         }
-        if failure.kind == .vendorRefusedValue {
+        if [.vendorRefusedValue, .serverUnreachable, .notMcpServer].contains(failure.kind) {
             dismissFailure()
         } else {
             await retryAfterFailure()

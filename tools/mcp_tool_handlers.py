@@ -245,8 +245,8 @@ def _check_circuit_breaker(server_name: str) -> Optional[str]:
         return tool_error(f"MCP server '{server_name}' rejected the last {failures} calls (it is reachable; see the "
                           f"error text those calls returned). Paused for ~{retry_in}s. Do NOT repeat the same call — "
                           f"fix the arguments/URL/target or use a different approach.")
-    return tool_error(f"MCP server '{server_name}' is unreachable after {failures} consecutive failures"
-                      f"{_device_failure_note(server_name)}. Auto-retry available in ~{retry_in}s. Do NOT retry "
+    return tool_error(f"MCP server '{server_name}' is unreachable after {failures} consecutive failures. "
+                      f"Auto-retry available in ~{retry_in}s. Do NOT retry "
                       f"this tool yet — use alternative approaches or ask the user to check the MCP server.")
 
 
@@ -278,7 +278,7 @@ def _acquire_call_server(server_name: str, tool_timeout: float):
         return server, None
     _core._bump_server_error(server_name)
     if server and _loop._signal_reconnect(server):
-        return None, tool_error(f"MCP server '{server_name}' transport is down{_device_failure_note(server_name)}; "
+        return None, tool_error(f"MCP server '{server_name}' transport is down; "
                                 f"reconnect requested. Do NOT retry this tool immediately — give it a few seconds "
                                 f"to come back.")
     return None, not_connected
@@ -348,9 +348,6 @@ def _retry_once(server_name: str, retry_call, op_description: str, what: str):
 def _reauth_pending_error(server_name: str) -> Optional[str]:
     """The typed sign-in-again error when this server's saved sign-in was rejected and nothing new has been
     handed over since; None otherwise. A stat of one marker file, so every call can afford it."""
-    from tools.mcp_tool_device import auth_required_error
-    if (device_error := auth_required_error(server_name)) is not None:
-        return device_error
     from tools.mcp_oauth import pending_reauth_reason
     if pending_reauth_reason(server_name) is None:
         return None
@@ -421,8 +418,7 @@ def _handle_session_expired_and_retry(server_name: str, exc: BaseException, retr
                        "have been dispatched; NOT auto-retrying a write-capable tool (reconnect %s).",
                        server_name, op_description, "succeeded" if reconnected else "failed")
         return tool_error(_SESSION_OUTCOME_UNCERTAIN_MSG.format(
-            s=server_name, state="been re-established" if reconnected else "not recovered yet"
-        ) + _device_failure_note(server_name),
+            s=server_name, state="been re-established" if reconnected else "not recovered yet"),
             outcome_uncertain=True, server=server_name)
     if srv is None:
         return None
@@ -433,11 +429,6 @@ def _handle_session_expired_and_retry(server_name: str, exc: BaseException, retr
                        "falling through to error response.", server_name)
         return None
     return _retry_once(server_name, retry_call, op_description, "session reconnect")
-
-
-def _device_failure_note(server_name: str) -> str:
-    from tools.mcp_tool_device import recent_failure_note
-    return recent_failure_note(server_name)
 
 
 class _StdioChildExited(RuntimeError):
@@ -526,7 +517,7 @@ def _dispatch(server_name: str, server: Any, op: str, call, tool_timeout: float,
             if recovered is not None:
                 return recovered
         on_final_failure(exc)
-        return tool_error(_mcp_call_failed_message(exc) + _device_failure_note(server_name))
+        return tool_error(_mcp_call_failed_message(exc))
 
 
 @asynccontextmanager
@@ -599,9 +590,7 @@ async def _call_tool_racing_stdio_death(server, server_name: str, tool_name: str
             # server a transport-closure error after dispatch is the same ambiguous mid-call death;
             # it must not fall through to the session-expired recoverer, which replays the call.
             _is_http = getattr(server, "_is_http", None)
-            _is_device = getattr(server, "_is_device", None)
-            if (callable(_is_http) and _is_http() is False and not (callable(_is_device) and _is_device() is True)
-                    and _is_session_expired_error(exc)):
+            if callable(_is_http) and _is_http() is False and _is_session_expired_error(exc):
                 raise _StdioChildExited(
                     f"MCP stdio subprocess for '{server_name}' closed its transport mid-call",
                     in_flight=True,
