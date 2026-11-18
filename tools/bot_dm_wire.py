@@ -132,6 +132,33 @@ def parse_relay_output(output: str) -> Optional[RelayOutcome]:
     return None
 
 
+_REPORT_LABELS = (("Outcome", "outcome"), ("Status", "status"), ("Delivery id", "delivery_id"),
+                  ("Target state", "target_state"), ("Reason", "reason"), ("Error", "error"), ("Detail", "detail"))
+
+
+def parse_delivery_report(output: str) -> Optional[dict]:
+    """A delivery runner's stdout receipt (settled reply or failure), else None. Looser than
+    ``parse_live_output``: a refusal before admission has no delivery id."""
+    try:
+        payload = json.loads(output.strip())
+    except ValueError:
+        return None
+    if not isinstance(payload, dict) or not any(key in payload for key in ("outcome", "status", "error", "reply")):
+        return None
+    return payload
+
+
+def format_delivery_report(payload: dict, reply_limit: int) -> str:
+    """The receipt as labelled plain lines, the reply last and whole up to ``reply_limit`` characters."""
+    lines = [f"{label}: {value}" for label, key in _REPORT_LABELS if (value := str(payload.get(key) or "").strip())]
+    reply = str(payload.get("reply") or "")
+    if reply:
+        cut = len(reply) - reply_limit
+        lines.append("Reply:" if cut <= 0 else f"Reply (last {cut} characters cut):")
+        lines.append(reply[:reply_limit])
+    return "\n".join(lines)
+
+
 def parse_live_output(output: str) -> Optional[dict]:
     try:
         payload = json.loads(output.strip())
