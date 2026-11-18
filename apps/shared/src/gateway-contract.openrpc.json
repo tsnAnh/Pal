@@ -1105,6 +1105,60 @@
       }
     },
     {
+      "name": "connectors.google_ads.save",
+      "summary": "Owner only. Write the Google Ads credentials file from the saved Google client and the Ads sign-in, save the read-only Ads stdio server with the optional manager account id (digits only, else INVALID_PARAMS), then run the MCP handshake. A failed handshake restores the previous config and is an error.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/GoogleAdsSaveParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleAdsSaveResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.google_ads.status",
+      "summary": "Owner only. Where the Google Ads sign-in stands: needs_setup (no Google client saved yet), needs_sign_in, signed_in or needs_reconnect, whether the read-only Ads server is saved, and the saved manager account id. Never returns a token.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleAdsStatusResult"
+        }
+      }
+    },
+    {
+      "name": "connectors.google_ads.verify",
+      "summary": "Owner only. One live Google Ads call with the signed-in account. A refusal is a check value, never an RPC error: explorer_access_needed when Google has not approved the owner's Cloud project, needs_reauth when the refresh token was revoked or expired, unreachable when Google did not answer.",
+      "params": [
+        {
+          "name": "params",
+          "schema": {
+            "$ref": "#/components/schemas/ProfileParams"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/GoogleAdsVerifyResult"
+        }
+      }
+    },
+    {
       "name": "connectors.legacy",
       "summary": "Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only.",
       "params": [
@@ -27260,6 +27314,138 @@
           "gates"
         ],
         "title": "GoalSnapshot",
+        "type": "object"
+      },
+      "GoogleAdsCheck": {
+        "enum": [
+          "ready",
+          "explorer_access_needed",
+          "needs_reauth",
+          "unreachable"
+        ],
+        "title": "GoogleAdsCheck",
+        "type": "string"
+      },
+      "GoogleAdsSaveParams": {
+        "additionalProperties": false,
+        "properties": {
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Profile"
+          },
+          "login_customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Login Customer Id"
+          }
+        },
+        "title": "GoogleAdsSaveParams",
+        "type": "object"
+      },
+      "GoogleAdsSaveResult": {
+        "additionalProperties": false,
+        "properties": {
+          "tools": {
+            "title": "Tools",
+            "type": "integer"
+          },
+          "login_customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login Customer Id"
+          }
+        },
+        "required": [
+          "tools",
+          "login_customer_id"
+        ],
+        "title": "GoogleAdsSaveResult",
+        "type": "object"
+      },
+      "GoogleAdsState": {
+        "enum": [
+          "needs_setup",
+          "needs_sign_in",
+          "signed_in",
+          "needs_reconnect"
+        ],
+        "title": "GoogleAdsState",
+        "type": "string"
+      },
+      "GoogleAdsStatusResult": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GoogleAdsState"
+          },
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "login_customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Login Customer Id"
+          }
+        },
+        "required": [
+          "state",
+          "configured",
+          "login_customer_id"
+        ],
+        "title": "GoogleAdsStatusResult",
+        "type": "object"
+      },
+      "GoogleAdsVerifyResult": {
+        "additionalProperties": false,
+        "properties": {
+          "check": {
+            "$ref": "#/components/schemas/GoogleAdsCheck"
+          },
+          "accounts": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accounts"
+          }
+        },
+        "required": [
+          "check",
+          "accounts"
+        ],
+        "title": "GoogleAdsVerifyResult",
         "type": "object"
       },
       "GoogleClientSetParams": {

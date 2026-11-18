@@ -8,6 +8,10 @@ extension ConnectAppsModel {
     func continueSetup(_ offer: SetupResumeOffer) {
         guard let app = catalog.apps.first(where: { $0.id == offer.appID }) else { return }
         if presentsDiscordFlow(app) { return }
+        if app.isGoogleAds {
+            Task { await openGoogleAds(app) }
+            return
+        }
         presentOwnerSetup(app)
     }
 }

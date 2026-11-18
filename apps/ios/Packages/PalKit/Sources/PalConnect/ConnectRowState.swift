@@ -51,7 +51,7 @@ public struct ConnectRowInput: Sendable, Equatable {
         self.init(
             connection: app.state, isBusy: isBusy, authReason: app.authReason,
             needsGuidedSetup: app.oauthClientEntry == nil && app.setupGuideEntry != nil,
-            hasSetupFlow: app.oauthClientEntry != nil || app.setupGuideEntry != nil || bot != nil, bot: bot
+            hasSetupFlow: app.oauthClientEntry != nil || app.setupGuideEntry != nil || app.isGoogleAds || bot != nil, bot: bot
         )
     }
 }

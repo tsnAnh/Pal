@@ -10,7 +10,7 @@ OWNER_PICKS = frozenset({
     "aws-knowledge", "microsoft-learn", "twilio-docs", "unreal-engine", "wolfram",
     "sentry", "grafana", "datadog",
     "linear", "atlassian", "clickup", "monday", "todoist", "notion", "airtable", "craft", "miro",
-    "google-workspace", "dropbox", "figma", "canva", "gamma", "cloudinary", "comfy-cloud", "webflow", "wordpress-com",
+    "google-workspace", "google-ads", "dropbox", "figma", "canva", "gamma", "cloudinary", "comfy-cloud", "webflow", "wordpress-com",
     "stripe", "intercom", "calendly",
     "slack", "clickhouse", "mintlify", "upwork", "discord", "t3code",
 })
@@ -19,7 +19,7 @@ OWNER_PICKS = frozenset({
 def test_shipped_catalog_is_exactly_the_owner_picks():
     ids = {e.id for e in load_pal_connectors()}
     assert ids == OWNER_PICKS
-    assert len(ids) == 52
+    assert len(ids) == 53
 
 
 def test_shipped_catalog_loads_with_unique_ids_and_sourced_verified_entries():

@@ -53,3 +53,4 @@ Any unit that adds or changes what a person sees in the Pal app (macOS, iPhone, 
 - Mac/iOS parity+shared code; no streamed text (avatar+step+dots); Liquid Glass ToolbarItems; pinned bots top; no other brands; bot Qs never expire; NO_REPLY-type markers never shown/flashed anywhere
 - Avatars: 14 blobs, 1:1:1 3D, unlit; black eyes (white→gray in light); body turns to pointer with eyes (no eyes-only/1-eye anims), upright on hover; rest eyes up-right, slanted; review render pre-build
 - T3 Code = catalog connector `t3code` (no bridge): Network on, plain-http tailnet `<ip>:<port>/mcp`, OAuth DCR+PKCE, no refresh; wizard `T3CodeFlow` (PalConnect), Mac prefill `T3AddressSuggestion`
+- Google Ads = catalog `google-ads` (oauth_client + stdio `google-ads-mcp`, read-only), reuses the Workspace client, adwords scope only; wizard `GoogleAdsFlow` (PalConnect), RPC `connectors.google_ads.status|save|verify`; Explorer access refusal = `explorer_access_needed` status

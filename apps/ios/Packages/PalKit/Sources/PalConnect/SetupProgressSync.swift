@@ -177,10 +177,12 @@ extension PalCatalogEntry {
 }
 
 public enum SetupResume {
+    private static func flowID(for app: ConnectApp) -> String? {
+        app.isGoogleAds ? GoogleAdsFlow.flowID : (app.oauthClientEntry ?? app.setupGuideEntry)?.setupFlowID
+    }
+
     public static func offer(records: [SetupProgressRecord], apps: [ConnectApp], on device: SetupDevice) -> SetupResumeOffer? {
-        let byFlow = Dictionary(
-            apps.compactMap { app in (app.oauthClientEntry ?? app.setupGuideEntry)?.setupFlowID.map { ($0, app) } }, uniquingKeysWith: { first, _ in first }
-        )
+        let byFlow = Dictionary(apps.compactMap { app in flowID(for: app).map { ($0, app) } }, uniquingKeysWith: { first, _ in first })
         for record in records.sorted(by: { $0.updatedAt > $1.updatedAt }) where record.bot == nil {
             guard let from = record.device, from != device, let app = byFlow[record.connector], !app.isConnected else { continue }
             return SetupResumeOffer(appID: app.id, appName: app.name, device: from)

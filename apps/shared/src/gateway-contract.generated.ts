@@ -1868,6 +1868,25 @@ export interface DiscordSaveResult {
   read_only: boolean
   guild_ids: string[]
 }
+export interface GoogleAdsStatusResult {
+  state: GoogleAdsState
+  configured: boolean
+  login_customer_id: string | null
+}
+export type GoogleAdsState = 'needs_setup' | 'needs_sign_in' | 'signed_in' | 'needs_reconnect'
+export interface GoogleAdsSaveParams {
+  profile?: string | null
+  login_customer_id?: string | null
+}
+export interface GoogleAdsSaveResult {
+  tools: number
+  login_customer_id: string | null
+}
+export interface GoogleAdsVerifyResult {
+  check: GoogleAdsCheck
+  accounts: number | null
+}
+export type GoogleAdsCheck = 'ready' | 'explorer_access_needed' | 'needs_reauth' | 'unreachable'
 export interface ConnectorSetupCheckParams {
   profile?: string | null
   slug: string
@@ -8457,6 +8476,12 @@ export interface RpcMethods {
   'connectors.discord.save': { params: DiscordSaveParams; result: DiscordSaveResult }
   /** Owner only. Check the bot token in Vault item item with Discord and save it to the profile's .env as DISCORD_TOKEN. Returns the bot's name and application id only, never the token. */
   'connectors.discord.token': { params: DiscordTokenParams; result: DiscordBotResult }
+  /** Owner only. Write the Google Ads credentials file from the saved Google client and the Ads sign-in, save the read-only Ads stdio server with the optional manager account id (digits only, else INVALID_PARAMS), then run the MCP handshake. A failed handshake restores the previous config and is an error. */
+  'connectors.google_ads.save': { params: GoogleAdsSaveParams; result: GoogleAdsSaveResult }
+  /** Owner only. Where the Google Ads sign-in stands: needs_setup (no Google client saved yet), needs_sign_in, signed_in or needs_reconnect, whether the read-only Ads server is saved, and the saved manager account id. Never returns a token. */
+  'connectors.google_ads.status': { params: ProfileParams; result: GoogleAdsStatusResult }
+  /** Owner only. One live Google Ads call with the signed-in account. A refusal is a check value, never an RPC error: explorer_access_needed when Google has not approved the owner's Cloud project, needs_reauth when the refresh token was revoked or expired, unreachable when Google did not answer. */
+  'connectors.google_ads.verify': { params: ProfileParams; result: GoogleAdsVerifyResult }
   /** Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only. */
   'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
@@ -9131,6 +9156,9 @@ export const RPC_METHODS = [
   'connectors.discord.guilds',
   'connectors.discord.save',
   'connectors.discord.token',
+  'connectors.google_ads.save',
+  'connectors.google_ads.status',
+  'connectors.google_ads.verify',
   'connectors.legacy',
   'connectors.list',
   'connectors.oauth_client.connect',

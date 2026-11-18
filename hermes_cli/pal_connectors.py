@@ -114,7 +114,7 @@ def _https(value: object, field: str, cid: str) -> str:
 
 STEP_KINDS = ("public_url", "open_page", "paste", "server_picker", "access")
 STEP_CHECKS = ("google_client", "github_token", "canva_client", "discord_bot")
-_PINNED_PACKAGE = re.compile(r"^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@\d+\.\d+\.\d+$")
+_PINNED_PACKAGE = re.compile(r"^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*(@|==)\d+\.\d+\.\d+$")
 
 
 def _text(raw: object, key: str, where: str) -> str:
@@ -221,8 +221,10 @@ def _parse_entry(raw: object) -> PalConnector:
     if method is ConnectionMethod.OAUTH_CLIENT and oauth is None and mcp_url is None:
         raise PalCatalogError(f"{cid}: oauth_client needs oauth endpoints or an mcp_url")
     stdio = _parse_stdio(raw["stdio"], cid) if raw.get("stdio") is not None else None
-    if (method is ConnectionMethod.BOT_TOKEN_STDIO) != (stdio is not None):
-        raise PalCatalogError(f"{cid}: bot_token_stdio entries, and only they, carry a stdio recipe")
+    if (method is ConnectionMethod.BOT_TOKEN_STDIO) and stdio is None:
+        raise PalCatalogError(f"{cid}: bot_token_stdio entries carry a stdio recipe")
+    if stdio is not None and method not in (ConnectionMethod.BOT_TOKEN_STDIO, ConnectionMethod.OAUTH_CLIENT):
+        raise PalCatalogError(f"{cid}: only bot_token_stdio and oauth_client entries carry a stdio recipe")
     return PalConnector(
         id=raw["id"], name=raw["name"], icon=raw["icon"], category=raw["category"], method=method,
         verified=raw["verified"], source=_https(raw["source"], "source", cid), mcp_url=mcp_url, oauth=oauth,

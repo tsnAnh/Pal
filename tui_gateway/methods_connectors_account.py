@@ -239,6 +239,42 @@ def _(rid, params):
         rid, params)
 
 
+def _google_ads_call(params_model, action):
+    def handler(rid, params):
+        from pydantic import ValidationError
+        from tui_gateway import google_ads_connector as ads
+        try:
+            request = params_model.model_validate(params)
+        except ValidationError:
+            return _connector_rpc_error(rid, 4000, ConnectorErrorReason.invalid_params, "Google Ads parameters are invalid.")
+        try:
+            return _ok(rid, action(ads, request).model_dump(mode="json"))
+        except ads.GoogleAdsRpcError as exc:
+            return _connector_rpc_error(rid, exc.code, exc.reason, exc.message)
+    return handler
+
+
+@method("connectors.google_ads.status")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.common import ProfileParams
+    return _google_ads_call(ProfileParams, lambda ads, _request: ads.status())(rid, params)
+
+
+@method("connectors.google_ads.save")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.connectors import GoogleAdsSaveParams
+    return _google_ads_call(GoogleAdsSaveParams, lambda ads, request: ads.save(request.login_customer_id))(rid, params)
+
+
+@method("connectors.google_ads.verify")
+@_profile_scoped
+def _(rid, params):
+    from tui_gateway.contracts.common import ProfileParams
+    return _google_ads_call(ProfileParams, lambda ads, _request: ads.verify())(rid, params)
+
+
 @method("connectors.legacy")
 @_profile_scoped
 def _(rid, _params):
