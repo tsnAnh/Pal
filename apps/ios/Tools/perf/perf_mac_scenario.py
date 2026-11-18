@@ -21,7 +21,7 @@ SIGNPOST_CATEGORY = "perf"
 SIGNPOST_INSTRUMENT = "os_signpost"
 INTERVALS = (
     "roster.apply", "roster.refetch", "chat.rebuild", "chat.timeline.apply", "markdown.parse",
-    "avatar.frame", "shell.body", "disk.cache.load", "disk.sync.main", "roster.row.body", "roster.apply.skipped",
+    "avatar.frame", "avatar.canvas.draw", "shell.body", "disk.cache.load", "disk.sync.main", "roster.row.body", "roster.apply.skipped",
 )
 TEMPLATES = ("Time Profiler", "SwiftUI", "Animation Hitches")
 SIGNPOST_SCHEMAS = ("os-signpost-interval", "os-signpost")

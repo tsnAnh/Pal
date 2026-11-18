@@ -1,4 +1,5 @@
 import CoreGraphics
+import PalDiagnostics
 import SwiftUI
 
 struct SolidCanvas: View {
@@ -14,11 +15,13 @@ struct SolidCanvas: View {
         let side = size + 2 * inset
         let solid = solid.detailed(for: size)
         return Canvas { context, _ in
-            SolidPainter(solid: solid, size: size, inset: inset, outline: outline)
-                .paint(
-                    SolidPose.resolve(pose: pose, look: look, restTilt: solid.restTilt, reduceMotion: reduceMotion),
-                    in: &context
-                )
+            PalPerf.interval("avatar.canvas.draw") {
+                SolidPainter(solid: solid, size: size, inset: inset, outline: outline)
+                    .paint(
+                        SolidPose.resolve(pose: pose, look: look, restTilt: solid.restTilt, reduceMotion: reduceMotion),
+                        in: &context
+                    )
+            }
         }
         .frame(width: side, height: side)
         .frame(width: size, height: size)
