@@ -33,6 +33,15 @@ Any new connector, MCP preset or service tool that can fail on a missing, expire
 - Any configuration or credential the apps still need (messaging included, such as Slack or Telegram) must be settable from the Swift apps, through the shared secret-entry flow (`SecretEntryView`, `SecretField`) or a settings form, never only by a terminal, SSH or the hermes CLI.
 - Use the system back and close controls; one way out per screen: the NavigationStack back, a `ToolbarItem(placement: .cancellationAction)` or `Button(role: .close)`, never a custom `chevron.left`/`xmark` Button (`scripts/ci/check_swift_nav_chrome.py`, `swift-nav-chrome` in `python scripts/check`; exception: `// nav-chrome: ok`).
 
+## Rule 4: UI changes start from an owner-approved HTML mockup
+
+Any unit that adds or changes what a person sees in the Pal app (macOS, iPhone, iPad, desktop: a screen, card, control, spacing, colour, empty or error state) is two steps. Follow-up polish on an already shipped screen counts too.
+
+- Step 1, mockup: one self-contained HTML file of the result, with the app's real tokens, fonts, colours and spacing, light and dark, Mac and iPhone sizes where both apply, and every state (normal, empty, error, loading, long text). Hand it to the owner to open.
+- Step 2, code: starts only after the owner approves the mockup in his own words. The approved mockup is the spec and the coding session does not deviate from it; any deviation is reported in the PR body as "Deviation:" with the reason.
+- A coding session cannot ask the owner, so the gate sits before the session is launched. A session launched for a UI change with no approved mockup in its brief makes no UI code: it writes the mockup file instead and reports.
+- Exempt: changes with no visible effect (logic, gateway, data, CI); the brief says so.
+
 ## Tests
 
 - `swift test` in `apps/ios/Packages/PalKit` covers `ConnectedServices` and the source scan.
