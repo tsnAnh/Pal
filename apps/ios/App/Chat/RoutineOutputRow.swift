@@ -20,7 +20,7 @@ struct RoutineMessage: Equatable {
     }
 }
 
-struct RoutineRow: View {
+struct RoutineOutputRow: View {
     let routine: RoutineMessage
     let highlight: String
     let isCurrentMatch: Bool

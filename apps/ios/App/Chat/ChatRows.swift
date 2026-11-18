@@ -86,7 +86,7 @@ struct ChatRowView: View {
                 model.answerConnection(opID: card.operation.opID, target: target.name, decision: decision)
             }
         case .routine(let routine):
-            RoutineRow(routine: routine, highlight: findQuery, isCurrentMatch: isCurrentMatch)
+            RoutineOutputRow(routine: routine, highlight: findQuery, isCurrentMatch: isCurrentMatch)
                 .environment(\.messageActions, messageActions(for: routine.text))
         case .notice(let notice):
             NoticeRow(notice: notice, highlight: findQuery, isCurrentMatch: isCurrentMatch)
