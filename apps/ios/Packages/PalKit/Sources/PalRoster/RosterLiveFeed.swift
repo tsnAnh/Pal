@@ -27,6 +27,7 @@ public struct RosterFeedTiming: Sendable {
     public var offlineAfterFailures: Int
     public var idleRefresh: Duration
     public var busyRefresh: Duration
+    public var busyBackoffLimit: Duration
     public var pingInterval: Duration
 
     public init(
@@ -34,16 +35,43 @@ public struct RosterFeedTiming: Sendable {
         offlineAfterFailures: Int = 2,
         idleRefresh: Duration = .seconds(60),
         busyRefresh: Duration = .seconds(3),
+        busyBackoffLimit: Duration = .seconds(6),
         pingInterval: Duration = .seconds(20)
     ) {
         self.backoff = backoff.isEmpty ? [.seconds(1)] : backoff
         self.offlineAfterFailures = offlineAfterFailures
         self.idleRefresh = idleRefresh
         self.busyRefresh = busyRefresh
+        self.busyBackoffLimit = max(busyRefresh, busyBackoffLimit)
         self.pingInterval = pingInterval
     }
 
     public static let standard = RosterFeedTiming()
+}
+
+public struct RosterRefreshSchedule: Sendable {
+    public let timing: RosterFeedTiming
+    public private(set) var unchangedStreak = 0
+    private var last: RosterSnapshot?
+
+    public init(timing: RosterFeedTiming) {
+        self.timing = timing
+    }
+
+    @discardableResult
+    public mutating func record(_ snapshot: RosterSnapshot) -> Bool {
+        let changed = !RosterSnapshotChange(from: last, to: snapshot).isEmpty
+        unchangedStreak = changed ? 0 : unchangedStreak + 1
+        last = snapshot
+        return changed
+    }
+
+    public func interval(busy: Bool) -> Duration {
+        guard busy else { return timing.idleRefresh }
+        var wait = timing.busyRefresh
+        for _ in 0..<unchangedStreak where wait < timing.busyBackoffLimit { wait *= 2 }
+        return min(wait, timing.busyBackoffLimit)
+    }
 }
 
 public actor RosterLiveFeed {
@@ -62,6 +90,7 @@ public actor RosterLiveFeed {
     private var backoffSleep: Task<Void, Never>?
     private var link: GatewayLink?
     private var busy = false
+    private var schedule: RosterRefreshSchedule
     private var lastRefresh: ContinuousClock.Instant
 
     public init(
@@ -75,6 +104,7 @@ public actor RosterLiveFeed {
         self.onEvent = onEvent
         self.timing = timing
         self.diagnostics = diagnostics
+        schedule = RosterRefreshSchedule(timing: timing)
         lastRefresh = clock.now
     }
 
@@ -129,6 +159,7 @@ public actor RosterLiveFeed {
         let (triggers, trigger) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         activeTrigger = trigger
         busy = false
+        schedule = RosterRefreshSchedule(timing: timing)
         lastRefresh = clock.now
         trigger.yield()
         await withTaskGroup(of: Void.self) { group in
@@ -174,7 +205,7 @@ public actor RosterLiveFeed {
         let tick = min(timing.busyRefresh, .seconds(1))
         while !Task.isCancelled {
             do { try await Task.sleep(for: tick) } catch { return }
-            let interval = busy ? timing.busyRefresh : timing.idleRefresh
+            let interval = schedule.interval(busy: busy)
             if clock.now - lastRefresh >= interval { trigger.yield() }
         }
     }
@@ -194,6 +225,7 @@ public actor RosterLiveFeed {
                 state.sessions.contains { $0 == .working || $0 == .starting || $0 == .waiting }
             }
             lastRefresh = clock.now
+            schedule.record(snapshot)
             continuation.yield(.snapshot(snapshot))
         } catch is CancellationError {
             return

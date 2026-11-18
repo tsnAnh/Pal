@@ -12,7 +12,7 @@ exception carries ``perf-lint: ok`` on the flagged line.
 Rules: perf-body-parse, perf-body-format, perf-redraw-per-call, perf-main-disk-read, perf-main-json,
 perf-queue-sync, perf-timeline-unlisted, perf-timeline-interval, perf-hover-unlisted,
 perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry-per-row,
-perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill.
+perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write.
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -48,6 +48,7 @@ ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted", "perf-moni
 SHADOW_MAX_RADIUS = 24
 OWNED_TYPE = r"[A-Z]\w*(?:Model|Store|Hub|Conversation|Controller)(?:\.\w+)?"
 SHELL_FILES = {("App", "Mac", "MacShell.swift")}
+GUARDED_WRITE_FIELDS = {("App", "RosterModel.swift"): ("live", "capabilities", "bots", "isLoaded")}
 
 
 def in_app(parts: tuple[str, ...], text: str) -> bool:
@@ -68,6 +69,10 @@ def view_file(parts: tuple[str, ...], text: str) -> bool:
 
 def mac_shell(parts: tuple[str, ...], text: str) -> bool:
     return parts in SHELL_FILES
+
+
+def guarded_model(parts: tuple[str, ...], text: str) -> bool:
+    return parts in GUARDED_WRITE_FIELDS
 
 
 @dataclass(frozen=True)
@@ -198,6 +203,14 @@ LINE_RULES = (
         "model constructed while building a view. Every parent body builds and discards one: hold it in "
         "`@State private var model = ...` on the screen that owns it and load it in .task",
         in_view=True,
+    ),
+    LineRule(
+        "perf-unguarded-write",
+        re.compile(rf"^\s*(?:self\.)?(?:{'|'.join(sorted({f for fields in GUARDED_WRITE_FIELDS.values() for f in fields}))})\s*=(?!=)"),
+        guarded_model,
+        "snapshot field of an @Observable model assigned without an equality guard: every assignment notifies every "
+        "observer, even when the value is equal. Write it with assignIfChanged(\\.field, value) (PalRoster), which "
+        "skips an equal value",
     ),
     LineRule(
         "perf-shadow-radius",
