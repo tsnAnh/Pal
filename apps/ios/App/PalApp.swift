@@ -355,7 +355,7 @@ struct RootView: View {
             #else
             .overlay(alignment: .top) { ScreenCaptureBadge(indicator: hostPool.screenIndicator) }
             .overlay {
-                MacModalHost(connection: model, roster: roster, router: router, hostPool: hostPool, createBot: createBot, templateImport: templateImport, hub: hub)
+                MacModalHost(connection: model, roster: roster, router: router, hostPool: hostPool, createBot: createBot, hub: hub)
             }
             .onChange(of: router.sheet) { _, sheet in
                 if sheet == nil { resetCreateBot() }

@@ -63,8 +63,6 @@
   {"file": "App/CreateBotSheet.swift", "rule": "glass-floating-bar", "text": ".safeAreaInset(edge: .bottom) {"},
   {"file": "App/CreateBotSheet.swift", "rule": "glass-sheet-chrome", "text": ".padding(.bottom, 24)"},
   {"file": "App/Kanban/KanbanFilterBar.swift", "rule": "glass-search-field", "text": "TextField(\"\", text: $filter.text, prompt: Text(\"Search cards\").foregroundStyle(PalTokens.textSecondary))"},
-  {"file": "App/Mac/MacCreateBot.swift", "rule": "glass-pill-button", "text": ".buttonStyle(.palPill("},
-  {"file": "App/Mac/MacCreateBot.swift", "rule": "glass-pill-button", "text": ".buttonStyle(.palPill(horizontalPadding: 14))"},
   {"file": "App/Mac/MacModalSupport.swift", "rule": "glass-pill-button", "text": ".buttonStyle(.palPill(height: 22, fontSize: 11, fill: prominent ? PalTokens.toggleOn.opacity(0.7) : nil))"},
   {"file": "App/Mac/MacModalSupport.swift", "rule": "glass-pill-button", "text": "Button(\"Try Again\", action: retry).buttonStyle(.palPill(height: 24, fontSize: 11))"},
   {"file": "App/Mac/MacModelProviders.swift", "rule": "glass-pill-button", "text": ".buttonStyle(.palPill(height: 24, fontSize: 11))"},
