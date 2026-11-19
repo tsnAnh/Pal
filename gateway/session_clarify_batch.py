@@ -10,7 +10,20 @@ answers it unchanged, and blocks until it answers, the turn is interrupted, or t
 """
 from __future__ import annotations
 
+import uuid
+
 _QUESTION_KEYS = ("qid", "question", "choices", "multi_select")
+
+
+def viewer_attached(turn) -> bool:
+    """Whether a viewer is attached to the turn's live session to receive the batch request. With none,
+    the batch fails at once; the per-question cards stay pending (and push) until a viewer returns."""
+    owner = getattr(turn, "_approval_owner", None)
+    if owner is None:
+        return False
+    authority, session_id, _generation = owner
+    live = authority.sessions.get(session_id)
+    return live is not None and bool(live.event_stream.fanout.transports())
 
 
 def ask_clarify_batch(turn, questions) -> dict:
@@ -23,6 +36,8 @@ def ask_clarify_batch(turn, questions) -> dict:
         lambda: False)
     if live is None:
         return {"answers": {}, "outcome": "cancelled"}
+    from gateway.push_notify import Kind, waiting_on_user
+    waiting_on_user(authority, session_id, uuid.uuid4().hex[:10], Kind.CLARIFY)
     wire = [{key: entry.get(key) for key in _QUESTION_KEYS if entry.get(key) is not None} for entry in questions]
     timeout = get_clarify_timeout()
     # ``qids``: the viewer's batch panel locks each answer with ``clarify.lock`` (#140400).

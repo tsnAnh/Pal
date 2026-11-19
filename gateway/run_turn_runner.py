@@ -599,9 +599,10 @@ class TurnRunner(GatewayTurnProgressMixin, GatewaySessionAgentMixin):
             from gateway.session_finite import finite_clarify_reply
             return finite_clarify_reply()
         from gateway.session_cli_turn import clarify_batch_turn
-        if clarify_batch_turn(self):
-            # Main's batch panel (classic CLI, Ink TUI) shows every question at once: one request.
-            from gateway.session_clarify_batch import ask_clarify_batch
+        from gateway.session_clarify_batch import ask_clarify_batch, viewer_attached
+        if clarify_batch_turn(self) and viewer_attached(self):
+            # Main's batch panel (classic CLI, Ink TUI, Pal) shows every question at once: one request.
+            # A turn with no viewer attached keeps the per-question cards, which wait and push.
             return ask_clarify_batch(self, questions)
         answers: dict[str, Any] = {}
         reply: dict[str, Any] = {"answers": answers, "outcome": "submitted"}
