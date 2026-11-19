@@ -4,20 +4,6 @@ import PalConnect
 import PalDesign
 import SwiftUI
 
-private enum InspectorTab: String, CaseIterable, Identifiable {
-    case activity
-    case library
-
-    var id: Self { self }
-
-    var title: LocalizedStringKey {
-        switch self {
-        case .activity: "Activity"
-        case .library: "Library"
-        }
-    }
-}
-
 struct MacInspector: View {
     let botName: String
     let roster: RosterModel
@@ -189,7 +175,9 @@ struct MacInspector: View {
             }
         }
     }
+}
 
+extension MacInspector {
     private var activity: some View {
         VStack(spacing: 0) {
             InspectorSection(title: String(localized: "Upcoming"), identifier: "inspectorRoutines", first: true) {
