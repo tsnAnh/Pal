@@ -63,7 +63,7 @@ struct RoomMemberAvatar: View {
 
     var body: some View {
         if let member, let bot = roster.bot(named: member.profile) {
-            BotAvatarView(spec: bot.spec, size: size * 1.15)
+            BotAvatarView(spec: bot.spec, size: size * 1.15, sharesSlot: true)
                 .frame(width: size, height: size)
         } else {
             InitialAvatar(initial: String((member?.displayName ?? "?").prefix(1)).uppercased(), diameter: size)

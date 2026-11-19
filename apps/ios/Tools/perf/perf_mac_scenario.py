@@ -23,6 +23,8 @@ INTERVALS = (
     "roster.apply", "roster.refetch", "chat.rebuild", "chat.timeline.apply", "markdown.parse",
     "avatar.frame", "avatar.canvas.draw", "shell.body", "disk.cache.load", "disk.sync.main", "roster.row.body", "roster.apply.skipped",
     "chat.row.body", "chat.scroll.rowMoved", "chat.snapshot.coalesced",
+    "connect.open", "connect.catalog.build", "connect.sections.main", "connect.localReports", "connect.permission.probe",
+    "connect.messagesdb.probe", "connect.start.burst", "connect.body.main",
 )
 TEMPLATES = ("Time Profiler", "SwiftUI", "Animation Hitches")
 SIGNPOST_SCHEMAS = ("os-signpost-interval", "os-signpost")
@@ -51,6 +53,15 @@ STEPS = (
 
 def total_seconds():
     return sum(step.seconds for step in STEPS)
+
+
+def step_window(title):
+    elapsed = 0
+    for step in STEPS:
+        if step.title == title:
+            return elapsed, elapsed + step.seconds
+        elapsed += step.seconds
+    raise KeyError(title)
 
 
 def load_constants(relative_path, name):
@@ -155,6 +166,7 @@ def xtrace_text(app, out, time_limit):
         "",
         "The --toc output lists the tables the trace holds; pick the signpost table from it (the second xpath form covers a trace that only has the event table).",
         f"Keep rows with subsystem {SIGNPOST_SUBSYSTEM} and category {SIGNPOST_CATEGORY}, grouped by interval name; compare duration sums and counts between the before and after trace.",
+        "Connect Apps summary from two exports (one file per schema): perf.py signposts INTERVALS.xml EVENTS.xml --offset SECONDS_BETWEEN_RECORDING_START_AND_STEP_1",
     ]
     return "\n".join(lines) + "\n"
 

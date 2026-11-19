@@ -9,6 +9,7 @@ struct AvatarActivity: Equatable, Sendable {
     let size: CGFloat
     let animated: Bool
     let reduceMotion: Bool
+    var paused = false
 
     var blinksAtRest: Bool { !reduceMotion && size >= Self.restingBlinkMinimumSize }
 
@@ -17,6 +18,6 @@ struct AvatarActivity: Equatable, Sendable {
     var frameInterval: TimeInterval { reduceMotion ? Self.reducedInterval : Self.loopInterval }
 
     func ticks(settling: Bool) -> Bool {
-        animated && (mood != .idle || blinksAtRest || settling)
+        animated && !paused && (mood != .idle || blinksAtRest || settling)
     }
 }

@@ -1,6 +1,7 @@
 import Foundation
 import PalBotProfile
 import PalConnect
+import PalDiagnostics
 
 struct ConnectListEntry: Identifiable {
     let row: ConnectListRow
@@ -45,6 +46,7 @@ extension ConnectAppsModel {
     }
 
     var listSections: [ConnectListSectionEntries] {
+        let perf = PalPerf.begin("connect.sections.main"); defer { perf.end() }
         let apps = searchedApps
         let byID = Dictionary(apps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let rows = apps.map(listRow(for:))

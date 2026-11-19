@@ -8,12 +8,15 @@ import PalDevice
 import PalDiagnostics
 import PalProtocol
 import Observation
+import os
 
 struct ConnectionRPC: ConnectRPC {
     let model: ConnectionModel
+    var tally: OSAllocatedUnfairLock<Int>?
 
     func call(_ method: String, _ params: JSONValue) async throws -> JSONValue {
-        try await model.rpc(method, params)
+        tally?.withLock { $0 += 1 }
+        return try await model.rpc(method, params)
     }
 }
 
@@ -95,6 +98,8 @@ final class ConnectAppsModel {
     var failures: [String: String] = [:]
     var setupRecords: [SetupProgressRecord] = []
     private(set) var mode: Mode = .list
+    @ObservationIgnored private var openInterval: PerfInterval?
+    private let rpcTally: OSAllocatedUnfairLock<Int>
 
     let botName: String
     let devices: DeviceConnectorsModel
@@ -114,6 +119,8 @@ final class ConnectAppsModel {
         connection: ConnectionModel, pool: DeviceHostPool, profile: String?, botName: String, browser: any AuthorizationBrowser,
         bots: [CustomConnectorBot] = [], currentBot: String? = nil
     ) {
+        let tally = OSAllocatedUnfairLock(initialState: 0)
+        rpcTally = tally
         slackWizard = SlackWizardContext(bots: bots, connection: connection)
         slack = SlackBotsModel(bots: slackWizard.slackBots())
         self.profile = profile
@@ -122,14 +129,17 @@ final class ConnectAppsModel {
         self.bots = bots
         self.currentBot = currentBot
         let connectService = ConnectAppsService(
-            rpc: OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection))), profile: profile,
+            rpc: OAuthClientScript.wrap(McpSignInScript.wrap(ConnectionRPC(model: connection, tally: tally))), profile: profile,
             browser: McpSignInScript.browser(OAuthClientScript.browser(browser)),
             systemBrowser: SystemBrowserAuthorization(), nativeSignIn: NativeMcpSignIn.native(connection: connection), diagnostics: .osLog()
         )
         service = connectService
         legacy = LegacyConnectionsModel(service: connectService, profile: profile)
-        skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection), profile: profile, diagnostics: .osLog())
-        capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in try await connection.rpc(method, params) })
+        skillsService = SkillsCatalogService(rpc: ConnectionRPC(model: connection, tally: tally), profile: profile, diagnostics: .osLog())
+        capabilitiesService = CapabilitiesService(gateway: BotsGateway { method, params in
+            tally.withLock { $0 += 1 }
+            return try await connection.rpc(method, params)
+        })
         surfaces = connection.surfaces
         if let held = surfaces.remembered(ConnectCatalog.self, catalogKey) {
             catalog = held
@@ -151,11 +161,19 @@ final class ConnectAppsModel {
     var searchedSkills: [InstalledSkill] { catalog.matchingSkills(trimmedQuery) }
 
     func start() async {
+        openInterval = PalPerf.begin("connect.open")
+        rpcTally.withLock { $0 = 0 }
         Task { await devices.start() }
         Task { await legacy.load() }
         Task { await slack.load() }
         await reload()
         await loadCapabilities()
+        PalPerf.event("connect.start.burst", count: rpcTally.withLock { $0 })
+    }
+
+    func noteListRendered() {
+        openInterval?.end()
+        openInterval = nil
     }
 
     func makeSkillsModel() -> SkillsCatalogModel { SkillsCatalogModel(service: skillsService, profile: profile, surfaces: surfaces) }
