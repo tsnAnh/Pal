@@ -452,14 +452,14 @@ final class RosterModel {
 
     private func publish() {
         let combined = serverBots + provisional.values.filter { extra in !serverBots.contains { $0.name == extra.name } }
-        let next = combined.filter { !deleted.contains($0.name) }.map(applyingOverrides).sorted { lhs, rhs in
+        assignIfChanged(\.bots, combined.filter { !deleted.contains($0.name) }.map(applyingOverrides).sorted { lhs, rhs in
             switch (lhs.lastActive, rhs.lastActive) {
             case let (l?, r?): l > r
             case (_?, nil): true
             case (nil, _?): false
             case (nil, nil): lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
             }
-        }
+        })
     }
 
     private func applyingOverrides(_ bot: BotRow) -> BotRow {
