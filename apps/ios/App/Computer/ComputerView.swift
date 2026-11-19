@@ -71,7 +71,7 @@ struct ComputerView: View {
     private var toolbar: some ToolbarContent {
         #if os(iOS)
         ToolbarItem(placement: .leadingBar) {
-            Button { dismiss() } label: { Image(systemName: "chevron.left") } // nav-chrome: ok
+            Button { dismiss() } label: { PalIcon("chevron.left") } // nav-chrome: ok
                 .accessibilityLabel(Text("Back"))
                 .accessibilityIdentifier("computerBackButton")
                 .tint(.primary)
@@ -91,7 +91,7 @@ struct ComputerView: View {
         }
         .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .trailingBar) {
-            Button { model.showsHelp = true } label: { Image(systemName: "questionmark") }
+            Button { model.showsHelp = true } label: { PalIcon("questionmark") }
                 .accessibilityLabel(Text("Help"))
                 .accessibilityIdentifier("computerHelpButton")
                 .tint(.primary)
@@ -194,19 +194,19 @@ struct ComputerView: View {
                     .accessibilityIdentifier("computerKeyboardButton")
             }
             Menu {
-                Button(DeviceWording.copyToDevice, systemImage: DeviceWording.deviceSystemImage) { Task { await model.copyToPhone() } }
+                Button { Task { await model.copyToPhone() } } label: { Label(DeviceWording.copyToDevice, palIcon: DeviceWording.deviceSystemImage) }
                     .accessibilityIdentifier("computerCopyToPhone")
-                Button(DeviceWording.pasteFromDevice, systemImage: "doc.on.clipboard") { model.pasteFromPhone() }
+                Button { model.pasteFromPhone() } label: { Label(DeviceWording.pasteFromDevice, palIcon: "doc.on.clipboard") }
                     .accessibilityIdentifier("computerPasteFromPhone")
             } label: { ComputerToolIcon(systemName: "list.clipboard") }
                 .accessibilityLabel(Text("Clipboard"))
                 .accessibilityIdentifier("computerClipboardButton")
             if PlatformCapabilities.hasTouchScreen {
                 Menu {
-                    Toggle("Trackpad mode", systemImage: "rectangle.and.hand.point.up.left", isOn: $model.trackpad)
+                    Toggle(isOn: $model.trackpad) { Label("Trackpad mode", palIcon: "rectangle.and.hand.point.up.left") }
                         .accessibilityIdentifier("computerTrackpadToggle")
                     if model.trackpad {
-                        Button("Recenter pointer", systemImage: "scope") { model.recenterPointer() }
+                        Button { model.recenterPointer() } label: { Label("Recenter pointer", palIcon: "scope") }
                             .accessibilityIdentifier("computerRecenter")
                     }
                 } label: { ComputerToolIcon(systemName: "ellipsis") }
@@ -239,9 +239,8 @@ struct ComputerToolIcon: View {
     let systemName: String
 
     var body: some View {
-        Image(systemName: systemName)
+        PalIcon(systemName, ink: .onFill)
             .font(.system(size: 17, weight: .regular))
-            .foregroundStyle(.white)
             .frame(width: ComputerMetrics.pillHeight + 8, height: ComputerMetrics.pillHeight)
             .background(ComputerChrome.fill, in: Capsule())
             .contentShape(Capsule())

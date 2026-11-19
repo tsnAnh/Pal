@@ -80,7 +80,7 @@ struct MacShortcutSettingsSection: View {
                 Spacer(minLength: 8)
                 if !store.bindings.isDefault(action) {
                     Button { reset(action) } label: {
-                        Image(systemName: "arrow.counterclockwise").font(.system(size: 11))
+                        PalIcon("arrow.counterclockwise", ink: .secondary).font(.system(size: 11))
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(PalTokens.textSecondary)

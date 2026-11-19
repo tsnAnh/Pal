@@ -70,9 +70,8 @@ struct ChatFileCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 10) {
-                Image(systemName: "doc")
+                PalIcon("doc", ink: .secondary)
                     .font(.system(size: 22))
-                    .foregroundStyle(Color(theme.palette.textSecondary))
                 details
                 Spacer(minLength: 8)
                 trailing
@@ -125,7 +124,7 @@ struct ChatFileCard: View {
             DelayedProgressView().controlSize(.small)
         case .ready:
             Button { Task { await save() } } label: {
-                Label("Save", systemImage: "square.and.arrow.down")
+                Label("Save", palIcon: "square.and.arrow.down")
             }
             .buttonStyle(PillButtonStyle(kind: .neutral))
             .disabled(isSaving)
@@ -133,7 +132,7 @@ struct ChatFileCard: View {
             .accessibilityIdentifier("chatFileSave")
         case .unavailable, .failed:
             Button { attempt += 1 } label: {
-                Label("Retry", systemImage: "arrow.clockwise")
+                Label("Retry", palIcon: "arrow.clockwise")
             }
             .buttonStyle(PillButtonStyle(kind: .neutral))
             .accessibilityIdentifier("chatFileRetry")

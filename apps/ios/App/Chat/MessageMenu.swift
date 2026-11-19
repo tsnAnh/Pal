@@ -39,9 +39,8 @@ struct MessageMenuRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: symbol)
+                PalIcon(symbol, ink: .secondary)
                     .font(.system(size: MessageMenuMetrics.glyphSize))
-                    .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: MessageMenuMetrics.glyphWidth)
                 Text(title)
                     .font(.system(size: MessageMenuMetrics.textSize))

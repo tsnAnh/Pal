@@ -121,7 +121,7 @@ struct ServiceSignInPasteStep: View {
                 Button {
                     if let pasted = ServiceSignInClipboard.paste() { text = pasted }
                 } label: {
-                    Label("Paste", systemImage: "doc.on.clipboard")
+                    Label("Paste", palIcon: "doc.on.clipboard")
                 }
                 .buttonStyle(PillButtonStyle(kind: .neutral))
                 .accessibilityIdentifier("service-signin-callback-paste-button")
@@ -152,7 +152,7 @@ struct ServiceSignInCodeCard: View {
                 ServiceSignInClipboard.copy(code)
                 copied = true
             } label: {
-                Label(copied ? String(localized: "Copied") : String(localized: "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc")
+                Label(copied ? String(localized: "Copied") : String(localized: "Copy"), palIcon: copied ? "checkmark" : "doc.on.doc")
             }
             .buttonStyle(PillButtonStyle(kind: .neutral))
             .accessibilityIdentifier("service-signin-copy-button")
@@ -179,7 +179,7 @@ struct ServiceSignInSetupTokenHelp: View {
                 ServiceSignInClipboard.copy(ServiceSignInWording.setupTokenCommand)
                 copied = true
             } label: {
-                Label(copied ? String(localized: "Copied") : String(localized: "Copy Command"), systemImage: copied ? "checkmark" : "doc.on.doc")
+                Label(copied ? String(localized: "Copied") : String(localized: "Copy Command"), palIcon: copied ? "checkmark" : "doc.on.doc")
             }
             .buttonStyle(PillButtonStyle(kind: .neutral))
             .accessibilityIdentifier("service-signin-copy-command-button")

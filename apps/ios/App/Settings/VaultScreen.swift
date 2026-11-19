@@ -91,11 +91,10 @@ struct VaultScreen: View {
             title: "Vault", identifier: "vaultScreen", back: back,
             trailing: {
                 Button { adding = true } label: {
-                    Image(systemName: "plus")
+                    PalIcon("plus")
                 }
                 .accessibilityLabel(Text("Add to vault"))
                 .accessibilityIdentifier("vaultAddButton")
-                .tint(.primary)
             },
             content: {
                 switch model.state {
@@ -167,9 +166,8 @@ private struct VaultEntryRow: View {
             title: entry.title, subtitle: entry.subtitle, leadingSpacing: 14,
             accessibilityIdentifier: "vaultItem-\(entry.id)", action: entry.isRemovable ? remove : nil
         ) {
-            Image(systemName: entry.kind.symbolName)
+            PalIcon(entry.kind.symbolName, ink: .secondary)
                 .font(.system(size: 17))
-                .foregroundStyle(Color(theme.palette.textSecondary))
                 .frame(width: 24)
                 .accessibilityHidden(true)
         }

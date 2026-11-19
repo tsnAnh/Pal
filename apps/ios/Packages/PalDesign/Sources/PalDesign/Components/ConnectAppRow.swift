@@ -54,9 +54,8 @@ public struct PluginGlyphTile: View {
 
     public var body: some View {
         AppTile {
-            Image(systemName: "puzzlepiece.extension")
+            PalIcon("puzzlepiece.extension")
                 .font(.system(size: 20, weight: .regular))
-                .foregroundStyle(Color(theme.palette.textPrimary))
         }
     }
 }
@@ -224,9 +223,8 @@ public struct ConnectSectionHeader: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(PalTokens.textSecondary)
             if showsChevron {
-                Image(systemName: "chevron.right")
+                PalIcon("chevron.right", ink: .tertiary)
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(PalTokens.textTertiary)
             }
             Spacer(minLength: 0)
         }

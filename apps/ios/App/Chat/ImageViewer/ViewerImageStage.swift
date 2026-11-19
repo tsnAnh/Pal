@@ -120,7 +120,7 @@ private struct ViewerImagePhase: View {
 
     private func failure(_ message: String) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: "photo.badge.exclamationmark").font(.system(size: 32))
+            PalIcon("photo.badge.exclamationmark", ink: .secondary).font(.system(size: 32))
             Text(message).multilineTextAlignment(.center)
             Button(action: retry) {
                 Text("Retry")
@@ -175,7 +175,7 @@ private struct ViewerZoomableImage: View {
                 .gesture(magnify(fitted: fitted, viewport: viewport))
                 .simultaneousGesture(drag(fitted: fitted, viewport: viewport))
                 .contextMenu {
-                    Button { ImageActions.copy(cgImage) } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    Button { ImageActions.copy(cgImage) } label: { Label("Copy", palIcon: "doc.on.doc") }
                         .accessibilityIdentifier("imageViewerCopy")
                     ShareLink(item: shareable, preview: SharePreview(image.reference.name, image: shareable))
                         .accessibilityIdentifier("imageViewerShare")

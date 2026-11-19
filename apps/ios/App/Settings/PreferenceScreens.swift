@@ -212,7 +212,7 @@ struct TimeZoneScreen: View {
                                 .foregroundStyle(Color(theme.palette.textPrimary))
                             Spacer()
                             if identifier == hub.aboutYou?.timezone {
-                                Image(systemName: "checkmark").foregroundStyle(Color(theme.palette.textPrimary))
+                                PalIcon("checkmark")
                             }
                         }
                     }

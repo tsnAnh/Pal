@@ -166,13 +166,11 @@ struct MessageSheet: View {
         LazyVGrid(columns: Self.reactionColumns, spacing: 4) {
             ForEach(MessageReactions.choices, id: \.self) { emoji in reactionCell(emoji) }
             Button { page = .emoji } label: {
-                Image(systemName: "face.smiling")
+                PalIcon("face.smiling")
                     .font(.title2)
-                    .foregroundStyle(PalTokens.textPrimary)
                     .overlay(alignment: .topTrailing) {
-                        Image(systemName: "plus")
+                        PalIcon("plus")
                             .font(.system(size: 9, weight: .heavy))
-                            .foregroundStyle(PalTokens.textPrimary)
                             .offset(x: 6, y: -3)
                     }
                     .frame(maxWidth: .infinity, minHeight: 48)
@@ -244,9 +242,8 @@ struct MessageSheet: View {
                 .font(.body)
                 .foregroundStyle(PalTokens.textPrimary)
             Spacer(minLength: 0)
-            Image(systemName: symbol)
+            PalIcon(symbol)
                 .font(.body)
-                .foregroundStyle(PalTokens.textPrimary)
         }
         .padding(.horizontal, 16)
         .frame(minHeight: MessageMenuMetrics.rowHeight)
@@ -275,7 +272,7 @@ struct MessageSheet: View {
                     .foregroundStyle(PalTokens.textPrimary)
                 HStack {
                     Button { page = .menu } label: {
-                        Label("Back", systemImage: "chevron.backward")
+                        Label("Back", palIcon: "chevron.backward")
                             .font(.body)
                             .foregroundStyle(PalTokens.textPrimary)
                     }

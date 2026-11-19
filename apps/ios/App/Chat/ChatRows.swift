@@ -224,18 +224,18 @@ struct UserBubble: View {
         case .sent:
             EmptyView()
         case .sending:
-            Label("Sending", systemImage: "arrow.up.circle")
+            Label("Sending", palIcon: "arrow.up.circle", ink: .secondary)
                 .font(.caption)
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("deliverySending")
         case .waitingForConnection:
-            Label("Waiting for connection", systemImage: "clock")
+            Label("Waiting for connection", palIcon: "clock", ink: .secondary)
                 .font(.caption)
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("deliveryWaitingForConnection")
         case .failed(let id):
             Button { retry(id) } label: {
-                Label("Not sent. Tap to retry", systemImage: "exclamationmark.circle.fill")
+                Label("Not sent. Tap to retry", palIcon: "exclamationmark.circle.fill", ink: .destructive)
                     .font(.caption)
                     .foregroundStyle(Color(theme.palette.destructive))
             }
@@ -260,7 +260,7 @@ struct NoticeRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "arrow.down.left.circle").font(.system(size: 12))
+            PalIcon("arrow.down.left.circle", ink: .secondary).font(.system(size: 12))
             Text(title).hermesText(.chip)
         }
         .foregroundStyle(Color(theme.palette.textSecondary))

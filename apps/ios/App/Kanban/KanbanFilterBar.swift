@@ -79,9 +79,8 @@ struct KanbanFilterBar: View {
 
     private var searchField: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
+            PalIcon("magnifyingglass", ink: .secondary)
                 .font(.system(size: 13, weight: .regular))
-                .foregroundStyle(PalTokens.textSecondary)
                 .accessibilityHidden(true)
             TextField("", text: $filter.text, prompt: Text("Search cards").foregroundStyle(PalTokens.textSecondary))
                 .textFieldStyle(.plain)
@@ -99,7 +98,7 @@ struct KanbanFilterBar: View {
                 .accessibilityIdentifier("kanbanSearch")
             if !filter.text.isEmpty {
                 Button { filter.text = "" } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(PalTokens.textSecondary)
+                    PalIcon("xmark.circle.fill", ink: .secondary)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Clear search"))
@@ -125,7 +124,7 @@ struct KanbanFilterBar: View {
         } label: {
             HStack(spacing: 4) {
                 Text(selection.wrappedValue.map(label) ?? title)
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                PalIcon("chevron.down").font(.system(size: 9, weight: .semibold))
             }
             .hermesText(.chip)
             .foregroundStyle(PalTokens.textPrimary)

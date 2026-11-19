@@ -92,9 +92,8 @@ private struct SwipeReplyGlyph: View {
 
     var body: some View {
         GlassEffectContainer {
-            Image(systemName: "arrow.uturn.left")
+            PalIcon("arrow.uturn.left")
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(PalTokens.textPrimary)
                 .frame(width: 32, height: 32)
                 .palGlass(Circle(), interactive: false)
         }

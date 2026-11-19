@@ -111,9 +111,8 @@ struct ReplyBar: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             Button(action: cancel) {
-                Image(systemName: "xmark")
+                PalIcon("xmark", ink: .secondary)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: 32, height: 32)
                     .minimumHitTarget(visual: 32)
             }
@@ -156,10 +155,12 @@ struct AttachmentTray: View {
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .overlay { overlay(attachment) }
             Button { remove(attachment.id) } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 20))
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(Color(theme.palette.textPrimary), Color(theme.palette.circleButtonFill))
+                ZStack {
+                    PalIcon("circle.fill", ink: .custom(Color(theme.palette.circleButtonFill)))
+                        .font(.system(size: 20))
+                    PalIcon("xmark")
+                        .font(.system(size: 9, weight: .bold))
+                }
             }
             .buttonStyle(.plain)
             .offset(x: 6, y: -6)
@@ -178,7 +179,7 @@ struct AttachmentTray: View {
                 .accessibilityIdentifier("attachmentThumbnail")
         } else {
             VStack(spacing: 4) {
-                Image(systemName: "doc").font(.system(size: 20))
+                PalIcon("doc", ink: .secondary).font(.system(size: 20))
                 Text(attachment.name).font(.caption2).lineLimit(1).padding(.horizontal, 4)
             }
             .foregroundStyle(Color(theme.palette.textSecondary))
@@ -197,9 +198,8 @@ struct AttachmentTray: View {
         case .failed(let reason):
             ZStack {
                 PalTokens.content.opacity(0.75)
-                Image(systemName: "exclamationmark.circle")
+                PalIcon("exclamationmark.circle")
                     .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(PalTokens.textPrimary)
             }
             .accessibilityLabel(Text(reason))
             .accessibilityIdentifier("attachmentFailed")

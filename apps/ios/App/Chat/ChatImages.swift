@@ -198,9 +198,8 @@ private struct ChatImageTile: View {
         case .failed(let message):
             Button(action: retry) {
                 VStack(spacing: 4) {
-                    Image(systemName: "photo")
+                    PalIcon("photo", ink: .tertiary)
                         .font(.system(size: 17))
-                        .foregroundStyle(PalTokens.textTertiary)
                     Text("Couldn't load · Retry")
                         .hermesText(.timestamp)
                         .foregroundStyle(PalTokens.textSecondary)
@@ -287,14 +286,14 @@ struct ChatImageViewer: View {
     private func stepButtons(_ state: ImageViewerState) -> some View {
         HStack {
             Button { _ = go(-1) } label: {
-                Image(systemName: "chevron.left.circle.fill").font(.system(size: 32))
+                PalIcon("chevron.left.circle.fill", ink: .secondary).font(.system(size: 32))
             }
             .disabled(!state.canGoPrevious)
             .accessibilityLabel(Text("Previous image"))
             .accessibilityIdentifier("imageViewerPrevious")
             Spacer()
             Button { _ = go(1) } label: {
-                Image(systemName: "chevron.right.circle.fill").font(.system(size: 32))
+                PalIcon("chevron.right.circle.fill", ink: .secondary).font(.system(size: 32))
             }
             .disabled(!state.canGoNext)
             .accessibilityLabel(Text("Next image"))
@@ -316,10 +315,10 @@ struct ChatImageViewer: View {
         ToolbarItemGroup(placement: .primaryAction) {
             ShareLink(item: shareable, preview: SharePreview(reference.name, image: shareable))
                 .accessibilityIdentifier("imageViewerShare")
-            Button { ImageActions.copy(image) } label: { Label("Copy", systemImage: "doc.on.doc") }
+            Button { ImageActions.copy(image) } label: { Label("Copy", palIcon: "doc.on.doc") }
                 .accessibilityIdentifier("imageViewerCopy")
             #if os(macOS)
-            Button { ImageActions.save(image, suggestedName: reference.name) } label: { Label("Save", systemImage: "square.and.arrow.down") }
+            Button { ImageActions.save(image, suggestedName: reference.name) } label: { Label("Save", palIcon: "square.and.arrow.down") }
                 .accessibilityIdentifier("imageViewerSave")
             #endif
         }
@@ -341,7 +340,7 @@ struct ChatImageViewer: View {
         case .failed(let message):
             Button(action: retry) {
                 VStack(spacing: 8) {
-                    Image(systemName: "photo.badge.exclamationmark").font(.system(size: 32))
+                    PalIcon("photo.badge.exclamationmark", ink: .secondary).font(.system(size: 32))
                     Text(message).multilineTextAlignment(.center)
                 }
                 .foregroundStyle(Color(theme.palette.textSecondary))

@@ -95,9 +95,8 @@ struct MacMessageMenuView: View {
                 reactionButton(emoji)
             }
             Button { page = .emoji } label: {
-                Image(systemName: "plus")
+                PalIcon("plus", ink: .secondary)
                     .font(.system(size: MessageMenuMetrics.glyphSize + 1))
-                    .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: MessageMenuMetrics.cellWidth, height: MessageMenuMetrics.rowHeight)
                     .contentShape(Rectangle())
             }
@@ -173,9 +172,8 @@ private struct MacMenuRowLabel: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: symbol)
+            PalIcon(symbol, ink: .secondary)
                 .font(.system(size: MessageMenuMetrics.glyphSize))
-                .foregroundStyle(PalTokens.textSecondary)
                 .frame(width: MessageMenuMetrics.glyphWidth)
             Text(title)
                 .font(.system(size: MessageMenuMetrics.textSize))

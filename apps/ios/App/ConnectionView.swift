@@ -96,7 +96,7 @@ struct ConnectionForm: View {
                 .accessibilityIdentifier("statusLabel")
         case .connected(let instanceID):
             VStack(alignment: .leading, spacing: 4) {
-                Label("Connected", systemImage: "checkmark.circle.fill")
+                Label("Connected", palIcon: "checkmark.circle.fill", ink: .success)
                     .foregroundStyle(.green)
                     .accessibilityIdentifier("statusLabel")
                 Text(instanceID)
@@ -211,9 +211,8 @@ struct ConnectionView: View {
                         if model.isBusy {
                             ProgressView().controlSize(.small).tint(tone.primaryText)
                         } else {
-                            Image(systemName: "server.rack")
+                            PalIcon("server.rack", ink: .custom(tone.primaryText))
                                 .font(.system(size: SignInMetrics.buttonGlyphSize - 4, weight: .medium))
-                                .foregroundStyle(tone.primaryText)
                         }
                     }
                     .frame(width: SignInMetrics.buttonGlyphSize, height: SignInMetrics.buttonGlyphSize)

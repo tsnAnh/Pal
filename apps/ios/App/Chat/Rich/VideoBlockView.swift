@@ -38,10 +38,9 @@ struct VideoBlockView: View {
                 RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
                     .fill(PalTokens.chipFill)
                 VStack(spacing: 6) {
-                    Image(systemName: "play.circle.fill")
+                    PalIcon("play.circle.fill")
                         .font(.system(size: playSize))
                         .symbolRenderingMode(.hierarchical)
-                        .foregroundStyle(PalTokens.textPrimary)
                     Text(hostLabel)
                         .hermesText(.chip)
                         .foregroundStyle(PalTokens.textTertiary)

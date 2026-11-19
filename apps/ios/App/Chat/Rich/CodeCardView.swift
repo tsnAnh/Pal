@@ -37,9 +37,8 @@ struct RichCardFrame<Accessory: View, Content: View>: View {
                     Pasteboard.string = copyText
                     copied = true
                 } label: {
-                    Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    PalIcon(copied ? "checkmark" : "doc.on.doc", ink: .secondary)
                         .hermesText(.chip)
-                        .foregroundStyle(PalTokens.textSecondary)
                         .frame(minWidth: 28, minHeight: 28)
                         .contentShape(Rectangle())
                 }

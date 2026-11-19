@@ -13,9 +13,8 @@ struct AutoApproveBanner: View {
         if autoApprove.showsBanner(sessionID: sessionID) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 9) {
-                    Image(systemName: "checkmark.shield")
+                    PalIcon("checkmark.shield", ink: .secondary)
                         .font(.system(size: 12))
-                        .foregroundStyle(PalTokens.textSecondary)
                         .accessibilityHidden(true)
                     Text("Upwork actions are approved automatically in this chat")
                         .font(.system(size: 13))

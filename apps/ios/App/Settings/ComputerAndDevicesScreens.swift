@@ -202,9 +202,8 @@ private struct SignedInDeviceRow: View {
         ) {
             HStack(spacing: 8) {
                 StatusDot(isOn: device.isOnline)
-                Image(systemName: device.symbolName)
+                PalIcon(device.symbolName, ink: .secondary)
                     .font(.system(size: 20, weight: .light))
-                    .foregroundStyle(Color(theme.palette.textSecondary))
                     .frame(width: 26)
                     .accessibilityHidden(true)
             }

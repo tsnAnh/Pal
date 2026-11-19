@@ -21,9 +21,8 @@ struct StatusBlock: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Image(systemName: status.symbol)
+            PalIcon(status.symbol, ink: .destructive)
                 .font(.system(size: 24))
-                .foregroundStyle(.red)
                 .frame(width: 54, height: 54)
                 .background(PalTokens.control, in: Circle())
                 .accessibilityHidden(true)
@@ -63,7 +62,7 @@ struct StatusBlock: View {
                     .background(PalTokens.control, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
                     .accessibilityIdentifier("\(identifierPrefix)DetailsText")
                 SetupButton(
-                    title: String(localized: "Copy details"), systemImage: "doc.on.doc", identifier: "\(identifierPrefix)CopyDetails"
+                    title: String(localized: "Copy details"), symbol: "doc.on.doc", identifier: "\(identifierPrefix)CopyDetails"
                 ) {
                     Pasteboard.string = status.detailsText(appBuild: AppBuild.label)
                 }
