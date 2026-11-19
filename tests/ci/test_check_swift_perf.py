@@ -258,7 +258,6 @@ REAL_SITES = [
     ("perf-queue-sync", "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"),
     ("perf-eager-stack", "App/Mac/MacSidebarRail.swift"),
     ("perf-state-model-init", "App/Mac/MacInspector.swift"),
-    ("perf-model-in-body", "App/Mac/MacModals.swift"),
     ("perf-model-in-body", "App/PalApp.swift"),
     ("perf-shadow-radius", "App/Mac/MacModalSupport.swift"),
     ("perf-shadow-radius", "App/Mac/MacPalette.swift"),

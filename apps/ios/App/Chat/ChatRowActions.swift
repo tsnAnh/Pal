@@ -1,7 +1,6 @@
 import PalChat
 import PalDesign
 import SwiftUI
-import SwiftUI
 
 extension ChatModel {
     func toggleUnread() {
