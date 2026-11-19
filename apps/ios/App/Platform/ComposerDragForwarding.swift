@@ -59,7 +59,7 @@ enum ComposerDragForwarding {
         typealias VoidIMP = @convention(c) (AnyObject, Selector, AnyObject) -> Void
         typealias BoolIMP = @convention(c) (AnyObject, Selector, AnyObject) -> Bool
 
-        func operation(_ selector: Selector, _ forward: @escaping (NSDraggingDestination, NSDraggingInfo) -> NSDragOperation) {
+        func operation(_ selector: Selector, _ forward: @escaping @MainActor (NSDraggingDestination, NSDraggingInfo) -> NSDragOperation) {
             let original = unsafeBitCast(class_getMethodImplementation(base, selector), to: OperationIMP.self)
             let block: @convention(block) (AnyObject, AnyObject) -> UInt = { editor, info in
                 if let host = attachmentHost(for: editor, info), let sender = info as? NSDraggingInfo {
@@ -70,7 +70,7 @@ enum ComposerDragForwarding {
             class_addMethod(subclass, selector, imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self)), "Q@:@")
         }
 
-        func notification(_ selector: Selector, _ forward: @escaping (NSDraggingDestination, NSDraggingInfo) -> Void) {
+        func notification(_ selector: Selector, _ forward: @escaping @MainActor (NSDraggingDestination, NSDraggingInfo) -> Void) {
             let original = unsafeBitCast(class_getMethodImplementation(base, selector), to: VoidIMP.self)
             let block: @convention(block) (AnyObject, AnyObject) -> Void = { editor, info in
                 if let host = attachmentHost(for: editor, info), let sender = info as? NSDraggingInfo {
@@ -82,7 +82,7 @@ enum ComposerDragForwarding {
             class_addMethod(subclass, selector, imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self)), "v@:@")
         }
 
-        func decision(_ selector: Selector, _ forward: @escaping (NSDraggingDestination, NSDraggingInfo) -> Bool) {
+        func decision(_ selector: Selector, _ forward: @escaping @MainActor (NSDraggingDestination, NSDraggingInfo) -> Bool) {
             let original = unsafeBitCast(class_getMethodImplementation(base, selector), to: BoolIMP.self)
             let block: @convention(block) (AnyObject, AnyObject) -> Bool = { editor, info in
                 if let host = attachmentHost(for: editor, info), let sender = info as? NSDraggingInfo {
