@@ -566,8 +566,9 @@ def test_pre_fix_assistant_bubble_fails_and_the_real_rows_file_passes() -> None:
     ios = REPO / "apps" / "ios"
     rules = {f.rule for f in csp.violations(Path(ROWS), PRE_FIX_ASSISTANT_BUBBLE)}
     assert {"perf-selection-island", "perf-table-in-text-bubble"} <= rules
-    current = (ios / ROWS).read_text(encoding="utf-8")
-    assert not [f for f in csp.violations(Path(ROWS), current) if f.rule in {"perf-selection-island", "perf-table-in-text-bubble"}]
+    for rel in (ROWS, "App/Chat/AssistantBubble.swift"):
+        current = (ios / rel).read_text(encoding="utf-8")
+        assert not [f for f in csp.violations(Path(rel), current) if f.rule in {"perf-selection-island", "perf-table-in-text-bubble"}], rel
     entries = json.loads((ios / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
     assert not [e for e in entries if e["file"] == "App/Chat/MarkdownTableView.swift"]
 

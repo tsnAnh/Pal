@@ -50,7 +50,7 @@ ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted", "perf-moni
 SHADOW_MAX_RADIUS = 24
 OWNED_TYPE = r"[A-Z]\w*(?:Model|Store|Hub|Conversation|Controller)(?:\.\w+)?"
 SHELL_FILES = {("App", "Mac", "MacShell.swift")}
-ROW_FILES = {("App", "Chat", "ChatRows.swift")}
+ROW_FILES = {("App", "Chat", "ChatRows.swift"), ("App", "Chat", "AssistantBubble.swift")}
 AVATAR_ROW_FILES = {("App", "Mac", "MacSidebar.swift"), ("App", "HomeView.swift"), ("App", "Rooms", "RoomRows.swift")}
 GUARDED_WRITE_FIELDS = {("App", "RosterModel.swift"): ("live", "capabilities", "bots", "isLoaded")}
 

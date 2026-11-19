@@ -26,7 +26,7 @@ struct AssistantBubble: View {
                     textBubble(nil, lead: failureLead, isFirst: true, label: text)
                 }
                 ForEach(segments) { segment in
-                    segmentView(segment, isFirst: segment.id == segments.first?.id, single: segments.count == 1)
+                    segmentView(segment, isFirst: segment.id == segments.first?.id && !leadsAlone(segments), single: segments.count == 1)
                 }
             }
             if !files.isEmpty { ChatFileStack(files: files, isStreaming: filesPending).bubbleWidth(.leading) }
@@ -38,6 +38,10 @@ struct AssistantBubble: View {
             openFile(file)
             return .handled
         })
+    }
+
+    private func leadsAlone(_ segments: [MessageSegment]) -> Bool {
+        failureLead != nil && !startsWithText(segments)
     }
 
     private func startsWithText(_ segments: [MessageSegment]) -> Bool {
@@ -56,10 +60,14 @@ struct AssistantBubble: View {
         }
     }
 
+    private func leadView(_ lead: String) -> some View {
+        FailureLead(text: lead, highlight: highlight, isCurrentMatch: isCurrentMatch).bubbleTextSelection()
+    }
+
     private func textBubble(_ segment: TextSegment?, lead: String?, isFirst: Bool, label: String) -> some View {
         ChatBubble(style: BubblePalette.agentBubble) {
             VStack(alignment: .leading, spacing: 8) {
-                if let lead { FailureLead(text: lead, highlight: highlight, isCurrentMatch: isCurrentMatch) }
+                if let lead { leadView(lead) }
                 if let segment {
                     MarkdownView(
                         segment: segment, wholeBubbleSelection: wholeBubbleSelection,

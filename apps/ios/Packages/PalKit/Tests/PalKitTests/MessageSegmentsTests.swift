@@ -50,7 +50,7 @@ struct MessageSegmentsTests {
         #expect(kinds(first) == ["text", "table"])
         #expect(kinds(second) == ["text", "table"])
         #expect(first.map(\.id) == second.map(\.id))
-        guard case .table(_, let table) = second[1] else { return Issue.record("no table") }
+        guard case .table(_, let table) = second[1] else { Issue.record("no table"); return }
         #expect(table.rows.count == 2)
     }
 
@@ -64,7 +64,7 @@ struct MessageSegmentsTests {
     }
 
     @Test func textSegmentsKeepTheirSpokenText() {
-        guard case .text(let segment) = segments("hello **world**\n\n- one\n- two")[0] else { return Issue.record("no text") }
+        guard case .text(let segment) = segments("hello **world**\n\n- one\n- two")[0] else { Issue.record("no text"); return }
         #expect(segment.spoken == "hello world\none\ntwo")
     }
 
@@ -138,7 +138,7 @@ struct SelectableRunTests {
     @Test func headingsParagraphsAndListsShareOneRun() {
         let result = runs("# Title\n\nbody **bold**\n\n- one\n- two")
         #expect(result.count == 1)
-        guard case .text(_, let text) = result[0] else { return Issue.record("not text") }
+        guard case .text(_, let text) = result[0] else { Issue.record("not text"); return }
         #expect(text.paragraphs.count == 4)
         #expect(text.paragraphs[0].style == .heading(level: 1))
         #expect(text.plainText == "Title\nbody bold\n•\tone\n•\ttwo")
@@ -147,23 +147,23 @@ struct SelectableRunTests {
     @Test func codeBlocksSplitRunsAndKeepTheirOwnView() {
         let result = runs("before\n\n```swift\nlet x = 1\n```\n\nafter")
         #expect(result.count == 3)
-        guard case .text = result[0], case .block(let code) = result[1], case .text = result[2] else { return Issue.record("shape") }
+        guard case .text = result[0], case .block(let code) = result[1], case .text = result[2] else { Issue.record("shape"); return }
         #expect(code.kind == .code(language: "swift"))
     }
 
     @Test func orderedListsKeepTheirNumbers() {
-        guard case .text(_, let text) = runs("1. first\n2. second")[0] else { return Issue.record("not text") }
+        guard case .text(_, let text) = runs("1. first\n2. second")[0] else { Issue.record("not text"); return }
         #expect(text.paragraphs.map(\.marker) == ["1.", "2."])
         #expect(text.paragraphs.allSatisfy { $0.listDepth == 1 })
     }
 
     @Test func nestedListsIncreaseTheDepth() {
-        guard case .text(_, let text) = runs("- a\n  - b")[0] else { return Issue.record("not text") }
+        guard case .text(_, let text) = runs("- a\n  - b")[0] else { Issue.record("not text"); return }
         #expect(text.paragraphs.map(\.listDepth) == [1, 2])
     }
 
     @Test func linksSurviveInTheParagraphText() {
-        guard case .text(_, let text) = runs("see [docs](https://example.com/a) now")[0] else { return Issue.record("not text") }
+        guard case .text(_, let text) = runs("see [docs](https://example.com/a) now")[0] else { Issue.record("not text"); return }
         let links = text.paragraphs[0].text.runs.compactMap(\.link)
         #expect(links == [URL(string: "https://example.com/a")!])
     }
@@ -171,13 +171,13 @@ struct SelectableRunTests {
     @Test func embedLinksStayOutsideTheSelectableRun() {
         let result = runs("see this\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ\n\nthanks")
         #expect(result.count == 3)
-        guard case .block = result[1] else { return Issue.record("embed should be its own block") }
+        guard case .block = result[1] else { Issue.record("embed should be its own block"); return }
     }
 
     @Test func quotesGroupTheirOwnRuns() {
         let result = runs("intro\n\n> quoted line\n\noutro")
         #expect(result.count == 3)
-        guard case .quote(_, let inner) = result[1] else { return Issue.record("not a quote") }
+        guard case .quote(_, let inner) = result[1] else { Issue.record("not a quote"); return }
         #expect(inner.count == 1)
     }
 }

@@ -292,6 +292,12 @@ private final class SelectableTextCoordinator: NSObject, NSTextViewDelegate {
 private final class PassiveTextView: NSTextView {
     override var writablePasteboardTypes: [NSPasteboard.PasteboardType] { [.string] }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let event = NSApp.currentEvent else { return super.hitTest(point) }
+        let opensMessageMenu = event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
+        return opensMessageMenu ? nil : super.hitTest(point)
+    }
+
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func scrollWheel(with event: NSEvent) {
