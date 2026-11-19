@@ -111,29 +111,3 @@ struct BotPersonaTests {
         #expect(await client(bots).describeAutomatically(overwrite: false) == .failed)
     }
 }
-
-@Suite("Unfinished bot setup")
-struct BotSetupUnfinishedTests {
-    private func profile(_ name: String, primary: Bool = false, meta: [String: JSONValue]? = nil) async throws -> BotProfile {
-        let bots = ScriptedBots()
-        bots.script("profiles.list", profilesList(profileRow(name, primary: primary, meta: meta)))
-        return try await BotProfileService(gateway: bots.gateway).profile(named: name)
-    }
-
-    @Test("a bot with no saved look is unfinished")
-    func noLook() async throws {
-        #expect(try await profile("atlas").isSetupUnfinished)
-        #expect(try await profile("atlas", meta: ["title": "Atlas"]).isSetupUnfinished)
-    }
-
-    @Test("a bot with a saved look is finished")
-    func hasLook() async throws {
-        #expect(try await !profile("atlas", meta: ["shape": "blobatar:ab:cloud", "color": "#10dc69"]).isSetupUnfinished)
-    }
-
-    @Test("the main bot and the primary bot never read as unfinished")
-    func mainBots() async throws {
-        #expect(try await !profile("default").isSetupUnfinished)
-        #expect(try await !profile("atlas", primary: true).isSetupUnfinished)
-    }
-}

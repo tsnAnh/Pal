@@ -2,6 +2,7 @@ import Foundation
 import PalBotProfile
 import PalDesign
 import PalProtocol
+import PalRoster
 import Observation
 
 @MainActor
@@ -43,8 +44,6 @@ final class BotProfileModel {
     var displayName: String { profile?.displayName ?? row?.displayName ?? botName }
 
     var isPrimary: Bool { profile?.isPrimary ?? false }
-
-    var isSetupUnfinished: Bool { profile?.isSetupUnfinished ?? false }
 
     var spec: BotAvatarSpec? { lookOverride ?? row?.spec }
 
@@ -146,12 +145,11 @@ final class BotProfileModel {
 
     func beginEditing() {
         guard let profile else { return }
-        let meta = profile.meta
+        let meta = BotMeta(fields: LooklessFill.filled(profile.meta.fields, name: botName, displayName: displayName, palette: .catalog))
         let seed = BotProfileEditSeed(
             name: displayName,
             look: BotLook(name: botName, shape: meta.shape, color: meta.color),
-            photo: currentPhoto,
-            needsLook: profile.isSetupUnfinished
+            photo: currentPhoto
         )
         editing = EditBotModel(profile: profile, seed: seed, services: services) { [weak self] spec, photo, photoChanged in
             await self?.saved(look: spec, photo: photo, photoChanged: photoChanged)
@@ -167,5 +165,4 @@ struct BotProfileEditSeed: Equatable {
     var name: String
     var look: BotLook
     var photo: Data?
-    var needsLook = false
 }
