@@ -46,6 +46,7 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "swift-bot-tint": (("apps/ios/*.swift", True),),
     "swift-chat-drop": (("apps/ios/*.swift", True),),
     "swift-glass": (("apps/ios/*.swift", True), ("apps/ios/.glass-lint-baseline.json", True)),
+    "swift-icon-tint": (("apps/ios/*.swift", True), ("scripts/ci/swift_icon_tint_allowlist.txt", True)),
     "swift-image-viewer": (("apps/ios/*.swift", True),),
     "swift-perf": (("apps/ios/*.swift", True), ("apps/ios/.perf-lint-*.json", True)),
     "swift-fault-details": (("apps/ios/*.swift", True), ("scripts/ci/swift_fault_details_allowlist.txt", True)),
@@ -59,7 +60,7 @@ JOB_CHECKS: dict[str, tuple[str, ...]] = {
     "tooling-tests": ("tooling-tests",),
     "ios-guards": ("shebangs", "no-tmp", "agents-md", "case-collisions", "profile-archives",
                    "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-glass",
-                   "swift-image-viewer", "swift-perf", "swift-fault-details", "swift-lint"),
+                   "swift-icon-tint", "swift-image-viewer", "swift-perf", "swift-fault-details", "swift-lint"),
     "swift": (),
     "faker-kit": (),
 }
