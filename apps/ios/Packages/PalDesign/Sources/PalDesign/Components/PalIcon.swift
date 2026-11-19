@@ -9,16 +9,21 @@ public enum PalIconInk: Equatable, Sendable {
     case onFill
     case custom(Color)
 
-    public func resolved(in palette: PalPalette) -> Color {
+    public func resolvedRGB(in palette: PalPalette) -> RGB? {
         switch self {
-        case .primary: Color(palette.textPrimary)
-        case .secondary: Color(palette.textSecondary)
-        case .tertiary: Color(palette.textTertiary)
-        case .destructive: Color(palette.destructive)
-        case .success: Color(palette.workingDot)
-        case .onFill: Color(palette.primaryBadgeGlyph)
-        case .custom(let color): color
+        case .primary: palette.textPrimary
+        case .secondary: palette.textSecondary
+        case .tertiary: palette.textTertiary
+        case .destructive: palette.destructive
+        case .success: palette.workingDot
+        case .onFill: palette.primaryBadgeGlyph
+        case .custom: nil
         }
+    }
+
+    func resolved(in palette: PalPalette) -> Color {
+        if case .custom(let color) = self { return color }
+        return Color(resolvedRGB(in: palette) ?? palette.textPrimary)
     }
 }
 
