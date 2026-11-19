@@ -283,7 +283,7 @@ private struct HeroCell: View {
                 showsPrimaryBadge: bot.isPrimary,
                 accessibilityIdentifier: "heroAvatar-\(bot.name)"
             ) {
-                BotAvatarView(spec: bot.spec, size: PalMetrics.heroAvatarFrame, mood: mood)
+                BotAvatarView(spec: bot.spec, size: PalMetrics.heroAvatarFrame, mood: mood) // perf-lint: ok hero avatar animates freely
                     .opacity(activity.avatarOpacity)
             }
             .frame(width: PalMetrics.heroDiameter, height: PalMetrics.heroDiameter)
@@ -372,7 +372,7 @@ struct BotRowAvatar: View {
             showsPrimaryBadge: bot.isPrimary && showsPrimaryBadge,
             accessibilityIdentifier: "rowAvatar-\(bot.name)"
         ) {
-            BotAvatarView(spec: bot.spec, size: PalMetrics.homeRowAvatarFrame, mood: mood)
+            BotAvatarView(spec: bot.spec, size: PalMetrics.homeRowAvatarFrame, mood: mood, sharesSlot: true)
                 .opacity(activity.avatarOpacity)
         }
         .frame(width: PalMetrics.homeRowAvatarSlot, height: PalMetrics.homeRowAvatarSlot)

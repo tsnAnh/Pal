@@ -96,6 +96,76 @@ struct AvatarActivityTests {
     }
 }
 
+@Suite("Avatar shared clock and slot")
+struct AvatarSharedClockTests {
+    private func workingFrames(_ count: Int, over seconds: TimeInterval) -> Set<Date> {
+        let activity = AvatarActivity(mood: .work, size: 30, animated: true, reduceMotion: false)
+        let end = origin.addingTimeInterval(seconds)
+        var instants = Set<Date>()
+        for index in 0..<count {
+            let start = origin.addingTimeInterval(Double(index) * 0.0071 + 0.0013)
+            let clock = AvatarMoodClock(
+                mood: .work, since: start, blinkDelay: Double(index) * 0.37, loadingSeed: UInt64(index),
+                reduceMotion: false, restingBlinks: false
+            )
+            let schedule = AvatarSchedule(clock: clock, frameInterval: activity.frameInterval)
+            instants.formUnion(schedule.entries(from: start, mode: .normal).dropFirst().prefix(while: { $0 < end }))
+        }
+        return instants
+    }
+
+    @Test("ten working avatars started at different moments cost the entries of one")
+    func workingAvatarsShareOneGrid() {
+        let one = workingFrames(1, over: 10)
+        let ten = workingFrames(10, over: 10)
+        #expect(one.count >= 295 && one.count <= 305)
+        #expect(ten == one)
+    }
+
+    @Test("every entry sits on the 1/30 s grid")
+    func entriesSitOnTheGrid() {
+        for instant in workingFrames(3, over: 5) {
+            let cells = instant.timeIntervalSinceReferenceDate / AvatarActivity.loopInterval
+            #expect(abs(cells - cells.rounded()) < 1e-3)
+        }
+    }
+
+    @Test("a paused avatar asks for no frame, so it records no avatar.frame and no avatar.canvas.draw")
+    func pausedAvatarDrawsNothing() {
+        for mood in AvatarMood.allCases {
+            for size in [CGFloat(30), 66] {
+                let paused = AvatarActivity(mood: mood, size: size, animated: true, reduceMotion: false, paused: true)
+                #expect(!paused.ticks(settling: true))
+                #expect(framesDrawn(paused, over: 60) == 0)
+            }
+        }
+    }
+
+    @MainActor
+    @Test("eight working rows share one slot: one ticks, releasing hands the slot on")
+    func rowsShareOneSlot() {
+        let budget = AvatarSlotBudget(capacity: 1)
+        let rows = (0..<8).map { _ in UUID() }
+        rows.forEach { budget.request($0) }
+        func ticking() -> [UUID] {
+            rows.filter { id in
+                AvatarActivity(mood: .work, size: 30, animated: true, reduceMotion: false, paused: !budget.holds(id))
+                    .ticks(settling: false)
+            }
+        }
+        #expect(ticking() == [rows[0]])
+        budget.request(rows[0])
+        #expect(ticking() == [rows[0]])
+        budget.release(rows[3])
+        #expect(ticking() == [rows[0]])
+        budget.release(rows[0])
+        #expect(ticking() == [rows[1]])
+        budget.release(rows[1])
+        budget.release(rows[2])
+        #expect(ticking() == [rows[4]])
+    }
+}
+
 @Suite("Avatar content store")
 struct AvatarContentStoreTests {
     private let spec = BotAvatarSpec(name: "Atlas", meta: BotAvatarMeta(shape: SolidTestShapes.blobs[0], color: "#3e8ef7", custom: true))
