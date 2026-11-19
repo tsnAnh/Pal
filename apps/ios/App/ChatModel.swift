@@ -650,7 +650,7 @@ final class ChatModel {
                 guard let settled = await session.settledPhase() else { return }
                 if settled != .detached { return }
             } catch {}
-            PalPerf.event("chat.open.retry")
+            opening.retrying(after: delay)
             noteDisconnected()
             try? await Task.sleep(for: delay)
             delay = min(delay * 2, .seconds(8))

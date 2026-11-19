@@ -11,6 +11,7 @@ final class ChatOpenCoordinator {
     private var settleTimer: Task<Void, Never>?
     private var liveSeen = true
     private(set) var isWindowOpen = false
+    private var attempts = 0
 
     func hold(version: UInt64, release: @escaping @MainActor (TimelineSnapshot) -> Void) {
         gate.hold(version: version)
@@ -45,6 +46,12 @@ final class ChatOpenCoordinator {
             isWindowOpen = false
             PalPerf.event("chat.open.settled")
         }
+    }
+
+    func retrying(after delay: Duration) {
+        attempts += 1
+        PalPerf.event("chat.open.retry", count: attempts)
+        PalPerf.event("chat.open.retry.delay", count: Int(delay.components.seconds * 1000 + delay.components.attoseconds / 1_000_000_000_000_000))
     }
 
     func cancel() {
