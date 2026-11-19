@@ -32,8 +32,6 @@
   {"file": "App/Mac/MacSettings.swift", "rule": "perf-state-model-init", "text": "_model = State(initialValue: VaultModel(surfaces: hub.connection.surfaces))"},
   {"file": "App/Mac/MacSettings.swift", "rule": "perf-state-model-init", "text": "_model = State(initialValue: WebhookRoutesModel.make(hub: hub))"},
   {"file": "App/Mac/MacSettings.swift", "rule": "perf-state-model-init", "text": "_sharing = State(initialValue: DataSharingModel(surfaces: connection.surfaces))"},
-  {"file": "App/Mac/MacShell.swift", "rule": "perf-animation-container", "text": ".animation(.snappy(duration: 0.22), value: shell.isCompact)"},
-  {"file": "App/Mac/MacShell.swift", "rule": "perf-animation-container", "text": ".animation(.snappy(duration: 0.22), value: shell.showsInspector)"},
   {"file": "App/Mac/MacSidebarRail.swift", "rule": "perf-eager-stack", "text": "VStack(spacing: 3) {"},
   {"file": "App/PalApp.swift", "rule": "perf-model-in-body", "text": "BotKeysScreen(model: BotKeysModel(service: bots.services.keys, profile: name, surfaces: bots.services.surfaces), displayName: displayName)"},
   {"file": "App/PalApp.swift", "rule": "perf-model-in-body", "text": "BotThreadView(model: BotThreadModel(route: thread, connection: model, roster: roster))"},

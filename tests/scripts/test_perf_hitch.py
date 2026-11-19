@@ -31,6 +31,17 @@ def report(**overrides):
     return {**base, **overrides}
 
 
+def with_long(**overrides):
+    base = {
+        "severeHitches": 3,
+        "worstFrameMs": 547.0,
+        "longHitchThresholdMs": 100.0,
+        "longHitchCount": 2,
+        "longHitches": [{"atSeconds": 7.25, "ms": 120.0}, {"atSeconds": 42.5, "ms": 547.0}],
+    }
+    return report(**{**base, **overrides})
+
+
 def without(field):
     return {key: value for key, value in report().items() if key != field}
 
@@ -56,6 +67,54 @@ def test_render_summary_names_every_headline_number():
     assert "6.00/min" in text
     assert "3.00 ms per second" in text
     assert "52.4 ms" in text
+
+
+def test_a_report_without_long_hitch_fields_still_validates_and_prints_no_long_section():
+    assert perf_hitch.validate(report()) == report()
+    assert "long hitches" not in perf_hitch.render_summary(report())
+
+
+def test_summary_lists_the_longest_hitches_worst_first_with_their_time():
+    text = perf_hitch.render_summary(with_long())
+    assert "long hitches (> 100 ms): 2" in text
+    lines = [line.strip() for line in text.splitlines() if line.strip().startswith("t=")]
+    assert lines == ["t=42.50 s  547.0 ms", "t=7.25 s  120.0 ms"]
+    assert perf_hitch.summary(with_long())["longestHitches"][0] == {"atSeconds": 42.5, "ms": 547.0}
+
+
+def test_summary_lists_at_most_ten_even_if_the_file_holds_more():
+    many = [{"atSeconds": float(i), "ms": 100.0 + i} for i in range(1, 13)]
+    stats = perf_hitch.summary(with_long(longHitchCount=12, severeHitches=12, hitches=12, worstFrameMs=112.0, longHitches=many[:10]))
+    assert len(stats["longestHitches"]) == 10
+    assert stats["longestHitches"][0]["ms"] == 110.0
+
+
+@pytest.mark.parametrize(
+    ("bad", "fragment"),
+    [
+        (with_long(longHitchCount=-1), "longHitchCount"),
+        (with_long(longHitchCount=2.5), "longHitchCount"),
+        (with_long(longHitchCount=1), "lists 2 entries"),
+        (with_long(longHitchCount=4, severeHitches=3), "exceeds severeHitches"),
+        (with_long(longHitches="none"), "must be a list"),
+        (with_long(longHitches=[1]), "must be objects"),
+        (with_long(longHitches=[{"atSeconds": 1.0}]), "ms"),
+        (with_long(longHitches=[{"atSeconds": -1.0, "ms": 120.0}]), "atSeconds"),
+        (with_long(longHitches=[{"atSeconds": 1.0, "ms": 900.0}]), "worstFrameMs"),
+        ({key: value for key, value in with_long().items() if key != "longHitches"}, "come together"),
+    ],
+)
+def test_malformed_long_hitch_fields_are_rejected(bad, fragment):
+    with pytest.raises(perf_hitch.HitchReportError, match=fragment):
+        perf_hitch.validate(bad)
+
+
+def test_cli_prints_the_longest_hitches_from_a_stdout_capture(tmp_path):
+    capture = tmp_path / "stdout.txt"
+    capture.write_text(stdout_capture(with_long()))
+    result = run_cli(capture)
+    assert result.returncode == 0
+    assert "t=42.50 s  547.0 ms" in result.stdout
 
 
 def row_cells(table, metric):
