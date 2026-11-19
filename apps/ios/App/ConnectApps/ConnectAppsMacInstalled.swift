@@ -31,7 +31,7 @@ struct ConnectAppsMacHeader: View {
                     }
                 }
                 Text("\(installed.count) connected")
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                PalIcon("chevron.down").font(.system(size: 9, weight: .semibold))
             }
         }
         .buttonStyle(PalClearCapsuleStyle(height: 34, horizontalPadding: 12, weight: .regular))

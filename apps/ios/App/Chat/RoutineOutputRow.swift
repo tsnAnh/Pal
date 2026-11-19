@@ -57,9 +57,8 @@ struct RoutineSenderLine: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "clock")
+            PalIcon("clock", ink: .secondary)
                 .font(.system(size: 12))
-                .foregroundStyle(PalTokens.textSecondary)
                 .frame(width: 22, height: 22)
                 .background(PalTokens.control, in: Circle())
             if !jobName.isEmpty {

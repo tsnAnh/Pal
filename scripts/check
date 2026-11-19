@@ -119,6 +119,7 @@ _GUARDS = {
     "swift-chat-drop": ["scripts/ci/check_swift_chat_drop.py"],
     "swift-chat-scroll": ["scripts/ci/check_swift_chat_scroll.py"],
     "swift-glass": ["scripts/ci/check_swift_glass.py"],
+    "swift-icon-tint": ["scripts/ci/check_swift_icon_tint.py"],
     "swift-image-viewer": ["scripts/ci/check_swift_image_viewer.py"],
     "swift-perf": ["scripts/ci/check_swift_perf.py"],
     "swift-fault-details": ["scripts/ci/check_swift_fault_details.py"],

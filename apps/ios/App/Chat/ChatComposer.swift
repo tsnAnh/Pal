@@ -241,12 +241,14 @@ struct ChatComposer: View {
         .accessibilityIdentifier("attachButton")
         #else
         Menu {
-            Button { isFileImporterPresented = true } label: { Label("Attach files", systemImage: "paperclip") }
+            Button { isFileImporterPresented = true } label: {
+                Label("Attach files", palIcon: "paperclip")
+            }
                 .accessibilityIdentifier("attachFiles")
-            Button { isPhotoPickerPresented = true } label: { Label("Photo Library", systemImage: "photo.on.rectangle") }
+            Button { isPhotoPickerPresented = true } label: { Label("Photo Library", palIcon: "photo.on.rectangle") }
                 .accessibilityIdentifier("attachPhotos")
             if CameraCapture.isAvailable {
-                Button { isCameraPresented = true } label: { Label("Camera", systemImage: "camera") }
+                Button { isCameraPresented = true } label: { Label("Camera", palIcon: "camera") }
                     .accessibilityIdentifier("attachCamera")
             }
         } label: {
@@ -331,17 +333,15 @@ struct ChatComposer: View {
     }
 
     private func plainIcon(_ systemName: String) -> some View {
-        Image(systemName: systemName)
+        PalIcon(systemName, ink: .secondary)
             .font(.system(size: PlatformVariant.pick(mac: 14, iOS: 17), weight: .regular))
-            .foregroundStyle(PalTokens.textSecondary)
             .frame(width: PlatformVariant.pick(mac: 28, iOS: buttonDiameter), height: buttonDiameter)
             .minimumHitTarget(visual: buttonDiameter)
     }
 
     private func actionCircle(systemName: String, weight: Font.Weight) -> some View {
-        Image(systemName: systemName)
+        PalIcon(systemName, ink: .custom(actionInk))
             .font(.system(size: buttonDiameter * PlatformVariant.pick(mac: 0.48, iOS: 0.5), weight: weight))
-            .foregroundStyle(actionInk)
             .frame(width: buttonDiameter, height: buttonDiameter)
             .background(actionFill, in: Circle())
             .minimumHitTarget(visual: buttonDiameter)

@@ -172,8 +172,7 @@ struct BotModelView: View {
         action: @escaping () async -> Void
     ) -> some View {
         Button { Task { await action() } } label: {
-            Image(systemName: symbol)
-                .foregroundStyle(Color(theme.palette.textSecondary))
+            PalIcon(symbol, ink: .secondary)
                 .frame(width: 28, height: 28)
         }
         .buttonStyle(.plain)

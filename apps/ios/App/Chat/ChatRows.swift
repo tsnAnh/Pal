@@ -45,36 +45,27 @@ struct ChatRowView: View {
         ChatTimeSeparator(text: ChatTimestamp.label(for: date))
     }
 
-    private func messageActions(for text: String) -> MessageActions {
-        let id = row.id
-        let model = model
-        return MessageActions(
-            rowID: id,
-            text: text,
-            reaction: context.reaction,
-            canReact: { model.canReact(to: id) },
-            react: { model.react(to: id, with: $0) },
-            reply: { model.beginReply(to: id) }
-        )
-    }
-
     @ViewBuilder
     private var content: some View {
         switch row.kind {
         case .user(let text, let delivery):
+            let actions = userActions(text: text, delivery: delivery)
             UserBubble(text: text, images: row.images, delivery: delivery, accent: context.accent, highlight: findQuery, isCurrentMatch: isCurrentMatch) { id in
                 model.retry(id)
             }
-            .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
+            .environment(\.messageActions, actions)
             .environment(\.chatImageLoader, model.imageLoader)
+            .rowHoverWiring(actions)
         case .assistant(let parsed):
+            let actions = messageActions(for: parsed.source, tables: { parsed.document.tables })
             AssistantBubble(
                 text: parsed.source, parsed: parsed, images: row.images, files: row.files, filesPending: row.isStreaming,
                 highlight: findQuery, isCurrentMatch: isCurrentMatch, wholeBubbleSelection: !row.isStreaming
             )
-                .environment(\.messageActions, messageActions(for: parsed.source))
+                .environment(\.messageActions, actions)
                 .environment(\.chatImageLoader, model.imageLoader)
                 .environment(\.chatFileActions, model.fileActions)
+                .rowHoverWiring(actions)
         case .clarifyAnswered, .clarify:
             ClarifyRowContent(kind: row.kind, accent: context.accent, model: model)
         case .approval(let prompt):
@@ -88,8 +79,10 @@ struct ChatRowView: View {
                 model.answerConnection(opID: card.operation.opID, target: target.name, decision: decision)
             }
         case .routine(let routine):
+            let actions = messageActions(for: routine.text)
             RoutineOutputRow(routine: routine, highlight: findQuery, isCurrentMatch: isCurrentMatch)
-                .environment(\.messageActions, messageActions(for: routine.text))
+                .environment(\.messageActions, actions)
+                .rowHoverWiring(actions)
         case .notice(let notice):
             NoticeRow(notice: notice, highlight: findQuery, isCurrentMatch: isCurrentMatch)
         case .botThread(let link):
@@ -98,6 +91,16 @@ struct ChatRowView: View {
             GeneratedImageRow(generation: generation)
                 .environment(\.chatImageLoader, model.imageLoader)
         }
+    }
+}
+
+private extension View {
+    func rowHoverWiring(_ actions: MessageActions?) -> some View {
+        #if os(macOS)
+        macRowHover(actions: actions)
+        #else
+        self
+        #endif
     }
 }
 
@@ -171,18 +174,18 @@ struct UserBubble: View {
         case .sent:
             EmptyView()
         case .sending:
-            Label("Sending", systemImage: "arrow.up.circle")
+            Label("Sending", palIcon: "arrow.up.circle", ink: .secondary)
                 .font(.caption)
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("deliverySending")
         case .waitingForConnection:
-            Label("Waiting for connection", systemImage: "clock")
+            Label("Waiting for connection", palIcon: "clock", ink: .secondary)
                 .font(.caption)
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("deliveryWaitingForConnection")
         case .failed(let id):
             Button { retry(id) } label: {
-                Label("Not sent. Tap to retry", systemImage: "exclamationmark.circle.fill")
+                Label("Not sent. Tap to retry", palIcon: "exclamationmark.circle.fill", ink: .destructive)
                     .font(.caption)
                     .foregroundStyle(Color(theme.palette.destructive))
             }
@@ -207,7 +210,7 @@ struct NoticeRow: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "arrow.down.left.circle").font(.system(size: 12))
+            PalIcon("arrow.down.left.circle", ink: .secondary).font(.system(size: 12))
             Text(title).hermesText(.chip)
         }
         .foregroundStyle(Color(theme.palette.textSecondary))

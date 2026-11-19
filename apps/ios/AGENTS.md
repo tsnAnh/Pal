@@ -57,6 +57,7 @@ Glass is a control and navigation layer floating above content, never the conten
 | Bars over scrolling content use system insets (`safeAreaBar`, scroll edge effect) | A bar over a ScrollView uses `safeAreaInset` or `contentMargins` (measured height) and owns a background; no overlay or ZStack with fixed padding (PAL-4) | `glass-floating-bar` |
 | System colours with light, dark and increased-contrast variants | Colours come from `PalTokens`, `theme.palette` or system colours; no raw hex, `Color(red:`, `Color(white:` in `App/` | `glass-raw-color` |
 | Bot accents stay on small shapes | Surfaces use the neutral palette | `swift-bot-tint` |
+| Icons are the primary ink | `PalIcon`, `Label(_, palIcon:)`; no raw `Image(systemName:)`, `systemImage:` or blue; exceptions in `swift_icon_tint_allowlist.txt` | `swift-icon-tint` |
 | One design system | Mac and iOS share PalDesign components; no Electron (`apps/desktop` is not Pal) | review |
 | Design first | UI changes start from an owner-approved mockup (Rule 4) | review |
 
@@ -93,8 +94,7 @@ A mistake found while tuning the Mac app becomes a type, a lint rule or a test, 
 - Avatars: 14 blobs, 1:1:1 3D, unlit; black eyes (white→gray in light); body turns to pointer with eyes (no eyes-only/1-eye anims), upright on hover; rest eyes up-right, slanted; review render pre-build
 - T3 Code = catalog connector `t3code` (no bridge): Network on, plain-http tailnet `<ip>:<port>/mcp`, OAuth DCR+PKCE, no refresh; wizard `T3CodeFlow` (PalConnect), Mac prefill `T3AddressSuggestion`
 - Google Ads = catalog `google-ads` (oauth_client + stdio `google-ads-mcp`, read-only), reuses the Workspace client, adwords scope only; wizard `GoogleAdsFlow` (PalConnect), RPC `connectors.google_ads.status|save|verify`; Explorer access refusal = `explorer_access_needed` status
-- Liquid Glass: one look everywhere = system default (untinted `.regular` via `palGlass`, `.buttonStyle(.glass)`, system ToolbarItems); no dark tints, no `.clear` variants
-- Before building/installing Pal (iPhone or Mac): pull latest main first; user expects newest code
+- Before building Pal (iPhone or Mac): pull latest main first
 - iPhone screenshots from connected physical device: `pymobiledevice3 developer dvt screenshot <out.png>`
 - Push: Pi APNs key DDRHGPZC24 = sandbox-only, topic dev.tsnanh.hermes.bot (team at its sandbox+production key limit); TestFlight/App Store builds need a separate production key. App picks APNs env from its signature (`SignedPushEnvironment`); gateway needs `hermes pm install --extra apns`
 - swift-lint baseline (`.swiftlint-baseline.json`) matches messages incl. counts: growing an already-oversized file/type re-fails it; offset lines, never re-baseline

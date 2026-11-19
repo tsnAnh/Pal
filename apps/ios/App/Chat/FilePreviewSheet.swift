@@ -52,7 +52,7 @@ struct FilePreviewSheet: View {
                 .accessibilityIdentifier("filePreviewContent")
         case .saveOnly(let url, let size):
             VStack(spacing: 12) {
-                Image(systemName: "doc").font(.system(size: 44))
+                PalIcon("doc", ink: .secondary).font(.system(size: 44))
                 Text(file.name).font(.headline).multilineTextAlignment(.center)
                 Text("\(file.typeLabel) · \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))")
                     .hermesText(.timestamp)
@@ -66,7 +66,7 @@ struct FilePreviewSheet: View {
         case .failed(let message):
             Button { attempt += 1 } label: {
                 VStack(spacing: 8) {
-                    Image(systemName: "doc.badge.ellipsis").font(.system(size: 32))
+                    PalIcon("doc.badge.ellipsis", ink: .secondary).font(.system(size: 32))
                     Text(message).multilineTextAlignment(.center)
                     Text("Retry")
                 }
@@ -84,13 +84,13 @@ struct FilePreviewSheet: View {
         Button {
             notice = (try? FileSaver.save(Data(contentsOf: url), name: file.name)) ?? String(localized: "The file could not be saved.")
         } label: {
-            Label("Save as…", systemImage: "square.and.arrow.down")
+            Label("Save as…", palIcon: "square.and.arrow.down")
         }
         .buttonStyle(PillButtonStyle(kind: .neutral))
         .accessibilityIdentifier("filePreviewSave")
         #else
         ShareLink(item: url) {
-            Label("Share", systemImage: "square.and.arrow.up")
+            Label("Share", palIcon: "square.and.arrow.up")
         }
         .buttonStyle(PillButtonStyle(kind: .neutral))
         .accessibilityIdentifier("filePreviewShare")

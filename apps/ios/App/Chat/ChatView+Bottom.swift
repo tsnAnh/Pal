@@ -102,7 +102,7 @@ extension ChatView {
         Menu {
             if router.supports(.viewProfile) {
                 Button { router.perform(.viewProfile, botName: model.bot.name) } label: {
-                    Label("View Profile", systemImage: "person.crop.circle")
+                    Label("View Profile", palIcon: "person.crop.circle")
                 }
                 .accessibilityIdentifier("chatMenuViewProfile")
             }
@@ -110,17 +110,17 @@ extension ChatView {
                 composerFocused = false
                 model.beginFinding()
             } label: {
-                Label("Find in Chat", systemImage: "magnifyingglass")
+                Label("Find in Chat", palIcon: "magnifyingglass")
             }
             .accessibilityIdentifier("chatMenuFind")
             if router.supports(.shareAsTemplate) {
                 Button { router.perform(.shareAsTemplate, botName: model.bot.name) } label: {
-                    Label("Share as Template…", systemImage: "square.and.arrow.up")
+                    Label("Share as Template…", palIcon: "square.and.arrow.up")
                 }
                 .accessibilityIdentifier("chatMenuShareTemplate")
             }
         } label: {
-            Image(systemName: "ellipsis")
+            PalIcon("ellipsis")
                 .accessibilityLabel(Text("Chat options"))
         }
         .tint(Color(theme.palette.textPrimary))

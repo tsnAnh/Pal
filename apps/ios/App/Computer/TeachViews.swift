@@ -57,9 +57,9 @@ struct TeachBanner: View {
         case .drafting:
             ProgressView().controlSize(.small).tint(Color(theme.palette.textSecondary))
         case .ready:
-            Image(systemName: "lightbulb.fill").foregroundStyle(Color(theme.palette.accentBlue))
+            PalIcon("lightbulb.fill")
         default:
-            Image(systemName: "pause.circle").foregroundStyle(Color(theme.palette.textSecondary))
+            PalIcon("pause.circle", ink: .secondary)
         }
     }
 

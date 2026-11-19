@@ -33,9 +33,8 @@ public struct AvatarBadge<Content: View>: View {
         let badgeDiameter = diameter * PalMetrics.primaryBadgeDiameterRatio
         let ring = diameter * PalMetrics.primaryBadgeRingRatio
         let offset = diameter * PalMetrics.primaryBadgeCenterOffsetRatio
-        return Image(systemName: "star.fill")
+        return PalIcon("star.fill", ink: .onFill)
             .font(.system(size: badgeDiameter * 0.5, weight: .bold))
-            .foregroundStyle(Color(theme.palette.primaryBadgeGlyph))
             .frame(width: badgeDiameter, height: badgeDiameter)
             .background(Color(theme.palette.primaryBadge), in: Circle())
             .overlay(Circle().strokeBorder(Color(theme.palette.canvas), lineWidth: ring).padding(-ring))

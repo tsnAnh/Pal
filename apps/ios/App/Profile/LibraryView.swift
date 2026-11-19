@@ -326,9 +326,8 @@ private struct LibraryIcon: View {
     }
 
     private func symbol(_ name: String) -> some View {
-        Image(systemName: name)
+        PalIcon(name, ink: .secondary)
             .font(.system(size: glyph, weight: .light))
-            .foregroundStyle(Color(theme.palette.textSecondary))
     }
 }
 

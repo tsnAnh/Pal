@@ -14,7 +14,8 @@ perf-queue-sync, perf-timeline-unlisted, perf-timeline-interval, perf-hover-unli
 perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry-per-row,
 perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write,
 perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired, perf-dropped-value,
-perf-avatar-row-slot, perf-drag-writes-binding, perf-open-ungated, perf-selection-island, perf-table-in-text-bubble.
+perf-avatar-row-slot, perf-drag-writes-binding, perf-open-ungated, perf-hover-state-in-row-body, perf-selection-island,
+perf-table-in-text-bubble.
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -77,6 +78,10 @@ def mac_shell(parts: tuple[str, ...], text: str) -> bool:
 
 def row_file(parts: tuple[str, ...], text: str) -> bool:
     return parts in ROW_FILES
+
+
+def chat_row_view_file(parts: tuple[str, ...], text: str) -> bool:
+    return parts[:2] == ("App", "Chat") and "struct ChatRowView" in text
 
 
 def avatar_row_file(parts: tuple[str, ...], text: str) -> bool:
@@ -159,6 +164,14 @@ LINE_RULES = (
         row_file,
         "a chat row reads shared model state, so any change to it re-evaluates every visible row. Read it once in the "
         "list (ChatModel.rowContext) and pass it in the row's Equatable ChatRowContext",
+    ),
+    LineRule(
+        "perf-hover-state-in-row-body",
+        re.compile(r"\browHover\b|\bisHovering\b"),
+        chat_row_view_file,
+        "ChatRowView reads per-row hover state, so every pointer enter or exit re-runs chat.row.body. Only the small "
+        "view that shows the hover affordance may read RowHoverState (MacMessageHoverBar); the row injects it with "
+        ".environment(\\.rowHover, hover) and never reads it",
     ),
     LineRule(
         "perf-observed-image-dictionary",

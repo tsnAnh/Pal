@@ -27,7 +27,7 @@ public struct AppearanceTile: View {
         let shape = RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
         Button(action: action) {
             VStack(spacing: 10) {
-                icon
+                icon.glyph(ink: isSelected ? .primary : .secondary)
                     .foregroundStyle(Color(isSelected ? theme.palette.textPrimary : theme.palette.textSecondary))
                     .frame(maxWidth: .infinity)
                     .frame(height: PalMetrics.appearanceTileHeight)
@@ -61,13 +61,18 @@ public enum AppearanceTileIcon: View {
     case black
 
     public var body: some View {
+        glyph(ink: .primary)
+    }
+
+    @ViewBuilder
+    func glyph(ink: PalIconInk) -> some View {
         switch self {
         case .followSystem:
-            Image(systemName: "circle.lefthalf.filled").font(.system(size: 26))
+            PalIcon("circle.lefthalf.filled", ink: ink).font(.system(size: 26))
         case .light:
-            Image(systemName: "sun.max.fill").font(.system(size: 26))
+            PalIcon("sun.max.fill", ink: ink).font(.system(size: 26))
         case .dark:
-            Image(systemName: "moon.fill").font(.system(size: 24))
+            PalIcon("moon.fill", ink: ink).font(.system(size: 24))
         case .black:
             Circle().frame(width: 26, height: 26)
         }

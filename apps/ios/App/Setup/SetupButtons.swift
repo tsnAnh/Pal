@@ -9,7 +9,7 @@ struct SetupButton: View {
 
     let title: String
     var kind: Kind = .secondary
-    var systemImage: String?
+    var symbol: String?
     var isBusy = false
     var fillsWidth = false
     let identifier: String
@@ -38,8 +38,8 @@ struct SetupButton: View {
 
     @ViewBuilder
     private var label: some View {
-        if let systemImage {
-            Label(title, systemImage: systemImage)
+        if let symbol {
+            Label(title, palIcon: symbol)
         } else {
             Text(title)
         }

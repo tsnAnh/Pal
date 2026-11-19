@@ -44,7 +44,7 @@ struct RoomView: View {
                     .padding(.top, 10)
                 }
                 workingLine
-                if model.isUnreachable { ChatStatusLine(text: String(localized: "Reconnecting…"), systemImage: "wifi.slash").padding(.top, 12) }
+                if model.isUnreachable { ChatStatusLine(text: String(localized: "Reconnecting…"), symbol: "wifi.slash").padding(.top, 12) }
             }
             .padding(.horizontal, ChatMetrics.edgeMargin)
             .padding(.top, 8)
@@ -155,7 +155,7 @@ struct RoomView: View {
 
     private var stopButton: some View {
         Button { model.stop() } label: {
-            Image(systemName: "stop.fill")
+            PalIcon("stop.fill")
         }
         .disabled(!model.canStop)
         .opacity(model.canStop ? 1 : 0)
@@ -174,7 +174,7 @@ struct RoomView: View {
     #if os(macOS)
     private var titleLabel: some View {
         HStack(spacing: 8) {
-            Image(systemName: "person.2.fill").font(.system(size: 13))
+            PalIcon("person.2.fill").font(.system(size: 13))
             Text(model.room.name).hermesText(.botName).lineLimit(1)
         }
         .foregroundStyle(PalTokens.textPrimary)
@@ -207,7 +207,7 @@ struct RoomView: View {
     #else
     private var titleLabel: some View {
         HStack(spacing: 9) {
-            Image(systemName: "person.2.fill").font(.system(size: 13))
+            PalIcon("person.2.fill").font(.system(size: 13))
             Text(model.room.name).hermesText(.botName).lineLimit(1)
         }
         .foregroundStyle(Color(theme.palette.textPrimary))

@@ -10,9 +10,8 @@ struct CapabilityListRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: ConnectRowMetrics.tileToTextGap) {
-            Image(systemName: row.indicator.symbolName)
+            PalIcon(row.indicator.symbolName, ink: indicatorInk)
                 .font(.system(size: 20))
-                .foregroundStyle(indicatorColor)
                 .frame(width: ConnectRowMetrics.tileSize)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
@@ -55,11 +54,11 @@ struct CapabilityListRow: View {
         .accessibilityIdentifier(row.accessibilityIdentifier)
     }
 
-    private var indicatorColor: Color {
+    private var indicatorInk: PalIconInk {
         switch row.indicator {
-        case .on: Color(theme.palette.toggleOnTrack)
-        case .limited: Color(theme.palette.accentBlue)
-        case .off, .unavailable: PalTokens.textTertiary
+        case .on: .primary
+        case .limited: .secondary
+        case .off, .unavailable: .tertiary
         }
     }
 }

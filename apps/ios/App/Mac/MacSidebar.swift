@@ -52,7 +52,11 @@ struct MacSidebar: View {
             .accessibilityIdentifier("rosterScreen")
             .overlay {
                 if roster.isLoaded, roster.bots.isEmpty {
-                    ContentUnavailableView("No bots yet", systemImage: "face.smiling", description: Text("Bots you create appear here."))
+                    ContentUnavailableView {
+                        Label("No bots yet", palIcon: "face.smiling")
+                    } description: {
+                        Text("Bots you create appear here.")
+                    }
                 }
             }
             .overlay(alignment: .top) { topBar }
@@ -89,9 +93,8 @@ struct MacIconButton: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
+            PalIcon(systemName, ink: .secondary)
                 .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(PalTokens.textSecondary)
                 .frame(width: diameter, height: diameter)
                 .palGlass(Circle())
                 .contentShape(Circle())
@@ -116,7 +119,7 @@ struct MacConnectAppsGlyph: View {
                     .frame(width: cell, height: cell)
                     .offset(x: CGFloat(index % 2) * (cell + gap), y: CGFloat(index / 2) * (cell + gap))
             }
-            Image(systemName: "plus")
+            PalIcon("plus", ink: .secondary)
                 .font(.system(size: size * 0.5, weight: .semibold))
                 .frame(width: cell, height: cell)
                 .offset(x: cell + gap, y: cell + gap)
@@ -204,9 +207,8 @@ private struct MacHiddenBots: View {
                     Text("\(roster.hiddenBots.count)")
                         .font(.system(size: 11.5))
                         .foregroundStyle(PalTokens.textTertiary)
-                    Image(systemName: "chevron.right")
+                    PalIcon("chevron.right", ink: .tertiary)
                         .font(.system(size: 8.5, weight: .semibold))
-                        .foregroundStyle(PalTokens.textTertiary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                         .opacity(hovering || expanded ? 1 : 0)
                 }
@@ -354,9 +356,8 @@ private struct MacSidebarFooter: View {
             }
             if router.capabilities.contains(.kanban) {
                 Button { router.presentKanban() } label: {
-                    Image(systemName: "rectangle.split.3x1")
+                    PalIcon("rectangle.split.3x1", ink: .secondary)
                         .font(.system(size: 15))
-                        .foregroundStyle(PalTokens.textSecondary)
                         .frame(width: 34, height: 34)
                         .palGlass(Circle())
                         .contentShape(Circle())

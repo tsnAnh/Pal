@@ -12,9 +12,8 @@ struct UsageBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 9) {
-                Image(systemName: "exclamationmark.triangle.fill")
+                PalIcon("exclamationmark.triangle.fill", ink: .custom(.orange))
                     .font(.system(size: 12))
-                    .foregroundStyle(Color.orange)
                     .accessibilityHidden(true)
                 Text(notice.headline())
                     .font(.system(size: 13))
@@ -22,9 +21,8 @@ struct UsageBanner: View {
                     .accessibilityIdentifier("usageBannerTitle")
                 Spacer(minLength: 8)
                 Button(action: dismiss) {
-                    Image(systemName: "xmark")
+                    PalIcon("xmark", ink: .secondary)
                         .font(.system(size: 10))
-                        .foregroundStyle(PalTokens.textSecondary)
                         .frame(width: 28, height: 28)
                         .contentShape(Rectangle())
                 }

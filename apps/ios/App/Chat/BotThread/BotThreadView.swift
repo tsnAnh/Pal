@@ -182,7 +182,7 @@ private struct BotThreadMessageRow: View {
                 Spacer(minLength: threadBubbleGap)
             }
             if isFailure, let statusText = row.message.statusText {
-                Label(statusText, systemImage: row.message.status == .pending ? "clock" : "exclamationmark.circle")
+                Label(statusText, palIcon: row.message.status == .pending ? "clock" : "exclamationmark.circle", ink: .secondary)
                     .font(.caption)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                     .padding(.leading, ChatMetrics.threadAvatarSize + ChatMetrics.threadAvatarGap + ChatMetrics.threadNameInset)
@@ -205,7 +205,7 @@ private struct ReadOnlyPill: View {
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
-        Label("Read-only", systemImage: "lock")
+        Label("Read-only", palIcon: "lock")
             .hermesText(.chip)
             .foregroundStyle(Color(theme.palette.textPrimary))
             .padding(.horizontal, 16)

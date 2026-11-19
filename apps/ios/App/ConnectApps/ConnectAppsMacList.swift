@@ -23,7 +23,7 @@ extension ConnectAppsList {
                     resumeBanner
                     macContent(state)
                     Button { model.addCustomConnector() } label: {
-                        Label("Add a custom connector", systemImage: "plus")
+                        Label("Add a custom connector", palIcon: "plus")
                     }
                     .buttonStyle(.palClearWide)
                     .accessibilityIdentifier("addCustomConnectorButton")
@@ -293,7 +293,7 @@ struct ConnectAppsMacChips: View {
         } label: {
             HStack(spacing: 6) {
                 Text(moreTitle)
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                PalIcon("chevron.down").font(.system(size: 9, weight: .semibold))
             }
         }
         .menuStyle(.button)

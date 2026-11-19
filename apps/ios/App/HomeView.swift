@@ -47,7 +47,7 @@ struct HomeView: View {
             if rooms.canCreate {
                 ToolbarItem(placement: .trailingBar) {
                     Button { rooms.showsCreate = true } label: {
-                        Image(systemName: "person.2")
+                        PalIcon("person.2")
                     }
                     .accessibilityLabel(Text("New Group Chat"))
                     .accessibilityIdentifier("createRoomButton")
@@ -57,7 +57,7 @@ struct HomeView: View {
             if router.capabilities.contains(.kanban) {
                 ToolbarItem(placement: .trailingBar) {
                     Button { router.presentKanban() } label: {
-                        Image(systemName: "rectangle.split.3x1")
+                        PalIcon("rectangle.split.3x1")
                     }
                     .accessibilityLabel(Text("Pal Kanban"))
                     .accessibilityIdentifier("kanbanButton")
@@ -66,7 +66,7 @@ struct HomeView: View {
             }
             ToolbarItem(placement: .trailingBar) {
                 Button { router.present(.createBot) } label: {
-                    Image(systemName: "plus")
+                    PalIcon("plus")
                 }
                 .accessibilityLabel(Text("Create New Bot"))
                 .accessibilityIdentifier("createBotButton")
@@ -93,7 +93,9 @@ struct HomeView: View {
         }
         .overlay {
             if roster.isLoaded, roster.bots.isEmpty {
-                ContentUnavailableView("No bots yet", systemImage: "face.smiling", description: Text("Bots you create appear here."))
+                ContentUnavailableView {
+                    Label("No bots yet", palIcon: "face.smiling")
+                } description: { Text("Bots you create appear here.") }
             }
         }
         .botManagementDialogs(roster: roster, router: router)
@@ -150,9 +152,8 @@ private struct HiddenBotsSection: View {
                     Text("\(roster.hiddenBots.count)")
                         .font(.system(size: 13))
                         .foregroundStyle(PalTokens.textTertiary)
-                    Image(systemName: "chevron.right")
+                    PalIcon("chevron.right", ink: .tertiary)
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(PalTokens.textTertiary)
                         .rotationEffect(.degrees(expanded ? 90 : 0))
                 }
                 .padding(.horizontal, PalMetrics.homeRowInset - 8)
@@ -402,9 +403,8 @@ struct PreviewLine: View {
     var body: some View {
         HStack(spacing: 8) {
             if let glyph {
-                Image(systemName: glyph.name)
+                PalIcon(glyph.name, ink: .custom(glyph.color))
                     .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(glyph.color)
                     .accessibilityLabel(Text(glyph.label))
             }
             Text(bot.preview.text.isEmpty ? " " : bot.preview.text)

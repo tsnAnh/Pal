@@ -83,7 +83,7 @@ struct FaultSummary: View {
                 .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityIdentifier("diagnosticsTrace")
             if record.reported {
-                Label(DiagnosticsCopy.reported, systemImage: "checkmark.circle")
+                Label(DiagnosticsCopy.reported, palIcon: "checkmark.circle", ink: .secondary)
                     .hermesText(.rowSubtitle)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                     .accessibilityIdentifier("diagnosticsReported")
@@ -145,7 +145,11 @@ struct FaultDetails: View {
 
 struct DiagnosticsEmpty: View {
     var body: some View {
-        ContentUnavailableView(DiagnosticsCopy.emptyTitle, systemImage: "checkmark.seal", description: Text(DiagnosticsCopy.emptyBody))
+        ContentUnavailableView {
+            Label(DiagnosticsCopy.emptyTitle, palIcon: "checkmark.seal")
+        } description: {
+            Text(DiagnosticsCopy.emptyBody)
+        }
             .accessibilityIdentifier("diagnosticsEmpty")
     }
 }
@@ -161,17 +165,16 @@ struct DiagnosticsScreen: View {
             title: DiagnosticsCopy.title, identifier: "diagnosticsScreen", back: back,
             trailing: {
                 Menu {
-                    Button(DiagnosticsCopy.copyAll, systemImage: "doc.on.doc") { Pasteboard.string = model.allText }
+                    Button { Pasteboard.string = model.allText } label: { Label(DiagnosticsCopy.copyAll, palIcon: "doc.on.doc") }
                         .accessibilityIdentifier("diagnosticsCopyAll")
-                    Button(DiagnosticsCopy.clear, systemImage: "trash", role: .destructive) { confirmingClear = true }
+                    Button(role: .destructive) { confirmingClear = true } label: { Label(DiagnosticsCopy.clear, palIcon: "trash", ink: .destructive) }
                         .accessibilityIdentifier("diagnosticsClear")
                 } label: {
-                    Image(systemName: "ellipsis")
+                    PalIcon("ellipsis")
                 }
                 .disabled(model.records?.isEmpty ?? true)
                 .accessibilityLabel(Text(String(localized: "Diagnostics actions")))
                 .accessibilityIdentifier("diagnosticsActions")
-                .tint(.primary)
             },
             content: {
                 if let records = model.records {
