@@ -1,4 +1,5 @@
 #if os(macOS)
+import PalConnect
 import PalDesign
 import PalDiagnostics
 import SwiftUI
