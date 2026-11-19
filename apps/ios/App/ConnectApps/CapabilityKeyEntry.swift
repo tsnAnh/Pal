@@ -28,8 +28,6 @@ struct CapabilitySetKeyButton: View {
     let row: CapabilityRow
     let onSelect: (String) -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
         let keys = row.settableKeys
         if keys.count == 1, let key = keys.first {
@@ -39,7 +37,7 @@ struct CapabilitySetKeyButton: View {
             Menu(String(localized: "Set key")) {
                 ForEach(keys, id: \.self) { key in Button(key) { onSelect(key) } }
             }
-            .buttonStyle(.glass(PalGlass.style(interactive: true, colorScheme: colorScheme)))
+            .buttonStyle(.glass(.regular.interactive()))
             .controlSize(.small)
             .accessibilityIdentifier("capabilitySetKey-\(row.id)")
         }

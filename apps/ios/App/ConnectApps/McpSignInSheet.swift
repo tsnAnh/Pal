@@ -9,7 +9,6 @@ struct McpSignInSheet: View {
 
     @State private var address = ""
     @State private var clipboardMark: Int?
-    @Environment(\.colorScheme) private var colorScheme
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     #endif
@@ -64,7 +63,7 @@ struct McpSignInSheet: View {
                 .accessibilityIdentifier("mcpSignInTitle")
             Spacer()
             Button(role: .close, action: close)
-                .buttonStyle(.glass(PalGlass.style(interactive: true, colorScheme: colorScheme)))
+                .buttonStyle(.glass(.regular.interactive()))
                 .accessibilityIdentifier("mcpSignInClose")
         }
         .padding(.horizontal, PalMetrics.screenMargin)

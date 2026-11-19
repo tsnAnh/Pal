@@ -15,12 +15,10 @@ struct SetupButton: View {
     let identifier: String
     let action: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
-
     private var glass: Glass {
         switch kind {
         case .primary: Glass.regular.tint(PalTokens.toggleOn).interactive()
-        case .secondary: PalGlass.style(interactive: true, colorScheme: colorScheme)
+        case .secondary: Glass.regular.interactive()
         }
     }
 

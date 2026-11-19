@@ -171,8 +171,6 @@ struct SetupHeader: View {
     let title: String
     let close: () -> Void
 
-    @Environment(\.colorScheme) private var colorScheme
-
     var body: some View {
         HStack {
             Text(title)
@@ -183,7 +181,7 @@ struct SetupHeader: View {
                 .accessibilityIdentifier("stepFlowTitle")
             Spacer()
             Button(role: .close, action: close)
-                .buttonStyle(.glass(PalGlass.style(interactive: true, colorScheme: colorScheme)))
+                .buttonStyle(.glass(.regular.interactive()))
                 .accessibilityIdentifier("stepFlowClose")
         }
         .padding(.horizontal, PalMetrics.screenMargin)
