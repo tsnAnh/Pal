@@ -80,6 +80,7 @@ class CLIHandoffMixin:
                 return _cp(f"  {_t('handoff.no_home_channel', platform=platform_name)}",
                            f"  {_t('handoff.set_home_hint')}")
             return _cp(f"  {_t('handoff.' + exc.reason, platform=platform_name)}")
+        # health: allow BLE001 -- the failure is printed and the handoff does not start
         except Exception as exc:
             return _cp(f"  {_t('handoff.config_load_failed', error=exc)}")
 

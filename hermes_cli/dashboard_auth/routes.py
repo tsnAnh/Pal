@@ -524,6 +524,7 @@ async def auth_logout(request: Request):
     for provider in list_providers() if at else ():
         try:
             provider.revoke_access_session(access_token=at)
+        # health: allow BLE001 -- best-effort revoke per provider: one failing must not block sign-out; it is logged
         except Exception as e:
             _log.warning("dashboard-auth: access revoke on %r failed: %s", provider.name, e)
     if rt:

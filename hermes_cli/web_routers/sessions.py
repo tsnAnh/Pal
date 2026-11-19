@@ -338,6 +338,7 @@ async def search_sessions(
             def get_session(sid):
                 try:
                     return store.sessions.get(sid)
+                # health: allow BLE001 -- a row that fails to load is skipped; the search still answers
                 except Exception:
                     return None
 
@@ -374,6 +375,7 @@ async def search_sessions(
                 if session_id not in tip_cache:
                     try:
                         tip_cache[session_id] = store.lineage.tip(session_id)
+                    # health: allow BLE001 -- an unreadable lineage falls back to the matched id, which resumes correctly
                     except Exception:
                         tip_cache[session_id] = session_id
                 return tip_cache[session_id]
@@ -396,6 +398,7 @@ async def search_sessions(
                 payload["is_default_profile"] = row_profile == "default"
                 try:
                     entry = store.sessions.summary(sid)
+                # health: allow BLE001 -- a hit without a readable summary keeps its search payload
                 except Exception:
                     entry = None
                 if entry:

@@ -478,6 +478,8 @@ select = [
 "skills/**" = ["PLW1514"]
 "optional-skills/**" = ["PLW1514"]
 "plugins/**" = ["PLW1514"]
+# Pal: the Swift app's macOS-only developer tools (perf, roster bench, scroll spike) never run on Windows.
+"apps/ios/**" = ["PLW1514"]
 
 [lint.mccabe]
 max-complexity = 20

@@ -22,6 +22,7 @@ def _query_ro_sqlite(path: Path, fn):
     try:
         conn = connect_tracked(read_only_db_uri(path), uri=True, timeout=1.0, tracking_path=path)
         return fn(conn), None
+    # health: allow BLE001 -- the exception is returned to the caller, which reports the integrity failure
     except Exception as exc:
         return None, exc
     finally:

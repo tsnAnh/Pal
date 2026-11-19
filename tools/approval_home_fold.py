@@ -127,6 +127,7 @@ def _rewrite_resolved_hermes_home(command: str) -> str:
         from hermes_constants import get_hermes_home
         home = get_hermes_home().expanduser()
         paths = _home_spellings([str(home), str(home.resolve(strict=False))], command)
+    # health: allow BLE001 -- an unresolvable home leaves the command unfolded, as the ~ fold above does
     except Exception:
         return command
     command = _fold_home_prefixes(command, paths, "~/.hermes")

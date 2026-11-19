@@ -99,6 +99,7 @@ def _standalone_send(
                     timeout=30 + send_timeout - base_timeout), None
             finally:
                 pool.shutdown(wait=False)
+        # health: allow BLE001 -- any send error becomes this target's delivery outcome (shutdown, in-flight or failed) for the caller
         except Exception as e:
             if _sched._interpreter_shutting_down(e):
                 return _warned(shutdown_msg)
@@ -106,6 +107,7 @@ def _standalone_send(
             if isinstance(e, TimeoutError):
                 return _in_flight(30 + send_timeout - base_timeout)
             return _failed(e)
+    # health: allow BLE001 -- any error preparing the standalone send is returned as this target's delivery failure
     except Exception as e:
         return _failed(e)
 

@@ -1475,6 +1475,7 @@ def _start_server_runtime(
         from hermes_cli.nous_auth_keepalive import start_nous_auth_keepalive
 
         start_nous_auth_keepalive()
+    # health: allow BLE001 -- optional keepalive: the server starts without it
     except Exception as exc:
         _log.debug("Nous auth keepalive did not start: %s", exc)
 
@@ -1500,6 +1501,7 @@ def _start_server_runtime(
         from tui_gateway.server import install_exit_flush_signal_handlers
 
         install_exit_flush_signal_handlers()
+    # health: allow BLE001 -- the server still starts; only the flush-on-kill guard is missing (logged)
     except Exception as exc:
         _log.debug("exit-flush signal handlers not installed: %s", exc)
 
@@ -1524,6 +1526,7 @@ def _start_server_runtime(
         from tui_gateway.launch_profile_policy import activate_multi_profile_hosting_eagerly
 
         activate_multi_profile_hosting_eagerly()
+    # health: allow BLE001 -- logged with its traceback; the server still serves the launch profile
     except Exception:
         _log.warning("eager multi-profile activation failed", exc_info=True)
 

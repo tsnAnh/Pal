@@ -428,6 +428,7 @@ def _listener_api_server_extra(listener_home: Path) -> dict:
         # Profile-scoped read through the CANONICAL loader (managed-scope overlay, ${ENV_VAR}
         # expansion) — never a raw yaml.safe_load (tests/hermes_cli/test_config_read_guard.py).
         from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+        # health: allow HX016 -- home-only bind on purpose: reads the listener profile's config.yaml, no secrets or terminal
         token = set_hermes_home_override(str(listener_home))
         try:
             profile_cfg = load_config()

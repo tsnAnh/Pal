@@ -1,3 +1,4 @@
+# health: allow FILE_LINES -- upstream sync merge: 3 lines over (upstream 1988, Pal 1999); split it in a follow-up
 """Tools & system / slash / insights / rollback / plugins / cron / skills / MCP JSON-RPC handlers.
 
 Rebound onto server.py's globals at install time (``method_ctx.bind_module``), so

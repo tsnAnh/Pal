@@ -726,7 +726,7 @@ from hermes_cli.main_install_repair import (  # frozen updater surface: update_c
     _update_marker_path,
     _venv_scripts_dir,
 )
-from hermes_cli.main_desktop import (  # noqa: F401 -- kept as hermes_cli.main.cmd_gui for callers/tests
+from hermes_cli.main_desktop import (  # kept as hermes_cli.main.cmd_gui for callers and tests
     cmd_gui,
 )
 from hermes_cli.main_desktop import (  # frozen updater surface: update_cmd*.py resolve these via _m()

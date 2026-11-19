@@ -1,3 +1,4 @@
+# health: allow FILE_LINES -- upstream's file as merged by the upstream sync (2026 lines upstream); split it upstream-side
 """Tests for agent.redact -- secret masking in logs and output."""
 
 import ast
