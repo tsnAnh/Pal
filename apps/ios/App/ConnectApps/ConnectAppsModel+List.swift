@@ -45,13 +45,31 @@ extension ConnectAppsModel {
         return ConnectListRow(app: app, state: state, problem: failures[app.id], botSummary: botSummary)
     }
 
+    var rowCacheKey: ConnectRowCache.Key {
+        ConnectRowCache.Key(revision: catalogRevision, busy: busy, failures: failures, t3Reach: t3Reach, bot: botInstall)
+    }
+
+    func cachedEntries() -> [ConnectListEntry] {
+        let key = rowCacheKey
+        if let held = rowCache, held.key == key { return held.entries }
+        rowBuilds += 1
+        let entries = catalog.apps.map { ConnectListEntry(row: listRow(for: $0), app: $0) }
+        rowCache = ConnectRowCache(key: key, entries: entries)
+        return entries
+    }
+
+    func matchedEntries() -> [ConnectListEntry] {
+        let entries = cachedEntries()
+        let needle = trimmedQuery
+        return needle.isEmpty ? entries : entries.filter { ConnectCatalog.matches($0.app, needle: needle) }
+    }
+
     var listSections: [ConnectListSectionEntries] {
         let perf = PalPerf.begin("connect.sections.main"); defer { perf.end() }
-        let apps = searchedApps
-        let byID = Dictionary(apps.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        let rows = apps.map(listRow(for:))
-        return ConnectListLayout.sections(rows: rows, categories: catalog.categories).map { section in
-            ConnectListSectionEntries(section: section, entries: section.rows.compactMap { row in byID[row.id].map { ConnectListEntry(row: row, app: $0) } })
+        let entries = matchedEntries()
+        let byID = Dictionary(entries.map { ($0.row.id, $0) }, uniquingKeysWith: { first, _ in first })
+        return ConnectListLayout.sections(rows: entries.map(\.row), categories: catalog.categories).map { section in
+            ConnectListSectionEntries(section: section, entries: section.rows.compactMap { byID[$0.id] })
         }
     }
 
