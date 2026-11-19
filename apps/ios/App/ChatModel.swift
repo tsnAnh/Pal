@@ -330,6 +330,11 @@ final class ChatModel {
         replyTarget = nil
     }
 
+    func toggleUnread() {
+        let current = bot
+        if current.isUnread { roster.markRead(current.name) } else { roster.markUnread(current) }
+    }
+
     func canReact(to rowID: String) -> Bool {
         reactionTarget(for: rowID) != nil
     }

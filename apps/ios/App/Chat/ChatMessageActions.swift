@@ -1,3 +1,4 @@
+import PalChat
 import PalDesign
 import SwiftUI
 
@@ -7,16 +8,33 @@ enum MessageSide {
 }
 
 enum MessageReactions {
-    static let choices = ["🎉", "👍", "👎", "❤️", "😂"]
+    static let choices = ReactionCatalog.quick
 }
 
 struct MessageActions: Sendable {
     let rowID: String
     let text: String
     let reaction: String?
+    let ink: Color
     let canReact: @MainActor @Sendable () -> Bool
     let react: @MainActor @Sendable (String) -> Void
     let reply: @MainActor @Sendable () -> Void
+    let isChatUnread: @MainActor @Sendable () -> Bool
+    let toggleUnread: @MainActor @Sendable () -> Void
+    let retry: (@MainActor @Sendable () -> Void)?
+    let tables: @MainActor @Sendable () -> [MarkdownTable]
+
+    var isOwnFailed: Bool { retry != nil }
+
+    @MainActor
+    func plan(offersSelectText: Bool) -> MessageActionPlan {
+        MessageActionPlan(
+            isOwnFailed: isOwnFailed,
+            hasTable: !tables().isEmpty,
+            isChatUnread: isChatUnread(),
+            offersSelectText: offersSelectText
+        )
+    }
 }
 
 private struct MessageActionsKey: EnvironmentKey {

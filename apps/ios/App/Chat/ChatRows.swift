@@ -45,17 +45,30 @@ struct ChatRowView: View {
         ChatTimeSeparator(text: ChatTimestamp.label(for: date))
     }
 
-    private func messageActions(for text: String) -> MessageActions {
+    private func messageActions(for text: String, failedSubmission: String? = nil, tables: @escaping @MainActor @Sendable () -> [MarkdownTable] = { [] }) -> MessageActions {
         let id = row.id
         let model = model
         return MessageActions(
             rowID: id,
             text: text,
             reaction: context.reaction,
+            ink: BubblePalette.ink(accent: context.accent),
             canReact: { model.canReact(to: id) },
             react: { model.react(to: id, with: $0) },
-            reply: { model.beginReply(to: id) }
+            reply: { model.beginReply(to: id) },
+            isChatUnread: { model.bot.isUnread },
+            toggleUnread: { model.toggleUnread() },
+            retry: failedSubmission.map { submission in { model.retry(submission) } },
+            tables: tables
         )
+    }
+
+    private func userActions(text: String, delivery: BubbleDelivery) -> MessageActions? {
+        switch delivery {
+        case .sent: messageActions(for: text)
+        case .failed(let submission): messageActions(for: text, failedSubmission: submission)
+        case .sending, .waitingForConnection: nil
+        }
     }
 
     @ViewBuilder
@@ -65,14 +78,14 @@ struct ChatRowView: View {
             UserBubble(text: text, images: row.images, delivery: delivery, accent: context.accent, highlight: findQuery, isCurrentMatch: isCurrentMatch) { id in
                 model.retry(id)
             }
-            .environment(\.messageActions, delivery == .sent ? messageActions(for: text) : nil)
+            .environment(\.messageActions, userActions(text: text, delivery: delivery))
             .environment(\.chatImageLoader, model.imageLoader)
         case .assistant(let parsed):
             AssistantBubble(
                 text: parsed.source, parsed: parsed, images: row.images, files: row.files, filesPending: row.isStreaming,
                 highlight: findQuery, isCurrentMatch: isCurrentMatch
             )
-                .environment(\.messageActions, messageActions(for: parsed.source))
+                .environment(\.messageActions, messageActions(for: parsed.source, tables: { parsed.document.tables }))
                 .environment(\.chatImageLoader, model.imageLoader)
                 .environment(\.chatFileActions, model.fileActions)
         case .clarifyAnswered, .clarify:
