@@ -1,4 +1,6 @@
 import ImageIO
+import PalChat
+import PhotosUI
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -55,5 +57,67 @@ enum AttachmentPreparer {
         let stem = (name?.isEmpty == false ? name! : "photo-\(Int(Date().timeIntervalSince1970))")
         let cleaned = stem.unicodeScalars.map { CharacterSet.alphanumerics.contains($0) || $0 == "-" || $0 == "_" ? Character($0) : "-" }
         return String(cleaned) + ".jpg"
+    }
+}
+
+struct AttachmentSink {
+    let photo: @MainActor (PreparedUpload) -> Void
+    let file: @MainActor (PreparedUpload, String) -> Void
+    let fail: @MainActor (String) -> Void
+}
+
+@MainActor
+enum AttachmentStager {
+    static func stage(_ batch: DropBatch, into sink: AttachmentSink) async {
+        defer { batch.temporaryDirectories.forEach { try? FileManager.default.removeItem(at: $0) } }
+        if let summary = DropFailure.summary(of: batch.failures) { sink.fail(summary) }
+        await stage(files: batch.files, into: sink)
+        for data in batch.images { await stage(imageData: data, into: sink) }
+    }
+
+    static func stage(photos items: [PhotosPickerItem], into sink: AttachmentSink) async {
+        for item in items {
+            guard let data = try? await item.loadTransferable(type: Data.self) else {
+                sink.fail(String(localized: "That photo couldn't be loaded."))
+                continue
+            }
+            await stage(imageData: data, into: sink)
+        }
+    }
+
+    static func stage(imageData data: Data, into sink: AttachmentSink) async {
+        do {
+            sink.photo(try await Task.detached { try AttachmentPreparer.prepareImage(from: data) }.value)
+        } catch {
+            sink.fail(String(localized: "That photo couldn't be prepared."))
+        }
+    }
+
+    static func stage(image: PlatformImage, into sink: AttachmentSink) async {
+        do {
+            sink.photo(try await Task.detached { try AttachmentPreparer.prepareImage(from: image) }.value)
+        } catch {
+            sink.fail(String(localized: "That photo couldn't be prepared."))
+        }
+    }
+
+    static func stage(files urls: [URL], into sink: AttachmentSink) async {
+        let items = DropIntake.classify(urls)
+        if let message = DropIntake.rejectionMessage(for: items) { sink.fail(message) }
+        for item in items {
+            let url: URL
+            switch item {
+            case .image(let accepted), .document(let accepted): url = accepted
+            case .rejected: continue
+            }
+            do {
+                let prepared = try await Task.detached { try AttachmentPreparer.prepareFile(at: url) }.value
+                if prepared.isImage { sink.photo(prepared.upload) } else { sink.file(prepared.upload, prepared.mime) }
+            } catch AttachmentError.tooLarge {
+                sink.fail(DropFailure.tooLarge(limitMegabytes: AttachmentPreparer.maximumBytes / (1024 * 1024)).message)
+            } catch {
+                sink.fail(DropFailure.unreadable.message)
+            }
+        }
     }
 }

@@ -179,6 +179,10 @@ targets:
         product: PalRoster
       - package: PalKit
         product: PalConnect
+      - package: PalKit
+        product: PalChat
+      - package: PalDesign
+        product: PalDesign
 schemes:
   HermesBots:
     build:
