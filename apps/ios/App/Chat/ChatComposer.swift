@@ -24,8 +24,7 @@ struct ChatComposer: View {
     let removeAttachment: (UUID) -> Void
     let attachPhotos: ([PhotosPickerItem]) -> Void
     let attachCapture: (PlatformImage) -> Void
-    let attachImageData: ImageDataHandler
-    let attachFiles: FilesHandler
+    let attach: IntakeHandler
 
     #if os(macOS)
     @Environment(MacShell.self) private var shell
@@ -145,6 +144,7 @@ struct ChatComposer: View {
             if SlashCatalog.query(in: text) == nil, let trigger = FileRefCatalog.trigger(in: text) { loadFileRefs(trigger.word) }
         }
         .onChange(of: focused.wrappedValue) { _, isFocused in
+            ComposerDragForwarding.update(isFocused: isFocused)
             if !isFocused, !isAttachmentSheetPresented { dismissedDraft = draft }
         }
         .onChange(of: isAttachmentSheetPresented) { _, presented in
@@ -157,9 +157,9 @@ struct ChatComposer: View {
             pickedPhotos = []
         }
         .cameraCapture(isPresented: $isCameraPresented, onCapture: attachCapture)
-        .attachmentIntake(files: attachFiles, imageData: attachImageData)
+        .attachmentPaste(intake: attach)
         .fileImporter(isPresented: $isFileImporterPresented, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result { attachFiles(urls) }
+            if case .success(let urls) = result { attach(DropBatch(files: urls)) }
         }
     }
 

@@ -14,7 +14,32 @@ enum ChatEdgeFade {
     }
 }
 
+struct ChatEdgeFadeMask: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let insets = proxy.safeAreaInsets
+            VStack(spacing: 0) {
+                Color.clear
+                    .frame(height: max(0, max(insets.top, ChatEdgeFade.topFloor) - ChatEdgeFade.feather / 2))
+                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
+                    .frame(height: ChatEdgeFade.feather * 1.5)
+                Color.black
+                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                    .frame(height: ChatEdgeFade.feather)
+                Color.clear
+                    .frame(height: max(0, insets.bottom - ChatEdgeFade.feather))
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height + insets.top + insets.bottom)
+            .offset(y: -insets.top)
+        }
+    }
+}
+
 extension View {
+    func newestFirst() -> some View {
+        scaleEffect(x: 1, y: -1, anchor: .center)
+    }
+
     func chatColumn() -> some View {
         #if os(macOS)
         frame(maxWidth: MacMetrics.chatColumn + 2 * ChatMetrics.edgeMargin).frame(maxWidth: .infinity)
