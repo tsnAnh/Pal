@@ -11,8 +11,6 @@ import { host, useValue, Wordmark } from '@hermes/plugin-sdk'
 
 import { avatarColor, botAppearance, BotFace } from './avatar'
 import { isBackfilledFacePng } from './avatar-image'
-import { $settledOnboarding, onboardingPending } from './bot-onboarding'
-import { BotOnboarding } from './bot-onboarding-card'
 import { $botMeta, $lastRoster } from './data'
 import { useBots } from './i18n'
 import { displayName } from './labels'
@@ -50,7 +48,7 @@ function focusedStoredId(): string {
   return String(host.state.focusedStoredSessionId?.get?.() ?? '')
 }
 
-export function botForChat(roster: readonly RosterRow[], sessionId: string): null | RosterRow {
+function botForChat(roster: readonly RosterRow[], sessionId: string): null | RosterRow {
   // Stored ids pass straight through, so a shell that hands us one still
   // resolves; otherwise the focused chat is the empty one being looked at.
   return botForStoredId(roster, sessionId) ?? botForStoredId(roster, focusedStoredId())
@@ -65,7 +63,6 @@ export function BotChatEmpty({ sessionId }: { sessionId: string }) {
   const roster = useValue($lastRoster)
   const allMeta = useValue($botMeta)
   useValue(host.state.focusedStoredSessionId)
-  const settledOnboarding = useValue($settledOnboarding)
   const bot = botForChat(roster, sessionId)
 
   if (!bot) {
@@ -81,28 +78,6 @@ export function BotChatEmpty({ sessionId }: { sessionId: string }) {
   // Same rule the rows use: keep a real photo or pet, drop the SVG backfill so
   // the math face can animate.
   const photo = Boolean(image && !isBackfilledFacePng(image))
-
-  if (onboardingPending(bot, settledOnboarding)) {
-    return (
-      <div className="flex w-full min-w-0 justify-center py-6">
-        <BotOnboarding
-          bot={bot}
-          face={
-            <BotFace
-              color={avatarColor(color, bot.name)}
-              image={photo ? image : null}
-              mood="idle"
-              name={bot.name}
-              shape={shape}
-              size={32}
-            />
-          }
-          name={name}
-          sessionId={sessionId}
-        />
-      </div>
-    )
-  }
 
   return (
     <div

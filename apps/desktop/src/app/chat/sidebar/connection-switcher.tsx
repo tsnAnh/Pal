@@ -32,46 +32,18 @@ import { notifyError } from '@/store/notifications'
 import { ConnectionGlyph } from './connection-glyph'
 import { useLocalDeviceSwitch } from './local-device-switch'
 
-export function useConnectionSwitch() {
+export function ConnectionSwitcher({ compact = false, onConnect }: { compact?: boolean; onConnect: () => void }) {
   const { t } = useI18n()
   const registry = useStore($connectionsRegistry)
   const activeConnectionId = useStore($activeConnectionId)
   const pendingConnectionId = useStore($pendingConnectionId)
-  const { dialog, request: requestLocalDevice } = useLocalDeviceSwitch()
-
-  const connections = useMemo(() => sortConnectionsForDisplay(registry?.connections ?? []), [registry?.connections])
-
-  const choose = (connectionId: string) => {
-    triggerHaptic('selection')
-    const connection = connections.find(candidate => candidate.id === connectionId)
-
-    void (async () => {
-      if (connection?.kind === 'local' && connectionId !== activeConnectionId) {
-        const accepted = await requestLocalDevice({ connectionId, label: connection.label })
-
-        if (!accepted) {
-          return
-        }
-      }
-
-      await selectConnection(connectionId).catch(error =>
-        notifyError(error, t.profiles.switchConnectionFailed(connection?.label ?? connectionId))
-      )
-    })()
-  }
-
-  return { activeConnectionId, choose, connections, dialog, pending: pendingConnectionId !== null }
-}
-
-export type ConnectionSwitch = ReturnType<typeof useConnectionSwitch>
-
-export function ConnectionSwitcher({ compact = false, onConnect }: { compact?: boolean; onConnect: () => void }) {
-  const { t } = useI18n()
-  const { activeConnectionId, choose, connections, dialog, pending } = useConnectionSwitch()
   const [searchQuery, setSearchQuery] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const connectionListRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const { dialog: localDeviceDialog, request: requestLocalDevice } = useLocalDeviceSwitch()
+
+  const connections = useMemo(() => sortConnectionsForDisplay(registry?.connections ?? []), [registry?.connections])
 
   const activeConnection = connections.find(connection => connection.id === activeConnectionId)
   const searchable = connections.length >= CONNECTION_SEARCH_THRESHOLD
@@ -120,9 +92,28 @@ export function ConnectionSwitcher({ compact = false, onConnect }: { compact?: b
     return null
   }
 
+  const choose = (connectionId: string) => {
+    triggerHaptic('selection')
+    const connection = connections.find(candidate => candidate.id === connectionId)
+
+    void (async () => {
+      if (connection?.kind === 'local' && connectionId !== activeConnectionId) {
+        const accepted = await requestLocalDevice({ connectionId, label: connection.label })
+
+        if (!accepted) {
+          return
+        }
+      }
+
+      await selectConnection(connectionId).catch(error =>
+        notifyError(error, t.profiles.switchConnectionFailed(connection?.label ?? connectionId))
+      )
+    })()
+  }
+
   return (
     <div
-      aria-busy={pending}
+      aria-busy={pendingConnectionId !== null}
       aria-label={t.settings.connections.title}
       className={cn('min-w-20 shrink overflow-hidden', compact ? 'h-full max-w-40' : 'max-w-72')}
       data-slot="connection-switcher"
@@ -142,7 +133,7 @@ export function ConnectionSwitcher({ compact = false, onConnect }: { compact?: b
           <ConnectionSwitcherTrigger
             activeConnection={activeConnection}
             compact={compact}
-            pending={pending}
+            pending={pendingConnectionId !== null}
             title={t.settings.connections.title}
           />
         </DropdownMenuTrigger>
@@ -229,7 +220,7 @@ export function ConnectionSwitcher({ compact = false, onConnect }: { compact?: b
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-      {dialog}
+      {localDeviceDialog}
     </div>
   )
 }
@@ -283,7 +274,7 @@ function ManageGatewaysLabel({ label }: { label: string }) {
   )
 }
 
-export function ConnectionLabel({ connection }: { connection: DesktopRegistryConnection }) {
+function ConnectionLabel({ connection }: { connection: DesktopRegistryConnection }) {
   return (
     <span className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden" title={connectionTooltip(connection)}>
       <ConnectionGlyph connection={connection} />

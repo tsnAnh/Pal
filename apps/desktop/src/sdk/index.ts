@@ -18,8 +18,6 @@
  *  - `ui.*` — the design language, so plugin UI looks native by default.
  */
 
-import { traits as blobatarTraits, type TraitOverrides } from 'blobatar'
-import { layout as blobatarLayout } from 'blobatar/blob'
 import { computed, type ReadableAtom } from 'nanostores'
 import type { ReactNode } from 'react'
 
@@ -33,7 +31,6 @@ import {
   $newSessionTabAction,
   $paneVisible,
   adoptContributedPanes,
-  closeTreePane,
   registerPaneCloser,
   removeTreePane,
   revealTreePane,
@@ -106,7 +103,7 @@ import {
   sessionTileDelegate
 } from '@/store/session-states'
 import { runGatewayRestart } from '@/store/system-actions'
-import type { UsageStats } from '@/types/hermes'
+import type { PaginatedSessions, UsageStats } from '@/types/hermes'
 
 import type { SessionMutationSnapshot } from '../../../shared/src/session-http-mutations'
 
@@ -122,7 +119,7 @@ import {
   pluginRouteStillRegistered,
   requestPluginProfile
 } from './profile-request'
-import { listPersistedSessions, searchPersistedSessions, sessionsHost } from './sessions'
+import { sessionsHost } from './sessions'
 import { desktopSettings } from './settings'
 import { spellcheckHost } from './spellcheck'
 import { $viewport, type ViewportRect } from './viewport'
@@ -1320,14 +1317,6 @@ export const host = {
     adoptContributedPanes()
   },
 
-  closePane: (paneId: string): void => {
-    const id = (paneId ?? '').trim()
-
-    if (id) {
-      closeTreePane(id)
-    }
-  },
-
   /** Reveal a contributed pane and its zone from an explicit user action. */
   revealPane: (paneId: string): void => {
     const id = (paneId ?? '').trim()
@@ -1438,8 +1427,39 @@ export const host = {
     return retainGatewayForAgent(null, route.trim() || 'default', options)
   },
 
-  listPersistedSessions,
-  searchPersistedSessions,
+  /** Read persisted sessions from a profile's owning source without dialing
+   *  that profile's gateway. The source primary opens state.db directly. */
+  listPersistedSessions: async (
+    route: PluginProfileRoute | null,
+    options: { profile: string; limit?: number }
+  ): Promise<PaginatedSessions> => {
+    if (route && (!route.connectionId.trim() || !route.profile.trim() || !route.targetProfile.trim())) {
+      throw new Error('Profile route must include connectionId, profile, and targetProfile')
+    }
+
+    const profile = options.profile.trim()
+
+    if (!profile) {
+      throw new Error('Persisted session reads require a profile')
+    }
+
+    const limit = Math.min(500, Math.max(0, options.limit ?? 200))
+
+    const query = new URLSearchParams({
+      limit: String(limit),
+      offset: '0',
+      min_messages: '0',
+      archived: 'exclude',
+      order: 'created',
+      profile
+    })
+
+    return hermesApi<PaginatedSessions>({
+      ...(route ? { connectionId: route.connectionId } : {}),
+      path: `/api/profiles/sessions?${query.toString()}`,
+      timeoutMs: 60_000
+    })
+  },
 
   /** Mutate the durable hidden flag through the source primary. Keeping the
    *  owner profile in the body (not request.profile) prevents Electron from
@@ -1629,15 +1649,11 @@ export { APPEARANCE_AREAS } from '@/app/settings/appearance-contrib'
  *  never an Off/On pill pair. Use them for preference rows in plugin panes and
  *  dialogs so they line up with core Settings. */
 export { ListRow, ToggleRow } from '@/app/settings/primitives'
-/** Headless voice settings of one profile (voice list, `setVoice`, `setLanguage`, `preview`);
- *  probe `typeof useProfileVoice === 'function'` first: older builds lack it. */
-export { type ProfileVoice, type ProfileVoiceLabels, saveProfileVoice, useProfileVoice } from '@/app/settings/profile-voice'
 /** THE full per-toolset config panel core Settings renders — provider picker,
  *  env vars / API keys, model catalog picker, and post-setup runners. Route-
  *  decoupled (the "manage keys" deep link is a no-op outside the router); pass
  *  `toolset`, optional `onConfiguredChange`, and an optional `profile`. */
 export { ToolsetConfigPanel } from '@/app/settings/toolset-config-panel'
-export { AccountPill } from '@/app/shell/account-pill'
 /** THE model catalog menu — the same searchable, provider-grouped, family-
  *  collapsing picker the chat composer uses, including the per-row
  *  thinking/effort/fast submenu. Drive it with a `ModelMenuController`: the
@@ -1663,12 +1679,6 @@ export {
 } from '@/app/shell/model-menu-row-decorations'
 export type { StatusbarItem } from '@/app/shell/statusbar-controls'
 export type { TitlebarTool } from '@/app/shell/titlebar-controls'
-/** The card core asks a question with: one rounded shell, a bold question with
- *  its close button, lettered option rows, and a free-text field with Send.
- *  A plugin that asks the user something inline renders THESE, so it can never
- *  drift from the clarify card — never fork a copy. */
-export { emptyStage as clarifyEmptyStage, QuestionBlock as ClarifyQuestionBlock } from '@/components/assistant-ui/clarify/core/question-block'
-export { ClarifyShell } from '@/components/assistant-ui/clarify/core/shell'
 /** Canonical raw message renderer: applies Desktop message transforms (including
  * `MEDIA:` delivery directives) and the same rich Markdown/media components as
  * core chat. Prefer this over raw Streamdown for transcript-style messages. */
@@ -1677,14 +1687,12 @@ export { composerInputBacking, composerSurfaceRing } from '@/components/chat/com
 /** The oversized Collapse lettering an empty chat is titled with — core writes
  *  "HERMES AGENT" with it, a `chat.empty` contribution writes its own name. */
 export { Wordmark } from '@/components/chat/wordmark'
-export { usePaneVisible } from '@/components/pane-shell/pane-visibility'
 /** Pane placement roles. `'floating'` is the one NON-tiling value: the pane is
  *  excluded from the layout tree and rendered as a fixed, draggable card above
  *  it — it takes no width from any zone, has no tab, and can't be docked.
  *  Pair it with `anchor` (spawn corner, default `'top-right'`) plus
  *  `width`/`height`. */
 export type { FloatingAnchor } from '@/components/pane-shell/tree/renderer/floating-rect'
-export { $hiddenStripTabs, setStripTabHidden } from '@/components/pane-shell/tree/store'
 export { StatusDot, type StatusTone } from '@/components/status-dot'
 export { Badge } from '@/components/ui/badge'
 export { Button } from '@/components/ui/button'
@@ -1761,15 +1769,15 @@ export { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 export { Textarea } from '@/components/ui/textarea'
 export { Tip, Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 export type { GatewayEventListener } from '@/contrib/events'
-
-// -- contracts ----------------------------------------------------------------
-
 /** Mount-scoped contribution: while the rendering component is mounted, its
  *  children render in the target area's slot; unmount disposes it. Use for
  *  page-owned chrome (a page's titlebar control leaves with the page) —
  *  `ctx.register` stays the door for permanent contributions. Namespace the
  *  id with your plugin slug (`kanban:board-switcher`). */
 export { Contribute, type ContributeProps } from '@/contrib/react/contribute'
+
+// -- contracts ----------------------------------------------------------------
+
 /** Settings ▸ Plugins entries (`ctx.registerSettingsPage`); `pluginSettingsHref` deep-links one. */
 export { pluginSettingsHref, SETTINGS_PLUGINS_AREA } from '@/contrib/settings-pages'
 export type { Contribution } from '@/contrib/types'
@@ -1852,7 +1860,6 @@ export { catalogProviderMatches } from '@/lib/model-options'
  *  hand-picked color still sits with the generated ones; reach for them
  *  instead of literal hex, which can't follow the theme. */
 export { PROFILE_SWATCHES, profileColor, profileColorSoft } from '@/lib/profile-color'
-
 /** The shared client itself, for invalidation OUTSIDE React (e.g. a
  *  `ctx.socket` frame invalidating a query). Inside components keep using
  *  `useQueryClient`. */
@@ -1861,6 +1868,7 @@ export { queryClient } from '@/lib/query-client'
 /** Compact labels for the reasoning levels exported from @hermes/shared, so a
  *  plugin surfacing a thinking depth uses the same spelling as the app. */
 export { reasoningEffortLabel } from '@/lib/reasoning-effort'
+
 /** The app's own gateway-readiness evaluation (setup.status +
  *  setup.runtime_check, reconciled) — pass `host.request`. Don't hand-roll
  *  readiness from raw RPC shapes. */
@@ -1887,9 +1895,6 @@ export {
   type TranscriptDirectiveProps
 } from '@/lib/transcript-directives'
 export { cn } from '@/lib/utils'
-export { $botChromeless } from '@/store/bot-surface'
-export { type ChatPersona, type ChatVoiceLabels, setChatPersonas, setHandlePersonas } from '@/store/chat-persona'
-export type { ClarifyQuestion } from '@/store/clarify'
 export { gatewayActivationEpoch, useGatewayActivationEpoch } from '@/store/gateway'
 /** THE unread store behind `SessionStatusDot`'s emerald dot. A plugin that
  *  learns out-of-band that a session produced something the user hasn't seen
@@ -1946,10 +1951,8 @@ export type { StatusResponse } from '@/types/hermes'
 export type { GatewayEvent as RpcEvent } from '@hermes/shared'
 /** Bot Screen wire shapes, generated from `tui_gateway/contracts/display.py`. */
 export type { DisplayLease, DisplayObserveResult, DisplayStatus, DisplayThumbnailResult } from '@hermes/shared'
-/** Teach-a-skill wire shapes, generated from `tui_gateway/contracts/bot_teach.py`. */
-export type { BotTeachDraft, BotTeachPending, BotTeachStatus, BotTeachStopResult } from '@hermes/shared'
-/** `session.list` / `profiles.list` session rows, generated from `tui_gateway/contracts`. */
-export type { ProfileSessionPreview, SessionListRow } from '@hermes/shared'
+/** Profile creation and session rows, generated from `tui_gateway/contracts`. */
+export type { ProfilesCreateResult, ProfileSessionPreview, SessionListRow } from '@hermes/shared'
 /** THE compact-number formatter — every user-facing count/token figure goes
  *  through here (1230 → "1.2k", 1_500_000 → "1.5M"). Don't hand-roll `/1000`. */
 export { compactNumber } from '@hermes/shared'
@@ -1968,7 +1971,6 @@ export {
   REASONING_EFFORTS,
   type ReasoningEffort
 } from '@hermes/shared'
-export { default as avatarLoadingClips } from '@hermes/shared/avatar-loading-clips.json'
 /** WCAG contrast, from the sRGB primitives shared with the TUI (`null` for
  *  an unparseable colour, never a fake 0). */
 export { contrastRatio } from '@hermes/shared/color'
@@ -1978,9 +1980,6 @@ export { useStore as useValue } from '@nanostores/react'
  *  the app root, so their queries cache, dedupe, poll (`refetchInterval`), and
  *  invalidate exactly like core screens — no hand-rolled atoms or polls. */
 export { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-/** The silhouette name (`round`, `boxy`, ...) blobatar draws for a seed. */
-export const blobatarSilhouette = (seed: string, overrides?: TraitOverrides): string =>
-  blobatarLayout(blobatarTraits(seed, true, overrides)).shape
 /** Deterministic soft-body avatars from any string (name → face). String
  *  renderer for rasterization; React component for live rendering. */
 export { blobatar as blobatarSvg } from 'blobatar/blob'

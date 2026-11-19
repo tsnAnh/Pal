@@ -27,9 +27,14 @@ import {
   $sendDiagnostics,
   confirmSendDiagnostics,
   dismissSendDiagnostics,
-  type SendDiagnosticsResult,
-  SUPPORT_LINKS
+  type SendDiagnosticsResult
 } from '@/store/send-diagnostics'
+
+const SUPPORT_LINKS = [
+  { key: 'github', url: 'https://github.com/NousResearch/hermes-agent/issues' },
+  { key: 'portal', url: 'https://portal.nousresearch.com/help' },
+  { key: 'discord', url: 'https://discord.gg/NousResearch' }
+] as const
 
 export function SendDiagnosticsHost() {
   const { t } = useI18n()

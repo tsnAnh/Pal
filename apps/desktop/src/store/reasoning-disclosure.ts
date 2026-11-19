@@ -1,9 +1,7 @@
-import { useStore } from '@nanostores/react'
 import { atom } from 'nanostores'
 
 import { persistStore } from '@/lib/persist-store'
 import { persistBoolean, storedBoolean } from '@/lib/storage'
-import { useSurfacePersona } from '@/store/chat-persona'
 import { modeBound } from '@/store/interface-mode'
 import type { HermesConfig } from '@/types/hermes'
 
@@ -36,14 +34,6 @@ export const $showReasoning = atom(true)
 
 export function setShowReasoningFromConfig(value: unknown): void {
   $showReasoning.set(!(value === false || value === 'false' || value === 0))
-}
-
-export function useShowReasoning(): boolean {
-  const configured = useStore($showReasoning)
-
-  const botChat = useSurfacePersona() !== null
-
-  return configured && !botChat
 }
 
 /** The `display.show_reasoning` a local surface uses: a local session's `/reasoning show|hide` saves the

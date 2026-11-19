@@ -4,8 +4,6 @@ import { translateNow } from '@/i18n'
 import { type HermesOpenTarget, resolveHermesOpenPath } from '@/lib/hermes-open-target'
 import { persistString, storedString } from '@/lib/storage'
 
-import type { HermesNotification } from '../../electron/notification-types'
-
 import { recordFeatureToggle } from './desktop-metrics'
 import { $gateway } from './gateway'
 import { $hapticsMuted } from './haptics'
@@ -26,7 +24,7 @@ export type { HermesOpenTarget }
 // Native OS notifications (Electron `Notification`), separate from the in-app
 // toast feed in `notifications.ts`. Each kind toggles independently.
 export type NativeNotificationKind =
-  'approval' | 'backgroundDone' | 'credits' | 'input' | 'plugin' | 'proactive' | 'turnDone' | 'turnError'
+  'approval' | 'backgroundDone' | 'credits' | 'input' | 'plugin' | 'turnDone' | 'turnError'
 
 export const NATIVE_NOTIFICATION_KINDS: readonly NativeNotificationKind[] = [
   'approval',
@@ -35,16 +33,11 @@ export const NATIVE_NOTIFICATION_KINDS: readonly NativeNotificationKind[] = [
   'turnError',
   'backgroundDone',
   'credits',
-  'plugin',
-  'proactive'
+  'plugin'
 ]
 
 // Blocking prompts — surface even while focused if they're for another session.
 const ATTENTION_KINDS = new Set<NativeNotificationKind>(['approval', 'input'])
-
-// Pushed by the backend as a live offer, never replayed state, and presented
-// whether or not the window is focused (the caller picks toast or OS alert).
-const LIVE_OFFER_KINDS = new Set<NativeNotificationKind>(['proactive'])
 
 export interface NativeNotificationPrefs {
   enabled: boolean
@@ -61,7 +54,6 @@ const DEFAULT_PREFS: NativeNotificationPrefs = {
     credits: true,
     input: true,
     plugin: true,
-    proactive: true,
     turnDone: true,
     turnError: true
   }
@@ -150,10 +142,6 @@ function isBackgrounded(): boolean {
 }
 
 function shouldFire(kind: NativeNotificationKind, sessionId?: null | string, global = false): boolean {
-  if (LIVE_OFFER_KINDS.has(kind)) {
-    return true
-  }
-
   // Global notifications aren't tied to a chat session (e.g. pet generation,
   // which runs from the command center with no active conversation). They fire
   // whenever the user is away, with no session-match requirement — otherwise a
@@ -230,42 +218,38 @@ export interface NativeNotificationInput {
   activate?: string
   /** Renderer-side handle so click/action can invoke registered callbacks. */
   notifyId?: string
-  /** Stored session id to reveal on click, for emitters that never held a runtime id. */
-  focusSessionId?: string
 }
 
-export function nativeNotificationEnabled(kind: NativeNotificationKind): boolean {
+/** Returns true when the notification passed every guard and was handed to the
+ *  OS bridge — callers registering per-notification state (plugin handlers)
+ *  must only do so on true, or suppressed/throttled notifications leak it. */
+export function dispatchNativeNotification(input: NativeNotificationInput): boolean {
   const prefs = $nativeNotifyPrefs.get()
 
-  return prefs.enabled && prefs.kinds[kind]
-}
-
-function prepareNativeNotification(input: NativeNotificationInput): HermesNotification | null {
-  if (!nativeNotificationEnabled(input.kind)) {
-    return null
+  if (!prefs.enabled || !prefs.kinds[input.kind]) {
+    return false
   }
 
-  if (!LIVE_OFFER_KINDS.has(input.kind) && withinNativeNotifyBaseline()) {
-    return null
+  if (withinNativeNotifyBaseline()) {
+    return false
   }
 
   if (!shouldFire(input.kind, input.sessionId, input.global)) {
-    return null
+    return false
   }
 
   if (throttled(`${input.kind}:${input.sessionId ?? input.tag ?? (input.global ? 'global' : '')}`, Date.now())) {
-    return null
+    return false
   }
 
   const namedKey = input.sessionId ? NAMED_TITLE_KEYS[input.kind] : undefined
   const title = namedKey && input.sessionId ? withSessionLabel(namedKey, input.sessionId) : input.title
 
-  return {
+  void window.hermesDesktop?.notify({
     actions: input.actions,
     activate: input.activate,
     body: input.body,
-    focusSessionId:
-      input.focusSessionId ?? (input.sessionId ? (storedSessionIdForRuntimeId(input.sessionId) ?? undefined) : undefined),
+    focusSessionId: input.sessionId ? (storedSessionIdForRuntimeId(input.sessionId) ?? undefined) : undefined,
     icon: input.icon,
     kind: input.kind,
     notifyId: input.notifyId,
@@ -274,38 +258,9 @@ function prepareNativeNotification(input: NativeNotificationInput): HermesNotifi
     silent: $hapticsMuted.get() || input.silent,
     tag: input.tag,
     title
-  }
-}
-
-/** Returns true when the notification passed every guard and was handed to the
- *  OS bridge — callers registering per-notification state (plugin handlers)
- *  must only do so on true, or suppressed/throttled notifications leak it. */
-export function dispatchNativeNotification(input: NativeNotificationInput): boolean {
-  const payload = prepareNativeNotification(input)
-
-  if (!payload) {
-    return false
-  }
-
-  void window.hermesDesktop?.notify(payload)
+  })
 
   return true
-}
-
-/** Like `dispatchNativeNotification`, but resolves with whether the OS actually
- *  accepted the notification, for callers that report back that it was shown. */
-export async function presentNativeNotification(input: NativeNotificationInput): Promise<boolean> {
-  const payload = prepareNativeNotification(input)
-
-  if (!payload || !window.hermesDesktop?.notify) {
-    return false
-  }
-
-  try {
-    return await window.hermesDesktop.notify(payload)
-  } catch {
-    return false
-  }
 }
 
 // -- the plugin door (`ctx.os.notify`) ----------------------------------------

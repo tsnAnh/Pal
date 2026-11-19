@@ -183,8 +183,7 @@ export const ruOverrides = {
       turnErrorTitle: 'Ход не удался',
       backgroundDoneTitle: 'Фоновая задача завершена',
       backgroundFailedTitle: 'Фоновая задача не удалась',
-      creditsTitle: 'Кредиты',
-      proactiveOpen: 'Открыть'
+      creditsTitle: 'Кредиты'
     }
   },
   ...ruNotices,
@@ -445,6 +444,8 @@ export const ruOverrides = {
       mcp: 'MCP',
       archivedChats: 'Архив чатов',
       sessions: 'Сеансы',
+      backup: 'Резервная копия и перенос',
+      backupOnly: 'Резервная копия',
       about: 'О программе',
       billing: 'Оплата',
       notifications: 'Уведомления',
@@ -937,7 +938,10 @@ export const ruOverrides = {
       attachmentSizeLabel: 'Макс. размер превью / загрузки изображений в мегабайтах',
       voiceShortcutHintTitle: 'Горячая клавиша записи голоса',
       voiceShortcutHintDesc:
-        'Настройте горячую клавишу записи голоса в разделе «Настройки → Горячие клавиши» («Начать / остановить голосовой диалог»). Параметр voice.record_key действует только в CLI и TUI.'
+        'Настройте горячую клавишу записи голоса в разделе «Настройки → Горячие клавиши» («Начать / остановить голосовой диалог»). Параметр voice.record_key действует только в CLI и TUI.',
+      desktopReadAloudTitle: 'Зачитывать ответы в этом приложении',
+      desktopReadAloudDesc:
+        'Зачитывает каждый готовый ответ в Desktop. Тот же переключатель, что и в поле ввода; действует во всех открытых окнах, а выключение останавливает ответ на полуслове. «Зачитывать ответы вслух» ниже относится к мессенджерам и CLI.'
     },
     hudModifier: {
       title: 'Вызов HUD коротким нажатием',
@@ -1541,10 +1545,6 @@ export const ruOverrides = {
       actionFailed: 'Действие с навыком не удалось',
       actionLog: 'Журнал действий',
       alreadyInstalled: name => `«${name}» уже установлен`,
-      pickerTitle: 'Хаб навыков',
-      pickerBrowse: 'Открыть весь хаб',
-      pickerHide: 'Скрыть браузер хаба',
-      pickerHint: 'Нажмите «+ Добавить к этому агенту» на любом навыке — он установится и появится в списке выше.',
       loadFailed: 'Не удалось загрузить хаб навыков',
       previewFailed: 'Не удалось получить предпросмотр навыка',
       scanFailed: 'Не удалось выполнить проверку безопасности',
@@ -1774,7 +1774,10 @@ export const ruOverrides = {
       backup: 'Создать резервную копию',
       backupDesc: 'Сжатие конфигурации, памяти, навыков и сеансов в zip',
       debugShare: 'Поделиться отладкой',
-      debugShareDesc: 'Загрузка анонимизированного отчёта + журналов, получение ссылок (автоудаление через 6 ч)',
+      debugShareDesc: 'Загрузка сводки (версии, ключи конфигурации, счётчики ошибок; без текста журналов), получение ссылки (автоудаление через 6 ч)',
+      debugShareConfirm: 'Загрузить отладочный отчёт в публичный paste-сервис?',
+      debugShareConfirmDesc:
+        'Загружает сводку в публичный paste-сервис: версии Hermes, Python и ОС, имена подключённых платформ и наборов инструментов, ключи конфигурации (без значений) и счётчики предупреждений/ошибок. Строк журналов и текста сообщений в ней нет. Пасты автоматически удаляются через 6 часов; если paste.rs недоступен, резервный dpaste.com хранит их публично 1 день, и удалить их раньше нельзя.',
       debugShareRunning: 'Загрузка отладочного отчёта...',
       debugShareLinks: 'Ссылки для шаринга',
       debugShareFailed: 'Ошибка шаринга отладки',
@@ -2085,6 +2088,14 @@ export const ruOverrides = {
     fieldSkillsPlaceholder: 'имена навыков через запятую (необязательно)',
     fieldDeliver: 'Доставить в',
     fieldDeliverOnly: 'Доставлять только payload',
+    fieldSignature: 'Подпись',
+    fieldSignatureHint: 'Единственная схема подписи, которую принимает этот маршрут. Доставкам GitHub, GitLab и Linear нужна своя схема.',
+    signatureOptions: {
+      generic: 'Общая (с меткой времени)',
+      github: 'GitHub',
+      gitlab: 'GitLab',
+      linear: 'Linear'
+    },
     fieldPrompt: 'Промпт',
     fieldPromptPlaceholder: 'Инструкции для агента при срабатывании этого вебхука (необязательно)',
     nameRequired: 'Имя обязательно',
@@ -2461,7 +2472,6 @@ export const ruOverrides = {
       cron: 'Запланированные задачи'
     },
     searchAria: 'Поиск сеансов',
-    paneSwitcherAria: 'Панели боковой панели',
     searchPlaceholder: 'Поиск сеансов…',
     clearSearch: 'Очистить поиск',
     noMatch: query => `Нет сеансов по запросу «${query}».`,
@@ -2556,7 +2566,6 @@ export const ruOverrides = {
     message: 'Сообщение',
     wakingProfile: profile => `Пробуждаем ${profile}…`,
     placeholderStarting: 'Запуск Hermes...',
-    placeholderBot: name => `Сообщение для ${name}`,
     placeholderReconnecting: 'Переподключение к Hermes…',
     placeholderFollowUp: 'Отправить продолжение',
     newSessionPlaceholders: [
@@ -2682,7 +2691,7 @@ export const ruOverrides = {
       '/topup': 'Показать баланс Nous и управлять оплатой',
       '/platform': 'Приостановить, возобновить или перечислить сбоящие платформы шлюза',
       '/version': 'Показать версию Hermes Agent',
-      '/debug': 'Загрузить отчёт отладки с данными системы и журналами и получить ссылку',
+      '/debug': 'Отладочный отчёт (версии, ключи конфигурации, счётчики ошибок; без текста журналов): сначала уведомление о конфиденциальности; /debug upload делится ссылками',
       '/model': 'Переключить модель для этого сеанса'
     },
     hotkeyDescs: {
@@ -3570,7 +3579,6 @@ export const ruOverrides = {
       loadingSession: 'Загрузка сеанса',
       showEarlier: 'Показать ранние сообщения',
       loadingResponse: 'Hermes загружает ответ',
-      peerRun: (count, peer) => `${count} ${RU_NOUN(count, 'сообщение', 'сообщения', 'сообщений')} с ${peer}`,
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'Продолжится, когда фоновая задача завершится'
@@ -3622,11 +3630,6 @@ export const ruOverrides = {
       allowSession: 'Разрешить в этом сеансе',
       alwaysAllowMenu: 'Всегда разрешать…',
       jumpToApproval: 'Нужно подтверждение',
-      botTitle: 'Нужно ваше согласие',
-      botBody: 'Это может что-то изменить или удалить. Разрешить?',
-      showDetails: 'Показать подробности',
-      hideDetails: 'Скрыть подробности',
-      botAlwaysDescription: 'Этот бот больше не будет спрашивать перед такими действиями ни в одном чате.',
       reject: 'Отклонить',
       alwaysTitle: 'Всегда разрешать эту команду?',
       alwaysDescription: pattern =>

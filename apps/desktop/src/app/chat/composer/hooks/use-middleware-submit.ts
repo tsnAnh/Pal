@@ -43,11 +43,7 @@ export function useMiddlewareSubmit(onSubmitProp: ChatBarProps['onSubmit']) {
         return false
       }
 
-      return onSubmitProp(draft.text, {
-        ...options,
-        attachments: draft.attachments,
-        ...(draft.turnContext && { turnContext: draft.turnContext })
-      })
+      return onSubmitProp(draft.text, { ...options, attachments: draft.attachments })
     },
     [onSubmitProp]
   )

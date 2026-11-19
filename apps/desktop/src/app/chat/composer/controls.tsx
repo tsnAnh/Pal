@@ -12,7 +12,6 @@ import { recordAction } from '@/store/desktop-metrics'
 import { $hudMode, closeHud, resetHudLayout } from '@/store/hud'
 import { $wakeWord, toggleWakeWord } from '@/store/wake-word'
 
-import type { ComposerBusyAction } from './busy-submit-state'
 import { ACTIVE_ICON_BTN, GHOST_ICON_BTN, PRIMARY_ICON_BTN } from './control-classes'
 import type { ConversationStatus } from './hooks/use-voice-conversation'
 import { ModelPill } from './model-pill'
@@ -49,7 +48,6 @@ interface ConversationProps {
 
 export function ComposerControls({
   autoSpeak,
-  botLayout = false,
   busy,
   busyAction,
   canSubmit,
@@ -60,20 +58,17 @@ export function ComposerControls({
   foldVoice = false,
   hasComposerPayload,
   hideModelPill = false,
-  hideVoiceConversation = false,
   minimal = false,
   state,
   voiceStatus,
   onDictate,
   onQueue,
   onSteer,
-  onStop,
   onToggleAutoSpeak
 }: {
   autoSpeak: boolean
-  botLayout?: boolean
   busy: boolean
-  busyAction: ComposerBusyAction
+  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop'
   canSubmit: boolean
   /** A card parked on the session takes typed text as its answer, so queueing that text would leave the card waiting. */
   cardWaiting?: boolean
@@ -83,14 +78,12 @@ export function ComposerControls({
   foldVoice?: boolean
   hasComposerPayload: boolean
   hideModelPill?: boolean
-  hideVoiceConversation?: boolean
   minimal?: boolean
   state: ChatBarState
   voiceStatus: VoiceStatus
   onDictate: () => void
   onQueue: () => void
   onSteer?: () => void
-  onStop?: () => void
   onToggleAutoSpeak: () => void
 }) {
   const { t } = useI18n()
@@ -101,7 +94,7 @@ export function ComposerControls({
     return <ConversationPill {...conversation} disabled={disabled} />
   }
 
-  const showVoicePrimary = !busy && !hasComposerPayload && !hideVoiceConversation
+  const showVoicePrimary = !busy && !hasComposerPayload
   // Steer is just send: a payload keeps the Send affordance mid-turn (it answers
   // a waiting card). Stop only when the composer is empty and a turn is running.
   const showStop = busy && !hasComposerPayload
@@ -117,28 +110,51 @@ export function ComposerControls({
   // same reason — same controls, same state, different budget. Below that
   // even the menu goes: at `minimal` the row is the send button and nothing
   // else, which is the one thing that must survive every width.
-  const voiceControls = (
-    <VoiceControls
+  const foldedVoice = hudMode || foldVoice
+
+  const voiceControls = foldedVoice ? (
+    <VoiceMenu
       autoSpeak={autoSpeak}
       disabled={disabled}
-      folded={hudMode || foldVoice}
-      hideConversation={hideVoiceConversation}
       onDictate={onDictate}
       onStartConversation={conversation.onStart}
       onToggleAutoSpeak={onToggleAutoSpeak}
       state={state}
       voiceStatus={voiceStatus}
     />
+  ) : (
+    // One mic in the row; hovering it fans the other voice toggles out of it.
+    <VoiceFan
+      autoSpeak={autoSpeak}
+      disabled={disabled}
+      onDictate={onDictate}
+      onToggleAutoSpeak={onToggleAutoSpeak}
+      state={state}
+      voiceStatus={voiceStatus}
+    />
   )
 
-  const modelChips = (
-    <ModelChips compact={compactModelPill} disabled={disabled} hidden={minimal || hideModelPill} model={state.model} />
-  )
+  // The browser host's touch-size controls can outgrow a minimal row, so there
+  // they pack to the end and wrap. Native Desktop keeps main's single row.
+  const browserHost = hostHas('touchSizedControls')
 
-  const sendCluster = (
-    <>
+  return (
+    <div
+      className={cn('flex min-w-0 shrink items-center gap-(--composer-control-gap)', browserHost && 'justify-end')}
+      style={{ flexWrap: browserHost && minimal ? 'wrap' : undefined }}
+    >
+      {minimal ? null : (
+        <>
+          {hideModelPill ? null : (
+            <>
+              <ModelPill compact={compactModelPill} disabled={disabled} model={state.model} />
+              {compactModelPill ? null : <ReasoningPill disabled={disabled} model={state.model} />}
+            </>
+          )}
+          {voiceControls}
+        </>
+      )}
       {renderSteerButton(busy, busyAction, onSteer, disabled, c.steer)}
-      {renderStopBesideSendButton(busy && hasComposerPayload, onStop, disabled, c.stop)}
       {showQueueButton ? (
         <Tip label={<TipKeybindLabel actionId="composer.queue" text={c.queueMessage} />} placement="control">
           <Button
@@ -184,36 +200,6 @@ export function ComposerControls({
           </Button>
         </Tip>
       )}
-    </>
-  )
-
-  if (botLayout) {
-    return (
-      <>
-        <div className="flex min-w-0 items-center gap-1 [grid-area:chips]" data-slot="composer-chips">
-          {modelChips}
-        </div>
-        <div
-          className="flex shrink-0 items-center gap-(--composer-control-gap) [grid-area:actions]"
-          data-slot="composer-actions"
-        >
-          {minimal ? null : voiceControls}
-          {sendCluster}
-          {hudMode ? <HudWindowButtons /> : null}
-        </div>
-      </>
-    )
-  }
-
-  return (
-    <div {...controlsRowProps(minimal)}>
-      {minimal ? null : (
-        <>
-          {modelChips}
-          {voiceControls}
-        </>
-      )}
-      {sendCluster}
       {/* The way out of HUD mode, riding the controls row rather than floating
           above the bar. The old chip lived in a 26px transparent strip reserved
           over the composer (--hud-chip-strip), which under glass is bare
@@ -226,97 +212,28 @@ export function ComposerControls({
   )
 }
 
-// The browser host's touch-size controls can outgrow a minimal row, so there
-// they pack to the end and wrap. Native Desktop keeps main's single row.
-function controlsRowProps(minimal: boolean) {
-  const browserHost = hostHas('touchSizedControls')
-
-  return {
-    className: cn('flex min-w-0 shrink items-center gap-(--composer-control-gap)', browserHost && 'justify-end'),
-    style: { flexWrap: browserHost && minimal ? ('wrap' as const) : undefined }
-  }
-}
-
-function ModelChips({
-  compact,
-  disabled,
-  hidden,
-  model
-}: {
-  compact: boolean
-  disabled: boolean
-  hidden: boolean
-  model: ChatBarState['model']
-}) {
-  if (hidden) {
-    return null
-  }
-
-  return (
-    <>
-      <ModelPill compact={compact} disabled={disabled} model={model} />
-      {compact ? null : <ReasoningPill disabled={disabled} model={model} />}
-    </>
-  )
-}
-
-function VoiceControls({
-  folded,
-  hideConversation,
-  ...props
-}: {
-  autoSpeak: boolean
-  disabled: boolean
-  folded: boolean
-  hideConversation?: boolean
-  onDictate: () => void
-  onStartConversation: () => void
-  onToggleAutoSpeak: () => void
-  state: ChatBarState
-  voiceStatus: VoiceStatus
-}) {
-  if (folded) {
-    return <VoiceMenu {...props} hideConversation={hideConversation} />
-  }
-
-  const { autoSpeak, disabled, onDictate, onToggleAutoSpeak, state, voiceStatus } = props
-
-  return (
-    <VoiceFan
-      autoSpeak={autoSpeak}
-      disabled={disabled}
-      onDictate={onDictate}
-      onToggleAutoSpeak={onToggleAutoSpeak}
-      state={state}
-      voiceStatus={voiceStatus}
-    />
-  )
-}
-
 // Queue is the secondary mid-turn action: never while the primary button already queues or stops, and
 // never while a card waits (its Send answers the card).
 function queueButtonVisible(
   busy: boolean,
-  busyAction: ComposerBusyAction,
+  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop',
   hasPayload: boolean,
   cardWaiting: boolean
 ): boolean {
-  return busy && busyAction !== 'stop' && busyAction !== 'queue' && busyAction !== 'send' && hasPayload && !cardWaiting
+  return busy && busyAction !== 'stop' && busyAction !== 'queue' && hasPayload && !cardWaiting
 }
 
 function composerSendLabel(
   busy: boolean,
-  busyAction: ComposerBusyAction,
+  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop',
   c: { redirect: string; queueMessage: string; send: string; steer: string; stop: string }
 ): string {
-  return busy
-    ? { interrupt: c.redirect, queue: c.queueMessage, send: c.send, steer: c.steer, stop: c.stop }[busyAction]
-    : c.send
+  return busy ? { interrupt: c.redirect, queue: c.queueMessage, steer: c.steer, stop: c.stop }[busyAction] : c.send
 }
 
 function renderSteerButton(
   busy: boolean,
-  busyAction: ComposerBusyAction,
+  busyAction: 'interrupt' | 'steer' | 'queue' | 'stop',
   onSteer: (() => void) | undefined,
   disabled: boolean,
   label: string
@@ -333,30 +250,6 @@ function renderSteerButton(
         variant="ghost"
       >
         <Codicon name="debug-step-over" size="0.875rem" />
-      </Button>
-    </Tip>
-  ) : null
-}
-
-function renderStopBesideSendButton(
-  visible: boolean,
-  onStop: (() => void) | undefined,
-  disabled: boolean,
-  label: string
-) {
-  return visible && onStop ? (
-    <Tip label={label}>
-      <Button
-        aria-label={label}
-        className={GHOST_ICON_BTN}
-        disabled={disabled}
-        onClick={onStop}
-        onMouseDown={keepEditorFocus}
-        size="icon"
-        type="button"
-        variant="ghost"
-      >
-        <Square className={iconSize.sm} />
       </Button>
     </Tip>
   ) : null

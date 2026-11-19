@@ -5,7 +5,6 @@ export const arChat = {
     message: 'الرسالة',
     wakingProfile: profile => `جار إيقاظ ${profile}`,
     placeholderStarting: 'جار بدء Hermes...',
-    placeholderBot: name => `رسالة إلى ${name}`,
     placeholderReconnecting: 'جار إعادة الاتصال...',
     placeholderFollowUp: 'اكتب متابعة...',
     newSessionPlaceholders: ['اسأل Hermes عن شيء...', 'اطلب من Hermes تنفيذ مهمة...', 'ابدأ محادثة جديدة...'],
@@ -108,7 +107,7 @@ export const arChat = {
       '/topup': 'عرض رصيد Nous وإدارة الفواتير',
       '/platform': 'إيقاف منصة بوابة متعثرة مؤقتًا أو استئنافها أو عرضها',
       '/version': 'عرض إصدار Hermes Agent',
-      '/debug': 'رفع تقرير تصحيح يتضمن معلومات النظام والسجلات للحصول على رابط قابل للمشاركة',
+      '/debug': 'تقرير تصحيح الأخطاء (الإصدارات وأسماء مفاتيح الإعداد وأعداد الأخطاء؛ دون نص السجلات): يعرض إشعار الخصوصية أولًا؛ /debug upload يشارك الروابط',
       '/model': 'تبديل نموذج هذه الجلسة'
     },
     hotkeyDescs: {

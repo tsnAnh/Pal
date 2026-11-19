@@ -1,7 +1,6 @@
 import { atom, host, useQuery, useValue } from '@hermes/plugin-sdk'
 import { useEffect, useMemo } from 'react'
 
-import { classifyGroupListFailure } from './canonical-group-link'
 import type { CanonicalGroupMessages } from './canonical-group-locales'
 import { disbandCanonicalGroup, discoverCanonicalGroups, listCanonicalRooms } from './canonical-groups'
 import type { CanonicalGroupBinding, CanonicalGroupRoute, CanonicalRoom, CanonicalRoomMember } from './canonical-groups'
@@ -21,12 +20,6 @@ const $disbandedGatewayRooms = atom<ReadonlySet<string>>(new Set())
 export function refreshGatewayGroupRooms(): void {
   $canonicalGroupListRevision.set($canonicalGroupListRevision.get() + 1)
 }
-
-export type CanonicalGroupLink = 'down' | 'ok' | 'retrying'
-
-export const $canonicalGroupLink = atom<CanonicalGroupLink>('ok')
-
-export const retryCanonicalGroups = refreshGatewayGroupRooms
 
 /** Drop a disbanded room's key and every alias to it, then re-read the sidebar list. */
 export function forgetCanonicalGroup({ connectionId, profile, roomId }: CanonicalGroupBinding): void {
@@ -254,7 +247,7 @@ export function useGatewayGroupRooms(): GatewayGroupRoom[] {
   const revision = useValue($canonicalGroupListRevision)
   const disbanded = useValue($disbandedGatewayRooms)
 
-  const { data, error, isError, isFetching, isSuccess, refetch } = useQuery({
+  const { data, refetch } = useQuery({
     queryKey: [...ROOMS_KEY, connectionId, profile],
     enabled: Boolean(connectionId && profile) && gateway === 'open',
     queryFn: () => listGatewayGroupRooms({ connectionId: connectionId!, profile }),
@@ -268,22 +261,6 @@ export function useGatewayGroupRooms(): GatewayGroupRoom[] {
   useEffect(() => {
     if (revision && host.state.gateway.get() === 'open') {void refetch()}
   }, [revision, refetch])
-
-  useEffect(() => {
-    if (!connectionId) {
-      $canonicalGroupLink.set('ok')
-    } else if (gateway !== 'open') {
-      $canonicalGroupLink.set('down')
-    } else if (isFetching && $canonicalGroupLink.get() === 'down') {
-      $canonicalGroupLink.set('retrying')
-    } else if (isError) {
-      $canonicalGroupLink.set(classifyGroupListFailure(error, gateway) === 'down' ? 'down' : 'ok')
-    } else if (isSuccess) {
-      $canonicalGroupLink.set('ok')
-    }
-  }, [connectionId, error, gateway, isError, isFetching, isSuccess])
-
-  useEffect(() => () => $canonicalGroupLink.set('ok'), [])
 
   return useMemo(
     () => (connectionId ? (data ?? []).filter(room => !disbanded.has(room.key)) : []),

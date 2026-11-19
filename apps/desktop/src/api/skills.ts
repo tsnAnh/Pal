@@ -1,11 +1,13 @@
-import type { OfficialSkillInfo, SkillInfo, StarmapGraph } from '@/types/hermes'
-import type { ActionResponse } from '@/types/hermes'
 import type {
+  OfficialSkillInfo,
   SkillHubPreview,
   SkillHubScanResult,
   SkillHubSearchResponse,
-  SkillHubSourcesResponse
-} from '@/types/skills-hub'
+  SkillHubSourcesResponse,
+  SkillInfo,
+  StarmapGraph
+} from '@/types/hermes'
+import type { ActionResponse } from '@/types/hermes'
 
 import { capabilityScoped, hermesApi, type ProfileScope, profileScoped } from './client'
 
@@ -115,6 +117,21 @@ export function getOfficialSkills(profile?: ProfileScope): Promise<{ skills: Off
   return window.hermesDesktop.api<{ skills: OfficialSkillInfo[] }>({
     ...capabilityScoped(profile),
     path: '/api/skills/hub/official'
+  })
+}
+
+export interface SkillHubUpdate {
+  name: string
+  identifier: string
+  source: string
+}
+
+/** Hub skills with a newer upstream version (`hermes skills check`). Slow: fetches every source. */
+export function getSkillHubUpdates(profile?: ProfileScope): Promise<{ updates: SkillHubUpdate[] }> {
+  return window.hermesDesktop.api<{ updates: SkillHubUpdate[] }>({
+    ...capabilityScoped(profile),
+    path: '/api/skills/hub/updates',
+    timeoutMs: 120_000
   })
 }
 

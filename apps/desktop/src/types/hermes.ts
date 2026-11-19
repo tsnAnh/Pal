@@ -55,8 +55,6 @@ export interface AudioSttLeaseResponse {
   ok: boolean
   lease: string
   active: boolean
-  /** Live lease holders after this call (null when the backend call itself failed). */
-  leases: null | number
   /** Warm-up outcome: `loaded` | `cached` | `noop` | `error`. Release carries no action. */
   action?: string
   /** Whether the configured engine was actually warmed (`noop` for cloud providers carries false). */
@@ -478,58 +476,6 @@ export interface TelegramOnboardingApplyResponse {
   restart_started?: boolean
 }
 
-// -- Webhooks (subscription CRUD) --------------------------------------------
-// Incoming HTTP event routes served by the webhook gateway platform. Backed by
-// the same JSON store the CLI/dashboard use; per-route HMAC secrets are
-// redacted on read and surfaced exactly once on create.
-
-export interface WebhookRoute {
-  created_at: null | string
-  deliver: string
-  deliver_only: boolean
-  description: string
-  enabled: boolean
-  events: string[]
-  name: string
-  prompt: string
-  secret_set: boolean
-  skills: string[]
-  url: string
-}
-
-export interface WebhooksResponse {
-  base_url: string
-  enabled: boolean
-  subscriptions: WebhookRoute[]
-}
-
-export interface WebhookCreatePayload {
-  deliver?: string
-  deliver_chat_id?: string
-  deliver_only?: boolean
-  description?: string
-  events?: string[]
-  name: string
-  prompt?: string
-  skills?: string[]
-}
-
-// Create echoes the route summary plus the one-time secret.
-export interface WebhookCreateResponse extends WebhookRoute {
-  secret: string
-}
-
-export interface WebhookEnableResponse {
-  enabled: true
-  needs_restart: boolean
-  ok: boolean
-  platform: 'webhook'
-  restart_action?: string
-  restart_error?: string
-  restart_pid?: null | number
-  restart_started?: boolean
-}
-
 export interface HermesConfig {
   agent?: {
     reasoning_effort?: string
@@ -684,7 +630,7 @@ export interface SessionInfo {
    *  as visible. */
   hidden?: boolean
   /** Derived read state (backend watermark: `last_read_at` vs `last_active`,
-   *  see `SessionDB.session_unread`). True when the conversation was
+   *  see `session_unread` in persistence/sqlite/conversation/_store/sessions.py). True when the conversation was
    *  explicitly marked unread or a response arrived after it was last read.
    *  Undefined against a backend predating the flag; treat as read. */
   unread?: boolean
@@ -865,10 +811,7 @@ export interface SessionResumeResult {
     choices?: string[]
     command?: string
     description?: string
-    details?: unknown
-    draft?: unknown
     request_id?: string
-    scope?: unknown
     smart_denied?: boolean
   }
   // Server→client requests still unanswered for this session (clarify, sudo,
@@ -1297,9 +1240,8 @@ export interface SkillInfo {
   /** Total observed activity (use + view + patch). Absent on older backends. */
   usage?: number
   /** 'agent' = learned/local (editable), 'bundled' = ships with Hermes, 'hub' = installed,
-   * 'external' = mounted from skills.external_dirs (externally authored, still editable),
-   * 'shared' = a non-bundled skill living in the catalog every bot shares (editable in place). */
-  provenance?: 'agent' | 'bundled' | 'external' | 'hub' | 'shared'
+   * 'external' = mounted from skills.external_dirs (externally authored, still editable). */
+  provenance?: 'agent' | 'bundled' | 'external' | 'hub'
   /** User lock: the AGENT may not change this skill (the user still can). Absent on older backends. */
   locked?: boolean
 }
@@ -1807,6 +1749,84 @@ export interface StaleAuxAssignment {
   task: string
   provider: string
   model: string
+}
+
+/** One skill-hub source (official index, GitHub, skills.sh, …) as reported by
+ *  `GET /api/skills/hub/sources`. */
+export interface SkillHubSource {
+  id: string
+  label: string
+  available?: boolean
+  rate_limited?: boolean
+  // False when the centralized index already covers this source, so the UI's
+  // per-source search fan-out skips it (avoids redundant external API calls).
+  searchable?: boolean
+}
+
+/** A searchable/installable hub skill from `GET /api/skills/hub/search`. */
+export interface SkillHubResult {
+  name: string
+  description: string
+  source: string
+  identifier: string
+  trust_level: string
+  repo: string | null
+  tags: string[]
+}
+
+export interface SkillHubInstalledEntry {
+  name: string | null
+  trust_level: string | null
+  scan_verdict: string | null
+}
+
+export interface SkillHubSourcesResponse {
+  sources: SkillHubSource[]
+  index_available: boolean
+  featured: SkillHubResult[]
+  installed: Record<string, SkillHubInstalledEntry>
+}
+
+export interface SkillHubSearchResponse {
+  results: SkillHubResult[]
+  source_counts: Record<string, number>
+  timed_out: string[]
+  installed: Record<string, SkillHubInstalledEntry>
+}
+
+/** `GET /api/skills/hub/preview` — SKILL.md + manifest without installing. */
+export interface SkillHubPreview {
+  name: string
+  description: string
+  source: string
+  identifier: string
+  trust_level: string
+  repo: string | null
+  tags: string[]
+  skill_md: string
+  files: string[]
+}
+
+export interface SkillHubScanFinding {
+  severity: string
+  category: string
+  file: string
+  line: number | null
+  description: string
+}
+
+/** `GET /api/skills/hub/scan` — install-time security scan verdict. */
+export interface SkillHubScanResult {
+  name: string
+  identifier: string
+  source: string
+  trust_level: string
+  verdict: string
+  summary: string
+  policy: 'allow' | 'ask' | 'block'
+  policy_reason: string | null
+  findings: SkillHubScanFinding[]
+  severity_counts: Record<string, number>
 }
 
 /** One configured MCP server row from `GET /api/mcp/servers`. */

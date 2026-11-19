@@ -13,8 +13,6 @@
  * fallback is what every un-upgraded install runs.
  */
 
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const { budgetedLoopMock } = vi.hoisted(() => ({ budgetedLoopMock: { impl: undefined as unknown } }))
@@ -24,7 +22,6 @@ vi.mock('@hermes/plugin-sdk', async () => {
 
   return {
     atom,
-    avatarLoadingClips: (await import('./loading-clips-test-utils')).loadingClipFile(),
     blobatarSvg: undefined,
     // A live binding on the real SDK; the getter lets one test file cover both
     // the budgeted-loop path and the older hand-rolled one.
@@ -287,70 +284,5 @@ describe('the SDK budgeted-loop path', () => {
 
     expect(calls.created).toBe(1)
     expect(calls.wake).toBeGreaterThanOrEqual(1)
-  })
-})
-
-describe('the painted pill eyes', () => {
-  async function paintedFace() {
-    const { BotFace, startFaceClock } = await loadClock()
-    const host = document.createElement('div')
-
-    host.innerHTML = renderToStaticMarkup(
-      createElement(BotFace, { color: '#3e8ef7', mood: 'work', name: 'alpha', shape: 'circle', size: 48 })
-    )
-    document.body.append(host)
-
-    const face = host.querySelector('svg')!
-
-    startFaceClock()
-    observer!.emit([{ isIntersecting: true, target: face }])
-
-    return {
-      eyes: Array.from(face.querySelectorAll<SVGGElement>('[data-hb-eye]')),
-      gaze: face.querySelector('[data-hb-gaze]')!,
-      lids: face.querySelector('[data-hb-lids]')!,
-      staticShapes: Array.from(face.querySelectorAll('[data-hb-eye] path'), path => path.getAttribute('d'))
-    }
-  }
-
-  it('plays the loading clips on the eyes and leaves the gaze group where it is', async () => {
-    const { eyes, gaze } = await paintedFace()
-
-    pump(100)
-
-    expect(gaze.hasAttribute('transform')).toBe(false)
-
-    for (const eye of eyes) {
-      expect(eye.getAttribute('transform')).toMatch(/^matrix\(/)
-    }
-  })
-
-  it('repaints the eyes on the body wherever the clips carry them', async () => {
-    const { eyes, staticShapes } = await paintedFace()
-    const shapes = new Set<string>()
-
-    for (let i = 0; i < 45; i++) {
-      pump(100)
-      eyes.forEach(eye => shapes.add(eye.querySelector('path')!.getAttribute('d')!))
-    }
-
-    expect(shapes.size, 'a carried eye is re-projected, not left as the static drawing').toBeGreaterThan(
-      staticShapes.length
-    )
-
-    for (const shape of shapes) {
-      expect(shape).toMatch(/^(M-?[\d.]+ -?[\d.]+L.*Z)?$/)
-    }
-  })
-
-  it('leaves the blink to the CSS however long the clock runs', async () => {
-    const { lids } = await paintedFace()
-
-    for (let i = 0; i < 45; i++) {
-      pump(100)
-    }
-
-    expect(lids.hasAttribute('transform')).toBe(false)
-    expect(lids.getAttribute('style')).toBeNull()
   })
 })

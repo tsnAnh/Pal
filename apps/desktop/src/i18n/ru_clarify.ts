@@ -8,8 +8,6 @@ export const ruClarify: Partial<ClarifyCopy> = {
   other: 'Другое (введите ответ)',
   placeholder: 'Введите ваш ответ…',
   skip: 'Пропустить',
-  send: 'Отправить',
-  close: 'Закрыть вопрос',
   skipped: 'Пропущено',
   noAnswer: 'Нет ответа',
   confirmAndContinueLabel: 'Подтвердить и продолжить',

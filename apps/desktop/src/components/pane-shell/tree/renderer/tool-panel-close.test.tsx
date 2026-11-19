@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { registry } from '@/contrib/registry'
-import { setTabStripDefault } from '@/store/tabstrip-prefs'
 import { stubMenuDomApis, stubResizeObserver } from '@/test/jsdom'
 
 import { group, split } from '../model'
@@ -20,8 +19,6 @@ import { TreeGroup } from './tree-group'
 // Ground truth for "right-clicking logs doesn't even show Close, and ⌘W
 // doesn't close it". Renders the REAL zone renderer and opens the REAL
 // context menu.
-
-beforeEach(() => setTabStripDefault('auto'))
 
 beforeAll(() => {
   stubResizeObserver()

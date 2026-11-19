@@ -27,7 +27,6 @@ export interface Secondary {
   offEvent: () => void
   offRequest: () => void
   offState: () => void
-  offBound: () => void
   reconnectTimer: ReturnType<typeof setTimeout> | null
   reconnectAttempt: number
   /**

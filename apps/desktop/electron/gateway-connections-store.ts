@@ -626,8 +626,6 @@ export interface GatewayConnectionsStore {
   file: string
   tokensFile: string
   read(): ConnectionRegistry
-  /** Sticky: the list file was unreadable at some point, so an absent connection is unknown, not gone. */
-  isDegraded(): boolean
   /** `read`, but a store that cannot be read throws instead of answering a local-only list. */
   readStrict(): ConnectionRegistry
   write(registry: ConnectionRegistry): void
@@ -653,17 +651,6 @@ export function createGatewayConnectionsStore(deps: GatewayConnectionsStoreDeps)
   let cache: ConnectionRegistry | null = null
   let cacheStamp: null | string = null
   let cacheRevision = 0
-  let degraded = false
-
-  const readStoreDoc = () => {
-    const read = readDoc<StoreDoc>(file)
-
-    if (read.corrupt) {
-      degraded = true
-    }
-
-    return read
-  }
   // The list as this process last wrote or announced it: the watcher reports
   // only what ANOTHER writer changed since, however often main re-read meanwhile.
   let announced: ConnectionRegistry | null = null
@@ -728,7 +715,7 @@ export function createGatewayConnectionsStore(deps: GatewayConnectionsStoreDeps)
     const legacyTokens = decryptLegacyTokens(deps.userData, deps.decrypt)
 
     return withStoreLockSync(file, stillOurs => {
-      const { corrupt, doc } = readStoreDoc()
+      const { corrupt, doc } = readDoc<StoreDoc>(file)
 
       if (doc?.importedFrom?.[userDataKey]) {
         return remember(normalizeRegistry(doc), revisionOf(doc))
@@ -764,7 +751,7 @@ export function createGatewayConnectionsStore(deps: GatewayConnectionsStoreDeps)
   }
 
   const readFresh = (): ConnectionRegistry => {
-    const { doc } = readStoreDoc()
+    const { doc } = readDoc<StoreDoc>(file)
 
     if (!doc?.importedFrom?.[userDataKey]) {
       return importUserData()
@@ -781,7 +768,6 @@ export function createGatewayConnectionsStore(deps: GatewayConnectionsStoreDeps)
     try {
       return readFresh()
     } catch (error) {
-      degraded = true
       deps.log?.(`[connections] ${(error as Error).message}; keeping the last known list`)
 
       return cache || normalizeRegistry(null)
@@ -794,7 +780,7 @@ export function createGatewayConnectionsStore(deps: GatewayConnectionsStoreDeps)
     const plain = plainSecrets(registry, deps.decrypt).registry
 
     withStoreLockSync(file, stillOurs => {
-      const { corrupt, doc } = readStoreDoc()
+      const { corrupt, doc } = readDoc<StoreDoc>(file)
       const disk = normalizeRegistry(doc)
       const moved = revisionOf(doc) !== baseRevision && base
       const next = moved ? rebaseRegistry(base, plain, disk) : normalizeRegistry(plain)
@@ -949,7 +935,6 @@ export function createGatewayConnectionsStore(deps: GatewayConnectionsStoreDeps)
     file,
     tokensFile,
     read,
-    isDegraded: () => degraded,
     readStrict: () => (cache && cacheStamp === stampOf() ? cache : readFresh()),
     write,
     invalidate: () => {

@@ -10,6 +10,7 @@ import type { ErrorCodeKey } from '@/lib/error-surface'
 import type { TipId } from '@/lib/tips/catalog'
 
 import type { AppTourTranslations } from './types_app_tour'
+import type { BackupTransferTranslations } from './types_backup_transfer'
 import type { BillingTranslations } from './types_billing'
 import type { BootTranslations } from './types_boot'
 import type { CatalogTranslations } from './types_catalog'
@@ -522,7 +523,6 @@ export interface Translations extends NoticeTranslations {
       backgroundDoneTitle: string
       backgroundFailedTitle: string
       creditsTitle: string
-      proactiveOpen: string
     }
   }
 
@@ -626,6 +626,8 @@ export interface Translations extends NoticeTranslations {
       mcp: string
       archivedChats: string
       sessions: string
+      backup: string
+      backupOnly: string
       about: string
       billing: string
       notifications: string
@@ -923,6 +925,7 @@ export interface Translations extends NoticeTranslations {
     fieldLabels: Record<string, string>
     fieldDescriptions: Record<string, string>
     uninstallSection: UninstallSectionTranslations
+    backup: BackupTransferTranslations
     memoryLayers: MemoryLayersTranslations
     customEndpoints: {
       active: string
@@ -1006,6 +1009,8 @@ export interface Translations extends NoticeTranslations {
       attachmentSizeLabel: string
       voiceShortcutHintTitle: string
       voiceShortcutHintDesc: string
+      desktopReadAloudTitle: string
+      desktopReadAloudDesc: string
       showOptions: string
     }
     hudModifier: {
@@ -1382,6 +1387,7 @@ export interface Translations extends NoticeTranslations {
       activePill: string
       updateTitle: string
       updateDetail: (next: string, current: string) => string
+      updateSameBuildDetail: (tag: string) => string
       updateAction: string
       updating: string
       upToDateTitle: string
@@ -2023,10 +2029,6 @@ export interface Translations extends NoticeTranslations {
       openLog: string
       actionLog: string
       alreadyInstalled: (name: string) => string
-      pickerTitle: string
-      pickerBrowse: string
-      pickerHide: string
-      pickerHint: string
       loadFailed: string
       previewFailed: string
       scanFailed: string
@@ -2246,6 +2248,8 @@ export interface Translations extends NoticeTranslations {
       backupDesc: string
       debugShare: string
       debugShareDesc: string
+      debugShareConfirm: string
+      debugShareConfirmDesc: string
       debugShareRunning: string
       debugShareLinks: string
       debugShareFailed: string
@@ -2453,6 +2457,9 @@ export interface Translations extends NoticeTranslations {
     fieldSkillsPlaceholder: string
     fieldDeliver: string
     fieldDeliverOnly: string
+    fieldSignature: string
+    fieldSignatureHint: string
+    signatureOptions: Record<string, string>
     fieldPrompt: string
     fieldPromptPlaceholder: string
     nameRequired: string
@@ -2825,7 +2832,6 @@ export interface Translations extends NoticeTranslations {
     profileRail: string
     nav: Record<string, string>
     searchAria: string
-    paneSwitcherAria: string
     searchPlaceholder: string
     clearSearch: string
     noMatch: (query: string) => string
@@ -2926,7 +2932,6 @@ export interface Translations extends NoticeTranslations {
     message: string
     wakingProfile: (profile: string) => string
     placeholderStarting: string
-    placeholderBot: (name: string) => string
     placeholderReconnecting: string
     placeholderFollowUp: string
     newSessionPlaceholders: readonly string[]
@@ -3925,10 +3930,8 @@ export interface Translations extends NoticeTranslations {
       loadingSession: string
       showEarlier: string
       loadingResponse: string
-      botWorking: string
       loadingLocalModel: (model: string) => string
       processingPrompt: string
-      peerRun: (count: number, peer: string) => string
       resumeWhenBackgroundDone: (count: number) => string
       thinking: string
       thought: string
@@ -4067,11 +4070,6 @@ export interface Translations extends NoticeTranslations {
       run: string
       command: string
       commandDetails: string
-      botTitle: string
-      botBody: string
-      botAlwaysDescription: string
-      showDetails: string
-      hideDetails: string
       moreOptions: string
       allowSession: string
       alwaysAllowMenu: string
@@ -4080,22 +4078,6 @@ export interface Translations extends NoticeTranslations {
       alwaysTitle: string
       alwaysDescription: (pattern: string) => string
       alwaysAllow: string
-      allowOnce: string
-      deny: string
-      alwaysDescriptionBot: (pattern: string) => string
-      draftTitle: string
-      draftTo: (recipient: string) => string
-      draftVia: (channel: string) => string
-      draftSubject: (subject: string) => string
-      draftSend: string
-      draftSendEdited: string
-      draftDiscard: string
-      draftEdit: string
-      draftCancelEdit: string
-      draftEditLabel: string
-      draftHeld: string
-      draftExpired: string
-      draftUnviewable: string
     }
     clarify: ClarifyCopy
     themePicker: ThemePickerCopy

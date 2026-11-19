@@ -131,9 +131,6 @@ declare global {
         toggleMaximize: () => void
         close: () => void
       }
-      windowChrome?: {
-        setLayout: (layout: 'default' | 'relaxed') => void
-      }
       wakeIndicator?: {
         getState: () => Promise<WakeIndicatorState>
         setState: (state: WakeIndicatorState) => void
@@ -344,17 +341,13 @@ declare global {
         filters?: Array<{ extensions: string[]; name: string }>
         title?: string
       }) => Promise<{ canceled?: boolean; path?: string; saved: boolean }>
-      saveBotTemplate?: (request: {
-        data: string
-        suggestedName?: string
-      }) => Promise<{ canceled?: boolean; path?: string; saved: boolean }>
-      openBotTemplate?: () => Promise<
-        { canceled: true } | { canceled: false; data: string; name: string; size: number }
-      >
       writeClipboard: (text: string) => Promise<boolean>
       readClipboard: () => Promise<string>
       saveGatewayFile?: (payload: {
         connectionId?: null | string
+        /** A route that serves this file from the host that wrote it (an allow-listed
+         *  `/api/ops/...` download), read instead of the workspace's `/api/fs/download`. */
+        downloadPath?: string
         path: string
         profile?: null | string
         sessionId?: string
@@ -687,7 +680,12 @@ declare global {
         callback: (payload: { kind: string; name: string; params: Record<string, string> }) => void
       ) => () => void
       signalDeepLinkReady?: () => Promise<{ ok: boolean }>
-      probePluginRepo?: (payload: { identifier?: string; repo?: string }) => Promise<{
+      probePluginRepo?: (payload: {
+        identifier?: string
+        repo?: string
+        /** A catalog pick's pin: the repository is read at that commit, not its default branch. */
+        ref?: string
+      }) => Promise<{
         ok: boolean
         agent: boolean
         desktop: boolean
@@ -731,7 +729,6 @@ declare global {
       onNotificationActivate?: (
         callback: (payload: { actionId?: string; activate?: string; notifyId?: string; tag?: string }) => void
       ) => () => void
-      onNotificationClose?: (callback: (payload: { notifyId?: string; tag?: string }) => void) => () => void
       onPreviewFileChanged: (callback: (payload: HermesPreviewFileChanged) => void) => () => void
       onBackendExit: (callback: (payload: BackendExit) => void) => () => void
       // Soft gateway-mode apply: primary backend was torn down without a window
@@ -739,8 +736,6 @@ declare global {
       onConnectionApplied?: (callback: () => void) => () => void
       onPowerResume?: (callback: () => void) => () => void
       getOnBattery?: () => Promise<boolean>
-      getPresenceIdentity?: () => Promise<{ appVersion: string; deviceId: string; label: string }>
-      getSystemIdle?: () => Promise<boolean>
       onBatteryChanged?: (callback: (onBattery: boolean) => void) => () => void
       onBootProgress: (callback: (payload: DesktopBootProgress) => void) => () => void
       getBootstrapState: () => Promise<DesktopBootstrapState>
@@ -1348,10 +1343,6 @@ export interface DesktopConnectionsRegistry {
   // false drives the plain-text token opt-in on keyring-less Linux.
   secureTokenStorage: boolean
   connections: DesktopRegistryConnection[]
-  // True when connections.json could not be parsed and the main process fell
-  // back to a local-only registry: absent connections are unknown, not gone.
-  degraded?: boolean
-  quarantined?: Array<{ label: string; reason: string }>
 }
 
 export interface DesktopRegistryConnectionInput {
@@ -1577,6 +1568,8 @@ export interface DesktopCloudAgentSignInResult {
   baseUrl: string
   // Whether the agent's gateway session cookie landed (silent cascade done).
   connected: boolean
+  // The saved connection the sign-in authenticated, when the sign-in itself saved one (Webapp).
+  connectionId?: string
 }
 
 export interface DesktopBootProgress {

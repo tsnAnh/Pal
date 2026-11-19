@@ -1,8 +1,6 @@
-import { $hiddenStripTabs, AccountPill, host, useI18n, useValue } from '@hermes/plugin-sdk'
+import { host, useI18n, useValue } from '@hermes/plugin-sdk'
 import { useEffect, useRef, useState } from 'react'
 
-import { useAboutYouName } from './about-you'
-import { useBotDeleteRequest } from './bot-detail-state'
 import { BotRow } from './bot-row'
 import {
   $botChatFocused,
@@ -20,7 +18,6 @@ import {
 import { $canonicalRoomLive } from './canonical-group-details'
 import { bindGatewayGroupRoom, useGatewayGroupRooms } from './canonical-group-registry'
 import { CanonicalGroupRow } from './canonical-group-row'
-import { connectAppsSupported, openConnectApps } from './connect-apps'
 /**
  * The Bots pane itself: the roster's selection reconciliation, the
  * workspace-ownership reads its lifecycle keys off, and the pane that lists
@@ -52,13 +49,11 @@ import { renderRosterDialogs } from './roster-pane-dialogs'
 import { RosterGroupRowView } from './roster-pane-groups'
 import { $lastSources, usePublishRosterSnapshot } from './roster-pane-lifecycle'
 import { rosterSectionRenderers } from './roster-pane-sections'
-import { renderRosterToolbar, SESSIONS_PANE } from './roster-pane-toolbar'
-import { isPinnedBotRow, pinnedBots, PinnedStrip } from './roster-pinned-strip'
+import { renderRosterToolbar } from './roster-pane-toolbar'
 import { botNeedsHandleLabel, rosterGatewayOptions } from './roster-sections'
 import { botWorkspaceOwnerKey, setBotsWorkspaceOwner } from './routing'
 import { activeBots, useTurnBusy } from './row-helpers'
 import type { BotMeta, GatewaySource, GroupMember, RosterActivityFilter, RosterKindFilter, RosterRow } from './types'
-import { useBotModeMarker } from './use-bot-mode-marker'
 import {
   $botSections,
   $draggingBot,
@@ -236,50 +231,9 @@ function useReconcileRosterOwner(
   }, [data, error, selectionHydrated, roster, sourceSnapshot, allMeta])
 }
 
-function resolveRosterSource({
-  data,
-  error,
-  rememberedSources,
-  hydrated,
-  selectedRosterKey
-}: {
-  data: ReturnType<typeof useRoster>['data']
-  error: ReturnType<typeof useRoster>['error']
-  rememberedSources: GatewaySource[]
-  hydrated: boolean
-  selectedRosterKey: string
-}) {
-  const live = Array.isArray(data?.profiles) ? data.profiles : null
-  const source = live ?? (error ? $lastRoster.get() : [])
-  const sourceSnapshot = Array.isArray(data?.sources) ? data.sources : rememberedSources
-
-  const sourceWithSelectedOwner = hydrated ? rosterWithSelectedOwner(source, sourceSnapshot, selectedRosterKey) : source
-
-  return { live, sourceSnapshot, sourceWithSelectedOwner }
-}
-
-function staleRosterNotice({
-  failed,
-  listedCount,
-  gatewayUp
-}: {
-  failed: boolean
-  listedCount: number
-  gatewayUp: boolean
-}): null | string {
-  if (!failed || !listedCount) {
-    return null
-  }
-
-  return (
-    'Roster refresh failed — showing the last good list.' + (gatewayUp ? '' : ' Waiting for the gateway to reconnect…')
-  )
-}
-
 export function BotsPane() {
   const { t } = useI18n()
   const b = useBots()
-  const aboutYouName = useAboutYouName()
   const { data, error, isLoading, refetch } = useRoster()
   const gatewayState = useValue(host.state.gateway)
   const gatewayUp = gatewayState === 'open'
@@ -293,7 +247,6 @@ export function BotsPane() {
   // `path` is the profile directory the gateway reports on a profiles.list row;
   // it is not part of the shared RosterRow model, so it rides as an extra here.
   const [deleting, setDeleting] = useState<null | (RosterRow & { path?: string })>(null)
-  useBotDeleteRequest(setDeleting)
   const [deletingGroup, setDeletingGroup] = useState<null | { members: GroupMember[]; name: string }>(null)
   const userSections = useValue($botSections)
   const dragging = useValue($draggingBot)
@@ -305,17 +258,6 @@ export function BotsPane() {
 
   const [grouping, setGrouping] = useState<null | RosterRow>(null)
   const [query, setQuery] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
-  const searchInputRef = useRef<HTMLInputElement>(null)
-  const paneRef = useRef<HTMLDivElement>(null)
-  useBotModeMarker(paneRef)
-
-  useEffect(() => {
-    if (searchOpen) {
-      searchInputRef.current?.focus()
-    }
-  }, [searchOpen])
-
   const [rowKindFilter, setRowKindFilter] = useState<RosterKindFilter>('all')
   const [activityFilter, setActivityFilter] = useState<RosterActivityFilter>('all')
   const [gatewayFilter, setGatewayFilter] = useState('all')
@@ -328,7 +270,6 @@ export function BotsPane() {
   // (#89788 follow-up — without it a stale render could paint the in-pane
   // room beside a live main tab and stick).
   useValue($groupMainTabsRev)
-  const botsOnly = useValue($hiddenStripTabs).has(SESSIONS_PANE)
   const groupNeedsYou = useValue($groupNeedsYou)
   const groupClarify = useValue($groupClarify)
   const groupRooms = useValue($groupChats)
@@ -352,13 +293,12 @@ export function BotsPane() {
   // roster the user already had — mixed local+cloud gateways and remotes
   // waking from sleep fail transiently. Render the last good snapshot with
   // a notice; the full error card is reserved for "never had a roster".
-  const { live, sourceSnapshot, sourceWithSelectedOwner } = resolveRosterSource({
-    data,
-    error,
-    rememberedSources,
-    hydrated: selectionHydrated && rosterHydrated,
-    selectedRosterKey
-  })
+  const live = Array.isArray(data?.profiles) ? data.profiles : null
+  const source = live ?? (error ? $lastRoster.get() : [])
+  const sourceSnapshot = Array.isArray(data?.sources) ? data.sources : rememberedSources
+
+  const sourceWithSelectedOwner =
+    selectionHydrated && rosterHydrated ? rosterWithSelectedOwner(source, sourceSnapshot, selectedRosterKey) : source
 
   const { roster, activityOf, isPinned } = sortRosterBots(sourceWithSelectedOwner, allMeta)
 
@@ -400,9 +340,9 @@ export function BotsPane() {
     visibleRoster,
     filteredHiddenBots,
     groupNames,
-    rosterRows: allRosterRows,
+    rosterRows,
     sortedGroupRows,
-    gatewaySections: allGatewaySections,
+    gatewaySections,
     showGatewaySections
   } = deriveRosterRows({
     roster,
@@ -419,16 +359,6 @@ export function BotsPane() {
     activityOf,
     isPinned
   })
-
-  const stripBots = pinnedBots(allRosterRows)
-  const rosterRows = allRosterRows.filter(row => !isPinnedBotRow(row))
-
-  const gatewaySections = {
-    ...allGatewaySections,
-    sections: allGatewaySections.sections
-      .map(section => ({ ...section, rows: section.rows.filter(row => !isPinnedBotRow(row)) }))
-      .filter(section => section.rows.length)
-  }
 
   const {
     activeFilterCount,
@@ -488,33 +418,17 @@ export function BotsPane() {
 
   useReconcileRosterOwner(data, error, selectionHydrated, roster, sourceSnapshot, allMeta)
 
-  const staleNotice = staleRosterNotice({
-    failed: Boolean(error) && !live,
-    listedCount: roster.length + gatewayRooms.length,
-    gatewayUp
-  })
+  const staleNotice =
+    error && !live && (roster.length || gatewayRooms.length)
+      ? 'Roster refresh failed — showing the last good list.' +
+        (gatewayUp ? '' : ' Waiting for the gateway to reconnect…')
+      : null
 
   const groupChatMembers = groupChatName ? groupChatMemberBots(groupChatName, roster, allMeta) : []
 
   if (shouldRenderGroupChatInPane(groupChatName) && groupChatMembers.length) {
-    return (
-      <GroupChatWorkspace group={groupChatName} members={groupChatMembers} origin={groupOpenOrigin(groupChatName)} />
-    )
+    return <GroupChatWorkspace group={groupChatName} members={groupChatMembers} origin={groupOpenOrigin(groupChatName)} />
   }
-
-  const onlyPinnedRemain =
-    stripBots.length > 0 && rosterRows.length === 0 && matchingHiddenBots.length === 0 && !hasRosterConstraint
-
-  const renderPinnedTile = (bot: RosterRow) => (
-    <BotRow
-      bot={bot}
-      onDelete={setDeleting}
-      onEdit={setEditing}
-      onGroup={setGrouping}
-      onNewSection={target => setSectionDialog({ bot: target, mode: 'create' })}
-      variant="tile"
-    />
-  )
 
   const renderBotRow = (bot: RosterRow, keyPrefix = '') => (
     <BotRow
@@ -572,10 +486,9 @@ export function BotsPane() {
     })
 
   return (
-    <div className="flex h-full flex-col" data-bots-pane="" ref={paneRef}>
+    <div className="flex h-full flex-col">
       {renderRosterToolbar({
         b,
-        botsOnly,
         activityToasts,
         activeSourceRoster,
         roster,
@@ -583,9 +496,6 @@ export function BotsPane() {
         setGroupCreateOpen,
         setSectionDialog,
         showRosterTools,
-        searchInputRef,
-        searchOpen,
-        setSearchOpen,
         showRosterSearch,
         showRosterFilters,
         query,
@@ -599,44 +509,36 @@ export function BotsPane() {
         gatewayFilter,
         setGatewayFilter
       })}
-      <PinnedStrip bots={stripBots} renderTile={renderPinnedTile} />
-      {onlyPinnedRemain
-        ? null
-        : renderRosterContent({
-            b,
-            staleNotice,
-            isLoading,
-            initialRosterLoading,
-            listedCount: roster.length + gatewayRooms.length,
-            error,
-            gatewayUp,
-            refetch,
-            allBotsHidden,
-            hiddenExpanded,
-            rosterRows,
-            matchingHiddenBots,
-            query,
-            selectedGateway,
-            showGatewaySections,
-            sortedGroupRows,
-            gatewaySections,
-            showHiddenSection,
-            hiddenSectionRef,
-            hasRosterConstraint,
-            hiddenBots,
-            showHiddenRows,
-            hiddenGatewaySections,
-            renderBotRow,
-            renderGroupChatSection,
-            renderGatewaySection,
-            renderUserSections,
-            renderHiddenGatewaySection
-          })}
-      <AccountPill
-        appsLabel={b.connectApps.menu}
-        displayName={aboutYouName}
-        onOpenApps={connectAppsSupported ? () => openConnectApps() : undefined}
-      />
+      {renderRosterContent({
+        b,
+        staleNotice,
+        isLoading,
+        initialRosterLoading,
+        listedCount: roster.length + gatewayRooms.length,
+        error,
+        gatewayUp,
+        refetch,
+        allBotsHidden,
+        hiddenExpanded,
+        rosterRows,
+        matchingHiddenBots,
+        query,
+        selectedGateway,
+        showGatewaySections,
+        sortedGroupRows,
+        gatewaySections,
+        showHiddenSection,
+        hiddenSectionRef,
+        hasRosterConstraint,
+        hiddenBots,
+        showHiddenRows,
+        hiddenGatewaySections,
+        renderBotRow,
+        renderGroupChatSection,
+        renderGatewaySection,
+        renderUserSections,
+        renderHiddenGatewaySection
+      })}
       {renderRosterDialogs({
         b,
         t,

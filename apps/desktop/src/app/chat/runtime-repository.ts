@@ -6,8 +6,6 @@ import type { ChatMessage } from '@/lib/chat-messages'
 import { withUniqueToolCallIdsWithinMessage } from '@/lib/chat-messages'
 import { coalesceToolOnlyAssistants, createToolMergeCache, toRuntimeMessage } from '@/lib/chat-runtime'
 
-import { isHiddenNotice, isSilentInTranscript } from './transcript-silence'
-
 // The exact fallback status ExportedMessageRepository.fromBranchableArray uses.
 // Normalization happens HERE, once per message, so the cached record below is
 // already the final ThreadMessage the runtime consumes.
@@ -26,9 +24,8 @@ const FALLBACK_STATUS = getAutoStatus(false, false, false, false, undefined)
  * cache miss keeps identity stable for settled turns, which is what lets the
  * runtime reconcile detect that only the tail moved.
  */
-export function useRuntimeMessageRepository(messages: ChatMessage[], botChat = false): ExportedMessageRepository {
+export function useRuntimeMessageRepository(messages: ChatMessage[]): ExportedMessageRepository {
   const cacheRef = useRef(new WeakMap<ChatMessage, ThreadMessage>())
-  const afterNoticeCacheRef = useRef(new WeakMap<ThreadMessage, ThreadMessage>())
   const toolMergeCacheRef = useRef(createToolMergeCache())
 
   return useMemo(() => {
@@ -37,15 +34,8 @@ export function useRuntimeMessageRepository(messages: ChatMessage[], botChat = f
     const seenIds = new Set<string>()
     let visibleParentId: string | null = null
     let headId: string | null = null
-    let followsHiddenNotice = false
 
     for (const message of coalesceToolOnlyAssistants(messages, toolMergeCacheRef.current)) {
-      if (isSilentInTranscript(message, botChat)) {
-        followsHiddenNotice ||= isHiddenNotice(message, botChat)
-
-        continue
-      }
-
       // A repeated id is a transcript bug upstream, but it must not reach the
       // repository: MessageRepository throws on the second link ("A message
       // with the same id already exists in the parent tree") and takes the
@@ -83,13 +73,7 @@ export function useRuntimeMessageRepository(messages: ChatMessage[], botChat = f
         cacheRef.current.set(message, runtimeMessage)
       }
 
-      items.push({
-        message: followsHiddenNotice
-          ? markedAfterHiddenNotice(runtimeMessage, afterNoticeCacheRef.current)
-          : runtimeMessage,
-        parentId
-      })
-      followsHiddenNotice = false
+      items.push({ message: runtimeMessage, parentId })
 
       if (!message.hidden) {
         visibleParentId = message.id
@@ -98,22 +82,5 @@ export function useRuntimeMessageRepository(messages: ChatMessage[], botChat = f
     }
 
     return { headId, messages: items }
-  }, [botChat, messages])
-}
-
-function markedAfterHiddenNotice(message: ThreadMessage, cache: WeakMap<ThreadMessage, ThreadMessage>): ThreadMessage {
-  const cached = cache.get(message)
-
-  if (cached) {
-    return cached
-  }
-
-  const marked = {
-    ...message,
-    metadata: { ...message.metadata, custom: { ...message.metadata.custom, afterHiddenNotice: true } }
-  } as ThreadMessage
-
-  cache.set(message, marked)
-
-  return marked
+  }, [messages])
 }

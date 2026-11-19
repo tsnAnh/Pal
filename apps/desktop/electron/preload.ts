@@ -91,9 +91,6 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     toggleMaximize: () => ipcRenderer.send('hermes:window-control', 'toggle-maximize'),
     close: () => ipcRenderer.send('hermes:window-control', 'close')
   },
-  windowChrome: {
-    setLayout: layout => ipcRenderer.send('hermes:window:chrome-layout', layout)
-  },
   wakeIndicator: {
     getState: () => ipcRenderer.invoke('hermes:wake-indicator:get'),
     setState: state => ipcRenderer.send('hermes:wake-indicator:set', state),
@@ -374,8 +371,6 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   selectPaths: options => ipcRenderer.invoke('hermes:selectPaths', options),
   selectSavePath: options => ipcRenderer.invoke('hermes:selectSavePath', options),
   saveTextFileAs: request => ipcRenderer.invoke('hermes:saveTextFileAs', request),
-  saveBotTemplate: request => ipcRenderer.invoke('hermes:botTemplate:save', request),
-  openBotTemplate: () => ipcRenderer.invoke('hermes:botTemplate:open'),
   writeClipboard: text => ipcRenderer.invoke('hermes:writeClipboard', text),
   readClipboard: () => ipcRenderer.invoke('hermes:readClipboard'),
   saveGatewayFile: payload => ipcRenderer.invoke('hermes:saveGatewayFile', payload),
@@ -632,12 +627,6 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
 
     return () => ipcRenderer.removeListener('hermes:notification-action', listener)
   },
-  onNotificationClose: callback => {
-    const listener = (_event, payload) => callback(payload)
-    ipcRenderer.on('hermes:notification-close', listener)
-
-    return () => ipcRenderer.removeListener('hermes:notification-close', listener)
-  },
   onNotificationActivate: callback => {
     const listener = (_event, payload) => callback(payload)
     ipcRenderer.on('hermes:notification-activate', listener)
@@ -678,8 +667,6 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
   },
   // AC ↔ battery transitions; renderers slow their backstop polls on battery.
   getOnBattery: () => ipcRenderer.invoke('hermes:power-battery:get'),
-  getPresenceIdentity: () => ipcRenderer.invoke('hermes:presence:identity'),
-  getSystemIdle: () => ipcRenderer.invoke('hermes:presence:idle'),
   onBatteryChanged: callback => {
     const listener = (_event, onBattery) => callback(Boolean(onBattery))
     ipcRenderer.on('hermes:power-battery', listener)

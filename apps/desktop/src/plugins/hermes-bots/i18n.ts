@@ -32,12 +32,7 @@
 import { type PluginLocaleBundles, type PluginTranslate, usePluginI18n } from '@hermes/plugin-sdk'
 import { useMemo } from 'react'
 
-import { ABOUTYOU_LOCALES } from './about-you-locales'
-import { BOT_DETAIL_LOCALES } from './bot-detail-locales'
-import { BOT_ONBOARDING_LOCALES } from './bot-onboarding-locales'
-import { BOT_TEMPLATE_LOCALES } from './bot-template-locales'
 import { CANONICAL_GROUP_LOCALES } from './canonical-group-locales'
-import { CONNECT_APPS_LOCALES } from './connect-apps-locales'
 import { CROSS_GATEWAY_GROUP_LOCALES } from './cross-gateway-locales'
 import { GROUP_CHAT_LOCALES } from './group-chat-locales'
 import { GROUP_SURFACE_AR } from './group-surface-ar'
@@ -45,22 +40,14 @@ import { GROUP_SURFACE_DE } from './group-surface-de'
 import { GROUP_SURFACE_ES } from './group-surface-es'
 import { GROUP_SURFACE_FR } from './group-surface-fr'
 import { GROUP_SURFACE_RU } from './group-surface-ru'
-import { HANDBACK_LOCALES } from './handback-locales'
 import { bind, type Bound } from './i18n-bind'
 import { type BotsMessages } from './i18n-messages'
 import { ROSTER_CHROME } from './roster-chrome-locales'
-import { ROUTINES_LOCALES } from './routines-locales'
 import { getPluginCtx } from './shared'
-import { VOICE_LOCALES } from './voice-locales'
 
 const en: BotsMessages = {
   canonical: CANONICAL_GROUP_LOCALES.en,
   crossGateway: CROSS_GATEWAY_GROUP_LOCALES.en,
-  routines: ROUTINES_LOCALES.en,
-  voice: VOICE_LOCALES.en,
-  template: BOT_TEMPLATE_LOCALES.en,
-  onboarding: BOT_ONBOARDING_LOCALES.en,
-  detail: BOT_DETAIL_LOCALES.en,
   editor: {
     fullConfigHint: 'Full configuration needs a newer gateway (restart it after updating Hermes).',
     liveCapabilities: 'Capabilities (applies immediately — skills, tools, MCP)',
@@ -68,6 +55,7 @@ const en: BotsMessages = {
     remoteCapabilitiesHint:
       'Remote capabilities require a newer desktop. Model and SOUL changes remain staged until you save.',
     skillsEnabled: (enabled, total) => `Skills (${enabled}/${total} enabled)`,
+    toolsetsEnabled: (enabled, total) => `Toolsets (${enabled}/${total} enabled — unchecking all restores the default)`,
     mcpServers: 'MCP servers',
     providerCustom: 'Provider (Custom)',
     modelCustom: 'Model (Custom)',
@@ -85,6 +73,7 @@ const en: BotsMessages = {
     general: 'General',
     capabilities: 'Capabilities',
     skills: 'Skills',
+    tools: 'Tools',
     cloneFrom: 'Clone from profile',
     freshProfile: 'Fresh profile (bundled skills)',
     inheritedModel: 'inherited from launch profile',
@@ -92,7 +81,7 @@ const en: BotsMessages = {
     shareKeys: 'Share keys & accounts with the main profile',
     shareKeysOn: target => `Share keys & accounts with the default profile on ${target}`,
     shareKeysHint:
-      'Subscriptions, OAuth logins, and API keys stay shared (not copied), so token refreshes never invalidate each other. Uncheck for an isolated snapshot copy.',
+      'Subscriptions, OAuth logins, and API keys stay shared with the default profile (not copied), so token refreshes never invalidate each other. Uncheck for an isolated snapshot copy.',
     needsModel:
       'No model provider is ready for it yet, so it skipped its introduction. Pick a provider and model under Advanced.',
     configureModel: 'Configure model',
@@ -102,6 +91,7 @@ const en: BotsMessages = {
     newerDesktop: 'Skills need a newer Hermes Desktop.',
     newerGateway: 'Capability catalog needs a newer gateway (restart it after updating Hermes).',
     emptySkillsHint: '“Create empty” is checked — no bundled skills will be installed.',
+    defaultToolsHint: 'Leaving all (or none) checked keeps the default toolset behavior.',
     catalog: 'catalog',
     catalogInstalled: 'catalog · installed',
     mcpHint:
@@ -147,18 +137,13 @@ const en: BotsMessages = {
     allHidden: 'All bots are hidden',
     allHiddenDesc: 'They keep working and retain their history.',
     showHidden: 'Show hidden bots',
-    silenceActivityToasts: 'Silence activity toasts',
-    enableActivityToasts: 'Enable activity toasts',
     noHiddenMatch: 'No hidden bots match these filters.',
     hiddenFromRoster: 'Hidden from the roster',
     pinned: 'Pinned',
     needsAttention: 'needs attention',
-    mainBot: 'main bot',
     needsInput: 'Needs your input',
     botsAndGroups: 'Bots and group chats',
     botsOnly: 'Bots only',
-    botsOnlyMode: 'Bots-only mode',
-    showSessionsSidebar: 'Show sessions',
     groupsOnly: 'Group chats only',
     anyActivity: 'Any activity',
     activeNow: 'Active now',
@@ -175,8 +160,6 @@ const en: BotsMessages = {
     waitingForGateway:
       'Waiting for the gateway connection… (remote gateways can take a few seconds; retries automatically)'
   },
-  connectApps: CONNECT_APPS_LOCALES['en'],
-  aboutYou: ABOUTYOU_LOCALES['en'],
   sections: {
     newSection: 'New section',
     newTitle: 'New section',
@@ -236,12 +219,8 @@ const en: BotsMessages = {
     createFirstHint: 'Open the Bots pane and hit “New bot”.',
     createFailed: 'Could not create the profile yet',
     advanced: 'Advanced',
-    advancedHint: 'Advanced — model, skills, SOUL.md',
+    advancedHint: 'Advanced — model, skills, toolsets, SOUL.md',
     advancedFailed: 'Advanced configuration failed',
-    sendWithoutAsking: 'Send without asking',
-    sendWithoutAskingHint:
-      'Off: anything this bot wants to send for you waits for your Send first. Routines and webhook runs always wait.',
-    sendPolicySaveFailed: 'Could not save the send setting',
     openAnotherChatUnsupported: 'Update Hermes Desktop to open another bot chat.',
     remoteConnectionsUnsupported: 'Update Hermes Desktop to chat with bots on other connections.',
     openNeedsUpdateTitle: 'This bot lives on an older Hermes',
@@ -252,9 +231,7 @@ const en: BotsMessages = {
     openChatFailedMessage: 'Try again.',
     openGateways: 'Open Gateways',
     chatEmpty: 'Say something to get started.',
-    kickoff: 'Hey, tell me about yourself!',
-    birthNotice:
-      'You were just created and your owner has opened this chat. Greet them first, in one or two short sentences: say who you are, and ask what job you should own unless you already have one.'
+    kickoff: 'Hey, tell me about yourself!'
   },
   avatar: {
     classicShapes: 'Classic shapes',
@@ -277,13 +254,7 @@ const en: BotsMessages = {
     savedLocally: 'Saved look locally; remote persistence failed',
     savedLocallyDescriptionFailed: 'Saved look locally; description update failed',
     generate: 'Generate',
-    generating: 'Generating…',
-    change: 'Change avatar',
-    reset: 'Reset',
-    shapeGroup: 'Shape',
-    colorGroup: 'Color',
-    shapeOption: n => `Shape ${n}`,
-    colorOption: n => `Color ${n}`
+    generating: 'Generating…'
   },
   group: {
     ...GROUP_CHAT_LOCALES.en,
@@ -361,11 +332,6 @@ const en: BotsMessages = {
     answerTo: member => `Answer @${member}`
   },
   tools: {
-    installHint: name => `Install "${name}" and add it to the list above`,
-    installed: name => `Skill "${name}" installed`,
-    installFailed: name => `Installing "${name}" failed`,
-    searchHint: 'Searching community + well-known sources — can take ~10s…',
-    resizeHint: 'Drag the corner to resize.',
     addServerFailed: 'Could not add server',
     noTarget: 'No target profile',
     setKeyFailed: key => `Failed to set ${key}`,
@@ -381,13 +347,9 @@ const en: BotsMessages = {
     setupFailed: 'Setup failed',
     signIn: 'Sign in…',
     setUp: 'Set up…',
-    skillsHub: 'Hermes Skills Hub',
     filterSkills: 'Filter skills…',
-    searchHub: 'Search the hub (community + well-known sources)…',
     noMcpServers: 'No MCP servers configured or in the catalog.'
   },
-  handback: HANDBACK_LOCALES['en'],
-
   screen: {
     title: 'Screen',
     menu: 'Open Screen',
@@ -479,10 +441,6 @@ const en: BotsMessages = {
       'Scheduled jobs exist in this profile but none are tagged for this bot. Name a job "[bot:<name>] …" to show it here, or see them in Cron below.',
     needsRosterFirst: 'This bot has to appear in the roster first.',
     staleNotice: 'Could not refresh scheduled jobs. Showing the last list we had.',
-    profileDetailsTab: 'Details',
-    profileComputerTab: 'Computer',
-    profileAddLabel: 'Add a label',
-    routinesLabel: 'Routines',
     readFailure: 'The list may still be there — this was a read failure, not a delete.',
     createDesc: bot => `A recurring task ${bot} runs on a schedule. Runs land in its own chat history.`,
     instruction: 'Instruction',
@@ -513,7 +471,6 @@ const en: BotsMessages = {
     runsWeekdays: time => `Runs Monday–Friday at ${time}`,
     runsWeekly: (day, time) => `Runs every ${day} at ${time}`,
     runsMonthly: (day, time) => `Runs on day ${day} of each month at ${time}`,
-    scheduleAt: (label, time) => `${label} at ${time}`,
     runsInterval: (count, unit) => `Runs every ${count} ${unit}`,
     runsRaw: 'Raw schedule — every Nm/Nh/Nd or 5-field cron',
     timesTotal: count => `, ${count} time(s) total`
@@ -523,11 +480,6 @@ const en: BotsMessages = {
 const ja: BotsMessages = {
   canonical: CANONICAL_GROUP_LOCALES.ja,
   crossGateway: CROSS_GATEWAY_GROUP_LOCALES.ja,
-  routines: ROUTINES_LOCALES.ja,
-  voice: VOICE_LOCALES.ja,
-  template: BOT_TEMPLATE_LOCALES.ja,
-  onboarding: BOT_ONBOARDING_LOCALES.ja,
-  detail: BOT_DETAIL_LOCALES.ja,
   editor: {
     fullConfigHint: 'すべての設定を使うには新しいゲートウェイが必要です（Hermes 更新後に再起動してください）。',
     liveCapabilities: '機能（即時適用 — スキル、ツール、MCP）',
@@ -535,6 +487,7 @@ const ja: BotsMessages = {
     remoteCapabilitiesHint:
       'リモート機能には新しいデスクトップアプリが必要です。モデルと SOUL の変更は保存するまで適用されません。',
     skillsEnabled: (enabled, total) => `スキル（${enabled}/${total} 有効）`,
+    toolsetsEnabled: (enabled, total) => `ツールセット（${enabled}/${total} 有効 — すべて解除すると既定値に戻ります）`,
     mcpServers: 'MCP サーバー',
     providerCustom: 'プロバイダー（カスタム）',
     modelCustom: 'モデル（カスタム）',
@@ -553,6 +506,7 @@ const ja: BotsMessages = {
     general: '一般',
     capabilities: '機能',
     skills: 'スキル',
+    tools: 'ツール',
     cloneFrom: '複製元のプロファイル',
     freshProfile: '新規プロファイル（同梱スキル）',
     inheritedModel: '起動時のプロファイルから継承',
@@ -560,7 +514,7 @@ const ja: BotsMessages = {
     shareKeys: 'メインプロファイルとキー・アカウントを共有',
     shareKeysOn: target => `${target} の default プロファイルとキー・アカウントを共有`,
     shareKeysHint:
-      'サブスクリプション、OAuth ログイン、API キーをコピーせず共有するため、トークン更新で互いに無効になりません。チェックを外すと独立したスナップショットをコピーします。',
+      'サブスクリプション、OAuth ログイン、API キーを default プロファイルとコピーせず共有するため、トークン更新で互いに無効になりません。チェックを外すと独立したスナップショットをコピーします。',
     needsModel:
       'まだ使用できるモデルプロバイダーがないため、自己紹介をスキップしました。「詳細設定」でプロバイダーとモデルを選んでください。',
     configureModel: 'モデルを設定',
@@ -571,6 +525,7 @@ const ja: BotsMessages = {
     newerDesktop: 'スキルには新しい Hermes Desktop が必要です。',
     newerGateway: '機能カタログには新しいゲートウェイが必要です（Hermes 更新後に再起動してください）。',
     emptySkillsHint: '「空のプロファイルを作成」が選択されているため、同梱スキルはインストールされません。',
+    defaultToolsHint: 'すべて選択するか、何も選択しない場合は、既定のツールセット動作を維持します。',
     catalog: 'カタログ',
     catalogInstalled: 'カタログ · インストール済み',
     mcpHint:
@@ -616,18 +571,13 @@ const ja: BotsMessages = {
     allHidden: 'すべてのボットが非表示です',
     allHiddenDesc: '非表示でも動作を続け、履歴も残ります。',
     showHidden: '非表示のボットを表示',
-    silenceActivityToasts: 'アクティビティ通知をミュート',
-    enableActivityToasts: 'アクティビティ通知を有効にする',
     noHiddenMatch: 'これらのフィルタに一致する非表示ボットはありません。',
     hiddenFromRoster: '名簿から非表示',
     pinned: 'ピン留め',
     needsAttention: '要対応',
-    mainBot: 'メインボット',
     needsInput: '入力が必要です',
     botsAndGroups: 'ボットとグループチャット',
     botsOnly: 'ボットのみ',
-    botsOnlyMode: 'ボット専用モード',
-    showSessionsSidebar: 'セッションを表示',
     groupsOnly: 'グループチャットのみ',
     anyActivity: 'すべてのアクティビティ',
     activeNow: '現在アクティブ',
@@ -643,8 +593,6 @@ const ja: BotsMessages = {
       `名簿を取得できません: ${reason}。ゲートウェイが profiles.list より前の場合は、Hermes を更新してゲートウェイを再起動してください。`,
     waitingForGateway: 'ゲートウェイ接続を待っています…（リモートは数秒かかることがあります。自動で再試行します）'
   },
-  connectApps: CONNECT_APPS_LOCALES['ja'],
-  aboutYou: ABOUTYOU_LOCALES['ja'],
   sections: {
     newSection: '新しいセクション',
     newTitle: '新しいセクション',
@@ -704,12 +652,8 @@ const ja: BotsMessages = {
     createFirstHint: 'ボットパネルを開いて「新しいボット」を押してください。',
     createFailed: 'プロファイルをまだ作成できませんでした',
     advanced: '詳細設定',
-    advancedHint: '詳細設定 — モデル、スキル、SOUL.md',
+    advancedHint: '詳細設定 — モデル、スキル、ツールセット、SOUL.md',
     advancedFailed: '詳細設定に失敗しました',
-    sendWithoutAsking: '確認なしで送信',
-    sendWithoutAskingHint:
-      'オフ: このボットがあなたに代わって送るものは、あなたが送信するまで待機します。ルーティンと Webhook 実行は常に待機します。',
-    sendPolicySaveFailed: '送信設定を保存できませんでした',
     openAnotherChatUnsupported: '別のボットチャットを開くには Hermes Desktop を更新してください。',
     remoteConnectionsUnsupported: '他の接続上のボットとチャットするには Hermes Desktop を更新してください。',
     openNeedsUpdateTitle: 'このボットは古い Hermes 上で動いています',
@@ -720,9 +664,7 @@ const ja: BotsMessages = {
     openChatFailedMessage: 'もう一度お試しください。',
     openGateways: 'ゲートウェイを開く',
     chatEmpty: '何か書いて始めましょう。',
-    kickoff: 'こんにちは、自己紹介をしてください！',
-    birthNotice:
-      'あなたは作成されたばかりで、ユーザーがこのチャットを開きました。まず一、二文の短い挨拶をしてください。自分が誰かを伝え、まだ担当する仕事がなければ、何を担当すればよいか尋ねてください。日本語で返答してください。'
+    kickoff: 'こんにちは、自己紹介をしてください！'
   },
   avatar: {
     classicShapes: 'クラシックシェイプ',
@@ -745,13 +687,7 @@ const ja: BotsMessages = {
     savedLocally: '見た目はローカルに保存されましたが、リモートへの保存に失敗しました',
     savedLocallyDescriptionFailed: '見た目はローカルに保存されましたが、説明の更新に失敗しました',
     generate: '生成',
-    generating: '生成中…',
-    change: 'アバターを変更',
-    reset: 'リセット',
-    shapeGroup: '形状',
-    colorGroup: '色',
-    shapeOption: n => `形状 ${n}`,
-    colorOption: n => `色 ${n}`
+    generating: '生成中…'
   },
   group: {
     ...GROUP_CHAT_LOCALES.ja,
@@ -829,11 +765,6 @@ const ja: BotsMessages = {
     answerTo: member => `@${member}に回答`
   },
   tools: {
-    installHint: name => `「${name}」をインストールして上の一覧に追加`,
-    installed: name => `スキル「${name}」をインストールしました`,
-    installFailed: name => `「${name}」のインストールに失敗しました`,
-    searchHint: 'コミュニティと主要なソースを検索中 — 約 10 秒かかる場合があります…',
-    resizeHint: '角をドラッグしてサイズを変更できます。',
     addServerFailed: 'サーバーを追加できませんでした',
     noTarget: '対象プロファイルがありません',
     setKeyFailed: key => `${key} の設定に失敗しました`,
@@ -849,13 +780,9 @@ const ja: BotsMessages = {
     setupFailed: '設定に失敗しました',
     signIn: 'サインイン…',
     setUp: '設定…',
-    skillsHub: 'Hermes スキルハブ',
     filterSkills: 'スキルを絞り込み…',
-    searchHub: 'ハブを検索（コミュニティと既知のソース）…',
     noMcpServers: '設定済みまたはカタログ内の MCP サーバーはありません。'
   },
-  handback: HANDBACK_LOCALES['ja'],
-
   screen: {
     title: '画面',
     menu: '画面を開く',
@@ -950,10 +877,6 @@ const ja: BotsMessages = {
       'このプロファイルには定期実行ジョブがありますが、このボット向けのタグが付いたものはありません。ジョブ名を「[bot:<名前>] …」にするとここに表示されます。下のCronでも確認できます。',
     needsRosterFirst: 'このボットは先に名簿に表示される必要があります。',
     staleNotice: '定期実行ジョブを更新できませんでした。最後に取得したリストを表示しています。',
-    profileDetailsTab: '詳細',
-    profileComputerTab: 'コンピューター',
-    profileAddLabel: 'ラベルを追加',
-    routinesLabel: 'ルーティン',
     readFailure: 'リストはまだ存在している可能性があります — これは読み取りの失敗で、削除ではありません。',
     createDesc: bot => `${bot}がスケジュールに沿って実行する定期タスクです。実行結果は専用のチャット履歴に残ります。`,
     instruction: '指示',
@@ -984,7 +907,6 @@ const ja: BotsMessages = {
     runsWeekdays: time => `月曜〜金曜の${time}に実行します`,
     runsWeekly: (day, time) => `毎週${day}の${time}に実行します`,
     runsMonthly: (day, time) => `毎月${day}日の${time}に実行します`,
-    scheduleAt: (label, time) => `${label} ${time}`,
     runsInterval: (count, unit) => `${count}${unit}ごとに実行します`,
     runsRaw: '生のスケジュール — Nm/Nh/Nd または5フィールドのcron',
     timesTotal: count => `、合計${count}回`
@@ -994,17 +916,13 @@ const ja: BotsMessages = {
 const zh: BotsMessages = {
   canonical: CANONICAL_GROUP_LOCALES.zh,
   crossGateway: CROSS_GATEWAY_GROUP_LOCALES.zh,
-  routines: ROUTINES_LOCALES.zh,
-  voice: VOICE_LOCALES.zh,
-  template: BOT_TEMPLATE_LOCALES.zh,
-  onboarding: BOT_ONBOARDING_LOCALES.zh,
-  detail: BOT_DETAIL_LOCALES.zh,
   editor: {
     fullConfigHint: '完整配置需要更新网关（更新 Hermes 后请重启网关）。',
     liveCapabilities: '功能（立即生效 — 技能、工具、MCP）',
     editSoul: 'SOUL.md（人格 + 智能体消息协议）',
     remoteCapabilitiesHint: '远程功能需要更新桌面应用。模型和 SOUL 的更改会在保存后生效。',
     skillsEnabled: (enabled, total) => `技能（已启用 ${enabled}/${total}）`,
+    toolsetsEnabled: (enabled, total) => `工具集（已启用 ${enabled}/${total} — 全部取消勾选可恢复默认值）`,
     mcpServers: 'MCP 服务器',
     providerCustom: '提供商（自定义）',
     modelCustom: '模型（自定义）',
@@ -1022,6 +940,7 @@ const zh: BotsMessages = {
     general: '常规',
     capabilities: '能力',
     skills: '技能',
+    tools: '工具',
     cloneFrom: '从配置档案克隆',
     freshProfile: '新配置档案（内置技能）',
     inheritedModel: '继承启动时的配置档案',
@@ -1029,7 +948,7 @@ const zh: BotsMessages = {
     shareKeys: '与主配置档案共享密钥和账户',
     shareKeysOn: target => `与 ${target} 上的 default 配置档案共享密钥和账户`,
     shareKeysHint:
-      '订阅、OAuth 登录和 API 密钥保持共享而非复制，令牌刷新不会使另一方失效。取消勾选则创建隔离的快照副本。',
+      '订阅、OAuth 登录和 API 密钥与 default 配置档案保持共享而非复制，令牌刷新不会使另一方失效。取消勾选则创建隔离的快照副本。',
     needsModel: '它还没有可用的模型提供商，因此跳过了自我介绍。请在“高级”中选择提供商和模型。',
     configureModel: '配置模型',
     createEmpty: '创建空配置（跳过内置技能）',
@@ -1038,6 +957,7 @@ const zh: BotsMessages = {
     newerDesktop: '技能功能需要更新的 Hermes Desktop。',
     newerGateway: '能力目录需要更新的网关（更新 Hermes 后请重启网关）。',
     emptySkillsHint: '已勾选“创建空配置”，不会安装内置技能。',
+    defaultToolsHint: '全部勾选或全部不选将保留默认工具集行为。',
     catalog: '目录',
     catalogInstalled: '目录 · 已安装',
     mcpHint:
@@ -1081,18 +1001,13 @@ const zh: BotsMessages = {
     allHidden: '所有机器人都已隐藏',
     allHiddenDesc: '它们会继续运行，并保留各自的历史。',
     showHidden: '显示已隐藏的机器人',
-    silenceActivityToasts: '关闭活动提示',
-    enableActivityToasts: '开启活动提示',
     noHiddenMatch: '没有已隐藏的机器人匹配这些筛选条件。',
     hiddenFromRoster: '已从名单中隐藏',
     pinned: '已置顶',
     needsAttention: '需要处理',
-    mainBot: '主机器人',
     needsInput: '需要你输入',
     botsAndGroups: '机器人和群聊',
     botsOnly: '仅机器人',
-    botsOnlyMode: '仅机器人模式',
-    showSessionsSidebar: '显示会话',
     groupsOnly: '仅群聊',
     anyActivity: '任何活动',
     activeNow: '正在活动',
@@ -1107,8 +1022,6 @@ const zh: BotsMessages = {
     rosterUnavailable: reason => `无法获取名单：${reason}。如果网关早于 profiles.list，请更新 Hermes 并重启网关。`,
     waitingForGateway: '正在等待网关连接…（远程网关可能需要几秒；会自动重试）'
   },
-  connectApps: CONNECT_APPS_LOCALES['zh'],
-  aboutYou: ABOUTYOU_LOCALES['zh'],
   sections: {
     newSection: '新建分区',
     newTitle: '新建分区',
@@ -1165,12 +1078,8 @@ const zh: BotsMessages = {
     createFirstHint: '打开机器人面板，点击“新建机器人”。',
     createFailed: '暂时无法创建配置档案',
     advanced: '高级',
-    advancedHint: '高级 — 模型、技能、SOUL.md',
+    advancedHint: '高级 — 模型、技能、工具集、SOUL.md',
     advancedFailed: '高级配置失败',
-    sendWithoutAsking: '无需确认直接发送',
-    sendWithoutAskingHint:
-      '关闭时：该机器人替你发出的内容会先等你点击发送。例行任务和 Webhook 运行始终会等待。',
-    sendPolicySaveFailed: '无法保存发送设置',
     openAnotherChatUnsupported: '请更新 Hermes Desktop 以打开另一个机器人聊天。',
     remoteConnectionsUnsupported: '请更新 Hermes Desktop 以与其他连接上的机器人聊天。',
     openNeedsUpdateTitle: '这个机器人运行在较旧的 Hermes 上',
@@ -1181,9 +1090,7 @@ const zh: BotsMessages = {
     openChatFailedMessage: '请重试。',
     openGateways: '打开网关',
     chatEmpty: '说点什么开始吧。',
-    kickoff: '你好，介绍一下你自己吧！',
-    birthNotice:
-      '你刚刚被创建，用户已经打开了这个对话。请先用一两句简短的话打招呼：说明你是谁；如果你还没有负责的工作，问问用户希望你负责什么。请用简体中文回复。'
+    kickoff: '你好，介绍一下你自己吧！'
   },
   avatar: {
     classicShapes: '经典形状',
@@ -1206,13 +1113,7 @@ const zh: BotsMessages = {
     savedLocally: '外观已保存在本地；远程持久化失败',
     savedLocallyDescriptionFailed: '外观已保存在本地；描述更新失败',
     generate: '生成',
-    generating: '生成中…',
-    change: '更换头像',
-    reset: '重置',
-    shapeGroup: '形状',
-    colorGroup: '颜色',
-    shapeOption: n => `形状 ${n}`,
-    colorOption: n => `颜色 ${n}`
+    generating: '生成中…'
   },
   group: {
     ...GROUP_CHAT_LOCALES.zh,
@@ -1287,11 +1188,6 @@ const zh: BotsMessages = {
     answerTo: member => `回答 @${member}`
   },
   tools: {
-    installHint: name => `安装“${name}”并添加到上方列表`,
-    installed: name => `技能“${name}”已安装`,
-    installFailed: name => `安装“${name}”失败`,
-    searchHint: '正在搜索社区和常用来源 — 可能需要约 10 秒…',
-    resizeHint: '拖动角落可调整大小。',
     addServerFailed: '无法添加服务器',
     noTarget: '没有目标配置文件',
     setKeyFailed: key => `无法设置 ${key}`,
@@ -1307,13 +1203,9 @@ const zh: BotsMessages = {
     setupFailed: '设置失败',
     signIn: '登录…',
     setUp: '设置…',
-    skillsHub: 'Hermes 技能中心',
     filterSkills: '筛选技能…',
-    searchHub: '搜索技能中心（社区和常见来源）…',
     noMcpServers: '未配置 MCP 服务器，目录中也没有。'
   },
-  handback: HANDBACK_LOCALES['zh'],
-
   screen: {
     title: '屏幕',
     menu: '打开屏幕',
@@ -1404,10 +1296,6 @@ const zh: BotsMessages = {
       '此配置档案中有定时任务，但没有一个标记给这个机器人。将任务命名为“[bot:<名称>] …”即可显示在这里，也可以在下方的 Cron 中查看。',
     needsRosterFirst: '这个机器人需要先出现在名册中。',
     staleNotice: '无法刷新定时任务。显示的是上一次获取的列表。',
-    profileDetailsTab: '详情',
-    profileComputerTab: '电脑',
-    profileAddLabel: '添加标签',
-    routinesLabel: '例行任务',
     readFailure: '列表可能仍然存在 — 这是一次读取失败，不是删除。',
     createDesc: bot => `由 ${bot} 按计划运行的重复任务。运行结果会保存在它自己的聊天记录中。`,
     instruction: '指令',
@@ -1438,7 +1326,6 @@ const zh: BotsMessages = {
     runsWeekdays: time => `周一至周五 ${time} 运行`,
     runsWeekly: (day, time) => `每${day} ${time} 运行`,
     runsMonthly: (day, time) => `每月 ${day} 日 ${time} 运行`,
-    scheduleAt: (label, time) => `${label} ${time}`,
     runsInterval: (count, unit) => `每 ${count} ${unit}运行`,
     runsRaw: '原始计划 — every Nm/Nh/Nd 或 5 段 cron',
     timesTotal: count => `，共 ${count} 次`
@@ -1448,17 +1335,13 @@ const zh: BotsMessages = {
 const zhHant: BotsMessages = {
   canonical: CANONICAL_GROUP_LOCALES['zh-hant'],
   crossGateway: CROSS_GATEWAY_GROUP_LOCALES['zh-hant'],
-  routines: ROUTINES_LOCALES['zh-hant'],
-  voice: VOICE_LOCALES['zh-hant'],
-  template: BOT_TEMPLATE_LOCALES['zh-hant'],
-  onboarding: BOT_ONBOARDING_LOCALES['zh-hant'],
-  detail: BOT_DETAIL_LOCALES['zh-hant'],
   editor: {
     fullConfigHint: '完整設定需要更新閘道（更新 Hermes 後請重新啟動閘道）。',
     liveCapabilities: '功能（立即生效 — 技能、工具、MCP）',
     editSoul: 'SOUL.md（人格 + 智慧代理訊息協定）',
     remoteCapabilitiesHint: '遠端功能需要更新桌面應用程式。模型和 SOUL 的變更會在儲存後生效。',
     skillsEnabled: (enabled, total) => `技能（已啟用 ${enabled}/${total}）`,
+    toolsetsEnabled: (enabled, total) => `工具集（已啟用 ${enabled}/${total} — 全部取消勾選可還原預設值）`,
     mcpServers: 'MCP 伺服器',
     providerCustom: '供應商（自訂）',
     modelCustom: '模型（自訂）',
@@ -1476,6 +1359,7 @@ const zhHant: BotsMessages = {
     general: '一般',
     capabilities: '功能',
     skills: '技能',
+    tools: '工具',
     cloneFrom: '從設定檔複製',
     freshProfile: '新設定檔（內建技能）',
     inheritedModel: '繼承啟動時的設定檔',
@@ -1483,7 +1367,7 @@ const zhHant: BotsMessages = {
     shareKeys: '與主要設定檔共用金鑰和帳戶',
     shareKeysOn: target => `與 ${target} 上的 default 設定檔共用金鑰和帳戶`,
     shareKeysHint:
-      '訂閱、OAuth 登入和 API 金鑰保持共用而非複製，權杖更新不會使另一方失效。取消勾選則建立隔離的快照副本。',
+      '訂閱、OAuth 登入和 API 金鑰與 default 設定檔保持共用而非複製，權杖更新不會使另一方失效。取消勾選則建立隔離的快照副本。',
     needsModel: '它還沒有可用的模型提供者，因此略過了自我介紹。請在「進階」中選擇提供者和模型。',
     configureModel: '設定模型',
     createEmpty: '建立空白設定（略過內建技能）',
@@ -1492,6 +1376,7 @@ const zhHant: BotsMessages = {
     newerDesktop: '技能功能需要更新的 Hermes Desktop。',
     newerGateway: '功能目錄需要更新的閘道（更新 Hermes 後請重新啟動閘道）。',
     emptySkillsHint: '已勾選「建立空白設定」，不會安裝內建技能。',
+    defaultToolsHint: '全部勾選或全部不選將保留預設工具集行為。',
     catalog: '目錄',
     catalogInstalled: '目錄 · 已安裝',
     mcpHint:
@@ -1535,18 +1420,13 @@ const zhHant: BotsMessages = {
     allHidden: '所有機器人都已隱藏',
     allHiddenDesc: '它們會繼續運作，並保留各自的歷史。',
     showHidden: '顯示已隱藏的機器人',
-    silenceActivityToasts: '關閉活動提示',
-    enableActivityToasts: '開啟活動提示',
     noHiddenMatch: '沒有已隱藏的機器人符合這些篩選條件。',
     hiddenFromRoster: '已從名單中隱藏',
     pinned: '已釘選',
     needsAttention: '需要處理',
-    mainBot: '主機器人',
     needsInput: '需要您的輸入',
     botsAndGroups: '機器人和群組聊天',
     botsOnly: '僅機器人',
-    botsOnlyMode: '僅機器人模式',
-    showSessionsSidebar: '顯示工作階段',
     groupsOnly: '僅群組聊天',
     anyActivity: '任何活動',
     activeNow: '目前活躍',
@@ -1561,8 +1441,6 @@ const zhHant: BotsMessages = {
     rosterUnavailable: reason => `無法取得名單：${reason}。如果閘道早於 profiles.list，請更新 Hermes 並重新啟動閘道。`,
     waitingForGateway: '正在等待閘道連線…（遠端閘道可能需要幾秒；會自動重試）'
   },
-  connectApps: CONNECT_APPS_LOCALES['zh-hant'],
-  aboutYou: ABOUTYOU_LOCALES['zh-hant'],
   sections: {
     newSection: '新增分區',
     newTitle: '新增分區',
@@ -1619,12 +1497,8 @@ const zhHant: BotsMessages = {
     createFirstHint: '開啟機器人面板，點「新增機器人」。',
     createFailed: '暫時無法建立設定檔',
     advanced: '進階',
-    advancedHint: '進階 — 模型、技能、SOUL.md',
+    advancedHint: '進階 — 模型、技能、工具集、SOUL.md',
     advancedFailed: '進階設定失敗',
-    sendWithoutAsking: '無需確認直接傳送',
-    sendWithoutAskingHint:
-      '關閉時：這個機器人代你送出的內容會先等你按下傳送。例行任務和 Webhook 執行一律會等待。',
-    sendPolicySaveFailed: '無法儲存傳送設定',
     openAnotherChatUnsupported: '請更新 Hermes Desktop 以開啟另一個機器人聊天。',
     remoteConnectionsUnsupported: '請更新 Hermes Desktop 以與其他連線上的機器人聊天。',
     openNeedsUpdateTitle: '這個機器人運行在較舊的 Hermes 上',
@@ -1635,9 +1509,7 @@ const zhHant: BotsMessages = {
     openChatFailedMessage: '請再試一次。',
     openGateways: '開啟閘道',
     chatEmpty: '說點什麼開始吧。',
-    kickoff: '你好，介紹一下你自己吧！',
-    birthNotice:
-      '你剛剛被建立，使用者已經開啟了這個對話。請先用一兩句簡短的話打招呼：說明你是誰；如果你還沒有負責的工作，問問使用者希望你負責什麼。請用繁體中文回覆。'
+    kickoff: '你好，介紹一下你自己吧！'
   },
   avatar: {
     classicShapes: '經典形狀',
@@ -1660,13 +1532,7 @@ const zhHant: BotsMessages = {
     savedLocally: '外觀已儲存在本機；遠端持久化失敗',
     savedLocallyDescriptionFailed: '外觀已儲存在本機；描述更新失敗',
     generate: '生成',
-    generating: '生成中…',
-    change: '更換頭像',
-    reset: '重設',
-    shapeGroup: '形狀',
-    colorGroup: '顏色',
-    shapeOption: n => `形狀 ${n}`,
-    colorOption: n => `顏色 ${n}`
+    generating: '生成中…'
   },
   group: {
     ...GROUP_CHAT_LOCALES['zh-hant'],
@@ -1741,11 +1607,6 @@ const zhHant: BotsMessages = {
     answerTo: member => `回覆 @${member}`
   },
   tools: {
-    installHint: name => `安裝「${name}」並新增至上方清單`,
-    installed: name => `技能「${name}」已安裝`,
-    installFailed: name => `安裝「${name}」失敗`,
-    searchHint: '正在搜尋社群和常用來源 — 可能需要約 10 秒…',
-    resizeHint: '拖曳角落可調整大小。',
     addServerFailed: '無法新增伺服器',
     noTarget: '沒有目標設定檔',
     setKeyFailed: key => `無法設定 ${key}`,
@@ -1761,13 +1622,9 @@ const zhHant: BotsMessages = {
     setupFailed: '設定失敗',
     signIn: '登入…',
     setUp: '設定…',
-    skillsHub: 'Hermes 技能中心',
     filterSkills: '篩選技能…',
-    searchHub: '搜尋技能中心（社群和常見來源）…',
     noMcpServers: '未設定 MCP 伺服器，目錄中也沒有。'
   },
-  handback: HANDBACK_LOCALES['zh-hant'],
-
   screen: {
     title: '螢幕',
     menu: '開啟螢幕',
@@ -1858,10 +1715,6 @@ const zhHant: BotsMessages = {
       '此設定檔中有排程工作，但沒有任何一個標記給這個機器人。將工作命名為「[bot:<名稱>] …」即可顯示在這裡，也可以在下方的 Cron 中查看。',
     needsRosterFirst: '這個機器人需要先出現在名冊中。',
     staleNotice: '無法重新整理排程工作。顯示的是上一次取得的清單。',
-    profileDetailsTab: '詳細資料',
-    profileComputerTab: '電腦',
-    profileAddLabel: '新增標籤',
-    routinesLabel: '例行任務',
     readFailure: '清單可能仍然存在 — 這是一次讀取失敗，不是刪除。',
     createDesc: bot => `由 ${bot} 按排程執行的重複工作。執行結果會保存在它自己的聊天紀錄中。`,
     instruction: '指示',
@@ -1892,7 +1745,6 @@ const zhHant: BotsMessages = {
     runsWeekdays: time => `週一至週五 ${time} 執行`,
     runsWeekly: (day, time) => `每${day} ${time} 執行`,
     runsMonthly: (day, time) => `每月 ${day} 日 ${time} 執行`,
-    scheduleAt: (label, time) => `${label} ${time}`,
     runsInterval: (count, unit) => `每 ${count} ${unit}執行`,
     runsRaw: '原始排程 — every Nm/Nh/Nd 或 5 段 cron',
     timesTotal: count => `，共 ${count} 次`

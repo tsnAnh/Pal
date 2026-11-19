@@ -15,12 +15,11 @@ import { getLocalModelsStatus } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { sessionBackgroundResume } from '@/store/background-delegation'
-import { useSurfacePersona } from '@/store/chat-persona'
 import { sessionCompacting } from '@/store/compaction'
 import { $localModelsEnabled } from '@/store/local-models-flag'
 import { sessionAwaitingInput } from '@/store/prompts'
 import { parseModelLoadWait, sessionProviderWait } from '@/store/provider-wait'
-import { useShowReasoning } from '@/store/reasoning-disclosure'
+import { $showReasoning } from '@/store/reasoning-disclosure'
 import { $currentModel, $currentProvider } from '@/store/session'
 import { type DraftingTool, sessionDraftingTool } from '@/store/tool-drafting'
 import type { LocalModelLoadProgress } from '@/types/hermes'
@@ -53,8 +52,8 @@ const StatusRow: FC<{ children: ReactNode; label: string } & React.ComponentProp
 // Fixed label while auto-compaction runs — decoupled from backend status text.
 const COMPACTION_LABEL = 'Summarizing thread'
 
-const HintText: FC<{ children: ReactNode; className?: string }> = ({ children, className }) => (
-  <span className={cn(SCAFFOLD_LABEL_CLASS, 'shimmer min-w-0 flex-1 truncate', className)}>{children}</span>
+const HintText: FC<{ children: ReactNode }> = ({ children }) => (
+  <span className={cn(SCAFFOLD_LABEL_CLASS, 'shimmer min-w-0 flex-1 truncate')}>{children}</span>
 )
 
 // Provider slug of the managed local server (inventory.py's _local_runtime_row).
@@ -199,12 +198,7 @@ const DRAFTING_REVEAL_MS = 200
  * What to call the wait, if it deserves a name. Compaction outranks a draft —
  * it's rarer, slower, and explains a transcript that looks like it reset.
  */
-function useStatusHint(
-  compacting: boolean,
-  drafting: DraftingTool | null,
-  providerWait: string,
-  botChat: boolean
-): string {
+function useStatusHint(compacting: boolean, drafting: DraftingTool | null, providerWait: string): string {
   const [revealed, setRevealed] = useState(false)
   const name = drafting?.name ?? ''
 
@@ -224,7 +218,7 @@ function useStatusHint(
     return COMPACTION_LABEL
   }
 
-  if (providerWait && !botChat) {
+  if (providerWait) {
     return providerWait
   }
 
@@ -252,29 +246,18 @@ export const CenteredThreadSpinner: FC = () => {
   )
 }
 
-interface WaitBodyProps {
-  botChat: boolean
-  elapsed: number
-  hint: string
-  localLoad: ReturnType<typeof useLocalModelLoad>
-}
-
-function useBotWaitLabel(hint: string): string {
+export const ResponseLoadingIndicator: FC = () => {
   const { t } = useI18n()
-
-  return hint || t.assistant.thread.botWorking
-}
-
-const WaitBody: FC<WaitBodyProps> = ({ botChat, elapsed, hint, localLoad }) => {
-  const { t } = useI18n()
-  const botLabel = useBotWaitLabel(hint)
-
-  if (botChat) {
-    return <HintText className="text-(--ui-text-tertiary)">{botLabel}</HintText>
-  }
+  const { compacting, drafting, providerWait, turnStartedAt } = useThreadSessionStatus()
+  const elapsed = useElapsedSeconds(true, undefined, turnStartedAt)
+  const hint = useStatusHint(compacting, drafting, providerWait)
+  // Renderer-synthesized load bar: covers loads the backend's wait loop
+  // can't narrate (gateway still initializing, or an auxiliary call — not
+  // the main request — triggered the autoload). A real wait frame wins.
+  const localLoad = useLocalModelLoad(!hint)
 
   return (
-    <>
+    <StatusRow data-slot="aui_response-loading" label={hint || t.assistant.thread.loadingResponse}>
       <StatusPulse
         aria-hidden="true"
         className="dither inline-block size-3 rounded-[2px] text-midground/80"
@@ -286,29 +269,6 @@ const WaitBody: FC<WaitBodyProps> = ({ botChat, elapsed, hint, localLoad }) => {
         <ProgressHint label={t.assistant.thread.loadingLocalModel(localLoad.model)} percent={localLoad.percent} />
       ) : null}
       <ActivityTimerText aria-hidden={true} seconds={elapsed} />
-    </>
-  )
-}
-
-export const ResponseLoadingIndicator: FC = () => {
-  const { t } = useI18n()
-  const botChat = useSurfacePersona() !== null
-  const { compacting, drafting, providerWait, turnStartedAt } = useThreadSessionStatus()
-  const elapsed = useElapsedSeconds(true, undefined, turnStartedAt)
-  const hint = useStatusHint(compacting, drafting, providerWait, botChat)
-  // Renderer-synthesized load bar: covers loads the backend's wait loop
-  // can't narrate (gateway still initializing, or an auxiliary call — not
-  // the main request — triggered the autoload). A real wait frame wins.
-  const localLoad = useLocalModelLoad(!hint)
-  const botLabel = useBotWaitLabel(hint)
-
-  return (
-    <StatusRow
-      data-bot-pending={botChat ? '' : undefined}
-      data-slot="aui_response-loading"
-      label={botChat ? botLabel : hint || t.assistant.thread.loadingResponse}
-    >
-      <WaitBody botChat={botChat} elapsed={elapsed} hint={hint} localLoad={localLoad} />
     </StatusRow>
   )
 }
@@ -363,18 +323,30 @@ interface TurnActivityRowProps {
 }
 
 const TurnActivityRow: FC<TurnActivityRowProps> = ({ active, elapsed, hint, localLoad }) => {
-  const botChat = useSurfacePersona() !== null
-  const botLabel = useBotWaitLabel(hint)
+  const { t } = useI18n()
 
   return (
     <StatusRow
       className={cn(!active && 'sr-only')}
-      data-bot-pending={botChat && active ? '' : undefined}
       data-slot="aui_turn-activity"
       data-state={active ? 'active' : 'idle'}
-      label={active ? (botChat ? botLabel : hint || 'Hermes is working') : ''}
+      label={active ? hint || 'Hermes is working' : ''}
     >
-      {active && <WaitBody botChat={botChat} elapsed={elapsed} hint={hint} localLoad={localLoad} />}
+      {active && (
+        <>
+          <StatusPulse
+            aria-hidden="true"
+            className="dither inline-block size-3 rounded-[2px] text-midground/80"
+            kind="opacity"
+          />
+          {hint ? (
+            <WaitHint hint={hint} />
+          ) : localLoad ? (
+            <ProgressHint label={t.assistant.thread.loadingLocalModel(localLoad.model)} percent={localLoad.percent} />
+          ) : null}
+          <ActivityTimerText aria-hidden={true} seconds={elapsed} />
+        </>
+      )}
     </StatusRow>
   )
 }
@@ -396,8 +368,7 @@ const TurnActivityRow: FC<TurnActivityRowProps> = ({ active, elapsed, hint, loca
 // AssistantMessage subtree.
 export const TurnActivityIndicator: FC<{ thinking?: boolean }> = ({ thinking = false }) => {
   // Same rule the reasoning disclosure renders by (message-parts.tsx).
-  const showReasoning = useShowReasoning()
-  const botChat = useSurfacePersona() !== null
+  const showReasoning = useStore($showReasoning)
   const activity = useAuiState(s => activitySignature(s.message.content, showReasoning))
 
   // Timestamp of the last visible progress, held from the moment the quiet
@@ -406,13 +377,13 @@ export const TurnActivityIndicator: FC<{ thinking?: boolean }> = ({ thinking = f
   // the whole turn so far.
   const [quietSince, setQuietSince] = useState<number | undefined>(undefined)
   const { awaitingInput, busy, compacting, drafting, providerWait, turnStartedAt } = useThreadSessionStatus()
-  const hint = useStatusHint(compacting, drafting, providerWait, botChat)
+  const hint = useStatusHint(compacting, drafting, providerWait)
 
   // A tool run at the tail already narrates the wait — its summary counts the
   // calls, its ticker names the current one, and it carries its own timer. A
   // second spinner under that adds a line and says nothing new. Silent tools
   // (`todo`, reactions) render nothing, so they narrate nothing.
-  const toolNarrating = useAuiState(s => toolNarratesWait(s.message.content, !botChat))
+  const toolNarrating = useAuiState(s => toolNarratesWait(s.message.content))
 
   // Streaming can lead busy by one view flush on the first turn of a fresh
   // chat. Honor that lead only while this session still has an armed turn

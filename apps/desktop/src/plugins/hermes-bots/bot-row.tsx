@@ -23,6 +23,8 @@ import {
   host,
   queryClient,
   RowButton,
+  SessionStatusDot,
+  SidebarRowLead,
   Tip,
   useI18n,
   useValue
@@ -38,7 +40,6 @@ import {
   focusedRosterOwner,
   saveSelectedRosterBot
 } from './bot-state'
-import { BotShareSubmenu } from './bot-template-export'
 import { ensureBotMetadata, ensureBotProfile } from './canonical-chat'
 import {
   $botAttention,
@@ -65,12 +66,14 @@ import { displayName, stripPreviewMarkdown } from './labels'
 import { duplicateBot } from './profile-ops'
 import { botRecentSession, openBotRecentSession } from './recent-session'
 import { openRosterBot } from './roster-actions'
-import { rosterPreview } from './roster-preview'
 import { botRosterMeta, botWorkspaceOwnerKey, setBotsWorkspaceOwner } from './routing'
 import { rowAge } from './row-age'
 import {
+  A2A_PREFIX_RE,
+  botCanonicalSessionId,
   botRowOwnsWorkspace,
   botWorkingMood,
+  previewKind,
   useTurnBusy,
   workerActiveAt
 } from './row-helpers'
@@ -97,65 +100,9 @@ interface BotRowProps {
   /** Opens the New section dialog; the bot is filed into it on create. */
   onNewSection: (bot: RosterRow) => void
   showHandle?: boolean
-  variant?: 'row' | 'tile'
 }
 
-const CLUSTER_FACES = 3
-const CLUSTER_FACE_SIZE = 30
-
-function GroupFaceCluster({ members, muted }: { members: GroupMember[]; muted: boolean }) {
-  const allMeta = useValue($botMeta)
-  const shown = members.slice(0, CLUSTER_FACES)
-
-  return (
-    <div
-      className={cn('relative size-12', muted && 'grayscale opacity-60')}
-      data-slot="group-face-cluster"
-    >
-      {shown.map((member, index) => {
-        const { shape, color, image } = botAppearance(member.name, botRosterMeta(member, allMeta))
-        const photo = Boolean(image && !isBackfilledFacePng(image))
-        const offset = shown.length === 1 ? 9 : (index * (48 - CLUSTER_FACE_SIZE)) / (shown.length - 1)
-
-        return (
-          <span
-            className="absolute rounded-full bg-(--ui-bg-chrome,var(--background)) p-px"
-            key={`${member.connectionId ?? ''}::${member.name}`}
-            style={{ left: offset, top: index % 2 === 0 ? 0 : 48 - CLUSTER_FACE_SIZE - 2, zIndex: shown.length - index }}
-          >
-            <BotFace
-              color={avatarColor(color, member.name)}
-              image={photo ? image : null}
-              name={member.name}
-              shape={shape}
-              size={CLUSTER_FACE_SIZE - 2}
-            />
-          </span>
-        )
-      })}
-    </div>
-  )
-}
-
-function duplicateBotFromRow(bot: RosterRow, label: string, failedMessage: string) {
-  host.notify({
-    kind: 'info',
-    message: `Duplicating ${label}…`
-  })
-  duplicateBot(bot, $lastRoster.get())
-    .then(name => {
-      queryClient.invalidateQueries({
-        queryKey: ROSTER_KEY
-      })
-      host.notify({
-        kind: 'success',
-        message: `Created ${name} — full copy of ${bot.name}`
-      })
-    })
-    .catch(err => host.notifyError(err, failedMessage))
-}
-
-export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandle, variant = 'row' }: BotRowProps) {
+export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandle }: BotRowProps) {
   const { t } = useI18n()
   const b = useBots()
   const focusedOwner = focusedRosterOwner(useValue($focusedBotOwner))
@@ -188,6 +135,13 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
   // Keep user photos/pets. Drop the 160px SVG backfill so the math face can move.
   const photo = Boolean(image && !isBackfilledFacePng(image))
   const turnBusy = useTurnBusy()
+  // Preview identity must match click identity (#88200): when the backend
+  // resolved the pinned canonical chat, preview THAT session — not the
+  // profile's most recent (but unrelated) activity. Activity signals
+  // (age label, pulse dot) follow the same rule via botActivitySession:
+  // the canonical Bot Chat is hidden from last_session, so keying age off
+  // last_session alone shows "6d ago" on a bot you just messaged.
+  const previewSession = bot.canonical_session || last
   const activitySession = botActivitySession(bot)
   // A live kanban/tool worker gates only the pulse/mood (#90268). The age is
   // the last time the bot did ANYTHING — chat or delegated worker run — so a
@@ -195,9 +149,13 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
   // the moment the 150 s liveness window lapses (#105874). An absent
   // worker_session (past the gateway's 20-row window) degrades to chat age.
   const workerActive = workerActiveAt(bot)
+  const rowAgeTs = Math.max(activitySession?.last_active || 0, bot.worker_session?.last_active || 0)
 
   const groupKeys = useValue($activeGroupMemberKeys)
   const botMood = botWorkingMood(bot, focusedOwner, turnBusy, activeConnectionId, Date.now(), groupKeys)
+  // Status keys off the canonical Bot Chat — the very session this row opens,
+  // so the dot and the click can never describe different conversations.
+  const canonicalSessionId = botCanonicalSessionId(bot)
   // Needs-attention badge (#93091 item 3): background failures record under
   // the selection key (group turns) or the route key (relay deliveries) —
   // check both. Local/unannotated rows carry no connectionId, so their relay
@@ -212,7 +170,18 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
     attentionByKey[`${bot?.connectionId || activeConnectionId}::${bot?.name || 'default'}`] ||
     null
 
-  const { fromBot, text: displayPreview } = rosterPreview(bot, meta, $lastRoster.get())
+  // WHO sent the last message (bot-to-bot DM vs human) — the full stored
+  // history lives in the canonical chat, not inline.
+  // Preview identity must match click identity (#88200): when the backend
+  // resolved the pinned canonical chat, preview THAT session — not the
+  // profile's most recent (but unrelated) activity. Liveness checks above
+  // keep last_session semantics: any recent activity means the bot is alive.
+  const { fromBot } = previewKind(previewSession?.preview, $lastRoster.get(), bot.connectionId)
+
+  // DM previews read like DMs: strip the delivery prefix, keep the message.
+  const displayPreview = stripPreviewMarkdown(
+    fromBot ? (previewSession?.preview || '').replace(A2A_PREFIX_RE, '').trim() || '…' : previewSession?.preview || ''
+  )
 
   const handle = botHandle(bot.name, bot)
   const gatewayLabel = bot.connectionLabel || (bot.connectionId === 'local' ? b.bot.thisDevice : '')
@@ -261,18 +230,18 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
   const dragging = useValue($draggingBot) === rosterKey
   const currentSectionId = botSectionId(bot, allMeta)
 
-  const tileSubtitle = meta?.title || ''
-
-  const tile = (
+  const row = (
     <RowButton
       aria-busy={isOpening || undefined}
-      aria-label={attention ? `${rowTooltip} · ${b.roster.needsAttention}` : rowTooltip}
+      aria-label={rowTooltip}
       className={cn(
-        'group/tile flex w-24 min-w-0 flex-col items-center gap-1.5 overflow-hidden rounded-xl px-1 py-1 text-center transition-opacity',
-        'hover:opacity-80',
+        'flex w-full min-w-0 max-w-full items-center gap-2.5 overflow-hidden rounded-md px-2 py-2 text-left transition-colors',
+        'hover:bg-(--chrome-action-hover)',
+        isActive && 'bg-(--ui-row-active-background)',
+        // The row being dragged fades in place; the browser's drag image is
+        // the row itself, so the ghost under the pointer is the full row.
         dragging && 'opacity-40'
       )}
-      data-bot-gaze-scope
       data-roster-key={rosterKey}
       draggable
       onClick={open}
@@ -284,131 +253,70 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
       }}
       onPointerEnter={warm}
     >
-      <div className={cn('relative shrink-0 rounded-full p-0.5', !sourceStatus.available && 'grayscale opacity-60')}>
+      <div className={cn('shrink-0', !sourceStatus.available && 'grayscale opacity-60')}>
         <BotFace
           color={avatarColor(color, bot.name)}
           image={photo ? image : null}
           mood={botMood}
           name={bot.name}
           shape={shape}
-          size={72}
+          size={34}
         />
-        {isDefaultBot(bot) ? (
-          <span
-            aria-label={b.roster.mainBot}
-            className="absolute bottom-0 right-0 grid size-[18px] place-items-center rounded-full bg-orange-500 text-white ring-2 ring-(--ui-bg-chrome,var(--background))"
-            data-slot="bot-main-badge"
-            role="img"
-          >
-            <Codicon className="text-[0.625rem] leading-none" name="star-full" />
-          </span>
-        ) : null}
-        {attention ? (
-          <Codicon
-            aria-label={b.roster.needsAttention}
-            className="absolute -bottom-1 -right-1 text-[0.6875rem] text-amber-600 dark:text-amber-300"
-            name="warning"
-          />
-        ) : null}
-        {isOpening ? (
-          <GlyphSpinner
-            ariaLabel={b.bot.openingChat}
-            className="absolute -bottom-1 -left-1 text-xs text-(--ui-text-secondary)"
-          />
-        ) : null}
       </div>
-      <span className="w-full truncate text-[0.875rem] leading-[18px] text-(--ui-text-secondary)">
-        {displayName(bot, meta)}
-      </span>
-      {tileSubtitle ? (
-        <span className="-mt-1 w-full truncate text-[0.75rem] leading-4 text-(--ui-text-tertiary)">{tileSubtitle}</span>
-      ) : null}
-    </RowButton>
-  )
-
-  const row =
-    variant === 'tile' ? (
-      tile
-    ) : (
-      <RowButton
-        aria-busy={isOpening || undefined}
-        aria-label={rowTooltip}
-        className={cn(
-          'flex min-h-14 w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-[14px] px-3 py-1.5 text-left transition-colors',
-          'hover:bg-[color-mix(in_srgb,var(--bot-row-active,var(--chrome-action-hover))_55%,transparent)]',
-          isActive && 'bg-(--ui-row-active-background) hover:bg-(--ui-row-active-background)',
-          // The row being dragged fades in place; the browser's drag image is
-          // the row itself, so the ghost under the pointer is the full row.
-          dragging && 'opacity-40'
-        )}
-        data-bot-gaze-scope
-        data-roster-key={rosterKey}
-        draggable
-        onClick={open}
-        onDragEnd={() => $draggingBot.set(null)}
-        onDragStart={event => {
-          event.dataTransfer.setData(BOT_DRAG_MIME, rosterKey)
-          event.dataTransfer.effectAllowed = 'move'
-          $draggingBot.set(rosterKey)
-        }}
-        onPointerEnter={warm}
-      >
-        <div className={cn('relative shrink-0', !sourceStatus.available && 'grayscale opacity-60')}>
-          <BotFace
-            color={avatarColor(color, bot.name)}
-            image={photo ? image : null}
-            mood={botMood}
-            name={bot.name}
-            shape={shape}
-            size={48}
-          />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              {pinned ? (
-                <Tip label={b.roster.pinned}>
-                  <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
-                </Tip>
-              ) : null}
-              {hidden ? (
-                <Tip label={b.roster.hiddenFromRoster}>
-                  <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="eye-closed" />
-                </Tip>
-              ) : null}
-              <Tip label={rowTooltip}>
-                <span className="min-w-0 truncate text-[0.9375rem] font-medium leading-5 text-foreground">
-                  {displayName(bot, meta)}
-                </span>
-              </Tip>
-            </div>
-            {attention ? (
-              <Tip label={botAttentionHint(attention.reason)}>
-                <Codicon
-                  aria-label={b.roster.needsAttention}
-                  className="shrink-0 text-[0.6875rem] text-amber-600 dark:text-amber-300"
-                  name="warning"
-                />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1.5">
+            {/* The session row's own lead cell, so a bot's name sits on the
+                same left edge as every session name above it in the rail. */}
+            <SidebarRowLead>
+              <SessionStatusDot storedSessionId={canonicalSessionId} />
+            </SidebarRowLead>
+            {pinned ? (
+              <Tip label={b.roster.pinned}>
+                <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
               </Tip>
             ) : null}
-            {isOpening ? (
-              <GlyphSpinner ariaLabel={b.bot.openingChat} className="shrink-0 text-xs text-(--ui-text-secondary)" />
+            {hidden ? (
+              <Tip label={b.roster.hiddenFromRoster}>
+                <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="eye-closed" />
+              </Tip>
             ) : null}
+            <Tip label={rowTooltip}>
+              <span className="min-w-0 truncate text-[0.8125rem] font-medium">{displayName(bot, meta)}</span>
+            </Tip>
           </div>
-          {showDetailsRow ? (
-            <div className="flex min-w-0 items-center gap-1.5 text-[0.8125rem] leading-[18px] text-(--ui-text-tertiary)">
-              {showHandle ? (
-                <span className="shrink-0 font-mono text-[0.6875rem] text-(--ui-text-quaternary)">{`@${handle}`}</span>
-              ) : null}
-              {showHandle && displayPreview ? <span className="shrink-0 text-(--ui-text-quaternary)">·</span> : null}
-              {displayPreview ? (
-                <span className={cn('min-w-0 truncate', fromBot && 'italic')}>{displayPreview}</span>
-              ) : null}
-            </div>
+          {attention ? (
+            <Tip label={botAttentionHint(attention.reason)}>
+              <Codicon
+                aria-label={b.roster.needsAttention}
+                className="shrink-0 text-[0.6875rem] text-amber-600 dark:text-amber-300"
+                name="warning"
+              />
+            </Tip>
+          ) : null}
+          {isOpening ? (
+            <GlyphSpinner ariaLabel={b.bot.openingChat} className="shrink-0 text-xs text-(--ui-text-secondary)" />
+          ) : null}
+          {rowAgeTs ? (
+            <span className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)">
+              {rowAge(rowAgeTs * 1000, t.sidebar.row)}
+            </span>
           ) : null}
         </div>
-      </RowButton>
-    )
+        {showDetailsRow ? (
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-(--ui-text-tertiary)">
+            {showHandle ? (
+              <span className="shrink-0 font-mono text-[0.6875rem] text-(--ui-text-quaternary)">{`@${handle}`}</span>
+            ) : null}
+            {showHandle && displayPreview ? <span className="shrink-0 text-(--ui-text-quaternary)">·</span> : null}
+            {displayPreview ? (
+              <span className={cn('min-w-0 truncate', fromBot && 'italic')}>{displayPreview}</span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </RowButton>
+  )
 
   return (
     <ContextMenu>
@@ -501,10 +409,27 @@ export function BotRow({ bot, onDelete, onEdit, onGroup, onNewSection, showHandl
         >
           {groups.length ? b.bot.groupsMenu(groups.join(', ')) : b.bot.manageGroups}
         </ContextMenuItem>
-        <ContextMenuItem onSelect={() => duplicateBotFromRow(bot, displayName(bot, meta), b.bot.duplicateFailed)}>
+        <ContextMenuItem
+          onSelect={() => {
+            host.notify({
+              kind: 'info',
+              message: `Duplicating ${displayName(bot, meta)}…`
+            })
+            duplicateBot(bot, $lastRoster.get())
+              .then(name => {
+                queryClient.invalidateQueries({
+                  queryKey: ROSTER_KEY
+                })
+                host.notify({
+                  kind: 'success',
+                  message: `Created ${name} — full copy of ${bot.name}`
+                })
+              })
+              .catch(err => host.notifyError(err, b.bot.duplicateFailed))
+          }}
+        >
           {b.bot.duplicate}
         </ContextMenuItem>
-        <BotShareSubmenu bot={bot} />
         <ContextMenuSeparator />
         <ContextMenuItem
           onSelect={() => {
@@ -615,9 +540,9 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
     <RowButton
       aria-label={`${group}, ${b.group.memberCount(members.length)}, ${availabilityLabel}`}
       className={cn(
-        'flex min-h-14 w-full min-w-0 max-w-full items-center gap-3 overflow-hidden rounded-[14px] px-3 py-1.5 text-left transition-colors',
-        'hover:bg-[color-mix(in_srgb,var(--bot-row-active,var(--chrome-action-hover))_55%,transparent)]',
-        active && 'bg-(--ui-row-active-background) hover:bg-(--ui-row-active-background)',
+        'flex w-full min-w-0 max-w-full items-center gap-2.5 overflow-hidden rounded-md px-2 py-2 text-left transition-colors',
+        'hover:bg-(--chrome-action-hover)',
+        active && 'bg-(--ui-row-active-background)',
         dragging && 'opacity-40'
       )}
       draggable
@@ -632,15 +557,25 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
         $draggingBot.set(dragKey)
       }}
     >
-      <div className="relative flex h-12 w-12 shrink-0 items-center justify-center">
+      <div className="relative flex w-[34px] shrink-0 items-center justify-center">
         {room.image ? (
           <img
             alt=""
-            className={cn('size-12 rounded-full object-cover', availableMembers === 0 && 'grayscale opacity-60')}
+            className={cn(
+              'size-8 rounded-md object-cover ring-1 ring-(--ui-stroke-tertiary)',
+              availableMembers === 0 && 'grayscale opacity-60'
+            )}
             src={room.image}
           />
         ) : (
-          <GroupFaceCluster members={members} muted={availableMembers === 0} />
+          <span
+            className={cn(
+              'flex size-8 items-center justify-center rounded-md bg-(--chrome-action-hover) text-(--ui-text-tertiary)',
+              availableMembers === 0 && 'opacity-60'
+            )}
+          >
+            <Codicon name="organization" />
+          </span>
         )}
         {members.length > 0 && availableMembers < members.length ? (
           <Tip label={availabilityLabel}>
@@ -655,7 +590,7 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 flex-1 truncate text-[0.9375rem] font-medium leading-5 text-foreground">{group}</span>
+          <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">{group}</span>
           {room.pinned ? (
             <Tip label={b.roster.pinned}>
               <Codicon className="shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)" name="pinned" />
@@ -672,7 +607,7 @@ export function GroupRow({ active, group, members, needsYou, onOpen, onDisband, 
             </span>
           ) : null}
         </div>
-        <div className="min-w-0 truncate text-[0.8125rem] leading-[18px] text-(--ui-text-tertiary)">{preview}</div>
+        <div className="min-w-0 truncate text-xs text-(--ui-text-tertiary)">{preview}</div>
       </div>
     </RowButton>
   )

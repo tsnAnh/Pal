@@ -27,8 +27,6 @@ import {
 import type { ChatEmptyProps, PluginContext, ProfileGroupRoute } from '@hermes/plugin-sdk'
 
 import { startFaceClock, stopFaceClock } from './avatar'
-import { startBotChatAccent } from './bot-accent'
-import { startBotChatPersonas } from './bot-persona'
 import {
   $botChatFocused,
   $botsPaneVisible,
@@ -41,7 +39,7 @@ import {
 } from './bot-state'
 import { isCanonicalChatOnScreen, openBotCanonicalChat } from './canonical-chat'
 import { BotChatEmpty } from './chat-empty'
-import { bindProfileSync, RoutinesPane, RoutinesTabTitle } from './cron'
+import { bindProfileSync, RoutinesPane } from './cron'
 import {
   $botMeta,
   $lastRoster,
@@ -55,8 +53,6 @@ import {
   primeRoster,
   resolveRosterMentions
 } from './data'
-import { startFaceGaze } from './face-gaze'
-import { startFaceVisibility } from './face-visibility'
 import {
   $groupChats,
   $groupChatWorkspace,
@@ -72,13 +68,10 @@ import {
 } from './group-chat'
 import { stickyGroupEngine } from './group-engine'
 import { groupWorkspaceOwnerKey } from './group-membership'
-import { handbackCardContribution } from './handback-card'
 import { annotateOrphanedGroupChatMembers } from './hygiene'
 import { BOTS_LOCALES, botsText } from './i18n'
-import { identityNoticeContribution } from './identity-notice'
 import { displayName } from './labels'
 import { startBotRelay, stopBotRelay } from './relay'
-import { registerBotChatReopen } from './restore-last-bot-chat'
 import { $activityToasts } from './roster-actions'
 import {
   botChatOwnsWorkspace,
@@ -92,7 +85,6 @@ import { startScreenAutoRaise } from './screen-autoraise'
 import { ProfileGroupScreenPortal } from './screen-portal'
 import { startHideSweepScheduler } from './session-sweep'
 import { bumpBotOpenGeneration, getBotOpenGeneration, ID, setPluginCtx } from './shared'
-import { TEACH_BUNDLES } from './teach-locales'
 import type { GroupChat, RosterRow } from './types'
 import { loadBotSections } from './user-sections'
 
@@ -115,7 +107,6 @@ interface MentionCompletionItem {
 interface ComposerDraftPayload {
   attachments?: unknown[]
   text: string
-  turnContext?: string
 }
 
 export default {
@@ -129,7 +120,6 @@ export default {
     // writes through.
     loadBotSections()
     const disposeLocales = ctx.i18n.register(BOTS_LOCALES)
-    const disposeTeachLocales = ctx.i18n.register(TEACH_BUNDLES)
     setGroupChatSyncDisposed(false)
     startFaceClock()
     // The cross-connection relay rides every gateway socket this Desktop
@@ -137,24 +127,14 @@ export default {
     startBotRelay()
     // Opt-in per bot: raise a bot's Screen tab on its first live screen tool call.
     const stopScreenAutoRaise = startScreenAutoRaise()
-    const stopBotChatAccent = startBotChatAccent()
-    const stopBotChatPersonas = startBotChatPersonas()
-    const stopFaceGaze = startFaceGaze()
-    const stopFaceVisibility = startFaceVisibility()
 
     // Disabling the plugin (or a hot reload) must actually stop the clock —
     // before this, the rAF loop + 1Hz document scan ran until app restart.
     if (typeof ctx.onDispose === 'function') {
       ctx.onDispose(disposeLocales)
-      ctx.onDispose(disposeTeachLocales)
       ctx.onDispose(stopFaceClock)
       ctx.onDispose(stopBotRelay)
       ctx.onDispose(stopScreenAutoRaise)
-      ctx.onDispose(stopBotChatAccent)
-      ctx.onDispose(stopBotChatPersonas)
-      ctx.onDispose(stopFaceGaze)
-      ctx.onDispose(stopFaceVisibility)
-      ctx.onDispose(registerBotChatReopen())
     }
 
     // @-mention autocomplete: typing "@rese…" in ANY composer offers the
@@ -495,10 +475,8 @@ export default {
         width: '260px',
         collapsible: true,
         hideOnly: true,
-        ownsTitlebarRow: true,
         tabTitle: () => <LocalizedTabTitle select={t => t.common.bots} />,
         tabTitleText: () => translateNow('common.bots'),
-        switcherIcon: 'hubot',
         dock: {
           pane: 'sessions',
           pos: 'center',
@@ -525,13 +503,12 @@ export default {
         id: 'routines',
         area: 'panes',
         // The app's noun for these, so the tab agrees with the pane header and
-        // with the core vocabulary. `translateNow`, not `useI18n`:
+        // with the core Scheduled jobs surface. `translateNow`, not `useI18n`:
         // a pane title is read at registration, outside React.
-        title: translateNow('sidebar.filter.profile'),
+        title: translateNow('cron.title'),
         data: {
-          tabTitle: () => <RoutinesTabTitle />,
-          tabTitleText: () => translateNow('sidebar.filter.profile'),
-          headerVeto: true,
+          tabTitle: () => <LocalizedTabTitle select={t => t.cron.title} />,
+          tabTitleText: () => translateNow('cron.title'),
           placement: 'main',
           // Repair persisted layouts that stranded Cronjobs in the Bots tab strip.
           dock: {
@@ -539,11 +516,23 @@ export default {
             pos: 'right',
             enforce: true
           },
-          width: '300px'
+          // A bot's schedule is glanceable, not something you sit in — it
+          // arrives as the right edge's vertical tab and takes no width off the
+          // chat until the user opens it.
+          defaultCollapsed: true,
+          width: '250px'
         },
         render: () => <RoutinesPane />
       })
 
+      // The pane's ✕ remembers a Close across launches, and nothing else ever
+      // shows this pane again — it only comes back by being registered here.
+      // Entering Bot Mode is the user asking for their bot's chrome, so a
+      // remembered Close is dropped and the pane returns the way it first
+      // arrived: as the collapsed right-edge tab (#102224). Only on ENTRY:
+      // the pane also re-registers whenever a bot chat regains the workspace
+      // inside one Bots session (a group room and back), and a ✕ from that
+      // same session must survive those.
       if (restoreDismissed && typeof host.undismissPane === 'function') {
         host.undismissPane(`${ID}:routines`)
       }
@@ -738,9 +727,6 @@ export default {
 
     // A bot's chat before it has spoken: core's splash is Hermes' wordmark and
     // stands down for any session that exists, so the bot titles its own.
-    ctx.register(handbackCardContribution)
-    ctx.register(identityNoticeContribution)
-
     ctx.register({
       id: 'chat-empty',
       area: CHAT_EMPTY_AREA,
@@ -900,13 +886,13 @@ export default {
           })
 
           const note =
-            '[@mentions resolved from the Bot Mode roster — the user is referring to: ' +
+            '\n\n[@mentions resolved from the Bot Mode roster — the user is referring to: ' +
             lines.join('; ') +
             '. If they want one of these agents contacted, compose your own message and send it with your message_agent tool (agents on other connected machines are reachable too — the Desktop relays it); never forward the user\u2019s text verbatim. If this session has no message_agent tool, agent messaging is unavailable here — say so.]'
 
           return {
             ...draft,
-            turnContext: [draft.turnContext, note].filter(Boolean).join('\n\n')
+            text: text + note
           }
         }
       }

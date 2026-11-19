@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { registry } from '@/contrib/registry'
-import { setTabStripDefault } from '@/store/tabstrip-prefs'
 
 import { findGroupOfPane, group } from './model'
 import {
@@ -20,8 +19,6 @@ import {
 // whole gesture and its undo.
 
 const disposers: (() => void)[] = []
-
-beforeEach(() => setTabStripDefault('auto'))
 
 beforeEach(() => {
   window.localStorage.clear()

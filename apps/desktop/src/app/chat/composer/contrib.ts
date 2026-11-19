@@ -82,7 +82,6 @@ export interface ComposerContextMenuProvider {
 export interface ComposerDraft {
   text: string
   attachments?: ComposerAttachment[]
-  turnContext?: string
 }
 
 /** Payload of a `composer.middleware` data contribution. */

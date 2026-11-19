@@ -12,12 +12,12 @@ import * as sdk from '@hermes/plugin-sdk'
 import { host } from '@hermes/plugin-sdk'
 import type { SessionListRow } from '@hermes/plugin-sdk'
 
-import { $botMeta, botMetaKey, botOwner, botServerGreetsUnprompted, persistBotMetaSnapshot } from './data'
+import { $botMeta, botMetaKey, botOwner, persistBotMetaSnapshot } from './data'
 import { botsText } from './i18n'
 import { backendTargetProfile, botConnectionRoute, botRosterMeta, botWorkspaceOwnerKey, requestForBot } from './routing'
 import type { RpcErrorLike } from './routing'
 import { getPluginCtx } from './shared'
-import type { BotMeta, CanonicalSession, ProfileRoute, RosterRow } from './types'
+import type { BotMeta, CanonicalSession, RosterRow } from './types'
 
 // ── canonical bot chat ───────────────────────────────────────────────────────
 // Each bot has ONE forever chat, identified by NAME, never by pointer: the
@@ -421,7 +421,6 @@ interface OpenCanonicalChatOptions {
    *  host.openSession's refreshInPlace; without an SDK that supports it the
    *  open degrades to the old navigating shape. */
   background?: boolean
-  createIfMissing?: boolean
   openingStillCurrent?: (() => boolean) | null
   /** See OpenStoredBotChatOptions.intent. Only honored for an EXISTING Bot
    *  Chat; a freshly minted one always lands in main. */
@@ -435,29 +434,14 @@ interface OpenCanonicalChatOptions {
  *  foreign language, and the bot's reply followed the prompt's language, so one
  *  hardcoded string biased the whole conversation.
  *
- *  Only a gateway that does not advertise `bot_birth_notice` (or lacks the
- *  eager title write) still gets it as a visible user turn; current gateways
- *  get the hidden birth notice instead. */
+ *  It is still submitted on the user's side, which is the half of #91827 this
+ *  cannot close from here: `prompt.submit` IS the user-turn API, so an
+ *  unattributed birth needs the lazy/silent path that issue proposes — a
+ *  gateway contract change, not a rename. The intro itself is deliberate and
+ *  documented in AGENTS.md ("kicked off with the bot's intro"); what this
+ *  narrows is who has to read it in English. */
 function kickoffText(): string {
   return getPluginCtx()?.i18n?.t('bot.kickoff') ?? 'Hey, tell me about yourself!'
-}
-
-function birthNoticeText(): string {
-  return getPluginCtx()?.i18n?.t('bot.birthNotice') ?? BIRTH_NOTICE_FALLBACK
-}
-
-const BIRTH_NOTICE_FALLBACK =
-  'You were just created and your owner has opened this chat. Greet them first, in one or two short sentences: say who you are, and ask what job you should own unless you already have one.'
-
-function introSubmitParams(
-  sessionId: string,
-  titled: boolean,
-  bot: RosterRow,
-  route: null | ProfileRoute
-): Record<string, string> {
-  return titled && botServerGreetsUnprompted(bot, route)
-    ? { session_id: sessionId, text: birthNoticeText(), display_kind: 'hidden' }
-    : { session_id: sessionId, text: kickoffText() }
 }
 
 /** Create the bot's ONE forever chat: a real session titled "Bot Chat".
@@ -649,7 +633,10 @@ export function createCanonicalChat(
         await new Promise(resolve => window.setTimeout(resolve, 400))
 
         try {
-          await requestForBot(bot, 'prompt.submit', introSubmitParams(runtime, titled, bot, route))
+          await requestForBot(bot, 'prompt.submit', {
+            session_id: runtime,
+            text: kickoffText()
+          })
 
           if (!opened && sid && typeof host.openSession === 'function' && canNavigate()) {
             await openFreshCanonical(sid)
@@ -692,7 +679,7 @@ export function createCanonicalChat(
  *  bot's chat opens without re-homing Desktop's chrome. */
 export async function openBotCanonicalChat(
   owner: RosterRow | string,
-  { background = false, createIfMissing = true, openingStillCurrent = null, intent = 'in-place' }: OpenCanonicalChatOptions = {}
+  { background = false, openingStillCurrent = null, intent = 'in-place' }: OpenCanonicalChatOptions = {}
 ): Promise<{ openedId: string; registryId: string } | null> {
   const existing = await findExistingCanonicalChat(owner)
 
@@ -717,7 +704,7 @@ export async function openBotCanonicalChat(
   // A background re-resume never MINTS: it fires while nobody asked for this
   // bot, so a resolution miss keeps whatever the user is looking at instead
   // of creating a fresh forever-chat under their feet.
-  if (background || !createIfMissing) {
+  if (background) {
     return null
   }
 

@@ -1,7 +1,6 @@
 import type { GatewayEvent } from '@hermes/shared'
 
 import type { HermesConnection } from '@/global'
-import type { HermesGateway } from '@/hermes'
 import type { ScopedServerRequest } from '@/store/gateway'
 
 /** Hooks the gateway registry (store/gateway.ts) calls into its host. */
@@ -11,7 +10,6 @@ export interface RegistryConfig {
    * the connection store. */
   activeConnectionId?: () => null | string
   onEvent: (event: GatewayEvent) => void
-  bindSocket?: (gateway: HermesGateway) => () => void
   /** Server→client request (clarify, approval, …) from ANY socket the registry owns; the
    *  request's `respond` already routes to the socket it came from. `profile` /
    *  `connectionId` tag the source the same way events are tagged. */

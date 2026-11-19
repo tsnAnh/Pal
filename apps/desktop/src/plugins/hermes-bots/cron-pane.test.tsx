@@ -46,7 +46,6 @@ vi.mock('@hermes/plugin-sdk', async importOriginal => {
       // `$focusedBotOwner` is resolved once at bot-state module load.
       state: { ...sdk.host.state, focusedSessionOwner: nanoAtom(null) }
     },
-    useConnectorApps: () => ({ catalog: { curated: [], others: [] }, usedBy: () => [] }),
     // The plugin bundle normally lands via `ctx.i18n.register` at load, so
     // without this every localized label renders empty.
     usePluginI18n: () => translateBots
@@ -98,7 +97,7 @@ describe('the pane follows the roster hydrating after mount', () => {
 
     await waitFor(() => expect(screen.queryByText('This bot has to appear in the roster first.')).toBeNull())
     expect(await screen.findByText('Report')).toBeTruthy()
-    expect(screen.getByText('Routines')).toBeTruthy()
+    expect(screen.getByText('Scheduled jobs')).toBeTruthy()
   })
 
   it('offers a create affordance once the owner resolves', async () => {
@@ -111,9 +110,10 @@ describe('the pane follows the roster hydrating after mount', () => {
     // owner is stuck unresolved the pane never offers any create control.
     expect(await screen.findByText('No scheduled jobs yet')).toBeTruthy()
 
+    // Both doors: the header action and the empty state's own call to action.
     const create = screen.getAllByRole('button', { name: 'New cron' })
 
-    expect(create).toHaveLength(1)
+    expect(create).toHaveLength(2)
 
     act(() => create[0].click())
 

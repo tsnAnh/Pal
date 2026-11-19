@@ -22,7 +22,6 @@ import {
 import { defaultRemarkPlugins } from 'streamdown'
 
 import { useSessionView } from '@/app/chat/session-view'
-import { VoiceMemoPlayer } from '@/components/assistant-ui/voice-memo-player'
 import { ExpandableBlock } from '@/components/chat/expandable-block'
 import { PreviewAttachment } from '@/components/chat/preview-attachment'
 import { chunkByLines, SyntaxHighlighter } from '@/components/chat/shiki-highlighter'
@@ -55,7 +54,6 @@ import { sessionRefFromMarkdownHref } from '@/lib/session-refs'
 import { TOOL_MEDIA_RENDERER_AREA } from '@/lib/tool-media-renderers'
 import { remarkTranscriptDirectives } from '@/lib/transcript-directives'
 import { cn } from '@/lib/utils'
-import { useSurfacePersona } from '@/store/chat-persona'
 import { useForcedTextDirection } from '@/store/text-direction'
 
 import { ArtifactCard } from './artifact-card'
@@ -185,16 +183,6 @@ function MediaPlaybackAttachment({ path }: { path: string }) {
   const { failed, kind, onError, onLoadedMetadata, src } = useMediaPlaybackSrc(path)
   const { open, openFailed } = useOpenMediaFile(path)
   const name = mediaName(path)
-  const memoLabels = useSurfacePersona()?.voice?.()
-
-  if (kind === 'audio' && src && memoLabels) {
-    return (
-      <span className="block">
-        <VoiceMemoPlayer labels={memoLabels} name={name} onError={onError} onLoadedMetadata={onLoadedMetadata} src={src} />
-        {failed && <OpenMediaButton kind="audio" path={path} />}
-      </span>
-    )
-  }
 
   if (kind === 'audio' && src) {
     return (
@@ -485,6 +473,11 @@ function MarkdownImageContent({
   // the w-fit container hugs it so the download button and shadow sit on the
   // image, not on the letterbox. Without a frame (a source that failed last
   // time) it lays out as a plain capped image, like before frames existed.
+  // The click target takes the frame's height so the image's max-h-full has a
+  // definite height to resolve against. Without it a portrait image ignores
+  // the cap and paints over the text below the frame (#154409). A button
+  // centres its content vertically, so it is a top-aligned flex box: a shorter
+  // image stays at the top, under the download button.
   const framed = Boolean(image.frameStyle)
 
   return (
@@ -493,6 +486,7 @@ function MarkdownImageContent({
         <ZoomableImage
           {...props}
           alt={alt}
+          buttonClassName={framed ? 'flex h-full items-start' : undefined}
           className={cn(
             'm-0 block h-auto w-auto max-w-full rounded-lg object-scale-down shadow-[0_0.0625rem_0.125rem_color-mix(in_srgb,#000_4%,transparent),0_0.625rem_1.5rem_color-mix(in_srgb,#000_5%,transparent)]',
             framed ? 'max-h-full' : 'max-h-(--image-preview-height)',

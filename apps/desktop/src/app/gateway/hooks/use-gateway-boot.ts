@@ -70,7 +70,6 @@ import {
 } from '@/store/gateway-switch'
 import { watchLocalRuntimeJobs } from '@/store/local-runtime-jobs'
 import { notify, notifyError, RECOVERY_ACTIONS } from '@/store/notifications'
-import { bindGatewayPresence } from '@/store/presence'
 import {
   $activeGatewayProfile,
   currentProfileSelectionRevision,
@@ -1098,14 +1097,12 @@ export function useGatewayBoot({
     }
 
     callbacksRef.current.onGatewayReady(gateway)
-    const offPresence = bindGatewayPresence(gateway)
     setPrimaryGateway(gateway, survivor?.profile ?? normalizeProfileKey($activeGatewayProfile.get()))
     // Secondary (background-profile) sockets funnel into the same handler.
     // Record each event's source scope first: registry-tagged events feed the
     // (connectionId, profile) keep-set so two sources exposing the same
     // profile name (every source has a 'default') can't collide.
     configureGatewayRegistry({
-      bindSocket: bindGatewayPresence,
       onServerRequest: request => {
         if (!callbacksRef.current.handleServerRequest(request)) {
           request.fail(JSON_RPC_METHOD_NOT_FOUND, `Hermes Desktop cannot answer ${request.method}`)
@@ -1801,7 +1798,6 @@ export function useGatewayBoot({
       offExit()
       offWindowState?.()
       offBootProgress()
-      offPresence()
 
       // HMR teardown vs. real unmount. On a hot update we must NOT close the
       // socket — that's the whole bug. Detach this instance's listeners (their

@@ -507,8 +507,7 @@ export const deOverrides = {
       turnErrorTitle: 'Turn fehlgeschlagen',
       backgroundDoneTitle: 'Hintergrundaufgabe abgeschlossen',
       backgroundFailedTitle: 'Hintergrundaufgabe fehlgeschlagen',
-      creditsTitle: 'Credits',
-      proactiveOpen: 'Öffnen'
+      creditsTitle: 'Credits'
     }
   },
   ...deNotices,
@@ -774,6 +773,8 @@ export const deOverrides = {
       mcp: 'MCP',
       archivedChats: 'Archivierte Chats',
       sessions: 'Sessions',
+      backup: 'Sicherung & Übertragung',
+      backupOnly: 'Sicherung',
       about: 'Über',
       billing: 'Abrechnung',
       notifications: 'Benachrichtigungen',
@@ -1547,6 +1548,9 @@ export const deOverrides = {
         'Wie groß eine lokale Datei sein darf, die Desktop für Vorschauen und Bildanhänge lädt, in MB. Standard ist 16. Remote-Anhänge ohne Bild verwenden ein eigenes Limit von 256 MB. Ein sehr hoher Wert lädt die gesamte Datei in den Speicher, was die App einfrieren oder abstürzen lassen kann.',
       attachmentSizeUnit: 'MB',
       attachmentSizeLabel: 'Maximale Vorschau-/Bildladegröße in Megabyte',
+      desktopReadAloudTitle: 'Antworten in dieser App vorlesen',
+      desktopReadAloudDesc:
+        'Liest jede fertige Antwort in Desktop vor. Derselbe Schalter wie im Eingabefeld; er gilt für alle offenen Fenster, und Ausschalten stoppt eine Antwort mitten im Satz. „Antworten vorlesen“ unten gilt für Messaging und die CLI.',
       showOptions: 'Optionen anzeigen'
     },
     hudModifier: {
@@ -2612,11 +2616,6 @@ export const deOverrides = {
       openLog: 'Log öffnen',
       actionLog: 'Aktionsprotokoll',
       alreadyInstalled: (name: string) => `"${name}" ist bereits installiert`,
-      pickerTitle: 'Skills Hub',
-      pickerBrowse: 'Den ganzen Hub durchstöbern',
-      pickerHide: 'Hub-Durchsucher ausblenden',
-      pickerHint:
-        'Klicken Sie bei einem beliebigen Skill auf „+ Zu diesem Agenten hinzufügen“ – er wird installiert und erscheint in der Liste oben.',
       loadFailed: 'Skill-Hub konnte nicht geladen werden',
       previewFailed: 'Skill-Vorschau fehlgeschlagen',
       scanFailed: 'Sicherheitsscan fehlgeschlagen',
@@ -2874,7 +2873,10 @@ export const deOverrides = {
       backupDesc: 'Konfiguration, Memories, Skills und Sessions als ZIP packen',
       debugShare: 'Debug-Freigabe',
       debugShareDesc:
-        'Einen geschwärzten Bericht + Logs hochladen, teilbare Links erhalten (wird nach 6h automatisch gelöscht)',
+        'Eine Zusammenfassung hochladen (Versionen, Konfigurationsschlüssel, Fehlerzähler; kein Logtext), teilbaren Link erhalten (wird nach 6h automatisch gelöscht)',
+      debugShareConfirm: 'Debug-Bericht in ein öffentliches Paste hochladen?',
+      debugShareConfirmDesc:
+        'Lädt eine Zusammenfassung zu einem öffentlichen Paste-Dienst hoch: Hermes-, Python- und OS-Versionen, Namen verbundener Plattformen und Toolsets, Konfigurationsschlüssel (ohne Werte) und Warnungs-/Fehlerzähler. Sie enthält keine Logzeilen und keinen Nachrichtentext. Pastes werden nach 6 Stunden automatisch gelöscht; ist paste.rs nicht erreichbar, bleiben sie beim Ausweichdienst dpaste.com 1 Tag öffentlich und lassen sich nicht vorzeitig löschen.',
       debugShareRunning: 'Debug-Bericht wird hochgeladen...',
       debugShareLinks: 'Freigabelinks',
       debugShareFailed: 'Debug-Freigabe fehlgeschlagen',
@@ -3229,6 +3231,14 @@ export const deOverrides = {
     fieldSkillsPlaceholder: 'durch Kommas getrennte Skill-Namen (optional)',
     fieldDeliver: 'Zustellen an',
     fieldDeliverOnly: 'Nur die Payload zustellen',
+    fieldSignature: 'Signatur',
+    fieldSignatureHint: 'Das einzige Signaturschema, das diese Route akzeptiert. GitHub-, GitLab- und Linear-Zustellungen brauchen ihre eigene Festlegung.',
+    signatureOptions: {
+      generic: 'Generisch (mit Zeitstempel)',
+      github: 'GitHub',
+      gitlab: 'GitLab',
+      linear: 'Linear'
+    },
     fieldPrompt: 'Prompt',
     fieldPromptPlaceholder: 'Anweisungen für den Agenten, wenn dieser Webhook ausgelöst wird (optional)',
     nameRequired: 'Name erforderlich',
@@ -3661,7 +3671,6 @@ export const deOverrides = {
       cron: 'Geplante Jobs'
     },
     searchAria: 'Sessions durchsuchen',
-    paneSwitcherAria: 'Sidebar-Bereiche',
     searchPlaceholder: 'Sessions durchsuchen…',
     clearSearch: 'Suche löschen',
     noMatch: query => `Keine Sessions passen zu “${query}”.`,
@@ -3763,7 +3772,6 @@ export const deOverrides = {
     message: 'Nachricht',
     wakingProfile: profile => `Wecke ${profile}…`,
     placeholderStarting: 'Hermes wird gestartet…',
-    placeholderBot: name => `Nachricht an ${name}`,
     placeholderReconnecting: 'Verbindung zu Hermes wird wiederhergestellt…',
     placeholderFollowUp: 'Folge senden',
     newSessionPlaceholders: [
@@ -3900,7 +3908,7 @@ export const deOverrides = {
       '/topup': 'Ihr Nous-Guthaben anzeigen und die Abrechnung im Portal verwalten',
       '/platform': 'Eine fehlerhafte Gateway-Plattform pausieren, fortsetzen oder auflisten',
       '/version': 'Hermes-Agent-Version anzeigen',
-      '/debug': 'Debug-Bericht (Systeminfos + Logs) hochladen und teilbare Links erhalten',
+      '/debug': 'Debug-Bericht (Versionen, Konfigurationsschlüssel, Fehlerzähler; kein Logtext): zeigt zuerst den Datenschutzhinweis; /debug upload teilt Links',
       '/model': 'Modell für diese Session wechseln'
     },
     hotkeyDescs: {
@@ -4894,7 +4902,6 @@ export const deOverrides = {
       loadingResponse: 'Hermes lädt eine Antwort',
       loadingLocalModel: model => `${model} wird in den Speicher geladen`,
       processingPrompt: 'Verarbeite Prompt',
-      peerRun: (count, peer) => (count === 1 ? `1 Nachricht mit ${peer}` : `${count} Nachrichten mit ${peer}`),
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'Wird fortgesetzt, wenn die Hintergrundaufgabe endet'
@@ -5154,11 +5161,6 @@ export const deOverrides = {
       allowSession: 'Diese Session erlauben',
       alwaysAllowMenu: 'Immer erlauben…',
       jumpToApproval: 'Genehmigung erforderlich',
-      botTitle: 'Braucht Ihre Zustimmung',
-      botBody: 'Das könnte etwas ändern oder löschen. Erlauben?',
-      showDetails: 'Details anzeigen',
-      hideDetails: 'Details ausblenden',
-      botAlwaysDescription: 'Dieser Bot fragt vor solchen Aktionen nicht mehr nach, in keinem Chat.',
       reject: 'Ablehnen',
       alwaysTitle: 'Diesen Befehl immer erlauben?',
       alwaysDescription: pattern =>

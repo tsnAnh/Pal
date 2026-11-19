@@ -159,6 +159,7 @@ describe('ClarifyTool live card stays mounted across settle', () => {
     const { request, rerender } = renderLiveClarify()
 
     fireEvent.click(screen.getByRole('button', { name: /staging/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and continue/ }))
 
     await waitFor(() => {
       expect(request).toHaveBeenCalled()
@@ -191,7 +192,7 @@ describe('ClarifyTool live card stays mounted across settle', () => {
 
     expect(screen.getByText('Which deployment target?')).toBeTruthy()
     expect(screen.queryByRole('status', { name: /loading question/i })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true)
+    expect(screen.getByRole('button', { name: /Confirm and continue/ }).hasAttribute('disabled')).toBe(true)
   })
 
   it('a batch tool call answered one card at a time by the shared gateway gets a live single card', () => {
@@ -241,6 +242,7 @@ describe('ClarifyTool live card stays mounted across settle', () => {
     renderClarify(<ClarifyTool {...props} />)
 
     fireEvent.click(screen.getByRole('button', { name: /staging/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and continue/ }))
     await waitFor(() => expect(gatewayMocks.requestGatewayForAgent.mock.calls.length + 0).toBeGreaterThanOrEqual(0))
     await act(async () => {
       setClarifyRequest({
@@ -264,14 +266,12 @@ describe('ClarifyTool live card stays mounted across settle', () => {
       requestId: 'request-1',
       sessionId: 'session-1'
     })
-
     const args = {
       questions: [
         { question: 'Which deployment target?', choices: ['staging', 'production'] },
         { question: 'Which region?', choices: ['us', 'eu'] }
       ]
     }
-
     const props = { ...liveClarifyProps(), args, argsText: JSON.stringify(args) }
 
     renderClarify(<ClarifyTool {...props} />)
@@ -381,7 +381,7 @@ describe('ClarifyTool choice selection', () => {
   it('labels single-select vs multi-select before the user clicks', () => {
     const { rerender } = renderLiveClarify()
 
-    expect(document.querySelector('[data-clarify-select-mode="single"]')).toBeNull()
+    expect(document.querySelector('[data-clarify-select-mode="single"]')?.textContent).toMatch(/pick one/i)
     expect(document.querySelector('[data-clarify-select-mode="multi"]')).toBeNull()
 
     $activeSessionId.set('session-1')
@@ -432,7 +432,7 @@ describe('ClarifyTool keyboard navigation', () => {
 
     const staging = screen.getByRole('button', { name: /staging/ })
     const production = screen.getByRole('button', { name: /production/ })
-    const other = screen.getByPlaceholderText('Type your own answer')
+    const other = screen.getByPlaceholderText(/Other/)
 
     expect(staging.getAttribute('data-highlighted')).toBe('true')
     expect(staging.getAttribute('aria-current')).toBe('true')
@@ -442,7 +442,7 @@ describe('ClarifyTool keyboard navigation', () => {
     expect(production.getAttribute('data-highlighted')).toBe('true')
 
     fireEvent.keyDown(window, { key: 'ArrowDown' })
-    expect(other.getAttribute('data-highlighted')).toBe('true')
+    expect(other.closest('label')?.getAttribute('data-highlighted')).toBe('true')
     expect(other.getAttribute('aria-current')).toBe('true')
     expect(other.getAttribute('aria-keyshortcuts')).toBe('C 3')
 
@@ -450,7 +450,7 @@ describe('ClarifyTool keyboard navigation', () => {
     expect(staging.getAttribute('data-highlighted')).toBe('true')
 
     fireEvent.keyDown(window, { key: 'ArrowUp' })
-    expect(other.getAttribute('data-highlighted')).toBe('true')
+    expect(other.closest('label')?.getAttribute('data-highlighted')).toBe('true')
   })
 
   it('selects by number and confirms the answer with Enter', async () => {
@@ -484,7 +484,7 @@ describe('ClarifyTool keyboard navigation', () => {
   it('focuses Other when its number is pressed and leaves typing keys alone', () => {
     renderLiveClarify()
 
-    const other = screen.getByPlaceholderText('Type your own answer')
+    const other = screen.getByPlaceholderText(/Other/)
 
     fireEvent.keyDown(window, { key: '3' })
     expect(document.activeElement).toBe(other)
@@ -492,12 +492,12 @@ describe('ClarifyTool keyboard navigation', () => {
     fireEvent.change(other, { target: { value: 'canary' } })
     fireEvent.keyDown(window, { key: 'ArrowUp' })
     expect(document.activeElement).toBe(other)
-    expect((other as HTMLInputElement).value).toBe('canary')
+    expect((other as HTMLTextAreaElement).value).toBe('canary')
   })
 
   it('does not intercept keyboard events while an action button has focus', () => {
     const { request, respond } = renderLiveClarify()
-    const skip = screen.getByRole('button', { name: 'Dismiss question' })
+    const skip = screen.getByRole('button', { name: 'Skip' })
 
     skip.focus()
 
@@ -507,35 +507,23 @@ describe('ClarifyTool keyboard navigation', () => {
     expect(request).not.toHaveBeenCalled()
   })
 
-  it('submits a clicked choice immediately', async () => {
+  it('confirms a clicked choice with Enter while the choice button keeps focus', async () => {
     const { request } = renderLiveClarify()
+    const production = screen.getByRole('button', { name: /production/ })
 
-    fireEvent.click(screen.getByRole('button', { name: /production/ }))
+    // Click selects the choice; in a real browser the option button keeps
+    // focus afterwards. jsdom's fireEvent.click does not move focus, so
+    // focus it explicitly to reproduce the reported bug.
+    fireEvent.click(production)
+    production.focus()
+    expect(production.getAttribute('aria-pressed')).toBe('true')
+    expect(document.activeElement).toBe(production)
+
+    fireEvent.keyDown(window, { key: 'Enter' })
 
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith(...lock('production'))
     })
-  })
-
-  it('submits a double-clicked choice once and raises no send-failed notice', async () => {
-    const { request } = renderLiveClarify()
-    let release: (value: unknown) => void = () => {}
-
-    request.mockImplementation(() => new Promise(resolve => (release = resolve)))
-
-    const production = screen.getByRole('button', { name: /production/ })
-
-    act(() => {
-      fireEvent.click(production)
-      fireEvent.click(production)
-      fireEvent.keyDown(window, { key: '2' })
-    })
-    release({ ok: true, remaining: [] })
-
-    await waitFor(() => expect(hasOpenServerRequest('request-1')).toBe(false))
-    expect(request).toHaveBeenCalledTimes(1)
-    expect(request).toHaveBeenCalledWith(...lock('production'))
-    expect(screen.queryByText(/couldn.t send/i)).toBeNull()
   })
 
   it('picks the highlighted choice with Enter when a choice button is focused but not clicked, then confirms', async () => {
@@ -932,7 +920,7 @@ describe('ClarifyTool batch card', () => {
     const { request } = renderLiveBatch(undefined, true)
 
     fireEvent.click(screen.getByRole('button', { name: /red/ }))
-    fireEvent.change(screen.getByPlaceholderText('Type your own answer'), { target: { value: 'green' } })
+    fireEvent.change(screen.getByPlaceholderText(/Other/), { target: { value: 'green' } })
 
     // Typing in "Other" must not silently drop the pick already made.
     expect(screen.getByRole('button', { name: /red/ }).getAttribute('aria-pressed')).toBe('true')
@@ -952,7 +940,7 @@ describe('ClarifyTool batch card', () => {
 
   it('keeps a typed multi-select batch custom answer when picking a choice after typing it', async () => {
     const { request } = renderLiveBatch(undefined, true)
-    const other = screen.getByPlaceholderText('Type your own answer')
+    const other = screen.getByPlaceholderText(/Other/)
 
     fireEvent.change(other, { target: { value: 'green' } })
     fireEvent.click(screen.getByRole('button', { name: /red/ }))
@@ -1107,6 +1095,7 @@ describe('ClarifyTool batch card', () => {
 
     // And the single pick answers with the qid-keyed lock.
     fireEvent.click(screen.getByRole('button', { name: /GitHub Issues/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and continue/ }))
 
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith('clarify.lock', {
@@ -1464,6 +1453,7 @@ describe('ClarifyTool one-entry batch hydration', () => {
     expect((staging as HTMLButtonElement).disabled).toBe(false)
 
     fireEvent.click(staging)
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and continue/ }))
 
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith('clarify.lock', {
@@ -1487,6 +1477,7 @@ describe('ClarifyTool one-entry batch hydration', () => {
     expect((staging as HTMLButtonElement).disabled).toBe(false)
 
     fireEvent.click(staging)
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and continue/ }))
 
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith('clarify.lock', {
@@ -1504,10 +1495,10 @@ describe('ClarifyTool one-entry batch hydration', () => {
 
     expect(document.querySelector('[data-clarify-batch-preview]')).toBeNull()
     const field = screen.getByPlaceholderText(/Type your answer/)
-    expect((field as HTMLInputElement).disabled).toBe(false)
+    expect((field as HTMLTextAreaElement).disabled).toBe(false)
 
     fireEvent.change(field, { target: { value: 'my answer' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }))
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and continue/ }))
 
     await waitFor(() => {
       expect(request).toHaveBeenCalledWith('clarify.lock', {

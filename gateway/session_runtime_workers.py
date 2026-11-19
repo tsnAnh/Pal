@@ -53,25 +53,45 @@ def managed_worker_units(authority):
             for sid, worker in list(getattr(authority, '_managed_workers', {}).items()) if not worker.closed.is_set()]
 
 
-def executing_session_units(runner, authority, pid):
-    """One entry per unmapped executing session, naming it and, for a cron fire, its job."""
-    from gateway.session_cron import cron_session_job_id
+def wedged_managed_turn_count(runner, timeout):
+    """Live managed workers that sent no frame for ``timeout`` seconds and hold no open approval or
+    clarify prompt (a human may answer it any time): the restart wait must not hold for them."""
+    import time
+    now = time.monotonic()
+    return sum(1 for authority in all_authorities(runner)
+               for sid, worker in list(getattr(authority, '_managed_workers', {}).items())
+               if not worker.closed.is_set() and now - getattr(worker, 'last_frame_at', now) >= timeout
+               and not _open_prompts(authority, sid))
+
+
+def _open_prompts(authority, sid):
+    live = getattr(authority, 'sessions', {}).get(sid)
+    return bool(getattr(getattr(live, 'controls', None), 'remote_responders', None))
+
+
+def uncounted_runtime_work_units(runner):
+    """One ``active_work`` entry per unit ``uncounted_runtime_work`` counts, each naming the real
+    unit: a managed worker's session and process, an executing session's id and route, a tracked
+    mutation task, a side agent (/bg, /btw) thread."""
+    import os
+    running = getattr(runner, '_running_agents', {})
     units = []
-    for sid, _ in unmapped_executing_sessions(runner, authority):
-        unit = {'kind': 'managed', 'session': sid, 'pid': pid}
-        if (job_id := cron_session_job_id(authority, sid)) is not None:
-            unit['cron_job_id'] = job_id
-        units.append(unit)
+    for authority in all_authorities(runner):
+        units.extend(managed_worker_units(authority))
+        workers = getattr(authority, '_managed_workers', {})
+        from gateway.session_cron import cron_session_job_id
+        for sid, live, _ in executing_sessions(authority):
+            if live.route in running or sid in workers:
+                continue
+            unit = {'kind': 'session', 'session': sid, 'route': live.route, 'pid': os.getpid()}
+            if (job_id := cron_session_job_id(authority, sid)) is not None:
+                unit['cron_job_id'] = job_id  # a cron fire names the job it runs
+            units.append(unit)
+        units.extend({'kind': 'mutation', 'task': task.get_name(), 'pid': os.getpid()}
+                     for task in mutation_tasks(authority))
+        units.extend({'kind': 'side_agent', 'thread': thread.name, 'pid': os.getpid()}
+                     for thread, _ in side_agents(authority))
     return units
-
-
-def uncounted_runtime_work_units(runner, pid):
-    """One ``active_work`` entry per unit ``uncounted_runtime_work`` counts. Managed workers and executing
-    sessions are named; mutations and side agents carry only the gateway's *pid*."""
-    authorities = all_authorities(runner)
-    units = [unit for authority in authorities for unit in managed_worker_units(authority)]
-    units += [unit for authority in authorities for unit in executing_session_units(runner, authority, pid)]
-    return units + [{'kind': 'managed', 'pid': pid}] * max(0, uncounted_runtime_work(runner) - len(units))
 
 
 def side_agents(authority):

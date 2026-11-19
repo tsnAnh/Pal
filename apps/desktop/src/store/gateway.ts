@@ -959,7 +959,6 @@ function createSecondary(profile: string, connectionId: null | string = null): S
     offEvent: () => {},
     offRequest: () => {},
     offState: () => {},
-    offBound: g.config?.bindSocket?.(gateway) ?? (() => {}),
     reconnectTimer: null,
     reconnectAttempt: 0,
     livenessProbeFailures: 0,
@@ -2067,8 +2066,6 @@ export function openSecondaryCount(): number {
 // Tear a secondary down: stop its reconnect loop, detach listeners, close the
 // socket. Caller handles removal from the map.
 function disposeSecondary(entry: Secondary): void {
-  entry.offBound()
-
   if (!entry.wantOpen) {
     return
   }

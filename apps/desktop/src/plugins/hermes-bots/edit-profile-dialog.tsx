@@ -23,8 +23,6 @@ import { useState } from 'react'
 
 import { avatarColor, botAppearance, BotFace } from './avatar'
 import { AvatarPicker } from './avatar-picker'
-import { applySendPolicy, emptySendPolicy, SendPolicyField, type SendPolicyState } from './bot-send-policy'
-import { applyVoiceDraft, type VoiceDraft } from './bot-voice-section'
 import { $botMeta, botSelectionKey, ROSTER_KEY, saveBotMeta } from './data'
 import { labeled } from './dialog-parts'
 import { editedLook, type EditProfileLook } from './edit-profile-look'
@@ -45,13 +43,6 @@ interface EditProfileDialogProps {
   bot: null | RosterRow
   onClose: () => void
   open: boolean
-}
-
-async function applyStagedSettings(bot: RosterRow, voice: VoiceDraft, sendPolicy: SendPolicyState): Promise<boolean> {
-  const voiceSaved = await applyVoiceDraft(bot, voice)
-  const sendPolicySaved = await applySendPolicy(bot, sendPolicy)
-
-  return voiceSaved && sendPolicySaved
 }
 
 export function EditProfileDialog({ bot, open, onClose }: EditProfileDialogProps) {
@@ -92,7 +83,6 @@ export function EditProfileDialog({ bot, open, onClose }: EditProfileDialogProps
   const [busy, setBusy] = useState(false)
   const [advanced, setAdvanced] = useState(false)
   const [adv, setAdv] = useState(emptyAdvancedState())
-  const [sendPolicy, setSendPolicy] = useState(emptySendPolicy())
 
   // Re-seed local state each time a different bot opens the dialog.
   const [seedKey, setSeedKey] = useState<null | string>(null)
@@ -111,7 +101,6 @@ export function EditProfileDialog({ bot, open, onClose }: EditProfileDialogProps
       setBusy(false)
       setAdvanced(false)
       setAdv(emptyAdvancedState())
-      setSendPolicy(emptySendPolicy())
     }
   }
 
@@ -163,7 +152,7 @@ export function EditProfileDialog({ bot, open, onClose }: EditProfileDialogProps
       }
     }
 
-    if (adv.loaded && (adv.dirtyModel || adv.dirtySoul || adv.dirtySkills || adv.dirtyMcp)) {
+    if (adv.loaded && (adv.dirtyModel || adv.dirtySoul || adv.dirtySkills || adv.dirtyToolsets || adv.dirtyMcp)) {
       try {
         const res = await applyAdvancedConfig(bot, adv)
         const failed = Object.entries(res?.applied || {}).filter(([, ok]) => !ok)
@@ -179,10 +168,6 @@ export function EditProfileDialog({ bot, open, onClose }: EditProfileDialogProps
         advancedFailed = true
         host.notifyError(err, b.bot.advancedFailed)
       }
-    }
-
-    if (!(await applyStagedSettings(bot, adv.voice, sendPolicy))) {
-      advancedFailed = true
     }
 
     if (!advancedFailed && !lookFailed) {
@@ -251,7 +236,6 @@ export function EditProfileDialog({ bot, open, onClose }: EditProfileDialogProps
               value={description}
             />
           )}
-          <SendPolicyField bot={bot} setState={setSendPolicy} state={sendPolicy} />
           <Button
             className="flex items-center gap-1 text-xs font-medium text-(--ui-text-tertiary) hover:text-(--ui-text-secondary)"
             onClick={() => setAdvanced(v => !v)}

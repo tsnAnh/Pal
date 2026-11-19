@@ -1,6 +1,4 @@
 import {
-  $botChromeless,
-  $hiddenStripTabs,
   Button,
   cn,
   Codicon,
@@ -9,125 +7,17 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  GlyphSpinner,
   SearchField,
-  setStripTabHidden,
-  Tip,
-  useValue
+  Tip
 } from '@hermes/plugin-sdk'
-import { type ReactNode, type RefObject, useLayoutEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 
-import { AboutYouMenuItem } from './about-you-dialog'
-import { openBotSearch } from './bot-search-state'
-import { BotTemplateImportMenuItem } from './bot-template-dialog'
 import { connectionName, groupSelectionElsewhere, seatableGroupBots, useGroupCapability } from './canonical-group-capabilities'
-import { $canonicalGroupLink, retryCanonicalGroups } from './canonical-group-registry'
-import { ConnectAppsMenuItem } from './connect-apps-dialog'
 import { botSourceStatus } from './data'
 import type { useBots } from './i18n'
 import { setActivityToasts } from './roster-actions'
 import { GatewayKindGlyph } from './roster-sections'
 import type { rosterGatewayOptions } from './roster-sections'
 import type { RosterActivityFilter, RosterKindFilter, RosterRow } from './types'
-
-export const SESSIONS_PANE = 'sessions'
-
-function TitlebarLift({ children, lifted }: { children: ReactNode; lifted: boolean }) {
-  const anchorRef = useRef<HTMLDivElement>(null)
-  const chromeless = useValue($botChromeless)
-  const [header, setHeader] = useState<HTMLElement | null>(null)
-
-  useLayoutEffect(() => {
-    const zone = lifted && !chromeless ? anchorRef.current?.closest('[data-tree-group]') : null
-
-    setHeader(zone?.querySelector<HTMLElement>(':scope > [data-panel-header]') ?? null)
-  }, [lifted, chromeless])
-
-  if (lifted && header) {
-    return createPortal(
-      <div className="absolute top-px right-[19px] z-10 flex items-center [-webkit-app-region:no-drag]">
-        {children}
-      </div>,
-      header
-    )
-  }
-
-  if (chromeless) {
-    return (
-      <div
-        className="flex h-[52px] shrink-0 items-center justify-end px-4 [-webkit-app-region:drag]"
-        data-slot="bots-roster-toolbar"
-        ref={anchorRef}
-      >
-        <div className="[-webkit-app-region:no-drag]">{children}</div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex items-center justify-end px-[19px] pt-[15px] pb-3" ref={anchorRef}>
-      {children}
-    </div>
-  )
-}
-
-export function GatewayRetryButton({ b }: { b: ReturnType<typeof useBots> }) {
-  const link = useValue($canonicalGroupLink)
-
-  if (link === 'ok') {
-    return null
-  }
-
-  return (
-    <Tip label={b.canonical.retry}>
-      <Button
-        aria-label={b.canonical.retry}
-        className="grid size-8 place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
-        disabled={link === 'retrying'}
-        onClick={retryCanonicalGroups}
-        size="icon-xs"
-        variant="ghost"
-      >
-        {link === 'retrying' ? (
-          <GlyphSpinner spinner="breathe" />
-        ) : (
-          <Codicon className="block leading-none" name="refresh" />
-        )}
-      </Button>
-    </Tip>
-  )
-}
-
-export function GatewayUnreachableNotice({ b }: { b: ReturnType<typeof useBots> }) {
-  const link = useValue($canonicalGroupLink)
-
-  if (link === 'ok') {
-    return null
-  }
-
-  return (
-    <div
-      className="flex flex-col items-center gap-1 px-6 pt-8 pb-4 text-center text-(--ui-text-tertiary)"
-      data-slot="bots-gateway-unreachable"
-    >
-      <Codicon name="debug-disconnect" size="1.25rem" />
-      <p className="text-sm font-medium text-(--ui-text-secondary)">{b.canonical.unreachableTitle}</p>
-      <p className="text-xs leading-relaxed">{b.canonical.unreachableDesc}</p>
-    </div>
-  )
-}
-
-function BotsOnlyModeItem({ enterLabel, exitLabel }: { enterLabel: string; exitLabel: string }) {
-  const botsOnly = useValue($hiddenStripTabs).has(SESSIONS_PANE)
-
-  return (
-    <DropdownMenuItem onSelect={() => setStripTabHidden(SESSIONS_PANE, !botsOnly)}>
-      <Codicon className="mr-1.5" name={botsOnly ? 'list-unordered' : 'hubot'} />
-      {botsOnly ? exitLabel : enterLabel}
-    </DropdownMenuItem>
-  )
-}
 
 interface NewGroupChatItemProps {
   label: string
@@ -166,7 +56,6 @@ function NewGroupChatItem({ elsewhereNote, label, onSelect, roster }: NewGroupCh
 
 interface renderRosterToolbarProps {
   b: ReturnType<typeof useBots>
-  botsOnly: boolean
   activityToasts: boolean
   activeSourceRoster: RosterRow[]
   /** Full roster; New Group Chat seats only `seatableGroupBots` of it. */
@@ -177,9 +66,6 @@ interface renderRosterToolbarProps {
     value: null | { bot?: RosterRow; mode: 'create' } | { id: string; mode: 'rename'; name: string }
   ) => void
   showRosterTools: boolean
-  searchInputRef: RefObject<HTMLInputElement | null>
-  searchOpen: boolean
-  setSearchOpen: (value: boolean) => void
   showRosterSearch: boolean
   showRosterFilters: boolean
   query: string
@@ -195,7 +81,6 @@ interface renderRosterToolbarProps {
 }
 
 export function renderRosterToolbar({
-  botsOnly,
   b,
   activityToasts,
   activeSourceRoster,
@@ -204,9 +89,6 @@ export function renderRosterToolbar({
   setGroupCreateOpen,
   setSectionDialog,
   showRosterTools,
-  searchInputRef,
-  searchOpen,
-  setSearchOpen,
   showRosterSearch,
   showRosterFilters,
   query,
@@ -222,32 +104,33 @@ export function renderRosterToolbar({
 }: renderRosterToolbarProps) {
   return (
     <>
-      <TitlebarLift lifted={botsOnly}>
-        <div className="flex items-center gap-2">
-          {showRosterSearch ? null : (
-            <Tip label={b.roster.search}>
-              <Button
-                aria-label={b.roster.search}
-                className="grid size-8 place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
-                onClick={openBotSearch}
-                size="icon-xs"
-                variant="ghost"
-              >
-                <Codicon className="block leading-none" name="search" />
-              </Button>
-            </Tip>
-          )}
-          <GatewayRetryButton b={b} />
+      <div className="flex items-center justify-between gap-2 px-2.5 pt-2.5 pb-1.5">
+        <span className="text-[0.6875rem] font-semibold uppercase tracking-wider text-(--ui-text-quaternary)">
+          {b.roster.title}
+        </span>
+        <div className="flex items-center gap-0.5">
+          <Tip
+            label={activityToasts ? b.roster.toastsOn : b.roster.toastsOff}
+          >
+            <Button
+              className="rounded-md text-(--ui-text-tertiary) hover:text-foreground"
+              onClick={() => setActivityToasts(!activityToasts)}
+              size="icon-xs"
+              variant="ghost"
+            >
+              <Codicon name={activityToasts ? 'bell' : 'bell-slash'} />
+            </Button>
+          </Tip>
           <DropdownMenu>
             <Tip label={b.roster.newMenu}>
               <DropdownMenuTrigger asChild>
                 <Button
                   aria-label={b.roster.newBotOrGroup}
-                  className="grid size-8 place-items-center rounded-full bg-(--bot-control-fill,var(--chrome-action-hover)) p-0 text-(--ui-text-secondary) hover:text-foreground"
+                  className="rounded-md text-(--ui-text-tertiary) hover:text-foreground"
                   size="icon-xs"
                   variant="ghost"
                 >
-                  <Codicon className="block leading-none" name="add" />
+                  <Codicon name="add" />
                 </Button>
               </DropdownMenuTrigger>
             </Tip>
@@ -256,7 +139,6 @@ export function renderRosterToolbar({
                 <Codicon className="mr-1.5" name="hubot" />
                 {b.bot.newTitle}
               </DropdownMenuItem>
-              <BotTemplateImportMenuItem />
               <NewGroupChatItem
                 elsewhereNote={b.crossGateway.selectionElsewhere}
                 label={b.group.newTitle}
@@ -268,27 +150,17 @@ export function renderRosterToolbar({
                 <Codicon className="mr-1.5" name="new-folder" />
                 {b.sections.newSection}
               </DropdownMenuItem>
-              <ConnectAppsMenuItem />
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setActivityToasts(!activityToasts)}>
-                <Codicon className="mr-1.5" name={activityToasts ? 'bell-slash' : 'bell'} />
-                {activityToasts ? b.roster.silenceActivityToasts : b.roster.enableActivityToasts}
-              </DropdownMenuItem>
-              <BotsOnlyModeItem enterLabel={b.roster.botsOnlyMode} exitLabel={b.roster.showSessionsSidebar} />
-              <AboutYouMenuItem />
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </TitlebarLift>
-      <GatewayUnreachableNotice b={b} />
-      {showRosterTools || searchOpen ? (
-        <div className="flex min-w-0 items-center gap-1 px-2.5 pt-1 pb-1.5">
-          {showRosterSearch || searchOpen ? (
+      </div>
+      {showRosterTools ? (
+        <div className="flex min-w-0 items-center gap-1 px-2.5 pb-1.5">
+          {showRosterSearch ? (
             <SearchField
               aria-label={b.roster.search}
               containerClassName={cn('min-w-0 flex-1', query ? 'opacity-100!' : 'opacity-50 focus-within:opacity-100')}
               inputClassName="w-full text-[0.75rem] placeholder:text-(--ui-text-tertiary)"
-              inputRef={searchInputRef}
               key={'roster-search'}
               onChange={setQuery}
               placeholder={b.roster.searchPlaceholder}

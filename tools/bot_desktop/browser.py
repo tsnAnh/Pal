@@ -57,7 +57,7 @@ def executable() -> Optional[str]:
     if explicit and os.access(explicit, os.X_OK) and not _is_headless_shell(explicit):
         return explicit
     finders = [_managed_executable, _system_executable]
-    if not _is_root() and _userns_restricted():
+    if not runtime.is_root() and _userns_restricted():
         finders.reverse()
     return next((exe for find in finders if (exe := find())), None)
 
@@ -137,10 +137,6 @@ def snap_env(env: dict[str, str]) -> dict[str, str]:
 def _is_snap(exe: str) -> bool:
     """A snap-confined browser cannot write hidden directories under HOME (``~/.hermes``), only ``~/snap/<name>/common``."""
     return os.path.dirname(exe) == _SNAP_BIN_DIR or os.path.basename(os.path.realpath(exe)) == "snap"
-
-
-def _is_root() -> bool:
-    return hasattr(os, "geteuid") and os.geteuid() == 0
 
 
 def _userns_restricted() -> bool:

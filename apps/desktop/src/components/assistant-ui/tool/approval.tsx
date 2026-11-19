@@ -24,7 +24,6 @@ import { triggerHaptic } from '@/lib/haptics'
 import { ChevronDown, Loader2 } from '@/lib/icons'
 import { releaseApprovalKey } from '@/lib/keybinds/approval-keys'
 import { cn } from '@/lib/utils'
-import { useSurfacePersona } from '@/store/chat-persona'
 import { $gateway } from '@/store/gateway'
 import { reconnectAction } from '@/store/gateway-reconnect'
 import { notifyError } from '@/store/notifications'
@@ -36,11 +35,10 @@ import {
   sessionApprovalRequests,
   sessionApprovalStackSize
 } from '@/store/prompts'
-import { useShowToolActivity } from '@/store/tool-activity'
+import { $showToolActivity } from '@/store/tool-activity'
 import { setToolDisclosureOpen } from '@/store/tool-view'
 
 import { isApprovalActivity } from './approval-activity'
-import { BotChatApprovalActions, DraftApprovalCard } from './draft-approval'
 import { toolEntryDisclosureId } from './fallback-model/targets'
 import { isToolCallPart, summarizeToolRun } from './run-summary'
 
@@ -81,7 +79,7 @@ export const PendingApprovalStack: FC = () => {
 function ApprovalActivity({ floating, visible }: { floating: boolean; visible: boolean }) {
   const { t } = useI18n()
   const reduced = useReducedMotion()
-  const showToolActivity = useShowToolActivity()
+  const showToolActivity = useStore($showToolActivity)
 
   const summary = useAuiState(state => {
     if (!visible) {
@@ -168,7 +166,7 @@ function ApprovalActivity({ floating, visible }: { floating: boolean; visible: b
   )
 }
 
-async function sendApproval(request: ApprovalRequest, choice: ApprovalChoice, editedText?: string) {
+async function sendApproval(request: ApprovalRequest, choice: ApprovalChoice) {
   const gateway = $gateway.get()
 
   if (!gateway) {
@@ -183,7 +181,7 @@ async function sendApproval(request: ApprovalRequest, choice: ApprovalChoice, ed
     return
   }
 
-  await answerApproval(gateway, request, choice, false, editedText)
+  await answerApproval(gateway, request, choice)
   triggerHaptic(choice === 'deny' ? 'cancel' : 'submit')
   clearApprovalRequest(request.sessionId, request.requestId)
   void replayPendingApproval(gateway, request.sessionId).catch(() => undefined)
@@ -218,24 +216,14 @@ export function ApprovalQueue({
       )}
       swipeDirections={['left']}
     >
-      {(request, action) =>
-        request.draft ? (
-          <DraftApprovalCard
-            position={total - requests.length + requests.indexOf(request) + 1}
-            request={request}
-            send={sendApproval}
-            stack={action}
-            total={total}
-          />
-        ) : (
-          <ApprovalCard
-            position={total - requests.length + requests.indexOf(request) + 1}
-            request={request}
-            stack={action}
-            total={total}
-          />
-        )
-      }
+      {(request, action) => (
+        <ApprovalCard
+          position={total - requests.length + requests.indexOf(request) + 1}
+          request={request}
+          stack={action}
+          total={total}
+        />
+      )}
     </CardStack>
   )
 }
@@ -247,69 +235,8 @@ interface ApprovalCardProps {
   stack: CardStackAction
 }
 
-interface ApprovalMoreOptionsProps {
-  allowAlways: boolean
-  allowSession: boolean
-  busy: boolean
-  onAlways: () => void
-  onDeny: () => void
-  onSession: () => void
-}
-
-const ApprovalMoreOptions: FC<ApprovalMoreOptionsProps> = ({
-  allowAlways,
-  allowSession,
-  busy,
-  onAlways,
-  onDeny,
-  onSession
-}) => {
-  const { t } = useI18n()
-  const copy = t.assistant.approval
-
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button aria-label={copy.moreOptions} disabled={busy} size="sm" variant="secondary">
-          {copy.alwaysAllowMenu}
-          <ChevronDown className="size-3" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-44">
-        {allowSession && <DropdownMenuItem onSelect={onSession}>{copy.allowSession}</DropdownMenuItem>}
-        {allowAlways && <DropdownMenuItem onSelect={onAlways}>{copy.alwaysAllowMenu}</DropdownMenuItem>}
-        <DropdownMenuItem onSelect={onDeny} variant="destructive">
-          {copy.reject}
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-const ApprovalDetails: FC<{ command: string; description: string }> = ({ command, description }) => {
-  const { t } = useI18n()
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="min-w-0" data-slot="tool-approval-details">
-      <Button aria-expanded={open} onClick={() => setOpen(value => !value)} size="inline" variant="text">
-        {open ? t.assistant.approval.hideDetails : t.assistant.approval.showDetails}
-      </Button>
-      {open && description && (
-        <p className="m-0 mt-1.5 break-words text-xs leading-relaxed text-(--ui-text-secondary)">{description}</p>
-      )}
-      {open && command && (
-        <pre className="m-0 mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-(--ui-text-primary)">
-          {command}
-        </pre>
-      )}
-    </div>
-  )
-}
-
 const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }) => {
   const { t } = useI18n()
-  const botChat = useSurfacePersona() !== null
   const copy = t.assistant.approval
   const gateway = useStore($gateway)
   const [submitting, setSubmitting] = useState<ApprovalChoice | null>(null)
@@ -366,8 +293,6 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
   const showsDescription = !hasCommand || SYNTHETIC_COMMAND_RE.test(request.command.trim())
 
   const details = showsDescription ? request.description.trim() : request.command.trim()
-  const botDescription = request.description.trim()
-  const botCommand = showsDescription ? '' : request.command.trim()
 
   const respond = useCallback(
     async (choice: ApprovalChoice) => {
@@ -410,77 +335,67 @@ const ApprovalCard: FC<ApprovalCardProps> = ({ request, total, position, stack }
       ref={cardRef}
     >
       <div className="flex items-center gap-2 px-2.5 pt-2 text-xs text-(--ui-text-secondary)">
-        {!botChat && <Codicon name="terminal" size="0.875rem" />}
-        <span>{botChat ? copy.botTitle : showsDescription ? copy.commandDetails : copy.command}</span>
+        <Codicon name="terminal" size="0.875rem" />
+        <span>{showsDescription ? copy.commandDetails : copy.command}</span>
         {total > 1 && (
           <span className="ml-auto text-[0.6875rem] tabular-nums text-(--ui-text-tertiary)">
             {position} / {total}
           </span>
         )}
       </div>
-      {botChat ? (
-        <div className="flex min-w-0 flex-col gap-1.5 px-2.5 py-2">
-          <p className="m-0 break-words text-sm leading-relaxed text-(--ui-text-primary)">{copy.botBody}</p>
-          {(botDescription || botCommand) && <ApprovalDetails command={botCommand} description={botDescription} />}
-        </div>
-      ) : (
-        details.length > 0 && (
-          <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words px-2.5 py-2 font-mono text-xs leading-relaxed text-(--ui-text-primary)">
-            {details}
-          </pre>
-        )
+      {details.length > 0 && (
+        <pre className="m-0 max-h-40 overflow-auto whitespace-pre-wrap break-words px-2.5 py-2 font-mono text-xs leading-relaxed text-(--ui-text-primary)">
+          {details}
+        </pre>
       )}
       <div className="flex items-center justify-end gap-1.5 px-2 pb-2 pt-1" data-slot="tool-approval-actions">
-        {request.scope === 'bot_chat' ? (
-          <BotChatApprovalActions
-            allowAlways={allowAlways}
-            busy={busy}
-            description={request.description}
-            onAnswer={choice => void respond(choice)}
-            submitting={submitting}
-          />
-        ) : (
-          <>
-            <Button data-approval-deny="" disabled={busy} onClick={() => void respond('deny')} size="sm" variant="text">
-              {submitting === 'deny' ? <Loader2 className="size-3 animate-spin" /> : copy.reject}
-            </Button>
-            {hasMoreOptions && (
-              <ApprovalMoreOptions
-                allowAlways={allowAlways}
-                allowSession={allowSession}
-                busy={busy}
-                onAlways={() => {
-                  // Defer one tick so the menu fully unmounts before the dialog
-                  // mounts — otherwise Radix's focus-return races the dialog and
-                  // dismisses it via onInteractOutside.
-                  setTimeout(() => setConfirmAlways(true), 0)
-                }}
-                onDeny={() => void respond('deny')}
-                onSession={() => void respond('session')}
-              />
-            )}
-            <Button data-approval-run="" disabled={busy} onClick={() => void respond('once')} size="sm">
-              {submitting === 'once' ? <Loader2 className="size-3 animate-spin" /> : copy.run}
-              <span className="opacity-60">↵</span>
-            </Button>
-          </>
+        <Button data-approval-deny="" disabled={busy} onClick={() => void respond('deny')} size="sm" variant="text">
+          {submitting === 'deny' ? <Loader2 className="size-3 animate-spin" /> : copy.reject}
+        </Button>
+        {hasMoreOptions && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button aria-label={copy.moreOptions} disabled={busy} size="sm" variant="secondary">
+                {copy.alwaysAllowMenu}
+                <ChevronDown className="size-3" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-44">
+              {allowSession && (
+                <DropdownMenuItem onSelect={() => void respond('session')}>{copy.allowSession}</DropdownMenuItem>
+              )}
+              {allowAlways && (
+                <DropdownMenuItem
+                  onSelect={() => {
+                    // Defer one tick so the menu fully unmounts before the dialog
+                    // mounts — otherwise Radix's focus-return races the dialog and
+                    // dismisses it via onInteractOutside.
+                    setTimeout(() => setConfirmAlways(true), 0)
+                  }}
+                >
+                  {copy.alwaysAllowMenu}
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => void respond('deny')} variant="destructive">
+                {copy.reject}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
+        <Button data-approval-run="" disabled={busy} onClick={() => void respond('once')} size="sm">
+          {submitting === 'once' ? <Loader2 className="size-3 animate-spin" /> : copy.run}
+          <span className="opacity-60">↵</span>
+        </Button>
       </div>
 
       <Dialog onOpenChange={setConfirmAlways} open={confirmAlways}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{copy.alwaysTitle}</DialogTitle>
-            <DialogDescription>
-              {botChat ? copy.botAlwaysDescription : copy.alwaysDescription(request.description)}
-            </DialogDescription>
+            <DialogDescription>{copy.alwaysDescription(request.description)}</DialogDescription>
           </DialogHeader>
 
-          {botChat && (botDescription || botCommand) && (
-            <ApprovalDetails command={botCommand} description={botDescription} />
-          )}
-
-          {!botChat && request.command.trim() && (
+          {request.command.trim() && (
             <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words rounded-md border border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background) px-2.5 py-1.5 font-mono text-xs leading-snug text-foreground">
               {request.command.trim()}
             </pre>

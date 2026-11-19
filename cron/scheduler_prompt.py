@@ -305,12 +305,18 @@ _CRON_HINT = (
 )
 
 
-def _run_time_line() -> str:
-    """This fire's wall-clock time in the configured zone. The system prompt is date-only (byte-stable
-    for caching), so without it a 07:00 brief can't tell itself from a 19:00 retry. It leads the per-run
-    tail, after the stable scaffold, so consecutive fires share a cached prefix."""
+def _run_time_line(job: Optional[dict] = None) -> str:
+    """This fire's wall-clock time in the job's pinned zone, else the configured one. The system
+    prompt is date-only (byte-stable for caching), so without it a 07:00 brief can't tell itself
+    from a 19:00 retry. It leads the per-run tail, after the stable scaffold, so consecutive fires
+    share a cached prefix. A pinned job reads its schedule in its own zone, so its run time is
+    stated there too (a 09:00 New York job is not told 06:00 from a Los Angeles profile)."""
+    from cron.jobs_time import zone_for_job
     from hermes_time import safe_strftime
     now = _hermes_now()
+    pinned = zone_for_job(job or {})
+    if pinned is not None:
+        now = now.astimezone(pinned)
     offset = now.strftime("%z")
     zone = f" (UTC{offset[:3]}:{offset[3:]})" if offset else ""
     return f"[CURRENT RUN TIME: {safe_strftime(now, '%A, %Y-%m-%d %H:%M %Z').strip()}{zone}]\n\n"
@@ -347,7 +353,7 @@ def _per_run_tail(
     from cron import notepad as cron_notepad
     notepad_section = cron_notepad.render_notepad_section(str(job.get("id") or ""))
     tail = (
-        _run_time_line() + notepad_section + earlier_output + script_block
+        _run_time_line(job) + notepad_section + earlier_output + script_block
         + _run_context_sections(extra_prompt, runtime_data_prompt)
     ).rstrip()
     # Runtime DATA (script stdout, upstream output) legitimately quotes command-shape strings, so it
@@ -418,7 +424,7 @@ def _scan_assembled_cron_prompt(
     payload bypassed every gate. See #3968.
     """
     from tools.cronjob_tools import _scan_cron_prompt
-    from tools.cronjob_prompt_scan import _scan_cron_skill_assembled
+    from cron.prompt_scan import _scan_cron_skill_assembled
     if has_skills or has_injected_data:
         # The cleaned (sanitized) prompt is what actually runs.
         assembled, scan_error = _scan_cron_skill_assembled(assembled)

@@ -33,17 +33,13 @@ import {
 import { ScreenNotInstalled } from './screen-install'
 import {
   $screenState,
-  $takeoverIntents,
   beginScreenStatusRequest,
-  clearScreenTakeover,
-  liveTakeoverIntent,
   screenStateFor,
   setScreenLease,
   setScreenStatus,
   setScreenUnavailable,
   setScreenViewer
 } from './screen-state'
-import { TeachSkillBanner, TeachSkillControls } from './teach-skill-controls'
 import type { RosterRow } from './types'
 
 type RfbLike = {
@@ -388,7 +384,7 @@ export function BotScreenPane({ bot }: { bot: RosterRow }) {
     [bot]
   )
 
-  const takeOver = useCallback(async (reason?: string) => {
+  const takeOver = useCallback(async () => {
     // The button is disabled without a viewer; the guard keeps a keyboard-activated
     // stale closure from sending an empty viewer_id the server rejects.
     if (!viewer) {
@@ -399,7 +395,6 @@ export function BotScreenPane({ bot }: { bot: RosterRow }) {
 
     try {
       const result = await displayRequest<{ lease: DisplayLease }>(bot, 'display.lease.acquire', {
-        ...(reason ? { reason } : {}),
         viewer_id: viewer.id
       })
 
@@ -434,20 +429,6 @@ export function BotScreenPane({ bot }: { bot: RosterRow }) {
     },
     [bot, viewer?.id]
   )
-
-  const intent = liveTakeoverIntent(useValue($takeoverIntents), bot)
-
-  useEffect(() => {
-    if (!intent || !viewer || !lease || busy || conn === 'attaching') {
-      return
-    }
-
-    clearScreenTakeover(bot)
-
-    if (lease.holder === 'agent') {
-      void takeOver(intent.reason)
-    }
-  }, [bot, busy, conn, intent, lease, takeOver, viewer])
 
   if (state?.unavailable) {
     // A managed (Hermes Cloud) backend cannot be self-updated: its release is the platform's
@@ -544,7 +525,6 @@ export function BotScreenPane({ bot }: { bot: RosterRow }) {
         ) : (
           <span className="rounded bg-muted px-2 py-0.5 text-muted-foreground">{t.screen.agentControls}</span>
         )}
-        <TeachSkillControls bot={bot} lease={lease} live={Boolean(status?.running)} viewer={viewer} />
         {iHold ? (
           <Button disabled={busy} onClick={() => void handBack()} size="sm" variant="secondary">
             <Codicon name="debug-continue" /> {t.screen.handBack}
@@ -578,7 +558,6 @@ export function BotScreenPane({ bot }: { bot: RosterRow }) {
           </Button>
         </Tip>
       </div>
-      <TeachSkillBanner bot={bot} live={Boolean(status?.running)} />
       <div
         className={
           iHold ? 'relative min-h-0 grow bg-black ring-2 ring-inset ring-red-500/70' : 'relative min-h-0 grow bg-black'

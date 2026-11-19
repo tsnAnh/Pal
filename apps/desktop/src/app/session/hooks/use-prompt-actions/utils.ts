@@ -306,7 +306,7 @@ export function isCompressionBusyError(error: unknown): boolean {
 }
 
 /** prompt.submit refused because this principal's submission id on this session is ALREADY admitted
- *  with another payload (hermes_state_runtime.ADMITTED_REQUEST_CONFLICT): the send was delivered.
+ *  with another payload (persistence.authority.vocabulary.ADMITTED_REQUEST_CONFLICT): the send was delivered.
  *  Every other `admission_conflict` (route, binding, lineage) names no such field and stays an error. */
 export function isAdmittedSubmissionConflict(error: unknown): boolean {
   const data = error instanceof JsonRpcGatewayError ? (error.data as { field?: unknown; reason?: unknown } | undefined) : null
@@ -831,7 +831,6 @@ export interface SubmitTextOptions {
   /** A spoken turn from the chained voice conversation: the gateway runs it on
    *  `auxiliary.voice_chat` (the session model when that slot is on auto). */
   voiceTurn?: boolean
-  turnContext?: string
   fromQueue?: boolean
   /** Called once with the EXACT session identity the backend accepted the
    *  prompt into — the live runtime id after any stale-runtime recovery, plus

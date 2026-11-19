@@ -8,8 +8,6 @@ export const frClarify: Partial<ClarifyCopy> = {
   other: 'Autre (saisissez votre réponse)',
   placeholder: 'Saisissez votre réponse…',
   skip: 'Passer',
-  send: 'Envoyer',
-  close: 'Ignorer la question',
   skipped: 'Ignoré',
   noAnswer: 'Pas de réponse',
   confirmAndContinueLabel: 'Confirmer et continuer',

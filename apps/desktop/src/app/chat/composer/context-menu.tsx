@@ -60,12 +60,7 @@ export function ContextMenu({
               type="button"
               variant="ghost"
             >
-              <span className="inline-flex [[data-bot-chat]_&]:hidden">
-                <Codicon name="add" size="0.875rem" />
-              </span>
-              <span className="hidden [[data-bot-chat]_&]:inline-flex">
-                <Codicon name="attach" size="0.875rem" />
-              </span>
+              <Codicon name="add" size="0.875rem" />
             </Button>
           </DropdownMenuTrigger>
         </Tip>

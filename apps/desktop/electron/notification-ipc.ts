@@ -125,21 +125,7 @@ export function registerNativeNotifications({
         tag: payload?.tag
       })
     })
-    let expired = false
-
-    notifications.retain(notification, () => {
-      expired = true
-    })
-
-    if (payload?.notifyId && platform !== 'win32') {
-      notification.on('close', () => {
-        if (expired || !sourceWindow || sourceWindow.isDestroyed()) {
-          return
-        }
-
-        sourceWindow.webContents.send('hermes:notification-close', { notifyId: payload.notifyId, tag: payload.tag })
-      })
-    }
+    notifications.retain(notification)
 
     // The toast is transient; flash the taskbar/dock entry until the window is focused.
     requestAttention(targetWindow())

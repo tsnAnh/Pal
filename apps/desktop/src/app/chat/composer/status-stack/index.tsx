@@ -98,7 +98,6 @@ const hasRunningTodo = (group: StatusGroup) =>
   group.type === 'todo' && group.items.some(item => item.todoStatus === 'in_progress' && item.state === 'running')
 
 interface ComposerStatusStackProps {
-  botChat?: boolean
   onSubmit?: (value: string, options?: SubmitTextOptions) => Promise<boolean> | boolean
   /** The queue, built by the composer (it owns the queue's callbacks). */
   queue: ReactNode
@@ -110,7 +109,7 @@ interface ComposerStatusStackProps {
  * every session-scoped status — subagents, background tasks, queue — grouped by
  * type and separated by light dividers. Collapses to nothing when empty.
  */
-export function ComposerStatusStack({ botChat = false, onSubmit, queue, sessionId }: ComposerStatusStackProps) {
+export function ComposerStatusStack({ onSubmit, queue, sessionId }: ComposerStatusStackProps) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const storedSessionId = useStore(useSessionView().$storedId)
@@ -147,9 +146,7 @@ export function ComposerStatusStack({ botChat = false, onSubmit, queue, sessionI
   const freeTierNotice = ownsFreeTierNotice && freeTierStripPending(freeTierStatus, freeTierRoute)
   // Same single owner, one offer at a time: the metrics question waits for the free-tier notice.
   const sharedMetricsConsent = useStore($sharedMetricsConsent)
-
-  const sharedMetricsOffer =
-    !botChat && ownsFreeTierNotice && !freeTierNotice && sharedMetricsOfferPending(sharedMetricsConsent)
+  const sharedMetricsOffer = ownsFreeTierNotice && !freeTierNotice && sharedMetricsOfferPending(sharedMetricsConsent)
 
   const isStructuredSupported = controlEntry?.capability === 'supported'
 
@@ -161,14 +158,8 @@ export function ComposerStatusStack({ botChat = false, onSubmit, queue, sessionI
   const hasRunningBackground = allGroups.some(g => g.type === 'background' && g.items.some(i => i.state === 'running'))
 
   const groups = useMemo(
-    () =>
-      allGroups.filter(
-        group =>
-          shown(GROUP_TIER[group.type]) &&
-          (group.type !== 'goal' || !isStructuredSupported) &&
-          (group.type !== 'todo' || !botChat)
-      ),
-    [allGroups, botChat, isStructuredSupported, shown]
+    () => allGroups.filter(group => shown(GROUP_TIER[group.type]) && (group.type !== 'goal' || !isStructuredSupported)),
+    [allGroups, isStructuredSupported, shown]
   )
 
   // Seed from the registry on session open; event-driven refreshes (terminal /
@@ -319,7 +310,7 @@ export function ComposerStatusStack({ botChat = false, onSubmit, queue, sessionI
 
   // A settled snapshot is reviewable but never re-enters the live progress
   // feed. Only show this disclosure once the live Todo section has retired.
-  if (!botChat && !busy && retainedTodos.length > 0 && !groups.some(group => group.type === 'todo')) {
+  if (!busy && retainedTodos.length > 0 && !groups.some(group => group.type === 'todo')) {
     const done = retainedTodos.filter(todo => todo.status === 'completed').length
     sections.push({
       key: 'retained-todo',

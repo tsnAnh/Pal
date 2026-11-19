@@ -1,7 +1,4 @@
-import { useStore } from '@nanostores/react'
 import { atom } from 'nanostores'
-
-import { useSurfacePersona } from '@/store/chat-persona'
 
 // Mirrors `display.tool_progress`, independent of `display.show_reasoning`:
 // hiding thinking must not hide the work. Answer-only is both keys off.
@@ -20,12 +17,4 @@ export function toolProgressVisible(value: unknown): boolean {
 
 export function setShowToolActivityFromConfig(value: unknown): void {
   $showToolActivity.set(toolProgressVisible(value))
-}
-
-export function useShowToolActivity(): boolean {
-  const configured = useStore($showToolActivity)
-
-  const botChat = useSurfacePersona() !== null
-
-  return configured && !botChat
 }

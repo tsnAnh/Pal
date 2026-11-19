@@ -113,7 +113,7 @@ it('keeps failed, cancelled, deferred and unavailable work visible without print
   const members = [{ member_id: 'helper', profile: 'helper', handle: 'helper', display_name: 'Code Helper' }]
   const { container } = render(<CanonicalGroupHistory binding={binding} events={events} members={members} />)
 
-  for (const label of ['Turn failed', 'Stopped', 'Turn deferred', 'Member unavailable',
+  for (const label of ['Turn failed', 'Turn cancelled', 'Turn deferred', 'Member unavailable',
     'Stop requested', 'Group disbanded', 'Group ownership changed', 'Group work limit reached']) {
     expect(screen.getByText(label)).toBeTruthy()
   }
@@ -140,5 +140,5 @@ it.each(['member turn cancelled', 'Stopped by the operator'])('keeps only useful
     { seq: 1, kind: 'turn.cancelled', payload: { reason } }
   ]} />)
 
-  expect(container.textContent).toBe(reason === 'member turn cancelled' ? 'Stopped' : `Stopped: ${reason}`)
+  expect(container.textContent).toBe(reason === 'member turn cancelled' ? 'Turn cancelled' : `Turn cancelled: ${reason}`)
 })

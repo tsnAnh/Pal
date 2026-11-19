@@ -197,7 +197,7 @@ describe('a clarify asked one card per question', () => {
     chat.park(card('prompt-1', TARGET))
     const view = render(tree(<ClarifyTool {...chat.props('call-1')} />))
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss question' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Skip' }))
     expect(view.container.querySelector('[data-clarify-settled]')).not.toBeNull()
 
     act(() => chat.park(card('prompt-2', REGION)))
@@ -251,6 +251,7 @@ describe('a clarify asked one card per question', () => {
     const view = render(tree(chat.rows()))
 
     fireEvent.click(screen.getByRole('button', { name: /staging/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and continue/ }))
     await waitFor(() => expect(chat.locks()).toHaveLength(1))
 
     chat.add(clarifyCall('call-2', [REGION]))
@@ -296,6 +297,7 @@ describe('a clarify asked one card per question', () => {
     const view = render(tree(chat.rows()))
 
     fireEvent.click(screen.getByRole('button', { name: /staging/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Confirm and continue/ }))
     await waitFor(() => expect(chat.locks()).toHaveLength(1))
 
     act(() => chat.park(card('prompt-2', REGION)))

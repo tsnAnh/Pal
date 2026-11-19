@@ -36,7 +36,6 @@ const CARD_TOOL_NAMES = [
   'image_generate',
   'manage_catalog',
   'manage_connections',
-  'request_handback',
   'set_theme',
   'setup_beat'
 ] as const

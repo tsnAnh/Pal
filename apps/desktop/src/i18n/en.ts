@@ -2,6 +2,7 @@
 import { FIELD_DESCRIPTIONS, FIELD_LABELS } from '@/app/settings/constants'
 
 import { enAppTour } from './en_app_tour'
+import { enBackupTransfer } from './en_backup_transfer'
 import { enBilling } from './en_billing'
 import { enBoot } from './en_boot'
 import { enCatalog } from './en_catalog'
@@ -491,8 +492,7 @@ export const en: Translations = {
       turnErrorTitle: 'Turn failed',
       backgroundDoneTitle: 'Background task finished',
       backgroundFailedTitle: 'Background task failed',
-      creditsTitle: 'Credits',
-      proactiveOpen: 'Open'
+      creditsTitle: 'Credits'
     }
   },
 
@@ -768,6 +768,8 @@ export const en: Translations = {
       mcp: 'MCP',
       archivedChats: 'Archived Chats',
       sessions: 'Sessions',
+      backup: 'Backup & Transfer',
+      backupOnly: 'Backup',
       about: 'About',
       billing: 'Billing',
       notifications: 'Notifications',
@@ -1117,6 +1119,7 @@ export const en: Translations = {
     fieldLabels: FIELD_LABELS,
     fieldDescriptions: FIELD_DESCRIPTIONS,
     uninstallSection: enUninstallSection,
+    backup: enBackupTransfer,
     memoryLayers: enMemoryLayers,
     customEndpoints: {
       active: 'Active',
@@ -1207,6 +1210,9 @@ export const en: Translations = {
       voiceShortcutHintTitle: 'Voice recording shortcut',
       voiceShortcutHintDesc:
         'Set the voice recording shortcut in Settings → Keyboard Shortcuts ("Start / stop voice conversation"). The voice.record_key config value only applies to the CLI and TUI.',
+      desktopReadAloudTitle: 'Read replies aloud in this app',
+      desktopReadAloudDesc:
+        'Speak each finished reply in Desktop. Same switch as the composer button; it applies to every open window, and turning it off stops a reply mid-sentence. "Read Responses Aloud" below is for messaging and the CLI.',
       showOptions: 'Show options'
     },
     hudModifier: {
@@ -2243,10 +2249,6 @@ export const en: Translations = {
       openLog: 'Open log',
       actionLog: 'Action log',
       alreadyInstalled: (name: string) => `"${name}" is already installed`,
-      pickerTitle: 'Skills Hub',
-      pickerBrowse: 'Browse the full hub',
-      pickerHide: 'Hide the hub browser',
-      pickerHint: 'Hit "+ Add to this Agent" on any skill — it installs and appears in the list above.',
       loadFailed: 'Skill hub failed to load',
       previewFailed: 'Skill preview failed',
       scanFailed: 'Security scan failed',
@@ -2478,7 +2480,10 @@ export const en: Translations = {
       backup: 'Create backup',
       backupDesc: 'Zip config, memories, skills, and sessions',
       debugShare: 'Debug share',
-      debugShareDesc: 'Upload a redacted report + logs, get shareable links (auto-deletes in 6h)',
+      debugShareDesc: 'Upload a summary (versions, config keys, error counts; no log text), get a shareable link (auto-deletes in 6h)',
+      debugShareConfirm: 'Upload debug report to a public paste?',
+      debugShareConfirmDesc:
+        'Uploads a summary to a public paste service: Hermes, Python and OS versions, connected platform and toolset names, config key names (no values) and warning/error counts. It contains no log lines or message text. Pastes auto-delete after 6 hours; if paste.rs is unreachable, the dpaste.com fallback keeps them public for 1 day and they cannot be deleted early.',
       debugShareRunning: 'Uploading debug report...',
       debugShareLinks: 'Share links',
       debugShareFailed: 'Debug share failed',
@@ -2786,6 +2791,14 @@ export const en: Translations = {
     fieldSkillsPlaceholder: 'comma-separated skill names (optional)',
     fieldDeliver: 'Deliver to',
     fieldDeliverOnly: 'Deliver payload only',
+    fieldSignature: 'Signature',
+    fieldSignatureHint: 'The only signature scheme this route accepts. GitHub, GitLab and Linear deliveries need their own pin.',
+    signatureOptions: {
+      generic: 'Generic (timestamped)',
+      github: 'GitHub',
+      gitlab: 'GitLab',
+      linear: 'Linear'
+    },
     fieldPrompt: 'Prompt',
     fieldPromptPlaceholder: 'Instructions for the agent when this webhook fires (optional)',
     nameRequired: 'Name required',
@@ -3218,7 +3231,6 @@ export const en: Translations = {
       cron: 'Scheduled jobs'
     },
     searchAria: 'Search sessions',
-    paneSwitcherAria: 'Sidebar panes',
     searchPlaceholder: 'Search sessions…',
     clearSearch: 'Clear search',
     noMatch: query => `No sessions match “${query}”.`,
@@ -3320,7 +3332,6 @@ export const en: Translations = {
     message: 'Message',
     wakingProfile: profile => `Waking up ${profile}…`,
     placeholderStarting: 'Starting Hermes...',
-    placeholderBot: name => `Message ${name}`,
     placeholderReconnecting: 'Reconnecting to Hermes…',
     placeholderFollowUp: 'Send follow-up',
     newSessionPlaceholders: [
@@ -3454,7 +3465,7 @@ export const en: Translations = {
       '/topup': 'Show your Nous balance and manage billing on the portal',
       '/platform': 'Pause, resume, or list a failing gateway platform',
       '/version': 'Show Hermes Agent version',
-      '/debug': 'Upload debug report (system info + logs) and get shareable links',
+      '/debug': 'Debug report (versions, config keys, error counts; no log text): shows the privacy notice; /debug upload shares links',
       '/model': 'Switch the model for this session'
     },
     hotkeyDescs: {
@@ -4468,10 +4479,8 @@ export const en: Translations = {
       loadingSession: 'Loading session',
       showEarlier: 'Show earlier messages',
       loadingResponse: 'Hermes is loading a response',
-      botWorking: 'Reviewing your request',
       loadingLocalModel: model => `Loading ${model} into memory`,
       processingPrompt: 'Processing prompt',
-      peerRun: (count, peer) => (count === 1 ? `1 message with ${peer}` : `${count} messages with ${peer}`),
       resumeWhenBackgroundDone: count =>
         count === 1
           ? 'Will resume when the background task finishes'
@@ -4576,11 +4585,6 @@ export const en: Translations = {
       run: 'Run',
       command: 'Command',
       commandDetails: 'Command details',
-      botTitle: 'Needs your OK',
-      botBody: 'This could change or delete something. Allow it?',
-      botAlwaysDescription: 'This bot won’t ask again before doing this kind of thing, in any chat.',
-      showDetails: 'Show details',
-      hideDetails: 'Hide details',
       moreOptions: 'More approval options',
       allowSession: 'Allow this session',
       alwaysAllowMenu: 'Always allow…',
@@ -4589,24 +4593,7 @@ export const en: Translations = {
       alwaysTitle: 'Always allow this command?',
       alwaysDescription: pattern =>
         `This adds the “${pattern}” pattern to your permanent allowlist (~/.hermes/config.yaml). Hermes won’t ask again for commands like this — in this session or any future one.`,
-      alwaysAllow: 'Always allow',
-      allowOnce: 'Allow once',
-      deny: 'Deny',
-      alwaysDescriptionBot: pattern =>
-        `This bot will stop asking before “${pattern}” — in every chat from now on.`,
-      draftTitle: 'Draft message',
-      draftTo: recipient => `To ${recipient}`,
-      draftVia: channel => `via ${channel}`,
-      draftSubject: subject => `Subject: ${subject}`,
-      draftSend: 'Send',
-      draftSendEdited: 'Send edited',
-      draftDiscard: 'Discard',
-      draftEdit: 'Edit',
-      draftCancelEdit: 'Cancel edit',
-      draftEditLabel: 'Edit message',
-      draftHeld: 'Made while you were away. Nothing has been sent.',
-      draftExpired: 'Expired — this draft can no longer be sent. Discard it to dismiss.',
-      draftUnviewable: 'Part of this message cannot be shown in full, so it can only be discarded.'
+      alwaysAllow: 'Always allow'
     },
     clarify: enClarify,
     themePicker: enThemePicker,

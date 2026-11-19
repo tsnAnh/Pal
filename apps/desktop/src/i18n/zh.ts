@@ -285,8 +285,7 @@ export const zhOverrides = {
       turnErrorTitle: '本轮失败',
       backgroundDoneTitle: '后台任务已完成',
       backgroundFailedTitle: '后台任务失败',
-      creditsTitle: '额度',
-      proactiveOpen: '打开'
+      creditsTitle: '额度'
     }
   },
 
@@ -543,6 +542,8 @@ export const zhOverrides = {
       mcp: 'MCP',
       archivedChats: '已归档对话',
       sessions: '会话',
+      backup: '备份与迁移',
+      backupOnly: '备份',
       about: '关于',
       billing: '账单',
       notifications: '通知',
@@ -1262,6 +1263,9 @@ export const zhOverrides = {
       voiceShortcutHintTitle: '语音录制快捷键',
       voiceShortcutHintDesc:
         '请在“设置 → 键盘快捷键”中设置语音录制快捷键（“开始 / 停止语音对话”）。voice.record_key 配置项仅适用于 CLI 和 TUI。',
+      desktopReadAloudTitle: '在此应用中朗读回复',
+      desktopReadAloudDesc:
+        '在 Desktop 中朗读每条完成的回复。与输入框按钮是同一个开关；对所有打开的窗口生效，关闭后会立即停止正在朗读的回复。下方的“朗读回复”用于消息平台和 CLI。',
       showOptions: '显示选项'
     },
     hudModifier: {
@@ -2175,10 +2179,6 @@ export const zhOverrides = {
       actionFailed: '技能操作失败',
       actionLog: '操作日志',
       alreadyInstalled: name => `“${name}”已安装`,
-      pickerTitle: '技能中心',
-      pickerBrowse: '浏览完整技能中心',
-      pickerHide: '隐藏技能中心浏览器',
-      pickerHint: '点击任意技能上的“+ Add to this Agent”即可安装，安装后会出现在上方列表中。',
       loadFailed: '技能中心加载失败',
       previewFailed: '技能预览失败',
       scanFailed: '安全扫描失败',
@@ -2407,7 +2407,10 @@ export const zhOverrides = {
       backup: '创建备份',
       backupDesc: '打包配置、记忆、技能与会话',
       debugShare: '调试分享',
-      debugShareDesc: '上传脱敏报告与日志，获取可分享链接（6 小时后自动删除）',
+      debugShareDesc: '上传摘要（版本、配置键名、错误计数；不含日志文本），获取可分享链接（6 小时后自动删除）',
+      debugShareConfirm: '将调试报告上传到公开粘贴服务？',
+      debugShareConfirmDesc:
+        '将摘要上传到公开粘贴服务：Hermes、Python 和操作系统版本，已连接平台与工具集名称，配置键名（不含值），以及警告/错误计数。不包含任何日志行或消息文本。粘贴内容 6 小时后自动删除；若 paste.rs 不可用，备用的 dpaste.com 会将其公开保留 1 天，且无法提前删除。',
       debugShareRunning: '正在上传调试报告…',
       debugShareLinks: '分享链接',
       debugShareFailed: '调试分享失败',
@@ -2708,6 +2711,14 @@ export const zhOverrides = {
     fieldSkillsPlaceholder: '以逗号分隔的技能名称（可选）',
     fieldDeliver: '投递到',
     fieldDeliverOnly: '仅投递载荷',
+    fieldSignature: '签名',
+    fieldSignatureHint: '此路由唯一接受的签名方案。GitHub、GitLab 和 Linear 的投递需要固定为各自的方案。',
+    signatureOptions: {
+      generic: '通用（带时间戳）',
+      github: 'GitHub',
+      gitlab: 'GitLab',
+      linear: 'Linear'
+    },
     fieldPrompt: '提示词',
     fieldPromptPlaceholder: '此 Webhook 触发时给智能体的说明（可选）',
     nameRequired: '需要名称',
@@ -3123,7 +3134,6 @@ export const zhOverrides = {
       cron: '定时任务'
     },
     searchAria: '搜索会话',
-    paneSwitcherAria: '侧边栏面板',
     searchPlaceholder: '搜索会话…',
     clearSearch: '清除搜索',
     noMatch: query => `没有会话匹配"${query}"。`,
@@ -3219,7 +3229,6 @@ export const zhOverrides = {
     message: '消息',
     wakingProfile: profile => `正在唤醒 ${profile}…`,
     placeholderStarting: '正在启动 Hermes…',
-    placeholderBot: name => `给 ${name} 发消息`,
     placeholderReconnecting: '正在重新连接 Hermes…',
     placeholderFollowUp: '发送后续消息',
     newSessionPlaceholders: [
@@ -3352,7 +3361,7 @@ export const zhOverrides = {
       '/topup': '显示你的 Nous 余额，并在 Portal 管理账务',
       '/platform': '暂停、恢复或列出故障的网关平台',
       '/version': '显示 Hermes Agent 版本',
-      '/debug': '上传调试报告（系统信息与日志），并获取可分享链接',
+      '/debug': '调试报告（版本、配置键名、错误计数；不含日志文本）：先显示隐私声明；/debug upload 分享链接',
       '/model': '切换此会话的模型'
     },
     hotkeyDescs: {
@@ -4307,10 +4316,8 @@ export const zhOverrides = {
       loadingSession: '正在加载会话',
       showEarlier: '显示更早的消息',
       loadingResponse: 'Hermes 正在加载回复',
-      botWorking: '正在查看你的请求',
       loadingLocalModel: model => `正在将 ${model} 载入内存`,
       processingPrompt: '正在处理提示词',
-      peerRun: (count, peer) => `与 ${peer} 的 ${count} 条消息`,
       resumeWhenBackgroundDone: count =>
         count === 1 ? '后台任务完成后将自动继续' : `${count} 个后台任务完成后将自动继续`,
       thinking: '思考中',
@@ -4453,33 +4460,11 @@ export const zhOverrides = {
       allowSession: '允许本会话',
       alwaysAllowMenu: '始终允许…',
       jumpToApproval: '需要审批',
-      botTitle: '需要你的同意',
-      botBody: '这可能会更改或删除某些内容。要允许吗？',
-      showDetails: '显示详情',
-      hideDetails: '隐藏详情',
-      botAlwaysDescription: '此机器人在任何聊天中执行此类操作前都不会再询问。',
       reject: '拒绝',
       alwaysTitle: '始终允许此命令？',
       alwaysDescription: pattern =>
         `这会将“${pattern}”模式加入永久允许列表 (~/.hermes/config.yaml)。Hermes 对类似命令将不再询问，包括当前会话和未来会话。`,
-      alwaysAllow: '始终允许',
-      allowOnce: '仅允许一次',
-      deny: '拒绝',
-      alwaysDescriptionBot: pattern =>
-        `此后在所有聊天中，该机器人执行“${pattern}”前将不再询问。`,
-      draftTitle: '消息草稿',
-      draftTo: recipient => `发送给 ${recipient}`,
-      draftVia: channel => `通过 ${channel}`,
-      draftSubject: subject => `主题：${subject}`,
-      draftSend: '发送',
-      draftSendEdited: '发送编辑后的内容',
-      draftDiscard: '丢弃',
-      draftEdit: '编辑',
-      draftCancelEdit: '取消编辑',
-      draftEditLabel: '编辑消息',
-      draftHeld: '在你离开期间生成，尚未发送任何内容。',
-      draftExpired: '已过期 — 此草稿无法再发送。丢弃即可关闭。',
-      draftUnviewable: '此消息无法完整显示，因此只能丢弃。'
+      alwaysAllow: '始终允许'
     },
     clarify: zhClarify,
     themePicker: zhThemePicker,

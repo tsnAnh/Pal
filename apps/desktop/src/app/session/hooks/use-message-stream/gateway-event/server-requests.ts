@@ -20,7 +20,6 @@ import { hostHas } from '@/lib/host-capabilities'
 import type { PreviewActAction } from '@/lib/preview-act/act-in-page'
 import type { TourAction, TourStep } from '@/lib/tour'
 import { type AppearanceValues, applyAppearance, THEME_MODES } from '@/store/appearance-apply'
-import { parseApprovalDraft, parseApprovalScope } from '@/store/approval-draft'
 import { type ClarifyRequest, normalizeQuestions, setClarifyRequest } from '@/store/clarify'
 import type { ScopedServerRequest } from '@/store/gateway'
 import { dispatchNativeNotification } from '@/store/native-notifications'
@@ -391,7 +390,6 @@ const approval: Handler = ctx => {
   const p = request.params
   const command = str(p.command)
   const description = str(p.description) || 'dangerous command'
-  const draft = parseApprovalDraft(p.draft, { choices: p.choices, details: p.details })
 
   if (declineIfSessionStopped(ctx)) {
     return
@@ -406,10 +404,8 @@ const approval: Handler = ctx => {
       : undefined,
     command,
     description,
-    draft,
     // The approval queue's own id — `approval.pending` / `approval.received` / `approval.respond` key on it.
     requestId: str(p.request_id) || undefined,
-    scope: parseApprovalScope(p.scope),
     serverRequestId: request.id,
     sessionId: sessionId || null,
     smartDenied: p.smart_denied === true
@@ -418,18 +414,16 @@ const approval: Handler = ctx => {
 
   if (!request.replayed) {
     dispatchNativeNotification({
-      actions: draft
-        ? undefined
-        : [
-            {
-              id: str(p.request_id) ? `approve:${str(p.request_id)}` : 'approve',
-              text: translateNow('notifications.native.approveAction')
-            },
-            {
-              id: str(p.request_id) ? `reject:${str(p.request_id)}` : 'reject',
-              text: translateNow('notifications.native.rejectAction')
-            }
-          ],
+      actions: [
+        {
+          id: str(p.request_id) ? `approve:${str(p.request_id)}` : 'approve',
+          text: translateNow('notifications.native.approveAction')
+        },
+        {
+          id: str(p.request_id) ? `reject:${str(p.request_id)}` : 'reject',
+          text: translateNow('notifications.native.rejectAction')
+        }
+      ],
       body: command || description,
       kind: 'approval',
       sessionId: sessionId || null,

@@ -11,7 +11,6 @@ import { Thread } from '@/components/assistant-ui/thread'
 import { TranscriptWindowProvider } from '@/components/assistant-ui/thread/transcript-window'
 import { Backdrop } from '@/components/Backdrop'
 import { COMPOSER_HEART_CONFIG, HeartField } from '@/components/chat/vibe-hearts'
-import { PersonaVoiceCall } from '@/components/chat/voice-call-controls'
 import { useSetupChatView } from '@/components/onboarding/first-run/assembly'
 import { $introHoldsThread } from '@/components/onboarding/first-run/intro'
 import { IntroCopy } from '@/components/onboarding/first-run/intro-copy'
@@ -26,9 +25,8 @@ import { NEW_SESSION_TITLE, sessionTitle } from '@/lib/chat-runtime'
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
-import { ChatPersonaContext, useChatPersona } from '@/store/chat-persona'
 import { migrateSessionDraft } from '@/store/composer'
-import { migrateQueuedPrompts } from '@/store/composer-queue'
+import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
 import { $introSplash } from '@/store/intro-splash'
 import { $pinnedSessionIds } from '@/store/layout'
 import { $introView } from '@/store/onboarding-intro'
@@ -59,7 +57,6 @@ import { isAuxiliaryWindow, isMainWindow } from '@/store/windows'
 import { primaryRouteSelectedSessionId, routeSessionId } from '../routes'
 import { titlebarHeaderBaseClass, titlebarHeaderShadowClass, titlebarHeaderTitleClass } from '../shell/titlebar'
 
-import { BotStopNow, useChatHalt } from './bot-stop-now'
 import { ChatDropOverlay } from './chat-drop-overlay'
 import { dropOverlayKind, useShowChatBar } from './chat-surface-state'
 import { ChatSwapOverlay, ChatSyncBadge } from './chat-swap-overlay'
@@ -128,54 +125,19 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   onDismissError?: (messageId: string) => void
 }
 
-const botChipClass =
-  'flex h-7 min-w-0 max-w-full items-center gap-2 rounded-full border border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background)/80 px-2.5 text-sm font-medium text-foreground backdrop-blur-md'
-
-function BotTileChip({
-  busy,
-  onStopNow,
-  storedId
-}: {
-  busy: boolean
-  onStopNow: () => void
-  storedId: null | string | undefined
-}) {
-  const persona = useChatPersona(storedId ?? null)
-
-  if (!persona) {
-    return null
-  }
-
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-3 z-3 flex justify-center px-24">
-      <span className={botChipClass} data-slot="bot-title-chip">
-        <span className="grid shrink-0 place-items-center">{persona.avatar(20)}</span>
-        <span className="truncate">{persona.name}</span>
-      </span>
-      {busy && persona.stopNowLabel && <BotStopNow label={persona.stopNowLabel()} onStop={onStopNow} />}
-    </div>
-  )
-}
-
 interface ChatHeaderProps {
   activeSessionId: null | string
-  busy: boolean
   isRoutedSessionView: boolean
-  onStopNow: () => void
   onDeleteSelectedSession: () => void
   onToggleSelectedPin: () => void
-  personaSessionId: null | string | undefined
   selectedSessionId: null | string
 }
 
 function ChatHeader({
   activeSessionId,
-  busy,
   isRoutedSessionView,
-  onStopNow,
   onDeleteSelectedSession,
   onToggleSelectedPin,
-  personaSessionId,
   selectedSessionId
 }: ChatHeaderProps) {
   const sessions = useStore($sessions)
@@ -188,7 +150,6 @@ function ChatHeader({
     null
 
   const title = activeStoredSession ? sessionTitle(activeStoredSession) : NEW_SESSION_TITLE
-  const persona = useChatPersona(personaSessionId ?? null)
 
   // Which agent/persona owns this chat — glanceable in the header once a
   // second profile exists, so the open session's ownership is never ambiguous
@@ -207,51 +168,8 @@ function ChatHeader({
   // Secondary windows (new-session scratch, subagent watch, cmd-click pop-out)
   // are compact side panels — they drop the session-actions header + border
   // entirely. A brand-new draft has nothing to pin/delete/rename either.
-  if (isAuxiliaryWindow() || (!persona && !selectedSessionId && !activeSessionId && !isRoutedSessionView)) {
+  if (isAuxiliaryWindow() || (!selectedSessionId && !activeSessionId && !isRoutedSessionView)) {
     return null
-  }
-
-  const actionsMenu = (children: React.ReactNode) => (
-    <SessionActionsMenu
-      align={persona ? 'center' : 'start'}
-      onDelete={selectedSessionId ? onDeleteSelectedSession : undefined}
-      onPin={selectedSessionId ? onToggleSelectedPin : undefined}
-      pinned={selectedIsPinned}
-      profile={activeStoredSession?.profile}
-      sessionId={selectedSessionId || activeSessionId || ''}
-      sideOffset={8}
-      title={title}
-    >
-      {children}
-    </SessionActionsMenu>
-  )
-
-  const chip = (onClick?: () => void) =>
-    persona && (
-      <button
-        className={cn(
-          botChipClass,
-          'pointer-events-auto hover:bg-(--ui-control-hover-background) data-[state=open]:bg-(--ui-control-active-background) [-webkit-app-region:no-drag]'
-        )}
-        data-slot="bot-title-chip"
-        onClick={onClick}
-        type="button"
-      >
-        <span className="grid shrink-0 place-items-center">{persona.avatar(20)}</span>
-        <span className="truncate">{persona.name}</span>
-      </button>
-    )
-
-  if (persona) {
-    return (
-      <div className="pointer-events-none absolute inset-x-0 top-3 z-3 flex justify-center px-24">
-        <div className="flex min-w-0 max-w-full items-center">
-          {persona.openDetails ? chip(persona.openDetails) : actionsMenu(chip())}
-          {busy && persona.stopNowLabel && <BotStopNow label={persona.stopNowLabel()} onStop={onStopNow} />}
-          <PersonaVoiceCall persona={persona} />
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -264,7 +182,18 @@ function ChatHeader({
         }}
       >
         {showProfileTag && <ProfileTag className="pointer-events-auto mr-1.5" profile={activeStoredSession?.profile} />}
-        {actionsMenu(<TitleMenuTrigger>{title}</TitleMenuTrigger>)}
+        <SessionActionsMenu
+          align="start"
+          onDelete={selectedSessionId ? onDeleteSelectedSession : undefined}
+          onPin={selectedSessionId ? onToggleSelectedPin : undefined}
+          pinned={selectedIsPinned}
+          profile={activeStoredSession?.profile}
+          sessionId={selectedSessionId || activeSessionId || ''}
+          sideOffset={8}
+          title={title}
+        >
+          <TitleMenuTrigger>{title}</TitleMenuTrigger>
+        </SessionActionsMenu>
       </div>
     </header>
   )
@@ -421,8 +350,7 @@ export function ChatRuntimeBoundary({
     runtimeId,
     storedSessionId: storedId
   })
-  const botChat = useChatPersona(storedId) !== null
-  const runtimeMessageRepository = useRuntimeMessageRepository(currentMessages, botChat)
+  const runtimeMessageRepository = useRuntimeMessageRepository(currentMessages)
   // Subscribed (not read imperatively) so the "Show earlier" affordance
   // appears/retires as tail hydrations and backfill pages record their state.
   const transcriptTailStates = useStore($transcriptTailBySessionId)
@@ -453,11 +381,12 @@ export function ChatRuntimeBoundary({
           // checking the live atoms (not captured props) discards a page that
           // resolves after the user moved on — same pattern as isCurrentResume.
           isCurrent: () => view.$storedId.get() === storedId && view.$runtimeId.get() === runtimeId,
+          heldMessages: () => view.$messages.get(),
           applyOlderPage: olderPage => {
             const current = view.$messages.get()
 
             if (mergeOlderTranscriptPage(current, olderPage) === current) {
-              return
+              return false
             }
 
             beforePrepend?.()
@@ -682,8 +611,16 @@ const ChatViewContent = memo(function ChatViewContent({
     migrateQueuedPrompts(selectedSessionId, queueSessionKey)
   }, [queueSessionKey, selectedSessionId, sessions])
 
-  const halt = useChatHalt({ activeSessionId, gateway, onCancel, queueSessionKey, request: requestModelOptionsForOwner })
-  const { haltRun, stopNow } = halt
+  // Transcript-side stops (the streaming message's hover Stop, the runtime's
+  // cancel) are explicit halts, same as the composer's Stop button: park any
+  // queued turns so the interrupt doesn't roll straight into the next one.
+  // ChatBar wraps its own onCancel internally — its send-now-while-busy path
+  // needs the raw interrupt — so it still receives the unwrapped prop.
+  const haltRun = useCallback(() => {
+    parkQueuedPrompts(queueSessionKey || activeSessionId)
+
+    return onCancel()
+  }, [activeSessionId, onCancel, queueSessionKey])
 
   // A tile IS its session — no route involved, never "mismatched".
   const routedSessionId = isPrimary ? routeSessionId(location.pathname) : selectedSessionId
@@ -809,7 +746,6 @@ const ChatViewContent = memo(function ChatViewContent({
   const sessionEdgeHover = useStore($sessionTileEdgeHover)
 
   const overlayKind = dropOverlayKind(dragKind, sessionDragging, sessionEdgeHover)
-  const surfacePersona = useChatPersona(queueSessionKey)
 
   return (
     <div
@@ -817,7 +753,6 @@ const ChatViewContent = memo(function ChatViewContent({
         'relative isolate flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
         className
       )}
-      data-bot-chat={surfacePersona ? '' : undefined}
       data-chat-surface=""
       data-chat-unfocused={surfaceFocused || surfaceHovered ? undefined : ''}
       data-composer-surface-id={composerSurfaceId}
@@ -825,7 +760,6 @@ const ChatViewContent = memo(function ChatViewContent({
       data-guide-arrived={isPrimary && guideStarted ? '' : undefined}
       data-session-anchor={sessionAnchor}
       data-setup-chat={setupChat ? '' : undefined}
-      data-stored-session-id={storedId ?? undefined}
     >
       <Backdrop />
       {/* Tiles get their chrome from the layout zone (chip strip); the modal
@@ -833,16 +767,12 @@ const ChatViewContent = memo(function ChatViewContent({
       {isPrimary && (
         <ChatHeader
           activeSessionId={activeSessionId}
-          busy={busy}
           isRoutedSessionView={isRoutedSessionView}
           onDeleteSelectedSession={onDeleteSelectedSession}
-          onStopNow={stopNow}
           onToggleSelectedPin={onToggleSelectedPin}
-          personaSessionId={queueSessionKey}
           selectedSessionId={selectedSessionId}
         />
       )}
-      {!isPrimary && <BotTileChip busy={busy} onStopNow={stopNow} storedId={queueSessionKey} />}
 
       {/* Mounted for the primary AND every tile, each scoped to its own session
           so a tiled/background session's blocking prompt surfaces instead of
@@ -863,22 +793,20 @@ const ChatViewContent = memo(function ChatViewContent({
           data-slot="composer-bounds"
           {...dropHandlers}
         >
-          <ChatPersonaContext.Provider value={surfacePersona}>
-            <Thread
-              clampToComposer={showChatBar}
-              cwd={currentCwd}
-              gateway={gateway}
-              intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
-              loading={threadLoading}
-              onBranchInNewChat={onBranchInNewChat}
-              onCancel={haltRun}
-              onDismissError={onDismissError}
-              onRestoreToMessage={onRestoreToMessage}
-              scrollProfile={modelOptionsProfile || activeGatewayProfile}
-              sessionId={activeSessionId}
-              sessionKey={threadKey}
-            />
-          </ChatPersonaContext.Provider>
+          <Thread
+            clampToComposer={showChatBar}
+            cwd={currentCwd}
+            gateway={gateway}
+            intro={showIntro ? { personality: introPersonality, seed: introSeed } : undefined}
+            loading={threadLoading}
+            onBranchInNewChat={onBranchInNewChat}
+            onCancel={haltRun}
+            onDismissError={onDismissError}
+            onRestoreToMessage={onRestoreToMessage}
+            scrollProfile={modelOptionsProfile || activeGatewayProfile}
+            sessionId={activeSessionId}
+            sessionKey={threadKey}
+          />
           {isPrimary && isMainWindow() && <IntroCopy />}
           {resumeExhausted && routedSessionId && (
             <ResumeExhaustedOverlay onRetryResume={onRetryResume} sessionId={routedSessionId} />

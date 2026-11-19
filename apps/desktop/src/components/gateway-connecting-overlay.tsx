@@ -87,8 +87,7 @@ function ConnectingOverlayView({ decoding, onExit, phase }: ConnectingOverlayVie
     <div
       className={cn(
         'fixed inset-0 z-(--z-connecting) grid place-items-center bg-(--ui-chat-surface-background) transition-opacity duration-500 ease-out',
-        leaving && 'pointer-events-none',
-        overlayHidden ? 'opacity-0' : 'opacity-100'
+        overlayHidden ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
       // Masks the whole app while booting — must stay filled under window
       // glass or the shell shows through. Contract: `[data-glass-opaque]`

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { AGENT_MESSAGE_RE } from './content'
+import { AGENT_MESSAGE_RE } from './user-message'
 
 // Agent-to-agent deliveries render as a compact attributed timeline notice,
 // not a user bubble. This pins the detection contract: the Bot Mode prefix

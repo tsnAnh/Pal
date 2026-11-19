@@ -24,9 +24,8 @@ import { sanitizeComposerInput } from '@/lib/composer-input-sanitize'
 import { DATA_IMAGE_URL_RE } from '@/lib/embedded-images'
 import { triggerHaptic } from '@/lib/haptics'
 import { $touchPointer } from '@/lib/touch-interaction'
-import { useStoreSelector } from '@/lib/use-session-slice'
+import { useStoreSelector, useStoresSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
-import { useChatPersona } from '@/store/chat-persona'
 import { sessionCompacting } from '@/store/compaction'
 import { draftRetry } from '@/store/composer-draft-retry'
 import { browseBackward, browseForward, deriveUserHistory, isBrowsingHistory } from '@/store/composer-input-history'
@@ -38,6 +37,7 @@ import { $chatOnboardingSolo } from '@/store/onboarding-intro'
 import { sessionBlockingPrompt } from '@/store/prompts'
 import { toggleReview } from '@/store/review'
 import { $gatewayState } from '@/store/session'
+import { $botChatSessionIds, $sessionStates, $sessionTiles, isBotChatSession } from '@/store/session-states'
 import { useForcedTextDirection } from '@/store/text-direction'
 import { $threadScrolledUpBySession } from '@/store/thread-scroll'
 import { $autoSpeakReplies } from '@/store/voice-prefs'
@@ -58,7 +58,6 @@ import {
 } from './composer-utils'
 import { ContextMenu } from './context-menu'
 import { COMPOSER_AREAS } from './contrib'
-import { ComposerControlRow } from './control-row'
 import { ComposerControls } from './controls'
 import { ComposerDirectiveActions } from './directive-actions'
 import { COMPOSER_DROP_ACTIVE_CLASS, COMPOSER_DROP_FADE_CLASS } from './drop-affordance'
@@ -86,7 +85,6 @@ import { useMiddlewareSubmit } from './hooks/use-middleware-submit'
 import { useSlashCompletions } from './hooks/use-slash-completions'
 import { useStatusDrawer } from './hooks/use-status-drawer'
 import { useSessionStatusPresence } from './hooks/use-status-presence'
-import { useYieldFirst } from './hooks/use-yield-first'
 import { shouldConvertPasteToAttachment } from './large-paste'
 import { ActionBadges } from './micro-actions'
 import { chipTypedPathOnSpace, pathifyRefs } from './path-refs'
@@ -118,6 +116,19 @@ import {
   selectionLinkLabel
 } from './url-refs'
 import { VoiceActivity, VoicePlaybackActivity } from './voice-activity'
+
+/** Grid areas for the menu / input / controls row: one row when roomy, input
+ *  above menu + controls when stacked, and one area per row once two touch-size
+ *  controls no longer fit side by side. */
+function controlRowGridClass(singleColumn: boolean, stacked: boolean): string {
+  if (singleColumn) {
+    return 'grid-cols-[minmax(0,1fr)] gap-(--composer-row-gap) [grid-template-areas:"input"_"menu"_"controls"]'
+  }
+
+  return stacked
+    ? 'grid-cols-[auto_1fr] gap-(--composer-row-gap) [grid-template-areas:"input_input"_"menu_controls"]'
+    : 'grid-cols-[auto_1fr_auto] items-center gap-(--composer-control-gap) [grid-template-areas:"menu_input_controls"]'
+}
 
 export function ChatBar({
   busy,
@@ -399,8 +410,6 @@ export function ChatBar({
     poppedOut
   })
 
-  const { botChat, onStop, yieldFirst } = useYieldFirst({ haltRun, queueScopeKey: activeQueueSessionKey, sessionId })
-
   const hasComposerPayload = hasText || attachments.length > 0
   const { cardWaiting } = useCardWaitingSubmit(sessionId ?? null, busy, hasComposerPayload)
 
@@ -412,8 +421,7 @@ export function ChatBar({
     compacting,
     hasComposerPayload,
     hasSteerHandler: !!onSteer,
-    isSteerableText,
-    yieldFirst
+    isSteerableText
   })
 
   // The submit engine — the orchestration seam where draft + queue meet. Owns
@@ -447,17 +455,12 @@ export function ChatBar({
     setComposerText,
     stashAt,
     rememberDraftRetry,
-    takeDraftRetry,
-    yieldFirst
+    takeDraftRetry
   })
 
   // Resting / reconnecting / starting placeholder text, re-rolled only on a real
   // conversation change.
-  const persona = useChatPersona(queueSessionKey)
-  const restingPlaceholder = useComposerPlaceholder({ disabled, reconnecting, sessionId })
-
-  const placeholder =
-    persona && !disabled && !reconnecting ? t.composer.placeholderBot(persona.name) : restingPlaceholder
+  const placeholder = useComposerPlaceholder({ disabled, reconnecting, sessionId })
 
   // Trigger / completion engine: @// detection, the adapter-driven item list,
   // popover selection, and chip insertion. The keydown nav block below consumes
@@ -630,7 +633,8 @@ export function ChatBar({
     // The instruction the user types stays in the input; the pasted source
     // material rides along as a file. Falls back to inline insertion if the
     // attachment can't be created (missing bridge, write failure) so the
-    // paste is never lost.
+    // paste is never lost; a paste rejected as too large is dropped after the
+    // error toast rather than flooding the editor.
     if (onAttachPastedText && shouldConvertPasteToAttachment(pastedText)) {
       const editor = event.currentTarget
 
@@ -1063,6 +1067,14 @@ export function ChatBar({
     handleInputDrop
   } = useComposerDrop({ cwd, insertInlineRefs, onAttachDroppedItems, recordUndoPoint, requestMainFocus, sessionId })
 
+  // A bot chat is a companion conversation, not a working session, so it has no
+  // repo to speak of — see the blank repoPath handed to CodingStatusRow below.
+  // Three stores: the scope set records the answer, and resolving this runtime
+  // id to the stored one it is filed under reads the other two.
+  const botChat = useStoresSelector([$botChatSessionIds, $sessionStates, $sessionTiles], () =>
+    isBotChatSession(sessionId)
+  )
+
   // Branch / worktree hand-offs (CodingStatusRow). Owns the worktree open +
   // branch-off/convert/list/switch actions; draft travels into the new session.
   const { handleBranchOff, handleConvertBranch, handleListBranches, handleSwitchBranch, openInWorktree } =
@@ -1116,7 +1128,6 @@ export function ChatBar({
   const controls = (
     <ComposerControls
       autoSpeak={autoSpeak}
-      botLayout={botChat && !singleColumn}
       busy={busy}
       busyAction={busyAction}
       canSubmit={canSubmit}
@@ -1136,7 +1147,6 @@ export function ChatBar({
       foldVoice={foldVoice}
       hasComposerPayload={hasComposerPayload}
       hideModelPill={guidedChat}
-      hideVoiceConversation={botChat}
       minimal={minimal || chatOnboardingSolo}
       onDictate={dictate}
       onQueue={() => {
@@ -1145,15 +1155,13 @@ export function ChatBar({
         queueDraft()
       }}
       onSteer={canSteer ? () => steerDraft('steer') : undefined}
-      onStop={onStop}
       onToggleAutoSpeak={handleToggleAutoSpeak}
       state={state}
       voiceStatus={voiceStatus}
     />
   )
 
-  const cardLayout = stacked || botChat
-  const inputWidthClass = composerInputWidthClass(cardLayout)
+  const inputWidthClass = composerInputWidthClass(stacked)
 
   const input = (
     <div className={cn('relative', inputWidthClass)}>
@@ -1165,7 +1173,7 @@ export function ChatBar({
         className={cn(
           'min-h-[1.625rem] min-h-(--composer-input-min-height) max-h-(--composer-input-max-height) cursor-text overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] bg-transparent pb-1 pr-1 pt-1 leading-normal text-foreground outline-none disabled:cursor-not-allowed',
           '**:data-ref-text:cursor-default',
-          cardLayout && 'pl-3',
+          stacked && 'pl-3',
           inputWidthClass,
           // Inside the native Wayland HUD drag region: a drag region swallows
           // the page's mouse input whole, so the input must opt back out or it
@@ -1315,7 +1323,6 @@ export function ChatBar({
               it. Collapses to nothing when every status is empty. */}
           <StatusDrawerContent collapsed={statusDrawerCollapsed} id={statusDrawerId}>
             <ComposerStatusStack
-              botChat={botChat}
               onSubmit={onSubmit}
               queue={renderComposerQueueSlot({
                 activeQueueSessionKey,
@@ -1497,14 +1504,22 @@ export function ChatBar({
                   <VoicePlaybackActivity />
                   {queueEdit && editingQueuedPrompt && <QueuedEditBanner onExit={exitQueuedEdit} />}
                   {attachments.length > 0 && <AttachmentList attachments={attachments} onRemove={onRemoveAttachment} />}
-                  <ComposerControlRow
-                    botChat={botChat}
-                    contextMenu={contextMenu}
-                    controls={controls}
-                    input={input}
-                    singleColumn={singleColumn}
-                    stacked={stacked}
-                  />
+                  <div className={cn('grid w-full', controlRowGridClass(singleColumn, stacked))}>
+                    <div className="flex translate-y-[3px] items-start gap-(--composer-control-gap) self-start [grid-area:menu]">
+                      {contextMenu}
+                      <ContribSlot area={COMPOSER_AREAS.leading} />
+                    </div>
+                    <div className="min-w-0 [grid-area:input]">{input}</div>
+                    {/* `justify-end` packs contributed actions and the send cluster
+                      together on the right. The cluster must not carry its own
+                      `ml-auto`: in the stacked layout the auto margin absorbs the
+                      row's free space and pins a contributed action to the row
+                      start, detached from the cluster (#116332). */}
+                    <div className="flex min-w-0 items-center justify-end gap-(--composer-control-gap) [grid-area:controls]">
+                      <ContribSlot area={COMPOSER_AREAS.actions} />
+                      {controls}
+                    </div>
+                  </div>
                   <ContribSlot area={COMPOSER_AREAS.bottom} />
                 </div>
               </div>

@@ -3,7 +3,20 @@
  * swatches, the Generate and Upload tabs, and the petdex Pet tab.
  */
 
-import { Button, cn, Codicon, ColorSwatches, RowButton, SegmentedControl, Tip } from '@hermes/plugin-sdk'
+import {
+  Button,
+  cn,
+  Codicon,
+  ColorSwatches,
+  GlyphSpinner,
+  host,
+  PROFILE_SWATCHES,
+  RowButton,
+  SegmentedControl,
+  Textarea,
+  Tip,
+  useValue
+} from '@hermes/plugin-sdk'
 import { useState } from 'react'
 
 import {
@@ -17,8 +30,14 @@ import {
   isBlobShape,
   parseBlobShape
 } from './avatar'
-import { type AvatarGenerateSeed, GeneratePanel, UploadPanel } from './avatar-image-panels'
-import { AVATAR_SWATCHES } from './avatar-swatches'
+import {
+  $imagenAvailable,
+  generateAvatarImage,
+  type GeneratedImage,
+  normalizeAvatarImage,
+  pickImageFromDevice,
+  probeImagen
+} from './avatar-image'
 import { useBots } from './i18n'
 import { PetTab } from './pet'
 
@@ -26,7 +45,7 @@ interface AvatarPickerProps {
   /** `null` = no explicit pick, i.e. the name's deterministic hue. */
   color: null | string
   /** Feeds the Generate tab when the user leaves the description blank. */
-  generateSeed?: AvatarGenerateSeed | null
+  generateSeed?: { description?: string; name?: string; title?: string } | null
   image: null | string
   onColor: (color: null | string) => void
   onImage: (image: null | string) => void
@@ -38,12 +57,73 @@ interface AvatarPickerProps {
 export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generateSeed }: AvatarPickerProps) {
   const b = useBots()
   const pickerName = generateSeed?.name || 'agent'
+  const imagen = useValue($imagenAvailable)
   const [tab, setTab] = useState('bot')
+  const [describe, setDescribe] = useState('')
+  const [genBusy, setGenBusy] = useState(false)
+
+  if (imagen === null) {
+    void probeImagen()
+  }
+
+  // Re-check a stale "unavailable" whenever the user lands on the Generate
+  // tab — the gateway may have restarted with image.generate since.
+  const goTab = (id: string) => {
+    setTab(id)
+
+    if (id === 'generate' && $imagenAvailable.get() === false) {
+      $imagenAvailable.set(null)
+      void probeImagen()
+    }
+  }
+
+  const upload = async () => {
+    const raw = await pickImageFromDevice()
+
+    if (raw) {
+      onImage(await normalizeAvatarImage(raw))
+    }
+  }
+
+  const generate = async () => {
+    if (genBusy) {
+      return
+    }
+
+    setGenBusy(true)
+
+    try {
+      const custom = describe.trim()
+
+      const img = custom
+        ? await (async () => {
+            const res = await host.request<GeneratedImage>('image.generate', {
+              prompt: `${custom}. Avatar for an AI agent: centered, bold flat vector style, solid color background, no text.`,
+              aspect_ratio: 'square'
+            })
+
+            if (!res?.success) {
+              throw new Error(res?.error || 'generation failed')
+            }
+
+            return res.image_data || res.image
+          })()
+        : await generateAvatarImage(generateSeed?.name || 'agent', generateSeed?.title, generateSeed?.description)
+
+      if (img) {
+        onImage(await normalizeAvatarImage(img))
+      }
+    } catch (err) {
+      host.notifyError(err, b.avatar.generationFailed)
+    } finally {
+      setGenBusy(false)
+    }
+  }
 
   return (
     <div className="grid justify-items-center gap-3">
       <SegmentedControl
-        onChange={setTab}
+        onChange={goTab}
         options={[
           { id: 'bot', label: b.avatar.tabBot },
           { id: 'generate', label: b.avatar.tabGenerate },
@@ -65,7 +145,7 @@ export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, g
 
             return (
               <div className="grid justify-items-center gap-3">
-                {/* Silhouette pins: Auto (name decides) + the blob kinds. */}
+                {/* Silhouette pins: Auto (name decides) + the six blob kinds. */}
                 <div className="grid grid-cols-4 justify-items-center gap-1.5">
                   {['', ...BLOB_KINDS].map(k => (
                     <Tip key={k || 'auto'} label={k || b.editor.autoHint}>
@@ -120,12 +200,6 @@ export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, g
                 <div className="text-center text-[0.65rem] text-(--ui-text-quaternary)">
                   {locked ? b.editor.lockedHint : b.editor.unlockedHint}
                 </div>
-                <ColorSwatches
-                  clearLabel={b.avatar.matchTheName}
-                  onChange={onColor}
-                  swatches={AVATAR_SWATCHES}
-                  value={color}
-                />
                 <Button
                   className="text-(--ui-text-tertiary)"
                   onClick={() => onShape(defaultShapeFor(pickerName))}
@@ -162,14 +236,51 @@ export function AvatarPicker({ shape, color, image, onShape, onColor, onImage, g
             <ColorSwatches
               clearLabel={b.avatar.matchTheName}
               onChange={onColor}
-              swatches={AVATAR_SWATCHES}
+              swatches={PROFILE_SWATCHES}
               value={color}
             />
           </div>
         )
       ) : null}
-      {tab === 'generate' ? <GeneratePanel generateSeed={generateSeed} onImage={onImage} /> : null}
-      {tab === 'upload' ? <UploadPanel onImage={onImage} /> : null}
+      {tab === 'generate' ? (
+        imagen ? (
+          <div className="grid w-full gap-2">
+            <Textarea
+              className="min-h-16 text-xs"
+              onChange={event => setDescribe(event.target.value)}
+              placeholder={b.avatar.describePlaceholder}
+              value={describe}
+            />
+            <Button
+              className="w-full justify-center"
+              disabled={genBusy}
+              onClick={generate}
+              type="button"
+              variant="secondary"
+            >
+              {genBusy ? (
+                <GlyphSpinner className="mr-1 text-[0.8rem]" spinner="breathe" />
+              ) : (
+                <Codicon className="mr-1 text-[0.8rem]" name="sparkle" />
+              )}
+              {genBusy ? b.avatar.generating : b.avatar.generate}
+            </Button>
+            {describe.trim() ? null : (
+              <div className="text-center text-[0.65rem] text-(--ui-text-quaternary)">{b.bot.descriptionHint}</div>
+            )}
+          </div>
+        ) : (
+          <div className="px-2 py-3 text-center text-xs leading-5 text-(--ui-text-tertiary)">
+            {imagen === false ? b.editor.noImageModel : b.editor.checkingImage}
+          </div>
+        )
+      ) : null}
+      {tab === 'upload' ? (
+        <Button className="w-full justify-center" onClick={upload} type="button" variant="secondary">
+          <Codicon className="mr-1 text-[0.8rem]" name="device-camera" />
+          {b.editor.chooseImage}
+        </Button>
+      ) : null}
       {tab === 'pet' ? <PetTab image={image} onImage={onImage} /> : null}
     </div>
   )

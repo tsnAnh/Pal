@@ -26,7 +26,6 @@ const { markSessionUnreadFinished, notify, request } = vi.hoisted(() => ({
   request: vi.fn()
 }))
 
-vi.mock('./bot-accent', () => ({ startBotChatAccent: () => () => undefined }))
 vi.mock('@hermes/plugin-sdk', async importOriginal => {
   const sdk = await importOriginal<typeof HermesSdk>()
 

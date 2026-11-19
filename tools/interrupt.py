@@ -106,6 +106,11 @@ def take_yield(thread_id: int | None) -> YieldReason | None:
         return _yield_threads.pop(thread_id, None)
 
 
+def consume_yield(thread_id: int | None) -> bool:
+    """Atomically take the pending yield for *thread_id*; True if one was pending."""
+    return take_yield(thread_id) is not None
+
+
 def run_if_not_interrupted(callback: Callable[[], None]) -> bool:
     """Run a state transition atomically with current-thread interruption.
 

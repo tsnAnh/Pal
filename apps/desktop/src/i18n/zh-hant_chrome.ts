@@ -90,7 +90,6 @@ export const zhHantChrome = {
       cron: '排程工作'
     },
     searchAria: '搜尋工作階段',
-    paneSwitcherAria: '側邊欄面板',
     searchPlaceholder: '搜尋工作階段…',
     clearSearch: '清除搜尋',
     noMatch: query => `沒有工作階段符合「${query}」。`,

@@ -50,7 +50,6 @@ const { forgetSessionUnread, invalidateQueries, newChat, overrides, request, sta
   }
 })
 
-vi.mock('./bot-accent', () => ({ startBotChatAccent: () => () => undefined }))
 vi.mock('@hermes/plugin-sdk', async importOriginal => {
   const sdk = await importOriginal<typeof HermesSdk>()
 

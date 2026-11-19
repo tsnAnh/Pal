@@ -1,6 +1,5 @@
 import { atom, computed, type ReadableAtom } from 'nanostores'
 
-import { type ApprovalDraft, parseApprovalDraft, parseApprovalScope } from './approval-draft'
 import { $clarifyRequest, $clarifyRequests } from './clarify'
 import { isSessionGone, isSessionGoneForBackgroundPolling, markSessionGone } from './runtime-gone'
 import { respondToServerRequest } from './server-requests'
@@ -88,9 +87,7 @@ export interface ApprovalRequest extends KeyedPrompt {
   choices?: string[]
   command: string
   description: string
-  draft?: ApprovalDraft
   requestId?: string
-  scope?: 'bot_chat'
   serverRequestId?: string
   smartDenied?: boolean
 }
@@ -104,10 +101,7 @@ interface PendingApprovalPayload {
   choices?: unknown
   command?: unknown
   description?: unknown
-  details?: unknown
-  draft?: unknown
   request_id?: unknown
-  scope?: unknown
   smart_denied?: boolean
 }
 
@@ -335,9 +329,7 @@ export async function replayPendingApproval(gateway: ApprovalGateway | null, ses
           : undefined,
         command: typeof pending.command === 'string' ? pending.command : '',
         description: typeof pending.description === 'string' ? pending.description : 'dangerous command',
-        draft: parseApprovalDraft(pending.draft, { choices: pending.choices, details: pending.details }),
         requestId: pending.request_id,
-        scope: parseApprovalScope(pending.scope),
         sessionId,
         smartDenied: pending.smart_denied === true
       })
@@ -372,12 +364,9 @@ export async function answerApproval(
   gateway: ApprovalGateway | null,
   request: Pick<ApprovalRequest, 'requestId' | 'serverRequestId' | 'sessionId'>,
   choice: string,
-  all = false,
-  editedText?: string
+  all = false
 ): Promise<void> {
-  const edit = editedText === undefined ? {} : { edited_text: editedText }
-
-  if (respondToServerRequest(request.serverRequestId, { choice, ...(all ? { all: true } : {}), ...edit })) {
+  if (respondToServerRequest(request.serverRequestId, { choice, ...(all ? { all: true } : {}) })) {
     return
   }
 
@@ -388,7 +377,6 @@ export async function answerApproval(
   const params = {
     all,
     choice,
-    ...edit,
     ...(request.requestId ? { request_id: request.requestId } : {}),
     session_id: request.sessionId ?? undefined
   }

@@ -109,15 +109,16 @@ test.describe('batch clarify card', () => {
 
     await expect(batchCard.getByText(SINGLE_BATCH_CLARIFY_QUESTIONS[0]!.question)).toHaveCount(1)
 
-    const sendButton = batchCard.getByRole('button', { name: 'Send' })
-    await expect(sendButton).toBeDisabled()
+    const confirmButton = batchCard.locator('button[type="submit"]')
+    await expect(confirmButton).toBeDisabled()
 
     await batchCard.getByRole('button', { name: /Espresso/ }).click()
+    await expect(confirmButton).toBeEnabled()
+    await confirmButton.click()
 
-    const settled = page
-      .locator('[data-clarify-settled]')
-      .filter({ hasText: SINGLE_BATCH_CLARIFY_QUESTIONS[0]!.question })
+    const settled = page.locator('[data-clarify-settled]')
     await settled.waitFor({ state: 'visible', timeout: 30_000 })
+    await expect(settled.getByText(SINGLE_BATCH_CLARIFY_QUESTIONS[0]!.question)).toBeVisible()
     await expect(settled.getByText('Espresso', { exact: true })).toBeVisible()
 
     await expect(page.locator('form[data-clarify-batch]')).toHaveCount(0)

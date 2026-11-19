@@ -44,7 +44,6 @@ import { useI18n } from '@/i18n'
 import { useKeybindHint } from '@/lib/keybinds/use-keybind-hint'
 import { isBrowserOwnedTouch } from '@/lib/touch-interaction'
 import { cn } from '@/lib/utils'
-import { $botChromeless } from '@/store/bot-surface'
 import { closeAllOpenSessionTiles, setZoneParkedTiles } from '@/store/session-states'
 
 import { $layoutEditMode, $layoutEditRevealsHidden } from '../../edit-mode'
@@ -395,7 +394,7 @@ export function TreeGroup({
   node,
   parentAxis,
   railSide = 'left',
-  topEdge: topEdgeProp = false
+  topEdge = false
 }: {
   node: GroupNode
   parentAxis?: 'column' | 'row'
@@ -405,8 +404,6 @@ export function TreeGroup({
   rightEdge?: boolean
 }) {
   const { t } = useI18n()
-  const chromeless = useStore($botChromeless)
-  const topEdge = topEdgeProp && !chromeless
   const ref = useRef<HTMLDivElement>(null)
   const stripRef = useRef<HTMLDivElement>(null)
   // The scrolling tab list inside the header (the strip also holds the
@@ -429,7 +426,7 @@ export function TreeGroup({
   const dragging = useStore($treeDragging)
   const editMode = useStore($layoutEditMode)
   const revealsHidden = useStore($layoutEditRevealsHidden)
-  const controlsOverlap = useWindowControlsOverlap(ref, !topEdge)
+  const wcOverlap = useWindowControlsOverlap(ref, !topEdge)
 
   const hiddenPanes = useStore($hiddenTreePanes)
   const narrow = useStore($narrowViewport)
@@ -464,7 +461,6 @@ export function TreeGroup({
   const tabKeyboardProps = usePaneTabKeyboard(shown, activeId, ref)
 
   const active = paneFor(activeId)
-  const wcOverlap = chromeless && paneChrome(active).ownsTitlebarRow ? null : controlsOverlap
   const isEmpty = shown.length === 0
   const sidebarGroup = !node.panes.some(id => id === 'workspace' || paneChrome(paneFor(id)).placement === 'main')
 
@@ -662,7 +658,7 @@ export function TreeGroup({
     <div
       className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-(--ui-editor-surface-background)"
       data-tree-group={node.id}
-      data-window-top={topEdgeProp || undefined}
+      data-window-top={topEdge || undefined}
       // Advertises the visible tab strip so panes can drop their own
       // self-naming labels (see [data-pane-self-label] in styles.css).
       data-zone-header={headerVisible || undefined}
@@ -678,19 +674,11 @@ export function TreeGroup({
       style={
         wcOverlap
           ? { paddingTop: wcOverlap.y + wcOverlap.height }
-          : topEdgeProp && verticalCollapse
+          : topEdge && verticalCollapse
             ? { paddingTop: titlebarHeight }
             : undefined
       }
     >
-      {chromeless && topEdgeProp && !headerVisible && (
-        <div
-          aria-hidden="true"
-          className="absolute inset-x-0 top-0 z-10 h-2.5 [-webkit-app-region:drag]"
-          data-window-drag-strip=""
-        />
-      )}
-
       {wcOverlap && (
         <div
           aria-hidden="true"

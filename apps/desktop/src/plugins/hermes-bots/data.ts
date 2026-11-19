@@ -756,34 +756,6 @@ export async function migrateBotMeta(storage: BotMetaStorage | undefined = getPl
  *  Gates every SOUL.md protocol append below. */
 export let serverInjectsProtocol = false
 
-const birthNoticeByConnection = new Map<string, boolean>()
-const onboardingByConnection = new Map<string, boolean>()
-
-function recordBirthNotice(connectionId: null | string | undefined, snapshot: null | RosterSnapshot | undefined) {
-  birthNoticeByConnection.set(connectionId || '', Boolean(snapshot?.bot_birth_notice))
-  onboardingByConnection.set(connectionId || 'local', Boolean(snapshot?.bot_onboarding))
-}
-
-/** Does the connection's backend mark new bots for first-run onboarding and
- *  answer `profiles.onboard`? Older backends reject the create param, so the
- *  dialog only asks when this is true and otherwise keeps the intro turn. */
-export function botServerOnboards(connectionId?: null | string): boolean {
-  const candidates = [connectionId, host.state.connectionId?.get?.(), host.activeConnectionId?.()]
-    .map(id => String(id || ''))
-    .filter(Boolean)
-
-  return onboardingByConnection.get(candidates.find(id => onboardingByConnection.has(id)) ?? 'local') === true
-}
-
-export function botServerGreetsUnprompted(
-  bot: null | Partial<RosterRow> | undefined,
-  route: null | ProfileRoute = null
-): boolean {
-  const id = route?.connectionId || bot?.connectionId || host.state.connectionId?.get?.() || ''
-
-  return birthNoticeByConnection.get(id) === true
-}
-
 /** A `profiles.list` answer as Bot Mode consumes it, plus the fields the
  *  multi-source merge and the roster query stamp on afterwards. Not in
  *  types.ts: this is the query-cache envelope around RosterRow, not a domain
@@ -791,8 +763,6 @@ export function botServerGreetsUnprompted(
 interface RosterSnapshot {
   /** Newer backends inject the teammate protocol into the system prompt. */
   bot_mode_protocol?: boolean
-  bot_birth_notice?: boolean
-  bot_onboarding?: boolean
   /** Time the request was ISSUED, the conservative bound mergeServerMeta wants. */
   fetchedAt?: number
   primaryConnectionId?: string
@@ -913,7 +883,6 @@ async function fetchRosterSnapshot(activeConnectionId: null | string | undefined
   // session's system prompt (agent.bot_mode_protocol) — SOUL.md must not
   // carry a second copy. Older gateways lack the flag: keep appending.
   serverInjectsProtocol = Boolean(local?.bot_mode_protocol)
-  recordBirthNotice(activeConnectionId, local)
 
   // Multi-source desktops (hermes-agent #86875) also expose the union
   // agent roster across every registered connection. Merge agents from
@@ -1057,39 +1026,6 @@ export function cachedUnionRoster(): RosterSnapshot | null {
   }
 
   return null
-}
-
-function scopeUnlistedActiveRows(
-  rows: Iterable<RosterRow>,
-  sources: GatewaySource[] | undefined,
-  activeId: string
-) {
-  const source = activeId
-    ? (Array.isArray(sources) ? sources : []).find(entry => String(entry?.connectionId || '').trim() === activeId)
-    : undefined
-
-  if (!source) {
-    return
-  }
-
-  for (const row of rows) {
-    if (row.sourceScoped || row.connectionId) {
-      continue
-    }
-
-    const targetProfile = row.targetProfile || row.name
-    row.connectionId = activeId
-    row.connectionKind = source.kind
-    row.connectionLabel = source.label
-    row.targetProfile = targetProfile
-    row.route = {
-      connectionId: activeId,
-      mode: source.kind === 'local' ? 'local' : 'remote',
-      profile: row.name,
-      targetProfile
-    }
-    row.sourceScoped = true
-  }
 }
 
 /** Merge the union agent roster (host.agents) over the active gateway's
@@ -1244,8 +1180,6 @@ export function mergeMultiSourceRoster(
       ...unservedFlag(agent)
     })
   }
-
-  scopeUnlistedActiveRows(activeByName.values(), union?.sources, activeId)
 
   // SSH sources drop to connect-on-demand the moment their tunnel is not
   // the live gateway. Keep previously painted remote rows so clicking the

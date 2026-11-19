@@ -2,29 +2,15 @@
  * Message SHAPE for Bot Mode's plugin-scoped i18n bundles (see `./i18n.ts`).
  */
 
-import { type BotDetailMessages } from './bot-detail-locales'
-import { type BotOnboardingMessages } from './bot-onboarding-locales'
-import { type BotTemplateMessages } from './bot-template-locales'
 import { type CanonicalGroupMessages } from './canonical-group-locales'
 import { type CrossGatewayGroupMessages } from './cross-gateway-locales'
 import { type GroupChatMessages } from './group-chat-locales'
 import type { RosterChromeMessages } from './roster-chrome-locales'
-import { type RoutinesMessages } from './routines-locales'
-import { type VoiceMessages } from './voice-locales'
 
 export type BotsMessages = {
   canonical: { [K in keyof CanonicalGroupMessages]: string }
   /** Group chats seating bots from more than one connected machine. */
   crossGateway: { [K in keyof CrossGatewayGroupMessages]: CrossGatewayGroupMessages[K] }
-  /** Routine operations: test now, run history, schedule preview, triggers. */
-  routines: RoutinesMessages
-  /** Per-bot voice, voice chat from the bot's chat, voice memos. */
-  voice: VoiceMessages
-  /** Bot templates: export a bot as a shareable file, import one after a review step. */
-  template: BotTemplateMessages
-  /** First-run onboarding for a new bot, plus the inline identity-change notice. */
-  onboarding: BotOnboardingMessages
-  detail: BotDetailMessages
   /** Left rail: the bot + group-chat roster. */
   editor: {
     fullConfigHint: string
@@ -32,6 +18,7 @@ export type BotsMessages = {
     editSoul: string
     remoteCapabilitiesHint: string
     skillsEnabled: (enabled: number, total: number) => string
+    toolsetsEnabled: (enabled: number, total: number) => string
     mcpServers: string
     providerCustom: string
     modelCustom: string
@@ -49,6 +36,7 @@ export type BotsMessages = {
     general: string
     capabilities: string
     skills: string
+    tools: string
     cloneFrom: string
     freshProfile: string
     inheritedModel: string
@@ -64,6 +52,7 @@ export type BotsMessages = {
     newerDesktop: string
     newerGateway: string
     emptySkillsHint: string
+    defaultToolsHint: string
     catalog: string
     catalogInstalled: string
     mcpHint: string
@@ -105,19 +94,14 @@ export type BotsMessages = {
     allHidden: string
     allHiddenDesc: string
     showHidden: string
-    silenceActivityToasts: string
-    enableActivityToasts: string
     noHiddenMatch: string
     hiddenFromRoster: string
     pinned: string
     needsAttention: string
-    mainBot: string
     needsInput: string
     /** The kind filter's three options, in menu order. */
     botsAndGroups: string
     botsOnly: string
-    botsOnlyMode: string
-    showSessionsSidebar: string
     groupsOnly: string
     /** The activity filter's four options, in menu order. */
     anyActivity: string
@@ -133,51 +117,6 @@ export type BotsMessages = {
     retryNow: string
     rosterUnavailable: (reason: string) => string
     waitingForGateway: string
-  }
-  /** Facts about the owner every bot shares (name, time zone). */
-  aboutYou: {
-    menu: string
-    title: string
-    description: string
-    nameLabel: string
-    namePlaceholder: string
-    timezoneLabel: string
-    timezoneAuto: (zone: string) => string
-    loading: string
-    loadFailed: string
-    saveFailed: string
-    invalidTimezone: string
-    retry: string
-  }
-  /** Connect apps: the catalog of apps a bot can use, and which bots use each. */
-  connectApps: {
-    menu: string
-    title: string
-    description: string
-    focusDescription: (bot: string) => string
-    searchPlaceholder: string
-    searchLabel: string
-    popular: string
-    moreApps: string
-    noResults: string
-    loading: string
-    noBots: string
-    status: { connected: string; needsSignIn: string; notConnected: string }
-    comingSoon: string
-    unknown: string
-    offByOrg: string
-    action: { cancel: string; connect: string; reconnect: string; setup: string; turnOn: string }
-    waiting: string
-    usedBy: (bots: string) => string
-    usedByNone: string
-    manageBots: string
-    useFor: (bot: string) => string
-    botNeedsSignIn: string
-    botSignIn: string
-    botUnknown: string
-    notice: { failed: string; retry: string; signedOut: string; unavailable: string }
-    failure: { failed: string; needsSetup: string; rulesReadOnly: string }
-    openFromBot: string
   }
   /** User-made roster sections (folders the user files bots into). */
   sections: {
@@ -244,9 +183,6 @@ export type BotsMessages = {
     advanced: string
     advancedHint: string
     advancedFailed: string
-    sendWithoutAsking: string
-    sendWithoutAskingHint: string
-    sendPolicySaveFailed: string
     openAnotherChatUnsupported: string
     remoteConnectionsUnsupported: string
     /** Bot-open failure toasts (canonical-chat.ts notifyBotOpenFailure). The
@@ -262,7 +198,6 @@ export type BotsMessages = {
     chatEmpty: string
     /** First line of a brand-new bot's forever-chat — see `kickoffText`. */
     kickoff: string
-    birthNotice: string
   }
   /** Avatar picker: shapes, blobs, pets, uploads, generation. */
   avatar: {
@@ -288,12 +223,6 @@ export type BotsMessages = {
     savedLocallyDescriptionFailed: string
     generate: string
     generating: string
-    change: string
-    reset: string
-    shapeGroup: string
-    colorGroup: string
-    shapeOption: (position: number) => string
-    colorOption: (position: number) => string
   }
   /** Group chats: the room, its composer, threads and activity feed. */
   group: { [K in keyof GroupChatMessages]: GroupChatMessages[K] } & {
@@ -369,11 +298,6 @@ export type BotsMessages = {
   }
   /** Skills hub + MCP setup surfaces embedded in the bot editor. */
   tools: {
-    installHint: (name: string) => string
-    installed: (name: string) => string
-    installFailed: (name: string) => string
-    searchHint: string
-    resizeHint: string
     addServerFailed: string
     noTarget: string
     setKeyFailed: (name: string) => string
@@ -389,25 +313,8 @@ export type BotsMessages = {
     setupFailed: string
     signIn: string
     setUp: string
-    skillsHub: string
     filterSkills: string
-    searchHub: string
     noMcpServers: string
-  }
-
-  /** The card a bot raises when a step is only a person can do (sign-in, CAPTCHA, a code from another device). */
-  handback: {
-    needsYou: string
-    openComputer: string
-    done: string
-    cancel: string
-    inControl: string
-    elsewhere: string
-    resolved: string
-    continueMessage: string
-    cancelMessage: string
-    actionFailed: string
-    sendFailed: (name: string) => string
   }
 
   /** Bot Screen: the bot's headless desktop on the gateway host, live in a pane. */
@@ -503,10 +410,6 @@ export type BotsMessages = {
     filterHint: string
     needsRosterFirst: string
     staleNotice: string
-    profileDetailsTab: string
-    profileComputerTab: string
-    profileAddLabel: string
-    routinesLabel: string
     readFailure: string
     createDesc: (bot: string) => string
     instruction: string
@@ -541,7 +444,6 @@ export type BotsMessages = {
     runsMonthly: (day: string, time: string) => string
     runsInterval: (count: number, unit: string) => string
     runsRaw: string
-    scheduleAt: (label: string, time: string) => string
     timesTotal: (count: number) => string
   }
 }

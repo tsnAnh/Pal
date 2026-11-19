@@ -1,6 +1,6 @@
 import type { BusyInputMode } from '@/store/busy-input-mode'
 
-export type ComposerBusyAction = 'interrupt' | 'steer' | 'queue' | 'send' | 'stop'
+export type ComposerBusyAction = 'interrupt' | 'steer' | 'queue' | 'stop'
 
 export interface BusySubmitInputs {
   attachmentCount: number
@@ -11,7 +11,6 @@ export interface BusySubmitInputs {
   hasComposerPayload: boolean
   hasSteerHandler: boolean
   isSteerableText: boolean
-  yieldFirst: boolean
 }
 
 export interface BusySubmitState {
@@ -29,13 +28,8 @@ export function deriveBusySubmitState({
   compacting,
   hasComposerPayload,
   hasSteerHandler,
-  isSteerableText,
-  yieldFirst
+  isSteerableText
 }: BusySubmitInputs): BusySubmitState {
-  if (yieldFirst) {
-    return { busyAction: hasComposerPayload ? 'send' : 'stop', canSteer: false, canSubmit: busy || hasComposerPayload }
-  }
-
   const canSubmit =
     (busy || hasComposerPayload) &&
     !(busy && isSteerableText && attachmentCount === 0 && !compacting && !blockingPrompt && busyInputMode === null)

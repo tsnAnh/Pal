@@ -11,18 +11,7 @@ import type { RosterRow } from './types'
 
 vi.mock('./data', () => ({ botSelectionKey: (bot: RosterRow) => bot.name }))
 
-import {
-  $screenState,
-  $takeoverIntents,
-  beginScreenStatusRequest,
-  liveTakeoverIntent,
-  pruneExpiredTakeoverIntents,
-  requestScreenTakeover,
-  screenStateFor,
-  setScreenLease,
-  setScreenStatus,
-  TAKEOVER_INTENT_TTL_MS
-} from './screen-state'
+import { $screenState, beginScreenStatusRequest, screenStateFor, setScreenLease, setScreenStatus } from './screen-state'
 
 const bot: RosterRow = { name: 'ops' }
 
@@ -44,10 +33,7 @@ const statusWith = (lease: DisplayLease): DisplayStatus => ({
   lease
 })
 
-beforeEach(() => {
-  $screenState.set({})
-  $takeoverIntents.set({})
-})
+beforeEach(() => $screenState.set({}))
 
 describe('lease epoch ordering', () => {
   it('a status reply carrying an older epoch does not roll back a newer lease event', () => {
@@ -95,35 +81,5 @@ describe('status request ordering', () => {
     setScreenStatus(bot, statusWith(agent))
     setScreenStatus(bot, { ...statusWith(agent), running: false }, inFlight)
     expect(screenStateFor($screenState.get(), bot)?.status?.running).toBe(true)
-  })
-})
-
-describe('takeover intent expiry', () => {
-  const other: RosterRow = { name: 'scout' }
-
-  it('an expired intent is not returned and is pruned', () => {
-    requestScreenTakeover(bot, 'sign in', 1000)
-    const later = 1000 + TAKEOVER_INTENT_TTL_MS + 1
-
-    expect(liveTakeoverIntent($takeoverIntents.get(), bot, later)).toBeNull()
-
-    pruneExpiredTakeoverIntents(later)
-    expect($takeoverIntents.get()).toEqual({})
-  })
-
-  it('pruning keeps live intents', () => {
-    requestScreenTakeover(bot, 'old', 1000)
-    requestScreenTakeover(other, 'fresh', 1000 + TAKEOVER_INTENT_TTL_MS)
-
-    pruneExpiredTakeoverIntents(1000 + TAKEOVER_INTENT_TTL_MS + 1)
-
-    expect(Object.keys($takeoverIntents.get())).toEqual(['scout'])
-  })
-
-  it('requesting a takeover drops other bots expired intents', () => {
-    requestScreenTakeover(bot, 'old', 1000)
-    requestScreenTakeover(other, 'fresh', 1000 + TAKEOVER_INTENT_TTL_MS + 5)
-
-    expect(Object.keys($takeoverIntents.get())).toEqual(['scout'])
   })
 })

@@ -15,7 +15,6 @@ import { ClarifyTool } from '@/components/assistant-ui/clarify'
 import { ConnectorExecution, ConnectorTool } from '@/components/assistant-ui/connector-tool'
 import { MarkdownText, MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { McpSetupTool } from '@/components/assistant-ui/mcp-setup-tool'
-import { PluginToolCard } from '@/components/assistant-ui/plugin-tool-card'
 import { SetupBeatTool } from '@/components/assistant-ui/setup-beat/setup-beat-tool'
 import { setThemeCall } from '@/components/assistant-ui/theme-picker/args'
 import { ThemeTool } from '@/components/assistant-ui/theme-picker/theme-tool'
@@ -36,9 +35,8 @@ import { isTodoToolName } from '@/lib/todos'
 import { type CardToolName, isCardTool, isCardToolName } from '@/lib/tool-render-class'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
-import { useSurfacePersona } from '@/store/chat-persona'
 import { onboardingChatStore } from '@/store/onboarding-session'
-import { $reasoningCollapsedByDefault, useShowReasoning } from '@/store/reasoning-disclosure'
+import { $reasoningCollapsedByDefault, $showReasoning } from '@/store/reasoning-disclosure'
 import { useForcedTextDirection } from '@/store/text-direction'
 import { $showToolActivity } from '@/store/tool-activity'
 
@@ -135,7 +133,6 @@ const TOOL_CARDS: Record<CardToolName, FC<TimelineToolCallProps>> = {
   image_generate: ImageGenerateTool,
   manage_catalog: CatalogInstallTool,
   manage_connections: ConnectionsToolPart,
-  request_handback: PluginToolCard,
   set_theme: ThemeToolPart,
   setup_beat: SetupBeatToolPart
 }
@@ -151,12 +148,8 @@ const failedCallNeedsUser = (part: TimelineToolCallProps): boolean => {
   return toolCallFailed(part) || (typeof exitCode === 'number' && exitCode !== 0)
 }
 
-const identityChangeCall = ({ args, isError, result, toolName }: TimelineToolCallProps): boolean =>
-  toolName === 'memory' && args?.target === 'identity' && result !== undefined && !isError
-
 const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   const showToolActivity = useStore($showToolActivity)
-  const botChat = useSurfacePersona() !== null
 
   // todo parts are hoisted to a dedicated panel above the message content.
   if (isTodoToolName(props.toolName)) {
@@ -183,10 +176,6 @@ const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   }
 
   if (isCardToolName(props.toolName)) {
-    if (botChat && props.toolName === 'delegate_task') {
-      return null
-    }
-
     const ToolCard = TOOL_CARDS[props.toolName]
 
     return <ToolCard {...props} />
@@ -195,14 +184,6 @@ const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   // A reloaded transcript holds the model's own call: set_theme reached through the tool_call bridge.
   if (setThemeCall(props.toolName, props.args)) {
     return <ThemeToolPart {...props} />
-  }
-
-  if (botChat && identityChangeCall(props)) {
-    return <PluginToolCard {...props} />
-  }
-
-  if (botChat) {
-    return null
   }
 
   if (toolLabels(props.args).length > 0) {
@@ -395,7 +376,7 @@ const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; star
   endIndex,
   startIndex
 }) => {
-  const showReasoning = useShowReasoning()
+  const showReasoning = useStore($showReasoning)
   const messageId = useAuiState(s => s.message.id)
   const messageRunning = useAuiState(s => s.message.status?.type === 'running')
 
@@ -467,7 +448,7 @@ const ReasoningTextPart: ReasoningMessagePartComponent = () => {
   // The group above already hides grouped parts; this covers a Reasoning part
   // rendered without a ReasoningGroup wrapper (assistant-ui drops the group
   // when a ChainOfThought component is registered).
-  const showReasoning = useShowReasoning()
+  const showReasoning = useStore($showReasoning)
   const textDirection = useForcedTextDirection()
 
   if (!showReasoning) {

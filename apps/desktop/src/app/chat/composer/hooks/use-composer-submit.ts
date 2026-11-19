@@ -77,7 +77,6 @@ interface UseComposerSubmitArgs {
   /** Restored-send identity (see use-composer-draft); absent = every send is a new message. */
   rememberDraftRetry?: (scope: string | null, retry: ComposerDraftRetry) => void
   takeDraftRetry?: (text: string, attachments: ComposerAttachment[]) => ComposerDraftRetry | undefined
-  yieldFirst?: boolean
 }
 
 /**
@@ -116,8 +115,7 @@ export function useComposerSubmit({
   setComposerText,
   stashAt,
   rememberDraftRetry,
-  takeDraftRetry,
-  yieldFirst = false
+  takeDraftRetry
 }: UseComposerSubmitArgs) {
   const paneVisible = usePaneVisible()
   const scope = useComposerScope()
@@ -228,8 +226,8 @@ export function useComposerSubmit({
   // if the turn has already ended, or a steer is not possible, queue it so it
   // runs next. This holds for hidden setup notes and for visible messages a
   // button sends on the user's behalf alike.
-  const externalSubmitRef = useRef({ busy, dispatchSubmit, onSteer, onSteerHidden, yieldFirst })
-  externalSubmitRef.current = { busy, dispatchSubmit, onSteer, onSteerHidden, yieldFirst }
+  const externalSubmitRef = useRef({ busy, dispatchSubmit, onSteer, onSteerHidden })
+  externalSubmitRef.current = { busy, dispatchSubmit, onSteer, onSteerHidden }
 
   useLayoutEffect(
     () =>
@@ -253,7 +251,7 @@ export function useComposerSubmit({
               ...(displayKind ? { displayKind } : {})
             })
 
-          if (!current.busy || (current.yieldFirst && !displayKind)) {
+          if (!current.busy) {
             // Explicitly no attachments: the send must not pick up the draft's files. A rejected
             // visible request goes to the queue (sendable, editable), never over the user's draft:
             // under its own submission id (a rejection can follow an uncertain delivery, and the
@@ -331,18 +329,6 @@ export function useComposerSubmit({
     })
   }
 
-  const sendDraft = (text: string) => {
-    const submittedAttachments = cloneAttachments(attachments)
-    const retry = takeDraftRetry?.(text, submittedAttachments)
-    triggerHaptic('submit')
-    resetBrowseState(sessionId)
-    clearDraft()
-    // Keep blob: previews alive for the optimistic bubble; revoke when that
-    // consumer is discarded/replaced (not here — clear would race the clone).
-    scope.attachments.clear({ retainPreviewUrls: true })
-    dispatchSubmit(text, submittedAttachments, undefined, retry && { submission_id: retry.id })
-  }
-
   // Returns false when the submit was refused and must not refocus the input.
   const submitWhileBusy = (text: string, payloadPresent: boolean, blockingPrompt: boolean) => {
     // Slash commands should execute immediately even while the agent is
@@ -370,12 +356,6 @@ export function useComposerSubmit({
       triggerHaptic('submit')
       clearDraft()
       dispatchSubmit(text, undefined, undefined, retry && { submission_id: retry.id })
-
-      return true
-    }
-
-    if (yieldFirst && payloadPresent) {
-      sendDraft(text)
 
       return true
     }
@@ -555,7 +535,15 @@ export function useComposerSubmit({
     } else if (!payloadPresent && queuedPrompts.length > 0) {
       void drainNextQueued()
     } else if (payloadPresent) {
-      sendDraft(text)
+      const submittedAttachments = cloneAttachments(attachments)
+      const retry = takeDraftRetry?.(text, submittedAttachments)
+      triggerHaptic('submit')
+      resetBrowseState(sessionId)
+      clearDraft()
+      // Keep blob: previews alive for the optimistic bubble; revoke when that
+      // consumer is discarded/replaced (not here — clear would race the clone).
+      scope.attachments.clear({ retainPreviewUrls: true })
+      dispatchSubmit(text, submittedAttachments, undefined, retry && { submission_id: retry.id })
     }
 
     refocusAfterSend(editorHadFocus)

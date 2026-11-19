@@ -12,7 +12,6 @@ describe('skill provenance tiers', () => {
       expect(catalogSourceFor('bundled')).toBe('built-in')
       expect(catalogSourceFor('hub')).toBe('hub')
       expect(catalogSourceFor('external')).toBe('external')
-      expect(catalogSourceFor('shared')).toBe('shared')
       expect(catalogSourceFor('agent')).toBe('local')
     })
 
@@ -24,10 +23,6 @@ describe('skill provenance tiers', () => {
   describe('isEditableProvenance', () => {
     it('keeps learned/local skills editable', () => {
       expect(isEditableProvenance('agent')).toBe(true)
-    })
-
-    it('keeps shared catalog skills editable in place', () => {
-      expect(isEditableProvenance('shared')).toBe(true)
     })
 
     it('keeps external mounts editable in place', () => {

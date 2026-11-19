@@ -9,7 +9,8 @@ import {
   extendRefreshPageToOverlap,
   graftRefreshedTailOntoBackfill,
   mergeOlderTranscriptPage,
-  transcriptBackfillAvailable
+  transcriptBackfillAvailable,
+  unhideOpeningUserRows
 } from './transcript-backfill'
 
 vi.mock('@/hermes', () => ({
@@ -581,11 +582,11 @@ describe('backfillOlderTranscriptPage', () => {
   })
 
   // #96875: paging can reach the true top while the opening USER turn is still
-  // missing — the last `latest` page begins at the first assistant row. Once
-  // the tail bookkeeping reports the session fully loaded, the oldest display
-  // rows must be fetched once and the opening user turn prepended so "Show
-  // earlier" lands on the greeting. The server serves a genuine human opening
-  // visible; a hidden opening row is model scaffolding and never paints.
+  // missing — compaction projection stamps the durable opening row
+  // display_kind=hidden (hydration drops it) or the last `latest` page begins
+  // at the first assistant row. Once the tail bookkeeping reports the session
+  // fully loaded, the oldest display rows must be fetched once and the opening
+  // user turn prepended so "Show earlier" lands on the greeting.
   it('fetches the oldest page once paging is exhausted and prepends the opening user turn', async () => {
     truncatedTail()
     // The last older page: full paging history ends at the first assistant row.
@@ -594,13 +595,14 @@ describe('backfillOlderTranscriptPage', () => {
       pagination: { limit: 120, offset: 120, order: 'latest', returned: 1 },
       session_id: 'stored-1'
     } as never)
-    // The oldest page (order=oldest, offset 0) holds the greeting.
+    // The oldest page (order=oldest, offset 0) holds the greeting, hidden.
     vi.mocked(getSessionMessages).mockResolvedValue({
       messages: [
         {
           id: 1,
           role: 'user' as const,
           content: 'opening greeting',
+          display_kind: 'hidden',
           timestamp: 1
         },
         { ...row(10, 'first-assistant'), role: 'assistant' as const }
@@ -687,42 +689,43 @@ describe('backfillOlderTranscriptPage', () => {
     expect(applied).toBe(true)
     expect(applyOlderPage).toHaveBeenCalledTimes(1)
   })
+})
 
-  it.each([
-    ['older page', 'older'],
-    ['origin page', 'origin']
-  ])('keeps a hidden scaffolding opening row off screen on the %s', async (_label, source) => {
-    truncatedTail()
+describe('unhideOpeningUserRows', () => {
+  it('clears hidden on the opening user row so hydration keeps the greeting', () => {
+    const messages = unhideOpeningUserRows([
+      {
+        id: 1,
+        role: 'user',
+        content: 'hello there',
+        display_kind: 'hidden',
+        timestamp: 1
+      }
+    ])
 
-    const hiddenOpening = {
-      id: 1,
-      role: 'user' as const,
-      content: 'model-only birth notice',
-      display_kind: 'hidden',
-      timestamp: 1
-    }
+    expect(messages[0].display_kind).toBeUndefined()
+    expect(messages[0].display_content).toBe('hello there')
+  })
 
-    const reply = { ...row(2, 'first reply'), role: 'assistant' as const }
+  it('leaves a visible opening user row untouched', () => {
+    const messages = unhideOpeningUserRows([row(1, 'plain greeting')])
 
-    vi.mocked(getOlderSessionMessages).mockResolvedValue({
-      messages: source === 'older' ? [hiddenOpening, reply] : [reply],
-      pagination: { limit: 120, offset: 120, order: 'latest', returned: source === 'older' ? 2 : 1 },
-      session_id: 'stored-1'
-    } as never)
-    vi.mocked(getSessionMessages).mockResolvedValue({
-      messages: [hiddenOpening, reply],
-      pagination: { limit: 20, offset: 0, order: 'oldest', returned: 2 },
-      session_id: 'stored-1'
-    } as never)
+    expect(messages[0].display_kind).toBeUndefined()
+    expect(messages[0].display_content).toBeUndefined()
+  })
 
-    const applyOlderPage = vi.fn()
+  it('leaves hidden rows after the opening user turn alone', () => {
+    const messages = unhideOpeningUserRows([
+      row(1, 'greeting'),
+      { id: 2, role: 'user', content: 'scaffolding', display_kind: 'hidden', timestamp: 2 }
+    ])
 
-    await backfillOlderTranscriptPage({ storedSessionId: 'stored-1', isCurrent: () => true, applyOlderPage })
+    expect(messages[1].display_kind).toBe('hidden')
+  })
 
-    const applied = applyOlderPage.mock.calls.flatMap(call => call[0] as ChatMessage[])
+  it('leaves a hidden opening row without content hidden', () => {
+    const messages = unhideOpeningUserRows([{ id: 1, role: 'user', content: '', display_kind: 'hidden', timestamp: 1 }])
 
-    expect(applied.length).toBeGreaterThan(0)
-    expect(applied.some(message => message.role === 'user')).toBe(false)
-    expect(JSON.stringify(applied)).not.toContain('model-only birth notice')
+    expect(messages[0].display_kind).toBe('hidden')
   })
 })

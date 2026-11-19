@@ -25,7 +25,6 @@ import { VoiceEngineRows } from './voice-engine-rows'
 export interface VoiceMenuProps {
   autoSpeak: boolean
   disabled: boolean
-  hideConversation?: boolean
   state: ChatBarState
   voiceStatus: VoiceStatus
   onDictate: () => void
@@ -51,7 +50,6 @@ export interface VoiceMenuProps {
 export function VoiceMenu({
   autoSpeak,
   disabled,
-  hideConversation = false,
   state,
   voiceStatus,
   onDictate,
@@ -104,22 +102,18 @@ export function VoiceMenu({
         </DropdownMenuTrigger>
       </Tip>
       <DropdownMenuContent align="end" className="min-w-52">
-        {hideConversation ? null : (
-          <>
-            <DropdownMenuItem
-              className={dropdownMenuRow}
-              disabled={disabled}
-              onSelect={() => {
-                triggerHaptic('open')
-                onStartConversation()
-              }}
-            >
-              <AudioLines className={iconSize.sm} />
-              {c.startVoice}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-          </>
-        )}
+        <DropdownMenuItem
+          className={dropdownMenuRow}
+          disabled={disabled}
+          onSelect={() => {
+            triggerHaptic('open')
+            onStartConversation()
+          }}
+        >
+          <AudioLines className={iconSize.sm} />
+          {c.startVoice}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <VoiceEngineRows disabled={disabled} />
         <DropdownMenuSeparator />
         {/* Checkbox items, because all three are toggles the user is reading
