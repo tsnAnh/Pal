@@ -494,8 +494,13 @@ def _result(authority, record):
         if status == 'failed' and (record.get('retry') or {}).get('refused') == 'cancelled':
             status = 'cancelled'  # its sender withdrew it (``session_bot_cancel``); its retry never ran
     if status == 'settled' and reply and (record.get('author') or {}).get('is_bot'):
+        from gateway.session_authorities import served_profile_name
         from gateway.session_bot_outcome import sender_reply
-        reply = sender_reply(authority, current, reply)
+        from tools.bot_dm_language import screen_reply
+        author = record['author']
+        reply = screen_reply(sender_reply(authority, current, reply), original=reply, home=record['profile_home'],
+                             replier=served_profile_name(record['profile_home']), sender=str(author.get('name') or ''),
+                             key=record['delivery_id'])
     if status == 'settled' and not reply:
         from gateway.session_bot_outcome import forgotten_reply
         reply = forgotten_reply(authority, current, record) or ''
