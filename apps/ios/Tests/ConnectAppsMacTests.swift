@@ -30,8 +30,9 @@ private func makeModel(_ apps: [ConnectApp]) throws -> ConnectAppsModel {
         cache: CacheStore(root: root)
     )
     connection.surfaces.remember(ConnectCatalog(apps: apps), SurfaceKey.screen("connect-catalog", bot: tester))
+    let pool = DeviceHostPool(connection: connection, consent: DevicePermissionPresenter(botName: { $0 }))
     return ConnectAppsModel(
-        connection: connection, pool: DeviceHostPool(botName: { $0 }), profile: tester, botName: "Tester", browser: UnavailableAuthorizationBrowser()
+        connection: connection, pool: pool, profile: tester, botName: "Tester", browser: UnavailableAuthorizationBrowser()
     )
 }
 
