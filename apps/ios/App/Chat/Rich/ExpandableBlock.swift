@@ -39,10 +39,9 @@ struct ExpandableBlock<Content: View>: View {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
                 } label: {
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    PalIcon(expanded ? "chevron.up" : "chevron.down", ink: .secondary)
                         .hermesText(.chip)
                         .fontWeight(.semibold)
-                        .foregroundStyle(PalTokens.textSecondary)
                         .frame(maxWidth: .infinity, minHeight: Self.hitHeight)
                         .contentShape(Rectangle())
                 }

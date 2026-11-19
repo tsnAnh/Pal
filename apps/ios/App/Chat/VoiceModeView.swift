@@ -103,9 +103,13 @@ struct VoiceModeView: View {
                     .disabled(conversation.phase != .speaking && conversation.phase != .thinking)
             }
             Button(action: dismiss) { // nav-chrome: ok
-                Image(systemName: "xmark")
+                PalIcon(
+                    "xmark",
+                    ink: .custom(accent == Color(theme.palette.chipSelectedFill)
+                        ? Color(theme.palette.chipSelectedText)
+                        : (model.chatAccent?.foreground ?? .white))
+                )
                     .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(accent == Color(theme.palette.chipSelectedFill) ? Color(theme.palette.chipSelectedText) : (model.chatAccent?.foreground ?? .white))
                     .frame(width: 64, height: 64)
                     .background(accent, in: Circle())
             }
@@ -117,9 +121,8 @@ struct VoiceModeView: View {
 
     private func voiceButton(_ systemName: String, label: LocalizedStringKey, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemName)
+            PalIcon(systemName)
                 .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(Color(theme.palette.textPrimary))
                 .frame(width: 64, height: 64)
                 .background(Color(theme.palette.circleButtonFill), in: Circle())
         }

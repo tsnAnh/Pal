@@ -200,11 +200,11 @@ struct ChatView: View {
     private var connectionStatus: some View {
         switch model.connection {
         case .reconnecting:
-            ChatStatusLine(text: String(localized: "Reconnecting…"), systemImage: "clock")
+            ChatStatusLine(text: String(localized: "Reconnecting…"), symbol: "clock")
                 .accessibilityIdentifier("reconnectingIndicator")
         case .connecting, .live:
             if model.isCatchingUp {
-                ChatStatusLine(text: String(localized: "Checking for new messages…"), systemImage: "clock")
+                ChatStatusLine(text: String(localized: "Checking for new messages…"), symbol: "clock")
                     .accessibilityIdentifier("chatStatusLine")
             }
         }

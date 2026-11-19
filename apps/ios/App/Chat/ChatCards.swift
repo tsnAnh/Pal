@@ -136,7 +136,7 @@ struct ApprovalAnsweredCard: View {
                     .foregroundStyle(PalTokens.textSecondary)
                     .lineLimit(3)
             }
-            Label(outcome, systemImage: symbol)
+            Label(outcome, palIcon: symbol)
                 .hermesText(.chatBody)
                 .foregroundStyle(PalTokens.textPrimary)
         }

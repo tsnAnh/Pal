@@ -48,7 +48,7 @@ struct EmbedCardView: View {
                 Button {
                     store.loadOnce(descriptor)
                 } label: {
-                    Label("Load \(descriptor.label)", systemImage: "play.fill")
+                    Label("Load \(descriptor.label)", palIcon: "play.fill", ink: .onFill)
                 }
                 .buttonStyle(.pill(.accent))
                 Button("Always allow \(descriptor.label)") {
