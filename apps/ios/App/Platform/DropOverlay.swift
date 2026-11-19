@@ -60,9 +60,8 @@ struct DropOverlay: View {
 
     private func card(tint: DropOverlayTint) -> some View {
         VStack(spacing: 10) {
-            Image(systemName: Self.glyph)
+            PalIcon(Self.glyph, ink: .custom(tint.glyph))
                 .font(.system(size: 34, weight: .regular))
-                .foregroundStyle(tint.glyph)
                 .overlay(alignment: .topTrailing) { countBadge(tint: tint) }
             VStack(spacing: 2) {
                 Text(DropOverlayCopy.title(count: targeting.itemCount, botName: botName))

@@ -104,7 +104,7 @@ struct CustomConnectorBody: View {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color(RGB(hexString: BotLookCatalog.tealHex) ?? RGB(hex: 0x0ec79b)))
                     .frame(width: 56, height: 56)
-                    .overlay(Image(systemName: "powerplug.fill").font(.system(size: 24, weight: .semibold)).foregroundStyle(.white))
+                    .overlay(PalIcon("powerplug.fill", ink: .onFill).font(.system(size: 24, weight: .semibold)))
                     .accessibilityHidden(true)
                 Text(model.heading)
                     .font(style.titleFont)
@@ -190,7 +190,7 @@ struct CustomConnectorBody: View {
                         .disabled(model.isBusy)
                     if !row.isBlank {
                         Button { model.removeHeader(row.id) } label: {
-                            Image(systemName: "minus.circle.fill").foregroundStyle(style.secondary)
+                            PalIcon("minus.circle.fill", ink: .secondary)
                         }
                         .buttonStyle(.plain)
                         .disabled(model.isBusy)

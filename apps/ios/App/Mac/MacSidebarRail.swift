@@ -42,9 +42,8 @@ struct MacRail: View {
                     }
                     if router.capabilities.contains(.kanban) {
                         Button { router.presentKanban() } label: {
-                            Image(systemName: "rectangle.split.3x1")
+                            PalIcon("rectangle.split.3x1", ink: .secondary)
                                 .font(.system(size: 15))
-                                .foregroundStyle(PalTokens.textSecondary)
                                 .frame(width: 28, height: 28)
                                 .contentShape(Rectangle())
                         }
@@ -78,9 +77,8 @@ private struct MacRailAction: View {
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
+            PalIcon(systemName, ink: .secondary)
                 .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(PalTokens.textSecondary)
                 .frame(width: 28, height: 28)
                 .contentShape(Rectangle())
         }

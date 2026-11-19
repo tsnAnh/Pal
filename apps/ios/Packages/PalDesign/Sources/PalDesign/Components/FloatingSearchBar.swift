@@ -90,9 +90,8 @@ public struct FloatingSearchBar: View {
 
     private var field: some View {
         HStack(spacing: 10) {
-            Image(systemName: "magnifyingglass")
+            PalIcon("magnifyingglass")
                 .font(.system(size: 19, weight: .regular))
-                .foregroundStyle(Color(theme.palette.textPrimary))
                 .accessibilityHidden(true)
             TextField("", text: $text, prompt: Text(prompt).foregroundStyle(Color(theme.palette.textSecondary)))
                 .hermesText(.searchPrompt)
@@ -109,9 +108,8 @@ public struct FloatingSearchBar: View {
 
     private func glassCircle(systemName: String, label: String, identifier: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemName)
+            PalIcon(systemName)
                 .font(.system(size: 19, weight: .regular))
-                .foregroundStyle(Color(theme.palette.textPrimary))
                 .frame(width: PalMetrics.searchBarHeight, height: PalMetrics.searchBarHeight)
                 .contentShape(Circle())
         }
@@ -162,9 +160,8 @@ public struct FloatingSearchLauncher: View {
             HStack(spacing: PalMetrics.searchBarLeadingButtonGap) {
                 if let leadingButton {
                     Button(action: leadingButton.action) {
-                        Image(systemName: leadingButton.systemName)
+                        PalIcon(leadingButton.systemName)
                             .font(.system(size: 19, weight: .regular))
-                            .foregroundStyle(Color(theme.palette.textPrimary))
                             .frame(width: PalMetrics.searchBarHeight, height: PalMetrics.searchBarHeight)
                             .contentShape(Circle())
                     }
@@ -175,9 +172,8 @@ public struct FloatingSearchLauncher: View {
                 }
                 Button(action: action) {
                     HStack(spacing: 10) {
-                        Image(systemName: "magnifyingglass")
+                        PalIcon("magnifyingglass")
                             .font(.system(size: 19, weight: .regular))
-                            .foregroundStyle(Color(theme.palette.textPrimary))
                         Text(prompt)
                             .hermesText(.searchPrompt)
                             .foregroundStyle(Color(theme.palette.textSecondary))

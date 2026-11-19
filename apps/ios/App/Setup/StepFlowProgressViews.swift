@@ -92,7 +92,7 @@ struct StepFlowChecklist: View {
                     )
                 }
             if row.state == .done {
-                Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(.white)
+                PalIcon("checkmark", ink: .onFill).font(.system(size: 10, weight: .bold))
             } else {
                 Text("\(row.number)").font(.system(size: 11)).foregroundStyle(row.state == .current ? PalTokens.textPrimary : PalTokens.textTertiary)
             }
@@ -131,16 +131,14 @@ struct StepFlowCalmView: View {
             case .spinner:
                 ProgressView().controlSize(.extraLarge)
             case .success:
-                Image(systemName: "checkmark")
+                PalIcon("checkmark", ink: .success)
                     .font(.system(size: 24))
-                    .foregroundStyle(.green)
                     .frame(width: 54, height: 54)
                     .background(PalTokens.control, in: Circle())
                     .accessibilityHidden(true)
             case .pending:
-                Image(systemName: "clock")
+                PalIcon("clock", ink: .secondary)
                     .font(.system(size: 24))
-                    .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: 54, height: 54)
                     .background(PalTokens.control, in: Circle())
                     .accessibilityHidden(true)

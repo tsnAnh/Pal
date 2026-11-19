@@ -116,7 +116,7 @@ struct KanbanDetailsView: View {
             } label: {
                 HStack(spacing: 6) {
                     Text("Details")
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                    PalIcon(expanded ? "chevron.up" : "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                 }
             }

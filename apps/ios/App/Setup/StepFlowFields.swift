@@ -25,7 +25,7 @@ struct StepCopyCard: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             SetupButton(
-                title: copied ? String(localized: "Copied") : String(localized: "Copy"), systemImage: copied ? "checkmark" : "doc.on.doc",
+                title: copied ? String(localized: "Copied") : String(localized: "Copy"), symbol: copied ? "checkmark" : "doc.on.doc",
                 identifier: "\(identifier)Button"
             ) {
                 Pasteboard.string = value

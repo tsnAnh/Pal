@@ -55,27 +55,25 @@ struct BotProfileView: View {
     private var toolbar: some ToolbarContent {
         ToolbarItem(placement: .trailingBar) {
             Button { Task { await model.shareTemplate() } } label: {
-                Image(systemName: "square.and.arrow.up")
+                PalIcon("square.and.arrow.up")
             }
             .disabled(model.isSharing)
             .accessibilityLabel(Text("Share as Template"))
             .accessibilityIdentifier("profileShareButton")
-            .tint(.primary)
         }
         ToolbarItem(placement: .trailingBar) {
             Menu {
                 if !model.isPrimary {
-                    Button("Replace Primary Bot…", systemImage: "star") { model.confirmsReplacePrimary = true }
+                    Button { model.confirmsReplacePrimary = true } label: { Label("Replace Primary Bot…", palIcon: "star") }
                         .accessibilityIdentifier("profileReplacePrimary")
                 }
-                Button("Copy ID", systemImage: "doc.on.doc") { model.copyID() }
+                Button { model.copyID() } label: { Label("Copy ID", palIcon: "doc.on.doc") }
                     .accessibilityIdentifier("profileCopyID")
             } label: {
-                Image(systemName: "ellipsis")
+                PalIcon("ellipsis")
             }
             .accessibilityLabel(Text("More"))
             .accessibilityIdentifier("profileMoreButton")
-            .tint(.primary)
         }
     }
 

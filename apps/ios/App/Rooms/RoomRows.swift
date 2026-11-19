@@ -119,7 +119,7 @@ struct RoomAttachmentChip: View {
 
     var body: some View {
         Button(action: download) {
-            Label(attachment.name, systemImage: attachment.kind == "image" ? "photo" : attachment.kind == "pdf" ? "doc.richtext" : "doc")
+            Label(attachment.name, palIcon: attachment.kind == "image" ? "photo" : attachment.kind == "pdf" ? "doc.richtext" : "doc")
                 .lineLimit(1)
                 .modifier(RoomChip())
         }

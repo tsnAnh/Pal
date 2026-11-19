@@ -85,14 +85,12 @@ public struct LeadingSettingsRow<Leading: View>: View {
     private var accessory: some View {
         switch trailing {
         case .chevron:
-            Image(systemName: "chevron.right")
+            PalIcon("chevron.right", ink: .tertiary)
                 .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color(theme.palette.chevron))
                 .accessibilityHidden(true)
         case .external:
-            Image(systemName: "arrow.up.right")
+            PalIcon("arrow.up.right", ink: .tertiary)
                 .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color(theme.palette.chevron))
                 .accessibilityHidden(true)
         case .none, .toggle:
             EmptyView()

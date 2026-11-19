@@ -15,9 +15,8 @@ struct FindBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
+            PalIcon("magnifyingglass", ink: .secondary)
                 .font(.system(size: 17))
-                .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityHidden(true)
             TextField("", text: $model.findQuery, prompt: Text("Find in Chat").foregroundStyle(Color(theme.palette.textTertiary)))
                 .hermesText(.composerField)
@@ -57,9 +56,8 @@ struct FindBar: View {
 
     private func stepButton(_ systemName: String, label: LocalizedStringKey, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: systemName)
+            PalIcon(systemName)
                 .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Color(theme.palette.textPrimary))
                 .frame(width: 30, height: 30)
                 .minimumHitTarget(visual: 30)
         }

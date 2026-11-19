@@ -29,9 +29,8 @@ public struct PalClearGlassIconButton: View {
 
     public var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
+            PalIcon(systemName)
                 .font(.system(size: diameter * 0.42, weight: .medium))
-                .foregroundStyle(PalTokens.textPrimary)
                 .frame(width: diameter, height: diameter)
                 .palClearGlass(Circle())
                 .contentShape(Circle())
@@ -102,9 +101,8 @@ public struct ClearGlassSearchField: View {
 
     public var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
+            PalIcon("magnifyingglass", ink: .secondary)
                 .font(.system(size: 14))
-                .foregroundStyle(PalTokens.textSecondary)
                 .accessibilityHidden(true)
             TextField("", text: $text, prompt: Text(prompt).foregroundStyle(PalTokens.textTertiary))
                 .textFieldStyle(.plain)

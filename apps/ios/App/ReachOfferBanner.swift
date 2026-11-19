@@ -50,9 +50,8 @@ private struct ReachOfferBanner: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("reach-offer-banner")
             Button(action: dismiss) {
-                Image(systemName: "xmark")
+                PalIcon("xmark", ink: .secondary)
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(Color(theme.palette.textSecondary))
                     .frame(width: 32, height: 32)
                     .contentShape(Rectangle())
             }

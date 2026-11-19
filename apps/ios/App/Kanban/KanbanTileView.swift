@@ -64,7 +64,7 @@ struct KanbanChip: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            if let symbol { Image(systemName: symbol).font(.system(size: 9, weight: .semibold)) }
+            if let symbol { PalIcon(symbol, ink: .custom(tone)).font(.system(size: 9, weight: .semibold)) }
             Text(text).lineLimit(1)
         }
         .hermesText(.footnoteCaption)
@@ -212,7 +212,7 @@ struct KanbanPullRequestChip: View {
 
     var body: some View {
         HStack(spacing: 3) {
-            Image(systemName: symbol).font(.system(size: 9, weight: .semibold))
+            PalIcon(symbol, ink: .custom(tone)).font(.system(size: 9, weight: .semibold))
             Text(showsState ? "\(number) \(stateTitle)" : number).lineLimit(1)
         }
         .hermesText(.footnoteCaption)
@@ -278,7 +278,7 @@ struct KanbanTile: View {
     @ViewBuilder
     private var blockedNote: some View {
         if row.column == .blocked, let kind = row.card.blockKind, !kind.isEmpty {
-            Label(kind, systemImage: "exclamationmark.circle")
+            Label(kind, palIcon: "exclamationmark.circle", ink: .destructive)
                 .labelStyle(KanbanNoteLabelStyle())
                 .hermesText(.footnoteCaption)
                 .foregroundStyle(Color(theme.palette.destructive))

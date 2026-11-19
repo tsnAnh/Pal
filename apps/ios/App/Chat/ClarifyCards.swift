@@ -54,7 +54,7 @@ struct ClarifyCard: View {
         }
         .clarifySurface()
         .contextMenu {
-            Button("Skip question", systemImage: "xmark") { answer("") }
+            Button { answer("") } label: { Label("Skip question", palIcon: "xmark") }
         }
         .accessibilityElement(children: .contain)
         .accessibilityAction(named: Text("Skip question")) { answer("") }
@@ -189,7 +189,7 @@ struct ClarifyBadge: View {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .strokeBorder(Color(theme.palette.cardStroke), lineWidth: fill == nil ? 1 : 0)
             if style == .chosen, letter == nil {
-                Image(systemName: "checkmark")
+                PalIcon("checkmark", ink: .custom(Self.color(style.badgeText(in: theme.palette, accent: accent), ink: true) ?? .primary))
                     .font(.caption.weight(.bold))
             } else if let letter {
                 Text(verbatim: letter)

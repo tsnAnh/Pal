@@ -48,7 +48,7 @@ struct ComposerNotice: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "exclamationmark.circle")
+            PalIcon("exclamationmark.circle", ink: .secondary)
                 .font(.system(size: ChatMetrics.statusIconSize, weight: .medium))
                 .accessibilityHidden(true)
             Text(text)
@@ -56,7 +56,7 @@ struct ComposerNotice: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityIdentifier("composerNoticeText")
             Button(action: dismiss) {
-                Image(systemName: "xmark")
+                PalIcon("xmark", ink: .secondary)
                     .font(.system(size: 11, weight: .semibold))
                     .frame(width: ChatMetrics.minimumHitTarget, height: ChatMetrics.minimumHitTarget)
                     .contentShape(Rectangle())

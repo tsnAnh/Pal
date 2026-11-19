@@ -49,8 +49,10 @@ extension View {
     private func actionButtons(_ bot: BotRow, router: AppRouter) -> some View {
         ForEach(BotMenuAction.allCases) { action in
             if router.supports(action) {
-                Button(action.contextMenuTitle, systemImage: action.contextMenuSymbol) {
+                Button {
                     router.perform(action, botName: bot.name)
+                } label: {
+                    Label(action.contextMenuTitle, palIcon: action.contextMenuSymbol)
                 }
                 .accessibilityIdentifier("botMenu-\(action)")
             }
@@ -61,7 +63,7 @@ extension View {
         Button {
             roster.setPinned(bot, pinned: !bot.isPinned)
         } label: {
-            Label(bot.isPinned ? "Unpin" : "Pin", systemImage: bot.isPinned ? "pin.slash" : "pin")
+            Label(bot.isPinned ? "Unpin" : "Pin", palIcon: bot.isPinned ? "pin.slash" : "pin")
         }
         .accessibilityIdentifier(bot.isPinned ? "unpinAction" : "pinAction")
     }
@@ -70,7 +72,7 @@ extension View {
         Button {
             if bot.isUnread { roster.markRead(bot.name) } else { roster.markUnread(bot) }
         } label: {
-            Label(bot.isUnread ? "Mark as Read" : "Mark as Unread", systemImage: bot.isUnread ? "bell.slash" : "bell")
+            Label(bot.isUnread ? "Mark as Read" : "Mark as Unread", palIcon: bot.isUnread ? "bell.slash" : "bell")
         }
         .accessibilityIdentifier(bot.isUnread ? "markReadAction" : "markUnreadAction")
     }
@@ -79,7 +81,7 @@ extension View {
         Button {
             router.renamingBot = bot.name
         } label: {
-            Label("Rename Bot", systemImage: "square.and.pencil")
+            Label("Rename Bot", palIcon: "square.and.pencil")
         }
         .accessibilityIdentifier("renameBotAction")
     }
@@ -90,7 +92,7 @@ extension View {
             Button {
                 roster.copyConversationID(bot)
             } label: {
-                Label("Copy conversation ID", systemImage: "doc.on.doc")
+                Label("Copy conversation ID", palIcon: "doc.on.doc")
             }
             .accessibilityIdentifier("copyConversationIDAction")
         }
@@ -100,7 +102,7 @@ extension View {
         Button {
             roster.setHidden(bot, hidden: !bot.isHidden)
         } label: {
-            Label(visibilityTitle(hidden: bot.isHidden), systemImage: bot.isHidden ? "eye" : "eye.slash")
+            Label(visibilityTitle(hidden: bot.isHidden), palIcon: bot.isHidden ? "eye" : "eye.slash")
         }
         .accessibilityIdentifier(bot.isHidden ? "showBotAction" : "hideBotAction")
     }
@@ -116,7 +118,7 @@ extension View {
         Button(role: .destructive) {
             router.deletingBot = bot.name
         } label: {
-            Label("Delete", systemImage: "trash")
+            Label("Delete", palIcon: "trash", ink: .destructive)
         }
         .accessibilityIdentifier("deleteBotAction")
     }
@@ -130,7 +132,7 @@ extension View {
                         .accessibilityIdentifier("replacePrimary-\(candidate.name)")
                 }
             } label: {
-                Label("Replace with different Bot", systemImage: "arrow.left.arrow.right")
+                Label("Replace with different Bot", palIcon: "arrow.left.arrow.right")
             }
             .accessibilityIdentifier("replacePrimaryMenu")
         }
@@ -142,7 +144,7 @@ extension View {
             Button {
                 roster.makePrimary(bot)
             } label: {
-                Label("Make Primary", systemImage: "star")
+                Label("Make Primary", palIcon: "star")
             }
             .accessibilityIdentifier("makePrimaryAction")
         }

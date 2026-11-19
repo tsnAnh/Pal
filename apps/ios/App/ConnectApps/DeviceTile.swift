@@ -7,9 +7,8 @@ struct DeviceTile: View {
 
     var body: some View {
         AppTile(style: .filled(color)) {
-            Image(systemName: symbol)
+            PalIcon(symbol, ink: .onFill)
                 .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(.white)
         }
     }
 
