@@ -28,11 +28,13 @@ public enum SheetLeadingButton: Sendable {
 
 public struct SheetGlassButton: View {
     public let leading: SheetLeadingButton
+    public let clear: Bool
     public let accessibilityIdentifier: String
     public let action: () -> Void
 
-    public init(leading: SheetLeadingButton = .close, accessibilityIdentifier: String, action: @escaping () -> Void) {
+    public init(leading: SheetLeadingButton = .close, clear: Bool = false, accessibilityIdentifier: String, action: @escaping () -> Void) {
         self.leading = leading
+        self.clear = clear
         self.accessibilityIdentifier = accessibilityIdentifier
         self.action = action
     }
@@ -42,13 +44,25 @@ public struct SheetGlassButton: View {
             PalIcon(leading.systemName, ink: .secondary)
                 .font(.system(size: 14, weight: .regular))
                 .frame(width: PalMetrics.sheetGlassButtonSize, height: PalMetrics.sheetGlassButtonSize)
-                .palGlass(Circle())
+                .modifier(SheetGlassSurface(clear: clear))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .keyboardShortcut(.cancelAction)
         .accessibilityLabel(Text(leading.accessibilityLabel))
         .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+private struct SheetGlassSurface: ViewModifier {
+    let clear: Bool
+
+    func body(content: Content) -> some View {
+        if clear {
+            content.palClearGlass(Circle())
+        } else {
+            content.palGlass(Circle())
+        }
     }
 }
 

@@ -29,8 +29,16 @@ struct ConnectAppsList: View {
     @Bindable var model: ConnectAppsModel
 
     var body: some View {
+        #if os(macOS)
+        macBody
+        #else
+        iosBody
+        #endif
+    }
+
+    private var iosBody: some View {
         let _ = PalPerf.event("connect.body.main") // swiftlint:disable:this redundant_discardable_let
-        ScrollView {
+        return ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 resumeBanner
                 ConnectAppsSearchField(text: $model.query, prompt: String(localized: "Search \(model.catalog.apps.count) apps"))
@@ -48,7 +56,7 @@ struct ConnectAppsList: View {
     }
 
     @ViewBuilder
-    private var resumeBanner: some View {
+    var resumeBanner: some View {
         if model.trimmedQuery.isEmpty, let offer = model.resumeOffer {
             SetupResumeBanner(offer: offer) { model.continueSetup(offer) }
                 .padding(.horizontal, PalMetrics.screenMargin)
@@ -102,14 +110,14 @@ struct ConnectAppsList: View {
         }
     }
 
-    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+    func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
         VStack(spacing: 0) { content() }
             .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous).strokeBorder(PalTokens.panelBorder, lineWidth: 1))
             .padding(.horizontal, PalMetrics.screenMargin)
     }
 
-    private func skillResults(_ skills: [InstalledSkill]) -> some View {
+    func skillResults(_ skills: [InstalledSkill]) -> some View {
         Group {
             ConnectSectionHeader(String(localized: "Skills"), accessibilityIdentifier: "connectAppsSection-skills")
             card {
@@ -124,7 +132,7 @@ struct ConnectAppsList: View {
     }
 
     @ViewBuilder
-    private var legacySection: some View {
+    var legacySection: some View {
         switch model.legacy.display(in: model.catalog) {
         case .hidden:
             EmptyView()
@@ -198,7 +206,7 @@ struct ConnectAppsList: View {
     }
 
     @ViewBuilder
-    private var capabilitiesSection: some View {
+    var capabilitiesSection: some View {
         switch model.capabilitiesPhase {
         case .hidden:
             EmptyView()

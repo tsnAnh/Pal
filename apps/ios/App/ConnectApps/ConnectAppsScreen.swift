@@ -40,18 +40,15 @@ struct ConnectAppsScreen: View {
     private var listChrome: some View {
         #if os(macOS)
         VStack(spacing: 0) {
-            HStack {
-                Text("Connect Apps")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(PalTokens.textPrimary)
-                    .accessibilityAddTraits(.isHeader)
-                    .padding(.leading, PalMetrics.macPanelTitleClearance)
-                Spacer()
+            switch model.navigation.screen {
+            case .apps:
+                ConnectAppsMacHeader(model: model)
+                ConnectAppsList(model: model)
+            case .installed:
+                ConnectAppsMacInstalled(model: model)
             }
-            .padding(.horizontal, PalMetrics.cardGap)
-            .frame(height: MacMetrics.topBarHeight)
-            ConnectAppsList(model: model)
         }
+        .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: !model.navigation.showsPanelClose))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectApps")
         #else
@@ -88,7 +85,7 @@ struct ConnectAppsScreen: View {
             .frame(height: MacMetrics.topBarHeight)
             CustomConnectorForm(model: connector, style: .mac) { Task { await model.leaveCustomConnector() } }
         }
-        .preference(key: MacPanelCloseIdentifierKey.self, value: "customConnectorCloseButton")
+        .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(identifier: "customConnectorCloseButton"))
         #else
         SheetChrome(
             leading: .back,
