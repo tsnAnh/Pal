@@ -11,12 +11,17 @@ public struct BotAvatarView: View {
     private let outline: AvatarOutline?
     private let pointerReach: CGFloat
     private let eyeInk: AvatarColor?
+    private let sharesSlot: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if os(macOS)
+    @Environment(\.controlActiveState) private var controlActiveState
+    #endif
     @Environment(\.colorScheme) private var colorScheme
     @State private var clock: AvatarMoodClock
     @State private var cache = AvatarContentCache()
     @State private var look = AvatarLook.zero
+    @State private var slot = UUID()
 
     public init(
         spec: BotAvatarSpec,
@@ -25,7 +30,8 @@ public struct BotAvatarView: View {
         animated: Bool = true,
         outline: AvatarOutline? = nil,
         pointerReach: CGFloat? = nil,
-        eyeInk: AvatarColor? = nil
+        eyeInk: AvatarColor? = nil,
+        sharesSlot: Bool = false
     ) {
         self.spec = spec
         self.size = size
@@ -33,6 +39,7 @@ public struct BotAvatarView: View {
         self.animated = animated
         self.outline = outline
         self.eyeInk = eyeInk
+        self.sharesSlot = sharesSlot
         self.pointerReach = pointerReach ?? AvatarLook.defaultReach(size: size)
         _clock = State(initialValue: AvatarMoodClock(
             mood: mood,
@@ -44,7 +51,29 @@ public struct BotAvatarView: View {
     }
 
     private var activity: AvatarActivity {
-        AvatarActivity(mood: mood, size: size, animated: animated, reduceMotion: reduceMotion)
+        AvatarActivity(mood: mood, size: size, animated: animated, reduceMotion: reduceMotion, paused: isPaused)
+    }
+
+    private var wantsSlot: Bool { sharesSlot && animated && AvatarMotion.isLooping(mood) }
+
+    private var windowActive: Bool {
+        #if os(macOS)
+        controlActiveState != .inactive
+        #else
+        true
+        #endif
+    }
+
+    private var isPaused: Bool {
+        !windowActive || (wantsSlot && !AvatarSlotBudget.shared.holds(slot))
+    }
+
+    private func syncSlot() {
+        if wantsSlot {
+            AvatarSlotBudget.shared.request(slot)
+        } else {
+            AvatarSlotBudget.shared.release(slot)
+        }
     }
 
     public var body: some View {
@@ -66,6 +95,9 @@ public struct BotAvatarView: View {
         .frame(width: size, height: size)
         .modifier(PointerLook(look: $look, size: size, reach: pointerReach, tracks: activity.tracksPointer))
         .accessibilityHidden(true)
+        .onAppear { syncSlot() }
+        .onChange(of: wantsSlot) { syncSlot() }
+        .onDisappear { AvatarSlotBudget.shared.release(slot) }
         .onChange(of: mood) { _, next in
             clock = resolvedClock(solid: cache.isSolid).changing(to: next, at: Date())
         }
@@ -79,30 +111,6 @@ public struct BotAvatarView: View {
         resolved.loadingSeed = LoadingSequence.seed(for: spec.blinkKey)
         resolved.reduceMotion = reduceMotion
         return resolved
-    }
-}
-
-final class AvatarContentCache {
-    private let store: AvatarContentStore
-    private var spec: BotAvatarSpec?
-    private var scheme: ColorScheme?
-    private var eyeInk: AvatarColor?
-    private var content: AvatarContent?
-
-    init(store: AvatarContentStore = .shared) {
-        self.store = store
-    }
-
-    var isSolid: Bool { content?.isSolid ?? false }
-
-    func resolve(_ spec: BotAvatarSpec, _ scheme: ColorScheme, eyeInk: AvatarColor?) -> AvatarContent {
-        if let content, self.spec == spec, self.scheme == scheme, self.eyeInk == eyeInk { return content }
-        let built = store.content(for: spec, scheme: scheme, eyeInk: eyeInk)
-        self.spec = spec
-        self.scheme = scheme
-        self.eyeInk = eyeInk
-        content = built
-        return built
     }
 }
 

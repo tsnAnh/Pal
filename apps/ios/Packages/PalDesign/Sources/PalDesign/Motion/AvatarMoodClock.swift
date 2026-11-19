@@ -87,6 +87,13 @@ struct AvatarSchedule: TimelineSchedule, Sendable {
     func entries(from startDate: Date, mode: TimelineScheduleMode) -> UnfoldFirstSequence<Date> {
         let clock = clock
         let interval = mode == .lowFrequency ? max(frameInterval, 1) : frameInterval
-        return sequence(first: startDate) { clock.nextUpdate(after: $0, frameInterval: interval) }
+        return sequence(first: startDate) { Self.onGrid(clock.nextUpdate(after: $0, frameInterval: interval), interval) }
+    }
+
+    static func onGrid(_ date: Date?, _ interval: TimeInterval) -> Date? {
+        guard let date else { return nil }
+        let time = date.timeIntervalSinceReferenceDate
+        let cell = (time / interval - 1e-9).rounded(.up)
+        return Date(timeIntervalSinceReferenceDate: max(cell * interval, time))
     }
 }
