@@ -100,6 +100,12 @@ CASES = [
     ("perf-unguarded-write", ROSTER, "        live = snapshot.live\n", "        assignIfChanged(\\.live, snapshot.live)\n"),
     ("perf-unguarded-write", ROSTER, "        self.bots = next\n", "        let bots = next\n"),
     ("perf-unguarded-write", ROSTER, "        isLoaded = true\n", "        let isLoaded = true\n"),
+    ("perf-dropped-value", ROSTER,
+     "    private func publish() {\n        let next = combined.sorted()\n    }\n",
+     "    private func publish() {\n        assignIfChanged(\\.bots, combined.sorted())\n    }\n"),
+    ("perf-dropped-value", ROSTER,
+     "    private func apply(_ snapshot: RosterSnapshot) async {\n        let rebuild = change.profiles\n        publish()\n    }\n",
+     "    private func apply(_ snapshot: RosterSnapshot) async {\n        let rebuild = change.profiles\n        if rebuild { publish() }\n    }\n"),
     ("perf-shadow-radius", SCREEN, ".shadow(color: .black.opacity(0.35), radius: 40, y: 18)\n", ".shadow(color: .black.opacity(0.2), radius: 12, y: 4)\n"),
     ("perf-shadow-radius", SCREEN, ".shadow(color: .black, radius: 24)\n", ".shadow(color: .black, radius: 23)\n"),
     ("perf-glass-over-fill", DESIGN,
@@ -270,6 +276,23 @@ def test_pre_fix_roster_apply_fails_and_the_real_roster_model_passes(tmp_path: P
     assert [f.text.split("=")[0].strip() for f in old] == ["live", "capabilities", "isLoaded", "bots"]
     current = (REPO / "apps" / "ios" / ROSTER).read_text(encoding="utf-8")
     assert not [f for f in csp.scan(_tree(tmp_path / "new", {ROSTER: current})) if f.rule == "perf-unguarded-write"]
+
+
+def test_roster_publish_that_drops_its_list_fails_and_the_real_roster_model_passes(tmp_path: Path) -> None:
+    dropped = "    private func publish() {\n        let next = combined.sorted()\n    }\n"
+    assert [f.rule for f in csp.scan(_tree(tmp_path / "old", {ROSTER: dropped}))] == ["perf-dropped-value", "perf-dropped-value"]
+    current = (REPO / "apps" / "ios" / ROSTER).read_text(encoding="utf-8")
+    assert not [f for f in csp.scan(_tree(tmp_path / "new", {ROSTER: current})) if f.rule == "perf-dropped-value"]
+    parent = subprocess.run(
+        ["git", "show", f"1a45067c:apps/ios/{ROSTER}"], cwd=REPO, capture_output=True, text=True, check=False
+    )
+    if parent.returncode == 0:
+        found = [f.line for f in csp.scan(_tree(tmp_path / "main", {ROSTER: parent.stdout})) if f.rule == "perf-dropped-value"]
+        assert len(found) == 2
+
+
+def test_dropped_value_only_applies_to_the_guarded_model_file(tmp_path: Path) -> None:
+    assert "perf-dropped-value" not in _rules(tmp_path, SCREEN, "    func publish() {\n        let next = 1\n    }\n")
 
 
 AVATAR = "Packages/PalDesign/Sources/PalDesign/BotAvatarView.swift"
