@@ -26,7 +26,7 @@ struct ReplyTarget: Equatable {
 
 struct ParsedMarkdown: Equatable {
     let source: String
-    private let deferred: DeferredMarkdown
+    let deferred: DeferredMarkdown
     var document: MarkdownDocument { deferred.document }
 
     init(source: String, document: MarkdownDocument) {

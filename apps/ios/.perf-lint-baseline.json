@@ -5,7 +5,6 @@
   {"file": "App/Chat/BotThread/ParticipantAvatars.swift", "rule": "perf-main-json", "text": "let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]"},
   {"file": "App/Chat/FaviconStore.swift", "rule": "perf-main-disk-read", "text": "return try? Data(contentsOf: url)"},
   {"file": "App/Chat/FilePreviewSheet.swift", "rule": "perf-main-disk-read", "text": "notice = (try? FileSaver.save(Data(contentsOf: url), name: file.name)) ?? String(localized: \"The file could not be saved.\")"},
-  {"file": "App/Chat/MarkdownTableView.swift", "rule": "perf-geometry-per-row", "text": ".onGeometryChange(for: CGFloat.self) { $0.size.width } action: { record($0, column: column) }"},
   {"file": "App/Chat/Rich/MermaidRenderer.swift", "rule": "perf-main-disk-read", "text": "return try? String(contentsOf: url, encoding: .utf8)"},
   {"file": "App/Chat/RoutineOutputRow.swift", "rule": "perf-body-parse", "text": "if let block = MarkdownDocument(parsing: text).blocks.first {"},
   {"file": "App/Chat/VoiceModeView.swift", "rule": "perf-state-model-init", "text": "_conversation = State(initialValue: VoiceConversation("},

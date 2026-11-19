@@ -70,7 +70,7 @@ struct ChatRowView: View {
         case .assistant(let parsed):
             AssistantBubble(
                 text: parsed.source, parsed: parsed, images: row.images, files: row.files, filesPending: row.isStreaming,
-                highlight: findQuery, isCurrentMatch: isCurrentMatch
+                highlight: findQuery, isCurrentMatch: isCurrentMatch, wholeBubbleSelection: !row.isStreaming
             )
                 .environment(\.messageActions, messageActions(for: parsed.source))
                 .environment(\.chatImageLoader, model.imageLoader)
@@ -104,56 +104,6 @@ struct ChatRowView: View {
 extension ChatRowView: @preconcurrency Equatable {
     static func == (lhs: ChatRowView, rhs: ChatRowView) -> Bool {
         lhs.row == rhs.row && lhs.context == rhs.context
-    }
-}
-
-struct AssistantBubble: View {
-    let text: String
-    let parsed: ParsedMarkdown
-    var images: [ImageReference] = []
-    var files: [FileReference] = []
-    var filesPending = false
-    var failureLead: String?
-    let highlight: String
-    let isCurrentMatch: Bool
-    var isStreaming: Bool = false
-
-    @Environment(\.chatFileOpener) private var openFile
-
-    @ViewBuilder
-    private var bubbleContent: some View {
-        if let failureLead {
-            VStack(alignment: .leading, spacing: 8) {
-                FailureLead(text: failureLead, highlight: highlight, isCurrentMatch: isCurrentMatch)
-                if !parsed.document.blocks.isEmpty {
-                    MarkdownView(parsed: parsed, highlight: highlight, isCurrentMatch: isCurrentMatch)
-                }
-            }
-        } else {
-            MarkdownView(parsed: parsed, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if !images.isEmpty { ChatImageGrid(images: images) }
-            if !text.isEmpty {
-                ChatBubble(style: BubblePalette.agentBubble) {
-                    bubbleContent.bubbleTextSelection()
-                }
-                .bubbleAccessibility(text: text, identifier: "assistantBubble")
-                .messageActions(side: .assistant)
-            }
-            if !files.isEmpty { ChatFileStack(files: files, isStreaming: filesPending) }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .bubbleWidth(.leading)
-        .environment(\.openURL, OpenURLAction { url in
-            let path = url.isFileURL ? url.path : (url.scheme == nil ? url.path : nil)
-            guard let path, let file = files.first(where: { $0.path == path }), let openFile else { return .systemAction }
-            openFile(file)
-            return .handled
-        })
     }
 }
 
@@ -383,7 +333,7 @@ extension ChatRow {
     }
 }
 
-private extension View {
+extension View {
     func bubbleAccessibility(text: String, identifier: String) -> some View {
         accessibilityElement(children: .ignore).accessibilityLabel(Text(text)).accessibilityIdentifier(identifier)
     }

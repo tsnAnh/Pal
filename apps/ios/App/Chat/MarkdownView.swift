@@ -3,42 +3,122 @@ import PalDesign
 import SwiftUI
 
 struct MarkdownView: View {
-    let parsed: ParsedMarkdown
+    private enum Content {
+        case items([MarkdownLayoutItem])
+        #if os(macOS)
+        case runs([MarkdownRun])
+        #endif
+    }
+
+    private let content: Content
+    private let perBlockSelection: Bool
     let highlight: String
     let isCurrentMatch: Bool
     var isStreaming: Bool = false
 
-    @Environment(\.hermesTheme) private var theme
+    init(parsed: ParsedMarkdown, highlight: String, isCurrentMatch: Bool, isStreaming: Bool = false) {
+        content = .items(parsed.document.layoutItems)
+        perBlockSelection = false
+        self.highlight = highlight
+        self.isCurrentMatch = isCurrentMatch
+        self.isStreaming = isStreaming
+    }
+
+    init(segment: TextSegment, wholeBubbleSelection: Bool, highlight: String, isCurrentMatch: Bool, isStreaming: Bool = false) {
+        #if os(macOS)
+        content = wholeBubbleSelection ? .runs(segment.runs) : .items(segment.items)
+        #else
+        content = .items(segment.items)
+        #endif
+        perBlockSelection = !wholeBubbleSelection
+        self.highlight = highlight
+        self.isCurrentMatch = isCurrentMatch
+        self.isStreaming = isStreaming
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(parsed.document.layoutItems) { item in
-                switch item {
-                case .block(let block):
-                    blockView(block)
-                case .quote(let blocks):
-                    quoteView(blocks)
+            switch content {
+            case .items(let items):
+                ForEach(items) { item in
+                    switch item {
+                    case .block(let block):
+                        blockView(block)
+                    case .quote(let blocks):
+                        quoted {
+                            ForEach(blocks) { block in
+                                blockView(block)
+                            }
+                        }
+                    }
                 }
+            #if os(macOS)
+            case .runs(let runs):
+                ForEach(runs) { run in
+                    MarkdownRunView(run: run, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+                }
+            #endif
             }
         }
+        .modifier(PerBlockSelection(isOn: perBlockSelection))
     }
 
     private func blockView(_ block: MarkdownBlock) -> some View {
         MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
     }
 
-    private func quoteView(_ blocks: [MarkdownBlock]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(blocks) { block in
-                blockView(block)
+    private func quoted<Inner: View>(@ViewBuilder _ inner: () -> Inner) -> some View {
+        MarkdownQuote(content: inner())
+    }
+}
+
+private struct PerBlockSelection: ViewModifier {
+    let isOn: Bool
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        if isOn { content.textSelection(.enabled) } else { content }
+        #else
+        content
+        #endif
+    }
+}
+
+struct MarkdownQuote<Inner: View>: View {
+    let content: Inner
+
+    @Environment(\.hermesTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) { content }
+            .padding(.leading, 13)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(Color(theme.palette.textTertiary)).frame(width: 3)
             }
-        }
-        .padding(.leading, 13)
-        .overlay(alignment: .leading) {
-            Rectangle().fill(Color(theme.palette.textTertiary)).frame(width: 3)
+    }
+}
+
+#if os(macOS)
+private struct MarkdownRunView: View {
+    let run: MarkdownRun
+    let highlight: String
+    let isCurrentMatch: Bool
+    let isStreaming: Bool
+
+    var body: some View {
+        switch run {
+        case .text(_, let text):
+            SelectableMarkdownText(text: text, highlight: highlight, isCurrentMatch: isCurrentMatch)
+        case .block(let block):
+            MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+        case .quote(_, let runs):
+            MarkdownQuote(content: ForEach(runs) { inner in
+                MarkdownRunView(run: inner, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+            })
         }
     }
 }
+#endif
 
 private struct MarkdownBlockView: View {
     let block: MarkdownBlock

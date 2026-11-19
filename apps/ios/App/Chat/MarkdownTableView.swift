@@ -6,13 +6,11 @@ struct MarkdownTableView: View {
     let table: MarkdownTable
     let highlight: String
     let isCurrentMatch: Bool
+    var showsChrome = true
 
-    @Environment(\.hermesTheme) private var theme
     @ScaledMetric(relativeTo: .body) private var cellPadding: CGFloat = 10
     @ScaledMetric(relativeTo: .body) private var minimumColumn: CGFloat = 56
     @ScaledMetric(relativeTo: .body) private var maximumColumn: CGFloat = 260
-
-    @State private var measured: [CGFloat] = []
 
     private let corner: CGFloat = 8
 
@@ -21,72 +19,31 @@ struct MarkdownTableView: View {
             grid
             ScrollView(.horizontal, showsIndicators: false) { grid }
         }
-        .background(PalTokens.textPrimary.opacity(0.04), in: RoundedRectangle(cornerRadius: corner, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: corner, style: .continuous).strokeBorder(PalTokens.divider, lineWidth: 1)
-        }
-        .background { textMeasurement }
+        .modifier(TableChrome(isOn: showsChrome, corner: corner))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("markdownTable")
     }
 
-    private var widths: [CGFloat] {
-        table.columnWidths(measured: measured, cellPadding: cellPadding, minimum: minimumColumn, maximum: maximumColumn)
-    }
-
-    private var textMeasurement: some View {
-        HStack(alignment: .top, spacing: 0) {
-            ForEach(0..<table.columnCount, id: \.self) { column in
-                VStack(alignment: .leading, spacing: 0) {
-                    InlineText(text: table.header[column], highlight: "", isCurrentMatch: false, weight: .semibold)
-                        .fixedSize()
-                    ForEach(table.rows.indices, id: \.self) { index in
-                        InlineText(text: table.rows[index][column], highlight: "", isCurrentMatch: false)
-                            .fixedSize()
-                    }
-                }
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { record($0, column: column) }
-            }
-        }
-        .fixedSize()
-        .hidden()
-        .accessibilityHidden(true)
-    }
-
-    private func record(_ width: CGFloat, column: Int) {
-        var next = measured.count == table.columnCount ? measured : Array(repeating: 0, count: table.columnCount)
-        guard next[column] != width else { return }
-        next[column] = width
-        measured = next
-    }
-
     private var grid: some View {
-        let columnWidths = widths
-        return Grid(alignment: .topLeading, horizontalSpacing: 0, verticalSpacing: 0) {
-            row(table.header, widths: columnWidths, isHeader: true, isLast: table.rows.isEmpty)
+        TableGridLayout(columns: table.columnCount, minimum: minimumColumn, maximum: maximumColumn) {
+            ForEach(table.header.indices, id: \.self) { column in
+                cell(table.header[column], column: column, isHeader: true, isLast: table.rows.isEmpty)
+            }
             ForEach(table.rows.indices, id: \.self) { index in
-                row(table.rows[index], widths: columnWidths, isHeader: false, isLast: index == table.rows.count - 1)
+                ForEach(table.rows[index].indices, id: \.self) { column in
+                    cell(table.rows[index][column], column: column, isHeader: false, isLast: index == table.rows.count - 1)
+                }
             }
         }
         .textSelection(.enabled)
     }
 
-    private func row(_ cells: [AttributedString], widths: [CGFloat], isHeader: Bool, isLast: Bool) -> some View {
-        GridRow {
-            ForEach(cells.indices, id: \.self) { column in
-                cell(cells[column], width: widths[column], column: column, isHeader: isHeader, isLast: isLast)
-            }
-        }
-    }
-
-    private func cell(_ text: AttributedString, width: CGFloat, column: Int, isHeader: Bool, isLast: Bool) -> some View {
+    private func cell(_ text: AttributedString, column: Int, isHeader: Bool, isLast: Bool) -> some View {
         InlineText(text: text, highlight: highlight, isCurrentMatch: isCurrentMatch, weight: isHeader ? .semibold : nil)
             .multilineTextAlignment(textAlignment(column))
             .padding(.horizontal, cellPadding)
             .padding(.vertical, cellPadding * 0.6)
-            .frame(width: width, alignment: frameAlignment(column))
-            .frame(maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: frameAlignment(column))
             .background(isHeader ? PalTokens.chipFill : Color.clear)
             .overlay(alignment: .bottom) {
                 if !isLast { Rectangle().fill(PalTokens.divider).frame(height: 1) }
@@ -107,5 +64,114 @@ struct MarkdownTableView: View {
         case .center: .center
         case .trailing: .trailing
         }
+    }
+}
+
+private struct TableChrome: ViewModifier {
+    let isOn: Bool
+    let corner: CGFloat
+
+    func body(content: Content) -> some View {
+        if isOn {
+            content
+                .background(PalTokens.textPrimary.opacity(0.04), in: RoundedRectangle(cornerRadius: corner, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: corner, style: .continuous).strokeBorder(PalTokens.divider, lineWidth: 1)
+                }
+        } else {
+            content
+        }
+    }
+}
+
+private struct TableGridLayout: Layout {
+    let columns: Int
+    let minimum: CGFloat
+    let maximum: CGFloat
+
+    struct Metrics {
+        var width: CGFloat?
+        var columnWidths: [CGFloat] = []
+        var rowHeights: [CGFloat] = []
+    }
+
+    func makeCache(subviews: Subviews) -> Metrics? { nil }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Metrics?) -> CGSize {
+        let metrics = resolve(proposal.width, subviews: subviews, cache: &cache)
+        return CGSize(width: metrics.columnWidths.reduce(0, +), height: metrics.rowHeights.reduce(0, +))
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Metrics?) {
+        let metrics = resolve(proposal.width, subviews: subviews, cache: &cache)
+        var y = bounds.minY
+        for (row, height) in metrics.rowHeights.enumerated() {
+            var x = bounds.minX
+            for (column, width) in metrics.columnWidths.enumerated() {
+                subviews[row * columns + column].place(
+                    at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(width: width, height: height)
+                )
+                x += width
+            }
+            y += height
+        }
+    }
+
+    private func resolve(_ width: CGFloat?, subviews: Subviews, cache: inout Metrics?) -> Metrics {
+        if let cached = cache, cached.width == width { return cached }
+        let metrics = measure(width, subviews: subviews)
+        cache = metrics
+        return metrics
+    }
+
+    private func measure(_ width: CGFloat?, subviews: Subviews) -> Metrics {
+        guard columns > 0, subviews.count >= columns else { return Metrics(width: width) }
+        let rows = subviews.count / columns
+        let natural = (0..<columns).map { column in
+            (0..<rows).map { subviews[$0 * columns + column].sizeThatFits(.unspecified).width }.max() ?? 0
+        }
+        let columnWidths = TableColumnSizing.widths(natural: natural, minimum: minimum, maximum: maximum, available: width)
+        let rowHeights = (0..<rows).map { row in
+            (0..<columns).map { column in
+                subviews[row * columns + column].sizeThatFits(ProposedViewSize(width: columnWidths[column], height: nil)).height
+            }.max() ?? 0
+        }
+        return Metrics(width: width, columnWidths: columnWidths, rowHeights: rowHeights)
+    }
+}
+
+struct TableBubbleView: View {
+    let table: MarkdownTable
+    let highlight: String
+    let isCurrentMatch: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            MarkdownTableView(table: table, highlight: highlight, isCurrentMatch: isCurrentMatch, showsChrome: false)
+            footer
+        }
+        .background(BubblePalette.agentBubble, in: RoundedRectangle(cornerRadius: ChatMetrics.bubbleRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: ChatMetrics.bubbleRadius, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var footer: some View {
+        HStack {
+            Text("^[\(table.rowCount) row](inflect: true) · ^[\(table.columnCount) column](inflect: true)")
+            Spacer(minLength: 8)
+            Menu("Copy table") {
+                Button("Copy as Markdown") { Pasteboard.string = table.copyTable(format: .markdown) }
+                Button("Copy as TSV") { Pasteboard.string = table.copyTable(format: .tsv) }
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+        .font(.caption)
+        .foregroundStyle(PalTokens.textTertiary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .overlay(alignment: .top) { Rectangle().fill(PalTokens.divider).frame(height: 1) }
     }
 }
