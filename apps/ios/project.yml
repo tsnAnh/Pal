@@ -151,6 +151,29 @@ targets:
         product: PalDesign
       - sdk: AppIntentsTesting.framework
         destinationFilters: [iOS]
+  HermesBotsTests:
+    type: bundle.unit-test
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - Tests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: HermesBots
+      - package: PalKit
+        product: PalProtocol
+      - package: PalKit
+        product: PalDiagnostics
+      - package: PalKit
+        product: PalREST
+      - package: PalKit
+        product: PalAuth
+      - package: PalKit
+        product: PalClient
+      - package: PalKit
+        product: PalRoster
 schemes:
   HermesBots:
     build:
@@ -158,4 +181,5 @@ schemes:
         HermesBots: all
     test:
       targets:
+        - HermesBotsTests
         - HermesBotsUITests
