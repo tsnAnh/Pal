@@ -14,7 +14,7 @@ perf-queue-sync, perf-timeline-unlisted, perf-timeline-interval, perf-hover-unli
 perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry-per-row,
 perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write,
 perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired, perf-dropped-value,
-perf-open-ungated.
+perf-avatar-row-slot, perf-open-ungated.
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -51,6 +51,7 @@ SHADOW_MAX_RADIUS = 24
 OWNED_TYPE = r"[A-Z]\w*(?:Model|Store|Hub|Conversation|Controller)(?:\.\w+)?"
 SHELL_FILES = {("App", "Mac", "MacShell.swift")}
 ROW_FILES = {("App", "Chat", "ChatRows.swift")}
+AVATAR_ROW_FILES = {("App", "Mac", "MacSidebar.swift"), ("App", "HomeView.swift"), ("App", "Rooms", "RoomRows.swift")}
 GUARDED_WRITE_FIELDS = {("App", "RosterModel.swift"): ("live", "capabilities", "bots", "isLoaded")}
 
 
@@ -76,6 +77,10 @@ def mac_shell(parts: tuple[str, ...], text: str) -> bool:
 
 def row_file(parts: tuple[str, ...], text: str) -> bool:
     return parts in ROW_FILES
+
+
+def avatar_row_file(parts: tuple[str, ...], text: str) -> bool:
+    return parts in AVATAR_ROW_FILES
 
 
 def guarded_model(parts: tuple[str, ...], text: str) -> bool:
@@ -191,6 +196,14 @@ LINE_RULES = (
         anywhere,
         "unbounded or faster-than-30 fps animation schedule. Use TimelineView(.animation(minimumInterval: 1.0 / 30)) "
         "or slower (1.0 / 20 for small avatars), and pause it when idle",
+    ),
+    LineRule(
+        "perf-avatar-row-slot",
+        re.compile(r"\bBotAvatarView\("),
+        avatar_row_file,
+        "a list-row avatar animates its looping mood outside the window's shared slot. Pass sharesSlot: true "
+        "(one row per window animates, the rest hold the static pose) or animated: false",
+        skip=re.compile(r"\bsharesSlot:\s*true\b|\banimated:\s*false\b"),
     ),
     LineRule(
         "perf-hover-unlisted",

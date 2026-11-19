@@ -18,6 +18,7 @@ import perf_hitch
 import perf_host
 import perf_ios
 import perf_report
+import perf_signpost
 from perf_common import IOS_DIR, PROFILE_SIZES, REPO
 
 SCRIPTS = REPO / ".claude" / "skills" / "verify-ios" / "scripts"
@@ -213,6 +214,9 @@ def main():
     hitch = commands.add_parser("hitch", help="summarize one hitch report, or compare two (JSON file or captured stdout holding a PAL_HITCH line)")
     hitch.add_argument("report")
     hitch.add_argument("after", nargs="?")
+    signposts = commands.add_parser("signposts", help="list the Connect Apps signposts from xctrace exports (the os-signpost-interval and os-signpost tables): n, p50, p95, max, total, whole run and the Connect Apps step window")
+    signposts.add_argument("exports", nargs="+", help="xctrace export XML files (one per table)")
+    signposts.add_argument("--offset", type=float, default=0.0, help="seconds between the recording start and step 1 (default %(default)s)")
     arguments = sys.argv[1:]
     if not arguments or arguments[0].startswith("-"):
         arguments = ["run", *arguments]
@@ -224,6 +228,13 @@ def main():
         try:
             print(perf_hitch.render(args.report, args.after), end="")
         except perf_hitch.HitchReportError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
+        return 0
+    if args.command == "signposts":
+        try:
+            print(perf_signpost.render(args.exports, args.offset), end="")
+        except perf_signpost.SignpostError as error:
             print(f"error: {error}", file=sys.stderr)
             return 2
         return 0

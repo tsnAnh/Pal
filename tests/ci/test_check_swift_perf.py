@@ -51,6 +51,9 @@ CASES = [
     ("perf-body-format", SCREEN,
      "struct Row: View {\n    var body: some View {\n        let day = Calendar.current.startOfDay(for: date)\n        Text(\"\\(day)\")\n    }\n}\n",
      "struct Row: View {\n    let day: Date\n    var body: some View { Text(\"\\(day)\") }\n}\n"),
+    ("perf-avatar-row-slot", "App/Mac/MacSidebar.swift",
+     "struct R: View {\n    var body: some View {\n        BotAvatarView(spec: bot.spec, size: 24, mood: mood)\n    }\n}\n",
+     "struct R: View {\n    var body: some View {\n        BotAvatarView(spec: bot.spec, size: 24, mood: mood, sharesSlot: true)\n    }\n}\n"),
     ("perf-redraw-per-call", SCREEN,
      "if let image = images[host] { return image.roundedIcon(points: pointSize) }\n",
      "if let image = rounded[host] { return image }\n"),
@@ -361,6 +364,27 @@ def test_pre_fix_avatar_and_sidebar_fail_and_the_real_files_pass() -> None:
         assert not csp.violations(Path(rel), current, allow), rel
     entries = json.loads((ios / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
     assert not [e for e in entries if e["file"] in (AVATAR, SIDEBAR)]
+
+
+HOME = "App/HomeView.swift"
+ROOM_ROWS = "App/Rooms/RoomRows.swift"
+PRE_FIX_ROW_AVATARS = {
+    SIDEBAR: "struct MacBotAvatar: View {\n    var body: some View {\n        BotAvatarView(spec: bot.spec, size: diameter * 1.2, mood: roster.avatarMood(for: bot.name))\n    }\n}\n",
+    HOME: "struct Row: View {\n    var body: some View {\n        BotAvatarView(spec: bot.spec, size: PalMetrics.homeRowAvatarFrame, mood: mood)\n    }\n}\n",
+    ROOM_ROWS: "struct Row: View {\n    var body: some View {\n        BotAvatarView(spec: bot.spec, size: size * 1.15)\n    }\n}\n",
+}
+
+
+def test_pre_fix_row_avatars_fail_and_the_real_files_pass(tmp_path: Path) -> None:
+    ios = REPO / "apps" / "ios"
+    for rel, body in PRE_FIX_ROW_AVATARS.items():
+        assert [f.rule for f in csp.violations(Path(rel), body)] == ["perf-avatar-row-slot"], rel
+        opted = body.replace("mood: mood)", "mood: mood, sharesSlot: true)").replace("bot.name))", "bot.name), sharesSlot: true)")
+        opted = opted.replace("* 1.15)", "* 1.15, sharesSlot: true)")
+        assert not csp.violations(Path(rel), opted), rel
+        assert not csp.violations(Path(rel), body.replace(")\n    }", ", animated: false)\n    }", 1)), rel
+        assert not [f for f in csp.violations(Path(rel), (ios / rel).read_text(encoding="utf-8")) if f.rule == "perf-avatar-row-slot"], rel
+    assert not csp.violations(Path(SCREEN), PRE_FIX_ROW_AVATARS[SIDEBAR])
 
 
 def test_allowlisted_timeline_file_still_fails_the_minimum_interval(tmp_path: Path) -> None:

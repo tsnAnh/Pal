@@ -62,9 +62,12 @@ final class DeviceConnectorsModel {
     }
 
     private func localReports() async -> [DeviceConnectorID: DeviceConnectorReport] {
+        let perf = PalPerf.begin("connect.localReports"); defer { perf.end() }
         var reports: [DeviceConnectorID: DeviceConnectorReport] = [:]
         for entry in DeviceConnectorCatalog.entries(for: localKind) {
+            let probeStart = ContinuousClock.now
             reports[entry.id] = DeviceConnectorReport(id: entry.id, osPermission: await permissions.status(of: entry.id))
+            PalPerf.event("connect.permission.probe", label: entry.id.rawValue, since: probeStart)
         }
         return reports
     }

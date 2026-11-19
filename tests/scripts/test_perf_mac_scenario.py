@@ -11,6 +11,8 @@ INTERVALS = (
     "roster.apply", "roster.refetch", "chat.rebuild", "chat.timeline.apply", "markdown.parse",
     "avatar.frame", "avatar.canvas.draw", "shell.body", "disk.cache.load", "disk.sync.main", "roster.row.body", "roster.apply.skipped",
     "chat.row.body", "chat.scroll.rowMoved", "chat.snapshot.coalesced",
+    "connect.open", "connect.catalog.build", "connect.sections.main", "connect.localReports", "connect.permission.probe",
+    "connect.messagesdb.probe", "connect.start.burst", "connect.body.main",
 )
 TEMPLATES = ("Time Profiler", "SwiftUI", "Animation Hitches")
 

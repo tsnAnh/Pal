@@ -248,7 +248,7 @@ struct MacBotAvatar: View {
     var body: some View {
         let activity = roster.activity(for: bot.name)
         AvatarBadge(diameter: diameter, showsPrimaryBadge: showsPrimaryBadge && bot.isPrimary, accessibilityIdentifier: "rowAvatar-\(bot.name)") {
-            BotAvatarView(spec: bot.spec, size: diameter * 1.2, mood: roster.avatarMood(for: bot.name))
+            BotAvatarView(spec: bot.spec, size: diameter * 1.2, mood: roster.avatarMood(for: bot.name), sharesSlot: true)
                 .opacity(activity.avatarOpacity)
         }
         .frame(width: diameter, height: diameter)

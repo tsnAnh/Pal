@@ -2,6 +2,7 @@ import PalBotProfile
 import PalConnect
 import PalDesign
 import PalDevice
+import PalDiagnostics
 import PalProtocol
 import SwiftUI
 
@@ -28,6 +29,7 @@ struct ConnectAppsList: View {
     @Bindable var model: ConnectAppsModel
 
     var body: some View {
+        let _ = PalPerf.event("connect.body.main") // swiftlint:disable:this redundant_discardable_let
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 resumeBanner
@@ -69,6 +71,7 @@ struct ConnectAppsList: View {
 
     @ViewBuilder
     private var loaded: some View {
+        let _ = model.noteListRendered() // swiftlint:disable:this redundant_discardable_let
         let searching = !model.trimmedQuery.isEmpty
         let sections = model.listSections
         let skills = model.searchedSkills

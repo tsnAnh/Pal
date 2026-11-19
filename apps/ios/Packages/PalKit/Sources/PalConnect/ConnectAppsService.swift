@@ -105,6 +105,7 @@ public struct ConnectAppsService: Sendable {
         async let servers = attempt { try decodeList(await call("mcp.servers.list"), key: "servers", as: McpServerEntry.self) }
         let (entriesResult, presetsResult, skillsResult, serversResult) = await (entries, presets, skills, servers)
         if entriesResult == nil, presetsResult == nil { throw ConnectAppsError.unavailable }
+        let perf = PalPerf.begin("connect.catalog.build"); defer { perf.end() }
         return ConnectCatalog.make(
             catalog: entriesResult ?? [], mcp: presetsResult ?? [], skills: skillsResult ?? [], servers: serversResult ?? []
         )
