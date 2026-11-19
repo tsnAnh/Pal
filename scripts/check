@@ -118,6 +118,7 @@ _GUARDS = {
     "swift-bot-tint": ["scripts/ci/check_swift_bot_tint.py"],
     "swift-chat-drop": ["scripts/ci/check_swift_chat_drop.py"],
     "swift-glass": ["scripts/ci/check_swift_glass.py"],
+    "swift-image-viewer": ["scripts/ci/check_swift_image_viewer.py"],
     "swift-perf": ["scripts/ci/check_swift_perf.py"],
     "swift-fault-details": ["scripts/ci/check_swift_fault_details.py"],
 }

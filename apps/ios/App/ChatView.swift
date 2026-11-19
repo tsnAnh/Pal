@@ -178,9 +178,7 @@ struct ChatView: View {
         .fullCover(isPresented: $isVoiceModePresented) {
             VoiceModeView(model: model) { isVoiceModePresented = false }
         }
-        .fullCover(isPresented: Binding(get: { model.imageViewer != nil }, set: { if !$0 { model.imageViewer = nil } })) {
-            ChatImageViewer(model: model).environment(\.chatImageLoader, model.imageLoader)
-        }
+        .imageViewerPresentation(model: model, attach: attachActions) { scroll.jumpToBottom(animated: !reduceMotion) }
         .sheet(item: $model.filePreview) { file in
             FilePreviewSheet(file: file).environment(\.chatFileActions, model.fileActions)
         }

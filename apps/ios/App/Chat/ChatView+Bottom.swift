@@ -15,6 +15,14 @@ extension ChatView {
         { batch in Task { await AttachmentStager.stage(batch, into: sink) } }
     }
 
+    var attachActions: ComposerAttachActions {
+        ComposerAttachActions(
+            photos: { items in Task { await AttachmentStager.stage(photos: items, into: sink) } },
+            capture: { image in Task { await AttachmentStager.stage(image: image, into: sink) } },
+            intake: attach
+        )
+    }
+
     @ViewBuilder
     func bottomBar() -> some View {
         if model.isFinding {
