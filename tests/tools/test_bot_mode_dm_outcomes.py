@@ -10,6 +10,7 @@ from gateway.session_bot import _result
 from gateway.session_results import retain_result
 from persistence_assembly import open_persistence, profile_scope
 from tools import bot_mode_dm, bot_mode_dm_outcome
+from tools.bot_dm_language import WITHHELD_NOTICE
 from tests.fixtures.storage_seed import seed_session
 
 from tests.tools.test_bot_mode_dm import _FakeAgent, _canonical_target, _capture_spawn, _fresh_probe_cache, _managed_home
@@ -108,7 +109,7 @@ def test_owner_line_in_a_toolless_bot_turn_stays_out_of_the_sender_payload(tmp_p
     final = f"{OWNER_LINE}\n{ENGLISH_REPLY}"
     db, record = _settled(tmp_path, [{"role": "assistant", "content": final}], final)
     try:
-        receipt = _result(SimpleNamespace(db=db), record)
+        receipt = _result(SimpleNamespace(persistence=db, db=db), record)
         assert receipt["reply"] == ENGLISH_REPLY
         from gateway.session_results import admission_result
         assert OWNER_LINE in admission_result(db, record["admission_id"])["result"]["final_response"]
@@ -122,7 +123,7 @@ def test_owner_line_before_a_tool_call_is_an_earlier_message_and_the_reply_is_un
                 {"role": "assistant", "content": ENGLISH_REPLY}]
     db, record = _settled(tmp_path, messages, ENGLISH_REPLY)
     try:
-        assert _result(SimpleNamespace(db=db), record)["reply"] == ENGLISH_REPLY
+        assert _result(SimpleNamespace(persistence=db, db=db), record)["reply"] == ENGLISH_REPLY
     finally:
         db.close()
 
@@ -130,7 +131,7 @@ def test_owner_line_before_a_tool_call_is_an_earlier_message_and_the_reply_is_un
 def test_a_lone_owner_addressed_line_is_withheld_not_delivered(tmp_path):
     db, record = _settled(tmp_path, [{"role": "assistant", "content": OWNER_LINE}], OWNER_LINE)
     try:
-        assert _result(SimpleNamespace(db=db), record)["reply"] == ""
+        assert _result(SimpleNamespace(persistence=db, db=db), record)["reply"] == WITHHELD_NOTICE
     finally:
         db.close()
 
@@ -138,6 +139,6 @@ def test_a_lone_owner_addressed_line_is_withheld_not_delivered(tmp_path):
 def test_a_lone_english_line_is_still_delivered(tmp_path):
     db, record = _settled(tmp_path, [{"role": "assistant", "content": ENGLISH_REPLY}], ENGLISH_REPLY)
     try:
-        assert _result(SimpleNamespace(db=db), record)["reply"] == ENGLISH_REPLY
+        assert _result(SimpleNamespace(persistence=db, db=db), record)["reply"] == ENGLISH_REPLY
     finally:
         db.close()

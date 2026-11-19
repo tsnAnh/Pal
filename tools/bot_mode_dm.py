@@ -300,6 +300,10 @@ def message_agent_tool(target: str = "", message: str = "", task_id: Optional[st
     if len(body) > MESSAGE_MAX_CHARS:
         return _err(f"message too long ({len(body)} chars > {MESSAGE_MAX_CHARS}). "
                     "Send the essentials; share large content as a file path instead.")
+    from tools.bot_dm_language import screen_send
+
+    if (not_english := screen_send(body, home=home, sender=me, target=str(target or ""))):
+        return _err(not_english)
 
     from tools.bot_mode_dm_coordination import split_targets
 
