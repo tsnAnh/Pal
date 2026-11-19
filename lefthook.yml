@@ -18,11 +18,6 @@ pre-commit:
       glob: "*.{js,ts,tsx}"
       run: just eslint {staged_files}
 
-    - name: lint desktop app
-      root: apps/desktop/
-      glob: "*.{js,ts,tsx}"
-      run: just eslint {staged_files}
-
     - name: lint tui
       root: ui-tui/
       glob: "*.{js,ts,tsx}"

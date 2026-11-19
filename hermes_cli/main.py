@@ -292,8 +292,6 @@ from hermes_cli.subcommands.console import build_console_parser, cmd_console
 from hermes_cli.subcommands.update import build_update_parser
 from hermes_cli.subcommands.uninstall import build_uninstall_parser
 from hermes_cli.subcommands.dashboard import build_dashboard_parser, build_serve_parser
-from hermes_cli.subcommands.webapp import build_webapp_parser
-from hermes_cli.subcommands.gui import build_gui_parser
 from hermes_cli.subcommands.logs import build_logs_parser
 from hermes_cli.subcommands.prompt_size import build_prompt_size_parser
 from hermes_cli.subcommands.memory import build_memory_parser
@@ -728,7 +726,7 @@ from hermes_cli.main_install_repair import (  # frozen updater surface: update_c
     _update_marker_path,
     _venv_scripts_dir,
 )
-from hermes_cli.main_desktop import (
+from hermes_cli.main_desktop import (  # noqa: F401 -- kept as hermes_cli.main.cmd_gui for callers/tests
     cmd_gui,
 )
 from hermes_cli.main_desktop import (  # frozen updater surface: update_cmd*.py resolve these via _m()
@@ -3130,10 +3128,8 @@ def _build_cli_parser():
     build_completion_parser(subparsers, cmd_completion=cmd_completion, parser=parser)
     build_dashboard_parser(
         subparsers, cmd_dashboard=cmd_dashboard, cmd_dashboard_register=cmd_dashboard_register)
-    build_webapp_parser(subparsers, cmd_webapp=cmd_webapp)
-    # "desktop" is canonical (Hermes-Setup.exe tells users to run it, so it
-    # must be the name --help shows); "gui" is a deprecated alias.
-    build_gui_parser(subparsers, cmd_gui=cmd_gui)
+    # Pal ships no Electron app (apps/desktop is removed), so `hermes desktop`/`gui` and the
+    # browser-hosted Desktop (`hermes webapp`) are not registered.
     build_logs_parser(subparsers, cmd_logs=cmd_logs)
     build_prompt_size_parser(subparsers, cmd_prompt_size=cmd_prompt_size)
     return parser, subparsers

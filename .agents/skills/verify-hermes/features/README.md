@@ -1,6 +1,6 @@
 # Hermes engine verification map
 
-This directory is the maintained source for verifying the user-facing behavior of the Hermes engine from this checkout: the `hermes` CLI, the classic REPL, and the `hermes serve` JSON-RPC backend. Read the index before driving, then use the matching feature file as the recipe. Desktop and iOS are covered by `verify-desktop` and `verify-ios`.
+This directory is the maintained source for verifying the user-facing behavior of the Hermes engine from this checkout: the `hermes` CLI, the classic REPL, and the `hermes serve` JSON-RPC backend. Read the index before driving, then use the matching feature file as the recipe. iOS is covered by `verify-ios`.
 
 ## Baseline preconditions
 
