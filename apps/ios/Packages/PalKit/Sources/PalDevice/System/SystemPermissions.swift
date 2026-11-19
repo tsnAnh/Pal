@@ -5,6 +5,7 @@ import CoreGraphics
 import CoreLocation
 import EventKit
 import Foundation
+import PalDiagnostics
 import PalProtocol
 import UserNotifications
 #if canImport(AlarmKit) && os(iOS)
@@ -129,7 +130,7 @@ public struct SystemPermissions: DevicePermissions {
     private static var messagesStatus: DeviceOSPermission {
         #if os(macOS)
         guard UserDefaults.standard.bool(forKey: messagesAskedKey) else { return .notDetermined }
-        return switch MessagesAccessProbe.current() {
+        return switch PalPerf.interval("connect.messagesdb.probe", MessagesAccessProbe.current) {
         case .ready: .granted
         case .permissionNeeded: .denied
         case .unavailable: .unsupported
