@@ -9,6 +9,7 @@ PLATFORMS = ("macOS", "iOS")
 THRESHOLD_KEYS = ("hitch", "severe")
 COUNT_FIELDS = ("frames", "hitches", "severeHitches")
 MILLISECOND_FIELDS = ("worstFrameMs", "hitchMs")
+LONG_LIST_MAX = 10
 HITCH_LINE = re.compile(r"PAL_HITCH\s+(\{.*\})\s*$")
 COMPARED = (
     ("duration_s", "durationSeconds", "{:.1f}"),
@@ -69,7 +70,32 @@ def validate(report):
         raise HitchReportError("missing field 'thresholdsMs'")
     for key in THRESHOLD_KEYS:
         require_number(thresholds, key)
+    validate_long_hitches(report)
     return report
+
+
+def validate_long_hitches(report):
+    present = [field for field in ("longHitchThresholdMs", "longHitchCount", "longHitches") if field in report]
+    if not present:
+        return
+    if len(present) != 3:
+        raise HitchReportError(f"long hitch fields come together; got only {present}")
+    require_number(report, "longHitchThresholdMs")
+    count = require_number(report, "longHitchCount", integer=True)
+    listed = report["longHitches"]
+    if not isinstance(listed, list):
+        raise HitchReportError("field 'longHitches' must be a list")
+    if len(listed) > min(count, LONG_LIST_MAX):
+        raise HitchReportError(f"field 'longHitches' lists {len(listed)} entries for {count} long hitches (at most {LONG_LIST_MAX})")
+    if count > report["severeHitches"]:
+        raise HitchReportError("longHitchCount exceeds severeHitches; long hitches are severe ones")
+    for entry in listed:
+        if not isinstance(entry, dict):
+            raise HitchReportError(f"field 'longHitches' entries must be objects, got {entry!r}")
+        for key in ("atSeconds", "ms"):
+            require_number(entry, key)
+        if entry["ms"] > report["worstFrameMs"]:
+            raise HitchReportError("a long hitch is longer than worstFrameMs")
 
 
 def extract_line(text):
@@ -106,6 +132,10 @@ def load(path):
         raise HitchReportError(f"{path}: {error}") from None
 
 
+def longest_hitches(report):
+    return sorted(report.get("longHitches", []), key=lambda entry: entry["ms"], reverse=True)[:LONG_LIST_MAX]
+
+
 def summary(report):
     duration = report["durationSeconds"]
     return {
@@ -115,19 +145,25 @@ def summary(report):
         "severePerMinute": report["severeHitches"] / duration * 60,
         "hitchMsPerSecond": report["hitchMs"] / (duration * 1000) * 1000,
         "worstFrameMs": report["worstFrameMs"],
+        "longHitchCount": report.get("longHitchCount"),
+        "longestHitches": longest_hitches(report),
     }
 
 
 def render_summary(report):
     stats = summary(report)
     thresholds = report["thresholdsMs"]
-    return "\n".join([
+    lines = [
         f"{report['platform']} run started {report['startedAt']}, {stats['durationSeconds']:.1f} s, {report['frames']} frames "
         f"(hitch > {thresholds['hitch']:g} ms, severe > {thresholds['severe']:g} ms)",
         f"  hitches: {report['hitches']} ({stats['hitchesPerMinute']:.2f}/min), severe: {report['severeHitches']} ({stats['severePerMinute']:.2f}/min)",
         f"  hitch time: {stats['hitchMsPerSecond']:.2f} ms per second",
         f"  worst frame: {stats['worstFrameMs']:.1f} ms",
-    ]) + "\n"
+    ]
+    if stats["longHitchCount"] is not None:
+        lines.append(f"  long hitches (> {report['longHitchThresholdMs']:g} ms): {stats['longHitchCount']}")
+        lines += [f"    t={entry['atSeconds']:.2f} s  {entry['ms']:.1f} ms" for entry in stats["longestHitches"]]
+    return "\n".join(lines) + "\n"
 
 
 def change_cell(before, after):

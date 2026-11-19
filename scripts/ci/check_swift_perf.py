@@ -13,7 +13,8 @@ Rules: perf-body-parse, perf-body-format, perf-redraw-per-call, perf-main-disk-r
 perf-queue-sync, perf-timeline-unlisted, perf-timeline-interval, perf-hover-unlisted,
 perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry-per-row,
 perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write,
-perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired.
+perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired,
+perf-drag-writes-binding.
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -336,11 +337,32 @@ def monitor_unpaired(src: Source) -> Iterator[tuple[int, str]]:
                                        "NSEvent.removeMonitor (on teardown or when the last user leaves)")
 
 
+BINDING_DECL = re.compile(r"@(?:Binding|AppStorage|SceneStorage)\b(?:\([^)]*\))?\s+(?:private\s+)?var\s+(\w+)")
+ON_CHANGED = re.compile(r"\s*\.onChanged\s*\{")
+
+
+def drag_writes_binding(src: Source) -> Iterator[tuple[int, str]]:
+    names = set(BINDING_DECL.findall(src.text))
+    if not names:
+        return
+    write = re.compile(rf"(?<![\w.])(?:self\.)?({'|'.join(sorted(names))})\s*[-+*/]?=(?!=)")
+    for _, _, end in src.calls("DragGesture"):
+        handler = ON_CHANGED.match(src.text, end + 1)
+        if not handler:
+            continue
+        opener = handler.end() - 1
+        for m in write.finditer(src.text, opener, src.close.get(opener, opener)):
+            yield src.line_of(m.start()), (f"drag tick writes {m.group(1)}, a @Binding or stored property owned by an ancestor: every tick "
+                                           "re-evaluates the ancestor's body. Keep the live value in a small model or local @State "
+                                           "(PalDesign DragWidth) and write the stored value once in .onEnded")
+
+
 BLOCK_RULES: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[Source], Iterator[tuple[int, str]]]], ...] = (
     ("perf-eager-stack", in_app, eager_stack),
     ("perf-geometry-per-row", in_app, geometry_per_row),
     ("perf-glass-over-fill", anywhere, glass_over_fill),
     ("perf-monitor-unpaired", in_app, monitor_unpaired),
+    ("perf-drag-writes-binding", in_app, drag_writes_binding),
 )
 
 

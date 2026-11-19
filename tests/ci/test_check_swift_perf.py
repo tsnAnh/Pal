@@ -100,6 +100,18 @@ CASES = [
     ("perf-unguarded-write", ROSTER, "        live = snapshot.live\n", "        assignIfChanged(\\.live, snapshot.live)\n"),
     ("perf-unguarded-write", ROSTER, "        self.bots = next\n", "        let bots = next\n"),
     ("perf-unguarded-write", ROSTER, "        isLoaded = true\n", "        let isLoaded = true\n"),
+    ("perf-drag-writes-binding", MAC_SHELL,
+     "struct Handle: View {\n    @Binding var width: Double\n    var body: some View {\n        Color.clear.gesture(\n"
+     "            DragGesture(minimumDistance: 1)\n                .onChanged { drag in\n                    width = drag.translation.width\n"
+     "                }\n                .onEnded { _ in }\n        )\n    }\n}\n",
+     "struct Handle: View {\n    let width: DragWidth\n    var body: some View {\n        Color.clear.gesture(\n"
+     "            DragGesture(minimumDistance: 1)\n                .onChanged { drag in width.drag(by: drag.translation.width) }\n"
+     "                .onEnded { _ in width.endDrag() }\n        )\n    }\n}\n"),
+    ("perf-drag-writes-binding", SCREEN,
+     "struct Row: View {\n    @AppStorage(\"k\") private var stored = 0.0\n    var body: some View {\n        Color.clear.gesture(\n"
+     "            DragGesture().onChanged { stored += $0.translation.width }\n        )\n    }\n}\n",
+     "struct Row: View {\n    @AppStorage(\"k\") private var stored = 0.0\n    @State private var live = 0.0\n    var body: some View {\n        Color.clear.gesture(\n"
+     "            DragGesture().onChanged { live += $0.translation.width }.onEnded { _ in stored = live }\n        )\n    }\n}\n"),
     ("perf-shadow-radius", SCREEN, ".shadow(color: .black.opacity(0.35), radius: 40, y: 18)\n", ".shadow(color: .black.opacity(0.2), radius: 12, y: 4)\n"),
     ("perf-shadow-radius", SCREEN, ".shadow(color: .black, radius: 24)\n", ".shadow(color: .black, radius: 23)\n"),
     ("perf-glass-over-fill", DESIGN,
@@ -140,8 +152,11 @@ def test_messages_name_the_replacement() -> None:
         "perf-body-array-work": "rowsNewestFirst",
         "perf-row-reads-model": "ChatRowContext",
         "perf-observed-image-dictionary": "Slot",
+        "perf-drag-writes-binding": "DragWidth",
     }
     messages = {lr.rule: lr.message for lr in csp.LINE_RULES}
+    messages["perf-drag-writes-binding"] = " ".join(m for _, m in csp.drag_writes_binding(csp.Source(
+        "@Binding var w: Double\nDragGesture().onChanged { w = 1 }\n")))
     for rule, needle in wanted.items():
         assert needle in messages[rule], rule
 
@@ -225,7 +240,6 @@ REAL_SITES = [
     ("perf-main-disk-read", "App/Chat/FilePreviewSheet.swift"),
     ("perf-main-json", "App/RosterModel.swift"),
     ("perf-queue-sync", "Packages/PalKit/Sources/PalProtocol/Cache/CacheStore.swift"),
-    ("perf-animation-container", "App/Mac/MacShell.swift"),
     ("perf-eager-stack", "App/Mac/MacSidebarRail.swift"),
     ("perf-state-model-init", "App/Mac/MacInspector.swift"),
     ("perf-model-in-body", "App/Mac/MacModals.swift"),
@@ -245,6 +259,50 @@ def test_real_tree_fails_without_baseline_and_passes_with_it() -> None:
     assert csp.new_findings(found, csp.load_baseline(root / csp.BASELINE_NAME))[0] == []
     entries = json.loads((root / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
     assert all(set(e) == {"rule", "file", "text"} for e in entries)
+
+
+PRE_FIX_SHELL = """struct MacSidebarResizeHandle: View {
+    @Binding var width: Double
+    @State private var origin: Double?
+
+    var body: some View {
+        Color.clear
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { drag in
+                        let start = origin ?? width
+                        origin = start
+                        width = min(max(start + Double(drag.translation.width), 240), 400)
+                    }
+                    .onEnded { _ in origin = nil }
+            )
+    }
+}
+
+struct MacShellView: View {
+    @AppStorage(MacMetrics.sidebarWidthKey) private var storedSidebarWidth = 280.0
+
+    private var shellContent: some View {
+        HStack(spacing: 0) {
+            MacSidebar().overlay { MacSidebarResizeHandle(width: $storedSidebarWidth) }
+        }
+        .animation(.snappy(duration: 0.22), value: shell.isCompact)
+        .animation(.snappy(duration: 0.22), value: shell.showsInspector)
+    }
+}
+"""
+
+
+def test_pre_fix_mac_shell_fails_and_the_real_file_passes_with_no_baseline_entries() -> None:
+    ios = REPO / "apps" / "ios"
+    allow = csp.load_allowlist(ios / csp.ALLOWLIST_NAME)
+    old = [f for f in csp.violations(Path(MAC_SHELL), PRE_FIX_SHELL, allow)]
+    assert {f.rule for f in old} == {"perf-drag-writes-binding", "perf-animation-container"}
+    assert [f.line for f in old if f.rule == "perf-drag-writes-binding"] == [12]
+    current = (ios / MAC_SHELL).read_text(encoding="utf-8")
+    assert not csp.violations(Path(MAC_SHELL), current, allow)
+    entries = json.loads((ios / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
+    assert not [e for e in entries if e["file"] == MAC_SHELL]
 
 
 def test_unguarded_write_only_applies_to_the_guarded_model_file(tmp_path: Path) -> None:

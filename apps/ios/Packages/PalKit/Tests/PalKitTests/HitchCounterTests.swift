@@ -16,6 +16,44 @@ struct HitchCounterTests {
         #expect(counter.worstFrameMs == 40)
     }
 
+    @Test func classifiesA547msFrameAsLongAndKeepsWhenItEnded() {
+        var counter = HitchCounter()
+        #expect(counter.record(frameMs: 100, atSeconds: 1) == .severe)
+        #expect(counter.record(frameMs: 547, atSeconds: 42.5) == .long)
+        #expect(counter.severeHitches == 2)
+        #expect(counter.hitches == 2)
+        #expect(counter.longHitchCount == 1)
+        #expect(counter.longest == [LongHitch(atSeconds: 42.5, ms: 547)])
+        #expect(counter.worstFrameMs == 547)
+    }
+
+    @Test func keepsOnlyTheTenLongestSortedWorstFirst() {
+        var counter = HitchCounter()
+        for index in 1...15 { counter.record(frameMs: 100 + Double(index) * 10, atSeconds: Double(index)) }
+        counter.record(frameMs: 50, atSeconds: 99)
+        #expect(counter.longHitchCount == 15)
+        #expect(counter.longest.count == 10)
+        #expect(counter.longest.first == LongHitch(atSeconds: 15, ms: 250))
+        #expect(counter.longest.last == LongHitch(atSeconds: 6, ms: 160))
+        #expect(counter.longest.map(\.ms) == counter.longest.map(\.ms).sorted(by: >))
+    }
+
+    @Test func reportCarriesTheLongestHitchesWithoutAnyContent() throws {
+        var counter = HitchCounter()
+        counter.record(frameMs: 547, atSeconds: 42.5)
+        counter.record(frameMs: 120, atSeconds: 7.25)
+        let report = counter.report(platform: "macOS", startedAt: Date(timeIntervalSince1970: 1_800_000_000), durationSeconds: 60)
+        let object = try #require(JSONSerialization.jsonObject(with: report.jsonData()) as? [String: Any])
+        #expect(object["longHitchThresholdMs"] as? Double == 100)
+        #expect(object["longHitchCount"] as? Int == 2)
+        let listed = try #require(object["longHitches"] as? [[String: Double]])
+        #expect(listed == [["atSeconds": 42.5, "ms": 547], ["atSeconds": 7.25, "ms": 120]])
+        #expect(Set(object.keys) == [
+            "schema", "platform", "startedAt", "durationSeconds", "frames", "hitches", "severeHitches", "worstFrameMs",
+            "hitchMs", "thresholdsMs", "longHitchThresholdMs", "longHitchCount", "longHitches",
+        ])
+    }
+
     @Test func sumsTimeAboveTheHitchThreshold() {
         var counter = HitchCounter()
         counter.record(frameMs: 10)
