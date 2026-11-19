@@ -7,6 +7,34 @@ import UIKit
 import AppKit
 #endif
 
+@MainActor
+final class ConnectorLogoCache {
+    static let shared = ConnectorLogoCache { name in
+        #if canImport(UIKit)
+        UIImage(named: name) != nil
+        #else
+        NSImage(named: name) != nil
+        #endif
+    }
+
+    private let exists: (String) -> Bool
+    private var known: [String: Bool] = [:]
+    private(set) var lookups = 0
+
+    init(exists: @escaping (String) -> Bool) {
+        self.exists = exists
+    }
+
+    func hasImage(named name: String) -> Bool {
+        if let cached = known[name] { return cached }
+        lookups += 1
+        let found = exists(name)
+        known[name] = found
+        return found
+    }
+}
+
+@MainActor
 enum ConnectorLogo {
     static let namespace = "ConnectorLogos"
 
@@ -17,16 +45,8 @@ enum ConnectorLogo {
 
     static func image(named id: String) -> Image? {
         let name = "\(namespace)/\(id)"
-        guard !id.isEmpty, exists(name) else { return nil }
+        guard !id.isEmpty, ConnectorLogoCache.shared.hasImage(named: name) else { return nil }
         return Image(name).resizable()
-    }
-
-    private static func exists(_ name: String) -> Bool {
-        #if canImport(UIKit)
-        UIImage(named: name) != nil
-        #else
-        NSImage(named: name) != nil
-        #endif
     }
 }
 

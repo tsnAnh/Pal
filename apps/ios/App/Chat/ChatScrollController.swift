@@ -34,6 +34,7 @@ final class ChatScrollController {
     static let enterFollowing: CGFloat = 24
     static let contentSpace = "chatContent"
     static let leaveFollowing: CGFloat = 80
+    static let revealAnchor = UnitPoint(x: 0, y: 0.5)
 
     var position = ScrollPosition(idType: String.self, edge: .top)
     private(set) var mode = Mode.following
@@ -145,11 +146,11 @@ final class ChatScrollController {
         revealTask?.cancel()
         revealTask = Task { @MainActor [weak self] in
             await Task.yield()
-            withAnimation(.easeInOut(duration: 0.25)) { self?.position.scrollTo(id: id, anchor: .center) }
+            withAnimation(.easeInOut(duration: 0.25)) { self?.position.scrollTo(id: id, anchor: Self.revealAnchor) }
             for _ in 1..<Self.revealAttempts {
                 try? await Task.sleep(for: Self.revealSettle)
                 guard let self, !Task.isCancelled, self.revealing, !self.visibleIDs.contains(id) else { return }
-                self.position.scrollTo(id: id, anchor: .center)
+                self.position.scrollTo(id: id, anchor: Self.revealAnchor)
             }
         }
     }
