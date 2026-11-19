@@ -31,8 +31,7 @@
     "pyproject.toml",
     "toolsets.py",
     "model_tools.py",
-    "cron/",
-    "apps/desktop/"
+    "cron/"
   ],
   "incidents": {
     "main_checks": true,

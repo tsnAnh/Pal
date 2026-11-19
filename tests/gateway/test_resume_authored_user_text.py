@@ -84,7 +84,7 @@ async def test_photo_turn_with_origin_and_skill_notes_shows_only_what_the_user_s
                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(PNG).decode()}}]
     agent.run_conversation(content, conversation_history=None)
 
-    from agent.message_content import flatten_message_text
+    from session_rules.turns import flatten_message_text
     wire_text = flatten_message_text(_wire_user_content(agent))
     assert _NOTE_PREFIX in wire_text and SKILLS_NOTE in wire_text
 

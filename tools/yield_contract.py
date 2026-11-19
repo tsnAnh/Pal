@@ -40,7 +40,7 @@ _QUIET = "Do not mention process ids, commands or tools to the owner."
 
 _ARRIVAL = {
     True: "Its result will arrive as a message when it finishes, even after you end this turn.",
-    False: ("You will not be told when it finishes; check on it with process(action='poll', "
+    False: ("You will not be told when it finishes; check on it with process_manage(action='poll', "
             "session_id='{job_id}') only if the owner asks."),
 }
 

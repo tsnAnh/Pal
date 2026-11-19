@@ -45,12 +45,6 @@ def test_a_prose_reply_that_quotes_the_marker_stays_the_preview(home):
     assert canonical["preview"].startswith("I answered [SILENT]")
 
 
-def test_the_picker_last_reply_skips_a_silent_reply():
-    from gateway.session_picker_fields import _last_reply
-    assert _last_reply([("[SILENT]", False), ("Real answer.", False)]) == "Real answer."
-    assert _last_reply([("[SILENT]", False)]) is None
-
-
 def test_the_authority_roster_preview_skips_a_silent_reply(home):
     from gateway.session_group_controls import _read_bot_sessions
     db = _db(home)

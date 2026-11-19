@@ -32,11 +32,13 @@ def deliver_via_external_queue(job: dict, content: str, external_execution: str,
 
 def deliver_bot_chat_target(
     job: dict, content: str, target: dict, for_failure: bool, delivery_errors: list, unverified_targets: list
-) -> int:
+) -> tuple[int, bool]:
+    """Deliver to one Bot Chat target: (suppressed-all-targets flag, whether the text reached it)."""
     from cron.scheduler_delivery import _deliver_to_bot_chat
 
     bot_chat_error = _deliver_to_bot_chat(job, content, target["chat_id"], for_failure=for_failure)
     suppressed = job.pop("_notification_all_targets_suppressed", False)
+    receipt = None
     if bot_chat_error:
         receipt_target = f"bot-chat:{target['chat_id'] or '(own)'}"
         receipt = job.get("_bot_chat_delivery_receipts", {}).get(receipt_target)
@@ -44,4 +46,6 @@ def deliver_bot_chat_target(
             delivery_errors.append(bot_chat_error)
         if receipt and receipt["status"] == "ambiguous":
             unverified_targets.append(bot_chat_error)
-    return suppressed
+    # A queued, claimed or ambiguous send may still arrive; anything else reached nobody.
+    reached = not bot_chat_error or bool(receipt and receipt["status"] in ("queued", "claimed", "ambiguous"))
+    return suppressed, reached

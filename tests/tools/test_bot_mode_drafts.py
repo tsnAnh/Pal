@@ -386,7 +386,7 @@ class TestHeldDrafts:
     def test_send_message_drafts_deliver_through_the_send_message_helper(self, bot_home, monkeypatch):
         args = {"action": "send", "target": "telegram:123", "message": "hello"}
         delivered = []
-        monkeypatch.setattr("tools.send_message_tool.send_message_tool",
+        monkeypatch.setattr("gateway.outbound.send.send_message_tool",
                             lambda a, **k: delivered.append(a) or json.dumps({"success": True}))
         outbound = classify_outbound("send_message", args)
         record = bot_mode_draft_store.hold(outbound, args, origin="unattended")
@@ -415,7 +415,7 @@ class TestSendMessageActionsMirrorTheTool:
         assert classify_outbound("send_message", {"action": action, "target": "telegram:1", "message": "hi"}) is None
 
     def test_the_gate_and_the_tool_agree_on_every_action(self, monkeypatch):
-        import tools.send_message_tool as tool
+        import gateway.outbound.send as tool
         reached = []
         monkeypatch.setattr(tool, "_handle_send", lambda args: reached.append("send") or "{}")
         monkeypatch.setattr(tool, "_handle_list", lambda: reached.append("list") or "{}")

@@ -217,7 +217,7 @@ def _execute(record: dict, args: dict) -> str:
     tool = record["tool"]
     with approved_send():
         if tool == "send_message":
-            from tools.send_message_tool import send_message_tool
+            from gateway.outbound.send import send_message_tool
             return send_message_tool(args)
         import model_tools
         return model_tools.handle_function_call(

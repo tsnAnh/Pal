@@ -32,7 +32,13 @@ _PY = ("*.py", "*.pyi", "*.pyw")
 CHECK_READS: dict[str, tuple[Rule, ...]] = {
     **{name: tuple((g, True) for g in _PY) for name in (
         "footguns", "detached-spawns", "install-root", "config-writers", "config-readers",
-        "os-marker-fakes", "lazy-deps", "ruff", "health")},
+        "os-marker-fakes", "lazy-deps", "ruff", "health",
+        # Upstream guards merged by the sync that read Python sources only.
+        "backend-imports", "tool-discovery", "profile-create-entry")},
+    "packaged-imports": (*((g, True) for g in _PY), ("pyproject.toml", True)),
+    "shims": (*((g, True) for g in _PY), ("pyproject.toml", True), (".gitattributes", True)),
+    "line-endings": (("*", True),),
+    "dockerfile-downloads": (("Dockerfile", True), ("*/Dockerfile", True), ("*.Dockerfile", True)),
     "shebangs": (("*", True),),
     "no-tmp": tuple((f"*.{ext}", True) for ext in (
         "py", "sh", "bash", "ts", "tsx", "js", "mjs", "cjs", "md", "mdx", "txt", "yaml", "yml",
@@ -59,7 +65,7 @@ ALL_CHECKS = tuple(name for name in CHECK_READS if name != "tooling-tests")
 JOB_CHECKS: dict[str, tuple[str, ...]] = {
     "python": ALL_CHECKS,
     "tooling-tests": ("tooling-tests",),
-    "ios-guards": ("shebangs", "no-tmp", "agents-md", "case-collisions", "profile-archives",
+    "ios-guards": ("shebangs", "no-tmp", "agents-md", "case-collisions", "profile-archives", "line-endings",
                    "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "swift-glass",
                    "swift-icon-tint", "swift-image-viewer", "swift-perf", "swift-fault-details", "swift-lint"),
     "swift": (),
