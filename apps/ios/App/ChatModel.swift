@@ -147,7 +147,7 @@ final class ChatModel {
     var bot: BotRow { roster.bot(named: openedBot.name) ?? openedBot }
 
     private let links: BotLinks
-    private let roster: RosterModel
+    let roster: RosterModel
     private let lastSeenStore: ChatLastSeenStore
     private let lastSeenAtOpen: Date?
     private var link: BotLink?

@@ -30,8 +30,9 @@ struct MacMessageMenuHost: View {
             let origin = proxy.frame(in: .global).origin
             if let request = shell.messageMenu {
                 popup(anchor: request.anchor, origin: origin, size: proxy.size, above: false, dismiss: { shell.messageMenu = nil }) {
-                    MessageMenu(actions: request.actions, dismiss: { shell.messageMenu = nil })
+                    MacMessageMenuView(actions: request.actions, dismiss: { shell.messageMenu = nil })
                 }
+                .background { Color.black.opacity(0.12).allowsHitTesting(false).accessibilityHidden(true) }
                 .id(request.id)
             } else if let request = shell.attachMenu {
                 popup(anchor: request.anchor, origin: origin, size: proxy.size, above: true, dismiss: { shell.attachMenu = nil }) {
@@ -62,7 +63,7 @@ private struct MacMessageMenuPlacement: ViewModifier {
     let container: CGSize
     let above: Bool
 
-    @State private var size = CGSize(width: MessageMenuMetrics.width, height: 128)
+    @State private var size = CGSize(width: MacMessageMenuView.width, height: 128)
 
     func body(content: Content) -> some View {
         let margin: CGFloat = 8

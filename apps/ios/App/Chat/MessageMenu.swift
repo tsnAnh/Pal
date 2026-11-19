@@ -28,86 +28,6 @@ struct MessageMenuSurface: ViewModifier {
     }
 }
 
-struct MessageMenu: View {
-    let actions: MessageActions
-    let dismiss: () -> Void
-
-    private static let extras = ["😮", "😢", "🙏", "🔥", "👏", "🤔", "😅", "😍", "🥳", "💯", "✅", "👀", "🙌", "💪", "😎", "🤝", "😬", "🚀", "😴", "🙈", "👌", "😭", "🤯", "💡"]
-
-    @State private var showsMore = false
-
-    var body: some View {
-        VStack(spacing: 1) {
-            if showsMore {
-                moreGrid
-            } else {
-                if actions.canReact() {
-                    reactionRow
-                    PalHairline().padding(.vertical, 4).padding(.horizontal, 5)
-                }
-                MessageMenuRow(title: String(localized: "Reply"), symbol: "arrow.uturn.left", identifier: "contextReply") {
-                    dismiss()
-                    actions.reply()
-                }
-                MessageMenuRow(title: String(localized: "Copy"), symbol: "doc.on.doc", identifier: "contextCopy") {
-                    Pasteboard.string = actions.text
-                    dismiss()
-                }
-            }
-        }
-        .frame(width: MessageMenuMetrics.width - 10)
-        .modifier(MessageMenuSurface(identifier: "messageContextMenu"))
-        .macOnly { menu in
-            menu.background {
-                Button("", action: dismiss)
-                    .keyboardShortcut(.cancelAction)
-                    .opacity(0)
-                    .accessibilityHidden(true)
-            }
-        }
-    }
-
-    private var reactionRow: some View {
-        HStack(spacing: 0) {
-            ForEach(MessageReactions.choices, id: \.self) { emoji in
-                reactionButton(emoji)
-            }
-            Button { showsMore = true } label: {
-                PalIcon("face.smiling", ink: .secondary)
-                    .font(.system(size: MessageMenuMetrics.glyphSize + 1))
-                    .frame(width: MessageMenuMetrics.cellWidth, height: MessageMenuMetrics.rowHeight)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text("More reactions"))
-            .accessibilityIdentifier("contextMoreReactions")
-        }
-    }
-
-    private var moreGrid: some View {
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 6)
-        return LazyVGrid(columns: columns, spacing: 0) {
-            ForEach(Self.extras, id: \.self) { emoji in reactionButton(emoji) }
-        }
-    }
-
-    private func reactionButton(_ emoji: String) -> some View {
-        Button {
-            dismiss()
-            actions.react(emoji)
-        } label: {
-            Text(emoji)
-                .font(.system(size: MessageMenuMetrics.emojiSize))
-                .frame(width: MessageMenuMetrics.cellWidth, height: MessageMenuMetrics.rowHeight)
-                .background(actions.reaction == emoji ? PalTokens.selected : Color.clear, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(emoji))
-        .accessibilityIdentifier("contextReaction-\(emoji)")
-    }
-}
-
 struct MessageMenuRow: View {
     let title: String
     let symbol: String
@@ -169,52 +89,21 @@ private struct MessageMenuPresenter: ViewModifier {
 }
 
 private struct MessageMenuHost: View {
-
     @Binding var request: MessageMenuRequest?
 
     var body: some View {
         GeometryReader { proxy in
             if let current = request {
-                ZStack(alignment: .topLeading) {
-                    PalTokens.scrim
-                        .opacity(0.55)
-                        .ignoresSafeArea()
-                        .contentShape(Rectangle())
-                        .onTapGesture { request = nil }
-                        .accessibilityHidden(true)
-                    MessageMenu(actions: current.actions) { request = nil }
-                        .modifier(MessageMenuPlacement(request: current, origin: proxy.frame(in: .global).origin, container: proxy.size))
+                ZStack(alignment: .bottom) {
+                    MessageSheetDim(anchor: current.anchor) { request = nil }
+                        .transition(.opacity)
+                    MessageSheet(actions: current.actions, maxContentHeight: proxy.size.height * 0.5) { request = nil }
+                        .transition(.move(edge: .bottom))
                 }
-                .transition(.opacity)
                 .accessibilityAddTraits(.isModal)
-                .accessibilityAction(.escape) { request = nil }
             }
         }
-        .animation(.snappy(duration: 0.16), value: request?.id)
-    }
-}
-
-private struct MessageMenuPlacement: ViewModifier {
-    let request: MessageMenuRequest
-    let origin: CGPoint
-    let container: CGSize
-
-    @State private var height: CGFloat = 170
-
-    func body(content: Content) -> some View {
-        let margin: CGFloat = 12
-        let gap: CGFloat = 8
-        let width = MessageMenuMetrics.width
-        let anchor = request.anchor.offsetBy(dx: -origin.x, dy: -origin.y)
-        let preferredX = request.side == .user ? anchor.maxX - width : anchor.minX
-        let x = min(max(preferredX, margin), max(margin, container.width - width - margin))
-        let below = anchor.maxY + gap
-        let fitsBelow = below + height <= container.height - margin
-        let preferredY = fitsBelow ? below : anchor.minY - gap - height
-        let y = min(max(preferredY, margin), max(margin, container.height - height - margin))
-        return content
-            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
-            .offset(x: x, y: y)
+        .animation(.snappy(duration: 0.25), value: request?.id)
     }
 }
 #endif

@@ -11,6 +11,11 @@ enum Haptics {
     static func impact() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
     }
+
+    @MainActor
+    static func light() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
 }
 #elseif os(macOS)
 import AppKit
