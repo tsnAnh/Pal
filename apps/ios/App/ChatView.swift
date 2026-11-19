@@ -67,6 +67,7 @@ struct ChatView: View {
             .coordinateSpace(.named(ChatScrollController.contentSpace))
             .padding(.horizontal, ChatMetrics.edgeMargin)
             .chatColumn()
+            .containerRelativeFrame(.horizontal)
         }
         .scrollPosition($scroll.position)
         .contentMargins(.top, max(0, chrome.bottom - chrome.top), for: .automatic)
