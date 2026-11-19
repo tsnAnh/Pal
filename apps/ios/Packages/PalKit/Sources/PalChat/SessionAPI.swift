@@ -10,6 +10,7 @@ public enum ChatError: Error, Sendable, Equatable {
     case attachmentRefused
     case noBotChat
     case connectionNotActionable
+    case clarifyExpired
 }
 
 struct LibraryAssetPayload: Decodable {
@@ -83,10 +84,22 @@ public enum ReactionTarget: Sendable, Hashable {
 public struct SessionAPI: Sendable {
     public let connection: GatewayConnection
     public let profile: String
+    private let answersServerRequests: Bool
 
-    public init(connection: GatewayConnection, profile: String) {
+    public init(connection: GatewayConnection, profile: String, answersServerRequests: Bool = false) {
         self.connection = connection
         self.profile = profile
+        self.answersServerRequests = answersServerRequests
+    }
+
+    public func supportsClarifyBatch() async -> Bool {
+        if let known = connection.negotiatedClarifyBatch { return known }
+        var params: [String: JSONValue] = [:]
+        if answersServerRequests { params["server_requests"] = true }
+        let reply = try? await connection.call("client.capabilities", params: .object(params))
+        let supported = reply?["canonical_clarify_batch"]?.boolValue ?? false
+        connection.recordClarifyBatch(supported)
+        return supported
     }
 
     public func list(title: String, includeHidden: Bool = true) async throws -> [SessionListRow] {
@@ -141,6 +154,7 @@ public struct SessionAPI: Sendable {
         }
         if hidden { params["display_kind"] = "hidden" }
         if voiceTurn { params["voice_turn"] = true }
+        if await supportsClarifyBatch() { params["clarify_batch"] = true }
         let result = try await call("prompt.submit", params)
         return try decode(AdmissionStatus.self, result, "prompt.submit")
     }
@@ -212,6 +226,10 @@ public struct SessionAPI: Sendable {
         promptID: String,
         answer: String
     ) async throws -> PromptResponseResult {
+        if promptID.hasPrefix(PendingPrompt.requestIDPrefix) {
+            try await lockClarify(requestID: promptID, questionID: PendingPrompt.soleQuestionID, answer: answer.isEmpty ? nil : answer)
+            return PromptResponseResult(status: "resolved", promptID: promptID)
+        }
         let result = try await call("clarify.respond", [
             "session_id": .string(sessionID),
             "execution_generation": .int(executionGeneration),
@@ -219,6 +237,15 @@ public struct SessionAPI: Sendable {
             "answer": .string(answer),
         ])
         return try decode(PromptResponseResult.self, result, "clarify.respond")
+    }
+
+    public func lockClarify(requestID: String, questionID: String, answer: String?) async throws {
+        let result = try await call("clarify.lock", [
+            "request_id": .string(requestID),
+            "question_id": .string(questionID),
+            "answer": answer.map(JSONValue.string) ?? .null,
+        ])
+        guard result["status"]?.stringValue == "ok" else { throw ChatError.clarifyExpired }
     }
 
     public func respondToApproval(

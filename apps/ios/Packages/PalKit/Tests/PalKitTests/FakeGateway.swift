@@ -75,6 +75,15 @@ final class FakeGateway: @unchecked Sendable {
         for target in targets { send(["jsonrpc": "2.0", "method": "event", "params": params], over: target) }
     }
 
+    func pushRequest(id: String, method: String, params: JSONValue, to connection: Int? = nil) {
+        let targets = state.withLock { state in
+            state.connections.filter { state.live.contains($0.key) && (connection == nil || $0.key == connection) }.map(\.value)
+        }
+        for target in targets {
+            send(["jsonrpc": "2.0", "id": .string(id), "method": .string(method), "params": params], over: target)
+        }
+    }
+
     func dropAll() {
         let targets = state.withLock { state in state.connections.filter { state.live.contains($0.key) }.map(\.value) }
         for target in targets { target.forceCancel() }

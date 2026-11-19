@@ -81,7 +81,7 @@ public actor ChatSession: OutboxSubmitter {
     public nonisolated let updates: AsyncStream<ChatUpdate>
 
     public private(set) var phase: ChatPhase = .detached
-    private(set) var transcript = Transcript()
+    var transcript = Transcript()
     public private(set) var terminalFailure: ChatTerminalFailure?
     public private(set) var botThreadLinks: [BotThreadLink] = []
     public nonisolated let terminalFailures: AsyncStream<ChatTerminalFailure>
@@ -95,11 +95,11 @@ public actor ChatSession: OutboxSubmitter {
     private let failureContinuation: AsyncStream<ChatTerminalFailure>.Continuation
     private let connector: any ChatConnector
     private let resolver: BotChatResolver
-    private let diagnostics: Diagnostics
+    let diagnostics: Diagnostics
     private let reconnectPolicy: ReconnectPolicy
     private var connection: GatewayConnection?
     private var attaching: GatewayConnection?
-    private var api: SessionAPI?
+    var api: SessionAPI?
     private var pumps: [Task<Void, Never>] = []
     private var reconnecting = false
     private var closing = false
@@ -108,7 +108,7 @@ public actor ChatSession: OutboxSubmitter {
     private var waiters: [UUID: StateWaiter] = [:]
     private let paging: PagingPolicy
     private let timelineContinuation: AsyncStream<TimelineSnapshot>.Continuation
-    private var timeline = Timeline()
+    var timeline = Timeline()
     private var timelineVersion: UInt64 = 0
     private var timelineCapable = false
     private var lastWant: ContinuousClock.Instant?
@@ -166,7 +166,7 @@ public actor ChatSession: OutboxSubmitter {
             return idle
         }
         let resolution: BotChatResolution
-        let api = SessionAPI(connection: connection, profile: profile)
+        let api = SessionAPI(connection: connection, profile: profile, answersServerRequests: true)
         attaching = connection
         do {
             let capable = api.supportsTimeline
@@ -497,8 +497,8 @@ public actor ChatSession: OutboxSubmitter {
 
     private func rejectServerRequests(_ connection: GatewayConnection) async {
         for await request in connection.serverRequests {
-            diagnostics.debug("chat", "rejected server request \(request.method)")
-            await connection.reject(request.id, code: -32601, message: "unsupported")
+            guard !serveClarifyRequest(request) else { continue }
+            await rejectServerRequest(request, on: connection)
         }
     }
 
@@ -567,7 +567,7 @@ public actor ChatSession: OutboxSubmitter {
             do {
                 let fresh = try await connector.connect()
                 candidate = fresh
-                let freshAPI = SessionAPI(connection: fresh, profile: profile)
+                let freshAPI = SessionAPI(connection: fresh, profile: profile, answersServerRequests: true)
                 try await reattach(freshAPI)
                 guard !closing else {
                     await fresh.close()
@@ -821,7 +821,7 @@ public actor ChatSession: OutboxSubmitter {
         notifyWaiters()
     }
 
-    private func publishLive() {
+    func publishLive() {
         if let cursor = transcript.cursor {
             phase = .live(lastSequence: cursor.lastSequence, replayEpoch: cursor.replayEpoch)
             continuation.yield(.phase(phase))

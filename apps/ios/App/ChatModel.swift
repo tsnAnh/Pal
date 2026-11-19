@@ -45,7 +45,7 @@ struct ChatRow: Identifiable, Equatable {
     enum Kind: Equatable {
         case user(text: String, delivery: BubbleDelivery)
         case assistant(ParsedMarkdown)
-        case clarifyAnswered(question: String, answer: ClarifyRecord.Answer)
+        case clarifyAnswered([ClarifyRecord])
         case clarify(PendingPrompt)
         case approval(PendingPrompt)
         case approvalAnswered(ApprovalRecord)
@@ -120,7 +120,7 @@ final class ChatModel {
     private(set) var hasPendingPrompt = false
     private(set) var olderHistory = OlderHistory.idle
     private(set) var isOpening = true
-    private(set) var sendError: String?
+    var sendError: String?
     private(set) var answeringConnections: Set<String> = []
     private var pending = PendingAttachments()
     var attachments: [PendingAttachment] { pending.items }
@@ -150,9 +150,9 @@ final class ChatModel {
     private let lastSeenStore: ChatLastSeenStore
     private let lastSeenAtOpen: Date?
     private var link: BotLink?
-    private var session: ChatSession?
+    var session: ChatSession?
     private var outbox: Outbox?
-    private var snapshot: TimelineSnapshot?
+    var snapshot: TimelineSnapshot?
     private var outboxEntries: [OutboxEntry] = []
     private var arrivals: [String: Date] = [:]
     private var aliases: [RowKey: String] = [:]
@@ -591,7 +591,7 @@ final class ChatModel {
     }
 
     private var pendingClarify: PendingPrompt? {
-        snapshot?.pendingPrompts.first { $0.kind == .clarify }
+        snapshot?.pendingPrompts.first { $0.kind == .clarify && !$0.isForm }
     }
 
     private func run(_ link: BotLink) async {
@@ -700,7 +700,7 @@ final class ChatModel {
     }
 
     private func observeActivityChange() {
-        let signature = ActivitySignature(running: snapshot?.isRunning ?? false, prompting: pendingClarify != nil)
+        let signature = ActivitySignature(running: snapshot?.isRunning ?? false, prompting: isAskingClarify)
         defer { lastSignature = signature }
         if signature != lastSignature { roster.nudge() }
     }
@@ -802,7 +802,7 @@ final class ChatModel {
             row.storedRowID = source.stored
             next.append(row)
         }
-        built = nextBuilt
+        (built, next) = (nextBuilt, ChatRow.mergingClarifyAnswers(next, sources: sources.map { ($0.id, $0.item.id) }))
         for index in next.indices {
             next[index].gap = Self.gap(for: next[index], after: index > 0 ? next[index - 1] : nil)
         }
@@ -880,7 +880,7 @@ final class ChatModel {
             guard let generation = call.imageGeneration else { return nil }
             return (.imageGeneration(generation), [], [])
         case .clarifyAnswered(let record):
-            return (.clarifyAnswered(question: record.question, answer: record.answer), [], [])
+            return (.clarifyAnswered([record]), [], [])
         case .clarify(let card):
             return (.clarify(card.prompt), [], [])
         case .approval(let card):

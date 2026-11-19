@@ -20,3 +20,20 @@ public enum ClarifyRowStyle: Sendable {
 
     public func typedText(in palette: PalPalette) -> RGB { ClarifyRowStyle.chosen.text(in: palette) }
 }
+
+public enum ClarifyBadgeColor: Equatable, Sendable {
+    case palette(RGB)
+    case botAccent(BotAccent)
+}
+
+extension ClarifyRowStyle {
+    public func badgeFill(in palette: PalPalette, accent: BotAccent?) -> ClarifyBadgeColor? {
+        guard self == .chosen else { return nil }
+        return accent.map(ClarifyBadgeColor.botAccent) ?? .palette(palette.chipSelectedFill)
+    }
+
+    public func badgeText(in palette: PalPalette, accent: BotAccent?) -> ClarifyBadgeColor {
+        guard self == .chosen else { return .palette(palette.textSecondary) }
+        return accent.map(ClarifyBadgeColor.botAccent) ?? .palette(palette.chipSelectedText)
+    }
+}

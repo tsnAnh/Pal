@@ -152,8 +152,23 @@ public struct ReplayGap: Codable, Sendable, Hashable {
 public struct PromptSettled: Codable, Sendable, Hashable {
     public var promptID: String
 
+    public init(promptID: String) {
+        self.promptID = promptID
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        promptID = try container.decodeIfPresent(String.self, forKey: .promptID) ?? container.decode(String.self, forKey: .requestID)
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(promptID, forKey: .promptID)
+    }
+
     enum CodingKeys: String, CodingKey {
         case promptID = "prompt_id"
+        case requestID = "id"
     }
 }
 
@@ -202,7 +217,7 @@ public enum SessionEvent: Sendable, Hashable {
         case "tool.start": decoded = (try? value.decoded(as: ToolStart.self)).map(SessionEvent.toolStart)
         case "tool.complete": decoded = (try? value.decoded(as: ToolComplete.self)).map(SessionEvent.toolComplete)
         case "clarify.request": decoded = (try? value.decoded(as: PendingPrompt.self)).map(SessionEvent.clarifyRequest)
-        case "clarify.settled": decoded = (try? value.decoded(as: PromptSettled.self)).map(SessionEvent.clarifySettled)
+        case "clarify.settled", PendingPrompt.requestCancelEvent: decoded = (try? value.decoded(as: PromptSettled.self)).map(SessionEvent.clarifySettled)
         case "approval.request": decoded = (try? value.decoded(as: PendingPrompt.self)).map(SessionEvent.approvalRequest)
         case "approval.settled": decoded = (try? value.decoded(as: PromptSettled.self)).map(SessionEvent.approvalSettled)
         case "connection.request": decoded = (try? value.decoded(as: ConnectionOperation.self)).map(SessionEvent.connectionRequest)
