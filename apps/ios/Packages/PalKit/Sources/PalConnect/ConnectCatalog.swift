@@ -261,7 +261,11 @@ public struct ConnectCatalog: Sendable, Equatable {
     public func matching(_ query: String) -> [ConnectApp] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return apps }
-        return apps.filter { $0.name.localizedStandardContains(needle) || $0.summary.localizedStandardContains(needle) }
+        return apps.filter { Self.matches($0, needle: needle) }
+    }
+
+    public static func matches(_ app: ConnectApp, needle: String) -> Bool {
+        app.name.localizedStandardContains(needle) || app.summary.localizedStandardContains(needle)
     }
 
     public static func make(

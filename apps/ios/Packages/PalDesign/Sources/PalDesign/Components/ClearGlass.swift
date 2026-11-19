@@ -1,0 +1,85 @@
+import SwiftUI
+
+public extension View {
+    func palClearGlass<S: Shape>(_ shape: S, interactive: Bool = true) -> some View {
+        glassEffect(interactive ? .clear.interactive() : .clear, in: shape)
+    }
+}
+
+public struct PalClearCapsuleStyle: ButtonStyle {
+    public var height: CGFloat
+    public var horizontalPadding: CGFloat
+    public var weight: Font.Weight
+    public var selected: Bool
+    public var fillsWidth: Bool
+
+    @Environment(\.isEnabled) private var isEnabled
+
+    public init(
+        height: CGFloat = 32, horizontalPadding: CGFloat = 16, weight: Font.Weight = .semibold, selected: Bool = false, fillsWidth: Bool = false
+    ) {
+        self.height = height
+        self.horizontalPadding = horizontalPadding
+        self.weight = weight
+        self.selected = selected
+        self.fillsWidth = fillsWidth
+    }
+
+    public func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: weight))
+            .foregroundStyle(PalTokens.textPrimary)
+            .padding(.horizontal, horizontalPadding)
+            .frame(maxWidth: fillsWidth ? .infinity : nil)
+            .frame(height: height)
+            .background(selected ? PalTokens.textPrimary.opacity(0.14) : Color.clear, in: Capsule())
+            .palClearGlass(Capsule())
+            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.6)
+            .contentShape(Capsule())
+    }
+}
+
+public extension ButtonStyle where Self == PalClearCapsuleStyle {
+    static var palClearCapsule: PalClearCapsuleStyle { PalClearCapsuleStyle() }
+
+    static func palClearChip(selected: Bool) -> PalClearCapsuleStyle {
+        PalClearCapsuleStyle(height: 30, horizontalPadding: 14, weight: selected ? .semibold : .regular, selected: selected)
+    }
+
+    static var palClearWide: PalClearCapsuleStyle {
+        PalClearCapsuleStyle(height: 38, fillsWidth: true)
+    }
+}
+
+public struct ClearGlassSearchField: View {
+    @Binding public var text: String
+    public let prompt: String
+    public let accessibilityLabel: String
+    public let accessibilityIdentifier: String
+
+    public init(text: Binding<String>, prompt: String, accessibilityLabel: String, accessibilityIdentifier: String) {
+        _text = text
+        self.prompt = prompt
+        self.accessibilityLabel = accessibilityLabel
+        self.accessibilityIdentifier = accessibilityIdentifier
+    }
+
+    public var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 14))
+                .foregroundStyle(PalTokens.textSecondary)
+                .accessibilityHidden(true)
+            TextField("", text: $text, prompt: Text(prompt).foregroundStyle(PalTokens.textTertiary))
+                .textFieldStyle(.plain)
+                .font(.system(size: 14))
+                .foregroundStyle(PalTokens.textPrimary)
+                .autocorrectionDisabled()
+                .accessibilityLabel(Text(accessibilityLabel))
+                .accessibilityIdentifier(accessibilityIdentifier)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .palClearGlass(Capsule(), interactive: false)
+    }
+}

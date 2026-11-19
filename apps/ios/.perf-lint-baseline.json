@@ -21,7 +21,6 @@
   {"file": "App/Mac/MacInspector.swift", "rule": "perf-state-model-init", "text": "_routines = State(initialValue: RoutinesModel(botName: botName, services: bots.services))"},
   {"file": "App/Mac/MacInspector.swift", "rule": "perf-state-model-init", "text": "_suggestions = State(initialValue: ConnectedServicesModel(botName: botName, services: bots.services))"},
   {"file": "App/Mac/MacModalSupport.swift", "rule": "perf-shadow-radius", "text": ".shadow(color: .black.opacity(0.35), radius: 40, y: 18)"},
-  {"file": "App/Mac/MacModals.swift", "rule": "perf-model-in-body", "text": "model: ConnectAppsModel("},
   {"file": "App/Mac/MacModals.swift", "rule": "perf-shadow-radius", "text": ".shadow(color: .black.opacity(0.3), radius: 24, y: 10)"},
   {"file": "App/Mac/MacPalette.swift", "rule": "perf-shadow-radius", "text": ".shadow(color: .black.opacity(0.35), radius: 40, y: 18)"},
   {"file": "App/Mac/MacPalette.swift", "rule": "perf-state-model-init", "text": "_model = State(initialValue: SearchModel(roster: roster, supported: router.searchScopes))"},

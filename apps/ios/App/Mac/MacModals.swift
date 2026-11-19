@@ -43,7 +43,7 @@ struct MacModalHost: View {
                         .accessibilityIdentifier("kanbanPanel")
                         .transition(.opacity)
                 } else if let sheet = router.sheet {
-                    MacModalScrim { router.dismissSheet() }
+                    MacModalScrim(blurs: sheet == .connectApps) { router.dismissSheet() }
                     panel(for: sheet)
                 } else if let bot = router.renamingBot.flatMap({ roster.bot(named: $0) }) {
                     MacModalScrim { router.renamingBot = nil }
@@ -111,20 +111,16 @@ struct MacModalHost: View {
                 MacCreateBot(model: createBot, importer: templateImport, roster: roster, router: router)
             }
         case .connectApps:
-            MacModalPanel(width: 825, height: 643, identifier: "connectAppsPanel", closeIdentifier: "connectApps-close", close: { router.dismissSheet() }) {
-                ConnectAppsScreen(
-                    model: ConnectAppsModel(
-                        connection: connection,
-                        pool: hostPool,
-                        profile: router.connectAppsProfile,
-                        botName: roster.displayName(forProfile: router.connectAppsProfile),
-                        browser: WebAuthenticationBrowser(),
-                        bots: roster.customConnectorBots,
-                        currentBot: roster.currentBotName(forProfile: router.connectAppsProfile)
-                    )
-                ) { router.dismissSheet() }
-                .id(router.connectAppsProfile ?? "")
-            }
+            MacModalPanel(
+                width: 825, height: 643, clearClose: true, identifier: "connectAppsPanel", closeIdentifier: "connectApps-close",
+                close: { router.dismissSheet() },
+                content: {
+                    MacConnectAppsPanel(connection: connection, hostPool: hostPool, roster: roster, profile: router.connectAppsProfile) {
+                        router.dismissSheet()
+                    }
+                    .id(router.connectAppsProfile ?? "")
+                }
+            )
         case .kanban:
             EmptyView()
         }

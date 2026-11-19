@@ -3,22 +3,32 @@ import PalDesign
 import SwiftUI
 
 struct MacModalScrim: View {
+    var blurs = false
     let dismiss: () -> Void
 
     var body: some View {
-        PalTokens.scrim
-            .contentShape(Rectangle())
-            .onTapGesture(perform: dismiss)
-            .accessibilityHidden(true)
-            .transition(.opacity)
+        ZStack {
+            if blurs { Rectangle().fill(.ultraThinMaterial) }
+            PalTokens.scrim
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: dismiss)
+        .accessibilityHidden(true)
+        .transition(.opacity)
     }
 }
 
-struct MacPanelCloseIdentifierKey: PreferenceKey {
-    static let defaultValue: String? = nil
+struct MacPanelCloseOverride: Equatable {
+    var identifier: String?
+    var hidden = false
+}
 
-    static func reduce(value: inout String?, nextValue: () -> String?) {
-        value = nextValue() ?? value
+struct MacPanelCloseKey: PreferenceKey {
+    static let defaultValue = MacPanelCloseOverride()
+
+    static func reduce(value: inout MacPanelCloseOverride, nextValue: () -> MacPanelCloseOverride) {
+        let next = nextValue()
+        value = MacPanelCloseOverride(identifier: next.identifier ?? value.identifier, hidden: next.hidden || value.hidden)
     }
 }
 
@@ -26,6 +36,7 @@ struct MacModalPanel<Content: View>: View {
     let width: CGFloat
     var height: CGFloat?
     var background = PalTokens.elevated
+    var clearClose = false
     let identifier: String
     let closeIdentifier: String
     let close: () -> Void
@@ -38,10 +49,12 @@ struct MacModalPanel<Content: View>: View {
             .frame(width: width, height: height)
             .background(background, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
-            .overlayPreferenceValue(MacPanelCloseIdentifierKey.self, alignment: .topLeading) { override in
-                SheetGlassButton(accessibilityIdentifier: override ?? closeIdentifier, action: close)
-                    .padding(.top, PalMetrics.macPanelCloseTopInset)
-                    .padding(.leading, PalMetrics.macPanelCloseLeadingInset)
+            .overlayPreferenceValue(MacPanelCloseKey.self, alignment: .topLeading) { override in
+                if !override.hidden {
+                    SheetGlassButton(clear: clearClose, accessibilityIdentifier: override.identifier ?? closeIdentifier, action: close)
+                        .padding(.top, PalMetrics.macPanelCloseTopInset)
+                        .padding(.leading, PalMetrics.macPanelCloseLeadingInset)
+                }
             }
             .clipShape(shape)
             .shadow(color: .black.opacity(0.35), radius: 40, y: 18)
