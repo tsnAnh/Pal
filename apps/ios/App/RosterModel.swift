@@ -376,7 +376,7 @@ final class RosterModel {
         return created
     }
 
-    private func apply(_ snapshot: RosterSnapshot) async {
+    func apply(_ snapshot: RosterSnapshot) async {
         let change = RosterSnapshotChange(from: lastSnapshot, to: snapshot)
         let profiles = change.profiles
             ? snapshot.profiles.compactMap(RosterProfile.init) : self.profiles
