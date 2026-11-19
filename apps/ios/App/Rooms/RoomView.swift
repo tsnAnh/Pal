@@ -66,7 +66,7 @@ struct RoomView: View {
         }
         .toolbarTitleDisplayMode(.inline)
         #endif
-        .attachmentIntake(intake: attach)
+        .attachmentIntake(botName: model.room.name, accent: nil, intake: attach)
         .accessibilityIdentifier("roomScreen")
         .task { await model.run() }
         .onDisappear { dictation.stop() }

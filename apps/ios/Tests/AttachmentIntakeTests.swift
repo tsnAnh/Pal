@@ -1,6 +1,7 @@
 #if os(macOS)
 import AppKit
 import PalChat
+import PalDesign
 import SwiftUI
 import Testing
 import UniformTypeIdentifiers
@@ -164,7 +165,7 @@ private struct Pane: View {
             ScrollView { LazyVStack { ForEach(0..<20, id: \.self) { _ in CountingRow(counter: counter).equatable() } } }
             Text("composer")
         }
-        .attachmentIntake(intake: { _ in }, targeting: targeting)
+        .attachmentIntake(botName: "Ada", accent: nil, intake: { _ in }, targeting: targeting)
     }
 }
 
@@ -175,6 +176,28 @@ extension CountingRow: Equatable {
 @MainActor
 @Suite("Drop overlay")
 struct DropOverlayTests {
+    @Test("the title names the bot, and several items say how many")
+    func copy() {
+        #expect(DropOverlayCopy.title(count: 1, botName: "Ada") == "Drop to attach to Ada")
+        #expect(DropOverlayCopy.title(count: 0, botName: "Ada") == "Drop to attach to Ada")
+        #expect(DropOverlayCopy.title(count: 3, botName: "Ada") == "Drop 3 files to attach to Ada")
+        #expect(DropOverlayCopy.subtitle == "Images and files")
+    }
+
+    @Test("a bot with an accent colours the overlay, a bot without one stays neutral")
+    func tint() {
+        let accent = BotAccent(name: "ada", meta: nil)
+        #expect(DropOverlayTint.resolve(accent: accent).isNeutral == false)
+        #expect(DropOverlayTint.resolve(accent: nil).isNeutral)
+        #expect(DropOverlayTint.resolve(accent: nil).glyph == PalTokens.textSecondary)
+        #expect(DropOverlayTint.resolve(accent: accent).glyph == BubblePalette.ink(accent: accent))
+    }
+
+    @Test("a failed attachment notice goes away on its own after four seconds")
+    func noticeDuration() {
+        #expect(ChatModel.attachmentNoticeDuration == .seconds(4))
+    }
+
     @Test("toggling the drop highlight reruns no row body")
     func overlayDoesNotRerunRows() async throws {
         let counter = BodyCounter()

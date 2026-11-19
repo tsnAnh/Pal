@@ -9,8 +9,13 @@ import UniformTypeIdentifiers
 typealias IntakeHandler = @MainActor @Sendable (DropBatch) -> Void
 
 extension View {
-    func attachmentIntake(intake: @escaping IntakeHandler, targeting: DropTargeting? = nil) -> some View {
-        modifier(AttachmentIntakeModifier(intake: intake, injected: targeting))
+    func attachmentIntake(
+        botName: String,
+        accent: BotAccent?,
+        intake: @escaping IntakeHandler,
+        targeting: DropTargeting? = nil
+    ) -> some View {
+        modifier(AttachmentIntakeModifier(botName: botName, accent: accent, intake: intake, injected: targeting))
     }
 
     func attachmentPaste(intake: @escaping IntakeHandler) -> some View {
@@ -21,9 +26,12 @@ extension View {
 @MainActor @Observable
 final class DropTargeting {
     var isTargeted = false
+    var itemCount = 1
 }
 
 private struct AttachmentIntakeModifier: ViewModifier {
+    let botName: String
+    let accent: BotAccent?
     let intake: IntakeHandler
     let injected: DropTargeting?
 
@@ -35,7 +43,7 @@ private struct AttachmentIntakeModifier: ViewModifier {
         #if os(macOS)
         content
             .onDrop(of: [.item], delegate: AttachmentDropDelegate(targeting: targeting, intake: intake))
-            .overlay { DropOverlay(targeting: targeting) }
+            .overlay { DropOverlay(targeting: targeting, botName: botName, accent: accent) }
             .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in
                 targeting.isTargeted = false
             }
@@ -71,22 +79,6 @@ private struct AttachmentPasteModifier: ViewModifier {
 }
 
 #if os(macOS)
-private struct DropOverlay: View {
-    let targeting: DropTargeting
-
-    @Environment(\.hermesTheme) private var theme
-
-    var body: some View {
-        if targeting.isTargeted {
-            RoundedRectangle(cornerRadius: PalMetrics.cardRadius, style: .continuous)
-                .strokeBorder(Color(theme.palette.primaryBadge), lineWidth: 2)
-                .padding(2)
-                .allowsHitTesting(false)
-                .accessibilityIdentifier("composerDropTarget")
-        }
-    }
-}
-
 @MainActor
 private struct AttachmentDropDelegate: DropDelegate {
     let targeting: DropTargeting
@@ -98,6 +90,7 @@ private struct AttachmentDropDelegate: DropDelegate {
     }
 
     func dropEntered(info: DropInfo) {
+        targeting.itemCount = max(1, info.itemProviders(for: [.item]).count)
         targeting.isTargeted = true
     }
 

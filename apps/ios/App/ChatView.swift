@@ -36,7 +36,7 @@ struct ChatView: View {
 
     var body: some View {
         chat
-            .attachmentIntake(intake: attach)
+            .attachmentIntake(botName: model.bot.displayName, accent: model.chatAccent, intake: attach)
     }
 
     private var sink: AttachmentSink {

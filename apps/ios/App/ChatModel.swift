@@ -171,6 +171,7 @@ final class ChatModel {
     private let opening = ChatOpenCoordinator()
     private var pendingCacheSave: Task<Void, Never>?
     private var findSearch: Task<Void, Never>?
+    private var attachmentNoticeExpiry: Task<Void, Never>?
     private var pendingReveal: RowKey?
 
     private struct ActivitySignature: Equatable {
@@ -498,7 +499,15 @@ final class ChatModel {
 
     func reportAttachmentFailure(_ message: String) {
         sendError = message
+        attachmentNoticeExpiry?.cancel()
+        attachmentNoticeExpiry = Task { [weak self] in
+            try? await Task.sleep(for: Self.attachmentNoticeDuration)
+            guard !Task.isCancelled, let self, self.sendError == message else { return }
+            self.sendError = nil
+        }
     }
+
+    static let attachmentNoticeDuration = Duration.seconds(4)
 
     func beginFinding() {
         isFinding = true
