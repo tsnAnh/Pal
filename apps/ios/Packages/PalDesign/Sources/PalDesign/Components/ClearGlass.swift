@@ -29,9 +29,8 @@ public struct PalClearGlassIconButton: View {
 
     public var body: some View {
         Button(action: action) {
-            Image(systemName: systemName)
+            PalIcon(systemName)
                 .font(.system(size: diameter * 0.42, weight: .medium))
-                .foregroundStyle(PalTokens.textPrimary)
                 .frame(width: diameter, height: diameter)
                 .palClearGlass(Circle())
                 .contentShape(Circle())

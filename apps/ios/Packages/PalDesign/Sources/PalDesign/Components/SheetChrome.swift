@@ -39,9 +39,8 @@ public struct SheetGlassButton: View {
 
     public var body: some View {
         Button(action: action) {
-            Image(systemName: leading.systemName)
+            PalIcon(leading.systemName, ink: .secondary)
                 .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(PalTokens.textSecondary)
                 .frame(width: PalMetrics.sheetGlassButtonSize, height: PalMetrics.sheetGlassButtonSize)
                 .palGlass(Circle())
                 .contentShape(Circle())
@@ -171,7 +170,7 @@ public struct SheetChrome<Trailing: View, Content: View>: View {
                 .tint(.primary)
         case .back:
             Button(action: onLeading) { // nav-chrome: ok
-                Image(systemName: "chevron.left")
+                PalIcon("chevron.left")
             }
             .accessibilityLabel(Text(leading.accessibilityLabel))
             .accessibilityIdentifier(leadingAccessibilityIdentifier ?? "\(accessibilityIdentifier)-back")

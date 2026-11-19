@@ -74,20 +74,19 @@ public struct UnreadDivider: View {
 
 public struct ChatStatusLine: View {
     public let text: String
-    public let systemImage: String
+    public let symbol: String
 
     @Environment(\.hermesTheme) private var theme
 
-    public init(text: String, systemImage: String) {
+    public init(text: String, symbol: String) {
         self.text = text
-        self.systemImage = systemImage
+        self.symbol = symbol
     }
 
     public var body: some View {
         HStack(spacing: ChatMetrics.statusTextGap) {
-            Image(systemName: systemImage)
+            PalIcon(symbol, ink: .secondary)
                 .font(.system(size: ChatMetrics.statusIconSize, weight: .medium))
-                .foregroundStyle(Color(theme.palette.textSecondary))
                 .accessibilityHidden(true)
             Text(text)
                 .hermesText(.chatStatus)
@@ -134,9 +133,8 @@ public struct GlassCircleLabel: View {
     }
 
     public var body: some View {
-        Image(systemName: systemName)
+        PalIcon(systemName)
             .font(.system(size: diameter * 0.42, weight: .medium))
-            .foregroundStyle(Color(theme.palette.textPrimary))
             .frame(width: diameter, height: diameter)
             .palGlass(Circle())
             .contentShape(Circle())
@@ -160,7 +158,7 @@ public struct ScrollToBottomButton: View {
     public var body: some View {
         Button(action: action) {
             HStack(spacing: 6) {
-                Image(systemName: "chevron.down")
+                PalIcon("chevron.down")
                     .font(.system(size: 13, weight: .semibold))
                 if newCount > 0 {
                     Text("\(newCount) new")

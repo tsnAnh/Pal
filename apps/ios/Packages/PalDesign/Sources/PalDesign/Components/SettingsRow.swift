@@ -35,7 +35,7 @@ public struct RowIcon {
     let content: AnyView
 
     public static func symbol(_ name: String) -> RowIcon {
-        RowIcon(content: AnyView(Image(systemName: name).font(.system(size: 17, weight: .light))))
+        RowIcon(content: AnyView(PalIcon(name, ink: .secondary).font(.system(size: 17, weight: .light))))
     }
 
     public static func custom<Content: View>(_ view: Content) -> RowIcon {
@@ -215,14 +215,12 @@ public struct SettingsRow: View {
         case .none:
             EmptyView()
         case .chevron:
-            Image(systemName: "chevron.right")
+            PalIcon("chevron.right", ink: .tertiary)
                 .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color(theme.palette.chevron))
                 .accessibilityHidden(true)
         case .external:
-            Image(systemName: "arrow.up.right")
+            PalIcon("arrow.up.right", ink: .tertiary)
                 .font(.system(size: 14, weight: .regular))
-                .foregroundStyle(Color(theme.palette.chevron))
                 .accessibilityHidden(true)
         case .toggle:
             Color.clear.frame(width: PalMetrics.toggleTrackSize.width, height: PalMetrics.toggleTrackSize.height)
