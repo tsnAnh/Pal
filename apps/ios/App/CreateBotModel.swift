@@ -37,6 +37,10 @@ final class CreateBotModel {
 
     var canCreate: Bool { identity.isValid && !isCreating }
 
+    var gate: CreateBotGate {
+        CreateBotGate(identity: identity, nameRefused: failure == .nameTaken || failure == .invalidName, isCreating: isCreating)
+    }
+
     var isNameRejected: Bool { !identity.displayName.isEmpty && !identity.isValid }
 
     var spec: BotAvatarSpec {
@@ -51,12 +55,12 @@ final class CreateBotModel {
         )
     }
 
-    func create(in roster: RosterModel) async -> CreatedBot? {
+    func create(in roster: RosterModel, startsFresh: Bool = false) async -> CreatedBot? {
         guard canCreate else { return nil }
         isCreating = true
         failure = nil
         defer { isCreating = false }
-        let request = NewBotRequest(name: name, kind: shape.rawValue, colorHex: colorHex, seed: seed, cloneFrom: cloneFrom)
+        let request = NewBotRequest(name: name, kind: shape.rawValue, colorHex: colorHex, seed: seed, cloneFrom: startsFresh ? nil : cloneFrom)
         do {
             return try await roster.create(request, spec: spec)
         } catch BotAdminError.incomplete(let profile) {

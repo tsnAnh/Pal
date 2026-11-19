@@ -62,3 +62,51 @@ public enum BotLookCatalog {
         }
     }
 }
+
+public enum LookDirection: Sendable {
+    case left, right, up, down
+}
+
+public extension BotLookCatalog {
+    static let shapeRowLengths = shapeRows.map(\.count)
+    static let swatchRowLengths = swatchRows.map(\.count)
+
+    static func move(_ index: Int, _ direction: LookDirection, rowLengths: [Int]) -> Int {
+        let total = rowLengths.reduce(0, +)
+        guard total > 0 else { return 0 }
+        let index = min(max(index, 0), total - 1)
+        var rowStart = 0
+        var row = 0
+        while index >= rowStart + rowLengths[row] {
+            rowStart += rowLengths[row]
+            row += 1
+        }
+        let column = index - rowStart
+        switch direction {
+        case .left:
+            return rowStart + max(column - 1, 0)
+        case .right:
+            return rowStart + min(column + 1, rowLengths[row] - 1)
+        case .up:
+            guard row > 0 else { return index }
+            let previousStart = rowStart - rowLengths[row - 1]
+            return previousStart + min(column, rowLengths[row - 1] - 1)
+        case .down:
+            guard row < rowLengths.count - 1 else { return index }
+            return rowStart + rowLengths[row] + min(column, rowLengths[row + 1] - 1)
+        }
+    }
+
+    static func shapeAccessibilityLabel(_ kind: BlobKind, isSelected: Bool) -> String {
+        let position = (shapes.firstIndex(of: kind) ?? 0) + 1
+        let base = String(localized: "Shape \(position) of \(shapes.count), \(displayName(of: kind))")
+        return isSelected ? String(localized: "\(base), selected") : base
+    }
+
+    static func swatchAccessibilityLabel(_ swatch: Swatch, isSelected: Bool) -> String {
+        let position = (swatches.firstIndex(of: swatch) ?? 0) + 1
+        let name = String(localized: String.LocalizationValue(swatch.name))
+        let base = String(localized: "Colour \(name), \(position) of \(swatches.count)")
+        return isSelected ? String(localized: "\(base), selected") : base
+    }
+}
