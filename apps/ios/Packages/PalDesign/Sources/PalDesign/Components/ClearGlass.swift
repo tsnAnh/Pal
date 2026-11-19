@@ -101,9 +101,8 @@ public struct ClearGlassSearchField: View {
 
     public var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
+            PalIcon("magnifyingglass", ink: .secondary)
                 .font(.system(size: 14))
-                .foregroundStyle(PalTokens.textSecondary)
                 .accessibilityHidden(true)
             TextField("", text: $text, prompt: Text(prompt).foregroundStyle(PalTokens.textTertiary))
                 .textFieldStyle(.plain)
