@@ -39,7 +39,7 @@ private func makeModel() throws -> RosterModel {
 
 private func profile(_ name: String, lastActive: Double? = nil, title: String? = nil) -> JSONValue {
     var fields: [String: JSONValue] = ["name": .string(name)]
-    if let lastActive { fields["canonical_session"] = .object(["preview": "hi", "last_active": .number(lastActive)]) }
+    if let lastActive { fields["canonical_session"] = .object(["preview": "hi", "last_active": .double(lastActive)]) }
     if let title { fields["ui_meta"] = .object(["hermes-bots": .object(["title": .string(title)])]) }
     return .object(fields)
 }
