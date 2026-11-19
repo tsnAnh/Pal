@@ -81,12 +81,37 @@ final class BubbleFrame {
     var rect = CGRect.zero
 }
 
+private struct SwipeDrag {
+    var decision = SwipeReply.Decision.undecided
+    var offset: CGFloat = 0
+    var buzzed = false
+}
+
+private struct SwipeReplyGlyph: View {
+    let progress: CGFloat
+
+    var body: some View {
+        GlassEffectContainer {
+            Image(systemName: "arrow.uturn.left")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(PalTokens.textPrimary)
+                .frame(width: 32, height: 32)
+                .palGlass(Circle(), interactive: false)
+        }
+        .padding(.leading, 8)
+        .opacity(progress)
+        .scaleEffect(0.6 + 0.4 * progress)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct TouchMessageActions: ViewModifier {
     let side: MessageSide
     let actions: MessageActions?
 
     @Environment(\.presentMessageMenu) private var presentMenu
     @State private var frame = BubbleFrame()
+    @State private var swipe = SwipeDrag()
 
     @MainActor
     private func open() {
@@ -95,10 +120,39 @@ private struct TouchMessageActions: ViewModifier {
         presentMenu(MessageMenuRequest(anchor: frame.rect, side: side, actions: actions))
     }
 
+    private var swipeGesture: some Gesture {
+        DragGesture(minimumDistance: SwipeReply.minimumDistance, coordinateSpace: .global)
+            .onChanged { value in
+                if swipe.decision == .undecided {
+                    swipe.decision = SwipeReply.decide(startX: value.startLocation.x, translation: value.translation)
+                }
+                guard swipe.decision == .tracking else { return }
+                let offset = SwipeReply.offset(for: value.translation.width)
+                if swipe.offset != offset { swipe.offset = offset }
+                if !swipe.buzzed, SwipeReply.reachedThreshold(value.translation.width) {
+                    swipe.buzzed = true
+                    Haptics.light()
+                }
+            }
+            .onEnded { value in
+                let shouldReply = swipe.decision == .tracking && SwipeReply.reachedThreshold(value.translation.width)
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { swipe = SwipeDrag() }
+                if shouldReply { actions?.reply() }
+            }
+    }
+
     func body(content: Content) -> some View {
         if let actions {
             content
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.rect = $0 }
+                .offset(x: swipe.offset)
+                .background(alignment: .leading) {
+                    if swipe.decision == .tracking {
+                        SwipeReplyGlyph(progress: SwipeReply.progress(for: swipe.offset))
+                            .transition(.opacity)
+                    }
+                }
+                .simultaneousGesture(swipeGesture, including: actions.isOwnFailed ? .subviews : .all)
                 .onLongPressGesture(minimumDuration: 0.35) { open() }
                 .accessibilityAction(named: Text("Reply")) { actions.reply() }
                 .accessibilityAction(named: Text("Copy")) { Pasteboard.string = actions.text }

@@ -147,7 +147,7 @@ final class ChatModel {
     var bot: BotRow { roster.bot(named: openedBot.name) ?? openedBot }
 
     private let links: BotLinks
-    private let roster: RosterModel
+    let roster: RosterModel
     private let lastSeenStore: ChatLastSeenStore
     private let lastSeenAtOpen: Date?
     private var link: BotLink?
@@ -328,11 +328,6 @@ final class ChatModel {
 
     func cancelReply() {
         replyTarget = nil
-    }
-
-    func toggleUnread() {
-        let current = bot
-        if current.isUnread { roster.markRead(current.name) } else { roster.markUnread(current) }
     }
 
     func canReact(to rowID: String) -> Bool {
