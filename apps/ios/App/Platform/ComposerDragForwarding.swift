@@ -101,4 +101,8 @@ enum ComposerDragForwarding {
         notification(#selector(NSDraggingDestination.concludeDragOperation(_:))) { $0.concludeDragOperation?($1) }
     }
 }
+#else
+enum ComposerDragForwarding {
+    static func update(isFocused: Bool) {}
+}
 #endif

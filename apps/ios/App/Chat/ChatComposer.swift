@@ -144,9 +144,7 @@ struct ChatComposer: View {
             if SlashCatalog.query(in: text) == nil, let trigger = FileRefCatalog.trigger(in: text) { loadFileRefs(trigger.word) }
         }
         .onChange(of: focused.wrappedValue) { _, isFocused in
-            #if os(macOS)
             ComposerDragForwarding.update(isFocused: isFocused)
-            #endif
             if !isFocused, !isAttachmentSheetPresented { dismissedDraft = draft }
         }
         .onChange(of: isAttachmentSheetPresented) { _, presented in

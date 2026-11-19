@@ -149,7 +149,7 @@ private struct CountingRow: View {
     let counter: BodyCounter
 
     var body: some View {
-        let _ = counter.count += 1
+        let _ = counter.count += 1 // swiftlint:disable:this redundant_discardable_let
         Text("row")
     }
 }
@@ -159,7 +159,7 @@ private struct Pane: View {
     let targeting: DropTargeting
 
     var body: some View {
-        let _ = counter.panes += 1
+        let _ = counter.panes += 1 // swiftlint:disable:this redundant_discardable_let
         VStack {
             Text("header")
             ScrollView { LazyVStack { ForEach(0..<20, id: \.self) { _ in CountingRow(counter: counter).equatable() } } }

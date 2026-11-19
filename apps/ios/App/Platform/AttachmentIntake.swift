@@ -139,19 +139,11 @@ enum AttachmentIntake {
         case .image(let identifier):
             if let data = await data(from: provider, identifier: identifier) {
                 batch.images.append(data)
-            } else if let copy = await copiedFile(from: provider, identifier: identifier) {
-                batch.files.append(copy.file)
-                batch.temporaryDirectories.append(copy.directory)
             } else {
-                batch.failures.append(.unreadable)
+                await collectContent(provider, identifier: identifier, into: &batch)
             }
         case .content(let identifier):
-            if let copy = await copiedFile(from: provider, identifier: identifier) {
-                batch.files.append(copy.file)
-                batch.temporaryDirectories.append(copy.directory)
-            } else {
-                batch.failures.append(.unreadable)
-            }
+            await collectContent(provider, identifier: identifier, into: &batch)
         case .webLink:
             if let url = await fileURL(from: provider) { batch.files.append(url) } else { batch.failures.append(.webLinkOnly) }
         case .text:
@@ -159,6 +151,15 @@ enum AttachmentIntake {
         case .unsupported:
             batch.failures.append(.unsupported)
         }
+    }
+
+    @MainActor private static func collectContent(_ provider: NSItemProvider, identifier: String, into batch: inout DropBatch) async {
+        guard let copy = await copiedFile(from: provider, identifier: identifier) else {
+            batch.failures.append(.unreadable)
+            return
+        }
+        batch.files.append(copy.file)
+        batch.temporaryDirectories.append(copy.directory)
     }
 
     @MainActor private static func fileURL(from provider: NSItemProvider) async -> URL? {
