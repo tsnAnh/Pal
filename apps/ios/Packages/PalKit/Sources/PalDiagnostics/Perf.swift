@@ -40,6 +40,13 @@ public enum PalPerf {
         signposter.emitEvent(name, "\(count)")
     }
 
+    public static func event(_ name: StaticString, label: String, since start: ContinuousClock.Instant) {
+        guard signposter.isEnabled else { return }
+        let elapsed = start.duration(to: .now).components
+        let microseconds = Int(elapsed.seconds * 1_000_000 + elapsed.attoseconds / 1_000_000_000_000)
+        signposter.emitEvent(name, "\(label, privacy: .public) \(microseconds)")
+    }
+
     fileprivate static func end(_ name: StaticString, _ state: OSSignpostIntervalState) {
         signposter.endInterval(name, state)
     }
