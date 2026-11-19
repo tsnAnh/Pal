@@ -210,12 +210,17 @@ public actor Outbox {
     }
 
     public func requeue(_ failed: OutboxEntry) throws -> OutboxEntry {
-        try enqueue(
+        let entry = try enqueue(
             botID: failed.botID,
             text: failed.text,
             attachments: failed.attachments,
             files: try fileStore.load(failed.files)
         )
+        entries = try store.update { stored in
+            stored.removeAll { $0.submissionID == failed.submissionID && $0.state != .pending }
+        }.entries
+        fileStore.remove(submissionID: failed.submissionID)
+        return entry
     }
 
     public func snapshot(botID: String? = nil) -> [OutboxEntry] {

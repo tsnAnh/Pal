@@ -123,6 +123,9 @@ CASES = [
      "            DragGesture().onChanged { live += $0.translation.width }.onEnded { _ in stored = live }\n        )\n    }\n}\n"),
     ("perf-shadow-radius", SCREEN, ".shadow(color: .black.opacity(0.35), radius: 40, y: 18)\n", ".shadow(color: .black.opacity(0.2), radius: 12, y: 4)\n"),
     ("perf-shadow-radius", SCREEN, ".shadow(color: .black, radius: 24)\n", ".shadow(color: .black, radius: 23)\n"),
+    ("perf-open-ungated", "App/ChatModel.swift",
+     "    func consume() async {\n        await TimelinePacer.consume(session.timelineSnapshots, apply: { next in\n            apply(next)\n        })\n    }\n",
+     "    func consume() async {\n        await TimelinePacer.consume(session.timelineSnapshots, apply: { next in\n            guard let ready = openGate.admit(next) else { return }\n            apply(ready)\n        })\n    }\n"),
     ("perf-glass-over-fill", DESIGN,
      "configuration.label\n    .background(fill ?? PalTokens.control, in: Capsule())\n    .palGlass(Capsule())\n",
      "configuration.label\n    .palGlass(Capsule())\n"),
@@ -354,6 +357,22 @@ def test_roster_publish_that_drops_its_list_fails_and_the_real_roster_model_pass
 
 def test_dropped_value_only_applies_to_the_guarded_model_file(tmp_path: Path) -> None:
     assert "perf-dropped-value" not in _rules(tmp_path, SCREEN, "    func publish() {\n        let next = 1\n    }\n")
+
+
+PRE_FIX_CHAT_OPEN = """    private func consumeTimeline(_ session: ChatSession) async {
+        await TimelinePacer.consume(session.timelineSnapshots, apply: { next in
+            apply(next)
+            if next.sessionID != nil { scheduleCacheSave() }
+        })
+    }
+"""
+
+
+def test_pre_fix_chat_open_fails_and_the_real_chat_model_passes(tmp_path: Path) -> None:
+    old = [f for f in csp.scan(_tree(tmp_path / "old", {"App/ChatModel.swift": PRE_FIX_CHAT_OPEN})) if f.rule == "perf-open-ungated"]
+    assert [f.line for f in old] == [2]
+    current = (REPO / "apps" / "ios" / "App" / "ChatModel.swift").read_text(encoding="utf-8")
+    assert not [f for f in csp.scan(_tree(tmp_path / "new", {"App/ChatModel.swift": current})) if f.rule == "perf-open-ungated"]
 
 
 AVATAR = "Packages/PalDesign/Sources/PalDesign/BotAvatarView.swift"

@@ -154,7 +154,7 @@ public actor ChatSession: OutboxSubmitter {
         setPhase(.attaching)
         let connection: GatewayConnection
         do {
-            connection = try await connector.connect()
+            connection = try await timed("chat.open.connect") { try await connector.connect() }
         } catch {
             setPhase(.detached)
             noteTerminal(error)
@@ -170,9 +170,9 @@ public actor ChatSession: OutboxSubmitter {
         attaching = connection
         do {
             let capable = api.supportsTimeline
-            resolution = try await resolver.open(api, timelineLimit: capable ? paging.firstPage : nil)
+            resolution = try await timed("chat.open.resolve") { try await resolver.open(api, timelineLimit: capable ? paging.firstPage : nil) }
             timelineCapable = capable
-            try await adoptTimeline(resolution.snapshot, page: resolution.timeline, api: api, forced: false)
+            try await timed("chat.open.adopt") { try await adoptTimeline(resolution.snapshot, page: resolution.timeline, api: api, forced: false) }
         } catch {
             attaching = nil
             await connection.close()

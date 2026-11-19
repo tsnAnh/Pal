@@ -85,7 +85,7 @@ struct ChatView: View {
         .safeAreaInset(edge: .top, spacing: 0) { AutoApproveBanner(sessionID: model.bot.conversationID) }
         .teachPresentations(teach, surface: .chat)
         .onScrollGeometryChange(for: ChatViewport.self, of: ChatViewport.init) { old, new in
-            scroll.observe(new)
+            scroll.observe(new, tracksOpen: model.isOpenWindow)
             if new.contentHeight > old.contentHeight { scroll.contentGrew() }
         }
         .onScrollPhaseChange { _, phase in scroll.observe(phase) }

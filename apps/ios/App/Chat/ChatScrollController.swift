@@ -59,7 +59,10 @@ final class ChatScrollController {
 
     var showsJumpButton: Bool { mode == .reading }
 
-    func observe(_ viewport: ChatViewport) {
+    func observe(_ viewport: ChatViewport, tracksOpen: Bool = false) {
+        if tracksOpen, !phase.isMoving, abs(viewport.distanceFromNewest - distanceFromNewest) > 0.5 {
+            PalPerf.event("chat.open.jump")
+        }
         distanceFromNewest = viewport.distanceFromNewest
         viewportHeight = viewport.viewportHeight
         if wantsOlder != viewport.wantsOlder { wantsOlder = viewport.wantsOlder }
