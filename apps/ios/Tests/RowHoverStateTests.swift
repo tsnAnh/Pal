@@ -1,4 +1,5 @@
 import Observation
+import Synchronization
 import Testing
 
 @testable import HermesBots
@@ -6,15 +7,17 @@ import Testing
 @MainActor
 @Suite("Row hover state")
 struct RowHoverStateTests {
-    private final class Fired {
-        var count = 0
+    private final class Fired: Sendable {
+        private let storage = Mutex(0)
+        var count: Int { storage.withLock { $0 } }
+        func bump() { storage.withLock { $0 += 1 } }
     }
 
     private func observe(_ state: RowHoverState, _ fired: Fired) {
         withObservationTracking {
             _ = state.isHovering
         } onChange: {
-            fired.count += 1
+            fired.bump()
         }
     }
 
