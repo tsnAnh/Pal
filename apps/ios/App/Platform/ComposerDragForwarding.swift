@@ -3,6 +3,14 @@ import AppKit
 import ObjectiveC
 import PalChat
 
+private struct ObjectBox: @unchecked Sendable {
+    let object: AnyObject
+
+    init(_ object: AnyObject) {
+        self.object = object
+    }
+}
+
 @MainActor
 enum ComposerDragForwarding {
     private static var subclasses: [ObjectIdentifier: AnyClass] = [:]
@@ -45,11 +53,13 @@ enum ComposerDragForwarding {
         _ info: AnyObject,
         _ forward: @MainActor (NSDraggingDestination, NSDraggingInfo) -> Result
     ) -> Result? {
-        MainActor.assumeIsolated {
-            guard let sender = info as? NSDraggingInfo else { return nil }
+        let editorBox = ObjectBox(editor)
+        let infoBox = ObjectBox(info)
+        return MainActor.assumeIsolated {
+            guard let sender = infoBox.object as? NSDraggingInfo else { return nil }
             let identifiers = sender.draggingPasteboard.types?.map(\.rawValue) ?? []
             guard DropSource.carriesAttachment(typeIdentifiers: identifiers) else { return nil }
-            var view = (editor as? NSView)?.superview
+            var view = (editorBox.object as? NSView)?.superview
             while let current = view {
                 if !current.registeredDraggedTypes.isEmpty, let host = current as? NSDraggingDestination { return forward(host, sender) }
                 view = current.superview
