@@ -57,7 +57,7 @@ struct KanbanCardView: View {
                     .accessibilityAddTraits(.isHeader)
                 #if os(macOS)
                 Button(action: back) { // nav-chrome: ok
-                    Image(systemName: "xmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(PalTokens.textSecondary)
+                    PalIcon("xmark", ink: .secondary).font(.system(size: 12, weight: .semibold))
                         .frame(width: 28, height: 28)
                         .palGlass(Circle())
                         .contentShape(Circle())

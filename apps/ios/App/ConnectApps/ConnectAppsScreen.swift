@@ -72,9 +72,8 @@ struct ConnectAppsScreen: View {
         VStack(spacing: 0) {
             HStack {
                 Button { Task { await model.leaveCustomConnector() } } label: { // nav-chrome: ok
-                    Image(systemName: "chevron.left")
+                    PalIcon("chevron.left")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(PalTokens.textPrimary)
                         .frame(width: 24, height: 24)
                         .contentShape(Rectangle())
                 }

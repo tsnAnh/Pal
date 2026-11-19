@@ -64,7 +64,11 @@ struct KanbanBoardView: View {
         return VStack(spacing: 0) {
             notice
             if rows.isEmpty {
-                ContentUnavailableView("No cards yet", systemImage: "rectangle.split.3x1", description: Text("Cards on this board appear here."))
+                ContentUnavailableView {
+                    Label("No cards yet", palIcon: "rectangle.split.3x1")
+                } description: {
+                    Text("Cards on this board appear here.")
+                }
                     .accessibilityIdentifier("kanbanBoardEmpty")
             } else {
                 KanbanFilterBar(filter: $filter, layout: layout, compact: !showsColumns)
@@ -82,7 +86,7 @@ struct KanbanBoardView: View {
     private var notice: some View {
         if load == .unreachable || load == .failed, let message = load.message {
             HStack(spacing: 8) {
-                Image(systemName: "wifi.exclamationmark")
+                PalIcon("wifi.exclamationmark", ink: .secondary)
                 Text(message).fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
@@ -97,7 +101,7 @@ struct KanbanBoardView: View {
 
     private var noMatches: some View {
         ContentUnavailableView {
-            Label("No matching cards", systemImage: "line.3.horizontal.decrease.circle")
+            Label("No matching cards", palIcon: "line.3.horizontal.decrease.circle")
         } description: {
             Text("Try a different search or clear the filters.")
         } actions: {

@@ -1,5 +1,6 @@
 import Foundation
 import PalClient
+import PalDesign
 import PalDevice
 import PalDiagnostics
 import PalProtocol
@@ -190,7 +191,7 @@ struct ScreenCaptureBadge: View {
 
     var body: some View {
         if indicator.isCapturing {
-            Label("A bot is looking at your screen", systemImage: "eye.fill")
+            Label("A bot is looking at your screen", palIcon: "eye.fill", ink: .onFill)
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12)

@@ -189,7 +189,7 @@ struct ConnectAppsList: View {
                 SetupButton(title: localized, kind: .primary, identifier: "\(identifier)-action") { model.devices.openSettings(for: id) }
                     .controlSize(.small)
             case nil:
-                Label(localized, systemImage: "checkmark")
+                Label(localized, palIcon: "checkmark", ink: .tertiary)
                     .font(.system(size: ConnectRowMetrics.subtitleSize))
                     .foregroundStyle(PalTokens.textTertiary)
                     .accessibilityIdentifier("\(identifier)-action")
@@ -269,7 +269,7 @@ struct ConnectAppRowView: View {
         case .needsAttention:
             SetupButton(title: title, kind: .primary, identifier: identifier, action: perform).controlSize(.small)
         case .connected:
-            SetupButton(title: title, systemImage: "checkmark", identifier: identifier, action: perform).controlSize(.small)
+            SetupButton(title: title, symbol: "checkmark", identifier: identifier, action: perform).controlSize(.small)
         case .waiting:
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)

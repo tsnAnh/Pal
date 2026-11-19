@@ -155,7 +155,7 @@ private struct ComputerHelpRow: View {
     @ViewBuilder
     private var icon: some View {
         switch topic.icon {
-        case .symbol(let name): Image(systemName: name).font(.system(size: 17, weight: .light))
+        case .symbol(let name): PalIcon(name, ink: .secondary).font(.system(size: 17, weight: .light))
         case .trackpad: TrackpadGlyph().frame(width: 16, height: 16)
         }
     }
