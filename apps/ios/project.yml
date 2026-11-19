@@ -160,6 +160,9 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot.tests
         GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Pal.app/Pal
+        TEST_HOST[sdk=macosx*]: $(BUILT_PRODUCTS_DIR)/Pal.app/Contents/MacOS/Pal
+        BUNDLE_LOADER: $(TEST_HOST)
     dependencies:
       - target: HermesBots
       - package: PalKit
