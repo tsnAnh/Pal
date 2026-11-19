@@ -3,42 +3,58 @@ import AppKit
 import PalDesign
 import SwiftUI
 
+private let messageBarGap: CGFloat = 8
+
+extension View {
+    func macRowHover(actions: MessageActions?) -> some View {
+        modifier(MacRowHoverModifier(actions: actions))
+    }
+}
+
+struct MacRowHoverModifier: ViewModifier {
+    let actions: MessageActions?
+
+    @Environment(MacShell.self) private var shell
+    @State private var hover = RowHoverState()
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(MacRowTracker(hover: hover, actions: actions) { anchor in
+                guard let actions else { return }
+                shell.messageMenu = MacMessageMenuRequest(anchor: anchor, actions: actions)
+            })
+            .environment(\.rowHover, hover)
+    }
+}
+
 struct MacMessageActionsModifier: ViewModifier {
     let side: MessageSide
     let actions: MessageActions?
 
-    @Environment(MacShell.self) private var shell
-    @State private var bubbleHovered = false
-    @State private var barHovered = false
-
-    private var showsBar: Bool {
-        guard let actions else { return false }
-        return (bubbleHovered || barHovered || shell.messageMenu?.actions.rowID == actions.rowID)
-    }
-
     func body(content: Content) -> some View {
         if let actions {
-            content
-                .background(MacHoverTracker(isHovering: $bubbleHovered, actions: actions) { anchor in
-                    shell.messageMenu = MacMessageMenuRequest(anchor: anchor, actions: actions)
-                })
-                .overlay(alignment: side == .user ? .leading : .trailing) {
-                    if showsBar {
-                        MacMessageHoverBar(side: side, actions: actions)
-                            .frame(width: MacMessageHoverBar.span, alignment: side == .user ? .trailing : .leading)
-                            .onHover { barHovered = $0 }
-                            .offset(x: side == .user ? -MacMessageHoverBar.span : MacMessageHoverBar.span)
-                    }
+            switch side {
+            case .user:
+                content.overlay(alignment: .leading) {
+                    MacMessageHoverBar(actions: actions)
+                        .alignmentGuide(.leading) { $0[.trailing] + messageBarGap }
                 }
+            case .assistant:
+                content.overlay(alignment: .trailing) {
+                    MacMessageHoverBar(actions: actions)
+                        .alignmentGuide(.trailing) { $0[.leading] - messageBarGap }
+                }
+            }
         } else {
             content
         }
     }
 }
 
-private struct MacHoverTracker: NSViewRepresentable {
-    @Binding var isHovering: Bool
-    let actions: MessageActions
+private struct MacRowTracker: NSViewRepresentable {
+    let hover: RowHoverState
+    let actions: MessageActions?
     let openMenu: (CGPoint) -> Void
 
     func makeNSView(context: Context) -> TrackingView {
@@ -52,7 +68,7 @@ private struct MacHoverTracker: NSViewRepresentable {
     }
 
     private func configure(_ view: TrackingView) {
-        view.onChange = { isHovering = $0 }
+        view.onChange = { [hover] in hover.setHovering($0) }
         view.openMenu = openMenu
         view.actions = actions
     }
@@ -113,13 +129,13 @@ private final class MessageMenuMonitor {
     static let shared = MessageMenuMonitor()
 
     private struct Entry {
-        weak var view: MacHoverTracker.TrackingView?
+        weak var view: MacRowTracker.TrackingView?
     }
 
     private var entries: [ObjectIdentifier: Entry] = [:]
     private var monitor: Any?
 
-    func add(_ view: MacHoverTracker.TrackingView) {
+    func add(_ view: MacRowTracker.TrackingView) {
         entries[ObjectIdentifier(view)] = Entry(view: view)
         guard monitor == nil else { return }
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [weak self] event in
@@ -132,7 +148,7 @@ private final class MessageMenuMonitor {
         }
     }
 
-    func remove(_ view: MacHoverTracker.TrackingView) {
+    func remove(_ view: MacRowTracker.TrackingView) {
         remove(ObjectIdentifier(view))
     }
 
@@ -144,54 +160,112 @@ private final class MessageMenuMonitor {
     }
 }
 
+private struct BarAccessibilityActions: ViewModifier {
+    let react: (() -> Void)?
+    let reply: (() -> Void)?
+    let more: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .accessibilityAction(named: Text("More"), more)
+            .modifier(OptionalAccessibilityAction(name: "React", action: react))
+            .modifier(OptionalAccessibilityAction(name: "Reply", action: reply))
+    }
+}
+
+private struct OptionalAccessibilityAction: ViewModifier {
+    let name: LocalizedStringKey
+    let action: (() -> Void)?
+
+    func body(content: Content) -> some View {
+        if let action {
+            content.accessibilityAction(named: Text(name), action)
+        } else {
+            content
+        }
+    }
+}
+
 private struct MacMessageHoverBar: View {
-    let side: MessageSide
     let actions: MessageActions
 
-    static let span: CGFloat = 80
     private static let pitch: CGFloat = 25
 
+    private enum Control: Hashable {
+        case react
+        case reply
+        case more
+    }
+
     @Environment(MacShell.self) private var shell
+    @Environment(\.rowHover) private var rowHover
+    @FocusState private var focus: Control?
     @State private var reactFrame = CGRect.zero
     @State private var moreFrame = CGRect.zero
 
+    private var isShown: Bool {
+        rowHover?.isHovering == true || focus != nil || shell.messageMenu?.actions.rowID == actions.rowID
+    }
+
     var body: some View {
+        let visible = isShown
+        let showsReact = !actions.isOwnFailed && (!visible || actions.canReact())
         GlassEffectContainer(spacing: 6) {
             HStack(spacing: 0) {
-                if actions.canReact() {
-                    Button { open(from: reactFrame) } label: { glyph("face.smiling") }
+                if showsReact {
+                    Button { openMenu(from: reactFrame) } label: { glyph("face.smiling") }
                         .buttonStyle(.plain)
-                        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { reactFrame = $0 }
+                        .focused($focus, equals: .react)
+                        .background { measure(visible, into: $reactFrame) }
                         .help(String(localized: "React"))
                         .accessibilityLabel(Text("React"))
                         .accessibilityIdentifier("messageReact")
                 }
-                Button { actions.reply() } label: { glyph("arrow.uturn.left") }
+                if !actions.isOwnFailed {
+                    Button { actions.reply() } label: { glyph("arrow.uturn.left") }
+                        .buttonStyle(.plain)
+                        .focused($focus, equals: .reply)
+                        .help(String(localized: "Reply"))
+                        .accessibilityLabel(Text("Reply"))
+                        .accessibilityIdentifier("messageReply")
+                }
+                Button { openMenu(from: moreFrame) } label: { glyph("ellipsis") }
                     .buttonStyle(.plain)
-                    .help(String(localized: "Reply"))
-                    .accessibilityLabel(Text("Reply"))
-                    .accessibilityIdentifier("messageReply")
-                Button { open(from: moreFrame) } label: { glyph("ellipsis") }
-                    .buttonStyle(.plain)
-                    .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { moreFrame = $0 }
+                    .focused($focus, equals: .more)
+                    .background { measure(visible, into: $moreFrame) }
                     .help(String(localized: "More"))
                     .accessibilityLabel(Text("More"))
                     .accessibilityIdentifier("messageMore")
             }
             .palGlass(Capsule())
         }
+        .opacity(visible ? 1 : 0)
+        .animation(.easeOut(duration: 0.12), value: visible)
+        .allowsHitTesting(visible)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("messageActionBar")
+        .modifier(BarAccessibilityActions(
+            react: showsReact ? { openMenu(from: reactFrame) } : nil,
+            reply: actions.isOwnFailed ? nil : { actions.reply() },
+            more: { openMenu(from: moreFrame) }
+        ))
     }
 
-    private func open(from frame: CGRect) {
+    @ViewBuilder
+    private func measure(_ visible: Bool, into frame: Binding<CGRect>) -> some View {
+        if visible {
+            Color.clear.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.wrappedValue = $0 }
+        }
+    }
+
+    private func openMenu(from frame: CGRect) {
         shell.messageMenu = MacMessageMenuRequest(anchor: CGPoint(x: frame.minX, y: frame.maxY + 6), actions: actions)
     }
 
     private func glyph(_ name: String) -> some View {
         Image(systemName: name)
             .font(.system(size: 13, weight: .regular))
-            .foregroundStyle(PalTokens.textSecondary)
+            .foregroundStyle(PalTokens.textPrimary)
             .frame(width: Self.pitch, height: 26)
             .contentShape(Rectangle())
     }

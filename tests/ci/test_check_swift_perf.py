@@ -90,6 +90,9 @@ CASES = [
      "struct Chat: View {\n    var chat: some View {\n        content\n            .onChange(of: model.rowIDs, initial: true) { _, ids in seen(ids) }\n    }\n}\n"),
     ("perf-row-reads-model", ROWS, "ink: BubblePalette.ink(accent: model.chatAccent)\n", "ink: BubblePalette.ink(accent: context.accent)\n"),
     ("perf-row-reads-model", ROWS, "reaction: model.reactions[id],\n", "reaction: context.reaction,\n"),
+    ("perf-hover-state-in-row-body", ROWS,
+     "struct ChatRowView: View {\n    @Environment(\\.rowHover) private var hover\n    var body: some View { Text(hover?.isHovering == true ? \"a\" : \"b\") }\n}\n",
+     "struct ChatRowView: View {\n    var body: some View { content.rowHoverWiring(actions) }\n}\n"),
     ("perf-observed-image-dictionary", SCREEN, "    private var images: [String: PlatformImage] = [:]\n", "    private var slots: [String: Slot] = [:]\n"),
     ("perf-monitor-unpaired", SCREEN,
      "final class V {\n    func install() { monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { $0 } }\n}\n",
@@ -163,6 +166,7 @@ def test_messages_name_the_replacement() -> None:
         "perf-monitor-per-view": csp.ALLOWLIST_NAME,
         "perf-body-array-work": "rowsNewestFirst",
         "perf-row-reads-model": "ChatRowContext",
+        "perf-hover-state-in-row-body": "MacMessageHoverBar",
         "perf-observed-image-dictionary": "Slot",
         "perf-drag-writes-binding": "DragWidth",
     }

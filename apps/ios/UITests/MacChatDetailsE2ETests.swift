@@ -54,7 +54,8 @@ final class MacChatDetailsE2ETests: BotProfileTestCase {
     func test1HoverActionsAppearAndCopyPutsTheReplyOnThePasteboard() throws {
         inEachAppearance { app, suffix in
             let reply = converse(app, "hover copy \(suffix)")
-            XCTAssertFalse(element(app, "messageActionBar").exists, "no action bar before hovering")
+            let idleBar = element(app, "messageActionBar")
+            XCTAssertFalse(idleBar.exists && idleBar.isHittable, "action bar is hidden before hovering")
             hover(app, reply)
             waitFor(element(app, "messageActionBar"), timeout: 10, "hover action bar")
             waitFor(element(app, "messageReact"), timeout: 5, "react button")
