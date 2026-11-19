@@ -10,7 +10,31 @@ answers it unchanged, and blocks until it answers, the turn is interrupted, or t
 """
 from __future__ import annotations
 
+import uuid
+
 _QUESTION_KEYS = ("qid", "question", "choices", "multi_select")
+
+
+def batch_answerable(turn) -> bool:
+    """Whether the batch request can go out: a viewer is attached, and every attached WebSocket client
+    advertised answering server→client requests (``client.capabilities``), or only one is attached (the
+    submitter). A client that never advertised (an older app) would reject the request and cancel it for
+    everyone, and with no viewer the batch fails at once; either way the per-question cards, which every
+    client answers and which wait and push, are asked instead."""
+    owner = getattr(turn, "_approval_owner", None)
+    if owner is None:
+        return False
+    authority, session_id, _generation = owner
+    live = authority.sessions.get(session_id)
+    if live is None:
+        return False
+    transports = live.event_stream.fanout.transports()
+    if not transports:
+        return False
+    from tui_gateway import server_requests
+    from tui_gateway.ws import WSTransport
+    clients = [peer for peer in transports if isinstance(peer, WSTransport)]
+    return len(clients) <= 1 or all(server_requests.answers_requests(peer) for peer in clients)
 
 
 def ask_clarify_batch(turn, questions) -> dict:
@@ -23,6 +47,8 @@ def ask_clarify_batch(turn, questions) -> dict:
         lambda: False)
     if live is None:
         return {"answers": {}, "outcome": "cancelled"}
+    from gateway.push_notify import Kind, waiting_on_user
+    waiting_on_user(authority, session_id, uuid.uuid4().hex[:10], Kind.CLARIFY)
     wire = [{key: entry.get(key) for key in _QUESTION_KEYS if entry.get(key) is not None} for entry in questions]
     timeout = get_clarify_timeout()
     # ``qids``: the viewer's batch panel locks each answer with ``clarify.lock`` (#140400).

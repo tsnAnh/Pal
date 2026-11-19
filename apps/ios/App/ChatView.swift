@@ -148,7 +148,7 @@ struct ChatView: View {
             }
         )
         .background(PlatformVariant.pick(mac: PalTokens.content, iOS: Color(theme.palette.canvas)))
-        .messageMenuPresenter()
+        .messageMenuPresenter().composerActivity(focused: composerFocused, draft: draft)
         .environment(\.chatInk, ink)
         .environment(\.focusComposer) {
             model.endFinding()

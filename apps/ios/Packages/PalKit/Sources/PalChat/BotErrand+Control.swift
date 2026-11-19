@@ -30,7 +30,7 @@ extension BotErrand {
         try await ensureLive()
         let transcript = await session.state.transcript
         let waiting = transcript.pendingPrompts
-        guard let prompt = waiting.first(where: { $0.kind == .clarify }) else {
+        guard let prompt = waiting.first(where: { $0.kind == .clarify && !$0.isForm }) else {
             return .nothingToAnswer(waitingOn: waiting.first)
         }
         let mark = transcript.answerMark(for: prompt)

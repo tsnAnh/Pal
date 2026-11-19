@@ -68,6 +68,7 @@ def test_runner_routes_a_classic_cli_turn_to_the_batch(monkeypatch):
     monkeypatch.setattr(run_turn_progress, 'local_viewer_turn', lambda turn: True)
     monkeypatch.setattr(run_turn_runner, '_finite_viewer_turn', lambda: False)
     monkeypatch.setattr(batch, 'ask_clarify_batch', lambda turn, qs: {'answers': {'q0': 'blue'}, 'outcome': 'submitted'})
+    monkeypatch.setattr(batch, 'batch_answerable', lambda turn: True)
     runner = run_turn_runner.TurnRunner.__new__(run_turn_runner.TurnRunner)
     runner._ctx = SimpleNamespace(inbound_message_id='adm-1', source=SimpleNamespace(platform=Platform.LOCAL))
     runner._ask_clarify_question = lambda *a, **k: (_ for _ in ()).throw(AssertionError('per-card path used'))
@@ -107,6 +108,7 @@ def test_a_tui_turn_that_asked_for_the_batch_gets_the_batch_panel(monkeypatch):
                         lambda runner, source: SimpleNamespace(platform=SURFACES['tui']))
     monkeypatch.setattr(run_turn_runner, '_finite_viewer_turn', lambda: False)
     monkeypatch.setattr(batch, 'ask_clarify_batch', lambda turn, qs: {'answers': {'q0': 'red'}, 'outcome': 'submitted'})
+    monkeypatch.setattr(batch, 'batch_answerable', lambda turn: True)
     runner = run_turn_runner.TurnRunner.__new__(run_turn_runner.TurnRunner)
     runner._runner = SimpleNamespace()
     runner._ctx = SimpleNamespace(inbound_message_id='adm-1', source=SimpleNamespace(platform=Platform.LOCAL))
@@ -114,3 +116,106 @@ def test_a_tui_turn_that_asked_for_the_batch_gets_the_batch_panel(monkeypatch):
     with session_cli_turn.cli_turn_scope('adm-1', {'clarify_batch': True}):
         assert runner._clarify_callback_sync(QUESTIONS) == {'answers': {'q0': 'red'}, 'outcome': 'submitted'}
 
+
+
+def test_a_batch_turn_with_no_viewer_attached_keeps_the_waiting_per_question_cards(monkeypatch):
+    """A viewer-less batch fails at once (and never pushes the owner), while a per-question card stays
+    pending until a viewer returns: with nobody attached the app's turn must ask the cards."""
+    from gateway import run_turn_progress, run_turn_runner, session_cli_turn
+    import gateway.session_clarify_batch as batch
+    from gateway.session_events import SessionEvents
+    monkeypatch.setattr(run_turn_progress, 'local_viewer_turn', lambda turn: True)
+    monkeypatch.setattr(run_turn_runner, '_finite_viewer_turn', lambda: False)
+    monkeypatch.setattr(batch, 'ask_clarify_batch', lambda *a: (_ for _ in ()).throw(AssertionError('batch path used')))
+    authority = SimpleNamespace(sessions={'s1': SimpleNamespace(event_stream=SessionEvents())})
+    runner = run_turn_runner.TurnRunner.__new__(run_turn_runner.TurnRunner)
+    runner._approval_owner = (authority, 's1', 1)
+    runner._ctx = SimpleNamespace(inbound_message_id='adm-1', source=SimpleNamespace(platform=Platform.LOCAL))
+    asked = []
+    runner._ask_clarify_question = lambda question, *a, **k: asked.append(question) or ('blue', True)
+    with session_cli_turn.cli_turn_scope('adm-1', {'clarify_batch': True}):
+        reply = runner._clarify_callback_sync(QUESTIONS)
+    assert asked == ['colour?', 'size?']
+    assert reply == {'answers': {'q0': 'blue', 'q1': 'blue'}, 'outcome': 'submitted'}
+
+
+def _ws_peer(advertised):
+    from tui_gateway import server_requests
+    from tui_gateway.ws import WSTransport
+
+    class Peer(WSTransport):
+        def __init__(self):
+            self.frames = []
+
+        def write(self, frame):
+            self.frames.append(frame)
+            return True
+
+        def close(self):
+            pass
+    peer = Peer()
+    server_requests.advertise(peer, advertised)
+    return peer
+
+
+def _turn_with(*peers):
+    from gateway.session_events import SessionEvents
+    events = SessionEvents()
+    for peer in peers:
+        events.fanout.attach(peer)
+    authority = SimpleNamespace(sessions={'s1': SimpleNamespace(event_stream=events)})
+    return SimpleNamespace(_approval_owner=(authority, 's1', 1))
+
+
+def test_batch_answerable_follows_the_live_sessions_transports():
+    from gateway.session_clarify_batch import batch_answerable
+    turn, _peer = _turn()
+    assert batch_answerable(turn)
+    assert not batch_answerable(_turn_with())
+    assert not batch_answerable(SimpleNamespace(_approval_owner=None))
+    assert not batch_answerable(SimpleNamespace(_approval_owner=(SimpleNamespace(sessions={}), 's1', 1)))
+
+
+def test_an_old_client_attached_beside_a_new_one_keeps_the_per_question_cards(monkeypatch):
+    """An attached client that never advertised answering server requests would reject the batch and
+    cancel it for everyone: no batch is sent, nothing is cancelled, the cards are asked."""
+    from gateway import run_turn_progress, run_turn_runner, session_cli_turn
+    import gateway.session_clarify_batch as batch
+    new, old = _ws_peer(True), _ws_peer(False)
+    turn = _turn_with(new, old)
+    assert not batch.batch_answerable(turn)
+    monkeypatch.setattr(run_turn_progress, 'local_viewer_turn', lambda turn: True)
+    monkeypatch.setattr(run_turn_runner, '_finite_viewer_turn', lambda: False)
+    runner = run_turn_runner.TurnRunner.__new__(run_turn_runner.TurnRunner)
+    runner._approval_owner = turn._approval_owner
+    runner._ctx = SimpleNamespace(inbound_message_id='adm-1', source=SimpleNamespace(platform=Platform.LOCAL))
+    asked = []
+    runner._ask_clarify_question = lambda question, *a, **k: asked.append(question) or ('blue', True)
+    with session_cli_turn.cli_turn_scope('adm-1', {'clarify_batch': True}):
+        reply = runner._clarify_callback_sync(QUESTIONS)
+    assert asked == ['colour?', 'size?']
+    assert reply == {'answers': {'q0': 'blue', 'q1': 'blue'}, 'outcome': 'submitted'}
+    assert new.frames == [] and old.frames == []
+
+
+def test_every_attached_client_advertising_or_a_lone_submitter_gets_the_batch():
+    from gateway.session_clarify_batch import batch_answerable
+    assert batch_answerable(_turn_with(_ws_peer(True), _ws_peer(True)))
+    assert batch_answerable(_turn_with(_ws_peer(False)))
+    assert not batch_answerable(_turn_with(_ws_peer(False), _ws_peer(True)))
+
+
+def test_an_asked_batch_pushes_the_owner_that_it_waits(monkeypatch):
+    from gateway import push_notify
+    from gateway.session_clarify_batch import ask_clarify_batch
+    from gateway.session_server_requests import resolve
+    sent = []
+    monkeypatch.setattr(push_notify, 'waiting_on_user', lambda authority, session_id, prompt_id, kind: sent.append((session_id, kind)))
+    turn, peer = _turn()
+    worker = threading.Thread(target=lambda: ask_clarify_batch(turn, QUESTIONS))
+    worker.start()
+    _wait_for(lambda: any(f.get('method') == 'clarify' for f in peer.frames))
+    assert sent == [('s1', push_notify.Kind.CLARIFY)]
+    request = next(f for f in peer.frames if f.get('method') == 'clarify')
+    resolve({'jsonrpc': '2.0', 'id': request['id'], 'result': {'answers': {}, 'outcome': 'cancelled'}})
+    worker.join(5)

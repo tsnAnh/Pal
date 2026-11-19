@@ -75,12 +75,8 @@ struct ChatRowView: View {
                 .environment(\.messageActions, messageActions(for: parsed.source))
                 .environment(\.chatImageLoader, model.imageLoader)
                 .environment(\.chatFileActions, model.fileActions)
-        case .clarifyAnswered(let question, let answer):
-            ClarifyAnsweredCard(question: question, answer: answer)
-                .bubbleWidth(.leading)
-        case .clarify(let prompt):
-            ClarifyCard(prompt: prompt) { answer in model.answer(prompt, with: answer) }
-                .bubbleWidth(.leading)
+        case .clarifyAnswered, .clarify:
+            ClarifyRowContent(kind: row.kind, accent: context.accent, model: model)
         case .approval(let prompt):
             ApprovalCard(prompt: prompt, ink: BubblePalette.ink(accent: context.accent), inkText: BubblePalette.inkText(accent: context.accent)) { choice in
                 model.answerApproval(prompt, choice: choice)

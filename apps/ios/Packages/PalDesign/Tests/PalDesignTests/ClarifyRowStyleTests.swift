@@ -30,4 +30,27 @@ struct ClarifyRowStyleTests {
             #expect(ClarifyRowStyle.choice.badgeText(in: palette) == palette.textSecondary)
         }
     }
+
+    @Test func pickedBadgeFollowsTheAskingBotsAccent() throws {
+        let accent = try #require(BotAccent(name: "Atlas", uiMeta: nil))
+        for palette in Self.palettes {
+            #expect(ClarifyRowStyle.chosen.badgeFill(in: palette, accent: accent) == .botAccent(accent))
+            #expect(ClarifyRowStyle.chosen.badgeText(in: palette, accent: accent) == .botAccent(accent))
+        }
+    }
+
+    @Test func aBotWithoutAnAccentKeepsTheNeutralSelectedFill() {
+        for palette in Self.palettes {
+            #expect(ClarifyRowStyle.chosen.badgeFill(in: palette, accent: nil) == .palette(palette.chipSelectedFill))
+            #expect(ClarifyRowStyle.chosen.badgeText(in: palette, accent: nil) == .palette(palette.chipSelectedText))
+        }
+    }
+
+    @Test func restingBadgesStayNeutralWhateverTheAccent() throws {
+        let accent = try #require(BotAccent(name: "Atlas", uiMeta: nil))
+        for palette in Self.palettes {
+            #expect(ClarifyRowStyle.choice.badgeFill(in: palette, accent: accent) == nil)
+            #expect(ClarifyRowStyle.choice.badgeText(in: palette, accent: accent) == .palette(palette.textSecondary))
+        }
+    }
 }

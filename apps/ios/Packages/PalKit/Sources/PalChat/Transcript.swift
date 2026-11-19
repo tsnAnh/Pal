@@ -782,7 +782,7 @@ public struct Transcript: Sendable, Equatable {
         items[index].content = .connection(card)
     }
 
-    private mutating func addCard(_ prompt: PendingPrompt) {
+    mutating func addCard(_ prompt: PendingPrompt) {
         let id = "prompt:\(prompt.promptID)"
         guard !items.contains(where: { $0.id == id }) else { return }
         let card = PromptCard(prompt: prompt)

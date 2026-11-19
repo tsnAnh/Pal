@@ -84,7 +84,7 @@ struct Timeline: Sendable {
         var parts: [Part]
     }
 
-    private(set) var live = Transcript()
+    var live = Transcript()
     private(set) var older: OlderEdge = .unknown
     private(set) var revision: String?
     private var settled: [Settled] = []
@@ -260,7 +260,7 @@ struct Timeline: Sendable {
         return nil
     }
 
-    private mutating func assignLiveKeys() {
+    mutating func assignLiveKeys() {
         let items = live.items
         guard let lastPainted = items.lastIndex(where: { liveKeys[$0.id] != nil }) ?? (items.isEmpty ? nil : -1),
               items.contains(where: { liveKeys[$0.id] == nil })

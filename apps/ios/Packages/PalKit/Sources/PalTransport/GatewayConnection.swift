@@ -148,6 +148,7 @@ public actor GatewayConnection {
     private var receiveTask: Task<Void, Never>?
     private var closeReason: GatewayCloseReason?
     private nonisolated let negotiated = Mutex<JSONValue?>(nil)
+    private nonisolated let clarifyBatch = Mutex<Bool?>(nil)
 
     private init(
         session: URLSession,
@@ -241,6 +242,12 @@ public actor GatewayConnection {
 
     public nonisolated func recordNegotiatedRuntime(_ description: JSONValue) {
         negotiated.withLock { $0 = description }
+    }
+
+    public nonisolated var negotiatedClarifyBatch: Bool? { clarifyBatch.withLock { $0 } }
+
+    public nonisolated func recordClarifyBatch(_ supported: Bool) {
+        clarifyBatch.withLock { $0 = supported }
     }
 
     public func respond(to id: RPCID, result: JSONValue) {

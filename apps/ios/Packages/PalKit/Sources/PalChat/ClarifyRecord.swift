@@ -14,6 +14,12 @@ public struct ClarifyRecord: Sendable, Hashable {
         self.answer = answer
     }
 
+    public static func callID(ofItemID id: String) -> String? {
+        let prefix = "tool:"
+        guard id.hasPrefix(prefix), let hash = id.lastIndex(of: "#") else { return nil }
+        return String(id[id.index(id.startIndex, offsetBy: prefix.count)..<hash])
+    }
+
     var summaryText: String {
         switch answer {
         case .answered(let picks): "\(question) -> \(picks.joined(separator: ", "))"

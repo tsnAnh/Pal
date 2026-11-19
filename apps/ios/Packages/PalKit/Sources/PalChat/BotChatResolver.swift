@@ -41,6 +41,7 @@ public struct BotChatResolver: Sendable {
     }
 
     public func open(_ api: SessionAPI, timelineLimit: Int? = nil) async throws -> BotChatResolution {
+        _ = await api.supportsClarifyBatch()
         if let row = try await lookup(api) {
             return try await resume(api, Self.target(of: row), timelineLimit)
         }

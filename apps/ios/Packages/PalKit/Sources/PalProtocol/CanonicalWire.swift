@@ -108,6 +108,7 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
     public var command: String?
     public var description: String?
     public var timeoutSeconds: Int?
+    public var questions: [ClarifyQuestion]
 
     public init(
         kind: Kind,
@@ -118,7 +119,8 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
         multiSelect: Bool? = nil,
         command: String? = nil,
         description: String? = nil,
-        timeoutSeconds: Int? = nil
+        timeoutSeconds: Int? = nil,
+        questions: [ClarifyQuestion] = []
     ) {
         self.kind = kind
         self.promptID = promptID
@@ -129,6 +131,7 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
         self.command = command
         self.description = description
         self.timeoutSeconds = timeoutSeconds
+        self.questions = questions
     }
 
     public init(from decoder: any Decoder) throws {
@@ -142,10 +145,12 @@ public struct PendingPrompt: Codable, Sendable, Hashable {
         command = try container.decodeIfPresent(String.self, forKey: .command)
         description = try container.decodeIfPresent(String.self, forKey: .description)
         timeoutSeconds = try container.decodeIfPresent(Int.self, forKey: .timeoutSeconds)
+        questions = try container.decodeIfPresent([ClarifyQuestion].self, forKey: .questions) ?? []
     }
 
     enum CodingKeys: String, CodingKey {
         case kind
+        case questions
         case promptID = "prompt_id"
         case executionGeneration = "execution_generation"
         case choices
@@ -230,6 +235,11 @@ public struct SessionSnapshot: Decodable, Sendable, Hashable {
         pending = try container.decodeIfPresent([PendingAdmission].self, forKey: .pending) ?? []
         prompts = try container.decodeIfPresent([PendingPrompt].self, forKey: .prompts) ?? []
         openRequests = try container.decodeIfPresent([OpenRequest].self, forKey: .openRequests) ?? []
+        prompts += openRequests.compactMap { request in
+            request.method == PendingPrompt.clarifyRequestMethod
+                ? PendingPrompt.clarifyBatch(requestID: request.id, params: request.params, sessionID: sessionID)
+                : nil
+        }
         pendingConnection = try? container.decodeIfPresent(ConnectionOperation.self, forKey: .pendingConnection)
     }
 
@@ -300,6 +310,11 @@ public struct EventsSinceResult: Codable, Sendable, Hashable {
 public struct PromptResponseResult: Codable, Sendable, Hashable {
     public var status: String
     public var promptID: String
+
+    public init(status: String, promptID: String) {
+        self.status = status
+        self.promptID = promptID
+    }
 
     enum CodingKeys: String, CodingKey {
         case status

@@ -5,6 +5,7 @@ import SwiftUI
 
 struct ClarifyCard: View {
     let prompt: PendingPrompt
+    var accent: BotAccent?
     let answer: (String) -> Void
 
     @State private var selection: Set<Int> = []
@@ -17,19 +18,29 @@ struct ClarifyCard: View {
         ClarifyAnswer.compose(choices: prompt.choices, selection: [], typed: otherText, multiSelect: false)
     }
 
+    private var composedAnswer: String? {
+        if prompt.isBatch {
+            return ClarifyAnswer.wire(choices: prompt.choices, selection: selection, typed: otherText, multiSelect: isMulti)
+        }
+        return ClarifyAnswer.compose(choices: prompt.choices, selection: selection, typed: otherText, multiSelect: isMulti)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ClarifyHeadline(text: question)
             ForEach(Array(prompt.choices.enumerated()), id: \.offset) { index, choice in
                 Button { tap(index, choice) } label: {
-                    ClarifyRow(letter: ClarifyRow.letter(index), text: choice, style: selection.contains(index) ? .chosen : .choice)
+                    ClarifyRow(letter: ClarifyRow.letter(index), text: choice, style: selection.contains(index) ? .chosen : .choice, accent: accent)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text(verbatim: "\(ClarifyRow.letter(index)), \(choice)"))
                 .accessibilityAddTraits(selection.contains(index) ? .isSelected : [])
                 .accessibilityIdentifier("clarifyChoice-\(index)")
             }
-            ClarifyInputRow(letter: ClarifyRow.letter(prompt.choices.count), text: $otherText, focused: $otherFocused, hasText: typedAnswer != nil) {
+            ClarifyInputRow(
+                letter: ClarifyRow.letter(prompt.choices.count), text: $otherText, focused: $otherFocused,
+                hasText: typedAnswer != nil, accent: accent
+            ) {
                 submitTyped()
             }
             if isMulti, !prompt.choices.isEmpty {
@@ -50,10 +61,6 @@ struct ClarifyCard: View {
         .accessibilityIdentifier("clarifyCard")
     }
 
-    private var composedAnswer: String? {
-        ClarifyAnswer.compose(choices: prompt.choices, selection: selection, typed: otherText, multiSelect: isMulti)
-    }
-
     private func submitTyped() {
         guard let composed = composedAnswer else { return }
         answer(composed)
@@ -72,6 +79,7 @@ struct ClarifyCard: View {
 struct ClarifyAnsweredCard: View {
     let question: String
     let answer: ClarifyRecord.Answer
+    var accent: BotAccent?
 
     @Environment(\.hermesTheme) private var theme
 
@@ -90,7 +98,7 @@ struct ClarifyAnsweredCard: View {
                 ClarifyRow(letter: nil, text: String(localized: "Skipped"), style: .choice)
             } else {
                 ForEach(Array(picks.enumerated()), id: \.offset) { _, pick in
-                    ClarifyRow(letter: nil, text: pick, style: .chosen)
+                    ClarifyRow(letter: nil, text: pick, style: .chosen, accent: accent)
                 }
             }
         }
@@ -101,7 +109,7 @@ struct ClarifyAnsweredCard: View {
     }
 }
 
-private struct ClarifyHeadline: View {
+struct ClarifyHeadline: View {
     let text: String
 
     @Environment(\.hermesTheme) private var theme
@@ -116,14 +124,15 @@ private struct ClarifyHeadline: View {
     }
 }
 
-private struct ClarifyRowShell<Content: View>: View {
+struct ClarifyRowShell<Content: View>: View {
     let letter: String?
     let style: ClarifyRowStyle
+    var accent: BotAccent?
     @ViewBuilder let content: Content
 
     var body: some View {
         HStack(spacing: 14) {
-            ClarifyBadge(letter: letter, style: style)
+            ClarifyBadge(letter: letter, style: style, accent: accent)
             content
         }
         .padding(.vertical, 6)
@@ -132,21 +141,31 @@ private struct ClarifyRowShell<Content: View>: View {
     }
 }
 
-private struct ClarifyRow: View {
+struct ClarifyRow: View {
     let letter: String?
     let text: String
     let style: ClarifyRowStyle
+    var accent: BotAccent?
 
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
-        ClarifyRowShell(letter: letter, style: style) {
-            Text(text)
-                .font(.body)
+        ClarifyRowShell(letter: letter, style: style, accent: accent) {
+            label
+                .font(.body.weight(style == .chosen ? .semibold : .regular))
                 .foregroundStyle(Color(style.text(in: theme.palette)))
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private static let recommended = " (Recommended)"
+
+    private var label: Text {
+        guard text.hasSuffix(Self.recommended) else { return Text(text) }
+        let base = Text(verbatim: String(text.dropLast(Self.recommended.count)))
+        let suffix = Text(verbatim: Self.recommended).fontWeight(.regular).foregroundStyle(Color(theme.palette.textTertiary))
+        return Text("\(base)\(suffix)")
     }
 
     static func letter(_ index: Int) -> String {
@@ -154,18 +173,19 @@ private struct ClarifyRow: View {
     }
 }
 
-private struct ClarifyBadge: View {
+struct ClarifyBadge: View {
     let letter: String?
     let style: ClarifyRowStyle
+    var accent: BotAccent?
 
     @Environment(\.hermesTheme) private var theme
     @ScaledMetric(relativeTo: .body) private var badgeSide: CGFloat = 26
 
     var body: some View {
-        let fill = style.badgeFill(in: theme.palette)
+        let fill = style.badgeFill(in: theme.palette, accent: accent)
         ZStack {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(fill.map { Color($0) } ?? PalTokens.hairline)
+                .fill(Self.color(fill, ink: false) ?? PalTokens.hairline)
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .strokeBorder(Color(theme.palette.cardStroke), lineWidth: fill == nil ? 1 : 0)
             if style == .chosen, letter == nil {
@@ -176,17 +196,26 @@ private struct ClarifyBadge: View {
                     .font(.footnote.weight(.medium))
             }
         }
-        .foregroundStyle(Color(style.badgeText(in: theme.palette)))
+        .foregroundStyle(Self.color(style.badgeText(in: theme.palette, accent: accent), ink: true) ?? .primary)
         .frame(width: badgeSide, height: badgeSide)
         .accessibilityHidden(true)
     }
+
+    static func color(_ resolved: ClarifyBadgeColor?, ink: Bool) -> Color? {
+        switch resolved {
+        case .palette(let rgb)?: Color(rgb)
+        case .botAccent(let accent)?: ink ? accent.foreground : accent.accent
+        case nil: nil
+        }
+    }
 }
 
-private struct ClarifyInputRow: View {
+struct ClarifyInputRow: View {
     let letter: String
     @Binding var text: String
     var focused: FocusState<Bool>.Binding
     let hasText: Bool
+    var accent: BotAccent?
     let onSubmit: () -> Void
 
     @Environment(\.hermesTheme) private var theme
@@ -194,7 +223,7 @@ private struct ClarifyInputRow: View {
     var body: some View {
         let style: ClarifyRowStyle = hasText || focused.wrappedValue ? .chosen : .choice
         let placeholder = String(localized: "Something else")
-        ClarifyRowShell(letter: letter, style: style) {
+        ClarifyRowShell(letter: letter, style: style, accent: accent) {
             TextField(
                 "",
                 text: $text,
@@ -217,7 +246,7 @@ private struct ClarifyInputRow: View {
     }
 }
 
-private extension View {
+extension View {
     func clarifySurface() -> some View {
         modifier(ClarifySurface())
     }
