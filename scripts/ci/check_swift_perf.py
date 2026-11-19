@@ -13,7 +13,7 @@ Rules: perf-body-parse, perf-body-format, perf-redraw-per-call, perf-main-disk-r
 perf-queue-sync, perf-timeline-unlisted, perf-timeline-interval, perf-hover-unlisted,
 perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry-per-row,
 perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write,
-perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired,
+perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired, perf-dropped-value,
 perf-avatar-row-slot.
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
@@ -350,11 +350,33 @@ def monitor_unpaired(src: Source) -> Iterator[tuple[int, str]]:
                                        "NSEvent.removeMonitor (on teardown or when the last user leaves)")
 
 
+PUBLISH_FUNC = re.compile(r"\bfunc\s+(publish|apply)\w*\s*\(")
+LOCAL_BINDING = re.compile(r"^[ \t]*(?:let|var)\s+(\w+)\b[^=\n]*=(?!=)", re.MULTILINE)
+
+
+def dropped_value(src: Source) -> Iterator[tuple[int, str]]:
+    for m in PUBLISH_FUNC.finditer(src.text):
+        paren = m.end() - 1
+        header = re.compile(r"[^{};]*\{").match(src.text, src.close.get(paren, -2) + 1)
+        if not header or (header.end() - 1) not in src.close:
+            continue
+        start, end = header.end(), src.close[header.end() - 1]
+        body = src.text[start:end]
+        if m.group(1) == "publish" and "assignIfChanged(" not in body:
+            yield src.line_of(m.start()), ("publish never assigns what it builds: the model keeps showing the old "
+                                           "value. Write the result with assignIfChanged(\\.field, value)")
+        for local in LOCAL_BINDING.finditer(body):
+            if len(re.findall(rf"\b{local.group(1)}\b", body)) == 1:
+                yield src.line_of(start + local.start(1)), (f"`{local.group(1)}` is computed and never used: the work "
+                                                            "is dropped. Assign it with assignIfChanged(\\.field, value) or delete it")
+
+
 BLOCK_RULES: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[Source], Iterator[tuple[int, str]]]], ...] = (
     ("perf-eager-stack", in_app, eager_stack),
     ("perf-geometry-per-row", in_app, geometry_per_row),
     ("perf-glass-over-fill", anywhere, glass_over_fill),
     ("perf-monitor-unpaired", in_app, monitor_unpaired),
+    ("perf-dropped-value", guarded_model, dropped_value),
 )
 
 
