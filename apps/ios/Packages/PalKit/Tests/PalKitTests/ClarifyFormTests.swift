@@ -167,3 +167,19 @@ struct ClarifyFormTests {
         #expect(form.currentDraft == ClarifyForm.Draft())
     }
 }
+
+@Suite("Clarify form focus policy")
+struct ClarifyFocusPolicyTests {
+    @Test("an idle composer lets the form take keyboard focus")
+    func idleComposerYields() {
+        #expect(ClarifyFocusPolicy.claimsFocus(composerFocused: false, draft: ""))
+        #expect(ClarifyFocusPolicy.claimsFocus(composerFocused: false, draft: "  \n"))
+    }
+
+    @Test("a focused composer or a draft keeps focus where it is")
+    func typingOwnerKeepsFocus() {
+        #expect(!ClarifyFocusPolicy.claimsFocus(composerFocused: true, draft: ""))
+        #expect(!ClarifyFocusPolicy.claimsFocus(composerFocused: false, draft: "half a thought"))
+        #expect(!ClarifyFocusPolicy.claimsFocus(composerFocused: true, draft: "typing"))
+    }
+}

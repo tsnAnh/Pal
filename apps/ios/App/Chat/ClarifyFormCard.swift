@@ -13,6 +13,7 @@ struct ClarifyFormCard: View {
     @FocusState private var otherFocused: Bool
     @FocusState private var cardFocused: Bool
     @Environment(\.hermesTheme) private var theme
+    @Environment(\.composerActivity) private var composer
 
     init(prompt: PendingPrompt, accent: BotAccent? = nil, submit: @escaping ([(qid: String, answer: ClarifyForm.Answer)]) async -> Bool) {
         self.prompt = prompt
@@ -56,6 +57,7 @@ struct ClarifyFormCard: View {
         .accessibilityAction(named: Text("Back")) { goBack() }
         .accessibilityAction(named: Text(primaryTitle)) { advanceOrSubmit() }
         .accessibilityIdentifier("clarifyForm")
+        .onAppear { cardFocused = ClarifyFocusPolicy.claimsFocus(composerFocused: composer.focused, draft: composer.draft) }
     }
 
     private var options: some View {
