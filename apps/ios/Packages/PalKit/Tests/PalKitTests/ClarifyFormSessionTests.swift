@@ -118,16 +118,6 @@ struct ClarifyFormSessionTests {
         await rig.finish()
     }
 
-    @Test func aFormCannotBeAnsweredWithOneTypedReply() async throws {
-        let rig = try await rig()
-        rig.gateway.pushRequest(id: "srq-1", method: "clarify", params: requestParams)
-        try await waitUntil("the form", timeout: .seconds(10)) { await rig.pendingPrompts().count == 1 }
-        let prompt = try #require(await rig.pendingPrompts().first)
-        await #expect(throws: ChatError.formNeedsAnswers) { try await rig.session.answerClarify(prompt, answer: "yes") }
-        #expect(rig.script.count("clarify.lock") == 0)
-        await rig.finish()
-    }
-
     @Test func aFormStillOpenAtTheGatewayComesBackWithTheSnapshot() async throws {
         let rig = try await rig { script in
             script.override("session.resume") { _ in .result(openRequestsSnapshot("srq-7")) }

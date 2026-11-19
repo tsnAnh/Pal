@@ -215,8 +215,7 @@ private struct ClarifyOpenField: View {
         TextField(
             "",
             text: $text,
-            prompt: Text(placeholder).foregroundStyle(Color(theme.palette.textTertiary)),
-            axis: .vertical
+            prompt: Text(placeholder).foregroundStyle(Color(theme.palette.textTertiary))
         )
         .textFieldStyle(.plain)
         .focusEffectDisabled()
