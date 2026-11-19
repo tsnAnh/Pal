@@ -145,7 +145,7 @@ def test_planted_violation_is_reported_with_file_line_rule_and_fix(tmp_path: Pat
 def test_real_tree_fails_without_baseline_and_passes_with_it() -> None:
     root = REPO / "apps" / "ios"
     without = csg.scan(root)
-    assert any(f.rule == "glass-dark-tint" and f.path.endswith("PalControls.swift") for f in without)
+    assert any(f.rule == "glass-pill-button" for f in without)
     assert csg.new_findings(without, csg.load_baseline(root / csg.BASELINE_NAME))[0] == []
     entries = json.loads((root / csg.BASELINE_NAME).read_text(encoding="utf-8-sig"))
     assert all(set(e) == {"rule", "file", "text"} for e in entries)
