@@ -15,18 +15,22 @@ struct AssistantBubble: View {
     var wholeBubbleSelection = false
 
     @Environment(\.chatFileOpener) private var openFile
-    @Environment(\.messageActions) private var actions
 
     var body: some View {
         let segments = parsed.segments
+        let leadsAlone = failureLead != nil && !startsWithText(segments)
+        let carrier = leadsAlone ? nil : (segments.first(where: isText) ?? segments.first)?.id
         VStack(alignment: .leading, spacing: ChatMetrics.sameSenderGap) {
             if !images.isEmpty { ChatImageGrid(images: images).bubbleWidth(.leading) }
             if !text.isEmpty {
-                if let failureLead, !startsWithText(segments) {
-                    textBubble(nil, lead: failureLead, isFirst: true, label: text)
+                if leadsAlone, let failureLead {
+                    textBubble(nil, lead: failureLead, carries: true, label: text)
                 }
                 ForEach(segments) { segment in
-                    segmentView(segment, isFirst: segment.id == segments.first?.id && !leadsAlone(segments), single: segments.count == 1)
+                    segmentView(
+                        segment, leadsMessage: segment.id == segments.first?.id,
+                        carries: segment.id == carrier, single: segments.count == 1
+                    )
                 }
             }
             if !files.isEmpty { ChatFileStack(files: files, isStreaming: filesPending).bubbleWidth(.leading) }
@@ -40,32 +44,35 @@ struct AssistantBubble: View {
         })
     }
 
-    private func leadsAlone(_ segments: [MessageSegment]) -> Bool {
-        failureLead != nil && !startsWithText(segments)
+    private func isText(_ segment: MessageSegment) -> Bool {
+        if case .text = segment { true } else { false }
     }
 
     private func startsWithText(_ segments: [MessageSegment]) -> Bool {
-        if case .text = segments.first { true } else { false }
+        segments.first.map(isText) ?? false
     }
 
     @ViewBuilder
-    private func segmentView(_ segment: MessageSegment, isFirst: Bool, single: Bool) -> some View {
+    private func segmentView(_ segment: MessageSegment, leadsMessage: Bool, carries: Bool, single: Bool) -> some View {
         switch segment {
         case .text(let textSegment):
-            textBubble(textSegment, lead: isFirst ? failureLead : nil, isFirst: isFirst, label: single ? text : textSegment.spoken)
+            textBubble(textSegment, lead: leadsMessage ? failureLead : nil, carries: carries, label: single ? text : textSegment.spoken)
         case .table(_, let table):
-            TableBubbleView(table: table, highlight: highlight, isCurrentMatch: isCurrentMatch)
-                .messageActions(side: .assistant)
-                .environment(\.messageActions, isFirst ? actions : actions?.withoutReaction)
+            withActions(TableBubbleView(table: table, highlight: highlight, isCurrentMatch: isCurrentMatch), carries)
         }
+    }
+
+    @ViewBuilder
+    private func withActions<Bubble: View>(_ bubble: Bubble, _ carries: Bool) -> some View {
+        if carries { bubble.messageActions(side: .assistant) } else { bubble }
     }
 
     private func leadView(_ lead: String) -> some View {
         FailureLead(text: lead, highlight: highlight, isCurrentMatch: isCurrentMatch).bubbleTextSelection()
     }
 
-    private func textBubble(_ segment: TextSegment?, lead: String?, isFirst: Bool, label: String) -> some View {
-        ChatBubble(style: BubblePalette.agentBubble) {
+    private func textBubble(_ segment: TextSegment?, lead: String?, carries: Bool, label: String) -> some View {
+        let bubble = ChatBubble(style: BubblePalette.agentBubble) {
             VStack(alignment: .leading, spacing: 8) {
                 if let lead { leadView(lead) }
                 if let segment {
@@ -77,15 +84,7 @@ struct AssistantBubble: View {
             }
         }
         .bubbleAccessibility(text: label, identifier: "assistantBubble")
-        .messageActions(side: .assistant)
-        .environment(\.messageActions, isFirst ? actions : actions?.withoutReaction)
-        .bubbleWidth(.leading)
-    }
-}
-
-private extension MessageActions {
-    var withoutReaction: MessageActions {
-        MessageActions(rowID: rowID, text: text, reaction: nil, canReact: canReact, react: react, reply: reply)
+        return withActions(bubble, carries).bubbleWidth(.leading)
     }
 }
 

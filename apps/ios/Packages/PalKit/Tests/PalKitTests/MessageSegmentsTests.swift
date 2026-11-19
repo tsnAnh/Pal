@@ -71,7 +71,7 @@ struct MessageSegmentsTests {
     @Test func documentTablesAreCollectedInOrder() {
         let document = MarkdownDocument(parsing: "\(Self.table)\n\ntext\n\n| c |\n|---|\n| 9 |")
         #expect(document.tables.count == 2)
-        #expect(MarkdownDocument(parsing: "no table").copyTable(format: .tsv) == nil)
+        #expect(MarkdownDocument(parsing: "no table").tables.isEmpty)
     }
 }
 
@@ -83,31 +83,26 @@ struct TableCopyTests {
 
     @Test func markdownKeepsAlignmentAndEscapesPipes() {
         let source = "| Run | Score | Note |\n|:---|---:|:---:|\n| A | 6.5 | a \\| b |"
-        let text = table(source).copyTable(format: .markdown)
+        let text = table(source).markdown
         #expect(text == "| Run | Score | Note |\n| --- | ---: | :---: |\n| A | 6.5 | a \\| b |")
     }
 
     @Test func tsvJoinsCellsWithTabsAndRowsWithNewlines() {
-        let text = table("| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |").copyTable(format: .tsv)
+        let text = table("| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |").tsv
         #expect(text == "a\tb\n1\t2\n3\t4")
     }
 
     @Test func tsvFlattensTabsAndLineBreaksInsideACell() {
         let cell = AttributedString("x\ty\nz")
         let built = MarkdownTable(alignments: [.leading], header: [AttributedString("h")], rows: [[cell]])
-        #expect(built.copyTable(format: .tsv) == "h\nx y z")
-        #expect(built.copyTable(format: .markdown).hasSuffix("| x\ty<br>z |"))
+        #expect(built.tsv == "h\nx y z")
+        #expect(built.markdown.hasSuffix("| x\ty z |"))
     }
 
     @Test func rowAndColumnCountsIncludeTheHeader() {
         let counted = table("| a | b |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |")
         #expect(counted.rowCount == 3)
         #expect(counted.columnCount == 2)
-    }
-
-    @Test func documentCopyJoinsTablesWithABlankLine() {
-        let document = MarkdownDocument(parsing: "| a |\n|---|\n| 1 |\n\ntext\n\n| b |\n|---|\n| 2 |")
-        #expect(document.copyTable(format: .tsv) == "a\n1\n\nb\n2")
     }
 
     @Test func naturalWidthsAreClampedToTheLimits() {

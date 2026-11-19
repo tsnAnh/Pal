@@ -55,19 +55,6 @@ public enum MessageSegment: Sendable, Equatable, Identifiable {
 
 public extension MarkdownDocument {
     var messageSegments: [MessageSegment] { MessageSegment.split(layoutItems) }
-
-    var tables: [MarkdownTable] {
-        blocks.compactMap { block -> MarkdownTable? in
-            guard case .table(let table) = block.kind else { return nil }
-            return table
-        }
-    }
-
-    func copyTable(format: TableCopyFormat) -> String? {
-        let all = tables
-        guard !all.isEmpty else { return nil }
-        return all.map { $0.copyTable(format: format) }.joined(separator: "\n\n")
-    }
 }
 
 public enum MarkdownRun: Sendable, Equatable, Identifiable {

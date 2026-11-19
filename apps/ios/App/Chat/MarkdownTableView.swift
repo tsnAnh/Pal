@@ -161,8 +161,8 @@ struct TableBubbleView: View {
             Text("^[\(table.rowCount) row](inflect: true) · ^[\(table.columnCount) column](inflect: true)")
             Spacer(minLength: 8)
             Menu("Copy table") {
-                Button("Copy as Markdown") { Pasteboard.string = table.copyTable(format: .markdown) }
-                Button("Copy as TSV") { Pasteboard.string = table.copyTable(format: .tsv) }
+                Button("Copy as Markdown") { Pasteboard.string = table.markdown }
+                Button("Copy as TSV") { Pasteboard.string = table.tsv }
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
