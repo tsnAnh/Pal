@@ -49,6 +49,31 @@ struct BotProvisionerTests {
         #expect(BotProvisioner.createParams(identity, cloneFrom: "scout")["clone_from"] == "scout")
     }
 
+    @Test func aRequestWithoutASourceSendsNoCloneFromAndKeepsTheRest() throws {
+        let identity = BotIdentity(entered: "Chó Ba Tư")
+        let params = try #require(BotProvisioner.createParams(identity, cloneFrom: nil).objectValue)
+        #expect(params["clone_from"] == nil)
+        #expect(params["name"] == "cho-ba-tu")
+        #expect(params["share_auth"] == true)
+        #expect(params["display_name"] == "Chó Ba Tư")
+        #expect(params["soul"]?.stringValue?.contains("`cho-ba-tu`") == true)
+        #expect(NewBotRequest(name: "Atlas", kind: "cloud", colorHex: "#10dc69", cloneFrom: nil).cloneFrom == nil)
+    }
+
+    @Test func aFreshBotIsCreatedOnTheGatewayWithoutACloneSource() async throws {
+        let fake = FakeRoster(names: ["default"])
+        let (provisioner, gateway, connection) = try await start(fake)
+        defer { gateway.stop(); Task { await connection.close() } }
+
+        let created = try await provisioner.create(NewBotRequest(name: "Scout", kind: "boxy", colorHex: "#f58a06", cloneFrom: nil))
+
+        #expect(created.name == "scout")
+        let create = try #require(fake.calls("profiles.create").first ?? nil)
+        #expect(create["clone_from"] == nil)
+        #expect(create["share_auth"] == true)
+        #expect(create["name"] == "scout")
+    }
+
     @Test func aSourceThatIsNotAProfileNameIsRejectedBeforeAnyCall() async throws {
         let fake = FakeRoster(names: ["default"])
         let (provisioner, gateway, connection) = try await start(fake)

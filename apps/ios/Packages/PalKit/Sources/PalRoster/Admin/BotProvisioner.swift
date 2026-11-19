@@ -7,9 +7,9 @@ public struct NewBotRequest: Sendable, Equatable {
     public var kind: String
     public var colorHex: String
     public var seed: String?
-    public var cloneFrom: String
+    public var cloneFrom: String?
 
-    public init(name: String, kind: String, colorHex: String, seed: String? = nil, cloneFrom: String = "default") {
+    public init(name: String, kind: String, colorHex: String, seed: String? = nil, cloneFrom: String? = "default") {
         self.name = name
         self.kind = kind
         self.colorHex = colorHex
@@ -53,7 +53,8 @@ public actor BotProvisioner {
 
     public func create(_ request: NewBotRequest) async throws -> CreatedBot {
         let identity = BotIdentity(entered: request.name)
-        guard identity.isValid, Self.isColor(request.colorHex), Self.isKind(request.kind), Self.isSeed(request.seed), Self.isSource(request.cloneFrom) else {
+        let sourceIsValid = request.cloneFrom.map(Self.isSource) ?? true
+        guard identity.isValid, Self.isColor(request.colorHex), Self.isKind(request.kind), Self.isSeed(request.seed), sourceIsValid else {
             throw BotAdminError.invalidName
         }
         if let running = inFlight[identity.slug] { return try await running.value }
@@ -87,7 +88,7 @@ public actor BotProvisioner {
         return CreatedBot(name: identity.slug, displayName: identity.displayName, greetsUnprompted: entry.greetsUnprompted)
     }
 
-    private func ensureProfile(_ identity: BotIdentity, cloneFrom: String) async throws -> Pending {
+    private func ensureProfile(_ identity: BotIdentity, cloneFrom: String?) async throws -> Pending {
         let listing = try await writer.listing()
         let exists = listing.profiles.contains { $0.name == identity.slug }
         if var known = pending[identity.slug] {
@@ -123,13 +124,13 @@ public actor BotProvisioner {
         }
     }
 
-    static func createParams(_ identity: BotIdentity, cloneFrom: String = "default") -> JSONValue {
+    static func createParams(_ identity: BotIdentity, cloneFrom: String? = "default") -> JSONValue {
         var params: [String: JSONValue] = [
             "name": .string(identity.slug),
-            "clone_from": .string(cloneFrom),
             "share_auth": true,
             "soul": .string(soul(for: identity)),
         ]
+        if let cloneFrom { params["clone_from"] = .string(cloneFrom) }
         if identity.displayName != identity.slug {
             params["display_name"] = .string(String(identity.displayName.prefix(BotIdentity.maximumDisplayNameLength)))
         }

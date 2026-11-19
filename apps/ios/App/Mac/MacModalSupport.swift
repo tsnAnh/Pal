@@ -32,11 +32,20 @@ struct MacPanelCloseKey: PreferenceKey {
     }
 }
 
+enum MacPanelClosePlacement {
+    case leading
+    case trailing
+
+    var alignment: Alignment { self == .leading ? .topLeading : .topTrailing }
+}
+
 struct MacModalPanel<Content: View>: View {
     let width: CGFloat
     var height: CGFloat?
     var background = PalTokens.elevated
     var clearClose = false
+    var closePlacement = MacPanelClosePlacement.leading
+    var closeDisabled = false
     let identifier: String
     let closeIdentifier: String
     let close: () -> Void
@@ -49,11 +58,12 @@ struct MacModalPanel<Content: View>: View {
             .frame(width: width, height: height)
             .background(background, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
-            .overlayPreferenceValue(MacPanelCloseKey.self, alignment: .topLeading) { override in
+            .overlayPreferenceValue(MacPanelCloseKey.self, alignment: closePlacement.alignment) { override in
                 if !override.hidden {
                     SheetGlassButton(clear: clearClose, accessibilityIdentifier: override.identifier ?? closeIdentifier, action: close)
+                        .disabled(closeDisabled)
                         .padding(.top, PalMetrics.macPanelCloseTopInset)
-                        .padding(.leading, PalMetrics.macPanelCloseLeadingInset)
+                        .padding(closePlacement == .leading ? .leading : .trailing, PalMetrics.macPanelCloseLeadingInset)
                 }
             }
             .clipShape(shape)
