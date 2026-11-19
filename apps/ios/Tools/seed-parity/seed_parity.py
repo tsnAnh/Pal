@@ -218,7 +218,7 @@ BOTS = (
             ("user", "Thêm báo cáo doanh thu RevenueCat nữa, đổ vào Notion."),
             ("assistant", "Em cần API key RevenueCat chỉ đọc. Anh cấp qua biến môi trường giúp em, em không lưu vào chat."),
             ("user", "Cấp rồi. Làm đi."),
-            ("assistant", "Xong rồi anh Anh. Em đã gộp vào routine của em và đổ số liệu vào [Notion dashboard](https://www.notion.so/metrics-daily) mỗi sáng 8:30. Lần chạy thử: crash-free 99.4%, doanh thu hôm qua đã khớp với RevenueCat."),
+            ("assistant", "Xong rồi anh Anh. Em đã gộp vào routine của em và đổ số liệu vào [Notion dashboard](https://www.notion.so/metrics-daily) mỗi sáng 8:30. Lần chạy thử: crash-free 99.4%, doanh thu hôm qua đã khớp với RevenueCat.\n\n| Nguồn số liệu | Chỉ số theo dõi mỗi sáng | Ngưỡng cảnh báo | Người nhận báo cáo |\n| --- | --- | --- | --- |\n| Crashlytics production | Tỉ lệ crash-free của phiên bản mới nhất | Dưới 99,0% trong 24 giờ | chó Định và anh Anh |\n| RevenueCat subscriptions | Doanh thu thuần theo ngày và số lượt hủy | Giảm hơn 15% so với tuần trước | chó Định |\n\n```bash\nhermes routine run --profile cho-dinh --name morning-metrics --notion-database metrics-daily --revenuecat-project fren-prod --crashlytics-app dev.tsnanh.fren --since yesterday\n```"),
         ),
     ),
 )
