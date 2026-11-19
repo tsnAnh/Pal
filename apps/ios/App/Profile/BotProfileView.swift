@@ -107,16 +107,6 @@ struct BotProfileView: View {
                 .disabled(model.profile == nil)
                 .padding(.top, ProfileMetrics.nameToEdit)
                 .accessibilityIdentifier("profileEditButton")
-            if model.isSetupUnfinished {
-                Text("Setup wasn't finished")
-                    .hermesText(.footnoteCaption)
-                    .foregroundStyle(Color(theme.palette.destructive))
-                    .padding(.top, 10)
-                    .accessibilityIdentifier("profileSetupUnfinished")
-                Button("Delete", role: .destructive) { router.deletingBot = model.botName }
-                    .padding(.top, 4)
-                    .accessibilityIdentifier("profileDeleteUnfinished")
-            }
         }
         .frame(maxWidth: .infinity)
     }

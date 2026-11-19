@@ -446,9 +446,9 @@ final class ChatModel {
     }
 
     func openImage(_ reference: ImageReference, inRow rowID: String) {
-        let images = ConversationImages.list(from: rows.map { row in
-            if case .imageGeneration(.ready(let image)) = row.kind { return (row.id, [image]) }
-            return (row.id, row.images)
+        let images = ConversationImages.list(from: rows.map { row -> ConversationImages.Row in
+            if case .imageGeneration(.ready(let image)) = row.kind { return .init(rowID: row.id, text: row.searchableText, images: [image]) }
+            return .init(rowID: row.id, text: row.searchableText, images: row.images)
         })
         imageViewer = ImageViewerState(images: images, opening: "\(rowID)/\(reference.id)", anchorRowID: rowID)
     }

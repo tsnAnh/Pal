@@ -32,13 +32,35 @@ nonisolated enum ChatImageDecoder {
         return cache
     }()
 
+    nonisolated(unsafe) private static let sizes = NSCache<NSString, PixelSizeBox>()
+
+    final class PixelSizeBox: NSObject {
+        let size: CGSize
+
+        init(_ size: CGSize) { self.size = size }
+    }
+
     static func cached(id: String, maxPixel: Int) -> CGImage? {
         cache.object(forKey: key(id, maxPixel))
+    }
+
+    static func originalSize(id: String) -> CGSize? {
+        sizes.object(forKey: id as NSString)?.size
+    }
+
+    private static func recordOriginalSize(of source: CGImageSource, id: String) {
+        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties[kCGImagePropertyPixelHeight] as? Int
+        else { return }
+        let turned = (5...8).contains(properties[kCGImagePropertyOrientation] as? Int ?? 1)
+        sizes.setObject(PixelSizeBox(turned ? CGSize(width: height, height: width) : CGSize(width: width, height: height)), forKey: id as NSString)
     }
 
     static func downsample(_ data: Data, id: String, maxPixel: Int) -> CGImage? {
         let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
         guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else { return nil }
+        recordOriginalSize(of: source, id: id)
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
@@ -55,13 +77,13 @@ nonisolated enum ChatImageDecoder {
     }
 }
 
-private enum ChatImagePhase {
+enum ChatImagePhase {
     case loading
     case loaded(CGImage)
     case failed(String)
 }
 
-private struct ChatImageSource: View {
+struct ChatImageSource: View {
     let reference: ImageReference
     let thumbnail: Bool
     let maxPixel: Int
@@ -117,6 +139,7 @@ struct ChatImageGrid: View {
 
     private static let single: CGFloat = 220
     private static let tile: CGFloat = 108
+    static let previewMaxPixels = [Int(single * 3), Int(tile * 3)]
     private static let spacing: CGFloat = 4
 
     var body: some View {
