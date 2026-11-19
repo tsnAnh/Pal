@@ -73,9 +73,8 @@ struct MessageMenu: View {
                 reactionButton(emoji)
             }
             Button { showsMore = true } label: {
-                Image(systemName: "face.smiling")
+                PalIcon("face.smiling", ink: .secondary)
                     .font(.system(size: MessageMenuMetrics.glyphSize + 1))
-                    .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: MessageMenuMetrics.cellWidth, height: MessageMenuMetrics.rowHeight)
                     .contentShape(Rectangle())
             }
@@ -120,9 +119,8 @@ struct MessageMenuRow: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: symbol)
+                PalIcon(symbol, ink: .secondary)
                     .font(.system(size: MessageMenuMetrics.glyphSize))
-                    .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: MessageMenuMetrics.glyphWidth)
                 Text(title)
                     .font(.system(size: MessageMenuMetrics.textSize))

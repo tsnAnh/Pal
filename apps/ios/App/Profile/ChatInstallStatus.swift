@@ -38,7 +38,7 @@ struct ChatInstallStatus<Secondary: View>: View {
 
     var body: some View {
         ContentUnavailableView {
-            Label(copy.title, systemImage: copy.symbol)
+            Label(copy.title, palIcon: copy.symbol)
         } description: {
             Text(copy.reason)
         } actions: {

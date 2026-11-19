@@ -88,8 +88,7 @@ struct CreateRoomSheet: View {
         )
         .overlay(alignment: .trailing) {
             if isSelected {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color(theme.palette.accentBlue))
+                PalIcon("checkmark.circle.fill")
                     .padding(.trailing, PalMetrics.rowInset)
                     .accessibilityHidden(true)
             }

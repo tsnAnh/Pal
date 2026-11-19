@@ -71,7 +71,11 @@ struct KanbanBoardsView: View {
                 Task { await store.loadBoards() }
             }
         case .ready:
-            ContentUnavailableView("No boards yet", systemImage: "rectangle.split.3x1", description: Text("Boards on this server appear here."))
+            ContentUnavailableView {
+                Label("No boards yet", palIcon: "rectangle.split.3x1")
+            } description: {
+                Text("Boards on this server appear here.")
+            }
         default:
             KanbanUnavailable(load: store.boardsLoad)
         }
@@ -108,7 +112,7 @@ struct KanbanBoardPicker: View {
         } label: {
             HStack(spacing: 4) {
                 Text(current).lineLimit(1)
-                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+                PalIcon("chevron.down").font(.system(size: 9, weight: .semibold))
             }
             .hermesText(.chip)
             .foregroundStyle(PalTokens.textPrimary)
@@ -143,7 +147,11 @@ struct KanbanUnavailable: View {
     let load: KanbanLoad
 
     var body: some View {
-        ContentUnavailableView(title, systemImage: symbol, description: Text(load.message ?? ""))
+        ContentUnavailableView {
+            Label(title, palIcon: symbol)
+        } description: {
+            Text(load.message ?? "")
+        }
             .frame(maxWidth: .infinity, minHeight: 280)
             .accessibilityIdentifier("kanbanUnavailable")
     }

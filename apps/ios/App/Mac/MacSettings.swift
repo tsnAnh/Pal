@@ -84,7 +84,7 @@ struct MacSettingsModal: View {
             ForEach(MacSettingsSection.allCases) { item in
                 Button { section = item } label: {
                     HStack(spacing: 8) {
-                        Image(systemName: item.symbol)
+                        PalIcon(item.symbol)
                             .font(.system(size: 12))
                             .frame(width: 14)
                         Text(item.title).font(.system(size: 12))
@@ -243,9 +243,8 @@ private struct MacGeneralSection: View {
                                 NSPasteboard.general.clearContents()
                                 NSPasteboard.general.setString(connection.userName, forType: .string)
                             } label: {
-                                Image(systemName: "doc.on.doc")
+                                PalIcon("doc.on.doc", ink: .secondary)
                                     .font(.system(size: 10))
-                                    .foregroundStyle(PalTokens.textSecondary)
                                     .frame(width: 18, height: 18)
                                     .contentShape(Rectangle())
                             }
@@ -476,9 +475,8 @@ private struct MacComputerSection: View {
 
     private func deviceRow(_ device: DeviceEntry) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: device.symbolName)
+            PalIcon(device.symbolName, ink: .secondary)
                 .font(.system(size: 12, weight: .light))
-                .foregroundStyle(PalTokens.textSecondary)
                 .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(device.name).font(.system(size: 12, weight: .medium)).foregroundStyle(PalTokens.textPrimary)
@@ -730,7 +728,7 @@ private struct MacVaultSection: View {
             ForEach(MacVaultFilter.allCases) { item in tab(item, count: entries.filter(item.includes).count) }
             Spacer()
             HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(PalTokens.textSecondary)
+                PalIcon("magnifyingglass", ink: .secondary).font(.system(size: 11))
                 TextField("Search Vault", text: $query)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
@@ -776,9 +774,8 @@ private struct MacVaultSection: View {
 
     private func row(_ entry: VaultEntry) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: entry.kind.symbolName)
+            PalIcon(entry.kind.symbolName, ink: .secondary)
                 .font(.system(size: 11))
-                .foregroundStyle(PalTokens.textSecondary)
                 .frame(width: 24, height: 24)
                 .background(PalTokens.control, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             VStack(alignment: .leading, spacing: 1) {

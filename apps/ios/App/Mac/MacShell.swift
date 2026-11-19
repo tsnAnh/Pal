@@ -177,7 +177,11 @@ struct MacShellView<Destination: View>: View {
                 if let first = router.path.first {
                     destination(first).id(first)
                 } else {
-                    ContentUnavailableView("Pick a bot", systemImage: "bubble.left.and.bubble.right", description: Text("Choose a bot from the list to start chatting."))
+                    ContentUnavailableView {
+                        Label("Pick a bot", palIcon: "bubble.left.and.bubble.right")
+                    } description: {
+                        Text("Choose a bot from the list to start chatting.")
+                    }
                 }
             }
             .navigationDestination(for: AppRoute.self) { route in

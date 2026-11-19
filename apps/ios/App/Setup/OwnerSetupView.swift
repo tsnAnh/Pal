@@ -97,7 +97,7 @@ private struct OwnerSetupAccessory: View {
                     .hermesText(.rowSubtitle)
                     .foregroundStyle(PalTokens.textSecondary)
             } icon: {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.green)
+                PalIcon("checkmark.circle.fill", ink: .success)
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("ownerSetupAddressReachable")

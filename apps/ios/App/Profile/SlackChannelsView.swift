@@ -16,7 +16,7 @@ struct SlackChannelsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
             HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(PalTokens.textTertiary).accessibilityHidden(true)
+                PalIcon("magnifyingglass", ink: .tertiary).accessibilityHidden(true)
                 TextField(String(localized: "Search channels"), text: $search)
                     .textFieldStyle(.plain)
                     .autocorrectionDisabled()
@@ -50,7 +50,7 @@ struct SlackChannelsView: View {
             HStack(spacing: 12) {
                 checkbox(isOn)
                 VStack(alignment: .leading, spacing: 2) {
-                    Label(row.space.name, systemImage: row.space.kind == .private ? "lock" : "number")
+                    Label(row.space.name, palIcon: row.space.kind == .private ? "lock" : "number")
                         .hermesText(.rowTitle)
                         .fontWeight(.semibold)
                         .foregroundStyle(PalTokens.textPrimary)
@@ -75,7 +75,7 @@ struct SlackChannelsView: View {
             .fill(isOn ? PalTokens.toggleOn : Color.clear)
             .overlay {
                 RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(isOn ? PalTokens.toggleOn : PalTokens.borderStrong, lineWidth: 1.5)
-                if isOn { Image(systemName: "checkmark").font(.system(size: 11, weight: .bold)).foregroundStyle(.white) }
+                if isOn { PalIcon("checkmark", ink: .onFill).font(.system(size: 11, weight: .bold)) }
             }
             .frame(width: 20, height: 20)
             .accessibilityHidden(true)

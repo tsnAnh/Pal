@@ -84,21 +84,21 @@ struct MacInspector: View {
         GlassEffectContainer(spacing: 10) {
             HStack(spacing: 8) {
                 Menu {
-                    Button("Edit…", systemImage: "square.and.pencil") { profile.beginEditing() }
+                    Button { profile.beginEditing() } label: { Label("Edit…", palIcon: "square.and.pencil") }
                         .disabled(profile.profile == nil)
                         .accessibilityIdentifier("profileEditButton")
-                    Button("New Routine…", systemImage: "plus") { creation = routines.creationModel() }
+                    Button { creation = routines.creationModel() } label: { Label("New Routine…", palIcon: "plus") }
                         .accessibilityIdentifier("routinesNewButton")
                     if suggestionsHidden, !suggestions.visibleSuggestions.isEmpty {
-                        Button("Show Suggestions", systemImage: "eye") { suggestionsHidden = false }
+                        Button { suggestionsHidden = false } label: { Label("Show Suggestions", palIcon: "eye") }
                             .accessibilityIdentifier("inspectorShowSuggestions")
                     }
                     Divider()
                     if !profile.isPrimary {
-                        Button("Replace Primary Bot…", systemImage: "star") { profile.confirmsReplacePrimary = true }
+                        Button { profile.confirmsReplacePrimary = true } label: { Label("Replace Primary Bot…", palIcon: "star") }
                             .accessibilityIdentifier("profileReplacePrimary")
                     }
-                    Button("Copy ID", systemImage: "doc.on.doc") { profile.copyID() }
+                    Button { profile.copyID() } label: { Label("Copy ID", palIcon: "doc.on.doc") }
                         .accessibilityIdentifier("profileCopyID")
                 } label: {
                     inspectorGlyph("ellipsis")
@@ -123,9 +123,8 @@ struct MacInspector: View {
     }
 
     private func inspectorGlyph(_ name: String) -> some View {
-        Image(systemName: name)
+        PalIcon(name, ink: .secondary)
             .font(.system(size: 12, weight: .regular))
-            .foregroundStyle(PalTokens.textSecondary)
             .frame(width: 32, height: 32)
             .palGlass(Circle())
             .contentShape(Circle())
@@ -200,7 +199,7 @@ extension MacInspector {
                                 SlackMark().frame(width: 14, height: 14)
                                 Text("Add to Slack").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
                                 Spacer(minLength: 0)
-                                Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                                PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
                             }
                         }
                     }
@@ -210,51 +209,51 @@ extension MacInspector {
                 EmptyView()
             } content: {
                 InspectorRow(identifier: "profileComputerRow", action: { router.push(.computer(botName: botName)) }) {
-                    Image(systemName: "display").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    PalIcon("display", ink: .secondary).font(.system(size: 13)).frame(width: 18)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("Bot's computer").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
                         Text(profile.computer?.text ?? " ").font(.system(size: 11)).foregroundStyle(PalTokens.textSecondary)
                     }
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
                 }
             }
             InspectorSection(title: String(localized: "Model"), identifier: "inspectorModel") {
                 EmptyView()
             } content: {
                 InspectorRow(identifier: "profileModelRow", action: { router.push(.botModel(botName: botName)) }) {
-                    Image(systemName: "cpu").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    PalIcon("cpu", ink: .secondary).font(.system(size: 13)).frame(width: 18)
                     Text("Model, effort and backups").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
                 }
             }
             InspectorSection(title: String(localized: "Messaging"), identifier: "inspectorMessaging") {
                 EmptyView()
             } content: {
                 InspectorRow(identifier: "profileMessagingRow", action: { router.push(.messagingSettings(botName: botName)) }) {
-                    Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    PalIcon("bubble.left.and.bubble.right", ink: .secondary).font(.system(size: 13)).frame(width: 18)
                     Text("Messaging settings").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
                 }
                 InspectorRow(identifier: "profileKeysRow", action: { router.push(.botKeys(botName: botName)) }) {
-                    Image(systemName: "key").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    PalIcon("key", ink: .secondary).font(.system(size: 13)).frame(width: 18)
                     Text("Keys").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
                 }
                 InspectorRow(identifier: "profileVaultRow", action: { router.push(.botVault(botName: botName)) }) {
-                    Image(systemName: "lock").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    PalIcon("lock", ink: .secondary).font(.system(size: 13)).frame(width: 18)
                     Text("Vault").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
                 }
                 InspectorRow(identifier: "profileTelegramRow", action: { router.push(.telegram(botName: botName)) }) {
-                    Image(systemName: "paperplane.fill").font(.system(size: 13)).foregroundStyle(PalTokens.textSecondary).frame(width: 18)
+                    PalIcon("paperplane.fill", ink: .secondary).font(.system(size: 13)).frame(width: 18)
                     Text("Connect Telegram").font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary)
                     Spacer(minLength: 0)
-                    Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(PalTokens.textTertiary)
+                    PalIcon("chevron.right", ink: .tertiary).font(.system(size: 9, weight: .semibold))
                 }
             }
             InspectorSection(title: String(localized: "Notifications"), identifier: "inspectorNotifications") {
@@ -314,7 +313,7 @@ extension MacInspector {
             VStack(spacing: 0) {
                 ForEach(routines.routines) { routine in
                     InspectorRow(identifier: "routine-\(routine.id)", action: nil) {
-                        Image(systemName: "clock").font(.system(size: 13)).foregroundStyle(PalTokens.textTertiary).frame(width: 18)
+                        PalIcon("clock", ink: .tertiary).font(.system(size: 13)).frame(width: 18)
                         VStack(alignment: .leading, spacing: 1) {
                             Text(routine.title).font(.system(size: 12)).foregroundStyle(PalTokens.textPrimary).lineLimit(1)
                             Text(routine.caption()).font(.system(size: 11)).foregroundStyle(PalTokens.textSecondary).lineLimit(1)

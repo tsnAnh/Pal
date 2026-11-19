@@ -72,7 +72,7 @@ private struct FailedImageNotice: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "photo.badge.exclamationmark")
+            PalIcon("photo.badge.exclamationmark", ink: .secondary)
             Text(reason)
                 .hermesText(.chip)
                 .fixedSize(horizontal: false, vertical: true)

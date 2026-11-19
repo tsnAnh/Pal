@@ -34,11 +34,10 @@ struct RoutinesView: View {
             .sharedBackgroundVisibility(.hidden)
             ToolbarItem(placement: .trailingBar) {
                 Button { creation = model.creationModel() } label: {
-                    Image(systemName: "plus")
+                    PalIcon("plus")
                 }
                 .accessibilityLabel(Text("New Routine"))
                 .accessibilityIdentifier("routinesNewButton")
-                .tint(.primary)
             }
         }
         .toolbarTitleDisplayMode(.inline)

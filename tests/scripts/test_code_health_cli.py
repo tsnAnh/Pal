@@ -25,15 +25,16 @@ from scripts.code_health.config import ENFORCEMENT
 
 REPO = Path(__file__).resolve().parents[2]
 _GUARD_SCRIPTS = (
+    # Upstream guards merged by the sync (kept on their own line, away from Pal's Swift-guard line).
+    "scripts/ci/check_line_endings.py", "scripts/ci/check_dockerfile_downloads.py", "scripts/check_tool_discovery.py",
+    "scripts/check_packaged_imports.py", "scripts/ci/check_backend_imports.py",
     "scripts/check-windows-footguns.py", "scripts/check_bash_shebangs.py",
     "scripts/check_no_tmp_literals.py", "scripts/check_detached_spawns.py", "scripts/install_root_lint.py",
     "scripts/check_config_yaml_writers.py", "scripts/check_config_yaml_readers.py",
     "scripts/check_profile_create_entry.py", "scripts/ci/check_os_marker_fakes.py", "scripts/check-case-collisions.py",
     "scripts/ci/check_lazy_deps_imports.py", "scripts/ci/check_profile_archive_boundary.py",
-    "scripts/ci/check_agents_md_size.py", "scripts/ci/check_blob_size.py", "scripts/ci/check_line_endings.py",
-    "scripts/ci/check_dockerfile_downloads.py", "scripts/check_tool_discovery.py",
-    "scripts/check_packaged_imports.py", "scripts/ci/check_backend_imports.py", "scripts/ci/check_swift_brand.py",
-    "scripts/ci/check_swift_nav_chrome.py", "scripts/ci/check_swift_bot_tint.py", "scripts/ci/check_swift_chat_drop.py", "scripts/ci/check_swift_chat_scroll.py", "scripts/ci/check_swift_glass.py", "scripts/ci/check_swift_image_viewer.py", "scripts/ci/check_swift_perf.py", "scripts/ci/check_swift_fault_details.py",
+    "scripts/ci/check_agents_md_size.py", "scripts/ci/check_blob_size.py", "scripts/ci/check_swift_brand.py",
+    "scripts/ci/check_swift_nav_chrome.py", "scripts/ci/check_swift_bot_tint.py", "scripts/ci/check_swift_chat_drop.py", "scripts/ci/check_swift_chat_scroll.py", "scripts/ci/check_swift_glass.py", "scripts/ci/check_swift_icon_tint.py", "scripts/ci/check_swift_image_viewer.py", "scripts/ci/check_swift_perf.py", "scripts/ci/check_swift_fault_details.py",
     "scripts/ci/swift_lint.py",
 )
 _SUPPORT = ("scripts/ci/profile_scope_patterns.json", "scripts/ci/swift_fault_details_allowlist.txt", "scripts/install_root_lint_baseline.json", "agent/subdirectory_hints.py",

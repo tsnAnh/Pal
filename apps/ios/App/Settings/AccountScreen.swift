@@ -28,9 +28,8 @@ struct AccountScreen: View {
                         title: name, trailing: .none, accessibilityIdentifier: "accountSwitchCurrent"
                     )
                     .overlay(alignment: .trailing) {
-                        Image(systemName: "checkmark")
+                        PalIcon("checkmark")
                             .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(Color(theme.palette.textPrimary))
                             .padding(.trailing, PalMetrics.rowInset)
                             .accessibilityHidden(true)
                     }
@@ -38,9 +37,8 @@ struct AccountScreen: View {
                         title: "Add Account", leadingSpacing: 14, accessibilityIdentifier: "accountAddRow",
                         action: { confirmingAdd = true }
                     ) {
-                        Image(systemName: "plus")
+                        PalIcon("plus")
                             .font(.system(size: 20, weight: .light))
-                            .foregroundStyle(Color(theme.palette.textPrimary))
                             .frame(width: 22)
                             .accessibilityHidden(true)
                     }

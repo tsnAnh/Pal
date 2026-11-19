@@ -160,15 +160,15 @@ struct SkillsCatalogSheet: View {
     private var outcomeBanner: some View {
         if let outcome = model.outcome {
             HStack(alignment: .top, spacing: 10) {
-                Image(systemName: outcome.isSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(outcome.isSuccess ? Color(theme.palette.toggleOnTrack) : Color(theme.palette.destructive))
+                PalIcon(outcome.isSuccess ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                        ink: outcome.isSuccess ? .success : .destructive)
                     .accessibilityHidden(true)
                 Text(outcome.message)
                     .hermesText(.rowSubtitle)
                     .foregroundStyle(Color(theme.palette.textPrimary))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
-                Button { model.dismissOutcome() } label: { Image(systemName: "xmark") }
+                Button { model.dismissOutcome() } label: { PalIcon("xmark", ink: .secondary) }
                     .buttonStyle(.plain)
                     .foregroundStyle(Color(theme.palette.textSecondary))
                     .accessibilityLabel(Text("Dismiss"))
