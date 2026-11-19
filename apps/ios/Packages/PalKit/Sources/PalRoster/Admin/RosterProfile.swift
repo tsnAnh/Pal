@@ -32,8 +32,6 @@ public struct BotMeta: Sendable, Equatable, Codable {
         fields["color"]?.stringValue
     }
 
-    public var hasLook: Bool { shape != nil && color != nil }
-
     public func setting(pinned: Bool) -> [String: JSONValue] {
         var next = fields
         next[Self.pinnedKey] = .bool(pinned)

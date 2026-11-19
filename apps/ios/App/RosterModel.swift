@@ -414,7 +414,7 @@ final class RosterModel {
         appliedActivities = currentActivities()
         if rebuild || change.capabilities { persist(snapshot) }
         if firstSnapshot {
-            LaunchClock.mark("roster live snapshot applied (\(profiles.count) bots)", on: .osLog())
+            didApplyFirstSnapshot(profiles)
             if !profiles.isEmpty {
                 connection.cache.prune(account: connection.accountKey, prefix: Self.retiredChatCachePrefix, keeping: [])
                 connection.cache.prune(
@@ -473,7 +473,7 @@ final class RosterModel {
     }
 
     private func row(from profile: RosterProfile, senders: [PreviewSender]) -> BotRow {
-        let uiMeta = profile.uiMeta.flatMap(Self.dictionary(from:))
+        let uiMeta = LooklessFill.effectiveUIMeta(for: profile, palette: .catalog).flatMap(Self.dictionary(from:))
         let lastActive = profile.canonical?.lastActive.map { Date(timeIntervalSince1970: $0) }
         return BotRow(
             name: profile.name,

@@ -4,20 +4,6 @@ import PalConnect
 import PalDesign
 import SwiftUI
 
-private enum InspectorTab: String, CaseIterable, Identifiable {
-    case activity
-    case library
-
-    var id: Self { self }
-
-    var title: LocalizedStringKey {
-        switch self {
-        case .activity: "Activity"
-        case .library: "Library"
-        }
-    }
-}
-
 struct MacInspector: View {
     let botName: String
     let roster: RosterModel
@@ -167,19 +153,6 @@ struct MacInspector: View {
                 .padding(.horizontal, 24)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("profileName")
-            if profile.isSetupUnfinished {
-                Text("Setup wasn't finished")
-                    .font(.system(size: 11))
-                    .foregroundStyle(PalTokens.textSecondary)
-                    .padding(.top, 8)
-                    .accessibilityIdentifier("profileSetupUnfinished")
-                Button("Delete", role: .destructive) { router.deletingBot = botName }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 11))
-                    .foregroundStyle(PalTokens.textSecondary)
-                    .padding(.top, 2)
-                    .accessibilityIdentifier("profileDeleteUnfinished")
-            }
         }
         .frame(maxWidth: .infinity)
     }
@@ -202,7 +175,9 @@ struct MacInspector: View {
             }
         }
     }
+}
 
+extension MacInspector {
     private var activity: some View {
         VStack(spacing: 0) {
             InspectorSection(title: String(localized: "Upcoming"), identifier: "inspectorRoutines", first: true) {

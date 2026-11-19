@@ -112,7 +112,7 @@ final class EditBotModel: Identifiable {
     var canSave: Bool {
         guard profile != nil, !trimmedName.isEmpty, trimmedName.count <= 60, !isSaving else { return false }
         let personaOK = personaState != .ready || personaEdit.isValid(from: loadedPersona)
-        let anyChange = nameChanged || lookChanged || photoChanged || original.needsLook || !changedPersonaFields.isEmpty
+        let anyChange = nameChanged || lookChanged || photoChanged || !changedPersonaFields.isEmpty
         return personaOK && anyChange
     }
 
@@ -181,7 +181,7 @@ final class EditBotModel: Identifiable {
                 }
                 photoWritten = true
             }
-            if looksChanged || original.needsLook {
+            if looksChanged {
                 try await services.profiles.updateLook(
                     profile.name, shape: look.shapeString, colorHex: look.colorHex, photo: photoChanged ? hasPhoto : nil
                 )
@@ -191,7 +191,7 @@ final class EditBotModel: Identifiable {
             failure = String(localized: "Couldn't save your changes. Try again.")
             return false
         }
-        original = BotProfileEditSeed(name: trimmedName, look: look, photo: photo, needsLook: false)
+        original = BotProfileEditSeed(name: trimmedName, look: look, photo: photo)
         await onSaved(looksChanged || photoTouched ? previewSpec : nil, photo, photoTouched)
         return await savePersona(profile.name)
     }
