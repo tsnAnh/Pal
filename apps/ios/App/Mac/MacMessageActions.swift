@@ -189,9 +189,8 @@ private struct MacMessageHoverBar: View {
     }
 
     private func glyph(_ name: String) -> some View {
-        Image(systemName: name)
+        PalIcon(name, ink: .secondary)
             .font(.system(size: 13, weight: .regular))
-            .foregroundStyle(PalTokens.textSecondary)
             .frame(width: Self.pitch, height: 26)
             .contentShape(Rectangle())
     }

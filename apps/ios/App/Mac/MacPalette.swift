@@ -110,9 +110,8 @@ struct MacPalette: View {
 
     private var searchField: some View {
         HStack(spacing: 12) {
-            Image(systemName: "magnifyingglass")
+            PalIcon("magnifyingglass", ink: .secondary)
                 .font(.system(size: 14))
-                .foregroundStyle(PalTokens.textSecondary)
             TextField("", text: $model.query, prompt: Text("Search Bots, Chats, Settings…").foregroundStyle(PalTokens.textTertiary))
                 .textFieldStyle(.plain)
                 .font(.system(size: 17))
@@ -212,9 +211,8 @@ struct MacPalette: View {
                 Color.clear.frame(width: 26, height: 26)
             }
         case .setting(let section):
-            Image(systemName: section.symbol)
+            PalIcon(section.symbol, ink: .secondary)
                 .font(.system(size: 12))
-                .foregroundStyle(PalTokens.textSecondary)
                 .frame(width: 26, height: 26)
         }
     }

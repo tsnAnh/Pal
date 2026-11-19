@@ -166,7 +166,7 @@ struct MacValueLabel: View {
     var body: some View {
         HStack(spacing: 4) {
             Text(text)
-            Image(systemName: "chevron.down").font(.system(size: 7, weight: .semibold)).foregroundStyle(PalTokens.textSecondary)
+            PalIcon("chevron.down", ink: .secondary).font(.system(size: 7, weight: .semibold))
         }
         .font(.system(size: 11.5))
         .foregroundStyle(PalTokens.textPrimary)
@@ -224,7 +224,7 @@ struct MacRowAction {
         if checked {
             Button(action: action) {
                 HStack(spacing: 4) {
-                    Image(systemName: "checkmark").font(.system(size: 8, weight: .semibold))
+                    PalIcon("checkmark", ink: .tertiary).font(.system(size: 8, weight: .semibold))
                     Text(title).font(.system(size: 11))
                 }
                 .foregroundStyle(PalTokens.textTertiary)

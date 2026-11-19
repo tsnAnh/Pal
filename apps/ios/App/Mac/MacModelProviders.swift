@@ -212,7 +212,7 @@ private struct MacProviderSearchField: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(PalTokens.textSecondary)
+            PalIcon("magnifyingglass", ink: .secondary).font(.system(size: 11))
             TextField("Search providers", text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))

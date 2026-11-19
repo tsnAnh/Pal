@@ -251,7 +251,7 @@ private struct MacCreateBotShapeGrid: View {
                 }
                 .overlay {
                     if selected, focus.wrappedValue == .shapes {
-                        frame.inset(by: -3).strokeBorder(Color.accentColor.opacity(0.9), lineWidth: 2)
+                        frame.inset(by: -3).strokeBorder(PalTokens.textPrimary.opacity(0.9), lineWidth: 2)
                     }
                 }
                 .contentShape(frame)
@@ -302,7 +302,7 @@ private struct MacCreateBotSwatches: View {
                     Circle().strokeBorder(color, lineWidth: 2).frame(width: 32, height: 32)
                 }
                 if selected, focus.wrappedValue == .colors {
-                    Circle().strokeBorder(Color.accentColor.opacity(0.9), lineWidth: 2).frame(width: 38, height: 38)
+                    Circle().strokeBorder(PalTokens.textPrimary.opacity(0.9), lineWidth: 2).frame(width: 38, height: 38)
                 }
             }
             .frame(width: 34, height: 34)

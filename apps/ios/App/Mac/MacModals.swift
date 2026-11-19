@@ -206,9 +206,8 @@ private struct MacMenuItem: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                Image(systemName: symbol)
+                PalIcon(symbol, ink: .secondary)
                     .font(.system(size: 12))
-                    .foregroundStyle(PalTokens.textSecondary)
                     .frame(width: 12)
                 Text(title)
                     .font(.system(size: 13))
@@ -221,9 +220,8 @@ private struct MacMenuItem: View {
                         .lineLimit(1)
                 }
                 if showsChevron {
-                    Image(systemName: "chevron.right")
+                    PalIcon("chevron.right", ink: .tertiary)
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(PalTokens.textTertiary)
                 }
             }
             .padding(.horizontal, 11)
