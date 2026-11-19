@@ -182,9 +182,7 @@ struct ChatView: View {
         .fullCover(isPresented: $isVoiceModePresented) {
             VoiceModeView(model: model) { isVoiceModePresented = false }
         }
-        .fullCover(isPresented: Binding(get: { model.imageViewer != nil }, set: { if !$0 { model.imageViewer = nil } })) {
-            ChatImageViewer(model: model).environment(\.chatImageLoader, model.imageLoader)
-        }
+        .imageViewerPresentation(model: model, attach: attachActions) { scroll.jumpToBottom(animated: !reduceMotion) }
         .sheet(item: $model.filePreview) { file in
             FilePreviewSheet(file: file).environment(\.chatFileActions, model.fileActions)
         }
@@ -234,10 +232,8 @@ struct ChatView: View {
 
     private var jumpButtonTransition: AnyTransition {
         guard !reduceMotion else { return .opacity }
-        return .asymmetric(
-            insertion: .scale(scale: 0.9).combined(with: .opacity),
-            removal: .scale(scale: 0.9).combined(with: .opacity).animation(.easeIn(duration: 0.17))
-        )
+        let scaled = AnyTransition.scale(scale: 0.9).combined(with: .opacity)
+        return .asymmetric(insertion: scaled, removal: scaled.animation(.easeIn(duration: 0.17)))
     }
 
     private var edgeFade: some View {
@@ -307,6 +303,11 @@ struct ChatView: View {
             .animation(.easeOut(duration: 0.2), value: dictation.failure ?? model.sendError)
             .task { await hub.refreshUsageIfStale() }
         }
+    }
+
+    private var attachActions: ComposerAttachActions {
+        ComposerAttachActions(photos: { items in Task { await loadPhotos(items) } }, capture: { image in Task { await stage(image: image) } },
+                              imageData: { data in Task { await stage(imageData: data) } }, files: { urls in Task { await loadFiles(urls) } })
     }
 
     private func reviewUsage() {
@@ -440,7 +441,6 @@ private extension View {
 
 private struct BotCapsule: View {
     @Environment(\.hermesTheme) private var theme
-
     let bot: BotRow
     let activity: BotActivity
     let mood: AvatarMood
