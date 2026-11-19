@@ -69,9 +69,8 @@ struct TelegramView: View {
             .fill(Color(theme.palette.groupedCard))
             .frame(width: TelegramMetrics.tileSize, height: TelegramMetrics.tileSize)
             .overlay {
-                Image(systemName: "paperplane.fill")
+                PalIcon("paperplane.fill")
                     .font(.system(size: TelegramMetrics.markSize))
-                    .foregroundStyle(Color(theme.palette.textPrimary))
             }
             .accessibilityHidden(true)
     }
@@ -81,13 +80,13 @@ struct TelegramView: View {
         VStack(spacing: 10) {
             switch model.connection {
             case .connected:
-                statusLine(String(localized: "Connected"), systemImage: "checkmark.circle.fill", identifier: "telegramStatusConnected")
+                statusLine(String(localized: "Connected"), symbol: "checkmark.circle.fill", identifier: "telegramStatusConnected")
             case .starting:
-                statusLine(String(localized: "Connecting…"), systemImage: "ellipsis.circle", identifier: "telegramStatusStarting")
+                statusLine(String(localized: "Connecting…"), symbol: "ellipsis.circle", identifier: "telegramStatusStarting")
             case .restartNeeded:
-                statusLine(String(localized: "Restart needed"), systemImage: "arrow.triangle.2.circlepath", identifier: "telegramStatusRestart")
+                statusLine(String(localized: "Restart needed"), symbol: "arrow.triangle.2.circlepath", identifier: "telegramStatusRestart")
             case .failed:
-                statusLine(String(localized: "Couldn't connect"), systemImage: "exclamationmark.triangle", identifier: "telegramStatusFailed")
+                statusLine(String(localized: "Couldn't connect"), symbol: "exclamationmark.triangle", identifier: "telegramStatusFailed")
                 if let failure = model.failure {
                     secondaryText(failure.message, identifier: "telegramFailureReason")
                 }
@@ -115,8 +114,8 @@ struct TelegramView: View {
             .accessibilityIdentifier(identifier)
     }
 
-    private func statusLine(_ text: String, systemImage: String, identifier: String) -> some View {
-        Label(text, systemImage: systemImage)
+    private func statusLine(_ text: String, symbol: String, identifier: String) -> some View {
+        Label(text, palIcon: symbol)
             .hermesText(.rowTitle)
             .foregroundStyle(Color(theme.palette.textPrimary))
             .accessibilityIdentifier(identifier)

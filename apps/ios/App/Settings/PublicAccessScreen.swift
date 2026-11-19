@@ -36,10 +36,9 @@ struct PublicAccessScreen: View {
             title: PublicAccessCopy.title, identifier: "publicAccessScreen", back: back,
             trailing: {
                 if model.canManage {
-                    Button { adding = true } label: { Image(systemName: "plus") }
+                    Button { adding = true } label: { PalIcon("plus") }
                         .accessibilityLabel(Text("Add a public address"))
                         .accessibilityIdentifier("publicAccessAddButton")
-                        .tint(.primary)
                 }
             },
             content: { PublicAccessContent(model: model, adding: $adding) }
@@ -181,8 +180,7 @@ private struct PublicProbeResultView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: symbol)
-                    .foregroundStyle(tint)
+                PalIcon(symbol, ink: .custom(tint))
                     .accessibilityHidden(true)
                 Text(probe.diagnosis.headline)
                     .hermesText(.rowTitle)

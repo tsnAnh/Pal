@@ -57,7 +57,7 @@ struct MessagingSettingsView: View {
     }
 
     private var restartNotice: some View {
-        Label(String(localized: "Restart the gateway for these changes to take effect."), systemImage: "arrow.triangle.2.circlepath")
+        Label(String(localized: "Restart the gateway for these changes to take effect."), palIcon: "arrow.triangle.2.circlepath")
             .hermesText(.rowSubtitle)
             .foregroundStyle(Color(theme.palette.textPrimary))
             .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset)
@@ -141,11 +141,11 @@ struct MessagingSettingsView: View {
             }
             switch model.saveStates[platform.id] {
             case .saved:
-                Label(String(localized: "Saved"), systemImage: "checkmark.circle.fill")
+                Label(String(localized: "Saved"), palIcon: "checkmark.circle.fill")
                     .hermesText(.rowSubtitle)
                     .accessibilityIdentifier("messagingSaved-\(platform.id)")
             case .failed(let message):
-                Label(message, systemImage: "exclamationmark.triangle")
+                Label(message, palIcon: "exclamationmark.triangle")
                     .hermesText(.rowSubtitle)
                     .accessibilityIdentifier("messagingFailed-\(platform.id)")
             case .saving, nil:
