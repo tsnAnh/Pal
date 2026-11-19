@@ -7,12 +7,6 @@ import UserNotifications
 final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
     nonisolated static let foregroundPresentation: UNNotificationPresentationOptions = [.banner, .list, .sound]
 
-    #if DEBUG
-    static let environment = PushEnvironment.sandbox
-    #else
-    static let environment = PushEnvironment.production
-    #endif
-
     private let center: UNUserNotificationCenter
     private let diagnostics: Diagnostics
     private var presence: ReachPresence?
@@ -51,9 +45,10 @@ final class PushNotifications: NSObject, UNUserNotificationCenterDelegate {
     }
 
     func didRegister(deviceToken: Data) async {
+        let environment = await SignedPushEnvironment.resolve()
         guard let token = PushToken(deviceToken: deviceToken),
               let bundleID = Bundle.main.bundleIdentifier,
-              let registration = PushRegistration(token: token, environment: Self.environment, bundleID: bundleID)
+              let registration = PushRegistration(token: token, environment: environment, bundleID: bundleID)
         else {
             diagnostics.warning("push", "device token was not usable")
             return
