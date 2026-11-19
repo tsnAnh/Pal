@@ -7,25 +7,25 @@ import PhotosUI
 import SwiftUI
 
 struct ChatView: View {
-    @State private var model: ChatModel
-    @State private var draft = ""
-    @State private var dictation = DictationController()
-    @State private var isVoiceModePresented = false
-    @State private var scroll = ChatScrollController()
+    @State var model: ChatModel
+    @State var draft = ""
+    @State var dictation = DictationController()
+    @State var isVoiceModePresented = false
+    @State var scroll = ChatScrollController()
     @State private var connectionIsSlow = false
     @State private var chrome = EdgeInsets()
-    @FocusState private var composerFocused: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @FocusState var composerFocused: Bool
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
 
     let teach: TeachModel
     let router: AppRouter
 
-    @Environment(\.hermesTheme) private var theme
+    @Environment(\.hermesTheme) var theme
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(SettingsHub.self) private var hub
+    @Environment(SettingsHub.self) var hub
     @Environment(ActionAutoApprove.self) private var autoApprove
     #if os(macOS)
-    @Environment(MacShell.self) private var shell
+    @Environment(MacShell.self) var shell
     #endif
 
     init(model: ChatModel, teach: TeachModel, router: AppRouter) {
@@ -36,11 +36,7 @@ struct ChatView: View {
 
     var body: some View {
         chat
-            .attachmentIntake(
-                handlesPaste: false,
-                files: { urls in Task { await loadFiles(urls) } },
-                imageData: { data in Task { await stage(imageData: data) } }
-            )
+            .attachmentIntake(botName: model.bot.displayName, accent: model.chatAccent, intake: attach)
     }
 
     private var chat: some View {
@@ -77,7 +73,7 @@ struct ChatView: View {
         .contentMargins(.bottom, max(0, chrome.top - chrome.bottom), for: .automatic)
         .onGeometryChange(for: EdgeInsets.self, of: \.safeAreaInsets) { chrome = $0 }
         .newestFirst()
-        .mask { edgeFade }
+        .mask { ChatEdgeFadeMask() }
         .overlay { openingState }
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectHidden(true, for: .all)
@@ -232,27 +228,10 @@ struct ChatView: View {
 
     private var jumpButtonTransition: AnyTransition {
         guard !reduceMotion else { return .opacity }
-        let scaled = AnyTransition.scale(scale: 0.9).combined(with: .opacity)
-        return .asymmetric(insertion: scaled, removal: scaled.animation(.easeIn(duration: 0.17)))
-    }
-
-    private var edgeFade: some View {
-        GeometryReader { proxy in
-            let insets = proxy.safeAreaInsets
-            VStack(spacing: 0) {
-                Color.clear
-                    .frame(height: max(0, max(insets.top, ChatEdgeFade.topFloor) - ChatEdgeFade.feather / 2))
-                LinearGradient(colors: [.clear, .black], startPoint: .top, endPoint: .bottom)
-                    .frame(height: ChatEdgeFade.feather * 1.5)
-                Color.black
-                LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
-                    .frame(height: ChatEdgeFade.feather)
-                Color.clear
-                    .frame(height: max(0, insets.bottom - ChatEdgeFade.feather))
-            }
-            .frame(width: proxy.size.width, height: proxy.size.height + insets.top + insets.bottom)
-            .offset(y: -insets.top)
-        }
+        return .asymmetric(
+            insertion: .scale(scale: 0.9).combined(with: .opacity),
+            removal: .scale(scale: 0.9).combined(with: .opacity).animation(.easeIn(duration: 0.17))
+        )
     }
 
     @ViewBuilder
@@ -274,173 +253,11 @@ struct ChatView: View {
 
     private static let firstSuggestion = String(localized: "Tell me about yourself")
 
-    @ViewBuilder
-    private func bottomBar() -> some View {
-        if model.isFinding {
-            FindBar(model: model)
-        } else {
-            VStack(spacing: 0) {
-                if let notice = dictation.failure ?? model.sendError {
-                    ComposerNotice(text: notice) {
-                        dictation.dismissFailure()
-                        model.dismissError()
-                    }
-                    .padding(.horizontal, ChatMetrics.edgeMargin)
-                    .transition(.opacity)
-                }
-                if let notice = hub.usageNotice {
-                    UsageBanner(notice: notice) {
-                        reviewUsage()
-                    } dismiss: {
-                        hub.dismissUsageNotice()
-                    }
-                    .padding(.horizontal, ChatMetrics.edgeMargin)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-                composer
-            }
-            .animation(.snappy(duration: 0.2), value: hub.usageNotice)
-            .animation(.easeOut(duration: 0.2), value: dictation.failure ?? model.sendError)
-            .task { await hub.refreshUsageIfStale() }
-        }
-    }
-
-    private var attachActions: ComposerAttachActions {
-        ComposerAttachActions(photos: { items in Task { await loadPhotos(items) } }, capture: { image in Task { await stage(image: image) } },
-                              imageData: { data in Task { await stage(imageData: data) } }, files: { urls in Task { await loadFiles(urls) } })
-    }
-
-    private func reviewUsage() {
-        #if os(macOS)
-        shell.settingsSection = .usage
-        router.present(.settings)
-        #else
-        router.presentSettings(route: .usage)
-        #endif
-    }
-
-    private var composer: some View {
-        ChatComposer(
-            botName: model.bot.displayName,
-            accent: model.chatAccent,
-            answersQuestion: model.hasPendingClarify,
-            attachments: model.attachments,
-            slashItems: model.slashItems,
-            loadSlashItems: { model.loadSlashItems() },
-            fileRefResult: model.fileRefResult,
-            loadFileRefs: { model.loadFileRefs(word: $0) },
-            replyTarget: model.replyTarget,
-            cancelReply: { model.cancelReply() },
-            canSend: model.canSendAttachments,
-            dictation: dictation,
-            draft: $draft,
-            focused: $composerFocused,
-            send: {
-                dictation.stop()
-                model.dismissError()
-                model.send(draft)
-                draft = ""
-                scroll.jumpToBottom(animated: !reduceMotion)
-            },
-            openVoiceMode: {
-                dictation.stop()
-                composerFocused = false
-                isVoiceModePresented = true
-            },
-            removeAttachment: { model.removeAttachment($0) },
-            attachPhotos: { items in Task { await loadPhotos(items) } },
-            attachCapture: { image in Task { await stage(image: image) } },
-            attachImageData: { data in Task { await stage(imageData: data) } },
-            attachFiles: { urls in Task { await loadFiles(urls) } }
-        )
-    }
-
-    private var menu: some View {
-        Menu {
-            if router.supports(.viewProfile) {
-                Button { router.perform(.viewProfile, botName: model.bot.name) } label: {
-                    Label("View Profile", systemImage: "person.crop.circle")
-                }
-                .accessibilityIdentifier("chatMenuViewProfile")
-            }
-            Button {
-                composerFocused = false
-                model.beginFinding()
-            } label: {
-                Label("Find in Chat", systemImage: "magnifyingglass")
-            }
-            .accessibilityIdentifier("chatMenuFind")
-            if router.supports(.shareAsTemplate) {
-                Button { router.perform(.shareAsTemplate, botName: model.bot.name) } label: {
-                    Label("Share as Template…", systemImage: "square.and.arrow.up")
-                }
-                .accessibilityIdentifier("chatMenuShareTemplate")
-            }
-        } label: {
-            Image(systemName: "ellipsis")
-                .accessibilityLabel(Text("Chat options"))
-        }
-        .tint(Color(theme.palette.textPrimary))
-        .accessibilityIdentifier("chatMenuButton")
-    }
-
-    private func loadPhotos(_ items: [PhotosPickerItem]) async {
-        for item in items {
-            guard let data = try? await item.loadTransferable(type: Data.self) else {
-                model.reportAttachmentFailure(String(localized: "That photo couldn't be loaded."))
-                continue
-            }
-            await stage(imageData: data)
-        }
-    }
-
-    private func stage(imageData data: Data) async {
-        do {
-            let upload = try await Task.detached { try AttachmentPreparer.prepareImage(from: data) }.value
-            model.attachPhoto(upload)
-        } catch {
-            model.reportAttachmentFailure(String(localized: "That photo couldn't be prepared."))
-        }
-    }
-
-    private func stage(image: PlatformImage) async {
-        do {
-            let upload = try await Task.detached { try AttachmentPreparer.prepareImage(from: image) }.value
-            model.attachPhoto(upload)
-        } catch {
-            model.reportAttachmentFailure(String(localized: "That photo couldn't be prepared."))
-        }
-    }
-
-    private func loadFiles(_ urls: [URL]) async {
-        let items = DropIntake.classify(urls)
-        if let message = DropIntake.rejectionMessage(for: items) { model.reportAttachmentFailure(message) }
-        for item in items {
-            let url: URL
-            switch item {
-            case .image(let accepted), .document(let accepted): url = accepted
-            case .rejected: continue
-            }
-            do {
-                let prepared = try await Task.detached { try AttachmentPreparer.prepareFile(at: url) }.value
-                if prepared.isImage { model.attachPhoto(prepared.upload) } else { model.attachFile(prepared.upload, mime: prepared.mime) }
-            } catch AttachmentError.tooLarge {
-                model.reportAttachmentFailure(String(localized: "That file is too large to send."))
-            } catch {
-                model.reportAttachmentFailure(String(localized: "That file couldn't be read."))
-            }
-        }
-    }
-}
-
-private extension View {
-    func newestFirst() -> some View {
-        scaleEffect(x: 1, y: -1, anchor: .center)
-    }
 }
 
 private struct BotCapsule: View {
     @Environment(\.hermesTheme) private var theme
+
     let bot: BotRow
     let activity: BotActivity
     let mood: AvatarMood

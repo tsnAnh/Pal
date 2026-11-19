@@ -5,8 +5,7 @@ import SwiftUI
 struct ComposerAttachActions {
     let photos: ([PhotosPickerItem]) -> Void
     let capture: (PlatformImage) -> Void
-    let imageData: ImageDataHandler
-    let files: FilesHandler
+    let intake: IntakeHandler
 }
 
 extension View {

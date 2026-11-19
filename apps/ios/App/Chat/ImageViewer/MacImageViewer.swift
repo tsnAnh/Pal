@@ -80,8 +80,7 @@ private struct MacImageViewer: View {
             removeAttachment: { model.removeViewerAttachment($0) },
             attachPhotos: attach.photos,
             attachCapture: attach.capture,
-            attachImageData: attach.imageData,
-            attachFiles: attach.files,
+            attach: attach.intake,
             prompt: composer.placeholder(title: state.title),
             clearGlass: true
         )

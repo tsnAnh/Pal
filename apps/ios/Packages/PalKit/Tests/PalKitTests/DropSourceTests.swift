@@ -1,0 +1,88 @@
+@testable import PalChat
+import Foundation
+import Testing
+
+@Suite("Drop sources")
+struct DropSourceTests {
+    @Test("a Finder drag is a file URL even when it also carries text and an icon image")
+    func fileURL() {
+        #expect(DropSource.classify(typeIdentifiers: ["public.file-url", "public.utf8-plain-text", "public.tiff"]) == .fileURL)
+    }
+
+    @Test("a screenshot thumbnail or Photos promise exposes the promised image type")
+    func filePromise() {
+        let identifiers = ["com.apple.NSFilePromiseItemMetaData", "com.apple.pasteboard.promised-file-content-type", "public.jpeg"]
+        let source = DropSource.classify(typeIdentifiers: identifiers)
+        #expect(source == .image(typeIdentifier: "public.jpeg"))
+    }
+
+    @Test("a promised document is content, not an image")
+    func promisedDocument() {
+        let source = DropSource.classify(typeIdentifiers: ["com.apple.NSFilePromiseItemMetaData", "com.adobe.pdf"])
+        #expect(source == .content(typeIdentifier: "com.adobe.pdf"))
+    }
+
+    @Test("every image representation is accepted in the preference order png, jpeg, heic, tiff, webp")
+    func imagePreference() {
+        for type in ["public.png", "public.jpeg", "public.heic", "public.tiff", "org.webmproject.webp"] {
+            #expect(DropSource.classify(typeIdentifiers: [type]) == .image(typeIdentifier: type))
+        }
+        #expect(DropSource.classify(typeIdentifiers: ["public.tiff", "public.heic", "public.png"]) == .image(typeIdentifier: "public.png"))
+        #expect(DropSource.classify(typeIdentifiers: ["public.tiff", "public.jpeg"]) == .image(typeIdentifier: "public.jpeg"))
+        #expect(DropSource.classify(typeIdentifiers: ["public.tiff", "org.webmproject.webp"]) == .image(typeIdentifier: "public.tiff"))
+    }
+
+    @Test("an image type outside the list is still taken through the image fallback")
+    func imageFallback() {
+        #expect(DropSource.classify(typeIdentifiers: ["com.compuserve.gif"]) == .image(typeIdentifier: "com.compuserve.gif"))
+    }
+
+    @Test("a browser image drag prefers the image data over its address and text")
+    func browserImage() {
+        let source = DropSource.classify(typeIdentifiers: ["public.url", "public.utf8-plain-text", "public.html", "public.png"])
+        #expect(source == .image(typeIdentifier: "public.png"))
+    }
+
+    @Test("an address alone is a web link, not a file")
+    func webLink() {
+        #expect(DropSource.classify(typeIdentifiers: ["public.url", "public.utf8-plain-text"]) == .webLink)
+        #expect(!DropSource.classify(typeIdentifiers: ["public.url"]).isAttachment)
+    }
+
+    @Test("plain text is left to the text field")
+    func text() {
+        #expect(DropSource.classify(typeIdentifiers: ["public.utf8-plain-text"]) == .text)
+        #expect(DropSource.classify(typeIdentifiers: ["public.rtf", "public.utf8-plain-text"]) == .text)
+    }
+
+    @Test("an unknown type is unsupported and an empty drag too")
+    func unsupported() {
+        #expect(DropSource.classify(typeIdentifiers: ["com.example.unknown-card"]) == .unsupported)
+        #expect(DropSource.classify(typeIdentifiers: []) == .unsupported)
+    }
+
+    @Test("only files, images and content make the text field hand the drag to the pane")
+    func forwarding() {
+        #expect(DropSource.carriesAttachment(typeIdentifiers: ["public.file-url", "public.utf8-plain-text"]))
+        #expect(DropSource.carriesAttachment(typeIdentifiers: ["public.url", "public.utf8-plain-text", "public.png"]))
+        #expect(!DropSource.carriesAttachment(typeIdentifiers: ["public.url", "public.utf8-plain-text"]))
+        #expect(!DropSource.carriesAttachment(typeIdentifiers: ["public.utf8-plain-text"]))
+    }
+
+    @Test("every failure has a plain reason, and several are summarised once")
+    func failures() {
+        #expect(DropFailure.tooLarge(limitMegabytes: 24).message == "That file is over 24 MB, so it was not attached.")
+        #expect(DropFailure.unsupported.message == "This item can't be attached.")
+        #expect(DropFailure.webLinkOnly.message.contains("web link"))
+        #expect(DropFailure.unreadable.message == "That item couldn't be read.")
+        #expect(DropFailure.summary(of: []) == nil)
+        #expect(DropFailure.summary(of: [.unsupported]) == "This item can't be attached.")
+        #expect(DropFailure.summary(of: [.unsupported, .unreadable]) == "2 items weren't attached. This item can't be attached.")
+    }
+
+    @Test("an empty batch has nothing to attach and nothing to report")
+    func emptyBatch() {
+        #expect(DropBatch().isEmpty)
+        #expect(!DropBatch(failures: [.unsupported]).isEmpty)
+    }
+}
