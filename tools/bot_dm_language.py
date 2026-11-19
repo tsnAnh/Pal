@@ -30,17 +30,17 @@ VIETNAMESE_LETTERS = frozenset("ăĂđĐơƠưƯ")
 LATIN_LOOKALIKES = frozenset("µªº")
 SCHEMELESS_TLDS = "com|org|net|io|dev|ai|app|co|edu|gov|vn|me|sh|xyz"
 
-_FENCE = re.compile(r"```.*?```", re.S)
+_FENCE = re.compile(r"```.*?```", re.DOTALL)
 _INLINE_CODE = re.compile(r"`[^`\n]+`")
 _VERBATIM_QUOTE = re.compile(
     rf"(?P<lead>(?:\(verbatim\)|verbatim:|owner['’]s words|owner said|the owner['’]s)[^\n\"“]{{0,{VERBATIM_LEAD_CHARS}}}?)"
-    rf"(?P<quote>\"[^\"]{{1,{VERBATIM_QUOTE_CHARS}}}\"|“[^”]{{1,{VERBATIM_QUOTE_CHARS}}}”)", re.I)
+    rf"(?P<quote>\"[^\"]{{1,{VERBATIM_QUOTE_CHARS}}}\"|“[^”]{{1,{VERBATIM_QUOTE_CHARS}}}”)", re.IGNORECASE)
 _URL = re.compile(
     rf"https?://[^\s<>)\]]+|\b(?:www\.(?:[a-z0-9-]+\.)*[a-z]{{2,}}|(?:[a-z0-9-]+\.)+(?:{SCHEMELESS_TLDS}))\b(?:/[^\s<>)\]]*)?",
-    re.I)
+    re.IGNORECASE)
 _TOKEN = re.compile(r"\S+")
 _FILE_EXTENSION = re.compile(r"^.+\.[a-z][a-z0-9]{0,4}$")
-_SHA = re.compile(r"\b[0-9a-f]{7,40}\b", re.I)
+_SHA = re.compile(r"\b[0-9a-f]{7,40}\b", re.IGNORECASE)
 _HANDLE = re.compile(r"@[A-Za-z0-9_.-]+")
 _CARD_ID = re.compile(r"\bt_[0-9a-f]+\b|\bPAL-\d+\b")
 _WORD = re.compile(r"[^\W\d_]+")
@@ -154,7 +154,7 @@ def _record(kind: str, *, home: Path | str, sender: str, recipient: str, rule: s
     try:
         with _FileLock(path.with_suffix(".lock")):
             try:
-                state = json.loads(path.read_text(encoding="utf-8"))
+                state = json.loads(path.read_text(encoding="utf-8-sig"))
             except FileNotFoundError:
                 state = {}
             seen = [str(k) for k in state.get("seen", [])]
