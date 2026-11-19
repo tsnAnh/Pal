@@ -153,6 +153,20 @@ struct OutboxAttachmentTests {
         #expect(FileManager.default.fileExists(atPath: attachmentsDirectory(directory).appendingPathComponent(again.submissionID).path))
     }
 
+    @Test func requeuingAFailedEntryLeavesOneEntryOnDisk() async throws {
+        let directory = try temporaryDirectory()
+        let refusal = RPCError(code: 4001, message: "invalid_params", data: ["reason": "invalid_params"])
+        let outbox = try Outbox(directory: directory, submitter: Recorder(failure: { GatewayTransportError.rpc(refusal) }))
+        let entry = try await outbox.enqueue(botID: "bot", text: "x", files: try samples())
+        _ = await outbox.deliver(entry.submissionID)
+        let failed = try #require(await outbox.snapshot(botID: "bot").first)
+        let again = try await outbox.requeue(failed)
+        let remaining = await outbox.snapshot(botID: "bot")
+        #expect(remaining.map(\.submissionID) == [again.submissionID])
+        let reopened = try Outbox(directory: directory, submitter: Recorder(failure: nil))
+        #expect(await reopened.snapshot(botID: "bot").map(\.submissionID) == [again.submissionID])
+    }
+
     @Test func filesThatVanishedFailTheEntryInsteadOfSendingNothing() async throws {
         let directory = try temporaryDirectory()
         let outbox = try Outbox(directory: directory, submitter: Recorder(failure: nil))

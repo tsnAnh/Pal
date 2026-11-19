@@ -13,7 +13,7 @@ Rules: perf-body-parse, perf-body-format, perf-redraw-per-call, perf-main-disk-r
 perf-queue-sync, perf-timeline-unlisted, perf-timeline-interval, perf-hover-unlisted,
 perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry-per-row,
 perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write,
-perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired.
+perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired, perf-open-ungated.
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -336,11 +336,21 @@ def monitor_unpaired(src: Source) -> Iterator[tuple[int, str]]:
                                        "NSEvent.removeMonitor (on teardown or when the last user leaves)")
 
 
+def open_ungated(src: Source) -> Iterator[tuple[int, str]]:
+    for m in re.finditer(r"\bTimelinePacer\.consume\(", src.text):
+        paren = m.end() - 1
+        if paren in src.close and ".admit(" not in src.text[paren:src.close[paren]]:
+            yield src.line_of(m.start()), ("timeline snapshots reach the chat model without ChatOpenGate: the cached "
+                                           "timeline paints as live rows and the live history then corrects it. Route "
+                                           "every snapshot through openGate.admit(_:) and apply only what it returns")
+
+
 BLOCK_RULES: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[Source], Iterator[tuple[int, str]]]], ...] = (
     ("perf-eager-stack", in_app, eager_stack),
     ("perf-geometry-per-row", in_app, geometry_per_row),
     ("perf-glass-over-fill", anywhere, glass_over_fill),
     ("perf-monitor-unpaired", in_app, monitor_unpaired),
+    ("perf-open-ungated", in_app, open_ungated),
 )
 
 

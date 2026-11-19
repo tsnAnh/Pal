@@ -13,10 +13,6 @@ enum BubbleDelivery: Equatable {
     case failed(submissionID: String)
 }
 
-enum ChatNotice: Equatable {
-    case botMessage(senderName: String, body: String)
-}
-
 struct ReplyTarget: Equatable {
     enum Author: Equatable {
         case you
@@ -30,15 +26,20 @@ struct ReplyTarget: Equatable {
 
 struct ParsedMarkdown: Equatable {
     let source: String
-    let document: MarkdownDocument
+    private let deferred: DeferredMarkdown
+    var document: MarkdownDocument { deferred.document }
+
+    init(source: String, document: MarkdownDocument) {
+        self.source = source
+        deferred = DeferredMarkdown(source, parsed: document)
+    }
+
+    init(deferring source: String) {
+        self.source = source
+        deferred = DeferredMarkdown(source)
+    }
 
     static func == (lhs: ParsedMarkdown, rhs: ParsedMarkdown) -> Bool { lhs.source == rhs.source }
-}
-
-enum ChatRowGap: Equatable {
-    case none
-    case sameSender
-    case senderSwitch
 }
 
 struct ChatRow: Identifiable, Equatable {
@@ -166,6 +167,8 @@ final class ChatModel {
     private var retried: Set<String> = []
     private var absorbedEchoes = AbsorbedEchoLedger()
     private var lastCached: CachedTimeline?
+
+    private let opening = ChatOpenCoordinator()
     private var pendingCacheSave: Task<Void, Never>?
     private var findSearch: Task<Void, Never>?
     private var pendingReveal: RowKey?
@@ -182,6 +185,7 @@ final class ChatModel {
         var files: [FileReference] = []
     }
 
+    var isOpenWindow: Bool { opening.isWindowOpen }
     var pendingDraft: String? { roster.drafts[bot.name] }
     var avatars: ParticipantAvatars { ParticipantAvatars(roster: roster) }
     var activity: BotActivity { roster.activity(for: bot.name) }
@@ -263,6 +267,7 @@ final class ChatModel {
         markViewed()
         running?.cancel()
         running = nil
+        opening.cancel()
         findSearch?.cancel()
         findSearch = nil
         let session = self.session
@@ -605,6 +610,7 @@ final class ChatModel {
         let current = await session.timelineSnapshot
         if current.rows.isEmpty, let cached = await loadCache() {
             await session.seed(cached)
+            opening.hold(version: await session.timelineSnapshot.version) { [weak self] in self?.applyTimeline($0) }
         } else {
             apply(current)
         }
@@ -629,11 +635,13 @@ final class ChatModel {
     }
 
     private func attach(_ session: ChatSession) async {
+        let preparing = PalPerf.begin("chat.open.outbox")
         await refreshOutbox()
         if !outboxEntries.contains(where: { if case .failed = $0.state { true } else { false } }) {
             try? await outbox?.purgeFinished()
         }
         await refreshOutbox()
+        preparing.end()
         var delay = Duration.milliseconds(500)
         let intro = roster.takeIntro(for: bot.name)
         while !Task.isCancelled {
@@ -642,6 +650,7 @@ final class ChatModel {
                 guard let settled = await session.settledPhase() else { return }
                 if settled != .detached { return }
             } catch {}
+            PalPerf.event("chat.open.retry")
             noteDisconnected()
             try? await Task.sleep(for: delay)
             delay = min(delay * 2, .seconds(8))
@@ -668,9 +677,14 @@ final class ChatModel {
 
     private func consumeTimeline(_ session: ChatSession) async {
         await TimelinePacer.consume(session.timelineSnapshots, apply: { next in
-            apply(next)
-            if next.sessionID != nil { scheduleCacheSave() }
+            guard let ready = opening.admit(next) else { return }
+            applyTimeline(ready)
         })
+    }
+
+    private func applyTimeline(_ next: TimelineSnapshot) {
+        apply(next)
+        if next.sessionID != nil { scheduleCacheSave() }
     }
 
     private func apply(_ next: TimelineSnapshot) {
@@ -745,7 +759,7 @@ final class ChatModel {
     private func sourceItems() -> [(id: String, item: TranscriptItem, stored: Int?)] {
         let timelineRows = snapshot?.rows ?? []
         var sources = timelineRows.map { (id: rowID(for: $0), item: $0.item, stored: $0.rowID) }
-        let known = Set(timelineRows.map(\.item.id))
+        let known = Set(timelineRows.map(\.item.id)).union(sources.map(\.id))
         let awaiting = outboxEntries.filter { entry in
             entry.state == .pending && !retried.contains(entry.submissionID) && !known.contains("submission:\(entry.submissionID)")
         }
@@ -806,25 +820,16 @@ final class ChatModel {
         for index in next.indices {
             next[index].gap = Self.gap(for: next[index], after: index > 0 ? next[index - 1] : nil)
         }
+        Self.flagDuplicateIDs(in: next)
         if next != rows { rows = next; rowsNewestFirst = Array(next.reversed()); rowIDs = next.map(\.id) }
         isRunning = snapshot?.isRunning ?? false
         workingStatus = snapshot?.runningToolName.map(ToolActivity.label(for:))
         hasPendingClarify = pendingClarify != nil
         hasPendingPrompt = !(snapshot?.pendingPrompts.isEmpty ?? true) || snapshot?.hasPendingConnection == true
         if !hasBaseline, snapshot?.sessionID != nil { hasBaseline = true }
-        if isOpening, !next.isEmpty || snapshot?.sessionID != nil { isOpening = false }
+        if isOpening, !next.isEmpty || snapshot?.sessionID != nil { isOpening = false; opening.firstPaint() }
+        opening.rowsChanged()
         recomputeFind(resetPosition: false)
-    }
-
-    private static func isEmpty(_ kind: ChatRow.Kind, images: [ImageReference], files: [FileReference]) -> Bool {
-        if case .assistant(let parsed) = kind, parsed.source.isEmpty, images.isEmpty, files.isEmpty { return true }
-        return false
-    }
-
-    private static func gap(for row: ChatRow, after previous: ChatRow?) -> ChatRowGap {
-        guard previous != nil, row.separator == nil, !row.showsUnreadDivider else { return .none }
-        guard let sender = row.sender, sender == previous?.sender else { return .senderSwitch }
-        return .sameSender
     }
 
     private func build(_ item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, reuse: BuiltRow?) -> BuiltRow {
@@ -838,11 +843,6 @@ final class ChatModel {
             return BuiltRow(item: item, kind: nil, images: [])
         }
         return BuiltRow(item: item, kind: kind, images: images, files: files)
-    }
-
-    private static func dependsOnConnection(_ item: TranscriptItem) -> Bool {
-        if case .user(_, .sending) = item.content { return true }
-        return false
     }
 
     private func rowKind(for item: TranscriptItem, outbox entry: OutboxEntry?, generated: Set<String>, previous: BuiltRow?) -> (ChatRow.Kind, [ImageReference], [FileReference])? {
@@ -875,7 +875,7 @@ final class ChatModel {
             if case .assistant(let parsed)? = previous?.kind, parsed.source == content.text {
                 return (.assistant(parsed), images, content.files)
             }
-            return (.assistant(ParsedMarkdown(source: content.text, document: MarkdownDocument(parsing: content.text))), images, content.files)
+            return (.assistant(ParsedMarkdown(deferring: content.text)), images, content.files)
         case .tool(let call):
             guard let generation = call.imageGeneration else { return nil }
             return (.imageGeneration(generation), [], [])

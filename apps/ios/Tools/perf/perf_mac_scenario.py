@@ -23,6 +23,8 @@ INTERVALS = (
     "roster.apply", "roster.refetch", "chat.rebuild", "chat.timeline.apply", "markdown.parse",
     "avatar.frame", "avatar.canvas.draw", "shell.body", "disk.cache.load", "disk.sync.main", "roster.row.body", "roster.apply.skipped",
     "chat.row.body", "chat.scroll.rowMoved", "chat.snapshot.coalesced",
+    "chat.open.connect", "chat.open.resolve", "chat.open.adopt", "chat.open.outbox", "chat.open.retry",
+    "chat.open.firstpaint", "chat.open.settled", "chat.open.jump", "chat.rows.duplicate",
 )
 TEMPLATES = ("Time Profiler", "SwiftUI", "Animation Hitches")
 SIGNPOST_SCHEMAS = ("os-signpost-interval", "os-signpost")
