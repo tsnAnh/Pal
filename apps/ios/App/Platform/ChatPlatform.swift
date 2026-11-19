@@ -33,7 +33,7 @@ extension View {
     ) -> some View {
         #if os(macOS)
         safeAreaBar(edge: .top) {
-            MacChatHeader(bot: bot, activity: activity, mood: mood, router: router)
+            MacChatHeader(bot: bot, activity: activity, mood: mood)
         }
         .modifier(MacChatActions(find: find, focusComposer: focusComposer))
         #else
