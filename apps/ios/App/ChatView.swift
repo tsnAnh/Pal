@@ -36,11 +36,19 @@ struct ChatView: View {
 
     var body: some View {
         chat
-            .attachmentIntake(
-                handlesPaste: false,
-                files: { urls in Task { await loadFiles(urls) } },
-                imageData: { data in Task { await stage(imageData: data) } }
-            )
+            .attachmentIntake(intake: attach)
+    }
+
+    private var sink: AttachmentSink {
+        AttachmentSink(
+            photo: { model.attachPhoto($0) },
+            file: { model.attachFile($0, mime: $1) },
+            fail: { model.reportAttachmentFailure($0) }
+        )
+    }
+
+    private var attach: IntakeHandler {
+        { batch in Task { await AttachmentStager.stage(batch, into: sink) } }
     }
 
     private var chat: some View {
@@ -347,10 +355,9 @@ struct ChatView: View {
                 isVoiceModePresented = true
             },
             removeAttachment: { model.removeAttachment($0) },
-            attachPhotos: { items in Task { await loadPhotos(items) } },
-            attachCapture: { image in Task { await stage(image: image) } },
-            attachImageData: { data in Task { await stage(imageData: data) } },
-            attachFiles: { urls in Task { await loadFiles(urls) } }
+            attachPhotos: { items in Task { await AttachmentStager.stage(photos: items, into: sink) } },
+            attachCapture: { image in Task { await AttachmentStager.stage(image: image, into: sink) } },
+            attach: attach
         )
     }
 
@@ -381,54 +388,6 @@ struct ChatView: View {
         }
         .tint(Color(theme.palette.textPrimary))
         .accessibilityIdentifier("chatMenuButton")
-    }
-
-    private func loadPhotos(_ items: [PhotosPickerItem]) async {
-        for item in items {
-            guard let data = try? await item.loadTransferable(type: Data.self) else {
-                model.reportAttachmentFailure(String(localized: "That photo couldn't be loaded."))
-                continue
-            }
-            await stage(imageData: data)
-        }
-    }
-
-    private func stage(imageData data: Data) async {
-        do {
-            let upload = try await Task.detached { try AttachmentPreparer.prepareImage(from: data) }.value
-            model.attachPhoto(upload)
-        } catch {
-            model.reportAttachmentFailure(String(localized: "That photo couldn't be prepared."))
-        }
-    }
-
-    private func stage(image: PlatformImage) async {
-        do {
-            let upload = try await Task.detached { try AttachmentPreparer.prepareImage(from: image) }.value
-            model.attachPhoto(upload)
-        } catch {
-            model.reportAttachmentFailure(String(localized: "That photo couldn't be prepared."))
-        }
-    }
-
-    private func loadFiles(_ urls: [URL]) async {
-        let items = DropIntake.classify(urls)
-        if let message = DropIntake.rejectionMessage(for: items) { model.reportAttachmentFailure(message) }
-        for item in items {
-            let url: URL
-            switch item {
-            case .image(let accepted), .document(let accepted): url = accepted
-            case .rejected: continue
-            }
-            do {
-                let prepared = try await Task.detached { try AttachmentPreparer.prepareFile(at: url) }.value
-                if prepared.isImage { model.attachPhoto(prepared.upload) } else { model.attachFile(prepared.upload, mime: prepared.mime) }
-            } catch AttachmentError.tooLarge {
-                model.reportAttachmentFailure(String(localized: "That file is too large to send."))
-            } catch {
-                model.reportAttachmentFailure(String(localized: "That file couldn't be read."))
-            }
-        }
     }
 }
 
