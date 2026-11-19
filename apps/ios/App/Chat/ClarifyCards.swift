@@ -4,7 +4,6 @@ import PalProtocol
 import SwiftUI
 
 struct ClarifyCard: View {
-    @Environment(\.colorScheme) private var colorScheme
     let prompt: PendingPrompt
     let answer: (String) -> Void
 
@@ -35,7 +34,7 @@ struct ClarifyCard: View {
             }
             if isMulti, !prompt.choices.isEmpty {
                 Button("Confirm and continue") { submitTyped() }
-                    .buttonStyle(.glass(PalGlass.style(interactive: false, colorScheme: colorScheme)))
+                    .buttonStyle(.glass)
                     .disabled(composedAnswer == nil)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 8)
