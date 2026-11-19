@@ -40,14 +40,18 @@ enum ComposerDragForwarding {
         return created
     }
 
-    private nonisolated static func attachmentHost(for editor: AnyObject, _ info: AnyObject) -> NSDraggingDestination? {
+    private nonisolated static func forwarded<Result: Sendable>(
+        _ editor: AnyObject,
+        _ info: AnyObject,
+        _ forward: @MainActor (NSDraggingDestination, NSDraggingInfo) -> Result
+    ) -> Result? {
         MainActor.assumeIsolated {
             guard let sender = info as? NSDraggingInfo else { return nil }
             let identifiers = sender.draggingPasteboard.types?.map(\.rawValue) ?? []
             guard DropSource.carriesAttachment(typeIdentifiers: identifiers) else { return nil }
             var view = (editor as? NSView)?.superview
             while let current = view {
-                if !current.registeredDraggedTypes.isEmpty, let destination = current as? NSDraggingDestination { return destination }
+                if !current.registeredDraggedTypes.isEmpty, let host = current as? NSDraggingDestination { return forward(host, sender) }
                 view = current.superview
             }
             return nil
@@ -62,9 +66,7 @@ enum ComposerDragForwarding {
         func operation(_ selector: Selector, _ forward: @escaping @MainActor (NSDraggingDestination, NSDraggingInfo) -> NSDragOperation) {
             let original = unsafeBitCast(class_getMethodImplementation(base, selector), to: OperationIMP.self)
             let block: @convention(block) (AnyObject, AnyObject) -> UInt = { editor, info in
-                if let host = attachmentHost(for: editor, info), let sender = info as? NSDraggingInfo {
-                    return MainActor.assumeIsolated { forward(host, sender).rawValue }
-                }
+                if let handled = forwarded(editor, info, { forward($0, $1).rawValue }) { return handled }
                 return original(editor, selector, info)
             }
             class_addMethod(subclass, selector, imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self)), "Q@:@")
@@ -73,11 +75,7 @@ enum ComposerDragForwarding {
         func notification(_ selector: Selector, _ forward: @escaping @MainActor (NSDraggingDestination, NSDraggingInfo) -> Void) {
             let original = unsafeBitCast(class_getMethodImplementation(base, selector), to: VoidIMP.self)
             let block: @convention(block) (AnyObject, AnyObject) -> Void = { editor, info in
-                if let host = attachmentHost(for: editor, info), let sender = info as? NSDraggingInfo {
-                    MainActor.assumeIsolated { forward(host, sender) }
-                } else {
-                    original(editor, selector, info)
-                }
+                if forwarded(editor, info, forward) == nil { original(editor, selector, info) }
             }
             class_addMethod(subclass, selector, imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self)), "v@:@")
         }
@@ -85,9 +83,7 @@ enum ComposerDragForwarding {
         func decision(_ selector: Selector, _ forward: @escaping @MainActor (NSDraggingDestination, NSDraggingInfo) -> Bool) {
             let original = unsafeBitCast(class_getMethodImplementation(base, selector), to: BoolIMP.self)
             let block: @convention(block) (AnyObject, AnyObject) -> Bool = { editor, info in
-                if let host = attachmentHost(for: editor, info), let sender = info as? NSDraggingInfo {
-                    return MainActor.assumeIsolated { forward(host, sender) }
-                }
+                if let handled = forwarded(editor, info, forward) { return handled }
                 return original(editor, selector, info)
             }
             class_addMethod(subclass, selector, imp_implementationWithBlock(unsafeBitCast(block, to: AnyObject.self)), "B@:@")
