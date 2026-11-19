@@ -178,6 +178,8 @@ targets:
       - package: PalKit
         product: PalRoster
       - package: PalKit
+        product: PalConnect
+      - package: PalKit
         product: PalChat
       - package: PalDesign
         product: PalDesign

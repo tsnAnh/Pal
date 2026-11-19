@@ -98,6 +98,16 @@ final class ConnectAppsModel {
     var failures: [String: String] = [:]
     var setupRecords: [SetupProgressRecord] = []
     private(set) var mode: Mode = .list
+    var chip = ConnectChip.all
+    var navigation = ConnectMacNavigation()
+    var expandedSections: Set<String> = []
+    var showsAllInstalled = false
+    private(set) var justConnected: Set<String> = []
+    @ObservationIgnored private(set) var catalogRevision = 0
+    @ObservationIgnored var rowCache: ConnectRowCache?
+    @ObservationIgnored var macCache: ConnectMacCache?
+    @ObservationIgnored var rowBuilds = 0
+    @ObservationIgnored var sectionBuilds = 0
     @ObservationIgnored private var openInterval: PerfInterval?
     private let rpcTally: OSAllocatedUnfairLock<Int>
 
@@ -163,10 +173,10 @@ final class ConnectAppsModel {
     func start() async {
         openInterval = PalPerf.begin("connect.open")
         rpcTally.withLock { $0 = 0 }
-        Task { await devices.start() }
         Task { await legacy.load() }
         Task { await slack.load() }
         await reload()
+        Task { await devices.start() }
         await loadCapabilities()
         PalPerf.event("connect.start.burst", count: rpcTally.withLock { $0 })
     }
@@ -185,6 +195,7 @@ final class ConnectAppsModel {
     func reload() async {
         do {
             catalog = try await service.load()
+            catalogRevision += 1
             phase = .ready
             surfaces.remember(catalog, catalogKey)
             setupRecords = (try? await service.setupProgress()) ?? []
@@ -218,6 +229,7 @@ final class ConnectAppsModel {
             fail(app, "Couldn't connect \(app.name). Try again.")
         }
         await reload()
+        if catalog.apps.contains(where: { $0.id == app.id && $0.state == .connected }) { justConnected.insert(app.id) }
     }
 
     func beginMcpSignIn(_ app: ConnectApp) {
