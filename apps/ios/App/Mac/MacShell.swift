@@ -8,9 +8,14 @@ import SwiftUI
 @Observable
 final class MacShell {
     static let compactKey = "mac.sidebar.compact"
+    private static let layoutAnimation = Animation.snappy(duration: 0.22)
 
     private(set) var isCompact: Bool
-    var showsInspector = false
+    private var inspectorVisible = false
+    var showsInspector: Bool {
+        get { inspectorVisible }
+        set { withAnimation(Self.layoutAnimation) { inspectorVisible = newValue } }
+    }
     var showsShortcuts = false
     var showsAccountMenu = false
     var messageMenu: MacMessageMenuRequest?
@@ -27,7 +32,7 @@ final class MacShell {
     }
 
     func toggleCompact() {
-        isCompact.toggle()
+        withAnimation(Self.layoutAnimation) { isCompact.toggle() }
         defaults.set(isCompact, forKey: Self.compactKey)
     }
 
@@ -59,8 +64,7 @@ final class MacShell {
 }
 
 struct MacSidebarResizeHandle: View {
-    @Binding var width: Double
-    @State private var origin: Double?
+    let width: DragWidth
     @State private var hovering = false
 
     var body: some View {
@@ -74,16 +78,31 @@ struct MacSidebarResizeHandle: View {
             }
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                    .onChanged { drag in
-                        let start = origin ?? width
-                        origin = start
-                        let proposed = start + Double(drag.translation.width)
-                        width = min(max(proposed, Double(MacMetrics.sidebarWidthRange.lowerBound)), Double(MacMetrics.sidebarWidthRange.upperBound))
-                    }
-                    .onEnded { _ in origin = nil }
+                    .onChanged { drag in width.drag(by: Double(drag.translation.width)) }
+                    .onEnded { _ in width.endDrag() }
             )
-            .onDisappear { if hovering { NSCursor.pop() } }
+            .onDisappear {
+                if hovering { NSCursor.pop() }
+                width.endDrag()
+            }
             .accessibilityHidden(true)
+    }
+}
+
+private struct MacSidebarFrame: ViewModifier {
+    let width: DragWidth
+    let compact: Bool
+
+    func body(content: Content) -> some View {
+        content.frame(width: compact ? MacMetrics.railWidth : CGFloat(width.live))
+    }
+}
+
+extension DragWidth {
+    static func sidebar(defaults: UserDefaults = .standard) -> DragWidth {
+        let stored = defaults.object(forKey: MacMetrics.sidebarWidthKey) as? Double ?? Double(MacMetrics.sidebarWidth)
+        let range = Double(MacMetrics.sidebarWidthRange.lowerBound)...Double(MacMetrics.sidebarWidthRange.upperBound)
+        return DragWidth(stored: stored, range: range) { defaults.set($0, forKey: MacMetrics.sidebarWidthKey) }
     }
 }
 
@@ -109,11 +128,7 @@ struct MacShellView<Destination: View>: View {
     @ViewBuilder let destination: (AppRoute) -> Destination
 
     @Environment(MacShell.self) private var shell
-    @AppStorage(MacMetrics.sidebarWidthKey) private var storedSidebarWidth = Double(MacMetrics.sidebarWidth)
-
-    private var sidebarWidth: CGFloat {
-        min(max(CGFloat(storedSidebarWidth), MacMetrics.sidebarWidthRange.lowerBound), MacMetrics.sidebarWidthRange.upperBound)
-    }
+    @State private var sidebarWidth = DragWidth.sidebar()
 
     var body: some View {
         PalPerf.interval("shell.body") { shellContent }
@@ -122,9 +137,9 @@ struct MacShellView<Destination: View>: View {
     private var shellContent: some View {
         HStack(spacing: 0) {
             MacSidebar(roster: roster, connection: connection, router: router)
-                .frame(width: shell.isCompact ? MacMetrics.railWidth : sidebarWidth)
+                .modifier(MacSidebarFrame(width: sidebarWidth, compact: shell.isCompact))
                 .overlay(alignment: .trailing) {
-                    if !shell.isCompact { MacSidebarResizeHandle(width: $storedSidebarWidth) }
+                    if !shell.isCompact { MacSidebarResizeHandle(width: sidebarWidth) }
                 }
             detail
             if shell.showsInspector, router.path.count == 1, let name = router.currentBotName, roster.bot(named: name) != nil {
@@ -138,8 +153,6 @@ struct MacShellView<Destination: View>: View {
         .background(PalTokens.content)
         .background(MacWindowChrome())
         .overlay { MacMessageMenuHost() }
-        .animation(.snappy(duration: 0.22), value: shell.isCompact)
-        .animation(.snappy(duration: 0.22), value: shell.showsInspector)
         .onChange(of: router.path, initial: true) { _, path in
             guard case .botProfile(let name)? = path.last else { return }
             router.path = [.chat(botName: name)]

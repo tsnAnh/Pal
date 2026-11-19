@@ -84,10 +84,14 @@ public final class FrameMonitor: NSObject {
             firstTimestamp = now
             return
         }
-        switch counter.record(frameMs: (now - last) * 1000) {
+        let frameMs = (now - last) * 1000
+        switch counter.record(frameMs: frameMs, atSeconds: now - (firstTimestamp ?? now)) {
         case .smooth: break
         case .hitch: PalPerf.event("hitch")
         case .severe: PalPerf.event("hitch.severe")
+        case .long:
+            PalPerf.event("hitch.severe")
+            PalPerf.event("hitch.long", count: Int(frameMs.rounded()))
         }
         if now - lastFlush >= Self.flushInterval {
             lastFlush = now
