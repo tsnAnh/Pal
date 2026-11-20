@@ -29,12 +29,17 @@ public enum SheetLeadingButton: Sendable {
 public struct SheetGlassButton: View {
     public let leading: SheetLeadingButton
     public let clear: Bool
+    public let escapes: Bool
     public let accessibilityIdentifier: String
     public let action: () -> Void
 
-    public init(leading: SheetLeadingButton = .close, clear: Bool = false, accessibilityIdentifier: String, action: @escaping () -> Void) {
+    public init(
+        leading: SheetLeadingButton = .close, clear: Bool = false, escapes: Bool = true,
+        accessibilityIdentifier: String, action: @escaping () -> Void
+    ) {
         self.leading = leading
         self.clear = clear
+        self.escapes = escapes
         self.accessibilityIdentifier = accessibilityIdentifier
         self.action = action
     }
@@ -48,9 +53,21 @@ public struct SheetGlassButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .keyboardShortcut(.cancelAction)
+        .modifier(EscapeShortcut(enabled: escapes))
         .accessibilityLabel(Text(leading.accessibilityLabel))
         .accessibilityIdentifier(accessibilityIdentifier)
+    }
+}
+
+private struct EscapeShortcut: ViewModifier {
+    let enabled: Bool
+
+    func body(content: Content) -> some View {
+        if enabled {
+            content.keyboardShortcut(.cancelAction)
+        } else {
+            content
+        }
     }
 }
 

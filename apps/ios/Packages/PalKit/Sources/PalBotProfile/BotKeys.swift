@@ -3,13 +3,26 @@ import Observation
 import PalProtocol
 import PalTransport
 
+public enum BotKeyState: Sendable, Equatable {
+    case set
+    case notSet
+
+    public var word: String {
+        switch self {
+        case .set: "Set"
+        case .notSet: "Not set"
+        }
+    }
+}
+
 public struct BotKeyRow: Sendable, Equatable, Identifiable {
     public let name: String
     public let label: String
     public let isSet: Bool
 
     public var id: String { name }
-    public var statusWord: String { isSet ? "Set" : "Not set" }
+    public var state: BotKeyState { isSet ? .set : .notSet }
+    public var statusWord: String { state.word }
 
     public init(name: String, label: String, isSet: Bool) {
         self.name = name

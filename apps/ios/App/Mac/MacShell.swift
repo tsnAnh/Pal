@@ -181,7 +181,10 @@ struct MacShellView<Destination: View>: View {
                 }
             }
             .navigationDestination(for: AppRoute.self) { route in
-                destination(route).navigationBarBackButtonHidden(true)
+                destination(route)
+                    .navigationBarBackButtonHidden(true)
+                    .environment(\.botSettingsClose, { router.path = Array(router.path.prefix(1)) })
+                    .environment(\.botSettingsSpec, router.currentBotName.flatMap { roster.bot(named: $0)?.spec })
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

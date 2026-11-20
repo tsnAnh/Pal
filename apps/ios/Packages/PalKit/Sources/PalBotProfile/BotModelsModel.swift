@@ -29,6 +29,13 @@ public final class BotModelsModel {
     public private(set) var effort: String?
     public private(set) var save = Save.idle
     public var confirmation: Confirmation?
+    private var failedWrite: Write?
+
+    private enum Write: Sendable, Equatable {
+        case model(ModelChoice, confirmed: Bool)
+        case effort(String)
+        case fallbacks([ModelChoice])
+    }
 
     private struct Snapshot: Sendable {
         let settings: BotModelSettings
@@ -57,6 +64,16 @@ public final class BotModelsModel {
     }
 
     public var isSaving: Bool { save == .saving }
+    public var canRetrySave: Bool { failedWrite != nil && !isSaving }
+
+    public func retrySave() async {
+        guard let write = failedWrite, !isSaving else { return }
+        switch write {
+        case .model(let choice, let confirmed): await commit(choice, confirmed: confirmed)
+        case .effort(let level): await chooseEffort(level)
+        case .fallbacks(let next): await commitFallbacks(next)
+        }
+    }
 
     public var currentText: String? {
         settings.current.map { displayName(for: $0) }
@@ -126,6 +143,7 @@ public final class BotModelsModel {
 
     private func commit(_ choice: ModelChoice, confirmed: Bool) async {
         save = .saving
+        failedWrite = nil
         switch await client.setModel(choice, confirmed: confirmed) {
         case .saved:
             settings.current = choice
@@ -135,6 +153,7 @@ public final class BotModelsModel {
             confirmation = Confirmation(choice: choice, message: message)
             save = .idle
         case .failed(let reason):
+            failedWrite = .model(choice, confirmed: confirmed)
             save = .failed(reason)
         }
     }
@@ -142,14 +161,17 @@ public final class BotModelsModel {
     public func chooseEffort(_ level: String) async {
         guard !isSaving, level != effort else { return }
         save = .saving
+        failedWrite = nil
         switch await client.setEffort(level) {
         case .saved:
             effort = level
             remember()
             save = .saved("Saved. New conversations use this effort; ones already open keep theirs.")
         case .failed(let reason):
+            failedWrite = .effort(level)
             save = .failed(reason)
         case .needsConfirmation:
+            failedWrite = .effort(level)
             save = .failed(BotModelClient.couldNotSaveEffort)
         }
     }
@@ -175,14 +197,17 @@ public final class BotModelsModel {
     private func commitFallbacks(_ next: [ModelChoice]) async {
         guard !isSaving else { return }
         save = .saving
+        failedWrite = nil
         switch await client.setFallbacks(next) {
         case .saved:
             settings.fallbacks = next
             remember()
             save = .saved("Saved. Backups apply from the next turn.")
         case .failed(let reason):
+            failedWrite = .fallbacks(next)
             save = .failed(reason)
         case .needsConfirmation:
+            failedWrite = .fallbacks(next)
             save = .failed(BotModelClient.couldNotSaveFallbacks)
         }
     }
