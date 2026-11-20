@@ -196,32 +196,16 @@ jobs:
           - name: ios-simulator
             kind: app
             destination: generic/platform=iOS Simulator
-            cache-path: build/DerivedData
           - name: macos
             kind: app
             destination: generic/platform=macOS
-            cache-path: build/DerivedData
           - name: hermeskit
             kind: package
-            cache-path: Packages/PalKit/.build
     defaults:
       run:
         working-directory: apps/ios
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Restore the build cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/ios/${{ matrix.cache-path }}
-          key: swift-v1-${{ matrix.name }}-${{ github.sha }}
-          restore-keys: swift-v1-${{ matrix.name }}-
-
-      - name: Mark sources unchanged since the cached build as older than it
-        working-directory: .
-        run: scripts/ci/swift_cache_mtimes.sh apps/ios/${{ matrix.cache-path }}
 
       # App/Intents uses the iOS/macOS 27 SDK (LongRunningIntent, the messages app schemas),
       # which only the xcode-27 image carries; macos-15 and macos-26 stop at Xcode 26.x.
@@ -247,7 +231,6 @@ jobs:
         if: matrix.kind == 'app'
         run: >-
           xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
-          -derivedDataPath build/DerivedData
           -destination '${{ matrix.destination }}'
           -skipPackagePluginValidation -skipMacroValidation
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
@@ -259,18 +242,6 @@ jobs:
         if: matrix.kind == 'package'
         working-directory: apps/ios/Packages/PalKit
         run: swift build --build-tests
-
-      - name: Stamp the cached build with its commit
-        if: github.event_name == 'push' || github.head_ref == 'ci/under-two-minutes'
-        working-directory: .
-        run: git rev-parse HEAD > apps/ios/${{ matrix.cache-path }}/.built-from
-
-      - name: Save the build cache
-        if: github.event_name == 'push' || github.head_ref == 'ci/under-two-minutes'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: apps/ios/${{ matrix.cache-path }}
-          key: swift-v1-${{ matrix.name }}-${{ github.sha }}
 
   # PAL_COMM_NOTIFICATIONS=1 adds the Notification Service Extension, the Communication
   # Notifications entitlement and the App Group; build it so the switched-on path keeps compiling.
