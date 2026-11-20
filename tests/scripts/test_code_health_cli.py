@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parents[2]
 _GUARD_SCRIPTS = (
     # Upstream guards merged by the sync (kept on their own line, away from Pal's Swift-guard line).
     "scripts/ci/check_line_endings.py", "scripts/ci/check_dockerfile_downloads.py", "scripts/check_tool_discovery.py",
-    "scripts/check_packaged_imports.py", "scripts/ci/check_backend_imports.py",
+    "scripts/check_packaged_imports.py", "scripts/ci/check_backend_imports.py", "scripts/ci/check_pal_nous_boundary.py",
     "scripts/check-windows-footguns.py", "scripts/check_bash_shebangs.py",
     "scripts/check_no_tmp_literals.py", "scripts/check_detached_spawns.py", "scripts/install_root_lint.py",
     "scripts/check_config_yaml_writers.py", "scripts/check_config_yaml_readers.py",
