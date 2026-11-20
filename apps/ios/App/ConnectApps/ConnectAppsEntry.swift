@@ -35,19 +35,20 @@ private struct DevicePermissionAlert: ViewModifier {
     let presenter: DevicePermissionPresenter
 
     func body(content: Content) -> some View {
-        content.alert(
-            presenter.pending.map { "\($0.botName) wants to \($0.ask.intent)" } ?? "",
-            isPresented: Binding(get: { presenter.pending != nil }, set: { _ in }),
-            presenting: presenter.pending
-        ) { pending in
-            Button(pending.status == .notDetermined ? "Continue" : "Open System Settings") { presenter.accept() }
-                .accessibilityIdentifier("devicePermissionAccept")
-            Button("Not Now", role: .cancel) { presenter.dismiss() }
-                .accessibilityIdentifier("devicePermissionDismiss")
-        } message: { pending in
-            Text(pending.status == .notDetermined
-                ? "macOS asks for your OK next. You can change this later in System Settings."
-                : "macOS has this turned off for Pal. Allow it in System Settings, then ask \(pending.botName) again.")
+        content.macAlert(item: Binding(get: { presenter.pending }, set: { _ in })) { pending in
+            MacDialogContent(
+                "\(pending.botName) wants to \(pending.ask.intent)",
+                message: pending.status == .notDetermined
+                    ? String(localized: "macOS asks for your OK next. You can change this later in System Settings.")
+                    : String(localized: "macOS has this turned off for Pal. Allow it in System Settings, then ask \(pending.botName) again."),
+                actions: [
+                    MacDialogAction(
+                        pending.status == .notDetermined ? String(localized: "Continue") : String(localized: "Open System Settings"),
+                        identifier: "devicePermissionAccept"
+                    ) { presenter.accept() },
+                    MacDialogAction(String(localized: "Not Now"), role: .cancel, identifier: "devicePermissionDismiss") { presenter.dismiss() },
+                ]
+            )
         }
     }
 }

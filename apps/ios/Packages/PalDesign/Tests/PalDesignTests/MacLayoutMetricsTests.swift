@@ -16,6 +16,11 @@ struct MacLayoutMetricsTests {
         #expect(MacLayoutMetrics.chatColumnMin <= MacLayoutMetrics.chatColumnMax)
     }
 
+    @Test func theWindowMinimumIsNineHundredBySixHundred() {
+        #expect(MacLayoutMetrics.windowMin == 900)
+        #expect(MacLayoutMetrics.windowMinHeight == 600)
+    }
+
     @Test func atEveryWindowWidthTheSidebarKeepsItsWidthAndStaysOnScreen() {
         for window in Self.windows {
             for sidebar in Self.sidebars {

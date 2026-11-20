@@ -44,17 +44,25 @@ struct HostKitScreen: View {
         }
         .task { await model.refreshStatus() }
         .refreshable { await model.refreshStatus() }
-        .confirmationDialog("Reload the gateway?", isPresented: $confirmingGatewayReload, titleVisibility: .visible) {
-            Button("Reload gateway", role: .destructive) { Task { await model.reload(.gateway) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Chats on this host reconnect once it is back.")
+        .macConfirm(isPresented: $confirmingGatewayReload) {
+            MacDialogContent(
+                String(localized: "Reload the gateway?"),
+                message: String(localized: "Chats on this host reconnect once it is back."),
+                actions: [
+                    MacDialogAction("Reload gateway", role: .destructive) { Task { await model.reload(.gateway) } },
+                    MacDialogAction("Cancel", role: .cancel),
+                ]
+            )
         }
-        .confirmationDialog("Replace the app's key to the kit?", isPresented: $confirmingRotate, titleVisibility: .visible) {
-            Button("Replace key", role: .destructive) { Task { await model.rotate() } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("The app uses the new key from its next request.")
+        .macConfirm(isPresented: $confirmingRotate) {
+            MacDialogContent(
+                String(localized: "Replace the app's key to the kit?"),
+                message: String(localized: "The app uses the new key from its next request."),
+                actions: [
+                    MacDialogAction("Replace key", role: .destructive) { Task { await model.rotate() } },
+                    MacDialogAction("Cancel", role: .cancel),
+                ]
+            )
         }
     }
 

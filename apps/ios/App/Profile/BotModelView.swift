@@ -57,17 +57,15 @@ struct BotModelView: View {
             BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback) { picking = nil }
                 .macSheetFrame()
         }
-        .confirmationDialog(
-            "Use this model?",
-            isPresented: Binding(get: { model.confirmation != nil }, set: { if !$0 { model.confirmation = nil } }),
-            titleVisibility: .visible,
-            presenting: model.confirmation
-        ) { _ in
-            Button("Use model") { Task { await model.confirmPending() } }
-                .accessibilityIdentifier("botModelConfirm")
-            Button("Cancel", role: .cancel) { model.confirmation = nil }
-        } message: { confirmation in
-            Text(confirmation.message)
+        .macConfirm(item: $model.confirmation) { confirmation in
+            MacDialogContent(
+                String(localized: "Use this model?"),
+                message: confirmation.message,
+                actions: [
+                    MacDialogAction(String(localized: "Use model"), identifier: "botModelConfirm") { Task { await model.confirmPending() } },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel) { model.confirmation = nil },
+                ]
+            )
         }
     }
 

@@ -12,6 +12,8 @@ struct MacModalHost: View {
     let hub: SettingsHub
 
     @Environment(MacShell.self) private var shell
+    @Environment(\.macWindowSize) private var windowSize
+    @Environment(\.macDialogCenter) private var dialogs
     @State private var confirmingSignOut = false
     @State private var confirmingAdd = false
 
@@ -25,51 +27,56 @@ struct MacModalHost: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                if shell.showsShortcuts {
-                    MacModalScrim { shell.showsShortcuts = false }
-                    MacModalPanel(width: 824, height: 478, identifier: "shortcutsSheet", closeIdentifier: "shortcutsClose", close: { shell.showsShortcuts = false }) {
-                        MacShortcutsSheet()
-                    }
-                } else if router.sheet == .kanban {
-                    KanbanSurface(connection: connection, roster: roster, close: { router.dismissSheet() })
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .padding(.top, MacMetrics.trafficLightCenter.y + MacMetrics.trafficLightPitch / 2)
-                        .background(PalTokens.content)
-                        .accessibilityElement(children: .contain)
-                        .accessibilityIdentifier("kanbanPanel")
-                        .transition(.opacity)
-                } else if let sheet = router.sheet {
-                    MacModalScrim(blurs: sheet == .connectApps) { router.dismissSheet() }
-                    panel(for: sheet)
-                } else if let bot = router.renamingBot.flatMap({ roster.bot(named: $0) }) {
-                    MacModalScrim { router.renamingBot = nil }
-                    MacModalPanel(width: 360, height: 168, identifier: "renameBotSheet", closeIdentifier: "renameBotClose", close: { router.renamingBot = nil }) {
-                        MacRenameBot(bot: bot, roster: roster, router: router)
-                    }
-                    .id(bot.name)
-                } else if router.isSearching {
-                    MacModalScrim { router.closeSearch() }
-                    MacPalette(roster: roster, router: router)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                        .padding(.top, proxy.size.height * 0.25)
-                        .transition(.scale(scale: 0.98).combined(with: .opacity))
-                }
-                if shell.showsAccountMenu, router.sheet == nil, !router.isSearching, !shell.showsShortcuts {
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onTapGesture { shell.showsAccountMenu = false }
-                        .accessibilityHidden(true)
-                    MacAccountMenu(hub: hub, router: router, addAccount: { confirmingAdd = true }, signOut: { confirmingSignOut = true })
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                        .padding(.leading, 15)
-                        .padding(.bottom, MacMetrics.footerHeight - 12)
-                        .transition(.scale(scale: 0.96, anchor: .bottomLeading).combined(with: .opacity))
-                }
+        ZStack {
+            if shell.showsShortcuts {
+                MacModalScrim { shell.showsShortcuts = false }
+                MacModalPanel(
+                    identifier: "shortcutsSheet", closeIdentifier: "shortcutsClose", close: { shell.showsShortcuts = false },
+                    content: { MacShortcutsSheet() }
+                )
+            } else if router.sheet == .kanban {
+                KanbanSurface(connection: connection, roster: roster, close: { router.dismissSheet() })
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.top, MacMetrics.trafficLightCenter.y + MacMetrics.trafficLightPitch / 2)
+                    .background(PalTokens.content)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("kanbanPanel")
+                    .transition(.opacity)
+            } else if let sheet = router.sheet {
+                MacModalScrim(blurs: sheet == .connectApps) { router.dismissSheet() }
+                panel(for: sheet)
+            } else if let bot = router.renamingBot.flatMap({ roster.bot(named: $0) }) {
+                MacModalScrim { router.renamingBot = nil }
+                MacModalPanel(
+                    fit: .content, identifier: "renameBotSheet", closeIdentifier: "renameBotClose", close: { router.renamingBot = nil },
+                    content: { MacRenameBot(bot: bot, roster: roster, router: router) }
+                )
+                .id(bot.name)
+            } else if router.isSearching {
+                MacModalScrim { router.closeSearch() }
+                MacModalPanel(
+                    identifier: "searchPanel", closeIdentifier: "searchPanelClose", close: { router.closeSearch() },
+                    content: { MacPalette(roster: roster, router: router) }
+                )
+                .transition(.scale(scale: 0.98).combined(with: .opacity))
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if shell.showsAccountMenu, router.sheet == nil, !router.isSearching, !shell.showsShortcuts {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { shell.showsAccountMenu = false }
+                    .accessibilityHidden(true)
+                MacAccountMenu(hub: hub, router: router, addAccount: { confirmingAdd = true }, signOut: { confirmingSignOut = true })
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.leading, 15)
+                    .padding(.bottom, MacMetrics.footerHeight - 12)
+                    .transition(.scale(scale: 0.96, anchor: .bottomLeading).combined(with: .opacity))
+            }
+            if let dialogs {
+                MacDialogLayer(center: dialogs, window: windowSize?.size ?? .zero)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onGeometryChange(for: CGSize.self, of: \.size) { windowSize?.update($0) }
         .ignoresSafeArea(.container, edges: .top)
         .animation(.snappy(duration: 0.2), value: shell.showsShortcuts)
         .animation(.snappy(duration: 0.2), value: router.sheet)
@@ -84,16 +91,23 @@ struct MacModalHost: View {
         .onChange(of: shell.showsAccountMenu) { _, shows in
             if shows { Task { await hub.refresh() } }
         }
-        .confirmationDialog("Sign out of Pal on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
-            Button("Sign Out", role: .destructive) { Task { await connection.signOut() } }
-            Button("Cancel", role: .cancel) {}
+        .macConfirm(isPresented: $confirmingSignOut) {
+            MacDialogContent(
+                String(localized: "Sign out of Pal on this device?"),
+                actions: [
+                    MacDialogAction(String(localized: "Sign Out"), role: .destructive) { Task { await connection.signOut() } },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel)
+                ]
+            )
         }
-        .confirmationDialog(
-            "Signing in with another account replaces this one on this device.",
-            isPresented: $confirmingAdd, titleVisibility: .visible
-        ) {
-            Button("Continue", role: .destructive) { Task { await connection.signOut() } }
-            Button("Cancel", role: .cancel) {}
+        .macConfirm(isPresented: $confirmingAdd) {
+            MacDialogContent(
+                String(localized: "Signing in with another account replaces this one on this device."),
+                actions: [
+                    MacDialogAction(String(localized: "Continue"), role: .destructive) { Task { await connection.signOut() } },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel)
+                ]
+            )
         }
     }
 
@@ -101,12 +115,13 @@ struct MacModalHost: View {
     private func panel(for sheet: AppSheet) -> some View {
         switch sheet {
         case .settings:
-            MacModalPanel(width: 825, height: 643, background: PalTokens.content, identifier: "settingsSheetPanel", closeIdentifier: "settingsClose", close: { router.dismissSheet() }) {
-                MacSettingsModal(hub: hub, connection: connection, section: Bindable(shell).settingsSection)
-            }
+            MacModalPanel(
+                background: PalTokens.content, identifier: "settingsSheetPanel", closeIdentifier: "settingsClose", close: { router.dismissSheet() },
+                content: { MacSettingsModal(hub: hub, connection: connection, section: Bindable(shell).settingsSection) }
+            )
         case .createBot:
             MacModalPanel(
-                width: MacCreateBot.width,
+                fit: .content,
                 closePlacement: .trailing,
                 closeDisabled: createBot.isCreating,
                 identifier: "createBotSheet",
@@ -116,7 +131,7 @@ struct MacModalHost: View {
             )
         case .connectApps:
             MacModalPanel(
-                width: 825, height: 643, clearClose: true, identifier: "connectAppsPanel", closeIdentifier: "connectApps-close",
+                clearClose: true, identifier: "connectAppsPanel", closeIdentifier: "connectApps-close",
                 close: { router.dismissSheet() },
                 content: {
                     MacConnectAppsPanel(connection: connection, hostPool: hostPool, roster: roster, profile: router.connectAppsProfile) {

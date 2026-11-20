@@ -267,36 +267,32 @@ private struct TeachPresentation: ViewModifier {
             .sheet(isPresented: Binding(get: { active && model.showsReview }, set: { if !$0 { model.showsReview = false } })) {
                 TeachReviewSheet(model: model)
             }
-            .confirmationDialog(
-                confirmationTitle,
-                isPresented: Binding(get: { active && model.confirmation != nil }, set: { if !$0 { model.confirmation = nil } }),
-                titleVisibility: .visible
-            ) {
-                switch model.confirmation {
-                case .approve:
-                    Button("Approve") { Task { await model.approve() } }
-                        .accessibilityIdentifier("teachApproveConfirm")
-                case .discardDraft:
-                    Button("Discard", role: .destructive) { Task { await model.discardDraft() } }
-                        .accessibilityIdentifier("teachDiscardDraftConfirm")
-                case .discardRecording:
-                    Button("Discard", role: .destructive) { Task { await model.stop(discard: true) } }
-                        .accessibilityIdentifier("teachDiscardRecordingConfirm")
-                case nil:
-                    EmptyView()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text(confirmationMessage)
+            .macConfirm(isPresented: Binding(get: { active && model.confirmation != nil }, set: { if !$0 { model.confirmation = nil } })) {
+                MacDialogContent(confirmationTitle, message: confirmationMessage, actions: confirmationActions + [
+                    MacDialogAction("Cancel", role: .cancel)
+                ])
             }
     }
 
-    private var confirmationTitle: Text {
+    private var confirmationActions: [MacDialogAction] {
         switch model.confirmation {
-        case .approve: Text("Turn on this skill?")
-        case .discardDraft: Text("Discard this draft?")
-        case .discardRecording: Text("Discard this recording?")
-        case nil: Text("")
+        case .approve:
+            [MacDialogAction("Approve", identifier: "teachApproveConfirm") { Task { await model.approve() } }]
+        case .discardDraft:
+            [MacDialogAction("Discard", role: .destructive, identifier: "teachDiscardDraftConfirm") { Task { await model.discardDraft() } }]
+        case .discardRecording:
+            [MacDialogAction("Discard", role: .destructive, identifier: "teachDiscardRecordingConfirm") { Task { await model.stop(discard: true) } }]
+        case nil:
+            []
+        }
+    }
+
+    private var confirmationTitle: String {
+        switch model.confirmation {
+        case .approve: String(localized: "Turn on this skill?")
+        case .discardDraft: String(localized: "Discard this draft?")
+        case .discardRecording: String(localized: "Discard this recording?")
+        case nil: ""
         }
     }
 

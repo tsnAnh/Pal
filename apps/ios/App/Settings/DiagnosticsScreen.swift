@@ -197,10 +197,14 @@ struct DiagnosticsScreen: View {
             }
         )
         .task { await model.watch() }
-        .confirmationDialog(DiagnosticsCopy.clearConfirm, isPresented: $confirmingClear, titleVisibility: .visible) {
-            Button(DiagnosticsCopy.clear, role: .destructive) { Task { await model.clear() } }
-                .accessibilityIdentifier("diagnosticsClearConfirm")
-            Button(String(localized: "Cancel"), role: .cancel) {}
+        .macConfirm(isPresented: $confirmingClear) {
+            MacDialogContent(
+                DiagnosticsCopy.clearConfirm,
+                actions: [
+                    MacDialogAction(DiagnosticsCopy.clear, role: .destructive, identifier: "diagnosticsClearConfirm") { Task { await model.clear() } },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
     }
 }
@@ -243,10 +247,14 @@ struct MacDiagnosticsSection: View {
             }
         }
         .task { await model.watch() }
-        .confirmationDialog(DiagnosticsCopy.clearConfirm, isPresented: $confirmingClear, titleVisibility: .visible) {
-            Button(DiagnosticsCopy.clear, role: .destructive) { Task { await model.clear() } }
-                .accessibilityIdentifier("diagnosticsClearConfirm")
-            Button(String(localized: "Cancel"), role: .cancel) {}
+        .macConfirm(isPresented: $confirmingClear) {
+            MacDialogContent(
+                DiagnosticsCopy.clearConfirm,
+                actions: [
+                    MacDialogAction(DiagnosticsCopy.clear, role: .destructive, identifier: "diagnosticsClearConfirm") { Task { await model.clear() } },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
     }
 }

@@ -46,13 +46,15 @@ struct HostUpdateScreen: View {
         }
         .task { await model.load() }
         .refreshable { await model.refreshCheck() }
-        .confirmationDialog(
-            "A chat is running", isPresented: $model.confirmingTurns, titleVisibility: .visible
-        ) {
-            Button("Update anyway", role: .destructive) { Task { await model.start(confirmTurns: true) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Updating restarts Pal and interrupts the chat.")
+        .macConfirm(isPresented: $model.confirmingTurns) {
+            MacDialogContent(
+                String(localized: "A chat is running"),
+                message: String(localized: "Updating restarts Pal and interrupts the chat."),
+                actions: [
+                    MacDialogAction("Update anyway", role: .destructive) { Task { await model.start(confirmTurns: true) } },
+                    MacDialogAction("Cancel", role: .cancel),
+                ]
+            )
         }
         .sheet(isPresented: $model.showingProgress, onDismiss: { model.dismissProgress() }) {
             HostUpdateProgressSheet(model: model) { model.showingProgress = false }

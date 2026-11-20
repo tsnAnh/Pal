@@ -115,18 +115,22 @@ private struct ConnectAppsPresentations: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .alert(item: $model.notice) { notice in
-                Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
+            .macAlert(item: $model.notice) { notice in
+                MacDialogContent(
+                    notice.title,
+                    message: notice.message,
+                    actions: [MacDialogAction(String(localized: "OK"), role: .cancel)]
+                )
             }
-            .alert(
-                model.disconnectTarget.map { String(localized: "Disconnect \($0.name)?") } ?? "",
-                isPresented: Binding(get: { model.disconnectTarget != nil }, set: { if !$0 { model.disconnectTarget = nil } }),
-                presenting: model.disconnectTarget
-            ) { target in
-                Button(String(localized: "Disconnect"), role: .destructive) { Task { await model.disconnect(target) } }
-                Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text("\(model.botName) loses access to this app until you connect it again.")
+            .macAlert(item: $model.disconnectTarget) { target in
+                MacDialogContent(
+                    String(localized: "Disconnect \(target.name)?"),
+                    message: String(localized: "\(model.botName) loses access to this app until you connect it again."),
+                    actions: [
+                        MacDialogAction(String(localized: "Disconnect"), role: .destructive) { Task { await model.disconnect(target) } },
+                        MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                    ]
+                )
             }
             .sheet(isPresented: $model.showsSkills) {
                 SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
@@ -159,7 +163,7 @@ private struct OwnerSetupSheet: ViewModifier {
         content.sheet(
             item: $model.ownerSetup,
             onDismiss: { Task { await model.reload() } },
-            content: { setup in OwnerSetupView(model: setup).macSheetFrame(idealWidth: 680) }
+            content: { setup in OwnerSetupView(model: setup).macSheetFrame(readable: true) }
         )
     }
 }

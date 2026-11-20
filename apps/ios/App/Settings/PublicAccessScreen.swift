@@ -80,22 +80,22 @@ struct PublicAccessContent: View {
             AddPublicRouteSheet(model: model) { adding = false }
                 .macSheetFrame()
         }
-        .alert(
-            "Public access", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.notice ?? "")
+        .macAlert(isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
+            MacDialogContent(
+                String(localized: "Public access"),
+                message: model.notice ?? "",
+                actions: [MacDialogAction("OK", role: .cancel)]
+            )
         }
-        .confirmationDialog(
-            "Remove this public address?", isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-            titleVisibility: .visible, presenting: removing
-        ) { route in
-            Button("Remove", role: .destructive) { Task { await model.remove(route.name) } }
-                .accessibilityIdentifier("publicAccessRemoveConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: { route in
-            Text("Services using \(route.name) will stop reaching your bot.")
+        .macConfirm(item: $removing) { route in
+            MacDialogContent(
+                String(localized: "Remove this public address?"),
+                message: String(localized: "Services using \(route.name) will stop reaching your bot."),
+                actions: [
+                    MacDialogAction("Remove", role: .destructive, identifier: "publicAccessRemoveConfirm") { Task { await model.remove(route.name) } },
+                    MacDialogAction("Cancel", role: .cancel),
+                ]
+            )
         }
     }
 

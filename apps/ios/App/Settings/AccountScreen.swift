@@ -48,16 +48,23 @@ struct AccountScreen: View {
                 SettingsRow.destructive("Sign Out", accessibilityIdentifier: "accountSignOutRow", action: { confirmingSignOut = true })
             }
         }
-        .confirmationDialog("Sign out of Pal on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
-            Button("Sign Out", role: .destructive) { Task { await connection.signOut() } }
-            Button("Cancel", role: .cancel) {}
+        .macConfirm(isPresented: $confirmingSignOut) {
+            MacDialogContent(
+                String(localized: "Sign out of Pal on this device?"),
+                actions: [
+                    MacDialogAction("Sign Out", role: .destructive) { Task { await connection.signOut() } },
+                    MacDialogAction("Cancel", role: .cancel),
+                ]
+            )
         }
-        .confirmationDialog(
-            "Signing in with another account replaces this one on this device.",
-            isPresented: $confirmingAdd, titleVisibility: .visible
-        ) {
-            Button("Continue", role: .destructive) { Task { await connection.signOut() } }
-            Button("Cancel", role: .cancel) {}
+        .macConfirm(isPresented: $confirmingAdd) {
+            MacDialogContent(
+                String(localized: "Signing in with another account replaces this one on this device."),
+                actions: [
+                    MacDialogAction("Continue", role: .destructive) { Task { await connection.signOut() } },
+                    MacDialogAction("Cancel", role: .cancel),
+                ]
+            )
         }
     }
 }

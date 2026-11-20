@@ -59,10 +59,11 @@ struct MacRenameBot: View {
             }
             .padding(.horizontal, 15)
             .padding(.top, 16)
-            Spacer(minLength: 0)
+            .padding(.bottom, 16)
             PalHairline(color: PalTokens.panelBorder)
             footer
         }
+        .frame(width: MacModalSizing.renameBotWidth)
         .task {
             for _ in 0..<10 where !focused {
                 focused = true

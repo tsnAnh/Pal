@@ -32,17 +32,15 @@ struct SpeechMemoryScreen: View {
         ) { target in
             keyEntrySheet(target)
         }
-        .confirmationDialog(
-            "Remove this key?",
-            isPresented: Binding(get: { model.pendingRemoval != nil }, set: { if !$0 { model.pendingRemoval = nil } }),
-            titleVisibility: .visible,
-            presenting: model.pendingRemoval
-        ) { target in
-            Button("Remove", role: .destructive) { Task { await model.remove(target) } }
-                .accessibilityIdentifier("speechMemoryRemoveConfirm")
-            Button("Cancel", role: .cancel) { model.pendingRemoval = nil }
-        } message: { target in
-            Text("\(target.provider.name) stops working until you set a key again.")
+        .macConfirm(item: Binding(get: { model.pendingRemoval }, set: { model.pendingRemoval = $0 })) { target in
+            MacDialogContent(
+                String(localized: "Remove this key?"),
+                message: String(localized: "\(target.provider.name) stops working until you set a key again."),
+                actions: [
+                    MacDialogAction("Remove", role: .destructive, identifier: "speechMemoryRemoveConfirm") { Task { await model.remove(target) } },
+                    MacDialogAction("Cancel", role: .cancel) { model.pendingRemoval = nil },
+                ]
+            )
         }
     }
 

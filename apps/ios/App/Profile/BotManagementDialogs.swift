@@ -1,3 +1,4 @@
+import PalDesign
 import PalRoster
 import SwiftUI
 
@@ -18,25 +19,24 @@ private struct BotManagementDialogs: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .confirmationDialog(
-                Text("Delete \(deletingBot?.displayName ?? "this bot")?"),
-                isPresented: Binding(get: { deletingBot != nil }, set: { if !$0 { router.deletingBot = nil } }),
-                titleVisibility: .visible,
-                presenting: deletingBot
-            ) { bot in
-                Button("Delete", role: .destructive) { Task { await roster.delete(bot) } }
-                    .accessibilityIdentifier("deleteBotConfirm")
-                Button("Cancel", role: .cancel) {}
-            } message: { _ in
-                Text("Its conversation and settings are removed from all your devices. This can't be undone.")
+            .macConfirm(item: Binding(get: { deletingBot }, set: { if $0 == nil { router.deletingBot = nil } })) { bot in
+                MacDialogContent(
+                    String(localized: "Delete \(bot.displayName)?"),
+                    message: String(localized: "Its conversation and settings are removed from all your devices. This can't be undone."),
+                    actions: [
+                        MacDialogAction(String(localized: "Delete"), role: .destructive, identifier: "deleteBotConfirm") {
+                            Task { await roster.delete(bot) }
+                        },
+                        MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                    ]
+                )
             }
-            .alert(
-                Text("Couldn't update the bot"),
-                isPresented: Binding(get: { roster.adminError != nil }, set: { if !$0 { roster.dismissAdminError() } })
-            ) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(AdminErrorCopy.message(roster.adminError))
+            .macAlert(isPresented: Binding(get: { roster.adminError != nil }, set: { if !$0 { roster.dismissAdminError() } })) {
+                MacDialogContent(
+                    String(localized: "Couldn't update the bot"),
+                    message: AdminErrorCopy.message(roster.adminError),
+                    actions: [MacDialogAction(String(localized: "OK"), role: .cancel)]
+                )
             }
             .iOSOnly { view in
                 view
