@@ -15,7 +15,7 @@ from persistence.conversation.messages import (
     ConversationPeer, ConversationRequest, ConversationRevision, CooldownSnapshot, DelegationDelivery,
     HeldCoverage, HeldMessage, MarkerPurgeReport, MessageRecord, MessageStorageState, NewMessage, PagedMessage, PromptPage,
     PrUrlHit, PrunedRowChange, PruneRewriteResult, Reaction, ReadCheck, ReplaceMode, ReplaceResult, ResumeConversations,
-    RewindPlan, RowDisposition, RowOutcome, RowStamp, RowUids, SegmentPage, SessionTimeline, TimelineEntry, TranscriptRead, TranscriptRow,
+    RewindPlan, RowDisposition, RowOutcome, RowStamp, RowUids, ScannedMessage, SegmentPage, SessionTimeline, TimelineEntry, TranscriptRead, TranscriptRow,
     TranscriptView,
     UnseenReaction, UserTurnRewind, Watermark,
 )
@@ -35,7 +35,7 @@ from ._store.detached_results import append_completion_note, append_delegation_d
 from ._store.identity import _restore_row_identity
 from ._store.messages import (
     _append_messages_in_transaction, _ensure_display_order, _execute_transcript_write,
-    _row_to_message_dict, _stamp_tool_call_uids, append_message, append_messages_batch, archive_and_compact, assert_resume_safe,
+    _decode_content, _row_to_message_dict, _stamp_tool_call_uids, append_message, append_messages_batch, archive_and_compact, assert_resume_safe,
     clear_messages, conversation_revision, deactivate_message, deactivate_messages_by_display_kind, display_message_count,
     find_pr_url_messages, get_active_message_ids, get_active_message_watermark, get_message_role, get_messages,
     get_messages_around, get_messages_as_conversation, get_resume_conversations, has_gateway_input_owner,
@@ -54,6 +54,8 @@ from ._errors import refusals
 from ._store import stored_reads, timeline
 
 __all__ = ["SQLiteMessageRepository"]
+
+_ROW_ID_BATCH = 400
 
 # The legacy store's rewind refusal texts, by the contract reason each one is.
 _REWIND_REFUSALS = {
@@ -730,6 +732,44 @@ class SQLiteMessageRepository:
                 )
                 while rows := cur.fetchmany(2000):
                     yield from ((tool_call_id, content) for tool_call_id, content in rows)
+
+    def newest_row_id(self) -> int:
+        holder = self._store.holder()
+        with _refusals(holder):
+            with holder._read_ctx() as conn:
+                return conn.execute("SELECT COALESCE(MAX(id), 0) FROM messages").fetchone()[0]
+
+    def scan_live_messages(self, after_row_id: int, tool_names: Sequence[str], *, limit: int) -> tuple[ScannedMessage, ...]:
+        holder = self._store.holder()
+        with _refusals(holder):
+            with holder._read_ctx() as conn:
+                rows = conn.execute(
+                    "SELECT id, session_id, role, content, tool_calls, tool_name, timestamp FROM messages "
+                    "WHERE id > ? AND (active = 1 OR compacted = 1) AND _compressed_summary = 0 "
+                    f"AND (role IN ('user', 'assistant') OR tool_name IN ({','.join('?' * len(tool_names))})) "
+                    "ORDER BY id LIMIT ?",
+                    (after_row_id, *tool_names, limit)).fetchall()
+        return tuple(
+            ScannedMessage(id=MessageId(row[0]), session_id=SessionId(row[1]), role=row[2], content=_decode_content(row[3]),
+                           tool_calls=row[4], tool_name=row[5], timestamp=float(row[6] or 0.0))
+            for row in rows)
+
+    def live_row_ids(self, ids: Sequence[MessageId]) -> frozenset[MessageId]:
+        return self._matching_row_ids(ids, "AND (active = 1 OR compacted = 1)")
+
+    def assistant_row_ids(self, ids: Sequence[MessageId]) -> frozenset[MessageId]:
+        return self._matching_row_ids(ids, "AND role = 'assistant'")
+
+    def _matching_row_ids(self, ids: Sequence[MessageId], condition: str) -> frozenset[MessageId]:
+        holder = self._store.holder()
+        found: set[MessageId] = set()
+        with _refusals(holder):
+            with holder._read_ctx() as conn:
+                for start in range(0, len(ids), _ROW_ID_BATCH):
+                    batch = ids[start:start + _ROW_ID_BATCH]
+                    found.update(MessageId(row[0]) for row in conn.execute(
+                        f"SELECT id FROM messages WHERE id IN ({','.join('?' * len(batch))}) {condition}", batch))
+        return frozenset(found)
 
     def has_any_message(self) -> bool:
         holder = self._store.holder()

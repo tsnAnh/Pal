@@ -59,6 +59,7 @@ __all__ = [
     "RowOutcome",
     "RowStamp",
     "RowUids",
+    "ScannedMessage",
     "SegmentPage",
     "SessionTimeline",
     "TimelineEntry",
@@ -936,6 +937,19 @@ class ReadCheck:
 
 
 @dataclass(frozen=True, slots=True)
+class ScannedMessage:
+    """One live row of a cross-session scan (``scan_live_messages``): the columns a derived index reads. ``content`` is decoded; ``tool_calls`` is the stored JSON text, so a reader skips the parse for a row that names no call it tracks; ``timestamp`` is epoch seconds, ``0.0`` for a row stored without one."""
+
+    id: MessageId
+    session_id: SessionId
+    role: str
+    content: JsonValue
+    tool_calls: Optional[str]
+    tool_name: Optional[str]
+    timestamp: float
+
+
+@dataclass(frozen=True, slots=True)
 class PagedMessage:
     """One display message of a transcript page: the replay projection with its row id, its ``position`` in the read (the segment's display slot on a segment page, the durable id on a lineage read) and ``durable_id``, the id of its message's first stored row (a removed original's included), which no compaction or rotation moves."""
 
@@ -1169,6 +1183,22 @@ class MessageRepository(Protocol):
 
     def blocked_tool_result_payloads(self, *, since_ts: float) -> Iterator[tuple[str, Optional[str]]]:
         """``(tool_call_id, content)`` of the tool rows with a call id since ``since_ts`` whose stored text content holds ``BLOCKED`` or ``approval`` in any ASCII case, in no defined order, streamed in batches inside one read that ends when the iterator is exhausted or closed."""
+        ...
+
+    def newest_row_id(self) -> int:
+        """The highest stored row id of any session and visibility in the scope; ``0`` when the scope holds none."""
+        ...
+
+    def scan_live_messages(self, after_row_id: int, tool_names: Sequence[str], *, limit: int) -> tuple[ScannedMessage, ...]:
+        """At most ``limit`` live rows (active or compaction-archived, never a compression summary) of every session with id above ``after_row_id``, ascending by id: each ``user`` or ``assistant`` row, and each row whose tool name is one of ``tool_names``. The read a derived index resumes from its last id."""
+        ...
+
+    def live_row_ids(self, ids: Sequence[MessageId]) -> frozenset[MessageId]:
+        """The ids among ``ids`` that name a live row (active or compaction-archived) of any session in the scope; an unknown or rewound id is left out."""
+        ...
+
+    def assistant_row_ids(self, ids: Sequence[MessageId]) -> frozenset[MessageId]:
+        """The ids among ``ids`` that name an ``assistant`` row of any session and visibility in the scope."""
         ...
 
     def has_any_message(self) -> bool:

@@ -365,6 +365,61 @@ def test_blocked_tool_result_payloads_stream_marked_tool_rows_since_a_time(backe
     assert list(store_b.messages.blocked_tool_result_payloads(since_ts=0.0)) == []
 
 
+def test_the_cross_session_scan_reads_live_rows_above_a_cursor(backend, scope_a, scope_b):
+    store = backend.open(scope_a)
+    store.sessions.create(NewSession(session_id=S, source="cli"))
+    store.sessions.create(NewSession(session_id=OTHER, source="cli"))
+    repo = store.messages
+    assert repo.newest_row_id() == 0
+    first = repo.append(S, msg("see https://a.example/", 1))
+    reply = repo.append(S, msg("", 2, "assistant", tool_calls=(CALL,)))
+    structured = repo.append(OTHER, msg([{"type": "text", "text": "hi"}], 3))
+    tracked = repo.append(OTHER, msg("{}", 4, "tool", tool_call_id="c-1", tool_name="web_search"))
+    repo.append(OTHER, msg("out", 5, "tool", tool_call_id="c-2", tool_name="terminal"))
+    repo.append(S, msg("summary", 6, "user", compressed_summary=True))
+    rewound = repo.append(S, msg("undone", 7))
+    assert repo.deactivate_message(S, rewound)
+    assert repo.newest_row_id() == rewound
+    scanned = repo.scan_live_messages(0, ("web_search",), limit=50)
+    # CONTRACT: live rows of every session in id order: dialogue rows and the named tool's rows; no other tool, summary or rewound row.
+    assert [row.id for row in scanned] == [first, reply, structured, tracked]
+    by_id = {row.id: row for row in scanned}
+    assert (by_id[first].session_id, by_id[first].role, by_id[first].content, by_id[first].timestamp) == (S, "user", "see https://a.example/", ts(1))
+    assert json.loads(by_id[reply].tool_calls) == [CALL] and by_id[first].tool_calls is None
+    assert by_id[structured].content == [{"type": "text", "text": "hi"}]
+    assert (by_id[tracked].tool_name, by_id[tracked].session_id) == ("web_search", OTHER)
+    assert [row.id for row in repo.scan_live_messages(first, ("web_search",), limit=2)] == [reply, structured]
+    assert repo.scan_live_messages(tracked, ("web_search",), limit=50) == ()
+    assert backend.open(scope_b).messages.scan_live_messages(0, ("web_search",), limit=50) == ()
+    assert backend.open(scope_b).messages.newest_row_id() == 0
+
+
+def test_live_and_assistant_row_ids_filter_a_batch_of_ids_across_sessions(backend, scope_a, scope_b):
+    store = backend.open(scope_a)
+    store.sessions.create(NewSession(session_id=S, source="cli"))
+    store.sessions.create(NewSession(session_id=OTHER, source="cli"))
+    repo = store.messages
+    user = repo.append(S, msg("ask", 1))
+    call = repo.append(S, msg("", 2, "assistant", tool_calls=(CALL,)))
+    result = repo.append(S, msg("long output", 3, "tool", tool_call_id="call-1", tool_name="terminal"))
+    answer = repo.append(OTHER, msg("answer", 4, "assistant"))
+    undone = repo.append(OTHER, msg("undone", 5, "assistant"))
+    assert repo.deactivate_message(OTHER, undone)
+    original = HeldMessage(role="tool", content="long output", tool_call_id="call-1", row_id=result, persisted=True)
+    stub = msg("[pruned]", 3, "tool", tool_call_id="call-1", tool_name="terminal")
+    call_row = msg("", 2, "assistant", tool_calls=(CALL,))
+    repo.rewrite_pruned_rows(S, [
+        PrunedRowChange(original, stub, msg("long output", 3, "tool", tool_call_id="call-1", tool_name="terminal")),
+        PrunedRowChange(HeldMessage(role="assistant", content="", tool_calls=(CALL,), row_id=call, persisted=True), call_row, call_row)])
+    ids = [user, call, result, answer, undone, MessageId(9999)]
+    # CONTRACT: live is active or compaction-archived, in any session; a rewound or unknown id is not live.
+    assert repo.live_row_ids(ids) == {user, call, result, answer}
+    # CONTRACT: the role check ignores visibility, so a rewound assistant row still counts.
+    assert repo.assistant_row_ids(ids) == {call, answer, undone}
+    assert repo.live_row_ids([]) == frozenset() and repo.assistant_row_ids([]) == frozenset()
+    assert backend.open(scope_b).messages.live_row_ids(ids) == frozenset()
+
+
 def test_has_any_message_and_spillover_reference_rows_read_the_whole_scope(backend, scope_a, scope_b):
     store_a = backend.open(scope_a)
     store_b = backend.open(scope_b)

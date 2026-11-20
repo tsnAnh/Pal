@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
 import logging
 import os
 import sqlite3
@@ -11,15 +12,19 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from hermes_state_library_extract import RESULT_TOOL_NAMES, TOOL_NAMES, Occurrence, extract_message
+
+if TYPE_CHECKING:
+    from persistence.conversation.messages import ScannedMessage
+    from persistence.core.backend import PersistenceStore
 
 logger = logging.getLogger(__name__)
 
 FORMAT_VERSION = 2
 CATCH_UP_BUDGET_S = 2.0
 SCAN_CHUNK_ROWS = 400
-LIVE_CHECK_BATCH = 400
 KINDS = ("link", "media", "file")
 
 _EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
@@ -41,12 +46,6 @@ CREATE TABLE IF NOT EXISTS items (
 );
 CREATE INDEX IF NOT EXISTS idx_items_kind_order ON items(kind, order_us DESC);
 """
-
-_SCAN_SQL = (
-    "SELECT rowid, session_id, role, content, tool_calls, tool_name, timestamp FROM messages "
-    "WHERE rowid > ? AND (active = 1 OR compacted = 1) AND _compressed_summary = 0 "
-    f"AND (role IN ('user', 'assistant') OR tool_name IN ({','.join('?' * len(RESULT_TOOL_NAMES))})) "
-    "ORDER BY rowid LIMIT ?")
 
 _UPSERT_SQL = (
     "INSERT INTO items (id, kind, locator, title, subtitle, mime, ts_us, order_us, session_id, message_id) "
@@ -130,12 +129,12 @@ class LibraryIndex:
             "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             (key, value))
 
-    def refresh(self, db, *, budget_s: float = CATCH_UP_BUDGET_S) -> bool:
+    def refresh(self, db: PersistenceStore, *, budget_s: float = CATCH_UP_BUDGET_S) -> bool:
         deadline = time.monotonic() + budget_s
+        tool_names = sorted(RESULT_TOOL_NAMES)
         with _path_lock(self.path), self._connect() as conn:
-            instance = str(db.get_meta("store_instance_id") or "")
-            with db._read_ctx() as source:
-                high = source.execute("SELECT COALESCE(MAX(rowid), 0) FROM messages").fetchone()[0]
+            instance = str(db.state_meta.get("store_instance_id") or "")
+            high = db.messages.newest_row_id()
             watermark = int(self._meta(conn, "watermark") or 0)
             if self._meta(conn, "instance") != instance or watermark > high:
                 conn.execute("BEGIN IMMEDIATE")
@@ -145,10 +144,8 @@ class LibraryIndex:
                 conn.execute("COMMIT")
                 watermark = 0
             while watermark < high:
-                with db._read_ctx() as source:
-                    rows = source.execute(
-                        _SCAN_SQL, (watermark, *sorted(RESULT_TOOL_NAMES), SCAN_CHUNK_ROWS)).fetchall()
-                reached = rows[-1][0] if len(rows) == SCAN_CHUNK_ROWS else high
+                rows = db.messages.scan_live_messages(watermark, tool_names, limit=SCAN_CHUNK_ROWS)
+                reached = rows[-1].id if len(rows) == SCAN_CHUNK_ROWS else high
                 conn.execute("BEGIN IMMEDIATE")
                 try:
                     for row in rows:
@@ -163,17 +160,13 @@ class LibraryIndex:
                     return False
             return True
 
-    def _index_row(self, conn: sqlite3.Connection, row) -> None:
-        message_id, session_id, role, content, tool_calls, tool_name, timestamp = row
-        from hermes_state import SessionDB
-        from hermes_state_messages import _parse_tool_calls
-        calls = _parse_tool_calls(tool_calls) if _mentions_tracked_tool(tool_calls) else None
-        if role == "assistant" and not content and not calls:
+    def _index_row(self, conn: sqlite3.Connection, row: ScannedMessage) -> None:
+        calls = _parse_tool_calls(row.tool_calls) if _mentions_tracked_tool(row.tool_calls) else None
+        if row.role == "assistant" and not row.content and not calls:
             return
-        decoded = SessionDB._decode_content(content)
-        ts_us = int(float(timestamp or 0) * 1_000_000)
-        for occurrence in extract_message(role, decoded, calls, tool_name):
-            self._upsert(conn, occurrence, session_id, message_id, ts_us)
+        ts_us = int(row.timestamp * 1_000_000)
+        for occurrence in extract_message(row.role, row.content, calls, row.tool_name):
+            self._upsert(conn, occurrence, row.session_id, row.id, ts_us)
 
     @staticmethod
     def _upsert(conn: sqlite3.Connection, occurrence: Occurrence, session_id: str, message_id: int, ts_us: int) -> None:
@@ -188,24 +181,7 @@ class LibraryIndex:
             key, occurrence.kind, occurrence.locator, occurrence.title, occurrence.subtitle, occurrence.mime,
             ts_us, order_us, session_id, message_id))
 
-    @staticmethod
-    def assistant_message_ids(db, ids: list[int]) -> set[int]:
-        with db._read_ctx() as source:
-            return {row[0] for row in source.execute(
-                f"SELECT id FROM messages WHERE id IN ({','.join('?' * len(ids))}) AND role = 'assistant'", ids)}
-
-    @staticmethod
-    def live_message_ids(db, ids: list[int]) -> set[int]:
-        live: set[int] = set()
-        with db._read_ctx() as source:
-            for start in range(0, len(ids), LIVE_CHECK_BATCH):
-                batch = ids[start:start + LIVE_CHECK_BATCH]
-                live.update(row[0] for row in source.execute(
-                    f"SELECT id FROM messages WHERE id IN ({','.join('?' * len(batch))}) "
-                    "AND (active = 1 OR compacted = 1)", batch))
-        return live
-
-    def page(self, db, *, kind: str | None, limit: int, before_us: int | None) -> tuple[list[IndexedItem], bool]:
+    def page(self, db: PersistenceStore, *, kind: str | None, limit: int, before_us: int | None) -> tuple[list[IndexedItem], bool]:
         collected: list[IndexedItem] = []
         cursor = before_us if before_us is not None else 1 << 62
         batch = max(limit * 2, 50)
@@ -217,7 +193,7 @@ class LibraryIndex:
                     (*args, cursor, batch)).fetchall()
                 if not rows:
                     break
-                live = self.live_message_ids(db, [row[8] for row in rows])
+                live = db.messages.live_row_ids([row[8] for row in rows])
                 collected.extend(IndexedItem(*row) for row in rows if row[8] in live)
                 if len(rows) < batch:
                     break
@@ -230,6 +206,13 @@ class LibraryIndex:
         with self._connect() as conn:
             row = conn.execute(f"SELECT {_ITEM_COLUMNS} FROM items WHERE id = ?", (key,)).fetchone()
         return None if row is None else IndexedItem(*row)
+
+
+def _parse_tool_calls(raw: str) -> Any:
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return []
 
 
 def _mentions_tracked_tool(tool_calls) -> bool:
