@@ -121,3 +121,17 @@ def test_t3code_shows_connected_once_its_http_server_is_added_and_needs_reconnec
     monkeypatch.setattr("tools.mcp_oauth.pending_reauth_reason", lambda name: "expired" if name == "t3code" else None)
 
     assert _rows()["t3code"]["status"] == "needs_reconnect"
+
+
+def test_every_featured_connector_id_is_in_the_catalog():
+    from hermes_cli.pal_connectors import FEATURED_CONNECTOR_IDS
+
+    assert set(FEATURED_CONNECTOR_IDS) <= set(ENTRIES)
+
+
+def test_catalog_marks_exactly_the_featured_connectors(work_home):
+    from hermes_cli.pal_connectors import FEATURED_CONNECTOR_IDS
+
+    rows = _rows()
+
+    assert {cid for cid, row in rows.items() if row["featured"]} == set(FEATURED_CONNECTOR_IDS)

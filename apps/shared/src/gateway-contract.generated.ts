@@ -1733,6 +1733,7 @@ export interface ConnectorCatalogRow {
   notes?: string | null
   setup_guide?: SetupGuide | null
   setup_progress?: SetupProgress | null
+  featured?: boolean
 }
 export type ConnectorCatalogStatus = 'connected' | 'needs_reconnect' | 'not_connected' | 'needs_setup'
 export interface SetupGuide {

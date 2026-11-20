@@ -17093,6 +17093,11 @@
               }
             ],
             "default": null
+          },
+          "featured": {
+            "default": false,
+            "title": "Featured",
+            "type": "boolean"
           }
         },
         "required": [

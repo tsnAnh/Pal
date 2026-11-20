@@ -84,6 +84,7 @@ def _(rid, _params):
 
 
 def _catalog_row(entry):
+    from hermes_cli.pal_connectors import FEATURED_CONNECTOR_IDS
     from tui_gateway.contracts.connectors import ConnectorCatalogRow
 
     from tui_gateway.connector_setup_guide import build_guide, derive_progress
@@ -92,6 +93,7 @@ def _catalog_row(entry):
         slug=entry.id, name=entry.name, description="", category=entry.category, icon=entry.icon,
         method=entry.method.value, verified=entry.verified, mcp_url=entry.mcp_url, status=_catalog_status(entry),
         notes=entry.notes, setup_guide=build_guide(entry), setup_progress=derive_progress(entry),
+        featured=entry.id in FEATURED_CONNECTOR_IDS,
     )
 
 
