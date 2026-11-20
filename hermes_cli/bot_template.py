@@ -770,14 +770,14 @@ def _overlay(parsed: ParsedTemplate, profile_dir: Path, shown: str) -> tuple[int
 def import_template(
     data: bytes, *, reviewed_digest: str | None, name: str | None = None, display_name: str | None = None,
 ) -> dict:
-    from hermes_cli.profiles import create_profile
+    from hermes_cli.profiles import create_profile  # profile-create: ok — Pal template import: a bare profile, then the template overlays its own skills, config and routines
 
     parsed = _parse(data)
     if not reviewed_digest or reviewed_digest != parsed.digest:
         raise _fail("digest_mismatch", "This template changed after it was reviewed. Open it again to review it.")
     slug, shown = _resolve_names(parsed, name, display_name)
     try:
-        profile_dir = create_profile(slug, no_alias=True, description=parsed.description or None, soul=parsed.soul)
+        profile_dir = create_profile(slug, no_alias=True, description=parsed.description or None, soul=parsed.soul)  # profile-create: ok — Pal template import: a bare profile, then the template overlays its own skills, config and routines
     except FileExistsError:
         raise
     except BaseException:

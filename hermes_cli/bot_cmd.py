@@ -147,13 +147,13 @@ def _pin_creating_session_model(profile_dir: Path) -> None:
 
 def create_bot(name: str, *, display_name: str | None = None, description: str | None = None) -> tuple[str, Path]:
     from hermes_cli.bot_onboarding import mark_onboarding_pending
-    from hermes_cli.profiles import create_profile, set_profile_display_name
+    from hermes_cli.profiles import create_profile, set_profile_display_name  # profile-create: ok — Pal bot creation: a bare profile, then this module applies its own skills, model and onboarding steps
 
     cleaned_display = (display_name or "").strip()
     if len(cleaned_display) > _MAX_DISPLAY_NAME:
         raise BotCreateError(f"Display name too long ({len(cleaned_display)} chars, max {_MAX_DISPLAY_NAME}).")
     try:
-        profile_dir = create_profile(name, no_alias=True, no_skills=True, description=description)
+        profile_dir = create_profile(name, no_alias=True, no_skills=True, description=description)  # profile-create: ok — Pal bot creation: a bare profile, then this module applies its own skills, model and onboarding steps
     except (ValueError, FileExistsError) as exc:
         raise BotCreateError(str(exc)) from exc
     canon = profile_dir.name

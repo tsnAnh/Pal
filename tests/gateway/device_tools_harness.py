@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+from tests.gateway.fixtures.storage_handles import close_storage_handles, storage_handle
 
 HELLO = {'kind': 'ios', 'label': 'iPhone', 'app_version': '1.0', 'accepts_offers': True, 'device_tools': True}
 
@@ -49,12 +50,10 @@ class FakePhone:
 async def make_authority(home: Path):
     from gateway.session_authority import SessionAuthority
     from gateway.session_cron import bind_owner
-    from hermes_state import SessionDB
-    from hermes_state_runtime import begin_runtime_epoch
     home.mkdir(parents=True, exist_ok=True)
-    db = SessionDB(db_path=home / 'state.db')
-    authority = SessionAuthority(SimpleNamespace(_draining=False), profile_id=str(home), instance_id='owner', db=db,
-                                 epoch=begin_runtime_epoch(db, instance_id='owner'))
+    store = storage_handle(home)
+    authority = SessionAuthority(SimpleNamespace(_draining=False), profile_id=str(home), instance_id='owner',
+                                 persistence=store, epoch=store.runtime.begin_epoch(instance_id='owner'))
     bind_owner(authority)
     return authority
 
@@ -62,7 +61,6 @@ async def make_authority(home: Path):
 def release_authority(authority) -> None:
     from gateway.session_cron import unbind_owner
     unbind_owner(authority)
-    authority.db.close()
 
 
 @pytest.fixture

@@ -105,7 +105,7 @@ def _launch(
     from tools.mcp_dashboard_oauth import DashboardOAuthFlow
     session_id = secrets.token_urlsafe(24)
     flow = DashboardOAuthFlow(
-        flow_id=session_id, server_name=server_name, profile=None, hermes_home=hermes_home,
+        flow_id=session_id, server_name=server_name, hermes_home=hermes_home,
         redirect_uri=redirect_uri if kind == KIND_GATEWAY else "", reconnect_live=reconnect_live)
     httpd = None if kind == KIND_GATEWAY else choose_callback_receiver(flow, cfg, redirect_uri)
     rec = register_flow(flow, httpd=httpd)

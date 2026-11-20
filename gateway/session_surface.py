@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 
 from gateway.reach_presence import ClientKind, origin_of, record_input
-from hermes_state_runtime import RuntimeStoreError
+from persistence.core.errors import AuthorityRefusal
 
 SURFACES = frozenset({'hud', 'voice-live'})
 _VOICE_CONTEXT_LIMIT = 6000
@@ -36,7 +36,7 @@ def _checked_origin(origin):
             or origin['kind'] not in _ORIGIN_KINDS
             or not isinstance(origin['label'], str) or not 0 < len(origin['label']) <= _ORIGIN_LABEL_LIMIT
             or not origin['label'].isprintable() or type(origin['same_host']) is not bool):
-        raise RuntimeStoreError('invalid_params')
+        raise AuthorityRefusal('invalid_params')
     return {key: origin[key] for key in sorted(_ORIGIN_KEYS)}
 
 
@@ -45,13 +45,13 @@ def admit_surface(params, origin=None):
     (``{}`` when absent). ``voice_turn`` marks a spoken voice-mode turn: it runs on ``auxiliary.voice_chat``."""
     surface, context, interrupted, voice_turn = (params.get(key) for key in _SUBMIT_FIELDS)
     if surface is not None and surface not in SURFACES:
-        raise RuntimeStoreError('invalid_params')
+        raise AuthorityRefusal('invalid_params')
     # The spoken transcript only makes sense for a live-voice delegation; anywhere else it is
     # a client smuggling model input past the persisted row.
     if context is not None and (surface != 'voice-live' or not isinstance(context, str)):
-        raise RuntimeStoreError('invalid_params')
+        raise AuthorityRefusal('invalid_params')
     if any(flag is not None and type(flag) is not bool for flag in (interrupted, voice_turn)):
-        raise RuntimeStoreError('invalid_params')
+        raise AuthorityRefusal('invalid_params')
     committed = {}
     if surface:
         committed['surface'] = surface
@@ -70,10 +70,10 @@ def restore_surface(committed):
     """A committed ``surface_v1`` arriving across a process boundary (managed worker), re-checked by
     the admission validator: only an object admission itself could have committed is accepted."""
     if not isinstance(committed, dict) or not committed or set(committed) - {*_SUBMIT_FIELDS, 'origin'}:
-        raise RuntimeStoreError('invalid_params')
+        raise AuthorityRefusal('invalid_params')
     fields = {key: value for key, value in committed.items() if key != 'origin'}
     if admit_surface(fields, origin=committed.get('origin')).get('surface_v1', {}) != committed:
-        raise RuntimeStoreError('invalid_params')
+        raise AuthorityRefusal('invalid_params')
     return committed
 
 

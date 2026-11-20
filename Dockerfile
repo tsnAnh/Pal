@@ -198,7 +198,7 @@ WORKDIR /opt/hermes
 # which fetched whatever revision the npm-resolved playwright wanted,
 # unverified, and recorded no fact. The resolved browser binary path is
 # baked to /etc/hermes/chromium-executable-path: the layout differs per
-# arch (chrome-linux64/chrome on amd64, chromium-linux-arm64/chromium on
+# arch (chrome-linux64/chrome on amd64, chrome-linux-arm64/chrome on
 # arm64), so it is resolved at build time and never hunted at boot.
 # hermes_cli/browser_runtime.py reads it when a volume over the runtime dir
 # hides pm's facts; stage2-hook.sh checks it still names a binary.
@@ -316,7 +316,7 @@ RUN /opt/hermes/.venv/bin/python -I scripts/generate_icons.py --source /opt/herm
 # Frontend dependencies never enter the runtime layers.
 FROM runtime_base AS frontend_build
 # pnpm installs the workspaces; nothing in the runtime image runs it, so only
-# the build stages (this one and webapp_build) stage it.
+# the build stage stages it.
 RUN python3 -c 'from pathlib import Path; from pm import ensure, installed_package; ensure("pnpm", explicit=True); Path("/usr/local/bin/pnpm").symlink_to(installed_package("pnpm").binary)' && \
     pnpm --version
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -324,7 +324,7 @@ COPY web/package.json web/
 COPY ui-tui/package.json ui-tui/
 COPY ui-tui/packages/hermes-ink/ ui-tui/packages/hermes-ink/
 COPY apps/shared/ apps/shared/
-COPY scripts/build/node-deps.mjs scripts/build/electron-runtime.mjs scripts/build/pnpm-lock.mjs scripts/build/
+COPY scripts/build/node-deps*.mjs scripts/build/electron-runtime.mjs scripts/build/pnpm-lock.mjs scripts/build/
 # Root node_modules/typescript is a link into pnpm's virtual store, which never
 # reaches the runtime image: stage a dereferenced copy for it.
 RUN node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui --workspace web && \
@@ -340,23 +340,6 @@ COPY assets/ assets/
 COPY --from=icons /tmp/hermes-icons /tmp/hermes-icons
 RUN node scripts/build/tui.mjs --source /opt/hermes --out /opt/products/tui && \
     node scripts/build/web.mjs --source /opt/hermes --icons /tmp/hermes-icons --out /opt/products/web
-
-# The Webapp (the browser-hosted Desktop) builds through its source recipe,
-# which installs Desktop's dependencies in a private workspace. A stage of its
-# own so Desktop changes leave the TUI and dashboard layers cached.
-FROM runtime_base AS webapp_build
-RUN python3 -c 'from pathlib import Path; from pm import ensure, installed_package; ensure("pnpm", explicit=True); Path("/usr/local/bin/pnpm").symlink_to(installed_package("pnpm").binary)' && \
-    pnpm --version
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-COPY apps/desktop/package.json apps/desktop/
-COPY apps/desktop/scripts/build-webapp.mjs apps/desktop/scripts/
-COPY apps/shared/package.json apps/shared/
-COPY scripts/build/*.mjs scripts/build/
-# Dependencies first, keyed only by the manifests and the recipe, so a source
-# change reuses this layer and the build below reuses its install.
-RUN node apps/desktop/scripts/build-webapp.mjs --deps-only
-COPY apps/ apps/
-RUN node apps/desktop/scripts/build-webapp.mjs
 
 FROM python_deps AS runtime
 # Standalone TypeScript linting is a runtime feature; Vite/esbuild are not.
@@ -383,7 +366,6 @@ RUN cd plugins/platforms/photon/sidecar && \
 # Shared product outputs are independent of application dependency assembly.
 COPY --from=frontend_build /opt/products/tui /opt/hermes/ui-tui
 COPY --from=frontend_build /opt/products/web /opt/hermes/hermes_cli/web_dist
-COPY --from=webapp_build /opt/hermes/apps/desktop/dist-webapp /opt/hermes/apps/desktop/dist-webapp
 # ---------- Bot Screen X socket directory ----------
 # Xvnc would create this itself (/tmp is 1777); pre-creating it keeps ownership
 # deterministic when HERMES_UID is remapped between boots.
@@ -543,8 +525,13 @@ COPY --chmod=0644 docker/profile-hermes-path.sh /etc/profile.d/hermes.sh
 # image these are shared, non-secret package metadata, read by UID 10000.
 # uv's environment locks are build-only and may be world-writable. Remove
 # them after all builds; never relax permissions on mutable PM/home state.
+# uv also creates its cache locks 0666 (the root .lock and one <entry>.lock
+# per wheel/sdist entry), and the seed copy into $HERMES_HOME/cache/uv keeps
+# modes. Drop the world bit instead of deleting by name: "*.lock" also matches
+# files inside unpacked wheels (setuptools/_vendor/.lock).
 RUN mkdir -p /opt/data && chmod 0644 /opt/hermes/tools/facts.json && \
-    rm -f /opt/hermes/.venv/.lock /opt/hermes/pm-runtime/.lock
+    rm -f /opt/hermes/.venv/.lock /opt/hermes/pm-runtime/.lock && \
+    find /opt/hermes/uv-cache ! -type l -perm -0002 -exec chmod o-w {} +
 # Build helpers use system Python above; TUI gateway children need the sealed runtime.
 ENV HERMES_PYTHON=/opt/hermes/.venv/bin/python
 VOLUME [ "/opt/data" ]

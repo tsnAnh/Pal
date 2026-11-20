@@ -31,8 +31,9 @@ def forgotten_reply(authority, admission_id, record):
     author = record.get('author') or {}
     if not author.get('is_bot') or NO_REPLY_MARKER in (record.get('message') or ''):
         return None
+    from gateway.session_persistence import authority_persistence
     from gateway.session_results import admission_result
-    saved = (admission_result(authority.db, admission_id) or {}).get('result') or {}
+    saved = (admission_result(authority_persistence(authority), admission_id) or {}).get('result') or {}
     text = _last_words(saved.get('messages') or [], str(author.get('name') or '').lower())
     return FORGOTTEN_REPLY_PREFIX + text if text else None
 
@@ -90,8 +91,9 @@ def sender_reply(authority, admission_id, reply):
     first line is that owner line. It stays in the owner's transcript and leaves the payload.
     A reply left with only an owner-addressed line is withheld, not delivered. Text further down
     is never rewritten."""
+    from gateway.session_persistence import authority_persistence
     from gateway.session_results import admission_result
-    saved = (admission_result(authority.db, admission_id) or {}).get('result') or {}
+    saved = (admission_result(authority_persistence(authority), admission_id) or {}).get('result') or {}
     assistant = [m for m in saved.get('messages') or [] if isinstance(m, dict) and m.get('role') == 'assistant']
     single = (len(assistant) == 1 and not assistant[0].get('tool_calls')
               and str(assistant[0].get('content') or '').strip() == reply.strip())

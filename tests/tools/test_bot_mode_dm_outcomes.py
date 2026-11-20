@@ -5,11 +5,13 @@ own gateway's restart interrupted reading as a failure, not a cancel."""
 import json
 from types import SimpleNamespace
 
-from hermes_state import SessionDB
-from hermes_state_runtime import admit_session_input, begin_runtime_epoch, claim_session_input, settle_session_input
+from gateway.session_authority import admission_row
 from gateway.session_bot import _result
 from gateway.session_results import retain_result
+from persistence_assembly import open_persistence, profile_scope
 from tools import bot_mode_dm, bot_mode_dm_outcome
+from tools.bot_dm_language import WITHHELD_NOTICE
+from tests.fixtures.storage_seed import seed_session
 
 from tests.tools.test_bot_mode_dm import _FakeAgent, _canonical_target, _capture_spawn, _fresh_probe_cache, _managed_home
 
@@ -30,20 +32,20 @@ def test_constraints_and_expecting_reach_the_teammate_as_labelled_lines(tmp_path
 
 def _settled(tmp_path, messages, final, *, message="Message from 🤖 alpha (@alpha): what is the codeword?",
              author: dict | None = ALPHA, interrupt=None):
-    db = SessionDB(tmp_path / "state.db")
-    db.create_session("bot", source="gui")
-    epoch = begin_runtime_epoch(db, instance_id="first")
-    admission = admit_session_input(db, epoch=epoch, principal_id="owner", session_id="bot",
-                                    request_id="bot:" + "a" * 32, payload={"text": message})
-    row = claim_session_input(db, epoch=epoch, session_id="bot")
+    db = open_persistence(profile_scope(home=tmp_path))
+    seed_session(db, "bot", "gui")
+    epoch = db.runtime.begin_epoch(instance_id="first")
+    admission, _ = db.admissions.admit(epoch=epoch, principal_id="owner", session_id="bot",
+                                       request_id="bot:" + "a" * 32, payload={"text": message})
+    row = admission_row(db.admissions.claim(epoch=epoch, session_id="bot"))
     value = {"final_response": final, "messages": messages, "_messages_are_turn_suffix": True}
     if interrupt:
         value.update(interrupted=True, interrupt_message=interrupt)
-        settle_session_input(db, epoch=epoch, admission_id=row["admission_id"], generation=row["generation"],
+        db.admissions.settle(epoch=epoch, admission_id=row["admission_id"], generation=row["generation"],
                              outcome="interrupted", result={"result": value, "usage": {}})
     else:
         retain_result(db, epoch=epoch, row=row, result={"result": value, "usage": {}})
-    record = dict(status="claimed", admission_id=admission["admission_id"], delivery_id="a" * 32,
+    record = dict(status="claimed", admission_id=admission.admission_id, delivery_id="a" * 32,
                   profile_home=str(tmp_path), session_id="bot", message=message, author=author)
     return db, record
 
@@ -58,7 +60,7 @@ def test_a_teammate_that_ends_silent_after_writing_its_answer_still_answers_once
                 {"role": "assistant", "content": "NO_REPLY"}]
     db, record = _settled(tmp_path, messages, "NO_REPLY")
     try:
-        receipt = _result(SimpleNamespace(db=db), record)
+        receipt = _result(SimpleNamespace(persistence=db), record)
         assert receipt["status"] == "settled"
         assert receipt["reply"] == "[no final reply; their last message this turn:] PELICAN-7731"
     finally:
@@ -72,7 +74,7 @@ def test_notify_only_and_non_bot_requests_keep_their_silence(tmp_path):
         (tmp_path / str(n)).mkdir()
         db, record = _settled(tmp_path / str(n), messages, "NO_REPLY", **kwargs)
         try:
-            assert _result(SimpleNamespace(db=db), record)["reply"] == ""
+            assert _result(SimpleNamespace(persistence=db), record)["reply"] == ""
         finally:
             db.close()
 
@@ -80,7 +82,7 @@ def test_notify_only_and_non_bot_requests_keep_their_silence(tmp_path):
 def test_a_turn_its_gateway_restart_interrupted_is_a_failure_that_says_so(tmp_path):
     db, record = _settled(tmp_path, [], "", interrupt="Gateway shutting down")
     try:
-        receipt = _result(SimpleNamespace(db=db), record)
+        receipt = _result(SimpleNamespace(persistence=db), record)
         assert receipt["status"] == "failed" and receipt["reason"] == "unknown"
         assert "gateway stopped or restarted mid-turn" in receipt["error"]
     finally:
@@ -107,7 +109,7 @@ def test_owner_line_in_a_toolless_bot_turn_stays_out_of_the_sender_payload(tmp_p
     final = f"{OWNER_LINE}\n{ENGLISH_REPLY}"
     db, record = _settled(tmp_path, [{"role": "assistant", "content": final}], final)
     try:
-        receipt = _result(SimpleNamespace(db=db), record)
+        receipt = _result(SimpleNamespace(persistence=db, db=db), record)
         assert receipt["reply"] == ENGLISH_REPLY
         from gateway.session_results import admission_result
         assert OWNER_LINE in admission_result(db, record["admission_id"])["result"]["final_response"]
@@ -121,7 +123,7 @@ def test_owner_line_before_a_tool_call_is_an_earlier_message_and_the_reply_is_un
                 {"role": "assistant", "content": ENGLISH_REPLY}]
     db, record = _settled(tmp_path, messages, ENGLISH_REPLY)
     try:
-        assert _result(SimpleNamespace(db=db), record)["reply"] == ENGLISH_REPLY
+        assert _result(SimpleNamespace(persistence=db, db=db), record)["reply"] == ENGLISH_REPLY
     finally:
         db.close()
 
@@ -129,7 +131,7 @@ def test_owner_line_before_a_tool_call_is_an_earlier_message_and_the_reply_is_un
 def test_a_lone_owner_addressed_line_is_withheld_not_delivered(tmp_path):
     db, record = _settled(tmp_path, [{"role": "assistant", "content": OWNER_LINE}], OWNER_LINE)
     try:
-        assert _result(SimpleNamespace(db=db), record)["reply"] == ""
+        assert _result(SimpleNamespace(persistence=db, db=db), record)["reply"] == WITHHELD_NOTICE
     finally:
         db.close()
 
@@ -137,6 +139,6 @@ def test_a_lone_owner_addressed_line_is_withheld_not_delivered(tmp_path):
 def test_a_lone_english_line_is_still_delivered(tmp_path):
     db, record = _settled(tmp_path, [{"role": "assistant", "content": ENGLISH_REPLY}], ENGLISH_REPLY)
     try:
-        assert _result(SimpleNamespace(db=db), record)["reply"] == ENGLISH_REPLY
+        assert _result(SimpleNamespace(persistence=db, db=db), record)["reply"] == ENGLISH_REPLY
     finally:
         db.close()

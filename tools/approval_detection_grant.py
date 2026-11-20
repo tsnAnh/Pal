@@ -37,7 +37,7 @@ GRANT_BINDINGS: dict[tuple[str, str], _GrantBinding] = {
     ("catalog", "migrate"): _GrantBinding("catalog_migrate"),
 }
 _PYTHON_API_ACTIONS = {
-    "create_profile": "create",
+    "create_profile": "create",  # profile-create: ok — a name this detector matches in commands, not a create call
     "delete_profile": "delete",
     "import_profile": "import",
     "install_profile": "install",

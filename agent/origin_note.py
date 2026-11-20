@@ -4,7 +4,7 @@ import logging
 import re
 from typing import Any, NamedTuple, Optional
 
-from agent.message_content import flatten_message_text
+from session_rules.turns import flatten_message_text
 from agent.surface_switch import identity_line_value
 
 logger = logging.getLogger("run_agent")

@@ -22,14 +22,13 @@
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import http from 'node:http'
+import { createRequire } from 'node:module'
 import type { ServerResponse } from 'node:http'
 import os from 'node:os'
 import nodePath from 'node:path'
 import { pathToFileURL } from 'node:url'
 
 import { z } from 'zod'
-
-import { resolveElectronBinary } from '../../apps/desktop/e2e/electron-binary.ts'
 
 import { writeEnvFile, writeMockProviderConfig } from './mock-provider-config.ts'
 
@@ -1572,6 +1571,16 @@ function assertDistBuilt(desktopRoot: string): void {
   }
 }
 
+function resolveElectronBinary(desktopRoot: string): string {
+  const resolved: unknown = createRequire(nodePath.join(desktopRoot, 'package.json'))('electron')
+
+  if (typeof resolved !== 'string' || !fs.existsSync(resolved)) {
+    throw new Error('Electron binary not found. Run "pnpm install --frozen-lockfile" from the repo root.')
+  }
+
+  return resolved
+}
+
 /** Start the mock, write the sandbox, and launch the built Electron app. */
 async function runDevLaunch(): Promise<void> {
   const desktopRoot = nodePath.resolve(import.meta.dirname, '..', '..', 'apps', 'desktop')
@@ -1588,7 +1597,7 @@ async function runDevLaunch(): Promise<void> {
   writeEnvFile(sandbox.hermesHome)
   console.log(`  HERMES_HOME: ${sandbox.hermesHome}`)
 
-  const electronBin = resolveElectronBinary([desktopRoot, repoRoot])
+  const electronBin = resolveElectronBinary(desktopRoot)
 
   const env: Record<string, string> = {
     ...process.env,

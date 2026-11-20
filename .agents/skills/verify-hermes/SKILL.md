@@ -1,6 +1,6 @@
 ---
 name: verify-hermes
-description: Drive the real Hermes engine from this checkout (the `hermes` CLI and classic REPL, one-shot `-z` and `chat -q`, `hermes serve` with its JSON-RPC gateway, slash commands, sessions, config) in an isolated sandbox against the repo's fake LLM, and capture proof. Use after any change under cli.py, hermes_cli/, agent/, tui_gateway/, gateway/ or hermes_state*.py that a CLI user or a gateway client can see, before reporting the change done. Not for apps/desktop (verify-desktop), apps/ios (verify-ios), the Ink TUI, or real providers.
+description: Drive the real Hermes engine from this checkout (the `hermes` CLI and classic REPL, one-shot `-z` and `chat -q`, `hermes serve` with its JSON-RPC gateway, slash commands, sessions, config) in an isolated sandbox against the repo's fake LLM, and capture proof. Use after any change under cli.py, hermes_cli/, agent/, tui_gateway/, gateway/ or hermes_state*.py that a CLI user or a gateway client can see, before reporting the change done. Not for apps/ios (verify-ios), the Ink TUI, or real providers.
 ---
 
 # verify-hermes

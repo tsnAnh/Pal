@@ -70,11 +70,6 @@
     "kind": "bare_which"
   },
   {
-    "path": "apps/desktop/electron/fixtures/source-backend.py",
-    "symbol": "main",
-    "kind": "bare_which"
-  },
-  {
     "path": "cron/scheduler_script.py",
     "symbol": "_script_argv",
     "kind": "bare_which"
@@ -289,11 +284,6 @@
   },
   {
     "path": "hermes_cli/main_tui_launch.py",
-    "symbol": "_apply_tui_python_env",
-    "kind": "bare_which"
-  },
-  {
-    "path": "hermes_cli/main_tui_launch.py",
     "symbol": "_make_tui_argv",
     "kind": "bare_which"
   },
@@ -313,11 +303,6 @@
     "kind": "bare_which"
   },
   {
-    "path": "hermes_cli/plugins_cmd.py",
-    "symbol": "_resolve_git_executable",
-    "kind": "bare_which"
-  },
-  {
     "path": "hermes_cli/profiles.py",
     "symbol": "create_wrapper_script",
     "kind": "bare_which"
@@ -328,9 +313,10 @@
     "kind": "bare_which"
   },
   {
-    "path": "hermes_cli/session_lost_and_found.py",
+    "path": "persistence/sqlite/admin/_lost_and_found.py",
     "symbol": "find_sqlite3_cli",
-    "kind": "bare_which"
+    "kind": "bare_which",
+    "reason": "the SQLite backend's salvage resolves the sqlite3 CLI the way hermes_cli/session_lost_and_found.py::find_sqlite3_cli does"
   },
   {
     "path": "hermes_cli/setup_tts.py",
@@ -454,17 +440,17 @@
     "kind": "bare_which"
   },
   {
-    "path": "tools/checkpoint_manager.py",
+    "path": "agent/checkpoints/manager.py",
     "symbol": "_init_store",
     "kind": "bare_which"
   },
   {
-    "path": "tools/checkpoint_manager.py",
+    "path": "agent/checkpoints/manager.py",
     "symbol": "_run_git",
     "kind": "bare_which"
   },
   {
-    "path": "tools/checkpoint_manager_profile_rename.py",
+    "path": "agent/checkpoints/manager_profile_rename.py",
     "symbol": "migrate_profile_checkpoint_projects",
     "kind": "bare_which"
   },
