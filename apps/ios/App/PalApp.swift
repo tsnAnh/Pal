@@ -286,7 +286,7 @@ struct RootView: View {
 
     var body: some View {
         if showsWorkspace {
-            workspace
+            workspace.macModalEnvironment()
         } else if model.phase == .connecting {
             DelayedReveal { ProgressView("Connecting") }
                 .accessibilityIdentifier("connectingIndicator")
@@ -299,7 +299,7 @@ struct RootView: View {
     private var workspace: some View {
         navigation
             .environment(hub)
-            .environment(rooms).macModalEnvironment()
+            .environment(rooms)
             .task { await roster.runLive() }
             .task { await rooms.run() }
             .sheet(isPresented: Binding(get: { rooms.showsCreate }, set: { rooms.showsCreate = $0 })) {

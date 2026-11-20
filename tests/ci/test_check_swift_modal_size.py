@@ -135,3 +135,26 @@ def test_the_opt_out_marker_waives_the_line(tmp_path):
 
 def test_the_real_tree_is_clean():
     assert cms.scan(REPO / "apps" / "ios") == []
+
+
+def test_an_overlay_after_the_modal_environment_is_a_finding_and_applying_it_last_is_clean(tmp_path: Path) -> None:
+    broken = (
+        "struct Root: View {\n"
+        "    var body: some View {\n"
+        "        navigation\n"
+        "            .environment(rooms).macModalEnvironment()\n"
+        "            .task { await load() }\n"
+        "            .overlay {\n"
+        "                MacModalHost()\n"
+        "            }\n"
+        "    }\n"
+        "}\n"
+    )
+    found = cms.scan(_tree(tmp_path, {"App/Root.swift": broken}))
+    assert [f for f in found if "modal-env-scope" in f] == [
+        "App/Root.swift:4: modal-env-scope: .overlay at line 6 sits outside it; " + cms.FIX_ENV
+    ]
+    fixed = broken.replace(".environment(rooms).macModalEnvironment()", ".environment(rooms)").replace(
+        "            }\n    }", "            }\n            .macModalEnvironment()\n    }"
+    )
+    assert not [f for f in cms.scan(_tree(tmp_path, {"App/Root.swift": fixed})) if "modal-env-scope" in f]

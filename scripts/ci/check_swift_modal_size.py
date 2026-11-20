@@ -14,6 +14,9 @@ Rules (each finding names the file, line and the fix):
 * modal-root-frame: the root of a Mac modal view (``MacPalette``, ``MacCreateBot``, ``MacRenameBot``,
   ``MacShortcutsSheet``, ``MacSettingsModal``, ``MacConnectAppsPanel``) has a literal ``.frame`` size.
 * modal-system-alert: ``.alert(`` or ``.confirmationDialog(`` in code that compiles for Mac.
+* modal-env-scope: an ``.overlay`` or ``.background`` follows ``.macModalEnvironment()`` in the same modifier
+  chain. Environment flows only into the view it modifies, so a ``MacModalHost`` attached after it gets no window
+  size or dialog centre and its panels collapse.
 
 Code inside ``#if os(iOS)`` and ``.iOSOnly { }`` is not Mac code. A justified exception carries
 ``modal-size: ok <reason>`` on the line.
@@ -49,6 +52,9 @@ FIX_PANEL = (
     "drop it, or pass fit: .content for a content-sized dialog"
 )
 FIX_ROOT = "size comes from MacModalPanel (90% of the window, or fit: .content); read a number from MacModalSizing"
+MODAL_ENV = ".macModalEnvironment()"
+CHAIN_ATTACH = re.compile(r"^\s*\.(overlay|background)\b")
+FIX_ENV = "apply .macModalEnvironment() last, after every .overlay and .background, so the modal host inherits it"
 FIX_ALERT = "use .macAlert(...) or .macConfirm(...) (PalDesign MacDialog) so Mac shows the shared dialog at its content size, capped at 90% of the window"
 
 
@@ -175,10 +181,33 @@ def _alert_findings(root: Path) -> list[str]:
     return found
 
 
+def _env_scope_findings(root: Path) -> list[str]:
+    found = []
+    for path in _swift_files(root):
+        rel = path.relative_to(root).as_posix()
+        lines = _read(path)
+        for i, line in enumerate(lines):
+            if MODAL_ENV not in line or OPT_OUT in line or line.lstrip().startswith("func "):
+                continue
+            indent = len(line) - len(line.lstrip())
+            for j in range(i + 1, len(lines)):
+                text = lines[j]
+                stripped = text.strip()
+                if not stripped or stripped.startswith(("#if", "#else", "#endif", "//", "}", ")")):
+                    continue
+                depth = len(text) - len(text.lstrip())
+                if depth < indent or (depth == indent and not stripped.startswith(".")):
+                    break
+                if depth == indent and CHAIN_ATTACH.match(text):
+                    found.append(f"{rel}:{i + 1}: modal-env-scope: .{CHAIN_ATTACH.match(text).group(1)} at line {j + 1} sits outside it; {FIX_ENV}")
+                    break
+    return found
+
+
 def scan(root: Path) -> list[str]:
     if not (root / "App" / "Mac").is_dir():
         return []
-    return _panel_findings(root) + _root_findings(root) + _alert_findings(root)
+    return _panel_findings(root) + _root_findings(root) + _alert_findings(root) + _env_scope_findings(root)
 
 
 def main(argv: list[str]) -> int:

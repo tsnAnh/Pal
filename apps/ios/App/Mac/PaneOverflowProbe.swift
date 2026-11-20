@@ -71,6 +71,10 @@ private struct PaneOverflowProbe: NSViewRepresentable {
             guard let content = window?.contentView else { return }
             let frame = convert(bounds, to: nil)
             let contentFrame = content.convert(content.bounds, to: nil)
+            if frame.width < 1 || frame.height < 1 || !frame.intersects(contentFrame) {
+                PalPerf.event("layout.empty", label: name, points: Int(frame.width * frame.height))
+                return
+            }
             let overflow = max(frame.maxX - contentFrame.maxX, contentFrame.minX - frame.minX)
             guard overflow > 1 else { return }
             PalPerf.event("layout.overflow", label: name, points: Int(overflow.rounded(.up)))
