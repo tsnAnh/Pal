@@ -121,12 +121,24 @@ jobs:
           OPENAI_API_KEY: ""
           NOUS_API_KEY: ""
 
-  swift:
-    name: swift
+  swift-build:
+    name: swift-build (${{ matrix.name }})
     needs: [changes, ios-guards]
     if: needs.changes.outputs.swift == 'true'
     runs-on: xcode-27
     timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: ios-simulator
+            kind: app
+            destination: generic/platform=iOS Simulator
+          - name: macos
+            kind: app
+            destination: generic/platform=macOS
+          - name: hermeskit
+            kind: package
     defaults:
       run:
         working-directory: apps/ios
@@ -144,63 +156,104 @@ jobs:
           xcodebuild -version
 
       - name: Install XcodeGen
+        if: matrix.kind == 'app'
         run: command -v xcodegen >/dev/null || brew install xcodegen
 
       - name: Generate the Xcode project (Communication Notifications off by default)
+        if: matrix.kind == 'app'
         run: |
           xcodegen generate
           if grep -q NotificationService HermesBots.xcodeproj/project.pbxproj; then exit 1; fi
 
-      - name: Build for testing (iOS Simulator)
+      - name: Build for testing
+        if: matrix.kind == 'app'
         run: >-
           xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
-          -destination 'generic/platform=iOS Simulator'
-          -skipPackagePluginValidation -skipMacroValidation
-          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
-
-      - name: Build for testing (macOS)
-        run: >-
-          xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
-          -destination 'generic/platform=macOS'
-          -skipPackagePluginValidation -skipMacroValidation
-          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
-
-      # PAL_COMM_NOTIFICATIONS=1 adds the Notification Service Extension, the Communication
-      # Notifications entitlement and the App Group; build it so the switched-on path keeps compiling.
-      # Only when the files it compiles change (ci_paths.py swift-variant) and on every push to main.
-      - name: Generate the Xcode project (PAL_COMM_NOTIFICATIONS=1)
-        if: needs.changes.outputs.swift_variant == 'true'
-        env:
-          PAL_COMM_NOTIFICATIONS: "1"
-        run: |
-          xcodegen generate
-          grep -q NotificationService HermesBots.xcodeproj/project.pbxproj
-
-      - name: Build with Communication Notifications (iOS Simulator)
-        if: needs.changes.outputs.swift_variant == 'true'
-        run: >-
-          xcodebuild build -project HermesBots.xcodeproj -scheme HermesBots
-          -destination 'generic/platform=iOS Simulator'
-          -skipPackagePluginValidation -skipMacroValidation
-          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
-
-      - name: Build with Communication Notifications (macOS)
-        if: needs.changes.outputs.swift_variant == 'true'
-        run: >-
-          xcodebuild build -project HermesBots.xcodeproj -scheme HermesBots
-          -destination 'generic/platform=macOS'
+          -destination '${{ matrix.destination }}'
           -skipPackagePluginValidation -skipMacroValidation
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
       # Compile only: the packages target macOS 26, which a macos-15 host cannot launch, so
       # `swift test` cannot run the tests here.
       - name: Build HermesKit and its tests
+        if: matrix.kind == 'package'
         working-directory: apps/ios/Packages/PalKit
         run: swift build --build-tests
 
+  # PAL_COMM_NOTIFICATIONS=1 adds the Notification Service Extension, the Communication
+  # Notifications entitlement and the App Group; build it so the switched-on path keeps compiling.
+  # Only when the files it compiles change (ci_paths.py swift-variant) and on every push to main.
+  swift-variant:
+    name: swift-variant (${{ matrix.name }})
+    needs: [changes, ios-guards]
+    if: needs.changes.outputs.swift == 'true' && needs.changes.outputs.swift_variant == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: ios-simulator
+            destination: generic/platform=iOS Simulator
+          - name: macos
+            destination: generic/platform=macOS
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+
+      - name: Select Xcode 27
+        working-directory: .
+        run: |
+          xcode="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)"
+          test -n "$xcode" || { echo "no Xcode 27 on this image"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: Generate the Xcode project (PAL_COMM_NOTIFICATIONS=1)
+        env:
+          PAL_COMM_NOTIFICATIONS: "1"
+        run: |
+          xcodegen generate
+          grep -q NotificationService HermesBots.xcodeproj/project.pbxproj
+
+      - name: Build with Communication Notifications
+        run: >-
+          xcodebuild build -project HermesBots.xcodeproj -scheme HermesBots
+          -destination '${{ matrix.destination }}'
+          -skipPackagePluginValidation -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+  swift:
+    name: swift
+    needs: [changes, ios-guards, swift-build, swift-variant]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail when a selected Swift job failed, was cancelled, or was skipped without a failed guard
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          SELECTED: ${{ needs.changes.outputs.swift }}
+          VARIANT: ${{ needs.changes.outputs.swift_variant }}
+          GUARDS: ${{ needs.ios-guards.result }}
+          BUILD: ${{ needs.swift-build.result }}
+          VARIANT_RESULT: ${{ needs.swift-variant.result }}
+        run: |
+          echo "needed jobs: $RESULTS"
+          case " $RESULTS " in *" failure "*|*" cancelled "*) exit 1 ;; esac
+          [ "$GUARDS" = success ] || exit 0
+          [ "$SELECTED" = true ] || exit 0
+          [ "$BUILD" = success ] || exit 1
+          [ "$VARIANT" != true ] || [ "$VARIANT_RESULT" = success ] || exit 1
+
   ci:
     name: ci
-    needs: [changes, ios-guards, python, swift]
+    needs: [changes, ios-guards, python, swift-build, swift-variant, swift]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
