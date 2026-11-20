@@ -33,8 +33,7 @@ struct MacRowHoverModifier: ViewModifier {
 
 struct MessageCarrier {
     let bubble: Anchor<CGRect>
-    let side: MessageSide
-    let preferred: MessageChromePlacement
+    let slot: MessageChromePlacement.Slot
 }
 
 struct MessageCarrierKey: PreferenceKey {
@@ -53,7 +52,7 @@ struct MacMessageActionsModifier: ViewModifier {
     func body(content: Content) -> some View {
         if actions != nil {
             content.anchorPreference(key: MessageCarrierKey.self, value: .bounds) { [side, placement] bubble in
-                MessageCarrier(bubble: bubble, side: side, preferred: placement)
+                MessageCarrier(bubble: bubble, slot: MessageChromePlacement.Slot(side: side, preferred: placement))
             }
         } else {
             content
@@ -70,8 +69,7 @@ private struct MacMessageChrome: View {
             MessageChromeLayout(
                 bubble: proxy[carrier.bubble],
                 region: CGRect(origin: .zero, size: proxy.size),
-                side: carrier.side,
-                preferred: carrier.preferred,
+                slot: carrier.slot,
                 hasReaction: actions.reaction != nil
             ) {
                 MacMessageHoverBar(actions: actions)
@@ -86,8 +84,7 @@ private struct MacMessageChrome: View {
 private struct MessageChromeLayout: Layout {
     let bubble: CGRect
     let region: CGRect
-    let side: MessageSide
-    let preferred: MessageChromePlacement
+    let slot: MessageChromePlacement.Slot
     let hasReaction: Bool
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
@@ -98,7 +95,7 @@ private struct MessageChromeLayout: Layout {
         guard let bar = subviews.first else { return }
         let barSize = bar.sizeThatFits(.unspecified)
         let resolved = MessageChromePlacement.place(
-            bubble: bubble, region: region, side: side, preferred: preferred, bar: barSize, hasReaction: hasReaction
+            bubble: bubble, region: region, slot: slot, bar: barSize, hasReaction: hasReaction
         )
         bar.place(at: bounds.origin.offset(by: resolved.frames.bar.origin), proposal: ProposedViewSize(barSize))
         if hasReaction, subviews.count > 1, let badge = resolved.frames.badge {

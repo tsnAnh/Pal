@@ -39,6 +39,7 @@ struct MacChatHeader: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 12)
         .frame(height: MacMetrics.topBarHeight)
+        .paneOverflowProbe("chat.header")
     }
 }
 

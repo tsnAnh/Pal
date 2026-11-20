@@ -16,6 +16,11 @@ enum MessageChromePlacement: Equatable {
         let badge: CGRect?
     }
 
+    struct Slot: Equatable {
+        let side: MessageSide
+        let preferred: MessageChromePlacement
+    }
+
     struct Resolved: Equatable {
         let chrome: MessageChromePlacement
         let frames: Frames
@@ -47,19 +52,18 @@ enum MessageChromePlacement: Equatable {
     static func place(
         bubble: CGRect,
         region: CGRect,
-        side: MessageSide,
-        preferred: MessageChromePlacement,
+        slot: Slot,
         bar: CGSize,
         hasReaction: Bool
     ) -> Resolved {
-        if preferred == .beside {
-            let beside = besideFrames(bubble: bubble, side: side, bar: bar, hasReaction: hasReaction)
+        if slot.preferred == .beside {
+            let beside = besideFrames(bubble: bubble, side: slot.side, bar: bar, hasReaction: hasReaction)
             let spans = [beside.bar.minX, beside.bar.maxX] + (beside.badge.map { [$0.minX, $0.maxX] } ?? [])
             if spans.allSatisfy({ $0 >= region.minX && $0 <= region.maxX }) {
                 return Resolved(chrome: .beside, frames: beside.keepingBar(inside: region))
             }
         }
-        let inside = MessageChromePlacement.insideBubble.insideFrames(bubble: bubble, bar: bar, hasReaction: hasReaction, side: side)
+        let inside = MessageChromePlacement.insideBubble.insideFrames(bubble: bubble, bar: bar, hasReaction: hasReaction, side: slot.side)
         return Resolved(chrome: .insideBubble, frames: inside.keepingBar(inside: region))
     }
 

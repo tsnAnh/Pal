@@ -4,6 +4,11 @@ import Testing
 
 @testable import HermesBots
 
+private struct GateState {
+    var waiting: [CheckedContinuation<Void, Never>] = []
+    var requested: [Duration] = []
+}
+
 @MainActor
 @Suite("Row hover state")
 struct RowHoverStateTests {
@@ -14,12 +19,7 @@ struct RowHoverStateTests {
     }
 
     private final class SleepGate: Sendable {
-        private struct Gate {
-            var waiting: [CheckedContinuation<Void, Never>] = []
-            var requested: [Duration] = []
-        }
-
-        private let storage = Mutex(Gate())
+        private let storage = Mutex(GateState())
         var waiters: Int { storage.withLock { $0.waiting.count } }
         var requested: [Duration] { storage.withLock { $0.requested } }
 

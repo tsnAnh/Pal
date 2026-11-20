@@ -1,4 +1,4 @@
-"""scripts/ci/check_swift_chat_scroll.py: the chat list scrolls vertically only and is pinned to the viewport width."""
+"""scripts/ci/check_swift_chat_scroll.py: the chat list scrolls vertically only; iOS pins it to the viewport width, Mac never does."""
 
 from __future__ import annotations
 
@@ -11,7 +11,31 @@ sys.path.insert(0, str(SCRIPT.parent))
 
 import check_swift_chat_scroll as css
 
-VIEW = "struct ChatView: View {\n    var chat: some View {\n        ScrollView { rows.chatColumn().containerRelativeFrame(.horizontal) }\n    }\n}\n"
+VIEW = (
+    "struct ChatView: View {\n"
+    "    var chat: some View {\n"
+    "        ScrollView {\n"
+    "            rows\n"
+    "                .chatColumn()\n"
+    "                #if os(iOS)\n"
+    "                .containerRelativeFrame(.horizontal)\n"
+    "                #endif\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
+)
+PRE_FIX_VIEW = (
+    "struct ChatView: View {\n"
+    "    var chat: some View {\n"
+    "        ScrollView {\n"
+    "            rows\n"
+    "                .padding(.horizontal, ChatMetrics.edgeMargin)\n"
+    "                .chatColumn()\n"
+    "                .containerRelativeFrame(.horizontal)\n"
+    "        }\n"
+    "    }\n"
+    "}\n"
+)
 CONTROLLER = (
     "final class ChatScrollController {\n"
     "    static let revealAnchor = UnitPoint(x: 0, y: 0.5)\n"
@@ -48,10 +72,24 @@ def test_a_horizontal_target_fails(tmp_path):
         assert len(css.scan(root)) == 1, call
 
 
-def test_a_list_without_the_width_pin_fails(tmp_path):
-    root = _tree(tmp_path, view=VIEW.replace(".containerRelativeFrame(.horizontal)", ""))
+def test_a_list_without_the_ios_width_pin_fails(tmp_path):
+    root = _tree(tmp_path, view=VIEW.replace("                .containerRelativeFrame(.horizontal)\n", ""))
     found = css.scan(root)
-    assert len(found) == 1 and "viewport width" in found[0]
+    assert len(found) == 1 and "iOS" in found[0] and "viewport width" in found[0]
+
+
+def test_the_pin_in_the_mac_build_fails_naming_the_line_and_the_fix(tmp_path):
+    found = css.scan(_tree(tmp_path, view=PRE_FIX_VIEW))
+    assert len(found) == 1
+    assert found[0].startswith("App/ChatView.swift:7:")
+    assert "macOS build" in found[0] and "#if os(iOS)" in found[0] and ".chatColumn()" in found[0]
+
+
+def test_a_pin_behind_a_mac_only_branch_fails_and_an_ios_or_else_branch_passes(tmp_path):
+    mac_only = VIEW.replace("#if os(iOS)", "#if os(macOS)")
+    assert any("macOS build" in entry for entry in css.scan(_tree(tmp_path / "a", view=mac_only)))
+    ios_else = VIEW.replace("#if os(iOS)", "#if os(macOS)\n                .frame(maxWidth: .infinity)\n                #else")
+    assert css.scan(_tree(tmp_path / "b", view=ios_else)) == []
 
 
 def test_the_opt_out_marker_waives_the_line(tmp_path):

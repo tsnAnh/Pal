@@ -51,6 +51,18 @@ struct MessageChromePlacementTests {
 
     private let tracked = CGRect(x: 0, y: 0, width: 568, height: 400)
 
+    private func resolve(
+        _ frame: CGRect,
+        side: MessageSide,
+        preferred: MessageChromePlacement = .beside,
+        hasReaction: Bool = false,
+        region: CGRect? = nil
+    ) -> MessageChromePlacement.Resolved {
+        MessageChromePlacement.place(
+            bubble: frame, region: region ?? tracked, slot: .init(side: side, preferred: preferred), bar: bar, hasReaction: hasReaction
+        )
+    }
+
     private func bubble(width: CGFloat, side: MessageSide) -> CGRect {
         CGRect(x: side == .user ? tracked.maxX - width : tracked.minX, y: 120, width: width, height: 60)
     }
@@ -58,9 +70,7 @@ struct MessageChromePlacementTests {
     @Test(arguments: [MessageSide.assistant, .user], [120.0, 300, 478, 516, 568], [false, true])
     func theBarAndBadgeStayInsideTheTrackedColumnAtEveryBubbleWidth(side: MessageSide, points: Double, hasReaction: Bool) throws {
         let width = CGFloat(points)
-        let resolved = MessageChromePlacement.place(
-            bubble: bubble(width: width, side: side), region: tracked, side: side, preferred: .beside, bar: bar, hasReaction: hasReaction
-        )
+        let resolved = resolve(bubble(width: width, side: side), side: side, hasReaction: hasReaction)
         #expect(tracked.contains(resolved.frames.bar))
         if hasReaction {
             let badge = try #require(resolved.frames.badge)
@@ -74,7 +84,7 @@ struct MessageChromePlacementTests {
     @Test(arguments: [MessageSide.assistant, .user])
     func aBarBesideTheBubbleSitsInTheGutterAndNeverOverlapsIt(side: MessageSide) {
         let frame = bubble(width: 300, side: side)
-        let resolved = MessageChromePlacement.place(bubble: frame, region: tracked, side: side, preferred: .beside, bar: bar, hasReaction: false)
+        let resolved = resolve(frame, side: side)
         #expect(resolved.chrome == .beside)
         #expect(!resolved.frames.bar.intersects(frame))
         #expect(resolved.frames.bar.midY == frame.midY)
@@ -83,7 +93,7 @@ struct MessageChromePlacementTests {
     @Test(arguments: [MessageSide.assistant, .user])
     func aMaxWidthBubbleMovesTheBarIntoItsTopCorner(side: MessageSide) {
         let frame = bubble(width: 516, side: side)
-        let resolved = MessageChromePlacement.place(bubble: frame, region: tracked, side: side, preferred: .beside, bar: bar, hasReaction: false)
+        let resolved = resolve(frame, side: side)
         #expect(resolved.chrome == .insideBubble)
         #expect(frame.contains(resolved.frames.bar))
     }
@@ -91,13 +101,13 @@ struct MessageChromePlacementTests {
     @Test func aShortBubbleKeepsTheBarInsideTheTrackedRowVertically() {
         let short = CGRect(x: 0, y: 0, width: 568, height: 36)
         let row = CGRect(x: 0, y: 0, width: 568, height: 36)
-        let resolved = MessageChromePlacement.place(bubble: short, region: row, side: .assistant, preferred: .beside, bar: bar, hasReaction: true)
+        let resolved = resolve(short, side: .assistant, hasReaction: true, region: row)
         #expect(row.contains(resolved.frames.bar))
     }
 
     @Test func theTableBubbleKeepsItsInsidePlacementAtFullWidth() {
         let table = CGRect(x: 0, y: 100, width: tracked.width, height: 160)
-        let resolved = MessageChromePlacement.place(bubble: table, region: tracked, side: .assistant, preferred: .insideBubble, bar: bar, hasReaction: true)
+        let resolved = resolve(table, side: .assistant, preferred: .insideBubble, hasReaction: true)
         #expect(resolved.chrome == .insideBubble)
         #expect(tracked.contains(resolved.frames.bar))
         #expect(resolved.frames.badge.map { $0.maxX <= tracked.maxX && $0.minX >= tracked.minX } == true)

@@ -3,9 +3,12 @@
 
 The chat list scrolls vertically only. Two things keep it there:
 
-* the scrolled content is pinned to the viewport width with ``containerRelativeFrame(.horizontal)`` in
-  ``App/ChatView.swift``, so a wide row (table, code, image) can never widen the list; wide content scrolls
-  inside its own horizontal ScrollView;
+* on iPhone and iPad the scrolled content is pinned to the viewport width with ``containerRelativeFrame(.horizontal)``
+  in ``App/ChatView.swift`` (inside ``#if os(iOS)``), so a wide row (table, code, image) can never widen the list;
+  wide content scrolls inside its own horizontal ScrollView;
+* on Mac that modifier is forbidden: it resolves against the window, not the pane ``MacShellLayout`` proposes, so the
+  chat content is as wide as the window and overflows it by the sidebar width. The Mac list is bounded by
+  ``.chatColumn()`` alone;
 * every programmatic scroll of the list (``ChatView.swift``, ``ChatScrollController.swift``) sets only the vertical axis: ``scrollTo(edge: .top)``,
   ``scrollTo(edge: .bottom)``, ``scrollTo(y:)`` or ``scrollTo(id:, anchor: ChatScrollController.revealAnchor)``
   (an anchor with ``x: 0``). ``scrollTo(x:)``, ``scrollTo(point:)``, a leading or trailing edge and a centred
@@ -28,7 +31,80 @@ VERTICAL_ONLY = re.compile(
 )
 WIDTH_PIN = "containerRelativeFrame(.horizontal"
 FIX = ("Scroll the chat list on the vertical axis only: scrollTo(edge: .top), scrollTo(y:) or scrollTo(id:, anchor: "
-       "ChatScrollController.revealAnchor), and keep containerRelativeFrame(.horizontal) on the list content in ChatView.swift.")
+       "ChatScrollController.revealAnchor), and keep containerRelativeFrame(.horizontal) on the list content in ChatView.swift "
+       "inside #if os(iOS) only.")
+MAC_PIN = ("containerRelativeFrame(.horizontal) in the macOS build of the chat list: on Mac it resolves against the window, "
+           "not the pane MacShellLayout proposes, so the content is as wide as the whole window and overflows the pane by the "
+           "sidebar width. Put the pin inside #if os(iOS) and bound the Mac list with .chatColumn() alone")
+IOS_PIN = "the list content is not pinned to the viewport width on iOS; add containerRelativeFrame(.horizontal) inside #if os(iOS)"
+CONDITIONAL = re.compile(r"^\s*#(if|elseif|else|endif)\b(.*)$")
+OS_TEST = re.compile(r"\bos\((\w+)\)")
+
+
+def _holds(condition: str, target: str) -> bool:
+    expr = OS_TEST.sub(lambda m: "T" if m.group(1) == target else "F", condition)
+    expr = re.sub(r"\b(?:canImport|targetEnvironment|swift|compiler)\([^)]*\)|\b[A-Z_]{3,}\b", "F", expr)
+    tokens = re.findall(r"&&|\|\||!|\(|\)|T|F", expr)
+    position = 0
+
+    def peek() -> str:
+        return tokens[position] if position < len(tokens) else ""
+
+    def take() -> str:
+        nonlocal position
+        position += 1
+        return tokens[position - 1]
+
+    def either() -> bool:
+        value = both()
+        while peek() == "||":
+            take()
+            value = both() or value
+        return value
+
+    def both() -> bool:
+        value = unary()
+        while peek() == "&&":
+            take()
+            value = unary() and value
+        return value
+
+    def unary() -> bool:
+        token = take() if peek() else "F"
+        if token == "!":
+            return not unary()
+        if token == "(":
+            value = either()
+            if peek() == ")":
+                take()
+            return value
+        return token == "T"
+
+    return either()
+
+
+def active_lines(text: str, target: str) -> list[tuple[int, str]]:
+    frames: list[list[bool]] = []
+    active = []
+    for number, line in enumerate(text.splitlines(), 1):
+        directive = CONDITIONAL.match(line)
+        if directive:
+            kind, rest = directive.groups()
+            if kind == "if":
+                frames.append([_holds(rest, target), _holds(rest, target)])
+            elif kind == "elseif" and frames:
+                taken = frames[-1][1]
+                frames[-1][0] = not taken and _holds(rest, target)
+                frames[-1][1] = taken or frames[-1][0]
+            elif kind == "else" and frames:
+                frames[-1][0] = not frames[-1][1]
+                frames[-1][1] = True
+            elif kind == "endif" and frames:
+                frames.pop()
+            continue
+        if all(frame[0] for frame in frames):
+            active.append((number, line))
+    return active
 
 
 def list_files(root: Path) -> list[Path]:
@@ -45,8 +121,13 @@ def scan(root: Path) -> list[str]:
             if not VERTICAL_ONLY.search(line):
                 found.append(f"{rel}:{i + 1}: programmatic scroll that can set an x; use a vertical-only target")
     view = root / "App" / "ChatView.swift"
-    if view.is_file() and WIDTH_PIN not in view.read_text(encoding="utf-8-sig"):
-        found.append("App/ChatView.swift:1: the list content is not pinned to the viewport width; add containerRelativeFrame(.horizontal)")
+    if view.is_file():
+        text = view.read_text(encoding="utf-8-sig")
+        for number, line in active_lines(text, "macOS"):
+            if WIDTH_PIN in line and OPT_OUT not in line:
+                found.append(f"App/ChatView.swift:{number}: {MAC_PIN}")
+        if not any(WIDTH_PIN in line for _, line in active_lines(text, "iOS")):
+            found.append(f"App/ChatView.swift:1: {IOS_PIN}")
     return found
 
 

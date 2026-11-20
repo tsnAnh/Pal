@@ -188,7 +188,7 @@ LINE_RULES = (
         "the hover pill is placed by an overlay or alignmentGuide on its bubble, so it can sit outside the row's "
         "tracking rect (a bubble at the column edge): the pointer then leaves the tracker, mouseExited hides the pill "
         "under it and its buttons cannot be clicked. Resolve its frame with MessageChromePlacement.place(bubble:region:"
-        "side:preferred:bar:hasReaction:) inside MessageChromeLayout, whose region is the tracked row",
+        "slot:bar:hasReaction:) inside MessageChromeLayout, whose region is the tracked row",
     ),
     LineRule(
         "perf-hover-tracker-per-bubble",
