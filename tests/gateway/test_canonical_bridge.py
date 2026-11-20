@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 
 from gateway.runtime_bootstrap import _PURPOSE_CAPABILITIES
-from gateway.session_connectors_controls import ACCOUNT_OWNED_VERBS
+from gateway.session_connections import METHODS as CONNECTION_METHODS
 from gateway.session_legacy_bridge import handlers as bridge_handlers
 from hermes_cli.primary_profile import primary_profile_name
 from hermes_cli.profiles import get_profile_dir
@@ -27,8 +27,8 @@ def test_every_bridged_verb_reuses_the_sidecar_wire_on_the_canonical_catalog():
 @pytest.mark.asyncio
 async def test_the_authority_serves_exactly_the_declared_bridge(bots):
     served = set(bridge_handlers(bots.connect()))
-    assert served | set(ACCOUNT_OWNED_VERBS) == set(BRIDGED) | {'profiles.set_primary'}
-    assert not (served - {'profiles.set_primary'}) & set(ACCOUNT_OWNED_VERBS)
+    assert served | set(CONNECTION_METHODS) == set(BRIDGED) | {'profiles.set_primary'}
+    assert not (served - {'profiles.set_primary'}) & set(CONNECTION_METHODS)
 
 
 @pytest.mark.asyncio
