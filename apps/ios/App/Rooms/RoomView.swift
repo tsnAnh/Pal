@@ -80,13 +80,10 @@ struct RoomView: View {
         .fileExporter(isPresented: exportBinding, document: exported?.document, contentType: .data, defaultFilename: exported?.name) { _ in
             exported = nil
         }
-        .alert(
-            Text("Something went wrong"),
-            isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.dismissFailure() } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.failure ?? "")
+        .macAlert(isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.dismissFailure() } })) {
+            MacDialogContent(String(localized: "Something went wrong"), message: model.failure ?? "", actions: [
+                MacDialogAction("OK", role: .cancel)
+            ])
         }
     }
 

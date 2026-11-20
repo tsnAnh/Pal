@@ -36,20 +36,18 @@ struct BotKeysScreen: View {
         .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
-        .sheet(item: Binding(get: { model.entry }, set: { if $0 == nil { model.cancel() } })) { row in
+        .macSheet(item: Binding(get: { model.entry }, set: { if $0 == nil { model.cancel() } })) { row in
             entrySheet(row)
         }
-        .confirmationDialog(
-            "Remove this key?",
-            isPresented: Binding(get: { model.pendingRemoval != nil }, set: { if !$0 { model.pendingRemoval = nil } }),
-            titleVisibility: .visible,
-            presenting: model.pendingRemoval
-        ) { row in
-            Button("Remove", role: .destructive) { Task { await model.remove(row) } }
-                .accessibilityIdentifier("botKeysRemoveConfirm")
-            Button("Cancel", role: .cancel) { model.pendingRemoval = nil }
-        } message: { row in
-            Text("\(row.label) stops working for \(displayName) until you set a key again.")
+        .macConfirm(item: Binding(get: { model.pendingRemoval }, set: { model.pendingRemoval = $0 })) { row in
+            MacDialogContent(
+                String(localized: "Remove this key?"),
+                message: String(localized: "\(row.label) stops working for \(displayName) until you set a key again."),
+                actions: [
+                    MacDialogAction("Remove", role: .destructive, identifier: "botKeysRemoveConfirm") { Task { await model.remove(row) } },
+                    MacDialogAction("Cancel", role: .cancel) { model.pendingRemoval = nil },
+                ]
+            )
         }
     }
 
@@ -134,7 +132,6 @@ struct BotKeysScreen: View {
         )
         .padding(24)
         .presentationDetents([.medium])
-        .macSheetFrame()
     }
 
     private var entryState: SecretEntryState {

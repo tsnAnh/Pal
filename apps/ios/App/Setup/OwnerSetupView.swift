@@ -13,17 +13,25 @@ struct OwnerSetupView: View {
             .task { await model.start() }
             .task(id: model.currentStepID) { await model.checkAddressIfNeeded() }
             .onDisappear { model.discard() }
-            .alert(String(localized: "Replace the saved client?"), isPresented: $model.confirmsReplace) {
-                Button(String(localized: "Replace"), role: .destructive) { model.replaceClient() }
-                Button(String(localized: "Cancel"), role: .cancel) {}
-            } message: {
-                Text("The new client replaces the one saved on your Pal.")
+            .macAlert(isPresented: $model.confirmsReplace) {
+                MacDialogContent(
+                    String(localized: "Replace the saved client?"),
+                    message: String(localized: "The new client replaces the one saved on your Pal."),
+                    actions: [
+                        MacDialogAction(String(localized: "Replace"), role: .destructive) { model.replaceClient() },
+                        MacDialogAction(String(localized: "Cancel"), role: .cancel)
+                    ]
+                )
             }
-            .alert(String(localized: "Remove the saved client?"), isPresented: $model.confirmsRemove) {
-                Button(String(localized: "Remove client"), role: .destructive) { Task { await model.removeClient() } }
-                Button(String(localized: "Cancel"), role: .cancel) {}
-            } message: {
-                Text("Pal forgets this client and signs out of \(model.app.name). You can set up a new client any time.")
+            .macAlert(isPresented: $model.confirmsRemove) {
+                MacDialogContent(
+                    String(localized: "Remove the saved client?"),
+                    message: String(localized: "Pal forgets this client and signs out of \(model.app.name). You can set up a new client any time."),
+                    actions: [
+                        MacDialogAction(String(localized: "Remove client"), role: .destructive) { Task { await model.removeClient() } },
+                        MacDialogAction(String(localized: "Cancel"), role: .cancel)
+                    ]
+                )
             }
     }
 

@@ -105,14 +105,21 @@ struct SettingsRootView: View {
         }
         .task { await notifications.refresh() }
         .shareSheet(isPresented: $sharingFeedback) { [FeedbackReport.text(connection: connection)] }
-        .confirmationDialog("Sign out of Pal on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
-            Button("Sign Out", role: .destructive) { Task { await connection.signOut() } }
-            Button("Cancel", role: .cancel) {}
+        .macConfirm(isPresented: $confirmingSignOut) {
+            MacDialogContent(
+                String(localized: "Sign out of Pal on this device?"),
+                actions: [
+                    MacDialogAction("Sign Out", role: .destructive) { Task { await connection.signOut() } },
+                    MacDialogAction("Cancel", role: .cancel),
+                ]
+            )
         }
-        .alert("Settings", isPresented: Binding(get: { hub.message != nil }, set: { if !$0 { hub.message = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(hub.message ?? "")
+        .macAlert(isPresented: Binding(get: { hub.message != nil }, set: { if !$0 { hub.message = nil } })) {
+            MacDialogContent(
+                String(localized: "Settings"),
+                message: hub.message ?? "",
+                actions: [MacDialogAction("OK", role: .cancel)]
+            )
         }
     }
 

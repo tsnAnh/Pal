@@ -45,6 +45,9 @@ CASES = [
     ("perf-body-parse", SCREEN,
      "struct Row: View {\n    var body: some View {\n        Text(try! AttributedString(markdown: text))\n    }\n}\n",
      "struct Row: View {\n    let text: AttributedString\n    var body: some View { Text(text) }\n}\n"),
+    ("perf-body-parse", "App/Chat/ImageViewer/MacDocumentViewer.swift",
+     "struct Page: View {\n    var body: some View {\n        Page(document: ViewerDocument(data: data, kind: kind, file: file, chatFiles: files))\n    }\n}\n",
+     "struct Stage: View {\n    @State var phase = 0\n    var body: some View { Text(\"x\") }\n    private func load() async {\n        let document = await Task.detached { ViewerDocument(data: data, kind: kind, file: file, chatFiles: files) }.value\n    }\n}\n"),
     ("perf-body-format", SCREEN,
      "struct Row: View {\n    var body: some View {\n        Text(\"Next run \\(next.formatted(date: .abbreviated, time: .shortened))\")\n    }\n}\n",
      "struct Row: View {\n    let label: String\n    var body: some View { Text(label) }\n}\nfunc label(_ d: Date) -> String { d.formatted() }\n"),
@@ -274,7 +277,6 @@ REAL_SITES = [
     ("perf-state-model-init", "App/Mac/MacInspector.swift"),
     ("perf-model-in-body", "App/PalApp.swift"),
     ("perf-shadow-radius", "App/Mac/MacModalSupport.swift"),
-    ("perf-shadow-radius", "App/Mac/MacPalette.swift"),
     ("perf-glass-over-fill", "Packages/PalDesign/Sources/PalDesign/Components/PalControls.swift"),
 ]
 

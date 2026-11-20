@@ -88,28 +88,29 @@ struct PermissionsScreen: View {
             }
         }
         .task { await model.load(hub: hub) }
-        .sheet(item: $addingTo) { list in
+        .macSheet(item: $addingTo) { list in
             AddRuleSheet(list: list, model: model, hub: hub) { addingTo = nil }
                 .presentationDetents([.medium])
-                .macSheetFrame()
         }
-        .confirmationDialog(
-            "Remove this rule?",
-            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                if let rule = removing { Task { await model.remove(rule, hub: hub) } }
-                removing = nil
-            }
-            Button("Cancel", role: .cancel) { removing = nil }
-        } message: {
-            Text(removing?.text ?? "")
+        .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            MacDialogContent(
+                String(localized: "Remove this rule?"),
+                message: removing?.text ?? "",
+                actions: [
+                    MacDialogAction("Remove", role: .destructive) {
+                        if let rule = removing { Task { await model.remove(rule, hub: hub) } }
+                        removing = nil
+                    },
+                    MacDialogAction("Cancel", role: .cancel) { removing = nil },
+                ]
+            )
         }
-        .alert("Permissions", isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.actionFailure ?? "")
+        .macAlert(isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
+            MacDialogContent(
+                String(localized: "Permissions"),
+                message: model.actionFailure ?? "",
+                actions: [MacDialogAction("OK", role: .cancel)]
+            )
         }
     }
 

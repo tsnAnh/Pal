@@ -22,9 +22,8 @@ struct T3CodeSheet: ViewModifier {
     @Bindable var model: ConnectAppsModel
 
     func body(content: Content) -> some View {
-        content.sheet(item: $model.t3Flow, onDismiss: { Task { await model.reload() } }, content: { flow in
+        content.macSheet(item: $model.t3Flow, onDismiss: { Task { await model.reload() } }, content: { flow in
             T3CodeFlowSheet(flow: flow) { model.t3Flow = nil }
-                .macSheetFrame()
         })
     }
 }

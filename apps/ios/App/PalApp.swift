@@ -299,7 +299,7 @@ struct RootView: View {
     private var workspace: some View {
         navigation
             .environment(hub)
-            .environment(rooms)
+            .environment(rooms).macModalEnvironment()
             .task { await roster.runLive() }
             .task { await rooms.run() }
             .sheet(isPresented: Binding(get: { rooms.showsCreate }, set: { rooms.showsCreate = $0 })) {

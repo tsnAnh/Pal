@@ -38,7 +38,9 @@ extension ConnectAppsList {
     }
 
     private var columns: [GridItem] {
-        [GridItem(.flexible(), spacing: 18, alignment: .top), GridItem(.flexible(), spacing: 18, alignment: .top)]
+        let panelWidth = MacModalSizing.frame(window: windowSize?.size ?? .zero).width
+        let count = MacModalSizing.gridColumns(panelWidth: panelWidth)
+        return Array(repeating: GridItem(.flexible(), spacing: 18, alignment: .top), count: count)
     }
 
     @ViewBuilder

@@ -53,21 +53,18 @@ struct BotModelView: View {
         .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
-        .sheet(item: $picking) { mode in
+        .macSheet(item: $picking) { mode in
             BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback) { picking = nil }
-                .macSheetFrame()
         }
-        .confirmationDialog(
-            "Use this model?",
-            isPresented: Binding(get: { model.confirmation != nil }, set: { if !$0 { model.confirmation = nil } }),
-            titleVisibility: .visible,
-            presenting: model.confirmation
-        ) { _ in
-            Button("Use model") { Task { await model.confirmPending() } }
-                .accessibilityIdentifier("botModelConfirm")
-            Button("Cancel", role: .cancel) { model.confirmation = nil }
-        } message: { confirmation in
-            Text(confirmation.message)
+        .macConfirm(item: $model.confirmation) { confirmation in
+            MacDialogContent(
+                String(localized: "Use this model?"),
+                message: confirmation.message,
+                actions: [
+                    MacDialogAction(String(localized: "Use model"), identifier: "botModelConfirm") { Task { await model.confirmPending() } },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel) { model.confirmation = nil },
+                ]
+            )
         }
     }
 
@@ -226,7 +223,7 @@ private struct BotModelPicker: View {
         ) {
             list
         }
-        .sheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }) {
+        .macSheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }, content: {
             #if os(macOS)
             VStack(spacing: 0) {
                 HStack {
@@ -241,7 +238,6 @@ private struct BotModelPicker: View {
                 MacModelProvidersSection(hub: hub)
             }
             .background(PalTokens.content)
-            .macSheetFrame()
             .serviceSignInDialogHost()
             #else
             NavigationStack {
@@ -249,7 +245,7 @@ private struct BotModelPicker: View {
             }
             .serviceSignInDialogHost()
             #endif
-        }
+        })
     }
 
     private var list: some View {

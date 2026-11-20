@@ -5,8 +5,6 @@ import PalRoster
 import SwiftUI
 
 struct MacCreateBot: View {
-    static let width: CGFloat = 440
-
     @Bindable var model: CreateBotModel
     let roster: RosterModel
     let router: AppRouter
@@ -40,6 +38,7 @@ struct MacCreateBot: View {
             PalHairline(color: PalTokens.divider)
             MacCreateBotFooter(model: model, router: router, onCreate: create)
         }
+        .frame(width: MacModalSizing.createBotWidth)
         .task {
             for _ in 0..<10 where focus != .name {
                 focus = .name

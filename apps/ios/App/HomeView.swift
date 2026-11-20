@@ -183,13 +183,13 @@ private struct HiddenBotsSection: View {
 }
 
 enum AdminErrorCopy {
-    static func message(_ error: BotAdminError?) -> LocalizedStringKey {
+    static func message(_ error: BotAdminError?) -> String {
         switch error {
-        case .permissionDenied: "This device isn't allowed to change bots."
-        case .botNotFound: "That bot no longer exists."
-        case .conflict: "Another device changed this bot at the same time. Try again."
-        case .invalidName: "Choose a name between 1 and 60 characters."
-        default: "Try again in a moment."
+        case .permissionDenied: String(localized: "This device isn't allowed to change bots.")
+        case .botNotFound: String(localized: "That bot no longer exists.")
+        case .conflict: String(localized: "Another device changed this bot at the same time. Try again.")
+        case .invalidName: String(localized: "Choose a name between 1 and 60 characters.")
+        default: String(localized: "Try again in a moment.")
         }
     }
 }

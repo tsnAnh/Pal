@@ -42,20 +42,20 @@ struct SkillsCatalogSheet: View {
             }
         )
         .task { await model.start() }
-        .sheet(item: $model.keyRequest) { request in
-            SkillKeyEntrySheet(model: model, request: request, botName: botName)
+        .macSheet(item: $model.keyRequest) { request in
+            SkillKeyEntrySheet(model: model, request: request,
+                               botName: botName)
                 .presentationDetents([.medium])
-                .macSheetFrame()
         }
-        .alert(
-            model.removeTarget.map { String(localized: "Remove \($0.name)?") } ?? "",
-            isPresented: Binding(get: { model.removeTarget != nil }, set: { if !$0 { model.removeTarget = nil } }),
-            presenting: model.removeTarget
-        ) { _ in
-            Button(String(localized: "Remove"), role: .destructive) { Task { await model.confirmRemove() } }
-            Button(String(localized: "Cancel"), role: .cancel) {}
-        } message: { _ in
-            Text("\(botName) won't be able to use it until you install it again.")
+        .macAlert(item: $model.removeTarget) { target in
+            MacDialogContent(
+                String(localized: "Remove \(target.name)?"),
+                message: String(localized: "\(botName) won't be able to use it until you install it again."),
+                actions: [
+                    MacDialogAction(String(localized: "Remove"), role: .destructive) { Task { await model.confirmRemove() } },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
     }
 

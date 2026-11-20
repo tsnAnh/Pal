@@ -41,12 +41,17 @@ struct SlackTokensView: View {
         .accessibilityIdentifier("slackScreen")
         .task { await model.load() }
         .onDisappear { model.stop() }
-        .confirmationDialog(Text("Disconnect Slack?"), isPresented: $model.confirmsDisconnect, titleVisibility: .visible) {
-            Button("Disconnect", role: .destructive) { Task { await model.disconnect() } }
-                .accessibilityIdentifier("slackDisconnectConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(model.displayName) stops responding in Slack.")
+        .macConfirm(isPresented: $model.confirmsDisconnect) {
+            MacDialogContent(
+                String(localized: "Disconnect Slack?"),
+                message: String(localized: "\(model.displayName) stops responding in Slack."),
+                actions: [
+                    MacDialogAction(String(localized: "Disconnect"), role: .destructive, identifier: "slackDisconnectConfirm") {
+                        Task { await model.disconnect() }
+                    },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
     }
 
