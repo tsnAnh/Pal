@@ -13,6 +13,7 @@ __all__ = [
     "SIDE_AGENT_HINT",
     "GatewayAuthError",
     "GatewayUnavailable",
+    "HostedConnectorsDisabled",
     "IdempotencyConflict",
     "ToolGatewayError",
     "parse_gateway_error",
@@ -45,6 +46,11 @@ class GatewayAuthError(ToolGatewayError):
 
 class GatewayUnavailable(ToolGatewayError):
     """404 signals callers to degrade silently to local-only behavior."""
+
+
+class HostedConnectorsDisabled(GatewayUnavailable):
+    def __init__(self) -> None:
+        super().__init__("hosted connectors are turned off for this profile", code="CONNECTORS_DISABLED")
 
 
 class IdempotencyConflict(ToolGatewayError):

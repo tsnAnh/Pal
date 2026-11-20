@@ -14,6 +14,12 @@ method = _registry.method
 _profile_scoped = _registry.profile_scoped
 
 
+def _hosted_off_refusal(rid):
+    from tools.connectors.hosted_switch import hosted_enabled
+
+    return None if hosted_enabled() else _connector_rpc_error(rid, *_refusals().CONNECTORS_UNAVAILABLE)
+
+
 def _guarded(fn):
     def handler(rid, params):
         return _connector_guard(fn)(rid, params)
@@ -456,6 +462,8 @@ def _connector_rpc(rid, params, action):
         return error
     if request.owner.type == "account":
         with _account_scope(request):
+            if off := _hosted_off_refusal(rid):
+                return off
             if closed := _account_gate_closed(rid):
                 return _ok(rid, {"available": False, "connectors": []}) if action == "status" else closed
             if _ACCOUNT_CREATES_GUEST[action] and (setup_error := _account_identity_error(rid)):
@@ -466,6 +474,8 @@ def _connector_rpc(rid, params, action):
     try:
         profile_home = session.get("profile_home")
         with _session_profile_runtime_scope({"profile_home": profile_home or str(_hermes_home)}):
+            if off := _hosted_off_refusal(rid):
+                return off
             tokens = _set_session_context(session["session_key"], cwd=_session_cwd(session), ui_session_id=request.owner.session_id)
             try:
                 result = _session_connector_rpc(rid, request, session, action)

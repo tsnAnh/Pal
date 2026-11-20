@@ -20,11 +20,13 @@ from tools.connectors.gateway.config import session_platform
 from tools.connectors.gateway.errors import (
     GatewayAuthError,
     GatewayUnavailable,
+    HostedConnectorsDisabled,
     ToolGatewayError,
     parse_gateway_error,
 )
 
 from tools.connectors.gateway.merge import PlannedCall
+from tools.connectors.hosted_switch import hosted_enabled
 from tools.managed_gateway_identity import CallRef, connector_headers, log_connector_outcome, response_request_id
 
 logger = logging.getLogger(__name__)
@@ -377,6 +379,8 @@ class ConnectorClient:
         )
 
     def _url(self, path: str) -> str:
+        if not hosted_enabled():
+            raise HostedConnectorsDisabled()
         origin = self._endpoint_resolver()
         if not origin:
             raise GatewayUnavailable(

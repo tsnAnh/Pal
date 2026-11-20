@@ -12,9 +12,11 @@ from hermes_cli.nous_account import resolve_nous_portal_base_url
 from tools.connectors.gateway.errors import (
     GatewayAuthError,
     GatewayUnavailable,
+    HostedConnectorsDisabled,
     ToolGatewayError,
     parse_gateway_error,
 )
+from tools.connectors.hosted_switch import hosted_enabled
 from tools.connectors.gateway.wire import ConnectorAccount, ConnectorAccountsResponse, RemovedConnectorAccount
 from tools.connectors.portal.errors import InvalidConnectorSlug, PortalConnectorUnavailable, PortalToolsUnavailable
 from tools.connectors.portal.wire import (
@@ -80,6 +82,8 @@ class PortalConnectorClient:
         self._header_provider = header_provider or _default_header_provider
 
     def origin(self) -> str:
+        if not hosted_enabled():
+            raise HostedConnectorsDisabled()
         return self._endpoint_resolver().rstrip("/")
 
     def require_authentication(self) -> None:
