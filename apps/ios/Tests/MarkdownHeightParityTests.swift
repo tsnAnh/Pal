@@ -28,8 +28,8 @@ struct MarkdownHeightParityTests {
     }
 
     private func height<Content: View>(of content: Content) -> CGFloat {
-        let host = NSHostingView(rootView: content)
-        return host.sizeThatFits(ProposedViewSize(width: Self.width, height: nil)).height
+        let host = NSHostingView(rootView: content.frame(width: Self.width, alignment: .leading).fixedSize(horizontal: false, vertical: true))
+        return host.fittingSize.height
     }
 
     @Test func theTextAndTheTextViewPathsReportTheSameHeight() throws {
