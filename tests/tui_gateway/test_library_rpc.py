@@ -11,6 +11,7 @@ import pytest
 
 from hermes_cli.profiles import create_profile, get_profile_dir
 from hermes_state import SessionDB
+from persistence_assembly import open_persistence, profile_scope
 from tui_gateway import server
 
 BASE_TS = 1_700_000_000.0
@@ -24,7 +25,7 @@ def bots(tmp_path, monkeypatch):
     monkeypatch.setenv("HERMES_HOME", str(home))
     create_profile("alpha", no_alias=True, no_skills=True)
     create_profile("beta", no_alias=True, no_skills=True)
-    launch_db = SessionDB(home / "state.db")
+    launch_db = open_persistence(profile_scope(home=home), eager=True)
     monkeypatch.setattr(server, "_db", launch_db, raising=False)
     yield {"launch": home, "alpha": get_profile_dir("alpha"), "beta": get_profile_dir("beta"), "tmp": tmp_path}
     launch_db.close()
@@ -111,6 +112,20 @@ def test_lists_links_media_and_files_newest_first_deduped(bots):
     assert result["next_before"] is None and result["index_complete"] is True
     stamps = [item["occurred_at"] for item in result["items"]]
     assert stamps == sorted(stamps, reverse=True) and len(set(stamps)) == len(stamps)
+
+
+def test_the_session_authority_handle_alone_serves_the_library(bots):
+    from persistence.conversation.messages import NewMessage
+    from persistence.conversation.sessions import NewSession
+
+    handle = server._db
+    handle.sessions.create(NewSession(session_id="auth-1", source="cli"))
+    handle.messages.append("auth-1", NewMessage(
+        role="user", content="read https://authority.example.com/doc", timestamp=BASE_TS))
+    result = _ok("library.list", {})
+    assert _titles(result) == ["authority.example.com/doc"]
+    assert result["index_complete"] is True
+    assert _titles(_ok("library.list", {"kind": "links"})) == ["authority.example.com/doc"]
 
 
 def test_tool_calls_and_results_feed_the_library(bots):
@@ -279,6 +294,21 @@ def test_asset_serves_an_indexed_image_as_a_bounded_thumbnail_or_the_original(bo
     full = _ok("library.asset", {"profile": "alpha", "asset_ref": ref, "thumbnail": False})
     assert full["mime"] == "image/png" and base64.b64decode(full["data_base64"]) == original
     assert _error("library.asset", {"profile": "alpha", "asset_ref": ref, "thumbnail": False, "max_bytes": 100}) == 4152
+
+
+def test_the_session_authority_handle_alone_serves_an_allowed_file(bots):
+    from persistence.conversation.messages import NewMessage
+    from persistence.conversation.sessions import NewSession
+
+    image = bots["launch"] / "cache" / "images" / "chat.png"
+    original = _png(image)
+    handle = server._db
+    handle.sessions.create(NewSession(session_id="auth-2", source="cli"))
+    handle.messages.append("auth-2", NewMessage(role="user", content=f"@image:{image}", timestamp=BASE_TS))
+    ref = _ok("library.list", {})["items"][0]["asset_ref"]
+    full = _ok("library.asset", {"asset_ref": ref, "thumbnail": False})
+    assert full["mime"] == "image/png" and base64.b64decode(full["data_base64"]) == original
+    assert _error("library.asset", {"asset_ref": "f" * 32}) == 4151
 
 
 def test_asset_refuses_forged_unindexed_and_unsafe_references(bots):

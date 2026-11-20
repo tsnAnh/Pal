@@ -118,9 +118,9 @@ def _(rid, params: dict) -> dict:
                 item = index.lookup(ref)
             if item is None or item.kind == "link":
                 return unknown
-            if item.message_id not in LibraryIndex.live_message_ids(db, [item.message_id]):
+            if item.message_id not in db.messages.live_row_ids([item.message_id]):
                 return unknown
-            assistant_produced = item.message_id in LibraryIndex.assistant_message_ids(db, [item.message_id])
+            assistant_produced = item.message_id in db.messages.assistant_row_ids([item.message_id])
         finally:
             _library_close_db(db, owns)
         payload = read_asset(

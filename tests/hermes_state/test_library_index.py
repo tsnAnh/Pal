@@ -3,14 +3,20 @@ import sqlite3
 import hermes_state_library
 from hermes_state import SessionDB
 from hermes_state_library import LibraryIndex
+from persistence_assembly import open_persistence, open_persistence_reader, profile_scope
 
 
-def _store(tmp_path, count):
+def _seed(tmp_path, count):
     db = SessionDB(tmp_path / "state.db")
     db.create_session("s1", "cli")
     for index in range(count):
         db.append_message("s1", "user", f"https://resume{index}.example.com/", timestamp=1_700_000_000 + index)
-    return db
+    db.close()
+
+
+def _store(tmp_path, count):
+    _seed(tmp_path, count)
+    return open_persistence(profile_scope(home=tmp_path), eager=True)
 
 
 def _all(index, db):
@@ -39,14 +45,12 @@ def test_a_budget_cut_backfill_resumes_without_gaps_or_duplicates(tmp_path, monk
 
 
 def test_refresh_never_writes_to_the_message_store(tmp_path):
-    db = _store(tmp_path, 3)
-    db.close()
+    _seed(tmp_path, 3)
     path = tmp_path / "state.db"
     with sqlite3.connect(path) as conn:
         before = conn.execute("SELECT name FROM sqlite_master ORDER BY name").fetchall()
-    reader = SessionDB(path, read_only=True)
-    assert LibraryIndex(tmp_path).refresh(reader)
-    reader.close()
+    with open_persistence_reader(path) as reader:
+        assert LibraryIndex(tmp_path).refresh(reader)
     with sqlite3.connect(path) as conn:
         assert conn.execute("SELECT name FROM sqlite_master ORDER BY name").fetchall() == before
 
