@@ -341,7 +341,6 @@ private struct MacSidebarFooter: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(connection.userName.isEmpty ? String(localized: "Account and settings") : connection.userName)
             .accessibilityLabel(Text("Account and settings"))
             .accessibilityIdentifier("userAvatarButton")
             if router.capabilities.contains(.connectApps) {

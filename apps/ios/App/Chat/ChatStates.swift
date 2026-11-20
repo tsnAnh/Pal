@@ -63,7 +63,6 @@ struct ComposerNotice: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Dismiss"))
-            .help(Text("Dismiss"))
             .accessibilityIdentifier("composerNoticeDismiss")
         }
         .foregroundStyle(PalTokens.textSecondary)

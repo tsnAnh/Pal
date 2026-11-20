@@ -37,7 +37,6 @@ struct RoutinesView: View {
                     PalIcon("plus")
                 }
                 .accessibilityLabel(Text("New Routine"))
-                .help(Text("New Routine"))
                 .accessibilityIdentifier("routinesNewButton")
             }
         }
