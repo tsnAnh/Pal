@@ -44,16 +44,6 @@ struct HomeView: View {
                 .accessibilityIdentifier("userAvatarButton")
                 .tint(.primary)
             }
-            if rooms.canCreate {
-                ToolbarItem(placement: .trailingBar) {
-                    Button { rooms.showsCreate = true } label: {
-                        PalIcon("person.2")
-                    }
-                    .accessibilityLabel(Text("New Group Chat"))
-                    .accessibilityIdentifier("createRoomButton")
-                    .tint(.primary)
-                }
-            }
             if router.capabilities.contains(.kanban) {
                 ToolbarItem(placement: .trailingBar) {
                     Button { router.presentKanban() } label: {
@@ -61,6 +51,16 @@ struct HomeView: View {
                     }
                     .accessibilityLabel(Text("Pal Kanban"))
                     .accessibilityIdentifier("kanbanButton")
+                    .tint(.primary)
+                }
+            }
+            if rooms.canCreate {
+                ToolbarItem(placement: .trailingBar) {
+                    Button { rooms.showsCreate = true } label: {
+                        PalIcon("person.2")
+                    }
+                    .accessibilityLabel(Text("New Group Chat"))
+                    .accessibilityIdentifier("createRoomButton")
                     .tint(.primary)
                 }
             }
