@@ -8384,12 +8384,6 @@ export interface PetHatchProgressPayload {
 }
 /** ``change_watcher._CHANGE_WATCHES`` payload fn — ``{}`` for every watch except pet.changed. */
 export type ChangeSignalPayload = Record<string, unknown>
-/** ``change_watcher._groups_changed_payload``: the rooms whose log, tasks or live status moved; absent when something process-wide moved (every open room re-reads). ``broadcast_id`` names one broadcast: the same frame reaches a window once per open socket, and a copy needs no second read. */
-export interface GroupsChangedPayload {
-  room_ids?: string[] | null
-  broadcast_id?: string | null
-  [key: string]: unknown
-}
 export interface AuthRequiredPayload {
   request_id: string
   service: string
@@ -8435,6 +8429,12 @@ export interface ReachOfferPayload {
   title: string
   body: string
   session_id?: string | null
+}
+/** ``change_watcher._groups_changed_payload``: the rooms whose log, tasks or live status moved; absent when something process-wide moved (every open room re-reads). ``broadcast_id`` names one broadcast: the same frame reaches a window once per open socket, and a copy needs no second read. */
+export interface GroupsChangedPayload {
+  room_ids?: string[] | null
+  broadcast_id?: string | null
+  [key: string]: unknown
 }
 
 // ── Client→server methods ──
@@ -10138,10 +10138,10 @@ export interface BackendGatewayEventMap {
   'free_tier.challenge': FreeTierChallengePayload
   /** First frame of a connection: the resolved skin, the change-event capability and the replay epoch. */
   'gateway.ready': GatewayReadyPayload
-  /** A Group Chat log, task or live status moved; an open room re-reads its log delta and groups.state. */
-  'groups.changed': GroupsChangedPayload
   /** The owner's mid-turn message reached the running turn as its own user row. */
   'input.absorbed': InputAbsorbedPayload
+  /** A Group Chat log, task or live status moved; an open room re-reads its log delta and groups.state. */
+  'groups.changed': GroupsChangedPayload
   /** The turn ended: final text, usage and outcome. */
   'message.complete': MessageCompletePayload
   /** One streamed chunk of the assistant reply (null text: segment boundary). */
