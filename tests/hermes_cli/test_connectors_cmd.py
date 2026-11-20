@@ -119,3 +119,13 @@ def test_disconnect_can_remove_a_retired_account_by_its_label(portal):
 
     assert rc == 0
     assert portal == [("conn-retired", "deleted")]
+
+
+def test_hosted_switch_off_names_the_setting_not_a_sign_in(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    (tmp_path / "config.yaml").write_text("connectors:\n  hosted: false\n")
+
+    assert cmd_connectors(_parse("connectors", "list")) == 1
+    err = capsys.readouterr().err
+    assert "connectors.hosted" in err
+    assert "auth upgrade" not in err
