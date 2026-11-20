@@ -25604,6 +25604,37 @@
         "title": "LegacyPluginRow",
         "type": "object"
       },
+      "ListedSkill": {
+        "additionalProperties": false,
+        "description": "One ``list`` row: ``local`` = created in this profile; ``external`` = read-only dirs and project skills.",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "hub",
+              "bundled",
+              "local",
+              "external"
+            ],
+            "title": "Origin",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "origin"
+        ],
+        "title": "ListedSkill",
+        "type": "object"
+      },
       "LiveSessionStatus": {
         "enum": [
           "idle",
@@ -46419,7 +46450,7 @@
       },
       "SkillsManageResult": {
         "additionalProperties": false,
-        "description": "Shape follows the action: ``list`` \u2192 ``skills`` (category \u2192 names); ``search`` \u2192 ``results``;\n``install`` \u2192 ``installed`` + ``name``; ``browse`` \u2192 ``items`` + paging; ``inspect`` \u2192 ``info``;\n``installed`` \u2192 ``installed_skills``; ``check`` \u2192 ``updates``; ``update`` \u2192 ``updated``;\n``uninstall`` \u2192 ``removed``; ``set_key`` (``query`` = skill name, ``key_name``, ``value``) \u2192 ``saved``, refused with 4101 unless the skill declares ``key_name`` as a required environment variable (the value is never echoed or logged). ``update`` with no ``query`` updates every skill with an update;\na failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail.",
+        "description": "Shape follows the action: ``list`` \u2192 ``skills`` (category \u2192 names) + ``details`` (name, description, origin); ``search`` \u2192 ``results``;\n``install`` \u2192 ``installed`` + ``name``; ``browse`` \u2192 ``items`` + paging; ``inspect`` \u2192 ``info``;\n``installed`` \u2192 ``installed_skills``; ``check`` \u2192 ``updates``; ``update`` \u2192 ``updated``;\n``uninstall`` \u2192 ``removed``; ``set_key`` (``query`` = skill name, ``key_name``, ``value``) \u2192 ``saved``, refused with 4101 unless the skill declares ``key_name`` as a required environment variable (the value is never echoed or logged). ``update`` with no ``query`` updates every skill with an update;\na failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail.",
         "properties": {
           "skills": {
             "anyOf": [
@@ -46438,6 +46469,21 @@
             ],
             "default": null,
             "title": "Skills"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ListedSkill"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Details"
           },
           "results": {
             "anyOf": [

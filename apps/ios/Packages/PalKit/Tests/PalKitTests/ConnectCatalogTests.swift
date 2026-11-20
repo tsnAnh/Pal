@@ -116,6 +116,33 @@ struct ConnectCatalogTests {
         #expect(catalog.matchingSkills("").isEmpty)
     }
 
+    @Test func onlyLocallyCreatedSkillsArePrivateAndCarryTheirDescription() {
+        let payload: JSONValue = [
+            "skills": ["notes": ["weekly-review", "release-notes"], "apple": ["findmy"], "mcp": ["linear"], "dev": ["external-one"]],
+            "details": [
+                ["name": "weekly-review", "description": "  Summarise the week  ", "origin": "local"],
+                ["name": "release-notes", "description": "Draft release notes", "origin": "hub"],
+                ["name": "findmy", "description": "Find devices", "origin": "bundled"],
+                ["name": "linear", "origin": "local"],
+                ["name": "external-one", "description": "From a read-only dir", "origin": "external"],
+            ],
+        ]
+        let catalog = ConnectCatalog.make(catalog: [], mcp: [], skills: InstalledSkill.parse(payload))
+        #expect(catalog.privateSkills.map(\.name) == ["linear", "weekly-review"])
+        #expect(catalog.privateSkills.first { $0.name == "weekly-review" }?.description == "Summarise the week")
+        #expect(catalog.privateSkills.first { $0.name == "linear" }?.description == "")
+        #expect(catalog.skills.count == 5)
+    }
+
+    @Test func anOlderGatewayWithoutDetailsOrWithAnUnknownOriginHasNoPrivateSkills() {
+        let older = InstalledSkill.parse(["skills": ["notes": ["a"], "dev": ["b"]]])
+        #expect(older.count == 2 && older.allSatisfy { !$0.isLocal && $0.description.isEmpty })
+        let unknown = InstalledSkill.parse(["skills": ["notes": ["a"]], "details": [["name": "a", "origin": "somewhere-new"]]])
+        #expect(ConnectCatalog.make(catalog: [], mcp: [], skills: unknown).privateSkills.isEmpty)
+        let malformed = InstalledSkill.parse(["skills": ["notes": ["a"]], "details": [["description": "x"], "oops", ["name": 3, "origin": "local"]]])
+        #expect(malformed.allSatisfy { !$0.isLocal })
+    }
+
     @Test func theGatewayPayloadDecodesAndDropsRowsWithAnUnreadableStatus() throws {
         let rows: JSONValue = [
             [

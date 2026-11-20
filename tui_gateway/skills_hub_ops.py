@@ -45,6 +45,20 @@ def install(query: str) -> dict:
     return {"installed": True, "name": query}
 
 
+def listing(query: str) -> dict:
+    tools, usage, utils = _mod("tools.skills_tool"), _mod("tools.skill_usage"), _mod("agent.skill_utils")
+    hub, bundled = usage.provenance_names()
+    own_tiers = (utils.TIER_LOCAL, utils.TIER_CREATE_DIR)
+    details = []
+    for row in tools._skill_catalog():
+        if not row["load_name"]:
+            continue
+        origin = ("hub" if row["name"] in hub else "bundled" if row["name"] in bundled
+                  else "local" if row["tier"] in own_tiers else "external")
+        details.append({"name": row["load_name"], "description": row["description"] or "", "origin": origin})
+    return {"skills": _mod("hermes_cli.banner").get_available_skills(), "details": details}
+
+
 def installed(query: str) -> dict:
     keep = ("name", "identifier", "source", "trust_level", "install_path")
     rows = _mod("tools.skills_hub").HubLockFile().list_installed()

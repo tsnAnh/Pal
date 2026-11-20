@@ -230,14 +230,23 @@ class SkillUpdateStatus(Result):
     status: str
 
 
+class ListedSkill(Result):
+    """One ``list`` row: ``local`` = created in this profile; ``external`` = read-only dirs and project skills."""
+
+    name: str
+    description: str = ""
+    origin: Literal["hub", "bundled", "local", "external"]
+
+
 class SkillsManageResult(Result):
-    """Shape follows the action: ``list`` → ``skills`` (category → names); ``search`` → ``results``;
+    """Shape follows the action: ``list`` → ``skills`` (category → names) + ``details`` (name, description, origin); ``search`` → ``results``;
     ``install`` → ``installed`` + ``name``; ``browse`` → ``items`` + paging; ``inspect`` → ``info``;
     ``installed`` → ``installed_skills``; ``check`` → ``updates``; ``update`` → ``updated``;
     ``uninstall`` → ``removed``; ``set_key`` (``query`` = skill name, ``key_name``, ``value``) → ``saved``, refused with 4101 unless the skill declares ``key_name`` as a required environment variable (the value is never echoed or logged). ``update`` with no ``query`` updates every skill with an update;
     a failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail."""
 
     skills: dict[str, list[str]] | None = None
+    details: list[ListedSkill] | None = None
     results: list[SkillHubHit] | None = None
     installed: bool | None = None
     name: str | None = None
