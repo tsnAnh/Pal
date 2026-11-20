@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class LiveBotThreadE2ETests: E2ETestCase {
-    private let reply = "Đã nhận, em xử lý ngay."
+    private let reply = "Received, working on it."
     private let marker = "LIVE-DM-\(UUID().uuidString.prefix(8))"
 
     override func setUp() async throws {
