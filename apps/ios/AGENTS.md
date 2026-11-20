@@ -60,7 +60,7 @@ Glass is a control and navigation layer floating above content, never the conten
 | Icons are the primary ink | `PalIcon`, `Label(_, palIcon:)`; no raw `Image(systemName:)`, `systemImage:` or blue; exceptions in `swift_icon_tint_allowlist.txt` | `swift-icon-tint` |
 | Connect Apps: clear glass, ink only | `PalTokens` ink, `.palClearGlass`, `ClearGlassSearchField`; no blue, hex, `.tint(`, `Glass.regular` | `swift-connect-palette` |
 | Mac window fits: one `MacLayoutMetrics`, one `MacShellLayout`; sidebar rows use `.boundedToColumn()` | No width literal outside `MacLayoutMetrics`; the shell never lays out with a stack; a `Mac*Row` or row `LazyVStack` is bounded and has no `fixedSize` | `swift-mac-layout`, `MacLayoutMetricsTests` |
-| Chat rows name their side | `chatRowFrame(for: ChatSender)`: bot leading, user trailing, chips `.system`; no `.frame(maxWidth: .infinity)` without `alignment:` | `swift-chat-row-alignment` |
+| Chat rows name their side | `chatRowFrame(for: ChatSender)`: bot leading, user trailing, chips `.system`; no max- or fixed-width `.frame` without `alignment:` | `swift-chat-row-alignment` |
 | One design system | Mac and iOS share PalDesign components; no Electron (`apps/desktop` is not Pal) | review |
 | Design first | UI changes start from an owner-approved mockup (Rule 4) | review |
 | Mac dialogs size from the window | No `width:`/`height:` on `MacModalPanel` (90%, `fit: .content`); `.macAlert`/`.macConfirm`; `.macModalEnvironment()` last | `swift-modal-size` |

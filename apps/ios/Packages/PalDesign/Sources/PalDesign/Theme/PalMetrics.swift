@@ -197,6 +197,9 @@ public enum ChatMetrics {
         case .system: .center
         }
     }
+    public static func bubbleColumnAlignment(_ side: HorizontalAlignment) -> Alignment {
+        rowAlignment(for: side == .trailing ? .user : .bot)
+    }
     public static let edgeMargin: CGFloat = 16
     public static let bubbleHorizontalPadding: CGFloat = 12
     public static let bubbleVerticalPadding: CGFloat = 8
