@@ -47,7 +47,7 @@ struct ClarifyCard: View {
                 Button("Confirm and continue") { submitTyped() }
                     .buttonStyle(.glass)
                     .disabled(composedAnswer == nil)
-                    .frame(maxWidth: .infinity)
+                    .chatRowFrame(for: .system)
                     .padding(.top, 8)
                     .accessibilityIdentifier("clarifyConfirm")
             }

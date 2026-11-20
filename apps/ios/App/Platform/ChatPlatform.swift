@@ -42,7 +42,7 @@ extension View {
 
     func chatColumn() -> some View {
         #if os(macOS)
-        frame(maxWidth: MacMetrics.chatColumn + 2 * ChatMetrics.edgeMargin).frame(maxWidth: .infinity)
+        frame(maxWidth: MacLayoutMetrics.chatColumnMax + 2 * ChatMetrics.edgeMargin).frame(maxWidth: .infinity)
         #else
         frame(maxWidth: ChatMetrics.padColumn + 2 * ChatMetrics.edgeMargin).frame(maxWidth: .infinity)
         #endif

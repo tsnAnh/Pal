@@ -24,7 +24,7 @@ struct BotThreadView: View {
                 LazyVStack(alignment: .leading, spacing: ChatMetrics.rowSpacing) {
                     if model.timeline.hasOlder {
                         DelayedProgressView()
-                            .frame(maxWidth: .infinity)
+                            .chatRowFrame(for: .system)
                             .onAppear { model.loadOlder() }
                             .accessibilityIdentifier("threadLoadingOlder")
                     }
@@ -120,7 +120,7 @@ struct BotThreadView: View {
         Text("Replies from the other bot may be missing here.")
             .hermesText(.timestamp)
             .foregroundStyle(Color(theme.palette.textTertiary))
-            .frame(maxWidth: .infinity)
+            .chatRowFrame(for: .system)
             .multilineTextAlignment(.center)
             .padding(.vertical, 6)
             .accessibilityIdentifier("threadCoverageNote")

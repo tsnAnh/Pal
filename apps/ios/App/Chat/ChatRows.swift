@@ -164,7 +164,7 @@ struct UserBubble: View {
             }
             status
         }
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .chatRowFrame(for: .user)
         .modifier(SendRise(isFresh: delivery == .sending))
     }
 
@@ -217,7 +217,7 @@ struct NoticeRow: View {
         .padding(.vertical, 2)
         .padding(.horizontal, 10)
         .background(highlightFill, in: Capsule())
-        .frame(maxWidth: .infinity)
+        .chatRowFrame(for: .system)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(title))
         .accessibilityIdentifier("inboundNotice")
@@ -253,7 +253,7 @@ struct BotThreadLinkRow: View {
             .hermesText(.chip)
             .foregroundStyle(Color(theme.palette.textSecondary))
             .padding(.vertical, 4)
-            .frame(maxWidth: .infinity)
+            .chatRowFrame(for: .system)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -38,4 +38,22 @@ struct PalIconTests {
         #expect(PalIconInk.secondary.resolvedRGB(in: palette) == palette.textSecondary)
         #expect(PalIconInk.tertiary.resolvedRGB(in: palette) == palette.textTertiary)
     }
+
+    @MainActor
+    private func fittingSize(_ view: some View) throws -> CGSize {
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        let image = try #require(renderer.cgImage)
+        return CGSize(width: image.width, height: image.height)
+    }
+
+    @Test("an icon takes exactly the room of the plain symbol, whatever its ink")
+    @MainActor
+    func iconAddsNoLayoutOfItsOwn() throws {
+        let plain = try fittingSize(Image(systemName: "chevron.right").font(.system(size: 14)))
+        #expect(plain.width > 0 && plain.height > 0)
+        for ink in [PalIconInk.primary, .secondary, .tertiary, .destructive, .success, .onFill, .custom(.red)] {
+            #expect(try fittingSize(PalIcon("chevron.right", ink: ink).font(.system(size: 14))) == plain)
+        }
+    }
 }

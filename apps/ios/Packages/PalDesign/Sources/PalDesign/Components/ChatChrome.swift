@@ -33,7 +33,7 @@ public struct ChatTimeSeparator: View {
         Text(text)
             .hermesText(.timestamp)
             .foregroundStyle(PalTokens.textTertiary)
-            .frame(maxWidth: .infinity)
+            .chatRowFrame(for: .system)
             .padding(.top, ChatMetrics.separatorTopPadding)
             .padding(.bottom, ChatMetrics.separatorBottomPadding)
             .accessibilityAddTraits(.isHeader)

@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import PalAuth
 import PalClient
+import PalDesign
 import PalDiagnostics
 import PalProtocol
 import PalREST
@@ -42,6 +43,15 @@ private func profile(_ name: String, lastActive: Double? = nil, title: String? =
     if let lastActive { fields["canonical_session"] = .object(["preview": "hi", "last_active": .double(lastActive)]) }
     if let title { fields["ui_meta"] = .object(["hermes-bots": .object(["title": .string(title)])]) }
     return .object(fields)
+}
+
+private func profile(_ name: String, bot: [String: JSONValue], isPrimary: Bool = false) -> JSONValue {
+    .object([
+        "name": .string(name),
+        "is_primary": .bool(isPrimary),
+        "canonical_session": .object(["preview": "hi", "last_active": 10]),
+        "ui_meta": .object(["hermes-bots": .object(bot), "other-ns": .object(["keep": true])]),
+    ])
 }
 
 private func snapshot(_ profiles: [JSONValue], at seconds: TimeInterval = 0) -> RosterSnapshot {
@@ -117,5 +127,52 @@ struct RosterModelTests {
         #expect(row.isHidden)
         #expect(model.bots.count == 4)
         #expect(try #require(model.bot(named: "bot-b")).isPinned == false)
+    }
+
+    private func blob(_ row: BotRow) -> BlobAvatar? {
+        guard case .shape(.blob(let blob)) = row.spec else { return nil }
+        return blob
+    }
+
+    @Test func aLooklessRowGetsABlobAvatarAnAccentAndANameBeforeAnyWriteLands() async throws {
+        let model = try makeModel()
+        await model.apply(snapshot([profile("atlas", bot: [:]), profile("scout", bot: ["title": "Scout Prime", "pinned": true])]))
+
+        for (name, display) in [("atlas", "Atlas"), ("scout", "Scout Prime")] {
+            let row = try #require(model.bot(named: name))
+            #expect(row.displayName == display)
+            let avatar = try #require(blob(row), "\(name) has a blob avatar")
+            #expect(avatar.seed == name)
+            #expect(avatar.kind != nil)
+            #expect(row.accent != nil)
+            #expect(!row.usesPrimaryLook)
+        }
+        #expect(try #require(model.bot(named: "scout")).isPinned)
+    }
+
+    @Test func aRowWithALookKeepsExactlyThatLook() async throws {
+        let model = try makeModel()
+        let stored: [String: JSONValue] = ["shape": "blobatar:ab:cloud", "color": "#10dc69", "custom": true]
+        await model.apply(snapshot([profile("styled", bot: stored)]))
+
+        let row = try #require(model.bot(named: "styled"))
+        let expected = BotAvatarSpec(
+            name: "styled",
+            meta: BotAvatarMeta(shape: "blobatar:ab:cloud", color: "#10dc69", custom: true)
+        )
+        #expect(row.spec == expected)
+    }
+
+    @Test func thePrimaryRowKeepsItsOwnLookEvenWhenLookless() async throws {
+        let model = try makeModel()
+        await model.apply(snapshot([profile("default", bot: [:], isPrimary: true)]))
+
+        let row = try #require(model.bot(named: "default"))
+        #expect(row.usesPrimaryLook)
+        guard case .shape(.classic(let classic)) = row.spec else {
+            Issue.record("the primary bot keeps the classic squircle")
+            return
+        }
+        #expect(classic.shape == .squircle)
     }
 }

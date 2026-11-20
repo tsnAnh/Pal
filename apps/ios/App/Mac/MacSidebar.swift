@@ -44,6 +44,7 @@ struct MacSidebar: View {
                             .padding(.top, 6)
                     }
                 }
+                .boundedToColumn()
                 .padding(.horizontal, 11)
                 .padding(.top, MacMetrics.topBarHeight + 7)
                 .padding(.bottom, 8)
@@ -167,6 +168,7 @@ private struct MacBotRow: View {
             .accessibilityLabel(Text(MacBotAccessibility.label(bot)))
         }
         .buttonStyle(.plain)
+        .boundedToColumn()
         .onHover { hovering = $0 }
         .botContextMenu(bot, roster: roster, router: router)
         .accessibilityIdentifier("botRow-\(bot.name)")
