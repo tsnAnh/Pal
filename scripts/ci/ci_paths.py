@@ -57,6 +57,7 @@ CHECK_READS: dict[str, tuple[Rule, ...]] = {
     "swift-modal-size": (("apps/ios/*.swift", True),),
     "swift-glass": (("apps/ios/*.swift", True), ("apps/ios/.glass-lint-baseline.json", True)),
     "swift-icon-tint": (("apps/ios/*.swift", True), ("scripts/ci/swift_icon_tint_allowlist.txt", True)),
+    "swift-connect-palette": (("apps/ios/*.swift", True), ("scripts/ci/check_swift_connect_palette.py", True)),
     "swift-image-viewer": (("apps/ios/*.swift", True),),
     "swift-bot-settings": (("apps/ios/*.swift", True),),
     "swift-perf": (("apps/ios/*.swift", True), ("apps/ios/.perf-lint-*.json", True)),
@@ -72,7 +73,7 @@ JOB_CHECKS: dict[str, tuple[str, ...]] = {
     "tooling-tests": ("tooling-tests",),
     "ios-guards": ("shebangs", "no-tmp", "agents-md", "case-collisions", "profile-archives", "line-endings",
                    "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "swift-chat-row-alignment", "swift-mac-layout", "swift-modal-size", "swift-glass",
-                   "swift-icon-tint", "swift-image-viewer", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint"),
+                   "swift-icon-tint", "swift-connect-palette", "swift-image-viewer", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint"),
     "swift": (),
     "faker-kit": (),
 }
