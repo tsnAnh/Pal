@@ -1007,7 +1007,7 @@ def _load_slice_weights(repo_root: Path) -> dict[str, float]:
     path = repo_root / "tests" / "ci" / "slice_weights.json"
     if not path.is_file():
         return {}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
 def _slice_files(

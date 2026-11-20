@@ -81,8 +81,16 @@ jobs:
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           filter: blob:none
+
+      - name: Fetch the base commit
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && [ -n "${BASE//0/}" ]; then
+            git fetch --no-tags --depth=1 --filter=blob:none origin "$BASE"
+          fi
 
       - name: Set up locked Python and test dependencies
         uses: ./.github/actions/setup-pm
@@ -96,10 +104,17 @@ jobs:
           command: python -m scripts.ci.python_packages "$(python -m scripts.code_health --print-pins)"
 
       - name: Lint and static checks (python scripts/check)
-        run: python scripts/check
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          base_args=()
+          if [ -n "$BASE" ] && [ -n "${BASE//0/}" ]; then
+            base_args=(--base "$BASE")
+          fi
+          python scripts/check "${base_args[@]}"
 
   tests:
-    name: tests (${{ matrix.slice }}/8)
+    name: tests (${{ matrix.slice }}/12)
     needs: changes
     if: needs.changes.outputs.tooling_tests == 'true'
     runs-on: ubuntu-latest
@@ -107,7 +122,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        slice: [1, 2, 3, 4, 5, 6, 7, 8]
+        slice: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
         with:
@@ -129,9 +144,9 @@ jobs:
       # tooling (about 8 min on 4 vCPU). Excluded: two tests red on main today, test_docs_drift
       # (undocumented config keys, /reach) and test_prompt_surface (stale snapshot), and
       # test_code_health_identity, which exceeded its 300 s file timeout on a 4-vCPU sandbox.
-      - name: Tests (tests/ci, tests/scripts, slice ${{ matrix.slice }} of 8)
+      - name: Tests (tests/ci, tests/scripts, slice ${{ matrix.slice }} of 12)
         run: >-
-          scripts/run_tests.sh tests/ci tests/scripts --slice ${{ matrix.slice }}/8 --
+          scripts/run_tests.sh tests/ci tests/scripts --slice ${{ matrix.slice }}/12 --
           --deselect=tests/ci/test_docs_drift.py::test_no_new_undocumented_config_keys_or_slash_commands
           --deselect=tests/ci/test_prompt_surface.py::test_committed_prompt_surface_is_current
           --ignore=tests/scripts/test_code_health_identity.py
