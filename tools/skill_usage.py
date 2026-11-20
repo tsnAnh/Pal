@@ -258,6 +258,11 @@ def read_skill_name(skill_md: Path, fallback: str) -> str:
     return next((v for v in values if v), fallback)
 
 
+def provenance_names() -> tuple[set[str], set[str]]:
+    """``(hub_installed, bundled)`` names, each read once, for classifying a whole listing."""
+    return _read_hub_installed_names(), _read_bundled_names()
+
+
 def is_agent_created(skill_name: str) -> bool:
     """Neither bundled nor hub-installed (and not only present in an external dir)."""
     return not (is_bundled(skill_name) or is_hub_installed(skill_name)) and (
