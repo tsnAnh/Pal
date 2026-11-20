@@ -50,7 +50,6 @@ extension ConnectAppsList {
     private func phoneLoaded(_ state: ConnectMacState) -> some View {
         let _ = model.noteListRendered() // swiftlint:disable:this redundant_discardable_let
         let searching = !model.trimmedQuery.isEmpty
-        if !searching { legacySection }
         ForEach(state.sections) { group in phoneSection(group, deviceRows: state.deviceRows) }
         if searching {
             if state.sections.isEmpty, state.skills.isEmpty {

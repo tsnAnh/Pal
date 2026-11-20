@@ -51,7 +51,6 @@ extension ConnectAppsList {
     private func macLoaded(_ state: ConnectMacState) -> some View {
         let _ = model.noteListRendered() // swiftlint:disable:this redundant_discardable_let
         let searching = !model.trimmedQuery.isEmpty
-        if !searching { legacySection }
         ForEach(state.sections) { group in macSection(group, deviceRows: state.deviceRows) }
         if searching {
             if state.sections.isEmpty, state.skills.isEmpty {

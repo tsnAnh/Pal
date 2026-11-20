@@ -451,11 +451,14 @@ def get_toolset_names() -> list[str]:
 
 CROSS_SURFACE_TOOLSETS = frozenset({"iphone"})
 
+PLATFORM_EXCLUDED_TOOLSETS = {"ios": frozenset({"connections"})}
+
 
 def _gated_toolsets(platform: Optional[str], enabled: Optional[Iterable[str]]) -> list[str]:
     named = CROSS_SURFACE_TOOLSETS & set(enabled or ())
-    return [name for name, platforms in TOOLSET_SESSION_PLATFORMS.items()
-            if platform not in platforms and name not in named]
+    gated = [name for name, platforms in TOOLSET_SESSION_PLATFORMS.items()
+             if platform not in platforms and name not in named]
+    return [*gated, *sorted(PLATFORM_EXCLUDED_TOOLSETS.get(platform, ()))]
 
 
 def session_platform_tool_drops(platform: Optional[str], enabled: Optional[Iterable[str]] = None) -> frozenset:

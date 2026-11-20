@@ -131,10 +131,10 @@ def _retry(authority, ref, operation, request):
 def _require_connectors(authority, ref):
     """The sidecar's ``_session_connector_gate``: connectors on, and ``manage_connections`` in the session's tools."""
     import model_tools
-    from tools.connectors import connectors_available
+    from tools.connectors import hosted_surface
     from tui_gateway import connector_refusals as refusals
     enabled, disabled = _session_toolsets(authority, ref)
-    if 'manage_connections' not in model_tools._select_tool_names(enabled, disabled, quiet_mode=True) or not connectors_available():
+    if 'manage_connections' not in model_tools._select_tool_names(enabled, disabled, quiet_mode=True) or not hosted_surface.available():
         raise ConnectorRefusal(*refusals.CONNECTORS_UNAVAILABLE)
 
 

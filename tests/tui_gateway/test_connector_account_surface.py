@@ -12,7 +12,7 @@ from tui_gateway import server
 @pytest.fixture
 def remote_backend(monkeypatch):
     monkeypatch.delenv("HERMES_DESKTOP", raising=False)
-    monkeypatch.setattr("tools.connectors.connectors_available", lambda: True)
+    monkeypatch.setattr("tools.connectors.gateway.config.connectors_available", lambda: True)
     monkeypatch.setattr("tools.connectors.ensure_guest_identity", lambda: None)
     monkeypatch.setattr("tools.connectors.managed.ensure_guest_identity", lambda: None)
     live._open.clear()

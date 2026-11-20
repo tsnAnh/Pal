@@ -45,7 +45,7 @@ def test_secondary_ticket_runs_connectors_and_billing_in_its_own_profile(homes, 
     def rec(label):
         seen.append((label, Path(str(get_hermes_home())).resolve()))
 
-    monkeypatch.setattr(tools.connectors, 'connectors_available', lambda *a, **k: True)
+    monkeypatch.setattr("tools.connectors.gateway.config.connectors_available", lambda *a, **k: True)
     monkeypatch.setattr(tools.managed_tool_gateway, 'read_nous_access_token', lambda: 'token')
     monkeypatch.setattr(tools.connectors.managed, 'managed_client',
                         lambda **_: types.SimpleNamespace(list_connectors=lambda: rec('list') or []))

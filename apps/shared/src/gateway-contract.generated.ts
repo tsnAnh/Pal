@@ -1902,21 +1902,6 @@ export interface ConnectorSetupCheckResult {
   account?: string | null
 }
 export type ConnectorErrorReason = 'INVALID_PARAMS' | 'NOT_OWNER' | 'UNSUPPORTED_RUNTIME' | 'CONNECTOR_REQUEST_FAILED' | 'INVALID_CONNECTOR_RESPONSE' | 'UNKNOWN_TARGET' | 'LINK_STILL_VALID' | 'REISSUE_REFUSED' | 'UNKNOWN_OPERATION' | 'INVALID_ANSWER' | 'NEEDS_NOUS_AUTH' | 'CONNECTOR_NOT_FOUND' | 'TOOLS_UNAVAILABLE' | 'CONNECTORS_UNAVAILABLE' | 'CATALOG_UNAVAILABLE' | 'ACCOUNTS_UNAVAILABLE' | 'CONNECTION_NOT_FOUND' | 'POLICY_UNAVAILABLE' | 'POLICY_CONFLICT' | 'FORBIDDEN_SCOPE' | 'ORG_REQUIRED' | 'ORG_ACCESS_DENIED' | 'INVALID_POLICY' | 'ALIAS_TAKEN' | 'NEEDS_SETUP' | 'NEEDS_PUBLIC_URL' | 'INVALID_CLIENT' | 'CLIENT_UNREADABLE' | 'CONNECT_FAILED' | 'INVALID_TOKEN' | 'CHECK_UNAVAILABLE' | 'ADMIN_APPROVAL_PENDING'
-export interface ConnectorsLegacyResult {
-  source_readable: boolean
-  items: LegacyConnectorRow[]
-}
-export interface LegacyConnectorRow {
-  catalog_id: string | null
-  name: string
-  legacy_slug: string
-  legacy_source: LegacyConnectorSource
-  method: string | null
-  state: LegacyConnectorState
-  last_seen: number | null
-}
-export type LegacyConnectorSource = 'portal' | 'composio' | 'unknown'
-export type LegacyConnectorState = 'needs_reconnect' | 'needs_setup' | 'unmapped'
 export interface ConnectorAccountsParams {
   profile?: string | null
   connector?: string | null
@@ -8568,8 +8553,6 @@ export interface RpcMethods {
   'connectors.google_ads.status': { params: ProfileParams; result: GoogleAdsStatusResult }
   /** Owner only. One live Google Ads call with the signed-in account. A refusal is a check value, never an RPC error: explorer_access_needed when Google has not approved the owner's Cloud project, needs_reauth when the refresh token was revoked or expired, unreachable when Google did not answer. */
   'connectors.google_ads.verify': { params: ProfileParams; result: GoogleAdsVerifyResult }
-  /** Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only. */
-  'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
   /** Start the scoped profile's sign-in. With session_id the app relays the loopback redirect through mcp.servers.oauth.callback and polls mcp.servers.oauth.poll; without it the provider redirects to the gateway and the app polls connectors.catalog. */
@@ -9245,7 +9228,6 @@ export const RPC_METHODS = [
   'connectors.google_ads.save',
   'connectors.google_ads.status',
   'connectors.google_ads.verify',
-  'connectors.legacy',
   'connectors.list',
   'connectors.oauth_client.connect',
   'connectors.oauth_client.remove',
@@ -9627,8 +9609,6 @@ export interface CanonicalRpcMethods {
   'connectors.catalog': { params: ProfileParams; result: ConnectorsCatalogResult }
   /** Start or re-initiate authorization for named connectors on a session or account operation. */
   'connectors.connect': { params: ConnectorsConnectParams; result: ConnectorsConnectResult }
-  /** Services the scoped profile connected through the Nous Portal or Composio that are not connected directly yet, read from local records only. */
-  'connectors.legacy': { params: ProfileParams; result: ConnectorsLegacyResult }
   /** Connector catalog + connection state for one session or profile account owner. */
   'connectors.list': { params: ConnectorsListParams; result: ConnectorsListResult }
   /** The current snapshot of one open session or account operation. */
@@ -9902,7 +9882,6 @@ export const CANONICAL_RPC_METHODS = [
   'connectors.accounts.remove',
   'connectors.catalog',
   'connectors.connect',
-  'connectors.legacy',
   'connectors.list',
   'connectors.operation.status',
   'connectors.operation.wake',

@@ -36,7 +36,8 @@ def accepts_what_t3_accepts(uri: str) -> bool:
 class T3CodeDouble:
     """A plain-http stand-in that answers like T3 Code's MCP endpoint and OAuth server."""
 
-    def __init__(self, *, accepts=accepts_everything, mcp_behaviour="mcp"):
+    def __init__(self, *, accepts=accepts_everything, mcp_behaviour="mcp", advertises_cimd=False):
+        self.advertises_cimd = advertises_cimd
         self.accepts = accepts
         self.refusal = None
         self.mcp_behaviour = mcp_behaviour
@@ -106,6 +107,7 @@ class T3CodeDouble:
                 "scopes_supported": ["orchestration:read", "orchestration:operate"]})
         if path == "/.well-known/oauth-authorization-server":
             return self._send(h, 200, {
+                **({"client_id_metadata_document_supported": True} if self.advertises_cimd else {}),
                 "issuer": self.base, "authorization_endpoint": f"{self.base}/oauth/mcp/authorize",
                 "token_endpoint": f"{self.base}/oauth/mcp/token",
                 "registration_endpoint": f"{self.base}/oauth/mcp/register",

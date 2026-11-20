@@ -229,7 +229,7 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
     from gateway.run import _profile_runtime_scope
     from tools.connectors import live, run
     from tools.connectors.contract import Actor, TargetState
-    from tools import connectors
+    from tools.connectors.gateway import config as connector_config
     from tools.connectors.gateway.errors import GatewayAuthError
     from tools.connectors.operation import ConnectionOperation, Target
 
@@ -237,7 +237,7 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
                         cwd=str(Path(authority.profile_id) / 'session-work'))
     sid = created['result']['session_id']
     owner = {'type': 'session', 'session_id': sid}
-    connectors.connectors_available = lambda *a, **k: True
+    connector_config.connectors_available = lambda *a, **k: True
     with _profile_runtime_scope(Path(authority.profile_id)):
         operation = ConnectionOperation([Target('linear', 'mcp', 'install')], session_key=authority.sessions[sid].route)
         live.open(operation)
@@ -275,10 +275,10 @@ async def _connection_card(authority, ws, reader, sid, marker, receipt):
     run.reissue = broken
     failed = await rpc(ws, 'connectors.connect', owner=owner, connectors=['linear'], reconnect=True)
     assert failed['error']['code'] == 5034 and failed['error']['data']['reason'] == 'CONNECTOR_REQUEST_FAILED', failed
-    connectors.connectors_available = lambda *a, **k: False
+    connector_config.connectors_available = lambda *a, **k: False
     gated = await rpc(ws, 'connectors.connect', owner=owner, connectors=['linear'], reconnect=True)
     assert gated['error']['code'] == 4031 and gated['error']['data']['reason'] == 'CONNECTORS_UNAVAILABLE', gated
-    connectors.connectors_available = lambda *a, **k: True
+    connector_config.connectors_available = lambda *a, **k: True
     # A session whose tools leave out manage_connections cannot re-run a target, even with connectors on.
     toolless = (await rpc(ws, 'session.create', request_id='routes-toolless', source='gui', toolsets=[],
                           cwd=str(Path(authority.profile_id) / 'session-work')))['result']['session_id']

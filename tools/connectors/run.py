@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from tools.connectors import live
+from tools.connectors import hosted_surface, live
 from tools.connectors.contract import SettleReason
 from tools.connectors.operation import ConnectionOperation, Target
 
@@ -44,7 +44,7 @@ class Kind:
 
 
 def reissue(operation: ConnectionOperation, names: Sequence[str], *, initiator: Optional[str] = None) -> Optional[str]:
-    from tools.connectors.contract import Actor, TargetState, allowed
+    from tools.connectors.contract import TargetState, allowed
 
     targets = [operation.target(name) for name in names]
     if any(target is None for target in targets):
@@ -59,10 +59,9 @@ def reissue(operation: ConnectionOperation, names: Sequence[str], *, initiator: 
     if any(allowed(target.kind, target.state, TargetState.initiated) is None for target in targets):
         return NOT_ALLOWED
     if targets[0].kind == "connector":
-        from tools.connectors.managed import CARD_RETRY, managed_client, mint
-
-        client = managed_client(creates_guest=True, initiator=initiator or CARD_RETRY, call=operation.call)
-        mint(client, operation, stale, reinitiate=True, actor=Actor.user)
+        if not hosted_surface.installed():
+            return NOT_ALLOWED
+        hosted_surface.reissue(operation, stale, initiator)
         return None
     from tools.connectors import catalog
     from tools.connectors.mcp import retry
