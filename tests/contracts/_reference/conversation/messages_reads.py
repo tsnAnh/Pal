@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any, Iterator, Optional, Sequence
 
@@ -22,6 +23,7 @@ from persistence.conversation.messages import (
     PrUrlHit,
     ResumeConversations,
     ResumeTooLarge,
+    ScannedMessage,
     SessionTimeline,
     TimelineEntry,
     TranscriptRead,
@@ -357,6 +359,32 @@ class MessageReadsMixin(MessageBase):
                 and isinstance(row.message.content, str)
                 and ("blocked" in row.message.content.lower() or "approval" in row.message.content.lower())]
         return iter(hits)
+
+    def _every_row(self) -> list[tuple[SessionId, _StoredRow]]:
+        scope = self._backend.scope
+        rows = [(SessionId(sid), row) for sid, transcript in self._ns(scope)["transcripts"].items() for row in transcript.rows]
+        return sorted(rows, key=lambda pair: pair[1].id)
+
+    def newest_row_id(self) -> int:
+        return max((row.id for _, row in self._every_row()), default=0)
+
+    def scan_live_messages(self, after_row_id: int, tool_names: Sequence[str], *, limit: int) -> tuple[ScannedMessage, ...]:
+        hits = [ScannedMessage(id=MessageId(row.id), session_id=sid, role=row.message.role, content=copy.deepcopy(row.message.content),
+                               tool_calls=json.dumps(list(row.message.tool_calls)) if row.message.tool_calls else None,
+                               tool_name=row.message.tool_name, timestamp=row.epoch)
+                for sid, row in self._every_row()
+                if row.id > after_row_id and row.visibility is not RowVisibility.REWOUND and not row.message.compressed_summary
+                and (row.message.role in ("user", "assistant") or row.message.tool_name in tool_names)]
+        return tuple(hits[:limit])
+
+    def live_row_ids(self, ids: Sequence[MessageId]) -> frozenset[MessageId]:
+        wanted = set(ids)
+        return frozenset(MessageId(row.id) for _, row in self._every_row()
+                         if row.id in wanted and row.visibility is not RowVisibility.REWOUND)
+
+    def assistant_row_ids(self, ids: Sequence[MessageId]) -> frozenset[MessageId]:
+        wanted = set(ids)
+        return frozenset(MessageId(row.id) for _, row in self._every_row() if row.id in wanted and row.message.role == "assistant")
 
     def has_any_message(self) -> bool:
         scope = self._backend.scope
