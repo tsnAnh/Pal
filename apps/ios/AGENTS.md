@@ -44,7 +44,7 @@ Any unit that adds or changes what a person sees in the Pal app (macOS, iPhone, 
 
 ## Rule 5: Liquid Glass design rules are lint-enforced
 
-Glass is a control and navigation layer floating above content, never the content layer. Run `python scripts/check --only swift-glass,swift-nav-chrome,swift-bot-tint` on every UI change before calling it ready; a finding names the file, line, rule id and the fix. Today's findings sit in `apps/ios/.glass-lint-baseline.json`: new code never adds to it, units that fix a finding delete its entry (`python scripts/ci/check_swift_glass.py --write-baseline`). Exception: `// glass-lint: ok` on the line.
+Glass is a control and navigation layer floating above content, never the content layer. Run `python scripts/check --only swift-glass,swift-nav-chrome,swift-bot-tint` on every UI change; a finding names the file, line, rule id and the fix. Findings sit in `apps/ios/.glass-lint-baseline.json`: new code never adds to it; a fix deletes its entry (`check_swift_glass.py --write-baseline`). Exception: `// glass-lint: ok` on the line.
 
 | Apple rule | Pal decision | Lint id |
 |---|---|---|
@@ -62,12 +62,13 @@ Glass is a control and navigation layer floating above content, never the conten
 | Chat rows name their side | `chatRowFrame(for: ChatSender)`: bot leading, user trailing, chips `.system`; no `.frame(maxWidth: .infinity)` without `alignment:` | `swift-chat-row-alignment` |
 | One design system | Mac and iOS share PalDesign components; no Electron (`apps/desktop` is not Pal) | review |
 | Design first | UI changes start from an owner-approved mockup (Rule 4) | review |
+| Mac dialogs size from the window | No `width:`/`height:` on `MacModalPanel` (90%, `fit: .content`); Mac alerts use `.macAlert`/`.macConfirm`, not `.alert` | `swift-modal-size` |
 
-Apple sources: HIG Materials, Toolbars, Search fields, Color; "Adopting Liquid Glass"; "Applying Liquid Glass to custom views"; `ButtonRole.close`; WWDC25 219, 323, 356. Reduce Transparency and Increase Contrast are automatic for system glass: never branch on them to swap glass.
+Apple sources: HIG Materials, Toolbars, Search fields, Color; WWDC25 219, 323, 356. Reduce Transparency and Increase Contrast are automatic for system glass: never branch on them.
 
 ## Rule 6: Mac performance mistakes are lint-enforced
 
-A mistake found while tuning the Mac app becomes a type, a lint rule or a test, never only a note. Run `python scripts/check --only swift-perf` on every change under `apps/ios` before calling it ready; a finding names the file, line, rule id and the replacement. Today's findings sit in `apps/ios/.perf-lint-baseline.json`: new code never adds to it, and the unit that fixes a finding deletes its entry (`python scripts/ci/check_swift_perf.py --write-baseline`). Files allowed to use `TimelineView`, `onContinuousHover` or a single-instance window-scoped `NSEvent` monitor, each with a reason, sit in `apps/ios/.perf-lint-allowlist.json`. Exception: `// perf-lint: ok <reason>` on the line. Each perf fix unit carries the rule for its own class in the same PR.
+A mistake found while tuning the Mac app becomes a type, a lint rule or a test, never only a note. Run `python scripts/check --only swift-perf` on every change under `apps/ios`; a finding names the file, line, rule id and the replacement. Today's findings sit in `apps/ios/.perf-lint-baseline.json`: new code never adds to it, and the unit that fixes a finding deletes its entry (`python scripts/ci/check_swift_perf.py --write-baseline`). Files allowed to use `TimelineView`, `onContinuousHover` or a single-instance window-scoped `NSEvent` monitor, each with a reason, sit in `apps/ios/.perf-lint-allowlist.json`. Exception: `// perf-lint: ok <reason>` on the line. Each perf fix unit carries the rule for its own class in the same PR.
 
 | Class | Rule | Enforced by | Status |
 |---|---|---|---|
