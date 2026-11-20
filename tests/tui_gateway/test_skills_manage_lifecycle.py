@@ -106,3 +106,37 @@ def test_set_key_saves_only_a_name_the_skill_declares(monkeypatch, tmp_path):
     assert other["error"]["code"] == 4101
     assert unknown["error"]["code"] == 4004
     assert "abc123" not in str(ok) + str(other) + str(unknown)
+
+
+def _write_skill(root, rel, name, description):
+    folder = root / rel
+    folder.mkdir(parents=True)
+    (folder / "SKILL.md").write_text(f"---\nname: {name}\ndescription: {description}\n---\n\nSECRET BODY {name}\n")
+
+
+def test_list_reports_origin_and_description_per_skill_without_bodies(tmp_path, monkeypatch):
+    import json
+
+    from tools import skills_tool
+
+    skills = tmp_path / "skills"
+    _write_skill(skills, "notes/weekly-review", "weekly-review", "Summarise the week")
+    _write_skill(skills, "dev/release-notes", "release-notes", "Draft release notes")
+    _write_skill(skills, "apple/findmy", "findmy", "Find devices")
+    (skills / ".bundled_manifest").write_text("findmy:abc123\n")
+    (skills / ".hub").mkdir()
+    (skills / ".hub" / "lock.json").write_text(json.dumps(
+        {"version": 1, "installed": {"release-notes": {"identifier": "acme/release-notes", "install_path": "dev/release-notes"}}}))
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    skills_tool._SKILLS_CACHE.clear()
+
+    out = _call({"action": "list"})["result"]
+
+    assert {row["name"]: (row["origin"], row["description"]) for row in out["details"]} == {
+        "weekly-review": ("local", "Summarise the week"),
+        "release-notes": ("hub", "Draft release notes"),
+        "findmy": ("bundled", "Find devices"),
+    }
+    assert all(set(row) == {"name", "description", "origin"} for row in out["details"])
+    assert "SECRET BODY" not in json.dumps(out)
+    assert sorted(name for names in out["skills"].values() for name in names) == ["findmy", "release-notes", "weekly-review"]

@@ -58,7 +58,8 @@ struct ConnectAppsMacInstalled: View {
     }
 
     var body: some View {
-        let installed = model.macState.installed
+        let state = model.macState
+        let installed = state.installed
         let count = ConnectMacLayout.visibleCount(total: installed.count, expanded: model.showsAllInstalled)
         VStack(spacing: 0) {
             HStack {
@@ -100,6 +101,7 @@ struct ConnectAppsMacInstalled: View {
                         .padding(.horizontal, PalMetrics.screenMargin + 6)
                         .accessibilityIdentifier("connectAppsInstalledShowAll")
                     }
+                    if !state.privateSkills.isEmpty { privateSkills(state.privateSkills) }
                 }
                 .padding(.bottom, PalMetrics.cardGap)
             }
@@ -112,6 +114,30 @@ struct ConnectAppsMacInstalled: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectAppsInstalled")
+    }
+
+    private func privateSkills(_ skills: [InstalledSkill]) -> some View {
+        Group {
+            Text("Private skills")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(PalTokens.textPrimary)
+                .padding(.top, 14)
+                .padding(.horizontal, PalMetrics.screenMargin + 2)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("connectAppsPrivateSkillsTitle")
+            LazyVStack(alignment: .leading, spacing: 2) {
+                ForEach(skills) { skill in
+                    ConnectMacRow(
+                        title: skill.name,
+                        subtitle: skill.description.isEmpty
+                            ? String(localized: "Created locally") : String(localized: "Created locally · \(skill.description)"),
+                        problem: false, identifier: "connectPrivateSkill-\(skill.id)",
+                        icon: { PluginGlyphTile() }, trailing: { EmptyView() }
+                    )
+                }
+            }
+            .padding(.horizontal, PalMetrics.screenMargin)
+        }
     }
 
     private func installedRow(_ item: ConnectInstalledItem) -> some View {

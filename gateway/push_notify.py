@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 TITLE_LIMIT = 60
 BODY_LIMIT = 140
 WORKERS = 2
+BRAND_NAME = "Pal"
 
 
 class Kind(StrEnum):
@@ -112,7 +113,7 @@ def _bot_identity(authority) -> tuple[str, str]:
     home = Path(str(authority.profile_id))
     profile = profile_name_for_home(home) or "default"
     meta = read_profile_meta(home)
-    name = meta["bot_title"] or meta["display_name"] or ("Hermes" if profile == "default" else _readable(profile))
+    name = meta["bot_title"] or meta["display_name"] or (BRAND_NAME if profile == "default" else _readable(profile))
     return profile, name
 
 

@@ -51,6 +51,7 @@ struct ConnectMacState {
     let deviceRows: [DeviceConnectorRow]
     let installed: [ConnectInstalledItem]
     let skills: [InstalledSkill]
+    let privateSkills: [InstalledSkill]
 }
 
 struct ConnectMacCache {
@@ -83,7 +84,8 @@ extension ConnectAppsModel {
         }
         let state = ConnectMacState(
             chips: ConnectChipBar(rows: entries.map(\.row), categories: catalog.categories), sections: sections, deviceRows: deviceRows,
-            installed: installedApps + installedDevices, skills: catalog.matchingSkills(needle)
+            installed: installedApps + installedDevices, skills: catalog.matchingSkills(needle),
+            privateSkills: catalog.privateSkills
         )
         macCache = ConnectMacCache(key: key, state: state)
         return state

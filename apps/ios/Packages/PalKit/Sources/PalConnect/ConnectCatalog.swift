@@ -204,18 +204,32 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
 public struct InstalledSkill: Sendable, Equatable, Identifiable {
     public var name: String
     public var category: String
+    public var description: String
+    public var isLocal: Bool
 
     public var id: String { "\(category)/\(name)" }
 
-    public init(name: String, category: String) {
+    public init(name: String, category: String, description: String = "", isLocal: Bool = false) {
         self.name = name
         self.category = category
+        self.description = description
+        self.isLocal = isLocal
     }
 
     public static func parse(_ value: JSONValue) -> [InstalledSkill] {
         guard let groups = value["skills"]?.objectValue else { return [] }
+        var details: [String: JSONValue] = [:]
+        for row in value["details"]?.arrayValue ?? [] {
+            if let name = row["name"]?.stringValue { details[name] = row }
+        }
         return groups.flatMap { category, names in
-            (names.arrayValue ?? []).compactMap { $0.stringValue }.map { InstalledSkill(name: $0, category: category) }
+            (names.arrayValue ?? []).compactMap { $0.stringValue }.map { name in
+                let row = details[name]
+                return InstalledSkill(
+                    name: name, category: category, description: row?["description"]?.stringValue?.trimmed ?? "",
+                    isLocal: row?["origin"]?.stringValue == "local"
+                )
+            }
         }
         .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
@@ -236,6 +250,8 @@ public struct ConnectCatalog: Sendable, Equatable {
         self.apps = apps
         self.skills = skills
     }
+
+    public var privateSkills: [InstalledSkill] { skills.filter(\.isLocal) }
 
     public func matchingSkills(_ query: String) -> [InstalledSkill] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
