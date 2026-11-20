@@ -155,18 +155,6 @@ PRE_FIX_PLAIN_CLOSE = '''
         }
         .accessibilityLabel(Text("Close"))
 '''
-SEARCH_FIELD = '''
-struct ConnectAppsSearchField: View {
-    var body: some View {
-        TextField(prompt, text: $text)
-            .textFieldStyle(.roundedBorder)%s
-    }
-}
-
-struct ConnectAppsList: View {
-    var body: some View { Text("x") }
-}
-'''
 
 
 def test_mac_panel_close_on_the_trailing_side_with_a_plain_button_fails(tmp_path: Path) -> None:
@@ -189,23 +177,6 @@ def test_sheet_chrome_without_the_shared_bottom_inset_fails(tmp_path: Path) -> N
     assert len(found) == 1 and "sheetBottomInset" in found[0]
     ok = cnc.scan(_tree(tmp_path, {"Packages/PalDesign/Sources/PalDesign/Components/SheetChrome.swift": "content.safeAreaPadding(.bottom, PalMetrics.sheetBottomInset)\n"}))
     assert ok == []
-
-
-@pytest.mark.parametrize("modifier", [".background(Color.red)", ".palGlass(Capsule())", ".overlay(Capsule())"])
-def test_a_styled_connect_apps_search_field_fails(tmp_path: Path, modifier: str) -> None:
-    source = SEARCH_FIELD % f"\n            {modifier}"
-    found = cnc.scan(_tree(tmp_path, {"App/ConnectApps/ConnectAppsList.swift": source}))
-    assert len(found) == 1 and "plain system field" in found[0]
-
-
-def test_the_plain_connect_apps_search_field_passes(tmp_path: Path) -> None:
-    assert cnc.scan(_tree(tmp_path, {"App/ConnectApps/ConnectAppsList.swift": SEARCH_FIELD % ""})) == []
-
-
-def test_the_floating_search_bar_in_the_connect_apps_list_fails(tmp_path: Path) -> None:
-    source = SEARCH_FIELD % "" + "\nFloatingSearchBar(text: $q)\n"
-    found = cnc.scan(_tree(tmp_path, {"App/ConnectApps/ConnectAppsList.swift": source}))
-    assert len(found) == 1
 
 
 def test_an_opt_out_still_waives_the_allowlisted_in_content_dismisses(tmp_path: Path) -> None:

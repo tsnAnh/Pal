@@ -10,21 +10,6 @@ struct ConnectListEntry: Identifiable {
     var id: String { row.id }
 }
 
-struct ConnectListSectionEntries: Identifiable {
-    let section: ConnectListSection
-    let entries: [ConnectListEntry]
-
-    var id: String { section.id }
-
-    var identifier: String {
-        switch section.kind {
-        case .needsAttention: "connectAppsSection-attention"
-        case .connected: "connectAppsSection-connected"
-        case .category(let name): "connectAppsSection-\(name)"
-        }
-    }
-}
-
 extension ConnectAppsModel {
     private var botInstall: ConnectBotInstall {
         if slack.needsReinstall { return .needsReinstall(summary: String(localized: "Needs reinstall for a new permission")) }
@@ -56,21 +41,6 @@ extension ConnectAppsModel {
         let entries = catalog.apps.map { ConnectListEntry(row: listRow(for: $0), app: $0) }
         rowCache = ConnectRowCache(key: key, entries: entries)
         return entries
-    }
-
-    func matchedEntries() -> [ConnectListEntry] {
-        let entries = cachedEntries()
-        let needle = trimmedQuery
-        return needle.isEmpty ? entries : entries.filter { ConnectCatalog.matches($0.app, needle: needle) }
-    }
-
-    var listSections: [ConnectListSectionEntries] {
-        let perf = PalPerf.begin("connect.sections.main"); defer { perf.end() }
-        let entries = matchedEntries()
-        let byID = Dictionary(entries.map { ($0.row.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return ConnectListLayout.sections(rows: entries.map(\.row), categories: catalog.categories).map { section in
-            ConnectListSectionEntries(section: section, entries: section.rows.compactMap { byID[$0.id] })
-        }
     }
 
     func performRowAction(_ app: ConnectApp, state: ConnectRowState) {

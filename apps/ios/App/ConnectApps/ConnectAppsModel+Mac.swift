@@ -60,6 +60,14 @@ struct ConnectMacCache {
 }
 
 extension ConnectAppsModel {
+    static let includesFeatured: Bool = {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }()
+
     var macState: ConnectMacState {
         let entries = cachedEntries()
         let device = devices.thisDevice
@@ -73,7 +81,8 @@ extension ConnectAppsModel {
         let deviceRows = device.rows.filter { $0.state != .allowed }
         let sections = ConnectMacLayout.sections(
             rows: matched.map(\.row), categories: catalog.categories, chip: chip, isSearching: !needle.isEmpty,
-            device: (title: device.title, count: deviceRows.count), keeping: justConnected
+            device: (title: device.title, count: deviceRows.count), keeping: justConnected,
+            includesFeatured: Self.includesFeatured
         )
         .map { section in ConnectMacSectionEntries(section: section, entries: section.rows.compactMap { byID[$0.id] }) }
         let installedApps = entries.filter { $0.row.state == .connected }.map {
@@ -100,6 +109,10 @@ extension ConnectAppsModel {
     func selectChip(_ next: ConnectChip) {
         query = ""
         chip = next
+    }
+
+    func showSection(_ section: ConnectMacSection) {
+        if let next = section.kind.chip { selectChip(next) }
     }
 
     func showInstalled() {

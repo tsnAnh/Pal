@@ -6,7 +6,11 @@ struct SkillsCatalogEntry: View {
     let onOpen: () -> Void
 
     var body: some View {
+        #if os(macOS)
         ConnectSectionHeader("Skills", accessibilityIdentifier: "connectAppsSection-skillsCatalog", action: onOpen)
+        #else
+        ConnectFlatSectionHeader(title: String(localized: "Skills"), identifier: "connectAppsSection-skillsCatalog", action: onOpen)
+        #endif
     }
 }
 

@@ -91,29 +91,36 @@ public struct ClearGlassSearchField: View {
     public let prompt: String
     public let accessibilityLabel: String
     public let accessibilityIdentifier: String
+    public let height: CGFloat
+    public let fontSize: CGFloat
 
-    public init(text: Binding<String>, prompt: String, accessibilityLabel: String, accessibilityIdentifier: String) {
+    public init(
+        text: Binding<String>, prompt: String, accessibilityLabel: String, accessibilityIdentifier: String,
+        height: CGFloat = 38, fontSize: CGFloat = 14
+    ) {
         _text = text
         self.prompt = prompt
         self.accessibilityLabel = accessibilityLabel
         self.accessibilityIdentifier = accessibilityIdentifier
+        self.height = height
+        self.fontSize = fontSize
     }
 
     public var body: some View {
         HStack(spacing: 8) {
             PalIcon("magnifyingglass", ink: .secondary)
-                .font(.system(size: 14))
+                .font(.system(size: fontSize))
                 .accessibilityHidden(true)
             TextField("", text: $text, prompt: Text(prompt).foregroundStyle(PalTokens.textTertiary))
                 .textFieldStyle(.plain)
-                .font(.system(size: 14))
+                .font(.system(size: fontSize))
                 .foregroundStyle(PalTokens.textPrimary)
                 .autocorrectionDisabled()
                 .accessibilityLabel(Text(accessibilityLabel))
                 .accessibilityIdentifier(accessibilityIdentifier)
         }
         .padding(.horizontal, 14)
-        .frame(height: 38)
+        .frame(height: height)
         .palClearGlass(Capsule(), interactive: false)
     }
 }

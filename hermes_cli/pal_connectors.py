@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 import hermes_yaml as yaml
 
 CATALOG_PATH = Path(__file__).parent / "data" / "pal_connectors.yaml"
+FEATURED_CONNECTOR_IDS: tuple[str, ...] = ("github", "linear", "slack", "notion", "sentry")
 
 
 class ConnectionMethod(str, Enum):

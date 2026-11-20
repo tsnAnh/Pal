@@ -46,11 +46,6 @@ FULL_FRAME = ".frame(maxWidth: .infinity, maxHeight: .infinity)"
 OVERLAY_CHAIN = 4
 XMARK_OPT_OUT_ALLOWED = {"App/Kanban/KanbanCardView.swift", "App/Chat/VoiceModeView.swift"}
 PANEL_OVERLAY = re.compile(r"overlayPreferenceValue\(MacPanelCloseIdentifierKey\.self,\s*alignment:\s*(\.\w+)")
-SEARCH_FIELD_STRUCT = "struct ConnectAppsSearchField"
-SEARCH_FIELD_FORBIDDEN = (
-    ".background(", ".overlay(", ".palGlass", ".glassEffect", ".clipShape(", ".strokeBorder(", ".border(", ".cornerRadius(",
-    ".textFieldStyle(.plain)", "FloatingSearchBar(",
-)
 
 
 def violations(path: Path, source: str) -> list[str]:
@@ -120,18 +115,7 @@ def sheet_chrome_violations(path: Path, source: str) -> list[str]:
             found.append(f"{path}: Mac panel close must be SheetGlassButton at .topLeading, not {match.group(1)}")
     if name.endswith("Components/SheetChrome.swift") and "PalMetrics.sheetBottomInset" not in source:
         found.append(f"{path}: SheetChrome must apply PalMetrics.sheetBottomInset to its macOS content")
-    if name.endswith("ConnectApps/ConnectAppsList.swift"):
-        found += search_field_violations(path, source)
     return found
-
-
-def search_field_violations(path: Path, source: str) -> list[str]:
-    if SEARCH_FIELD_STRUCT not in source:
-        return [f"{path}: ConnectAppsSearchField is missing"]
-    block = source.split(SEARCH_FIELD_STRUCT, 1)[1].split("\nstruct ", 1)[0]
-    rest = source.replace(block, "")
-    return [f"{path}: Connect Apps search field must be the plain system field, found {token}"
-            for token in SEARCH_FIELD_FORBIDDEN if token in block or (token == "FloatingSearchBar(" and token in rest)]
 
 
 def scan(root: Path) -> list[str]:

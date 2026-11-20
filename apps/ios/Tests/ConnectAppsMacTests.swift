@@ -71,13 +71,6 @@ struct ConnectAppsMacTests {
         #expect(model.sectionBuilds == 4)
     }
 
-    @Test func theSharedRowCacheAlsoServesTheIPhoneListWithoutARebuild() throws {
-        let model = try makeModel(sample)
-        for _ in 0..<4 { _ = model.listSections }
-        _ = model.macState
-        #expect(model.rowBuilds == 1)
-    }
-
     @Test func connectedAppsLiveBehindTheCountAndNeverInTheGrid() throws {
         let model = try makeModel(sample)
         let state = model.macState

@@ -30,6 +30,20 @@ struct LegacyReconnectRowView: View {
     let reconnect: () -> Void
     let dismiss: () -> Void
 
+    @ViewBuilder
+    private var dismissButton: some View {
+        #if os(iOS)
+        SetupQuietButton(title: String(localized: "Dismiss"), identifier: "legacyRow-\(row.id)-dismiss", action: dismiss)
+            .font(.system(size: 13, weight: .semibold))
+            .padding(.horizontal, 8)
+            .disabled(isBusy)
+        #else
+        SetupButton(title: String(localized: "Dismiss"), identifier: "legacyRow-\(row.id)-dismiss", action: dismiss)
+            .controlSize(.small)
+            .disabled(isBusy)
+        #endif
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: ConnectRowMetrics.tileToTextGap) {
             PluginGlyphTile()
@@ -47,9 +61,7 @@ struct LegacyReconnectRowView: View {
                         SetupButton(title: title, kind: .primary, isBusy: isBusy, identifier: "legacyRow-\(row.id)-reconnect", action: reconnect)
                             .controlSize(.small)
                     }
-                    SetupButton(title: String(localized: "Dismiss"), identifier: "legacyRow-\(row.id)-dismiss", action: dismiss)
-                        .controlSize(.small)
-                        .disabled(isBusy)
+                    dismissButton
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

@@ -39,17 +39,6 @@ struct ConnectAppsMacHeader: View {
     }
 }
 
-struct ConnectInstalledIcon: View {
-    let item: ConnectInstalledItem
-
-    var body: some View {
-        switch item.source {
-        case .app(let app): ConnectorLogoTile(app: app)
-        case .device(let id): DeviceTile(connector: id)
-        }
-    }
-}
-
 struct ConnectAppsMacInstalled: View {
     @Bindable var model: ConnectAppsModel
 

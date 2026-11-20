@@ -251,6 +251,7 @@ class ConnectorCatalogRow(Result):
     notes: str | None = None
     setup_guide: SetupGuide | None = None
     setup_progress: SetupProgress | None = None
+    featured: bool = False
 
 
 class ConnectorsCatalogResult(Result):
