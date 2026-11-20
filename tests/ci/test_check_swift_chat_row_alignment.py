@@ -61,8 +61,49 @@ def test_a_multiline_frame_without_an_alignment_fails(tmp_path):
     assert len(found) == 1
 
 
-def test_a_bounded_width_frame_is_not_a_full_width_row(tmp_path):
-    assert cra.scan(_tree(tmp_path, CHIP.replace(".frame(maxWidth: .infinity)", ".frame(maxWidth: 320)"))) == []
+def test_a_finite_max_width_frame_without_an_alignment_fails(tmp_path):
+    for call in (".frame(maxWidth: 320)", ".frame(maxWidth: ChatMetrics.bubbleMaxWidth)", ".frame(maxWidth: 320, maxHeight: 40)"):
+        assert len(cra.scan(_tree(tmp_path, CHIP.replace(".frame(maxWidth: .infinity)", call)))) == 1, call
+
+
+def test_a_finite_max_width_frame_with_an_alignment_passes(tmp_path):
+    assert cra.scan(_tree(tmp_path, CHIP.replace(".frame(maxWidth: .infinity)", ".frame(maxWidth: 320, alignment: .leading)"))) == []
+
+
+def test_a_width_only_frame_without_an_alignment_fails_but_a_sized_box_passes(tmp_path):
+    assert len(cra.scan(_tree(tmp_path, CHIP.replace(".frame(maxWidth: .infinity)", ".frame(width: tile * 2 + spacing)")))) == 1
+    assert cra.scan(_tree(tmp_path, CHIP.replace(".frame(maxWidth: .infinity)", ".frame(width: 7, height: 7)"))) == []
+    assert cra.scan(_tree(tmp_path, CHIP.replace(".frame(maxWidth: .infinity)", ".frame(minWidth: 40)"))) == []
+
+
+def test_an_alignment_inside_a_nested_call_does_not_count(tmp_path):
+    call = ".frame(maxWidth: 320, minHeight: pick(alignment: .leading))"
+    assert len(cra.scan(_tree(tmp_path, CHIP.replace(".frame(maxWidth: .infinity)", call)))) == 1
+
+
+BUBBLE_WIDTH = (
+    "extension View {\n"
+    "    @ViewBuilder\n"
+    "    func bubbleWidth(_ alignment: HorizontalAlignment) -> some View {\n"
+    "        #if os(macOS)\n"
+    "        frame(maxWidth: ChatMetrics.bubbleMaxWidth).chatRowFrame(for: alignment == .trailing ? .user : .bot)\n"
+    "        #endif\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def test_the_mac_bubble_width_helper_that_centred_file_cards_fails_and_its_fix_passes(tmp_path):
+    found = cra.scan(_tree(tmp_path, BUBBLE_WIDTH, name="App/Chat/BubbleWidth.swift"))
+    assert len(found) == 1
+    assert found[0].startswith("App/Chat/BubbleWidth.swift:5:")
+    fixed = BUBBLE_WIDTH.replace("bubbleMaxWidth)", "bubbleMaxWidth, alignment: ChatMetrics.bubbleColumnAlignment(alignment))")
+    assert cra.scan(_tree(tmp_path, fixed, name="App/Chat/BubbleWidth.swift")) == []
+
+
+def test_the_image_grid_and_file_card_files_are_scanned():
+    for name in ("App/Chat/ChatImages.swift", "App/Chat/ChatFileCard.swift", "App/Chat/BubbleWidth.swift"):
+        assert name in cra.ROW_FILES
 
 
 def test_files_outside_the_row_list_are_not_scanned(tmp_path):

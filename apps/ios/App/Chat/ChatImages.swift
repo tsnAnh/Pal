@@ -153,7 +153,7 @@ struct ChatImageGrid: View {
                         ChatImageTile(reference: image, width: Self.tile, height: Self.tile) { opener?(image) }
                     }
                 }
-                .frame(width: Self.tile * 2 + Self.spacing)
+                .frame(width: Self.tile * 2 + Self.spacing, alignment: .leading)
             }
         }
         .accessibilityElement(children: .contain)
@@ -232,7 +232,7 @@ struct ChatImageViewer: View {
             Group {
                 if let state = model.imageViewer { stage(state) }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity) // chat-row-alignment: ok full-screen viewer, not a chat row
             .background(Color(theme.palette.canvas))
             .navigationTitle(title)
             .toolbar {
