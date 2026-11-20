@@ -52,6 +52,8 @@ targets:
         NSHomeKitUsageDescription: Pal controls your lights, locks and other home accessories when you ask your bot to.
         NSAlarmKitUsageDescription: Pal sets alarms and timers when you ask your bot to.
         NSAppleEventsUsageDescription: Pal sends a message through the Messages app when you approve a bot's request to.
+        NSUserActivityTypes:
+          - INSendMessageIntent
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UISupportedInterfaceOrientations:
@@ -105,10 +107,41 @@ targets:
         product: PalSettings
       - package: PalKit
         product: PalKanban
+      - package: PalKit
+        product: PalPush
       - package: PalDesign
         product: PalDesign
       - package: SwiftMath
         product: SwiftMath
+      - target: NotificationService
+  NotificationService:
+    type: app-extension
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: NotificationService
+        excludes:
+          - "*.entitlements"
+    info:
+      path: NotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: Pal Notifications
+        CFBundleName: Pal Notifications
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot.notification-service
+        PRODUCT_NAME: PalNotificationService
+        PRODUCT_MODULE_NAME: NotificationService
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: NotificationService/NotificationService.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: NotificationService/NotificationService-macOS.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - package: PalKit
+        product: PalPush
   HermesBotsUITests:
     type: bundle.ui-testing
     supportedDestinations: [iOS, macOS]
