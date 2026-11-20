@@ -38,19 +38,21 @@ struct StepFlowChecklist: View {
     let savedNote: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            ForEach(engine.checklist) { row in checklistRow(row) }
-            if let savedNote {
-                Text(savedNote)
-                    .hermesText(.rowSubtitle)
-                    .foregroundStyle(PalTokens.textTertiary)
-                    .padding(.top, PalMetrics.screenMargin)
-                    .padding(.horizontal, 8)
-                    .accessibilityIdentifier("stepFlowSavedNote")
+        MacOverflowScroll {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(engine.checklist) { row in checklistRow(row) }
+                if let savedNote {
+                    Text(savedNote)
+                        .hermesText(.rowSubtitle)
+                        .foregroundStyle(PalTokens.textTertiary)
+                        .padding(.top, PalMetrics.screenMargin)
+                        .padding(.horizontal, 8)
+                        .accessibilityIdentifier("stepFlowSavedNote")
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 0)
+            .padding(PalMetrics.screenMargin)
         }
-        .padding(PalMetrics.screenMargin)
         .frame(width: 196)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(PalTokens.sidebar)

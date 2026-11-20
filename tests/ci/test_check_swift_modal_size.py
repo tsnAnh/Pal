@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -158,3 +159,37 @@ def test_an_overlay_after_the_modal_environment_is_a_finding_and_applying_it_las
         "            }\n    }", "            }\n            .macModalEnvironment()\n    }"
     )
     assert not [f for f in cms.scan(_tree(tmp_path, {"App/Root.swift": fixed})) if "modal-env-scope" in f]
+
+
+STATUS_BLOCK = (
+    "struct StatusBlock: View {\n"
+    "    var body: some View {\n"
+    "        VStack { Text(\"x\") }\n"
+    "    }\n"
+    "}\n"
+)
+
+
+def test_a_window_panel_surface_without_the_scroll_container_fails_and_names_the_fix(tmp_path):
+    found = cms.scan(_tree(tmp_path, {"App/Setup/StatusBlock.swift": STATUS_BLOCK}))
+    assert found == ["App/Setup/StatusBlock.swift:1: modal-overflow: StatusBlock: " + cms.FIX_OVERFLOW]
+    assert "MacOverflowScroll" in found[0]
+
+
+def test_wrapping_the_surface_in_the_scroll_container_passes(tmp_path):
+    wrapped = STATUS_BLOCK.replace("        VStack { Text(\"x\") }\n", "        MacOverflowScroll { VStack { Text(\"x\") } }\n")
+    assert cms.scan(_tree(tmp_path, {"App/Setup/StatusBlock.swift": wrapped})) == []
+
+
+def test_the_scroll_container_in_another_struct_of_the_file_does_not_count(tmp_path):
+    other = STATUS_BLOCK + "struct Other: View {\n    var body: some View { MacOverflowScroll { Text(\"y\") } }\n}\n"
+    found = cms.scan(_tree(tmp_path, {"App/Setup/StatusBlock.swift": other}))
+    assert [f.split(":")[0] for f in found] == ["App/Setup/StatusBlock.swift"]
+
+
+def test_every_registered_overflow_surface_exists_in_the_real_tree():
+    root = REPO / "apps" / "ios"
+    for rel, structs in cms.OVERFLOW_SURFACES.items():
+        text = (root / rel).read_text(encoding="utf-8")
+        for struct in structs:
+            assert re.search(rf"\bstruct {struct}\b", text), f"{rel} no longer declares {struct}; update OVERFLOW_SURFACES"
