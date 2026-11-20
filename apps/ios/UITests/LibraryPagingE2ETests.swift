@@ -1,3 +1,4 @@
+import PalDesign
 import XCTest
 
 @MainActor
@@ -9,6 +10,8 @@ final class LibraryPagingE2ETests: BotProfileTestCase {
     private static let maxSwipes = 80
     private static let settleSeconds: TimeInterval = 6
     private static let settleBudget: TimeInterval = 120
+    private static let outageSeconds: TimeInterval = 90
+    private static let recoverBudget: TimeInterval = 90
 
     override func setUp() async throws {
         let seed = ProcessInfo.processInfo.environment["HERMES_UITEST_SEED"]
@@ -35,6 +38,50 @@ final class LibraryPagingE2ETests: BotProfileTestCase {
         }
         XCTAssertGreaterThan(loadedRows(cards), 2 * Self.pageSize, "scrolling to the end loaded the third page")
         shot(app, "library-paging-1-scrolled")
+    }
+
+    func test2AFailedNextPageShowsTryAgainAndRecovers() throws {
+        for appearance in [AppearanceMode.dark, .light] {
+            let app = signedInApp(appearance: appearance)
+            openProfile(app, Self.backlogSlug)
+            element(app, "profileLibraryRow").tap()
+            waitFor(element(app, "libraryScreen"), timeout: 20, "library screen")
+            let cards = app.descendants(matching: .any).matching(NSPredicate(format: "identifier BEGINSWITH %@", "libraryCard-"))
+            waitFor(cards.firstMatch, timeout: 30, "first section")
+            settleLoadedRows(cards)
+            XCTAssertEqual(loadedRows(cards), Self.pageSize, "the first page loaded before the gateway went away")
+
+            try control("kill-gateway")
+            let footer = element(app, "libraryLoadMoreFailed")
+            let screen = element(app, "libraryScreen")
+            var swipes = 0
+            while !footer.exists, swipes < Self.maxSwipes {
+                screen.swipeUp(velocity: .fast)
+                swipes += 1
+                Thread.sleep(forTimeInterval: 0.5)
+            }
+            waitFor(footer, timeout: Self.outageSeconds, "the footer after the next page failed (\(appearance.rawValue))")
+            let retry = app.buttons["libraryLoadMoreRetry"]
+            while !retry.isHittable, swipes < Self.maxSwipes {
+                screen.swipeUp(velocity: .slow)
+                swipes += 1
+            }
+            XCTAssertTrue(retry.isHittable, "the footer offers Try again on screen")
+            XCTAssertEqual(loadedRows(cards), Self.pageSize, "a failed page adds no rows")
+            Thread.sleep(forTimeInterval: Self.settleSeconds)
+            XCTAssertTrue(footer.exists, "nothing retried on its own while the footer was showing")
+            shot(app, "library-load-more-failed-\(appearance.rawValue)-footer")
+
+            try control("start-gateway")
+            let deadline = Date().addingTimeInterval(Self.recoverBudget)
+            while loadedRows(cards) <= Self.pageSize, Date() < deadline {
+                if retry.exists, retry.isHittable { retry.tap() }
+                Thread.sleep(forTimeInterval: 1)
+            }
+            XCTAssertGreaterThan(loadedRows(cards), Self.pageSize, "Try again loaded the next page once the gateway was back (\(appearance.rawValue))")
+            XCTAssertFalse(footer.exists, "the footer went away once the page loaded")
+            shot(app, "library-load-more-failed-\(appearance.rawValue)-recovered")
+        }
     }
 
     private func loadedRows(_ cards: XCUIElementQuery) -> Int {

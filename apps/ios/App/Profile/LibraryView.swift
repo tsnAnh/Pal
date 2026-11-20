@@ -84,15 +84,21 @@ struct LibraryView: View {
     @ViewBuilder
     private var loadMoreSentinel: some View {
         switch model.pagination {
-        case .more(let cursor), .loading(let cursor):
+        case .more(let cursor), .loading(let cursor, _):
             Color.clear
                 .frame(height: 1)
                 .accessibilityHidden(true)
                 .onAppear { model.loadMore() }
                 .id(cursor)
+        case .failed:
+            LibraryLoadMoreFailedFooter(showsChrome: showsChrome, retry: model.retryLoadMore)
         case .end:
             EmptyView()
         }
+    }
+
+    private var spinnerDelay: Duration {
+        if case .loading(_, .retry) = model.pagination { .zero } else { LoadingPolicy.silentWindow }
     }
 
     @ViewBuilder
@@ -119,7 +125,7 @@ struct LibraryView: View {
         case .ready:
             readySections
             if model.isIndexing || model.isLoadingMore {
-                DelayedProgressView()
+                DelayedProgressView(after: spinnerDelay)
                     .padding(.top, 24)
                     .accessibilityIdentifier("libraryIndexing")
             }

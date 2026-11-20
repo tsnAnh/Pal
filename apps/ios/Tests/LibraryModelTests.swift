@@ -40,7 +40,7 @@ private struct Request: Equatable {
 }
 
 private final class ScriptedLibrary: Sendable {
-    typealias Reply = @Sendable (Request) async -> JSONValue
+    typealias Reply = @Sendable (Request) async throws -> JSONValue
 
     private let log = Mutex<[Request]>([])
     private let reply: Reply
@@ -56,10 +56,12 @@ private final class ScriptedLibrary: Sendable {
             let object = params?.objectValue ?? [:]
             let request = Request(kind: object["kind"]?.stringValue ?? "", before: object["before"]?.stringValue)
             log.withLock { $0.append(request) }
-            return await reply(request)
+            return try await reply(request)
         })
     }
 }
+
+private struct Offline: Error {}
 
 private let newest = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -148,5 +150,51 @@ struct LibraryModelTests {
         model.loadMore()
         #expect(await settles { model.entries.count == 151 })
         #expect(library.requests.last == Request(kind: "all", before: stamp(99)))
+    }
+
+    @Test func aFailedNextPageWaitsForTheOwnerThenRetryAppendsIt() async {
+        let outage = Mutex(true)
+        let library = ScriptedLibrary { request in
+            if request.before == nil { return page(Array(0..<50), next: 49) }
+            if outage.withLock({ $0 }) { throw Offline() }
+            return page(Array(50..<100), next: nil)
+        }
+        let model = makeModel(library)
+        model.start()
+        #expect(await settles { model.phase == .ready && model.entries.count == 50 })
+        model.loadMore()
+        #expect(await settles { model.pagination == .failed(cursor: stamp(49)) })
+        #expect(model.hasMore)
+        #expect(model.entries.count == 50)
+        model.loadMore()
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(model.pagination == .failed(cursor: stamp(49)))
+        #expect(library.requests.count == 2)
+        outage.withLock { $0 = false }
+        model.retryLoadMore()
+        #expect(model.pagination == .loading(cursor: stamp(49), trigger: .retry))
+        #expect(await settles { model.entries.count == 100 })
+        #expect(model.pagination == .end)
+        #expect(library.requests.last == Request(kind: "all", before: stamp(49)))
+    }
+
+    @Test func aRetryThatFailsAgainKeepsTheSameCursorAndTheNextRetrySucceeds() async {
+        let attempts = Counter()
+        let library = ScriptedLibrary { request in
+            if request.before == nil { return page(Array(0..<50), next: 49) }
+            if attempts.next() < 3 { throw Offline() }
+            return page(Array(50..<100), next: nil)
+        }
+        let model = makeModel(library)
+        model.start()
+        #expect(await settles { model.phase == .ready && model.entries.count == 50 })
+        model.loadMore()
+        #expect(await settles { model.pagination == .failed(cursor: stamp(49)) })
+        model.retryLoadMore()
+        #expect(await settles { library.requests.count == 3 })
+        #expect(await settles { model.pagination == .failed(cursor: stamp(49)) })
+        model.retryLoadMore()
+        #expect(await settles { model.entries.count == 100 })
+        #expect(model.pagination == .end)
     }
 }

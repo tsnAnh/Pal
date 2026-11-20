@@ -12,13 +12,24 @@ final class LibraryModel {
         case failed
     }
 
+    enum LoadTrigger: Equatable {
+        case scroll
+        case retry
+    }
+
     enum Pagination: Equatable {
         case more(cursor: String)
-        case loading(cursor: String)
+        case loading(cursor: String, trigger: LoadTrigger)
+        case failed(cursor: String)
         case end
 
         init(_ page: LibraryPage) {
             self = page.nextBefore.map { .more(cursor: $0) } ?? .end
+        }
+
+        func following(_ page: LibraryPage) -> Pagination {
+            guard case .failed = self, let cursor = page.nextBefore else { return Pagination(page) }
+            return .failed(cursor: cursor)
         }
     }
 
@@ -80,7 +91,7 @@ final class LibraryModel {
         loadTask = nil
         loadMoreTask = nil
         pollTask = nil
-        if case .loading(let cursor) = pagination { pagination = .more(cursor: cursor) }
+        if case .loading(let cursor, _) = pagination { pagination = .more(cursor: cursor) }
     }
 
     func reload() {
@@ -142,7 +153,7 @@ final class LibraryModel {
         let headIDs = Set(page.entries.map(\.id))
         let tail = entries.filter { $0.occurredAt < boundary && !headIDs.contains($0.id) }
         entries = page.entries + tail
-        if tail.isEmpty, !isLoadingMore { pagination = Pagination(page) }
+        if tail.isEmpty, !isLoadingMore { pagination = pagination.following(page) }
         isIndexing = !page.indexComplete
     }
 
@@ -164,19 +175,29 @@ final class LibraryModel {
 
     func loadMore() {
         guard phase == .ready, case .more(let cursor) = pagination else { return }
-        pagination = .loading(cursor: cursor)
-        let current = generation
-        loadMoreTask = Task { await fetchMore(after: cursor, generation: current) }
+        beginLoadMore(after: cursor, trigger: .scroll)
     }
 
-    private func fetchMore(after cursor: String, generation current: Int) async {
+    func retryLoadMore() {
+        guard phase == .ready, case .failed(let cursor) = pagination else { return }
+        beginLoadMore(after: cursor, trigger: .retry)
+    }
+
+    private func beginLoadMore(after cursor: String, trigger: LoadTrigger) {
+        let loading = Pagination.loading(cursor: cursor, trigger: trigger)
+        pagination = loading
+        let current = generation
+        loadMoreTask = Task { await fetchMore(after: cursor, while: loading, generation: current) }
+    }
+
+    private func fetchMore(after cursor: String, while loading: Pagination, generation current: Int) async {
         do {
             let page = try await library.page(profile: botName, filter: filter, before: cursor)
             guard current == generation, !Task.isCancelled else { return }
             apply(page, replacing: false)
         } catch {
-            guard current == generation, !Task.isCancelled, pagination == .loading(cursor: cursor) else { return }
-            pagination = .more(cursor: cursor)
+            guard current == generation, !Task.isCancelled, pagination == loading else { return }
+            pagination = .failed(cursor: cursor)
         }
     }
 
