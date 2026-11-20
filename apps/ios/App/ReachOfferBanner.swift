@@ -65,7 +65,7 @@ private struct ReachOfferBanner: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .gesture(
-            DragGesture(minimumDistance: 12).onEnded { value in
+            DragGesture(minimumDistance: 12).onEnded { value in // scroll-gesture: ok floating banner outside any scroll view
                 if value.translation.height < -24 { dismiss() }
             }
         )

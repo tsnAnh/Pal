@@ -91,7 +91,7 @@ final class BubbleFrame {
 }
 
 private struct SwipeDrag {
-    var decision = SwipeReply.Decision.undecided
+    var tracking = false
     var offset: CGFloat = 0
     var buzzed = false
 }
@@ -128,25 +128,26 @@ private struct TouchMessageActions: ViewModifier {
         presentMenu(MessageMenuRequest(anchor: frame.rect, side: side, actions: actions))
     }
 
-    private var swipeGesture: some Gesture {
-        DragGesture(minimumDistance: SwipeReply.minimumDistance, coordinateSpace: .global)
-            .onChanged { value in
-                if swipe.decision == .undecided {
-                    swipe.decision = SwipeReply.decide(startX: value.startLocation.x, translation: value.translation)
-                }
-                guard swipe.decision == .tracking else { return }
-                let offset = SwipeReply.offset(for: value.translation.width)
+    private var swipeGesture: ScrollSafePan {
+        ScrollSafePan { start, velocity in
+            actions?.isOwnFailed == false && SwipeReply.begins(startX: start.x, velocity: velocity)
+        } update: { phase in
+            switch phase {
+            case .changed(let sample):
+                swipe.tracking = true
+                let offset = SwipeReply.offset(for: sample.translation.width)
                 if swipe.offset != offset { swipe.offset = offset }
-                if !swipe.buzzed, SwipeReply.reachedThreshold(value.translation.width) {
+                if !swipe.buzzed, SwipeReply.reachedThreshold(sample.translation.width) {
                     swipe.buzzed = true
                     Haptics.light()
                 }
-            }
-            .onEnded { value in
-                let shouldReply = swipe.decision == .tracking && SwipeReply.reachedThreshold(value.translation.width)
+            case .ended(let sample):
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { swipe = SwipeDrag() }
-                if shouldReply { actions?.reply() }
+                if SwipeReply.reachedThreshold(sample.translation.width) { actions?.reply() }
+            case .cancelled:
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) { swipe = SwipeDrag() }
             }
+        }
     }
 
     func body(content: Content) -> some View {
@@ -155,12 +156,12 @@ private struct TouchMessageActions: ViewModifier {
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame.rect = $0 }
                 .offset(x: swipe.offset)
                 .background(alignment: .leading) {
-                    if swipe.decision == .tracking {
+                    if swipe.tracking {
                         SwipeReplyGlyph(progress: SwipeReply.progress(for: swipe.offset))
                             .transition(.opacity)
                     }
                 }
-                .simultaneousGesture(swipeGesture, including: actions.isOwnFailed ? .subviews : .all)
+                .gesture(swipeGesture)
                 .onLongPressGesture(minimumDuration: 0.35) { open() }
                 .accessibilityAction(named: Text("Reply")) { actions.reply() }
                 .accessibilityAction(named: Text("Copy")) { Pasteboard.string = actions.text }

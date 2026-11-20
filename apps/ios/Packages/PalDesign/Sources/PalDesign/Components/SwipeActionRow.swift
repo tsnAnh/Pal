@@ -43,13 +43,18 @@ public struct SwipeActionRow<Content: View>: View {
             content
                 .background(Color(theme.palette.groupedCard))
                 .offset(x: offset)
+                #if os(iOS)
+                .gesture(pan)
+                #else
                 .simultaneousGesture(drag)
+                #endif
                 .accessibilityElement(children: .contain)
                 .accessibilityAction(named: Text(actionTitle), action)
         }
         .accessibilityIdentifier(accessibilityIdentifier)
     }
 
+    #if !os(iOS)
     private var drag: some Gesture {
         DragGesture(minimumDistance: 14)
             .onChanged { value in
@@ -58,13 +63,36 @@ public struct SwipeActionRow<Content: View>: View {
             }
             .onEnded { value in
                 guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                let projected = anchor + value.predictedEndTranslation.width
-                withAnimation(.snappy(duration: 0.2)) {
-                    let open = projected < -Self.revealWidth / 2
-                    offset = open ? -Self.revealWidth : 0
-                    anchor = offset
-                }
+                settle(projected: anchor + value.predictedEndTranslation.width)
             }
+    }
+    #endif
+
+    #if os(iOS)
+    private var pan: ScrollSafePan {
+        ScrollSafePan { _, velocity in
+            abs(velocity.width) > abs(velocity.height)
+        } update: { phase in
+            switch phase {
+            case .changed(let sample):
+                offset = min(0, max(-Self.revealWidth, anchor + sample.translation.width))
+            case .ended(let sample):
+                settle(projected: anchor + sample.translation.width + sample.velocity.width * Self.projectionSeconds)
+            case .cancelled:
+                settle(projected: anchor)
+            }
+        }
+    }
+
+    private static var projectionSeconds: CGFloat { 0.2 }
+    #endif
+
+    private func settle(projected: CGFloat) {
+        withAnimation(.snappy(duration: 0.2)) {
+            let open = projected < -Self.revealWidth / 2
+            offset = open ? -Self.revealWidth : 0
+            anchor = offset
+        }
     }
 
     private func close() {
