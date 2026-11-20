@@ -71,12 +71,11 @@ struct MessageActionsCoreTests {
     }
 
     @Test func swipeStartsOnlyFromAMostlyHorizontalRightwardDragAwayFromTheEdge() {
-        #expect(SwipeReply.decide(startX: 100, translation: CGSize(width: 4, height: 2)) == .undecided)
-        #expect(SwipeReply.decide(startX: 100, translation: CGSize(width: 30, height: 8)) == .tracking)
-        #expect(SwipeReply.decide(startX: 100, translation: CGSize(width: 30, height: 30)) == .rejected)
-        #expect(SwipeReply.decide(startX: 100, translation: CGSize(width: 4, height: 40)) == .rejected)
-        #expect(SwipeReply.decide(startX: 100, translation: CGSize(width: -30, height: 2)) == .rejected)
-        #expect(SwipeReply.decide(startX: 10, translation: CGSize(width: 40, height: 0)) == .rejected)
+        #expect(SwipeReply.begins(startX: 100, velocity: CGSize(width: 30, height: 8)))
+        #expect(!SwipeReply.begins(startX: 100, velocity: CGSize(width: 30, height: 30)))
+        #expect(!SwipeReply.begins(startX: 100, velocity: CGSize(width: 4, height: 40)))
+        #expect(!SwipeReply.begins(startX: 100, velocity: CGSize(width: -30, height: 2)))
+        #expect(!SwipeReply.begins(startX: 10, velocity: CGSize(width: 40, height: 0)))
     }
 
     @Test func swipeOffsetFollowsTheFingerUpToTheThreshold() {

@@ -102,7 +102,7 @@ struct MessageSheet: View {
     }
 
     private var dismissDrag: some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .global)
+        DragGesture(minimumDistance: 8, coordinateSpace: .global) // scroll-gesture: ok modal sheet over a dimmed chat
             .onChanged { dragOffset = max(0, $0.translation.height) }
             .onEnded { value in
                 if value.translation.height > 90 || value.predictedEndTranslation.height > 220 {
