@@ -67,7 +67,10 @@ struct ChatView: View {
             .coordinateSpace(.named(ChatScrollController.contentSpace))
             .padding(.horizontal, ChatMetrics.edgeMargin)
             .chatColumn()
+            .paneOverflowProbe("chat.list")
+            #if os(iOS)
             .containerRelativeFrame(.horizontal)
+            #endif
         }
         .scrollPosition($scroll.position)
         .contentMargins(.top, max(0, chrome.bottom - chrome.top), for: .automatic)
@@ -98,6 +101,7 @@ struct ChatView: View {
         }
         .accessibilityIdentifier("chatScreen")
         .accessibilityValue(Text(historySummary))
+        .paneOverflowProbe("chat.pane")
         .overlay(alignment: .bottom) {
             if scroll.showsJumpButton, !model.isFinding {
                 ScrollToBottomButton(newCount: scroll.unseen) { scroll.jumpToBottom(animated: !reduceMotion) }
@@ -106,7 +110,7 @@ struct ChatView: View {
             }
         }
         .animation(reduceMotion ? nil : .spring(duration: 0.25, bounce: 0), value: scroll.showsJumpButton)
-        .safeAreaBar(edge: .bottom) { bottomBar().chatColumn() }
+        .safeAreaBar(edge: .bottom) { bottomBar().chatColumn().paneOverflowProbe("chat.composer") }
         .onChange(of: model.currentFindRowID) { _, id in
             guard let id else { return }
             scroll.reveal(id)

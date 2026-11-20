@@ -26,7 +26,7 @@ INTERVALS = (
     "connect.open", "connect.catalog.build", "connect.sections.main", "connect.localReports", "connect.permission.probe",
     "connect.messagesdb.probe", "connect.start.burst", "connect.body.main",
     "chat.open.connect", "chat.open.resolve", "chat.open.adopt", "chat.open.outbox", "chat.open.retry", "chat.open.retry.delay",
-    "chat.open.firstpaint", "chat.open.settled", "chat.open.jump", "chat.rows.duplicate",
+    "chat.open.firstpaint", "chat.open.settled", "chat.open.jump", "chat.rows.duplicate", "layout.overflow",
 )
 TEMPLATES = ("Time Profiler", "SwiftUI", "Animation Hitches")
 SIGNPOST_SCHEMAS = ("os-signpost-interval", "os-signpost")

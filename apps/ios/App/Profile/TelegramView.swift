@@ -47,20 +47,20 @@ struct TelegramView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { action }
         .task { await model.load() }
         .onDisappear { model.stop() }
-        .sheet(isPresented: $model.isEnteringToken, onDismiss: { model.cancelTokenEntry() }) {
+        .macSheet(isPresented: $model.isEnteringToken, onDismiss: { model.cancelTokenEntry() }, content: {
             TelegramTokenSheet(model: model)
-                .macSheetFrame()
-        }
-        .confirmationDialog(
-            Text("Disconnect Telegram?"),
-            isPresented: $model.confirmsDisconnect,
-            titleVisibility: .visible
-        ) {
-            Button("Disconnect", role: .destructive) { Task { await model.disconnect() } }
-                .accessibilityIdentifier("telegramDisconnectConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(model.displayName) stops responding in Telegram.")
+        })
+        .macConfirm(isPresented: $model.confirmsDisconnect) {
+            MacDialogContent(
+                String(localized: "Disconnect Telegram?"),
+                message: String(localized: "\(model.displayName) stops responding in Telegram."),
+                actions: [
+                    MacDialogAction(String(localized: "Disconnect"), role: .destructive, identifier: "telegramDisconnectConfirm") {
+                        Task { await model.disconnect() }
+                    },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
     }
 

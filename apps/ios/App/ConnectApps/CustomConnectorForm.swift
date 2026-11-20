@@ -51,16 +51,17 @@ struct CustomConnectorForm: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("customConnector")
         .task { await model.begin() }
-        .confirmationDialog(
-            "Remove \(model.existing?.name ?? "this connector")?",
-            isPresented: $model.confirmingRemove,
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) { Task { await model.remove() } }
-                .accessibilityIdentifier("customConnectorRemoveConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Your bots lose access to this connector.")
+        .macConfirm(isPresented: $model.confirmingRemove) {
+            MacDialogContent(
+                String(localized: "Remove \(model.existing?.name ?? "this connector")?"),
+                message: String(localized: "Your bots lose access to this connector."),
+                actions: [
+                    MacDialogAction(String(localized: "Remove"), role: .destructive, identifier: "customConnectorRemoveConfirm") {
+                        Task { await model.remove() }
+                    },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
     }
 

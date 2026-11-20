@@ -69,14 +69,11 @@ struct StepSwitchGroups: View {
         VStack(alignment: .leading, spacing: PalMetrics.screenMargin) {
             ForEach(groups) { group in groupView(group) }
         }
-        .alert(
-            asking?.confirmTurningOff?.title ?? "", isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }),
-            presenting: asking
-        ) { item in
-            Button(item.confirmTurningOff?.confirmTitle ?? "", role: .destructive) { model.setSwitch(item.id, false) }
-            Button(String(localized: "Cancel"), role: .cancel) {}
-        } message: { item in
-            Text(item.confirmTurningOff?.message ?? "")
+        .macAlert(item: $asking) { item in
+            MacDialogContent(item.confirmTurningOff?.title ?? "", message: item.confirmTurningOff?.message ?? "", actions: [
+                MacDialogAction(item.confirmTurningOff?.confirmTitle ?? "", role: .destructive) { model.setSwitch(item.id, false) },
+                MacDialogAction(String(localized: "Cancel"), role: .cancel)
+            ])
         }
     }
 

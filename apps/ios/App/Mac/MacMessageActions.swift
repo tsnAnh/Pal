@@ -3,8 +3,6 @@ import AppKit
 import PalDesign
 import SwiftUI
 
-private let messageBarGap: CGFloat = 8
-
 extension View {
     func macRowHover(actions: MessageActions?) -> some View {
         modifier(MacRowHoverModifier(actions: actions))
@@ -24,7 +22,25 @@ struct MacRowHoverModifier: ViewModifier {
                 guard let actions else { return }
                 shell.messageMenu = MacMessageMenuRequest(anchor: anchor, actions: actions)
             })
+            .overlayPreferenceValue(MessageCarrierKey.self) { carrier in
+                if let carrier, let actions {
+                    MacMessageChrome(carrier: carrier, actions: actions)
+                }
+            }
             .environment(\.rowHover, hover)
+    }
+}
+
+struct MessageCarrier {
+    let bubble: Anchor<CGRect>
+    let slot: MessageChromePlacement.Slot
+}
+
+struct MessageCarrierKey: PreferenceKey {
+    static var defaultValue: MessageCarrier? { nil }
+
+    static func reduce(value: inout MessageCarrier?, nextValue: () -> MessageCarrier?) {
+        value = value ?? nextValue()
     }
 }
 
@@ -34,28 +50,63 @@ struct MacMessageActionsModifier: ViewModifier {
     let actions: MessageActions?
 
     func body(content: Content) -> some View {
-        if let actions {
-            switch side {
-            case .user:
-                content.overlay(alignment: .leading) {
-                    MacMessageHoverBar(actions: actions)
-                        .alignmentGuide(.leading) { $0[.trailing] + messageBarGap }
-                }
-            case .assistant where placement == .insideBubble:
-                content.overlay(alignment: .topTrailing) {
-                    MacMessageHoverBar(actions: actions)
-                        .padding(.top, placement.barTopInset(hasReaction: actions.reaction != nil))
-                        .padding(.trailing, MessageChromePlacement.insetFromEdge)
-                }
-            case .assistant:
-                content.overlay(alignment: .trailing) {
-                    MacMessageHoverBar(actions: actions)
-                        .alignmentGuide(.trailing) { $0[.leading] - messageBarGap }
-                }
+        if actions != nil {
+            content.anchorPreference(key: MessageCarrierKey.self, value: .bounds) { [side, placement] bubble in
+                MessageCarrier(bubble: bubble, slot: MessageChromePlacement.Slot(side: side, preferred: placement))
             }
         } else {
             content
         }
+    }
+}
+
+private struct MacMessageChrome: View {
+    let carrier: MessageCarrier
+    let actions: MessageActions
+
+    var body: some View {
+        GeometryReader { proxy in
+            MessageChromeLayout(
+                bubble: proxy[carrier.bubble],
+                region: CGRect(origin: .zero, size: proxy.size),
+                slot: carrier.slot,
+                hasReaction: actions.reaction != nil
+            ) {
+                MacMessageHoverBar(actions: actions)
+                if let reaction = actions.reaction {
+                    MessageReactionBadge(emoji: reaction)
+                }
+            }
+        }
+    }
+}
+
+private struct MessageChromeLayout: Layout {
+    let bubble: CGRect
+    let region: CGRect
+    let slot: MessageChromePlacement.Slot
+    let hasReaction: Bool
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions(by: region.size)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let bar = subviews.first else { return }
+        let barSize = bar.sizeThatFits(.unspecified)
+        let resolved = MessageChromePlacement.place(
+            bubble: bubble, region: region, slot: slot, bar: barSize, hasReaction: hasReaction
+        )
+        bar.place(at: bounds.origin.offset(by: resolved.frames.bar.origin), proposal: ProposedViewSize(barSize))
+        if hasReaction, subviews.count > 1, let badge = resolved.frames.badge {
+            subviews[1].place(at: bounds.origin.offset(by: badge.origin), proposal: ProposedViewSize(badge.size))
+        }
+    }
+}
+
+private extension CGPoint {
+    func offset(by other: CGPoint) -> CGPoint {
+        CGPoint(x: x + other.x, y: y + other.y)
     }
 }
 
@@ -75,7 +126,9 @@ private struct MacRowTracker: NSViewRepresentable {
     }
 
     private func configure(_ view: TrackingView) {
-        view.onChange = { [hover] in hover.setHovering($0) }
+        view.onChange = { [hover] in
+            if $0 { hover.enter(.message) } else { hover.exit(.message) }
+        }
         view.openMenu = openMenu
         view.actions = actions
     }
@@ -249,6 +302,10 @@ private struct MacMessageHoverBar: View {
         .opacity(visible ? 1 : 0)
         .animation(.easeOut(duration: 0.12), value: visible)
         .allowsHitTesting(visible)
+        .onHover { inside in
+            if inside { rowHover?.enter(.bar) } else { rowHover?.exit(.bar) }
+        }
+        .onDisappear { rowHover?.exit(.bar) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("messageActionBar")
         .modifier(BarAccessibilityActions(

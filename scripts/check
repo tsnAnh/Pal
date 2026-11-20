@@ -126,6 +126,7 @@ _GUARDS = {
     "swift-chat-scroll": ["scripts/ci/check_swift_chat_scroll.py"],
     "swift-chat-row-alignment": ["scripts/ci/check_swift_chat_row_alignment.py"],
     "swift-mac-layout": ["scripts/ci/check_swift_mac_layout.py"],
+    "swift-modal-size": ["scripts/ci/check_swift_modal_size.py"],
     "swift-glass": ["scripts/ci/check_swift_glass.py"],
     "swift-icon-tint": ["scripts/ci/check_swift_icon_tint.py"],
     "swift-image-viewer": ["scripts/ci/check_swift_image_viewer.py"],

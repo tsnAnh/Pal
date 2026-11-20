@@ -101,6 +101,7 @@ struct PalApp: App {
                     if connected { Task { await appDelegate.push.ensureRegistered() } }
                 }
                 .onChange(of: roster.bots) { _, bots in
+                    PushAvatarSync.shared.sync(bots)
                     Task { await directory.publish(bots) }
                 }
                 .onChange(of: scenePhase) { _, phase in
@@ -298,7 +299,7 @@ struct RootView: View {
     private var workspace: some View {
         navigation
             .environment(hub)
-            .environment(rooms)
+            .environment(rooms).macModalEnvironment()
             .task { await roster.runLive() }
             .task { await rooms.run() }
             .sheet(isPresented: Binding(get: { rooms.showsCreate }, set: { rooms.showsCreate = $0 })) {

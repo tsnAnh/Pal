@@ -34,20 +34,18 @@ struct BotProfileView: View {
         .task { await suggestions.load() }
         .task(id: model.row?.conversationID) { await autoApprove.load(sessionID: model.row?.conversationID) }
         .toast($model.toast)
-        .sheet(item: Binding(get: { model.editing }, set: { if $0 == nil { model.endEditing() } })) { editing in
+        .macSheet(item: Binding(get: { model.editing }, set: { if $0 == nil { model.endEditing() } })) { editing in
             EditBotSheet(model: editing) { model.endEditing() }
-                .macSheetFrame()
         }
-        .confirmationDialog(
-            Text("Replace Primary Bot?"),
-            isPresented: $model.confirmsReplacePrimary,
-            titleVisibility: .visible
-        ) {
-            Button("Replace") { Task { await model.replacePrimary() } }
-                .accessibilityIdentifier("replacePrimaryConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(model.displayName) becomes your primary bot. Nothing is copied or deleted.")
+        .macConfirm(isPresented: $model.confirmsReplacePrimary) {
+            MacDialogContent(
+                String(localized: "Replace Primary Bot?"),
+                message: String(localized: "\(model.displayName) becomes your primary bot. Nothing is copied or deleted."),
+                actions: [
+                    MacDialogAction(String(localized: "Replace"), identifier: "replacePrimaryConfirm") { Task { await model.replacePrimary() } },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
     }
 

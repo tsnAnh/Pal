@@ -44,21 +44,20 @@ struct RoutinesView: View {
         .task { await model.load() }
         .refreshable { await model.load() }
         .toast($model.toast)
-        .sheet(item: $creation) { created in
+        .macSheet(item: $creation) { created in
             NewRoutineSheet(model: created) { creation = nil }
-                .macSheetFrame()
         }
-        .confirmationDialog(
-            Text("Delete this routine?"),
-            isPresented: Binding(get: { model.pendingRemoval != nil }, set: { if !$0 { model.pendingRemoval = nil } }),
-            titleVisibility: .visible,
-            presenting: model.pendingRemoval
-        ) { routine in
-            Button("Delete", role: .destructive) { Task { await model.remove(routine) } }
-                .accessibilityIdentifier("routineDeleteConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: { routine in
-            Text("\(routine.title) won't run again.")
+        .macConfirm(item: $model.pendingRemoval) { routine in
+            MacDialogContent(
+                String(localized: "Delete this routine?"),
+                message: String(localized: "\(routine.title) won't run again."),
+                actions: [
+                    MacDialogAction(String(localized: "Delete"), role: .destructive, identifier: "routineDeleteConfirm") {
+                        Task { await model.remove(routine) }
+                    },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
     }
 

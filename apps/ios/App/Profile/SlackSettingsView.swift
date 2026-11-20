@@ -46,12 +46,17 @@ struct SlackSettingsView: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("slackSettings")
-        .confirmationDialog(Text("Disconnect \(name) from Slack?"), isPresented: $confirmsDisconnect, titleVisibility: .visible) {
-            Button("Disconnect", role: .destructive) { Task { await model.disconnect() } }
-                .accessibilityIdentifier("slackDisconnectConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(name) leaves every channel and stops answering in Slack.")
+        .macConfirm(isPresented: $confirmsDisconnect) {
+            MacDialogContent(
+                String(localized: "Disconnect \(name) from Slack?"),
+                message: String(localized: "\(name) leaves every channel and stops answering in Slack."),
+                actions: [
+                    MacDialogAction(String(localized: "Disconnect"), role: .destructive, identifier: "slackDisconnectConfirm") {
+                        Task { await model.disconnect() }
+                    },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
     }
 

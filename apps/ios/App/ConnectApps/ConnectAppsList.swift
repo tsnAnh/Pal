@@ -27,6 +27,9 @@ struct ConnectAppsSearchField: View {
 
 struct ConnectAppsList: View {
     @Bindable var model: ConnectAppsModel
+    #if os(macOS)
+    @Environment(\.macWindowSize) var windowSize
+    #endif
 
     var body: some View {
         #if os(macOS)

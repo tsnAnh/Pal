@@ -188,20 +188,17 @@ private struct ProviderRemovalConfirmation: ViewModifier {
     let model: ModelProvidersModel
 
     func body(content: Content) -> some View {
-        content.confirmationDialog(
-            model.pendingRemoval.map { "Remove \($0.name)?" } ?? "Remove this provider?",
-            isPresented: Binding(get: { model.pendingRemoval != nil }, set: { if !$0 { model.pendingRemoval = nil } }),
-            titleVisibility: .visible,
-            presenting: model.pendingRemoval
-        ) { provider in
-            Button("Remove", role: .destructive) { Task { await model.remove(provider) } }
-                .accessibilityIdentifier("modelProviderRemoveConfirm")
-            Button("Cancel", role: .cancel) { model.pendingRemoval = nil }
-        } message: { provider in
-            Text(
-                provider.scope == .account
-                    ? "This sign-in is shared by all your bots. Bots that use \(provider.name) stop working until you connect it again."
-                    : "Bots that use \(provider.name) stop working until you connect it again.")
+        content.macConfirm(item: Binding(get: { model.pendingRemoval }, set: { model.pendingRemoval = $0 })) { provider in
+            MacDialogContent(
+                String(localized: "Remove \(provider.name)?"),
+                message: provider.scope == .account
+                    ? String(localized: "This sign-in is shared by all your bots. Bots that use \(provider.name) stop working until you connect it again.")
+                    : String(localized: "Bots that use \(provider.name) stop working until you connect it again."),
+                actions: [
+                    MacDialogAction("Remove", role: .destructive, identifier: "modelProviderRemoveConfirm") { Task { await model.remove(provider) } },
+                    MacDialogAction("Cancel", role: .cancel) { model.pendingRemoval = nil },
+                ]
+            )
         }
     }
 }

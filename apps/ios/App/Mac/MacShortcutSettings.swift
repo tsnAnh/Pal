@@ -57,12 +57,14 @@ struct MacShortcutSettingsSection: View {
                 )
             }
         )
-        .confirmationDialog("Restore all keyboard shortcuts to their defaults?", isPresented: $confirmingRestore) {
-            Button("Restore Defaults", role: .destructive) {
-                stopRecording()
-                store.resetAll()
-            }
-            Button("Cancel", role: .cancel) {}
+        .macConfirm(isPresented: $confirmingRestore) {
+            MacDialogContent(String(localized: "Restore all keyboard shortcuts to their defaults?"), actions: [
+                MacDialogAction("Restore Defaults", role: .destructive) {
+                    stopRecording()
+                    store.resetAll()
+                },
+                MacDialogAction("Cancel", role: .cancel)
+            ])
         }
         .onDisappear { stopRecording() }
     }

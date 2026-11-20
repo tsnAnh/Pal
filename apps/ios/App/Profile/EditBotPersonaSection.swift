@@ -77,16 +77,17 @@ struct EditBotPersonaSection: View {
             }
         }
         .opacity(model.personaState == .ready ? 1 : 0.6)
-        .confirmationDialog(
-            Text("Replace the description?"),
-            isPresented: $model.confirmsReplaceDescription,
-            titleVisibility: .visible
-        ) {
-            Button("Replace") { Task { await model.writeDescription(overwrite: true) } }
-                .accessibilityIdentifier("editBotReplaceDescriptionConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Pal writes a new one and the description you wrote is lost.")
+        .macConfirm(isPresented: $model.confirmsReplaceDescription) {
+            MacDialogContent(
+                String(localized: "Replace the description?"),
+                message: String(localized: "Pal writes a new one and the description you wrote is lost."),
+                actions: [
+                    MacDialogAction(String(localized: "Replace"), identifier: "editBotReplaceDescriptionConfirm") {
+                        Task { await model.writeDescription(overwrite: true) }
+                    },
+                    MacDialogAction(String(localized: "Cancel"), role: .cancel),
+                ]
+            )
         }
         .task { await model.loadPersona() }
     }

@@ -9,8 +9,9 @@ struct MacModelProvidersSection: View {
 
     @State private var model: ModelProvidersModel
 
-    init(hub: SettingsHub) {
+    init(hub: SettingsHub, embedded: Bool = false) {
         self.hub = hub
+        self.embedded = embedded
         _model = State(initialValue: hub.modelProvidersModel())
     }
 
