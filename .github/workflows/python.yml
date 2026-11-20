@@ -1,4 +1,4 @@
-name: Python
+name: CI
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: python-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -21,6 +21,8 @@ jobs:
       python: ${{ steps.paths.outputs.python }}
       tooling_tests: ${{ steps.paths.outputs.tooling_tests }}
       ios_guards: ${{ steps.paths.outputs.ios_guards }}
+      swift: ${{ steps.paths.outputs.swift }}
+      swift_variant: ${{ github.event_name == 'push' || steps.paths.outputs.swift_variant == 'true' }}
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
         with:
@@ -65,6 +67,7 @@ jobs:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
         with:
           fetch-depth: 0
+          filter: blob:none
 
       - name: Set up locked Python and test dependencies
         uses: ./.github/actions/setup-pm
@@ -80,15 +83,41 @@ jobs:
       - name: Lint and static checks (python scripts/check)
         run: python scripts/check
 
+  tests:
+    name: tests (${{ matrix.slice }}/3)
+    needs: changes
+    if: needs.changes.outputs.tooling_tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: true
+      matrix:
+        slice: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Set up locked Python and test dependencies
+        uses: ./.github/actions/setup-pm
+        with:
+          test-environment: 'true'
+          prune-python-cache: true
+
+      - name: Install pinned ruff
+        uses: ./.github/actions/retry
+        with:
+          command: python -m scripts.ci.python_packages "$(python -m scripts.code_health --print-pins)"
+
       # Subset, not the full suite: the full suite is sized for three 32-vCPU runners and does not
       # finish on a hosted 4-vCPU one. tests/ci and tests/scripts cover the repo's own guards and
       # tooling (about 8 min on 4 vCPU). Excluded: two tests red on main today, test_docs_drift
       # (undocumented config keys, /reach) and test_prompt_surface (stale snapshot), and
       # test_code_health_identity, which exceeded its 300 s file timeout on a 4-vCPU sandbox.
-      - name: Tests (tests/ci, tests/scripts)
-        if: needs.changes.outputs.tooling_tests == 'true'
+      - name: Tests (tests/ci, tests/scripts, slice ${{ matrix.slice }} of 3)
         run: >-
-          scripts/run_tests.sh tests/ci tests/scripts --
+          scripts/run_tests.sh tests/ci tests/scripts --slice ${{ matrix.slice }}/3 --
           --deselect=tests/ci/test_docs_drift.py::test_no_new_undocumented_config_keys_or_slash_commands
           --deselect=tests/ci/test_prompt_surface.py::test_committed_prompt_surface_is_current
           --ignore=tests/scripts/test_code_health_identity.py
@@ -101,7 +130,7 @@ jobs:
       # bots_harness.py), where a stale initialize_session_authority call went unseen. Two
       # test_canonical_bridge tests are red on main (library.list, account-owned connector calls).
       - name: Tests (gateway device and bot harness)
-        if: needs.changes.outputs.tooling_tests == 'true'
+        if: matrix.slice == 1
         run: >-
           scripts/run_tests.sh
           tests/gateway/test_push_notifications.py
@@ -119,9 +148,139 @@ jobs:
           OPENAI_API_KEY: ""
           NOUS_API_KEY: ""
 
+  swift-build:
+    name: swift-build (${{ matrix.name }})
+    needs: [changes, ios-guards]
+    if: needs.changes.outputs.swift == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: ios-simulator
+            kind: app
+            destination: generic/platform=iOS Simulator
+          - name: macos
+            kind: app
+            destination: generic/platform=macOS
+          - name: hermeskit
+            kind: package
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+
+      # App/Intents uses the iOS/macOS 27 SDK (LongRunningIntent, the messages app schemas),
+      # which only the xcode-27 image carries; macos-15 and macos-26 stop at Xcode 26.x.
+      - name: Select Xcode 27
+        working-directory: .
+        run: |
+          xcode="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)"
+          test -n "$xcode" || { echo "no Xcode 27 on this image"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        if: matrix.kind == 'app'
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: Generate the Xcode project (Communication Notifications off by default)
+        if: matrix.kind == 'app'
+        run: |
+          xcodegen generate
+          if grep -q NotificationService HermesBots.xcodeproj/project.pbxproj; then exit 1; fi
+
+      - name: Build for testing
+        if: matrix.kind == 'app'
+        run: >-
+          xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
+          -destination '${{ matrix.destination }}'
+          -skipPackagePluginValidation -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      # Compile only: the packages target macOS 26, which a macos-15 host cannot launch, so
+      # `swift test` cannot run the tests here.
+      - name: Build HermesKit and its tests
+        if: matrix.kind == 'package'
+        working-directory: apps/ios/Packages/PalKit
+        run: swift build --build-tests
+
+  # PAL_COMM_NOTIFICATIONS=1 adds the Notification Service Extension, the Communication
+  # Notifications entitlement and the App Group; build it so the switched-on path keeps compiling.
+  # Only when the files it compiles change (ci_paths.py swift-variant) and on every push to main.
+  swift-variant:
+    name: swift-variant (${{ matrix.name }})
+    needs: [changes, ios-guards]
+    if: needs.changes.outputs.swift == 'true' && needs.changes.outputs.swift_variant == 'true'
+    runs-on: xcode-27
+    timeout-minutes: 60
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: ios-simulator
+            destination: generic/platform=iOS Simulator
+          - name: macos
+            destination: generic/platform=macOS
+    defaults:
+      run:
+        working-directory: apps/ios
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+
+      - name: Select Xcode 27
+        working-directory: .
+        run: |
+          xcode="$(ls -d /Applications/Xcode_27*.app 2>/dev/null | sort -V | tail -1)"
+          test -n "$xcode" || { echo "no Xcode 27 on this image"; ls -d /Applications/Xcode*; exit 1; }
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: Generate the Xcode project (PAL_COMM_NOTIFICATIONS=1)
+        env:
+          PAL_COMM_NOTIFICATIONS: "1"
+        run: |
+          xcodegen generate
+          grep -q NotificationService HermesBots.xcodeproj/project.pbxproj
+
+      - name: Build with Communication Notifications
+        run: >-
+          xcodebuild build -project HermesBots.xcodeproj -scheme HermesBots
+          -destination '${{ matrix.destination }}'
+          -skipPackagePluginValidation -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+  swift:
+    name: swift
+    needs: [changes, ios-guards, swift-build, swift-variant]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail when a selected Swift job failed, was cancelled, or was skipped without a failed guard
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+          SELECTED: ${{ needs.changes.outputs.swift }}
+          VARIANT: ${{ needs.changes.outputs.swift_variant }}
+          GUARDS: ${{ needs.ios-guards.result }}
+          BUILD: ${{ needs.swift-build.result }}
+          VARIANT_RESULT: ${{ needs.swift-variant.result }}
+        run: |
+          echo "needed jobs: $RESULTS"
+          case " $RESULTS " in *" failure "*|*" cancelled "*) exit 1 ;; esac
+          [ "$GUARDS" = success ] || exit 0
+          [ "$SELECTED" = true ] || exit 0
+          [ "$BUILD" = success ] || exit 1
+          [ "$VARIANT" != true ] || [ "$VARIANT_RESULT" = success ] || exit 1
+
   ci:
     name: ci
-    needs: [changes, ios-guards, python]
+    needs: [changes, ios-guards, python, tests, swift-build, swift-variant, swift]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

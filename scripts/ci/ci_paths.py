@@ -23,7 +23,13 @@ JOB_RULES: dict[str, tuple[Rule, ...]] = {
     "python": (*_OUTSIDE_IOS, ("apps/ios/*.py", True), *_RUN_EVERYTHING),
     "tooling-tests": (*_OUTSIDE_IOS, *_RUN_EVERYTHING),
     "ios-guards": (("apps/ios/*", True), *_RUN_EVERYTHING),
-    "swift": (("apps/ios/*", True), (".github/workflows/swift.yml", True)),
+    "swift": (("apps/ios/*", True), (".github/workflows/python.yml", True)),
+    "swift-variant": (
+        ("apps/ios/project.yml", True), ("apps/ios/*.entitlements", True),
+        ("apps/ios/Variants/*", True), ("apps/ios/NotificationService/*", True),
+        ("apps/ios/Packages/PalKit/Package.swift", True), ("apps/ios/Packages/PalKit/Sources/PalPush/*", True),
+        ("apps/ios/App/Push/PushAvatarSync.swift", True), ("scripts/ci/check_swift_entitlements.py", True),
+        (".github/workflows/python.yml", True)),
     "faker-kit": ((".claude/skills/*", True), (".agents/skills/*", True),
                   ("scripts/link-skills.sh", True), *_RUN_EVERYTHING),
 }
@@ -76,6 +82,7 @@ JOB_CHECKS: dict[str, tuple[str, ...]] = {
                    "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "swift-scroll-gesture", "swift-chat-row-alignment", "swift-mac-layout", "swift-modal-size", "swift-glass",
                    "swift-icon-tint", "swift-connect-palette", "swift-image-viewer", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint"),
     "swift": (),
+    "swift-variant": (),
     "faker-kit": (),
 }
 
