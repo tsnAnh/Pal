@@ -23,13 +23,14 @@ public enum FileAvailability: Sendable, Equatable {
 
 public enum MessageFiles {
     private static let tag = "MEDIA:"
+    private static let previewPrefix = "::preview{"
     private static let maxPathLength = 2048
     private static let trailingMarks = CharacterSet(charactersIn: ".,;:!?'\"*_`)]}>")
     private static let leftToOtherRenderers: Set<String> = MessageImages.imageExtensions.union(["mp4", "m4v", "mov", "m3u8", "webm", "mkv", "avi"])
     private static let audioExtensions: Set<String> = ["mp3", "wav", "ogg", "oga", "opus", "m4a", "aac", "flac"]
 
     public static func extract(from text: String, isStreaming: Bool) -> (text: String, files: [FileReference]) {
-        guard text.contains(tag) else { return (text, []) }
+        guard text.contains(tag) || text.contains(previewPrefix) else { return (text, []) }
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         var kept: [String] = []
         var files: [FileReference] = []
@@ -39,6 +40,10 @@ public enum MessageFiles {
             if let marker = fenceMarker(of: source) {
                 if fence == nil { fence = marker } else if fence == marker { fence = nil }
                 kept.append(source)
+                continue
+            }
+            if fence == nil, let path = previewPath(in: source) {
+                files.append(FileReference(path: path, directive: source.trimmingCharacters(in: .whitespaces)))
                 continue
             }
             guard fence == nil, source.contains(tag) else {
@@ -105,6 +110,24 @@ public enum MessageFiles {
         }
         let trimmed = result.trimmingCharacters(in: .whitespaces)
         return (trimmed, files)
+    }
+
+    private static func previewPath(in line: String) -> String? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix(previewPrefix), trimmed.hasSuffix("}") else { return nil }
+        let attributes = trimmed.dropFirst(previewPrefix.count).dropLast()
+        var search = attributes.startIndex..<attributes.endIndex
+        while let key = attributes.range(of: "file=", range: search) {
+            let atBoundary = key.lowerBound == attributes.startIndex || attributes[attributes.index(before: key.lowerBound)].isWhitespace
+            if atBoundary, let quote = attributes[key.upperBound...].first, quote == "\"" || quote == "'" {
+                let valueStart = attributes.index(after: key.upperBound)
+                if let close = attributes[valueStart...].firstIndex(of: quote) {
+                    return hostPath(from: String(attributes[valueStart..<close]))
+                }
+            }
+            search = key.upperBound..<attributes.endIndex
+        }
+        return nil
     }
 
     private static func hostPath(from token: String) -> String? {
