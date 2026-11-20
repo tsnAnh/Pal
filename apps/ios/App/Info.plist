@@ -55,6 +55,10 @@
 	<string>Pal reads and adds your reminders when you ask your bot to.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Pal turns your speech into text on this device for dictation and voice mode.</string>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>INSendMessageIntent</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

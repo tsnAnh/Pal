@@ -99,6 +99,12 @@ CASES = [
     ("perf-hover-state-in-row-body", ROWS,
      "struct ChatRowView: View {\n    @Environment(\\.rowHover) private var hover\n    var body: some View { Text(hover?.isHovering == true ? \"a\" : \"b\") }\n}\n",
      "struct ChatRowView: View {\n    var body: some View { content.rowHoverWiring(actions) }\n}\n"),
+    ("perf-hover-pill-outside-tracker", "App/Mac/MacMessageActions.swift",
+     "content.overlay(alignment: .trailing) {\n    MacMessageHoverBar(actions: actions)\n        .alignmentGuide(.trailing) { $0[.leading] - messageBarGap }\n}\nstruct MacMessageHoverBar: View {}\n",
+     "content.overlayPreferenceValue(MessageCarrierKey.self) { carrier in MacMessageChrome(carrier: carrier) }\nstruct MacMessageHoverBar: View {}\n"),
+    ("perf-hover-tracker-per-bubble", "App/Chat/AssistantBubble.swift",
+     "return bubble.rowHoverWiring(actions).bubbleWidth(.leading)\n",
+     "return bubble.messageActions(side: .assistant).bubbleWidth(.leading)\n"),
     ("perf-observed-image-dictionary", SCREEN, "    private var images: [String: PlatformImage] = [:]\n", "    private var slots: [String: Slot] = [:]\n"),
     ("perf-monitor-unpaired", SCREEN,
      "final class V {\n    func install() { monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { $0 } }\n}\n",
@@ -173,6 +179,8 @@ def test_messages_name_the_replacement() -> None:
         "perf-body-array-work": "rowsNewestFirst",
         "perf-row-reads-model": "ChatRowContext",
         "perf-hover-state-in-row-body": "MacMessageHoverBar",
+        "perf-hover-pill-outside-tracker": "MessageChromePlacement.place",
+        "perf-hover-tracker-per-bubble": "RowHoverState",
         "perf-observed-image-dictionary": "Slot",
         "perf-drag-writes-binding": "DragWidth",
     }
@@ -583,3 +591,41 @@ def test_selection_over_one_text_view_is_allowed_and_only_rows_are_checked(tmp_p
     assert _rules(tmp_path / "b", ROWS, island) == ["perf-selection-island"]
     assert _rules(tmp_path / "c", SCREEN, island) == []
     assert _rules(tmp_path / "d", SCREEN, "MarkdownView(parsed: parsed, highlight: h, isCurrentMatch: false)\n") == []
+
+
+PRE_FIX_HOVER_PILL = """struct MacMessageActionsModifier: ViewModifier {
+    func body(content: Content) -> some View {
+        if let actions {
+            switch side {
+            case .user:
+                content.overlay(alignment: .leading) {
+                    MacMessageHoverBar(actions: actions)
+                        .alignmentGuide(.leading) { $0[.trailing] + messageBarGap }
+                }
+            case .assistant:
+                content.overlay(alignment: .trailing) {
+                    MacMessageHoverBar(actions: actions)
+                        .alignmentGuide(.trailing) { $0[.leading] - messageBarGap }
+                }
+            }
+        }
+    }
+}
+"""
+
+
+def test_pre_fix_hover_pill_fails_naming_the_placement_function_and_the_real_file_passes() -> None:
+    rel = Path("App/Mac/MacMessageActions.swift")
+    old = [f for f in csp.violations(rel, PRE_FIX_HOVER_PILL, None) if f.rule == "perf-hover-pill-outside-tracker"]
+    assert [f.text for f in old] == [
+        "content.overlay(alignment: .leading) {",
+        ".alignmentGuide(.leading) { $0[.trailing] + messageBarGap }",
+        "content.overlay(alignment: .trailing) {",
+        ".alignmentGuide(.trailing) { $0[.leading] - messageBarGap }",
+    ]
+    assert all("MessageChromePlacement.place" in f.message for f in old)
+    ios = REPO / "apps" / "ios"
+    current = (ios / rel).read_text(encoding="utf-8")
+    assert not csp.violations(rel, current, csp.load_allowlist(ios / csp.ALLOWLIST_NAME))
+    entries = json.loads((ios / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
+    assert not [e for e in entries if e["file"] == rel.as_posix()]

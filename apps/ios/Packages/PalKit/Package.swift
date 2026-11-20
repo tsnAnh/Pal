@@ -10,6 +10,7 @@ let package = Package(
         .library(name: "PalREST", targets: ["PalREST"]),
         .library(name: "PalAuth", targets: ["PalAuth"]),
         .library(name: "PalTransport", targets: ["PalTransport"]),
+        .library(name: "PalPush", targets: ["PalPush"]),
         .library(name: "PalClient", targets: ["PalClient"]),
         .library(name: "PalChat", targets: ["PalChat"]),
         .library(name: "PalRoster", targets: ["PalRoster"]),
@@ -26,9 +27,10 @@ let package = Package(
         .target(name: "PalREST", dependencies: ["PalProtocol", "PalDiagnostics"]),
         .target(name: "PalAuth", dependencies: ["PalREST", "PalDiagnostics"]),
         .target(name: "PalTransport", dependencies: ["PalProtocol", "PalDiagnostics"]),
+        .target(name: "PalPush"),
         .target(
             name: "PalClient",
-            dependencies: ["PalProtocol", "PalDiagnostics", "PalREST", "PalAuth", "PalTransport"]
+            dependencies: ["PalProtocol", "PalDiagnostics", "PalREST", "PalAuth", "PalTransport", "PalPush"]
         ),
         .target(
             name: "PalChat",
@@ -49,7 +51,7 @@ let package = Package(
         .testTarget(
             name: "PalKitTests",
             dependencies: [
-                "PalProtocol", "PalDiagnostics", "PalREST", "PalAuth", "PalTransport", "PalClient",
+                "PalProtocol", "PalDiagnostics", "PalREST", "PalAuth", "PalTransport", "PalPush", "PalClient",
                 "PalChat", "PalRoster", "PalBotProfile", "PalRFB", "PalDevice", "PalConnect", "PalSettings", "PalKanban",
             ]
         ),
