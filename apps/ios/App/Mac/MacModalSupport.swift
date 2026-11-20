@@ -61,19 +61,16 @@ struct MacModalPanel<Content: View>: View {
 
     @ViewBuilder
     private var sized: some View {
-        let cap = MacModalSizing.frame(window: windowSize?.size ?? .zero)
-        if cap.width > 0, cap.height > 0 {
-            switch fit {
-            case .window: content.frame(width: cap.width, height: cap.height)
-            case .content: content.frame(maxWidth: cap.width, maxHeight: cap.height)
-            }
-        } else {
-            content
+        let cap = MacModalSizing.sheetSize(window: windowSize?.size ?? .zero)
+        switch fit {
+        case .window: content.frame(width: cap.width, height: cap.height)
+        case .content: content.frame(maxWidth: cap.width, maxHeight: cap.height)
         }
     }
 
     var body: some View {
         sized
+            .paneOverflowProbe(identifier)
             .background(background, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
             .overlayPreferenceValue(MacPanelCloseKey.self, alignment: closePlacement.alignment) { override in

@@ -59,4 +59,14 @@ struct MacModalSizingTests {
             }
         }
     }
+
+    @Test(arguments: [CGSize.zero, CGSize(width: 900, height: 600), CGSize(width: 1_280, height: 830), CGSize(width: 1_728, height: 1_117)])
+    func aPanelHasAPositiveSizeInsideTheWindowAndTheGridHasAColumnEvenBeforeTheWindowIsMeasured(window: CGSize) {
+        let panel = MacModalSizing.sheetSize(window: window)
+        #expect(panel.width > 0 && panel.height > 0)
+        if window != .zero {
+            #expect(panel.width <= window.width * 0.9 && panel.height <= window.height * 0.9)
+        }
+        #expect(MacModalSizing.gridColumns(panelWidth: panel.width) >= 1)
+    }
 }
