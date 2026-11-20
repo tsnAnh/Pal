@@ -58,7 +58,7 @@ def test_python_workflow_gates_each_job_on_its_table_output():
     assert jobs["ios-guards"]["if"] == "needs.changes.outputs.ios_guards == 'true'"
     assert jobs["tests"]["if"] == "needs.changes.outputs.tooling_tests == 'true'"
     for name in ("swift-build", "swift-variant"):
-        assert set(jobs[name]["needs"]) == {"changes", "ios-guards"}
+        assert set(jobs[name]["needs"]) == {"changes"}
     assert jobs["swift-build"]["if"] == "needs.changes.outputs.swift == 'true'"
     assert jobs["swift-variant"]["if"] == (
         "needs.changes.outputs.swift == 'true' && needs.changes.outputs.swift_variant == 'true'")

@@ -105,7 +105,7 @@ def selected_jobs(paths: list[str] | None) -> dict[str, bool]:
 def changed_paths(base: str, head: str) -> list[str] | None:
     if not base or set(base) == {"0"}:
         return None
-    proc = subprocess.run(["git", "diff", "--name-only", f"{base}...{head}"],
+    proc = subprocess.run(["git", "diff", "--name-only", "--no-renames", base, head],
                           capture_output=True, text=True, timeout=120, check=False)
     if proc.returncode != 0:
         print(f"ci_paths: git diff failed, running everything: {proc.stderr.strip()}",

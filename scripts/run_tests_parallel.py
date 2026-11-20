@@ -1003,6 +1003,13 @@ def _longest_first(
     return sorted(files, key=lambda f: -_estimated_duration(f, durations, repo_root))
 
 
+def _load_slice_weights(repo_root: Path) -> dict[str, float]:
+    path = repo_root / "tests" / "ci" / "slice_weights.json"
+    if not path.is_file():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
 def _slice_files(
     files: list[Path],
     slice_index: int,
@@ -1015,7 +1022,9 @@ def _slice_files(
     Every slice job computes the partition on its own, so it must come only from
     the checkout: a duration cache restored separately per job can differ (a main
     push saves a newer one in between) and silently drop or double-run files.
-    Sorted round-robin balances within seconds of timed LPT at this suite size.
+    The weights are the committed ``tests/ci/slice_weights.json`` (measured CI
+    durations of the heavy files), so a slow file never shares a slice with
+    other slow files; files without a weight count as equal.
 
     ``slice_index`` is 1-indexed (1..slice_count) for ergonomics —
     ``--slice 1/4`` reads more naturally than ``--slice 0/4``.
@@ -1029,7 +1038,7 @@ def _slice_files(
         )
         sys.exit(2)
 
-    bucket_files = _compute_lpt_slices(sorted(files), slice_count, {}, repo_root)
+    bucket_files = _compute_lpt_slices(sorted(files), slice_count, _load_slice_weights(repo_root), repo_root)
 
     target = bucket_files[slice_index - 1]
     target_dur = sum(_estimated_duration(f, durations, repo_root) for f in target)
