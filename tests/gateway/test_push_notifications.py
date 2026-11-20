@@ -477,3 +477,17 @@ def test_the_alert_title_is_the_name_the_app_shows_never_the_profile_id(tmp_path
     assert payload["aps"]["alert"] == {"title": expected, "body": "Done."}
     assert payload["aps"]["mutable-content"] == 1 and payload["aps"]["thread-id"] == profile
     assert len(json.dumps(payload).encode()) < 4096
+
+
+@pytest.mark.parametrize("profile_yaml, expected", [
+    ("", "Pal"),
+    ("display_name: Display Name\n", "Display Name"),
+    ("ui_meta:\n  hermes-bots:\n    title: Memolly\ndisplay_name: Other\n", "Memolly"),
+])
+def test_the_default_bots_alert_title_is_the_brand_unless_it_has_a_name(tmp_path, monkeypatch, profile_yaml, expected):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    (tmp_path / "profile.yaml").write_text(profile_yaml, encoding="utf-8")
+    profile, name = push_notify._bot_identity(SimpleNamespace(profile_id=str(tmp_path)))
+    assert profile == "default"
+    notice = push_notify.Notice(push_notify.Kind.FINISHED, "s", "k", "Done.")
+    assert push_notify._payload(notice, profile, name)["aps"]["alert"]["title"] == expected

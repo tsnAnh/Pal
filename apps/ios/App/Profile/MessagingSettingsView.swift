@@ -12,27 +12,9 @@ struct MessagingSettingsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                content
-            }
-            .padding(.top, 16)
-            .padding(.bottom, 32)
+        BotSettingsScreen(title: String(localized: "Messaging settings"), identifier: "messagingSettingsScreen") {
+            content
         }
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
-        .accessibilityIdentifier("messagingSettingsScreen")
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Messaging")
-                    .hermesText(.sheetTitle)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier("messagingSettingsTitle")
-            }
-            .sharedBackgroundVisibility(.hidden)
-        }
-        .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
     }
@@ -43,9 +25,9 @@ struct MessagingSettingsView: View {
         case .loading:
             DelayedProgressView().accessibilityIdentifier("messagingSettingsLoading")
         case .unavailable:
-            PillButton(String(localized: "Try again"), kind: .accent, size: .large, accessibilityIdentifier: "messagingSettingsRetry") {
-                Task { await model.load() }
-            }
+            Button("Try again") { Task { await model.load() } }
+                .buttonStyle(PalClearCapsuleStyle())
+                .accessibilityIdentifier("messagingSettingsRetry")
         case .ready:
             if model.restartNeeded {
                 restartNotice
@@ -131,23 +113,30 @@ struct MessagingSettingsView: View {
 
     private func saveRow(_ platform: MessagingPlatform) -> some View {
         VStack(spacing: 8) {
-            PillButton(
-                String(localized: "Save"),
-                kind: model.isDirty(platform) ? .accent : .dimmed,
-                isBusy: model.isSaving(platform),
-                accessibilityIdentifier: "messagingSave-\(platform.id)"
-            ) {
-                Task { await model.save(platform) }
+            HStack {
+                Spacer(minLength: 0)
+                Button {
+                    Task { await model.save(platform) }
+                } label: {
+                    if model.isSaving(platform) {
+                        Text("Saving…")
+                    } else {
+                        Text("Save")
+                    }
+                }
+                .buttonStyle(PalClearCapsuleStyle())
+                .disabled(!model.isDirty(platform) || model.isSaving(platform))
+                .accessibilityIdentifier("messagingSave-\(platform.id)")
             }
+            .padding(.horizontal, PalMetrics.screenMargin)
             switch model.saveStates[platform.id] {
             case .saved:
-                Label(String(localized: "Saved"), palIcon: "checkmark.circle.fill")
-                    .hermesText(.rowSubtitle)
-                    .accessibilityIdentifier("messagingSaved-\(platform.id)")
+                BotSettingsBanner(kind: .saved, text: String(localized: "Saved"), identifier: "messagingSaved-\(platform.id)")
             case .failed(let message):
-                Label(message, palIcon: "exclamationmark.triangle")
-                    .hermesText(.rowSubtitle)
-                    .accessibilityIdentifier("messagingFailed-\(platform.id)")
+                BotSettingsBanner(
+                    kind: .failed, text: message, identifier: "messagingFailed-\(platform.id)",
+                    retry: { Task { await model.save(platform) } }
+                )
             case .saving, nil:
                 EmptyView()
             }

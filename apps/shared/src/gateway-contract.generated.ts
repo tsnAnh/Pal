@@ -5636,9 +5636,10 @@ export interface SkillsManageParams {
   value?: string | null
 }
 export type SkillsAction = 'list' | 'search' | 'install' | 'browse' | 'inspect' | 'installed' | 'check' | 'update' | 'uninstall' | 'set_key'
-/** Shape follows the action: ``list`` → ``skills`` (category → names); ``search`` → ``results``; ``install`` → ``installed`` + ``name``; ``browse`` → ``items`` + paging; ``inspect`` → ``info``; ``installed`` → ``installed_skills``; ``check`` → ``updates``; ``update`` → ``updated``; ``uninstall`` → ``removed``; ``set_key`` (``query`` = skill name, ``key_name``, ``value``) → ``saved``, refused with 4101 unless the skill declares ``key_name`` as a required environment variable (the value is never echoed or logged). ``update`` with no ``query`` updates every skill with an update; a failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail. */
+/** Shape follows the action: ``list`` → ``skills`` (category → names) + ``details`` (name, description, origin); ``search`` → ``results``; ``install`` → ``installed`` + ``name``; ``browse`` → ``items`` + paging; ``inspect`` → ``info``; ``installed`` → ``installed_skills``; ``check`` → ``updates``; ``update`` → ``updated``; ``uninstall`` → ``removed``; ``set_key`` (``query`` = skill name, ``key_name``, ``value``) → ``saved``, refused with 4101 unless the skill declares ``key_name`` as a required environment variable (the value is never echoed or logged). ``update`` with no ``query`` updates every skill with an update; a failed install / update / uninstall answers an error envelope whose ``data.log`` is the CLI tail. */
 export interface SkillsManageResult {
   skills?: Record<string, string[]> | null
+  details?: ListedSkill[] | null
   results?: SkillHubHit[] | null
   installed?: boolean | null
   name?: string | null
@@ -5652,6 +5653,12 @@ export interface SkillsManageResult {
   updated?: boolean | null
   removed?: boolean | null
   saved?: boolean | null
+}
+/** One ``list`` row: ``local`` = created in this profile; ``external`` = read-only dirs and project skills. */
+export interface ListedSkill {
+  name: string
+  description?: string
+  origin: 'hub' | 'bundled' | 'local' | 'external'
 }
 export interface SkillHubHit {
   name: string
