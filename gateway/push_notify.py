@@ -112,8 +112,13 @@ def _bot_identity(authority) -> tuple[str, str]:
     home = Path(str(authority.profile_id))
     profile = profile_name_for_home(home) or "default"
     meta = read_profile_meta(home)
-    name = meta["bot_title"] or meta["display_name"] or ("Hermes" if profile == "default" else profile)
+    name = meta["bot_title"] or meta["display_name"] or ("Hermes" if profile == "default" else _readable(profile))
     return profile, name
+
+
+def _readable(profile: str) -> str:
+    words = " ".join(profile.replace("-", " ").replace("_", " ").split())
+    return " ".join(word[:1].upper() + word[1:] for word in words.split()) or profile
 
 
 def _first_line(text: str) -> str:
@@ -127,7 +132,7 @@ def _first_line(text: str) -> str:
 def _payload(notice: Notice, profile: str, name: str) -> dict:
     body = BODIES.get(notice.kind) or _first_line(notice.reply) or "Finished"
     alert = {"title": name[:TITLE_LIMIT], "body": body}
-    return {"aps": {"alert": alert, "sound": "default", "thread-id": profile},
+    return {"aps": {"alert": alert, "sound": "default", "thread-id": profile, "mutable-content": 1},
             "profile": profile, "session_id": notice.session_id}
 
 

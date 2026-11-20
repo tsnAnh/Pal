@@ -3,6 +3,7 @@ the APNs HTTP boundary (``httpx.MockTransport``). Failure cases this file pins: 
 APNs unconfigured, duplicate event, dead token, transient and persistent APNs errors, cron and interrupted turns,
 and one bot's toggle never deciding another bot's alert."""
 import asyncio
+import json
 import logging
 import os
 import time
@@ -97,7 +98,7 @@ async def test_a_finished_turn_with_nobody_attentive_sends_exactly_one_alert(roo
     assert claims["iss"] == TEAM_ID and abs(claims["iat"] - time.time()) < 60
     assert stub.payloads() == [{
         "aps": {"alert": {"title": "Atlas", "body": "Three files changed."}, "sound": "default",
-                "thread-id": "default"},
+                "thread-id": "default", "mutable-content": 1},
         "profile": "default", "session_id": "s"}]
     assert APNS_TOKEN not in caplog.text and "Three files changed" not in caplog.text
     await phone.close()
@@ -455,3 +456,24 @@ async def test_each_bot_keeps_its_own_notification_toggle(tmp_path, monkeypatch)
     assert await toggle(on_alpha, 10) == "on"
     await on_alpha.close()
     await on_beta.close()
+
+
+@pytest.mark.parametrize("profile_yaml, expected", [
+    ("ui_meta:\n  hermes-bots:\n    title: Memolly\ndisplay_name: Other\n", "Memolly"),
+    ("display_name: Display Name\n", "Display Name"),
+    ("ui_meta:\n  hermes-bots:\n    title: '   '\ndisplay_name: Display Name\n", "Display Name"),
+    ("", "Hermes Bot Mobile"),
+])
+def test_the_alert_title_is_the_name_the_app_shows_never_the_profile_id(tmp_path, monkeypatch, profile_yaml, expected):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    home = tmp_path / "profiles" / "hermes-bot_mobile"
+    home.mkdir(parents=True)
+    (home / "profile.yaml").write_text(profile_yaml, encoding="utf-8")
+    profile, name = push_notify._bot_identity(SimpleNamespace(profile_id=str(home)))
+    assert profile == "hermes-bot_mobile"
+    assert name == expected
+    notice = push_notify.Notice(push_notify.Kind.FINISHED, "s", "k", "Done.\nMore")
+    payload = push_notify._payload(notice, profile, name)
+    assert payload["aps"]["alert"] == {"title": expected, "body": "Done."}
+    assert payload["aps"]["mutable-content"] == 1 and payload["aps"]["thread-id"] == profile
+    assert len(json.dumps(payload).encode()) < 4096

@@ -101,6 +101,7 @@ struct PalApp: App {
                     if connected { Task { await appDelegate.push.ensureRegistered() } }
                 }
                 .onChange(of: roster.bots) { _, bots in
+                    PushAvatarSync.shared.sync(bots)
                     Task { await directory.publish(bots) }
                 }
                 .onChange(of: scenePhase) { _, phase in
