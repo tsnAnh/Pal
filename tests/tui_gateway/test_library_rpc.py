@@ -335,7 +335,7 @@ def test_asset_refuses_forged_unindexed_and_unsafe_references(bots):
     for ref in forged:
         assert _error("library.asset", {"profile": "alpha", "asset_ref": ref}) == 4151, ref
     for item in items:
-        assert _error("library.asset", {"profile": "alpha", "asset_ref": item["id"]}) == 4151, item["title"]
+        assert _error("library.asset", {"profile": "alpha", "asset_ref": item["id"]}) in (4151, 4154), item["title"]
 
 
 def test_asset_refuses_a_file_that_left_its_media_directory_or_whose_conversation_was_deleted(bots):

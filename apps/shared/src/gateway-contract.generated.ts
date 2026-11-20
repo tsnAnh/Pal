@@ -8775,7 +8775,7 @@ export interface RpcMethods {
   'learning.edit': { params: LearningEditParams; result: LearningMutationResult }
   /** Pre-render the /journey timeline (frames + legend/summary) so the TUI walks it locally. */
   'learning.frames': { params: LearningFramesParams; result: LearningFramesResult }
-  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. */
+  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
   'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
   /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
   'library.list': { params: LibraryListParams; result: LibraryListResult }
@@ -9704,7 +9704,7 @@ export interface CanonicalRpcMethods {
   'kanban.evidence.list': { params: KanbanEvidenceParams; result: KanbanEvidenceResult }
   /** Native-owner only: admit the dispatcher's current claim on a kanban task. */
   'kanban.run': { params: KanbanRunParams; result: KanbanRunResult }
-  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. */
+  /** Bytes of a library media item or file, base64, only for files the profile's library indexed. Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, 4154 refused by the media-delivery policy, 5151 temporary internal failure. */
   'library.asset': { params: LibraryAssetParams; result: LibraryAssetResult }
   /** Links, media and files a bot's conversations mention, newest first, deduplicated. */
   'library.list': { params: LibraryListParams; result: LibraryListResult }

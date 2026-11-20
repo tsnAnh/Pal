@@ -41,13 +41,6 @@ struct ChatFileStack: View {
     }
 }
 
-private enum ChatFilePhase: Equatable {
-    case checking
-    case ready
-    case unavailable
-    case failed(String)
-}
-
 struct ChatFileCard: View {
     let file: FileReference
     let isStreaming: Bool
@@ -55,7 +48,7 @@ struct ChatFileCard: View {
     @Environment(\.chatFileActions) private var actions
     @Environment(\.chatFileOpener) private var opener
     @Environment(\.hermesTheme) private var theme
-    @State private var phase: ChatFilePhase = .checking
+    @State private var phase: FileCardPhase = .checking
     @State private var attempt = 0
     @State private var isSaving = false
     @State private var notice: String?
@@ -112,8 +105,7 @@ struct ChatFileCard: View {
     private var subtitle: String {
         switch phase {
         case .checking, .ready: file.typeLabel
-        case .unavailable: String(localized: "\(file.typeLabel) · No longer available")
-        case .failed(let reason): reason
+        case .failed(let failure): failure.message
         }
     }
 
@@ -130,12 +122,14 @@ struct ChatFileCard: View {
             .disabled(isSaving)
             .accessibilityLabel(Text("Save \(file.name)"))
             .accessibilityIdentifier("chatFileSave")
-        case .unavailable, .failed:
-            Button { attempt += 1 } label: {
-                Label("Retry", palIcon: "arrow.clockwise")
+        case .failed:
+            if phase.offersRetry {
+                Button { attempt += 1 } label: {
+                    Label("Retry", palIcon: "arrow.clockwise")
+                }
+                .buttonStyle(PillButtonStyle(kind: .neutral))
+                .accessibilityIdentifier("chatFileRetry")
             }
-            .buttonStyle(PillButtonStyle(kind: .neutral))
-            .accessibilityIdentifier("chatFileRetry")
         }
     }
 
@@ -150,10 +144,10 @@ struct ChatFileCard: View {
                 }
                 if round < Self.probeAttempts - 1 { try await Task.sleep(for: Self.probeDelay) }
             }
-            phase = .unavailable
+            phase = .failed(FileLoadFailure(cause: .notFound))
         } catch is CancellationError {
         } catch {
-            phase = .failed(ImageLoadFailure(describing: error).reason)
+            phase = .failed(FileLoadFailure(describing: error))
         }
     }
 
@@ -162,13 +156,21 @@ struct ChatFileCard: View {
         isSaving = true
         notice = nil
         defer { isSaving = false }
+        let data: Data
         do {
-            let data = try await actions.load(file)
+            data = try await actions.load(file)
+        } catch is CancellationError {
+            return
+        } catch {
+            notice = FileLoadFailure(describing: error).message
+            return
+        }
+        do {
             let saved = try await FileSaver.save(data, name: file.name)
             notice = saved.isEmpty ? nil : saved
         } catch is CancellationError {
         } catch {
-            notice = ImageLoadFailure(describing: error).reason
+            notice = String(localized: "Couldn't save this file")
         }
     }
 }

@@ -60,10 +60,10 @@ def test_a_file_sent_by_the_user_stays_inside_the_media_roots(bots):
     seed = _seed(bots["alpha"])
     seed.message("s1", "user", f"@file:{secret}")
     seed.close()
-    assert _error("library.asset", _asset(_ref("file", secret))) == 4151
+    assert _error("library.asset", _asset(_ref("file", secret))) == 4154
 
 
-def test_refusals_are_identical_so_nothing_reveals_which_paths_exist(bots):
+def test_policy_refusals_share_one_code_and_message_and_a_missing_file_is_not_found(bots):
     alpha, beta = bots["alpha"], bots["beta"]
     (beta / ".env").write_text("TOKEN=other-profile-secret\n")
     (alpha / ".env").write_text("TOKEN=own-secret\n")
@@ -72,16 +72,18 @@ def test_refusals_are_identical_so_nothing_reveals_which_paths_exist(bots):
     link = outside / "report.csv"
     link.symlink_to(beta / ".env")
     missing = outside / "missing.csv"
-    traversal = f"{outside}/../../../../etc/passwd"
+    traversal = "/".join([str(outside), *[".."] * 16, "etc", "passwd"])
     seed = _seed(alpha)
     seed.message("s1", "assistant", "\n".join(
         f"MEDIA:{path}" for path in (beta / ".env", alpha / ".env", alpha / "state.db", link, missing, traversal)))
     seed.close()
     paths = (beta / ".env", alpha / ".env", alpha / "state.db", link, missing, traversal)
-    responses = [_call("library.asset", _asset(_ref("file", path))) for path in paths]
-    assert [r.get("error", {}).get("code") for r in responses] == [4151] * len(paths), responses
-    assert len({response["error"]["message"] for response in responses}) == 1
-    for response in responses:
+    responses = {path: _call("library.asset", _asset(_ref("file", path))) for path in paths}
+    denied = [response for path, response in responses.items() if path != missing]
+    assert {r["error"]["code"] for r in denied} == {4154}, responses
+    assert len({r["error"]["message"] for r in denied}) == 1
+    assert responses[missing]["error"]["code"] == 4151
+    for response in responses.values():
         assert "secret" not in str(response) and str(bots["tmp"]) not in str(response)
 
 
@@ -93,7 +95,7 @@ def test_canary_outside_the_allowed_roots_is_neither_readable_nor_revealed_in_st
     seed.message("s1", "assistant", f"MEDIA:{canary}")
     seed.close()
     response = _call("library.asset", _asset(_ref("file", canary)))
-    assert response["error"]["code"] == 4151
+    assert response["error"]["code"] == 4154
     assert "CANARY" not in str(response) and str(canary) not in str(response)
 
     config.write_text(f"gateway:\n  strict: true\n  trust_recent_files: false\n  media_delivery_allow_dirs: [{canary.parent}]\n")
@@ -129,3 +131,68 @@ def test_oversize_file_is_a_typed_limit_and_deleted_history_stops_serving(bots):
     assert seed.db.delete_session("s1")
     seed.close()
     assert _error("library.asset", _asset(ref)) == 4151
+
+
+def _strict(bots, *, trust_recent: bool, allow_dir=None, seconds: int | None = None):
+    lines = ["gateway:", "  strict: true", f"  trust_recent_files: {str(trust_recent).lower()}"]
+    if seconds is not None:
+        lines.append(f"  trust_recent_files_seconds: {seconds}")
+    if allow_dir is not None:
+        lines.append(f"  media_delivery_allow_dirs: [{allow_dir}]")
+    (bots["alpha"] / "config.yaml").write_text("\n".join(lines) + "\n")
+
+
+def test_strict_mode_serves_an_allowed_directory_outside_every_profile_home(bots):
+    page = _produce(bots, "mockup.html", b"<html>mockup</html>")
+    _strict(bots, trust_recent=False, allow_dir=page.parent)
+    seed = _seed(bots["alpha"])
+    seed.message("s1", "assistant", f"MEDIA:{page}")
+    seed.close()
+    result = _ok("library.asset", _asset(_ref("file", page), thumbnail=False))
+    assert base64.b64decode(result["data_base64"]) == b"<html>mockup</html>"
+    assert result["mime"] == "text/html" and result["size"] == len(b"<html>mockup</html>")
+
+
+def test_strict_mode_trusts_a_fresh_file_only_inside_the_recency_window(bots):
+    import os
+    import time
+    page = _produce(bots, "fresh.html", b"<p>fresh</p>")
+    _strict(bots, trust_recent=True, seconds=600)
+    seed = _seed(bots["alpha"])
+    seed.message("s1", "assistant", f"MEDIA:{page}")
+    seed.close()
+    assert base64.b64decode(_ok("library.asset", _asset(_ref("file", page)))["data_base64"]) == b"<p>fresh</p>"
+    old = time.time() - 3600
+    os.utime(page, (old, old))
+    assert _error("library.asset", _asset(_ref("file", page))) == 4154
+
+
+def test_a_preview_directive_on_its_own_line_serves_the_same_bytes_as_a_media_tag(bots):
+    page = _produce(bots, "widget.html", b"<div>widget</div>")
+    seed = _seed(bots["alpha"])
+    seed.message("s1", "assistant", f'Here is the widget.\n::preview{{file="{page}"}}\nDone.')
+    seed.close()
+    result = _ok("library.asset", _asset(_ref("file", page), thumbnail=False))
+    assert base64.b64decode(result["data_base64"]) == b"<div>widget</div>"
+
+
+def test_preview_lookalikes_do_not_index_a_file(bots):
+    inline = _produce(bots, "inline.html", b"x")
+    fenced = _produce(bots, "fenced.html", b"x")
+    other = _produce(bots, "other.html", b"x")
+    seed = _seed(bots["alpha"])
+    seed.message("s1", "assistant", "\n".join((
+        f'see ::preview{{file="{inline}"}} here',
+        f'```\n::preview{{file="{fenced}"}}\n```',
+        f'::chart{{file="{other}"}}')))
+    seed.close()
+    for path in (inline, fenced, other):
+        assert _error("library.asset", _asset(_ref("file", path))) == 4151
+
+
+def test_a_missing_file_is_not_found_not_a_policy_refusal(bots):
+    gone = bots["tmp"] / "research" / "gone.html"
+    seed = _seed(bots["alpha"])
+    seed.message("s1", "assistant", f"MEDIA:{gone}")
+    seed.close()
+    assert _error("library.asset", _asset(_ref("file", gone))) == 4151

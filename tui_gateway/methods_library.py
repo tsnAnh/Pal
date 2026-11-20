@@ -96,7 +96,8 @@ def _(rid, params: dict) -> dict:
 def _(rid, params: dict) -> dict:
     from hermes_state_library import LibraryIndex
     from tui_gateway.contracts.library import LibraryAssetParams
-    from tui_gateway.library_assets import ASSET_REF_RE, AssetTooLarge, AssetUnavailable, read_asset
+    from tui_gateway.library_assets import (
+        ASSET_REF_RE, AssetNotAllowed, AssetTooLarge, AssetUnavailable, read_asset)
     parsed, problem = _library_params(rid, LibraryAssetParams, params)
     if problem is not None:
         return problem
@@ -127,6 +128,8 @@ def _(rid, params: dict) -> dict:
             home, item, max_bytes=cap, thumbnail=parsed.thumbnail, assistant_produced=assistant_produced)
     except AssetUnavailable as exc:
         return _err(rid, 4151, str(exc))
+    except AssetNotAllowed as exc:
+        return _err(rid, 4154, str(exc))
     except AssetTooLarge:
         return _err(rid, 4152, f"This item is larger than the {cap // 1_000_000} MB download limit.")
     except Exception:

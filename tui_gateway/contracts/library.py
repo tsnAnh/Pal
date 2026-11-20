@@ -74,4 +74,6 @@ class LibraryAssetResult(Result):
 
 
 method("library.asset", params=LibraryAssetParams, result=LibraryAssetResult,
-       doc="Bytes of a library media item or file, base64, only for files the profile's library indexed.")
+       doc="Bytes of a library media item or file, base64, only for files the profile's library indexed. "
+           "Errors: 4151 not found or gone, 4152 larger than max_bytes, 4153 invalid request, "
+           "4154 refused by the media-delivery policy, 5151 temporary internal failure.")
