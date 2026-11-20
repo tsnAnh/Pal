@@ -20,6 +20,10 @@ struct StatusBlock: View {
     @State private var showsDetails = false
 
     var body: some View {
+        MacOverflowScroll { block }
+    }
+
+    private var block: some View {
         VStack(spacing: 14) {
             PalIcon(status.symbol, ink: .destructive)
                 .font(.system(size: 24))

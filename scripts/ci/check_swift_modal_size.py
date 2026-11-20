@@ -17,6 +17,10 @@ Rules (each finding names the file, line and the fix):
 * modal-env-scope: an ``.overlay`` or ``.background`` follows ``.macModalEnvironment()`` in the same modifier
   chain. Environment flows only into the view it modifies, so a ``MacModalHost`` attached after it gets no window
   size or dialog centre and its panels collapse.
+* modal-overflow: a view hosted in a window-fit panel (640 x 440 at the 900 x 600 minimum window) has content that can
+  outgrow it (``OVERFLOW_SURFACES``: the step checklist, a failure block with Details open, the Vault filter row) and
+  does not wrap it in ``MacOverflowScroll`` (PalDesign), the shared container that scrolls only when the content does
+  not fit. Add a new view of that kind to ``OVERFLOW_SURFACES`` in the same change.
 
 Code inside ``#if os(iOS)`` and ``.iOSOnly { }`` is not Mac code. A justified exception carries
 ``modal-size: ok <reason>`` on the line.
@@ -42,6 +46,12 @@ MODAL_ROOTS = {
     "App/Mac/MacSettings.swift": "MacSettingsModal",
     "App/ConnectApps/ConnectAppsMacPanel.swift": "MacConnectAppsPanel",
 }
+OVERFLOW_SURFACES = {
+    "App/Setup/StepFlowProgressViews.swift": ["StepFlowChecklist"],
+    "App/Setup/StatusBlock.swift": ["StatusBlock"],
+    "App/Mac/MacSettings.swift": ["MacVaultSection"],
+}
+OVERFLOW_CONTAINER = re.compile(r"\bMacOverflowScroll\b")
 SYSTEM_ALERT = re.compile(r"(?<!SharePresenter)\.(alert|confirmationDialog)\(")
 PANEL_SIZE_LABEL = re.compile(r"(?<![A-Za-z0-9_.])(width|height)\s*:")
 PANEL_SIZE_DECL = re.compile(r"^\s*(?:let|var)\s+(width|height)\s*:")
@@ -52,6 +62,10 @@ FIX_PANEL = (
     "drop it, or pass fit: .content for a content-sized dialog"
 )
 FIX_ROOT = "size comes from MacModalPanel (70% of the window, or fit: .content); read a number from MacModalSizing"
+FIX_OVERFLOW = (
+    "content can outgrow a 640 x 440 window-fit panel and would clip; wrap it in the shared scroll container, "
+    "MacOverflowScroll (PalDesign), which scrolls only when the content does not fit"
+)
 MODAL_ENV = ".macModalEnvironment()"
 CHAIN_ATTACH = re.compile(r"^\s*\.(overlay|background)\b")
 FIX_ENV = "apply .macModalEnvironment() last, after every .overlay and .background, so the modal host inherits it"
@@ -204,10 +218,27 @@ def _env_scope_findings(root: Path) -> list[str]:
     return found
 
 
+def _overflow_findings(root: Path) -> list[str]:
+    found = []
+    for rel, structs in OVERFLOW_SURFACES.items():
+        path = root / rel
+        if not path.is_file():
+            continue
+        lines = _read(path)
+        for struct in structs:
+            start = next((i for i, line in enumerate(lines) if re.match(rf"^\s*(?:private\s+|fileprivate\s+)?struct {struct}\b", line)), None)
+            if start is None or OPT_OUT in lines[start]:
+                continue
+            body = lines[start : _block_end(lines, start) + 1]
+            if not any(OVERFLOW_CONTAINER.search(line) for line in body):
+                found.append(f"{rel}:{start + 1}: modal-overflow: {struct}: {FIX_OVERFLOW}")
+    return found
+
+
 def scan(root: Path) -> list[str]:
     if not (root / "App" / "Mac").is_dir():
         return []
-    return _panel_findings(root) + _root_findings(root) + _alert_findings(root) + _env_scope_findings(root)
+    return _panel_findings(root) + _root_findings(root) + _alert_findings(root) + _env_scope_findings(root) + _overflow_findings(root)
 
 
 def main(argv: list[str]) -> int:
@@ -216,7 +247,7 @@ def main(argv: list[str]) -> int:
     for entry in found:
         print(entry)
     if found:
-        print(f"\n{len(found)} Mac modal size finding(s). Sizes live in MacModalPanel and MacModalSizing; alerts use .macAlert and .macConfirm.")
+        print(f"\n{len(found)} Mac modal size finding(s). Sizes live in MacModalPanel and MacModalSizing; alerts use .macAlert and .macConfirm; content that can outgrow a panel uses MacOverflowScroll.")
         return 1
     return 0
 
