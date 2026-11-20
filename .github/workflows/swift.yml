@@ -42,22 +42,47 @@ jobs:
       - name: Install XcodeGen
         run: command -v xcodegen >/dev/null || brew install xcodegen
 
-      - name: Generate the Xcode project
-        run: xcodegen generate
+      - name: Generate the Xcode project (Communication Notifications off by default)
+        run: |
+          xcodegen generate
+          if grep -q NotificationService HermesBots.xcodeproj/project.pbxproj; then exit 1; fi
 
       - name: Build for testing (iOS Simulator)
         run: >-
           xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
           -destination 'generic/platform=iOS Simulator'
           -skipPackagePluginValidation -skipMacroValidation
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
       - name: Build for testing (macOS)
         run: >-
           xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
           -destination 'generic/platform=macOS'
           -skipPackagePluginValidation -skipMacroValidation
-          CODE_SIGNING_ALLOWED=NO
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      # PAL_COMM_NOTIFICATIONS=1 adds the Notification Service Extension, the Communication
+      # Notifications entitlement and the App Group; build it so the switched-on path keeps compiling.
+      - name: Generate the Xcode project (PAL_COMM_NOTIFICATIONS=1)
+        env:
+          PAL_COMM_NOTIFICATIONS: "1"
+        run: |
+          xcodegen generate
+          grep -q NotificationService HermesBots.xcodeproj/project.pbxproj
+
+      - name: Build with Communication Notifications (iOS Simulator)
+        run: >-
+          xcodebuild build -project HermesBots.xcodeproj -scheme HermesBots
+          -destination 'generic/platform=iOS Simulator'
+          -skipPackagePluginValidation -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+
+      - name: Build with Communication Notifications (macOS)
+        run: >-
+          xcodebuild build -project HermesBots.xcodeproj -scheme HermesBots
+          -destination 'generic/platform=macOS'
+          -skipPackagePluginValidation -skipMacroValidation
+          CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
       # Compile only: the packages target macOS 26, which a macos-15 host cannot launch, so
       # `swift test` cannot run the tests here.
