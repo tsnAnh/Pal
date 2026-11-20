@@ -27,14 +27,21 @@ public struct MarkdownTable: Sendable, Hashable {
             .joined(separator: "\n")
     }
 
-    public func columnWidths(measured: [CGFloat], cellPadding: CGFloat, minimum: CGFloat, maximum: CGFloat) -> [CGFloat] {
-        (0..<columnCount).map { column in
-            let text = column < measured.count ? measured[column] : 0
-            return min(max((text + cellPadding * 2).rounded(.up), minimum), maximum)
-        }
-    }
-
     private static func fitted(_ cells: [AttributedString], to count: Int) -> [AttributedString] {
         cells.count >= count ? Array(cells.prefix(count)) : cells + Array(repeating: AttributedString(), count: count - cells.count)
+    }
+
+    public var rowCount: Int { rows.count + 1 }
+}
+
+public enum TableColumnSizing {
+    public static func widths(natural: [CGFloat], minimum: CGFloat, maximum: CGFloat, available: CGFloat?) -> [CGFloat] {
+        let clamped = natural.map { min(max($0.rounded(.up), minimum), maximum) }
+        let total = clamped.reduce(0, +)
+        guard let available, total > 0, total < available else { return clamped }
+        let scale = available / total
+        var widths = clamped.map { ($0 * scale).rounded(.down) }
+        widths[widths.count - 1] += available - widths.reduce(0, +)
+        return widths
     }
 }

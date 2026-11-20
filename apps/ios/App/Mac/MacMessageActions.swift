@@ -30,6 +30,7 @@ struct MacRowHoverModifier: ViewModifier {
 
 struct MacMessageActionsModifier: ViewModifier {
     let side: MessageSide
+    var placement: MessageChromePlacement = .beside
     let actions: MessageActions?
 
     func body(content: Content) -> some View {
@@ -39,6 +40,12 @@ struct MacMessageActionsModifier: ViewModifier {
                 content.overlay(alignment: .leading) {
                     MacMessageHoverBar(actions: actions)
                         .alignmentGuide(.leading) { $0[.trailing] + messageBarGap }
+                }
+            case .assistant where placement == .insideBubble:
+                content.overlay(alignment: .topTrailing) {
+                    MacMessageHoverBar(actions: actions)
+                        .padding(.top, placement.barTopInset(hasReaction: actions.reaction != nil))
+                        .padding(.trailing, MessageChromePlacement.insetFromEdge)
                 }
             case .assistant:
                 content.overlay(alignment: .trailing) {

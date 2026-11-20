@@ -54,6 +54,12 @@ CASES = [
     ("perf-avatar-row-slot", "App/Mac/MacSidebar.swift",
      "struct R: View {\n    var body: some View {\n        BotAvatarView(spec: bot.spec, size: 24, mood: mood)\n    }\n}\n",
      "struct R: View {\n    var body: some View {\n        BotAvatarView(spec: bot.spec, size: 24, mood: mood, sharesSlot: true)\n    }\n}\n"),
+    ("perf-table-in-text-bubble", ROWS,
+     "ChatBubble(style: agent) {\n    MarkdownView(parsed: parsed, highlight: h, isCurrentMatch: false)\n}\n",
+     "ChatBubble(style: agent) {\n    MarkdownView(segment: segment, wholeBubbleSelection: true, highlight: h, isCurrentMatch: false)\n}\n"),
+    ("perf-selection-island", ROWS,
+     "ChatBubble(style: agent) {\n    bubbleContent.bubbleTextSelection()\n}\n",
+     "ChatBubble(style: agent) {\n    bubbleContent\n}\n"),
     ("perf-redraw-per-call", SCREEN,
      "if let image = images[host] { return image.roundedIcon(points: pointSize) }\n",
      "if let image = rounded[host] { return image }\n"),
@@ -539,3 +545,41 @@ def test_row_reads_model_only_applies_to_the_chat_rows_file(tmp_path: Path) -> N
 def test_monitor_with_a_removal_in_the_file_is_paired(tmp_path: Path) -> None:
     body = "monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { $0 }\nNSEvent.removeMonitor(monitor)\n"
     assert "perf-monitor-unpaired" not in _rules(tmp_path, SCREEN, body)
+
+
+PRE_FIX_ASSISTANT_BUBBLE = """
+struct AssistantBubble: View {
+    @ViewBuilder
+    private var bubbleContent: some View {
+        MarkdownView(parsed: parsed, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ChatBubble(style: BubblePalette.agentBubble) {
+                bubbleContent.bubbleTextSelection()
+            }
+        }
+    }
+}
+"""
+
+
+def test_pre_fix_assistant_bubble_fails_and_the_real_rows_file_passes() -> None:
+    ios = REPO / "apps" / "ios"
+    rules = {f.rule for f in csp.violations(Path(ROWS), PRE_FIX_ASSISTANT_BUBBLE)}
+    assert {"perf-selection-island", "perf-table-in-text-bubble"} <= rules
+    for rel in (ROWS, "App/Chat/AssistantBubble.swift"):
+        current = (ios / rel).read_text(encoding="utf-8")
+        assert not [f for f in csp.violations(Path(rel), current) if f.rule in {"perf-selection-island", "perf-table-in-text-bubble"}], rel
+    entries = json.loads((ios / csp.BASELINE_NAME).read_text(encoding="utf-8-sig"))
+    assert not [e for e in entries if e["file"] == "App/Chat/MarkdownTableView.swift"]
+
+
+def test_selection_over_one_text_view_is_allowed_and_only_rows_are_checked(tmp_path: Path) -> None:
+    single = "ChatBubble(fill: paint) {\n    InlineText(text: body).bubbleTextSelection()\n}\n"
+    assert _rules(tmp_path / "a", ROWS, single) == []
+    island = "ChatBubble(fill: paint) {\n    MarkdownView(segment: s).textSelection(.enabled)\n}\n"
+    assert _rules(tmp_path / "b", ROWS, island) == ["perf-selection-island"]
+    assert _rules(tmp_path / "c", SCREEN, island) == []
+    assert _rules(tmp_path / "d", SCREEN, "MarkdownView(parsed: parsed, highlight: h, isCurrentMatch: false)\n") == []

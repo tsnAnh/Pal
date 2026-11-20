@@ -14,7 +14,8 @@ perf-queue-sync, perf-timeline-unlisted, perf-timeline-interval, perf-hover-unli
 perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry-per-row,
 perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write,
 perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired, perf-dropped-value,
-perf-avatar-row-slot, perf-drag-writes-binding, perf-open-ungated, perf-hover-state-in-row-body.
+perf-avatar-row-slot, perf-drag-writes-binding, perf-open-ungated, perf-hover-state-in-row-body, perf-selection-island,
+perf-table-in-text-bubble.
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -50,7 +51,7 @@ ALLOWLISTED_RULES = ("perf-timeline-unlisted", "perf-hover-unlisted", "perf-moni
 SHADOW_MAX_RADIUS = 24
 OWNED_TYPE = r"[A-Z]\w*(?:Model|Store|Hub|Conversation|Controller)(?:\.\w+)?"
 SHELL_FILES = {("App", "Mac", "MacShell.swift")}
-ROW_FILES = {("App", "Chat", "ChatRows.swift")}
+ROW_FILES = {("App", "Chat", "ChatRows.swift"), ("App", "Chat", "AssistantBubble.swift")}
 AVATAR_ROW_FILES = {("App", "Mac", "MacSidebar.swift"), ("App", "HomeView.swift"), ("App", "Rooms", "RoomRows.swift")}
 GUARDED_WRITE_FIELDS = {("App", "RosterModel.swift"): ("live", "capabilities", "bots", "isLoaded")}
 
@@ -149,6 +150,13 @@ LINE_RULES = (
         "array rebuilt in a View body on every pass (reversed rows, mapped ids). Compute it once when the rows change, "
         "in the model (ChatModel.rowsNewestFirst, ChatModel.rowIDs), and read the stored array",
         in_view=True,
+    ),
+    LineRule(
+        "perf-table-in-text-bubble",
+        re.compile(r"\bMarkdownView\(\s*parsed:"),
+        row_file,
+        "the whole document is rendered in one text bubble, so a table lands inside it. Build the bubbles from "
+        "ParsedMarkdown.segments: MarkdownView(segment:) for each text segment and TableBubbleView for each table",
     ),
     LineRule(
         "perf-row-reads-model",
@@ -412,6 +420,15 @@ def open_ungated(src: Source) -> Iterator[tuple[int, str]]:
                                            "every snapshot through openGate.admit(_:) and apply only what it returns")
 
 
+def selection_over_markdown(src: Source) -> Iterator[tuple[int, str]]:
+    for m in re.finditer(r"\.(?:bubbleTextSelection|textSelection)\(", src.text):
+        opener = next((o for o in src.enclosing(m.start()) if src.text[o] == "{"), None)
+        if opener is not None and re.search(r"\bMarkdownView\(|\bbubbleContent\b", src.text[opener:src.close[opener]]):
+            yield src.line_of(m.start()), ("text selection applied over a multi-block markdown view: every block is its own "
+                                           "Text, so a drag stops at each paragraph. Let MarkdownView own selection "
+                                           "(SelectableMarkdownText selects the whole bubble on Mac)")
+
+
 BLOCK_RULES: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[Source], Iterator[tuple[int, str]]]], ...] = (
     ("perf-eager-stack", in_app, eager_stack),
     ("perf-geometry-per-row", in_app, geometry_per_row),
@@ -420,6 +437,7 @@ BLOCK_RULES: tuple[tuple[str, Callable[[tuple[str, ...], str], bool], Callable[[
     ("perf-dropped-value", guarded_model, dropped_value),
     ("perf-drag-writes-binding", in_app, drag_writes_binding),
     ("perf-open-ungated", in_app, open_ungated),
+    ("perf-selection-island", row_file, selection_over_markdown),
 )
 
 
