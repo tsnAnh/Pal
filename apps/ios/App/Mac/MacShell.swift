@@ -94,25 +94,20 @@ private struct MacSidebarFrame: ViewModifier {
     let compact: Bool
 
     func body(content: Content) -> some View {
-        content.frame(width: compact ? MacMetrics.railWidth : CGFloat(width.live))
+        content.frame(width: compact ? MacLayoutMetrics.railWidth : CGFloat(width.live))
     }
 }
 
 extension DragWidth {
     static func sidebar(defaults: UserDefaults = .standard) -> DragWidth {
-        let stored = defaults.object(forKey: MacMetrics.sidebarWidthKey) as? Double ?? Double(MacMetrics.sidebarWidth)
-        let range = Double(MacMetrics.sidebarWidthRange.lowerBound)...Double(MacMetrics.sidebarWidthRange.upperBound)
+        let stored = defaults.object(forKey: MacMetrics.sidebarWidthKey) as? Double ?? Double(MacLayoutMetrics.sidebarWidth)
+        let range = Double(MacLayoutMetrics.sidebarWidthRange.lowerBound)...Double(MacLayoutMetrics.sidebarWidthRange.upperBound)
         return DragWidth(stored: stored, range: range) { defaults.set($0, forKey: MacMetrics.sidebarWidthKey) }
     }
 }
 
 enum MacMetrics {
-    static let sidebarWidth: CGFloat = 280
-    static let sidebarWidthRange: ClosedRange<CGFloat> = 240...400
     static let sidebarWidthKey = "mac.sidebar.width"
-    static let railWidth: CGFloat = 80
-    static let inspectorWidth: CGFloat = 320
-    static let chatColumn: CGFloat = 882
     static let topBarHeight: CGFloat = 55
     static let topBarCenter: CGFloat = 27.5
     static let footerHeight: CGFloat = 64
@@ -135,7 +130,7 @@ struct MacShellView<Destination: View>: View {
     }
 
     private var shellContent: some View {
-        HStack(spacing: 0) {
+        MacShellLayout {
             MacSidebar(roster: roster, connection: connection, router: router)
                 .modifier(MacSidebarFrame(width: sidebarWidth, compact: shell.isCompact))
                 .overlay(alignment: .trailing) {
@@ -145,7 +140,8 @@ struct MacShellView<Destination: View>: View {
             if shell.showsInspector, router.path.count == 1, let name = router.currentBotName, roster.bot(named: name) != nil {
                 MacInspector(botName: name, roster: roster, router: router, bots: bots)
                     .id(name)
-                    .frame(width: MacMetrics.inspectorWidth)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }

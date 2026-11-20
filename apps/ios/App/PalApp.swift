@@ -118,7 +118,7 @@ struct PalApp: App {
                 }
         }
         #if os(macOS)
-        .defaultSize(width: 1280, height: 830)
+        .defaultSize(width: MacLayoutMetrics.defaultWindowWidth, height: MacLayoutMetrics.defaultWindowHeight)
         .windowResizability(.contentMinSize)
         .windowStyle(.hiddenTitleBar)
         .commands { MacCommands(shell: shell, roster: roster, router: router, connection: model, shortcuts: shortcuts) }

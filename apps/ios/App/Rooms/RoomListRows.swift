@@ -115,6 +115,7 @@ private struct MacRoomRow: View {
             .accessibilityLabel(Text("\(room.name), group chat with \(memberLine(room))"))
         }
         .buttonStyle(.plain)
+        .boundedToColumn()
         .onHover { hovering = $0 }
         .accessibilityIdentifier("roomRow-\(room.roomID)")
     }

@@ -177,9 +177,26 @@ extension View {
     public func hermesText(_ style: PalTextStyle) -> some View {
         modifier(PalTextModifier(style: style))
     }
+
+    public func chatRowFrame(for sender: ChatSender) -> some View {
+        frame(maxWidth: .infinity, alignment: ChatMetrics.rowAlignment(for: sender))
+    }
+}
+
+public enum ChatSender: Sendable {
+    case bot
+    case user
+    case system
 }
 
 public enum ChatMetrics {
+    public static func rowAlignment(for sender: ChatSender) -> Alignment {
+        switch sender {
+        case .bot: .leading
+        case .user: .trailing
+        case .system: .center
+        }
+    }
     public static let edgeMargin: CGFloat = 16
     public static let bubbleHorizontalPadding: CGFloat = 12
     public static let bubbleVerticalPadding: CGFloat = 8

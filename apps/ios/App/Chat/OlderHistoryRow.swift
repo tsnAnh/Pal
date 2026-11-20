@@ -8,7 +8,7 @@ struct OlderHistoryRow: View {
 
     var body: some View {
         content
-            .frame(maxWidth: .infinity)
+            .chatRowFrame(for: .system)
             .frame(height: Self.height)
             .accessibilityIdentifier("olderHistoryRow")
             .accessibilityValue(Text(accessibilityValue))
