@@ -16,6 +16,9 @@ from perf_corpus import build_corpus, describe, manifest
 SESSION_SOURCE = "gui"
 HOME_MARKER = "hermes-ios-e2e."
 CORPUS_SEED = 20260514
+LIBRARY_BACKLOG_TITLE = "Library backlog"
+LIBRARY_BACKLOG_PROFILE = "bot-alpha"
+LIBRARY_BACKLOG_AGE_SECONDS = 100 * 86400
 
 
 def require_sandbox_home(home):
@@ -27,16 +30,16 @@ def require_sandbox_home(home):
     return resolved
 
 
-async def find_or_create_chat(rpc, profile):
-    found = await rpc.call("session.list", {"profile": profile, "title": BOT_CHAT_TITLE, "include_hidden": True})
-    rows = [row for row in found["result"]["sessions"] if row.get("title") == BOT_CHAT_TITLE]
+async def find_or_create_chat(rpc, profile, title=BOT_CHAT_TITLE):
+    found = await rpc.call("session.list", {"profile": profile, "title": title, "include_hidden": True})
+    rows = [row for row in found["result"]["sessions"] if row.get("title") == title]
     if rows:
         return rows[0].get("resolved_id") or rows[0]["session_id"]
     await rpc.call("session.create", {
-        "profile": profile, "title": BOT_CHAT_TITLE, "hidden": True,
+        "profile": profile, "title": title, "hidden": True,
         "request_id": str(uuid.uuid4()), "source": SESSION_SOURCE,
     })
-    listed = await rpc.call("session.list", {"profile": profile, "title": BOT_CHAT_TITLE, "include_hidden": True})
+    listed = await rpc.call("session.list", {"profile": profile, "title": title, "include_hidden": True})
     row = listed["result"]["sessions"][0]
     return row.get("resolved_id") or row["session_id"]
 
@@ -78,14 +81,44 @@ async def seed_profile(rpc, home, profile, rows, now, reset, marked):
     return result
 
 
-async def seed(home, sizes, reset, marked):
+def write_library_backlog(profile_dir, session_id, count, now):
+    from hermes_state import SessionDB
+
+    database = SessionDB(db_path=profile_dir / "state.db")
+    try:
+        existing = database.get_session(session_id)
+        if existing and int(existing.get("message_count") or 0) > 0:
+            return int(existing["message_count"])
+        oldest = now - LIBRARY_BACKLOG_AGE_SECONDS
+        for number in range(count):
+            database.append_message(
+                session_id, "assistant", f"Saved https://example.com/library/item-{number:03d} for later.",
+                timestamp=oldest + number * 60)
+        database._write_sql(
+            "UPDATE sessions SET started_at = ?, last_activity_at = ? WHERE id = ?",
+            (oldest, oldest + count * 60, session_id))
+    finally:
+        database.close()
+    return 0
+
+
+async def seed_library_backlog(rpc, home, count, now):
+    session_id = await find_or_create_chat(rpc, LIBRARY_BACKLOG_PROFILE, LIBRARY_BACKLOG_TITLE)
+    already = write_library_backlog(perf_common.profile_directory(home, LIBRARY_BACKLOG_PROFILE), session_id, count, now)
+    return {"profile": LIBRARY_BACKLOG_PROFILE, "library_links": count, "already_seeded": already}
+
+
+async def seed(home, sizes, reset, marked, library_links):
     client = perf_common.load_gateway_client()
     target = perf_common.target_from_environment()
     gateway = client.Gateway(target["base_url"], target["username"], target["password"])
     socket, rpc = await perf_common.open_rpc(client, gateway)
     now = time.time()
     try:
-        return [await seed_profile(rpc, home, profile, rows, now, reset, marked) for profile, rows in sizes.items()]
+        results = [await seed_profile(rpc, home, profile, rows, now, reset, marked) for profile, rows in sizes.items()]
+        if library_links:
+            await seed_library_backlog(rpc, home, library_links, now)
+        return results
     finally:
         await socket.close()
 
@@ -97,6 +130,7 @@ def main():
     parser.add_argument("--reset", action="store_true", help="replace the rows of a Bot Chat that already holds messages")
     parser.add_argument("--marked", action="store_true", help="give every visible row a unique marker, hide some rows, and add tall and tool-heavy turns")
     parser.add_argument("--manifest", type=Path, help="write the ordered visible and hidden markers per profile (needs --marked)")
+    parser.add_argument("--library-links", type=int, default=0, help=f"also give {LIBRARY_BACKLOG_PROFILE} a separate hidden session holding this many distinct links, for the Library screen's paging")
     parser.add_argument("--sizes", default=",".join(f"{profile}={rows}" for profile, rows in PROFILE_SIZES.items()))
     args = parser.parse_args()
     if args.manifest and not args.marked:
@@ -105,7 +139,7 @@ def main():
     home = require_sandbox_home(args.home)
     os.environ["HERMES_HOME"] = str(home)
     sys.path.insert(0, str(args.repo))
-    results = asyncio.run(seed(home, sizes, args.reset, args.marked))
+    results = asyncio.run(seed(home, sizes, args.reset, args.marked, args.library_links))
     if args.manifest:
         entries = {row["profile"]: {"session_id": row["session_id"], **row["manifest"]} for row in results}
         args.manifest.write_text(json.dumps(entries))

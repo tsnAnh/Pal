@@ -12,10 +12,20 @@ final class LibraryModel {
         case failed
     }
 
+    enum Pagination: Equatable {
+        case more(cursor: String)
+        case loading(cursor: String)
+        case end
+
+        init(_ page: LibraryPage) {
+            self = page.nextBefore.map { .more(cursor: $0) } ?? .end
+        }
+    }
+
     private(set) var phase: Phase = .loading
     private(set) var entries: [LibraryEntry] = []
+    private(set) var pagination: Pagination = .end
     private(set) var isIndexing = false
-    private(set) var isLoadingMore = false
     private(set) var previewFailed = false
     private(set) var preparingEntryID: String?
     var filter: LibraryFilter = .all {
@@ -25,24 +35,36 @@ final class LibraryModel {
     var previewURL: URL?
 
     let botName: String
-    private let services: BotsServices
-    private var nextBefore: String?
+    private let library: LibraryService
+    private let surfaces: SurfaceCache
+    private let pollInterval: Duration
     private var loadTask: Task<Void, Never>?
+    private var loadMoreTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
     private var generation = 0
     private var previewDirectory: URL?
 
-    static let pollInterval: Duration = .seconds(1.5)
+    static let defaultPollInterval: Duration = .seconds(1.5)
     static let pollLimit = 10
 
-    init(botName: String, services: BotsServices) {
+    init(botName: String, library: LibraryService, surfaces: SurfaceCache, pollInterval: Duration = LibraryModel.defaultPollInterval) {
         self.botName = botName
-        self.services = services
+        self.library = library
+        self.surfaces = surfaces
+        self.pollInterval = pollInterval
+    }
+
+    convenience init(botName: String, services: BotsServices) {
+        self.init(botName: botName, library: services.library, surfaces: services.surfaces)
     }
 
     var sections: [LibrarySection] { LibraryGrouping.sections(entries) }
 
-    var hasMore: Bool { nextBefore != nil }
+    var hasMore: Bool { pagination != .end }
+
+    var isLoadingMore: Bool {
+        if case .loading = pagination { true } else { false }
+    }
 
     var isEmpty: Bool { phase == .ready && entries.isEmpty }
 
@@ -53,19 +75,24 @@ final class LibraryModel {
 
     func stop() {
         loadTask?.cancel()
+        loadMoreTask?.cancel()
         pollTask?.cancel()
         loadTask = nil
+        loadMoreTask = nil
         pollTask = nil
+        if case .loading(let cursor) = pagination { pagination = .more(cursor: cursor) }
     }
 
     func reload() {
         generation += 1
         let current = generation
         loadTask?.cancel()
+        loadMoreTask?.cancel()
         pollTask?.cancel()
+        loadMoreTask = nil
         phase = .loading
         entries = []
-        nextBefore = nil
+        pagination = .end
         isIndexing = false
         loadTask = Task { await loadFirstPage(generation: current) }
     }
@@ -76,16 +103,18 @@ final class LibraryModel {
 
     private func loadFirstPage(generation current: Int) async {
         let key = SurfaceKey.screen("library-\(filter.rawValue)", bot: botName)
-        if let cached = await services.surfaces.value(LibraryPage.self, key), current == generation, phase == .loading {
+        if let cached = await surfaces.value(LibraryPage.self, key), current == generation, phase == .loading {
             apply(cached, replacing: true)
             phase = .ready
         }
         do {
-            let page = try await services.library.page(profile: botName, filter: filter)
+            let page = try await library.page(profile: botName, filter: filter)
             guard current == generation else { return }
+            loadMoreTask?.cancel()
+            loadMoreTask = nil
             apply(page, replacing: true)
             phase = .ready
-            services.surfaces.persist(page, key)
+            surfaces.persist(page, key)
             if !page.indexComplete { startPolling(generation: current) }
         } catch is CancellationError {
         } catch {
@@ -101,18 +130,31 @@ final class LibraryModel {
             let known = Set(entries.map(\.id))
             entries += page.entries.filter { !known.contains($0.id) }
         }
-        nextBefore = page.nextBefore
+        pagination = Pagination(page)
+        isIndexing = !page.indexComplete
+    }
+
+    private func refreshHead(with page: LibraryPage) {
+        guard let boundary = page.entries.last?.occurredAt else {
+            apply(page, replacing: true)
+            return
+        }
+        let headIDs = Set(page.entries.map(\.id))
+        let tail = entries.filter { $0.occurredAt < boundary && !headIDs.contains($0.id) }
+        entries = page.entries + tail
+        if tail.isEmpty, !isLoadingMore { pagination = Pagination(page) }
         isIndexing = !page.indexComplete
     }
 
     private func startPolling(generation current: Int) {
+        let interval = pollInterval
         pollTask = Task { [weak self] in
             for _ in 0..<Self.pollLimit {
-                try? await Task.sleep(for: Self.pollInterval)
+                try? await Task.sleep(for: interval)
                 guard let self, !Task.isCancelled, current == generation else { return }
-                guard let page = try? await services.library.page(profile: botName, filter: filter) else { continue }
+                guard let page = try? await library.page(profile: botName, filter: filter) else { continue }
                 guard current == generation else { return }
-                apply(page, replacing: true)
+                refreshHead(with: page)
                 if page.indexComplete { return }
             }
             guard let self, current == generation else { return }
@@ -120,14 +162,21 @@ final class LibraryModel {
         }
     }
 
-    func loadMoreIfNeeded(after entry: LibraryEntry) {
-        guard entry.id == entries.last?.id, let before = nextBefore, !isLoadingMore, phase == .ready else { return }
-        isLoadingMore = true
+    func loadMore() {
+        guard phase == .ready, case .more(let cursor) = pagination else { return }
+        pagination = .loading(cursor: cursor)
         let current = generation
-        Task {
-            defer { if current == generation { isLoadingMore = false } }
-            guard let page = try? await services.library.page(profile: botName, filter: filter, before: before), current == generation else { return }
+        loadMoreTask = Task { await fetchMore(after: cursor, generation: current) }
+    }
+
+    private func fetchMore(after cursor: String, generation current: Int) async {
+        do {
+            let page = try await library.page(profile: botName, filter: filter, before: cursor)
+            guard current == generation, !Task.isCancelled else { return }
             apply(page, replacing: false)
+        } catch {
+            guard current == generation, !Task.isCancelled, pagination == .loading(cursor: cursor) else { return }
+            pagination = .more(cursor: cursor)
         }
     }
 
@@ -146,7 +195,7 @@ final class LibraryModel {
 
     func thumbnail(for entry: LibraryEntry) async -> Data? {
         guard let ref = entry.assetRef else { return nil }
-        return try? await services.library.asset(profile: botName, ref: ref, thumbnail: true)
+        return try? await library.asset(profile: botName, ref: ref, thumbnail: true)
     }
 
     private func preview(_ entry: LibraryEntry) async {
@@ -155,7 +204,7 @@ final class LibraryModel {
         previewFailed = false
         defer { preparingEntryID = nil }
         do {
-            let data = try await services.library.asset(profile: botName, ref: ref, thumbnail: false)
+            let data = try await library.asset(profile: botName, ref: ref, thumbnail: false)
             let directory = FileManager.default.temporaryDirectory.appending(path: "library-\(UUID().uuidString)", directoryHint: .isDirectory)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             let name = (entry.title as NSString).lastPathComponent

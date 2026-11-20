@@ -21,6 +21,7 @@ struct LibraryView: View {
             LazyVStack(spacing: 0) {
                 chips
                 content
+                loadMoreSentinel
             }
             .padding(.bottom, 32)
             .padding(.leading, showsChrome ? 0 : 12)
@@ -77,6 +78,20 @@ struct LibraryView: View {
             ForEach(model.sections) { section in standardSection(section) }
         } else {
             ForEach(MacLibraryGroup.groups(model.entries)) { group in macSection(group) }
+        }
+    }
+
+    @ViewBuilder
+    private var loadMoreSentinel: some View {
+        switch model.pagination {
+        case .more(let cursor), .loading(let cursor):
+            Color.clear
+                .frame(height: 1)
+                .accessibilityHidden(true)
+                .onAppear { model.loadMore() }
+                .id(cursor)
+        case .end:
+            EmptyView()
         }
     }
 
@@ -228,7 +243,6 @@ private struct MacLibraryRow: View {
         .frame(minHeight: 33)
         .contentShape(Rectangle())
         .help(entry.subtitle())
-        .onAppear { model.loadMoreIfNeeded(after: entry) }
     }
 }
 
@@ -276,7 +290,6 @@ private struct LibraryRow: View {
         .padding(.vertical, LibraryMetrics.rowVerticalPadding)
         .frame(minHeight: LibraryMetrics.rowHeight)
         .contentShape(Rectangle())
-        .onAppear { model.loadMoreIfNeeded(after: entry) }
     }
 }
 
