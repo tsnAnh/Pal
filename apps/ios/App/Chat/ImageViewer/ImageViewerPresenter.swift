@@ -15,7 +15,10 @@ extension View {
             ChatImageViewer(model: model).environment(\.chatImageLoader, model.imageLoader)
         }
         #else
-        overlay { MacImageViewerHost(model: model, attach: attach, sent: sent) }
+        overlay {
+            MacImageViewerHost(model: model, attach: attach, sent: sent)
+            MacDocumentViewerHost(model: model, attach: attach, sent: sent)
+        }
         #endif
     }
 }

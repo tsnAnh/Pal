@@ -41,16 +41,7 @@ struct MarkdownView: View {
             switch content {
             case .items(let items):
                 ForEach(items) { item in
-                    switch item {
-                    case .block(let block):
-                        blockView(block)
-                    case .quote(let blocks):
-                        quoted {
-                            ForEach(blocks) { block in
-                                blockView(block)
-                            }
-                        }
-                    }
+                    MarkdownItemView(item: item, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
                 }
             #if os(macOS)
             case .runs(let runs):
@@ -63,12 +54,23 @@ struct MarkdownView: View {
         .modifier(PerBlockSelection(isOn: perBlockSelection))
     }
 
-    private func blockView(_ block: MarkdownBlock) -> some View {
-        MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
-    }
+}
 
-    private func quoted<Inner: View>(@ViewBuilder _ inner: () -> Inner) -> some View {
-        MarkdownQuote(content: inner())
+struct MarkdownItemView: View {
+    let item: MarkdownLayoutItem
+    var highlight = ""
+    var isCurrentMatch = false
+    var isStreaming = false
+
+    var body: some View {
+        switch item {
+        case .block(let block):
+            MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+        case .quote(let blocks):
+            MarkdownQuote(content: ForEach(blocks) { block in
+                MarkdownBlockView(block: block, highlight: highlight, isCurrentMatch: isCurrentMatch, isStreaming: isStreaming)
+            })
+        }
     }
 }
 
@@ -120,7 +122,7 @@ private struct MarkdownRunView: View {
 }
 #endif
 
-private struct MarkdownBlockView: View {
+struct MarkdownBlockView: View {
     let block: MarkdownBlock
     let highlight: String
     let isCurrentMatch: Bool
