@@ -1,4 +1,4 @@
-from gateway.session_legacy_bridge import Verb, account_owned, bridged, serve
+from gateway.session_legacy_bridge import Verb, account_owned, bridged
 
 VERBS = {
     'connectors.list': Verb('session:read', guard=account_owned),
@@ -7,17 +7,6 @@ VERBS = {
     'connectors.legacy': Verb('session:read', owner_scoped=True),
     'connectors.accounts.remove': Verb('session:control'),
 }
-
-ACCOUNT_OWNED_VERBS = {
-    'connectors.connect': Verb('session:control', guard=account_owned),
-    'connectors.operation.status': Verb('session:read', guard=account_owned),
-    'connectors.operation.wake': Verb('session:control', guard=account_owned),
-    'connection.respond': Verb('session:control', guard=account_owned),
-}
-
-
-async def serve_account_owned(connection, method, params):
-    return await serve(connection, method, ACCOUNT_OWNED_VERBS[method], None, params)
 
 
 def handlers(connection):
