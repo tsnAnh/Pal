@@ -69,12 +69,11 @@ def with_iphone(authority, policy, config, enabled, session_id):
 
 
 def _bot_chat(authority, session_id) -> bool:
-    db = getattr(authority, 'db', None)
-    if db is None:
+    store = getattr(authority, 'persistence', None)
+    if store is None:
         return False
-    row = db.get_session(db.get_compression_tip(session_id) or session_id)
     from gateway.session_local_migration import bot_chat_row
-    return row is not None and bot_chat_row(row)
+    return bot_chat_row(store.sessions.get(store.lineage.tip(session_id)))
 
 
 _POLICY_KINDS = {'ios': SessionKind.IOS, 'cli': SessionKind.CLI, 'gui': SessionKind.DESKTOP}
