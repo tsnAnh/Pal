@@ -296,6 +296,21 @@ def test_asset_serves_an_indexed_image_as_a_bounded_thumbnail_or_the_original(bo
     assert _error("library.asset", {"profile": "alpha", "asset_ref": ref, "thumbnail": False, "max_bytes": 100}) == 4152
 
 
+def test_the_session_authority_handle_alone_serves_an_allowed_file(bots):
+    from persistence.conversation.messages import NewMessage
+    from persistence.conversation.sessions import NewSession
+
+    image = bots["launch"] / "cache" / "images" / "chat.png"
+    original = _png(image)
+    handle = server._db
+    handle.sessions.create(NewSession(session_id="auth-2", source="cli"))
+    handle.messages.append("auth-2", NewMessage(role="user", content=f"@image:{image}", timestamp=BASE_TS))
+    ref = _ok("library.list", {})["items"][0]["asset_ref"]
+    full = _ok("library.asset", {"asset_ref": ref, "thumbnail": False})
+    assert full["mime"] == "image/png" and base64.b64decode(full["data_base64"]) == original
+    assert _error("library.asset", {"asset_ref": "f" * 32}) == 4151
+
+
 def test_asset_refuses_forged_unindexed_and_unsafe_references(bots):
     alpha = bots["alpha"]
     outside = bots["tmp"] / "outside"
