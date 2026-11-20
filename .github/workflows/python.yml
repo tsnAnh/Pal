@@ -22,6 +22,7 @@ jobs:
       tooling_tests: ${{ steps.paths.outputs.tooling_tests }}
       ios_guards: ${{ steps.paths.outputs.ios_guards }}
       swift: ${{ steps.paths.outputs.swift }}
+      swift_variant: ${{ github.event_name == 'push' || steps.paths.outputs.swift_variant == 'true' }}
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
         with:
@@ -166,7 +167,9 @@ jobs:
 
       # PAL_COMM_NOTIFICATIONS=1 adds the Notification Service Extension, the Communication
       # Notifications entitlement and the App Group; build it so the switched-on path keeps compiling.
+      # Only when the files it compiles change (ci_paths.py swift-variant) and on every push to main.
       - name: Generate the Xcode project (PAL_COMM_NOTIFICATIONS=1)
+        if: needs.changes.outputs.swift_variant == 'true'
         env:
           PAL_COMM_NOTIFICATIONS: "1"
         run: |
@@ -174,6 +177,7 @@ jobs:
           grep -q NotificationService HermesBots.xcodeproj/project.pbxproj
 
       - name: Build with Communication Notifications (iOS Simulator)
+        if: needs.changes.outputs.swift_variant == 'true'
         run: >-
           xcodebuild build -project HermesBots.xcodeproj -scheme HermesBots
           -destination 'generic/platform=iOS Simulator'
@@ -181,6 +185,7 @@ jobs:
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
 
       - name: Build with Communication Notifications (macOS)
+        if: needs.changes.outputs.swift_variant == 'true'
         run: >-
           xcodebuild build -project HermesBots.xcodeproj -scheme HermesBots
           -destination 'generic/platform=macOS'

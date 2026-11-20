@@ -53,7 +53,7 @@ def test_every_tracked_file_a_check_reads_selects_a_job_that_runs_it():
 def test_python_workflow_gates_each_job_on_its_table_output():
     jobs = _workflow("python.yml")["jobs"]
     outputs = set(jobs["changes"]["outputs"])
-    assert outputs == {"python", "tooling_tests", "ios_guards", "swift"}
+    assert outputs == {"python", "tooling_tests", "ios_guards", "swift", "swift_variant"}
     assert jobs["python"]["if"] == "needs.changes.outputs.python == 'true'"
     assert jobs["ios-guards"]["if"] == "needs.changes.outputs.ios_guards == 'true'"
     tests = next(s for s in jobs["python"]["steps"] if s.get("name", "").startswith("Tests ("))
@@ -100,6 +100,13 @@ def _run(cwd: Path, base: str) -> dict[str, str]:
      {"python": "false", "tooling_tests": "false", "ios_guards": "true", "swift": "true"}),
     ("apps/ios/Tools/probe.py",
      {"python": "true", "tooling_tests": "false", "ios_guards": "true", "swift": "true"}),
+    ("apps/ios/project.yml", {"swift": "true", "swift_variant": "true"}),
+    ("apps/ios/Variants/CommNotifications/HermesBots.entitlements",
+     {"swift": "true", "swift_variant": "true"}),
+    ("apps/ios/NotificationService/NotificationService.swift",
+     {"swift": "true", "swift_variant": "true"}),
+    ("apps/ios/App/Chat/ChatView.swift", {"swift": "true", "swift_variant": "false"}),
+    (".github/workflows/python.yml", {"swift": "true", "swift_variant": "true"}),
     ("gateway/run.py",
      {"python": "true", "tooling_tests": "true", "ios_guards": "false", "swift": "false"}),
     (".github/workflows/python.yml",
