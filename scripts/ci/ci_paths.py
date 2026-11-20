@@ -23,7 +23,7 @@ JOB_RULES: dict[str, tuple[Rule, ...]] = {
     "python": (*_OUTSIDE_IOS, ("apps/ios/*.py", True), *_RUN_EVERYTHING),
     "tooling-tests": (*_OUTSIDE_IOS, *_RUN_EVERYTHING),
     "ios-guards": (("apps/ios/*", True), *_RUN_EVERYTHING),
-    "swift": (("apps/ios/*", True), (".github/workflows/swift.yml", True)),
+    "swift": (("apps/ios/*", True), (".github/workflows/python.yml", True)),
     "faker-kit": ((".claude/skills/*", True), (".agents/skills/*", True),
                   ("scripts/link-skills.sh", True), *_RUN_EVERYTHING),
 }

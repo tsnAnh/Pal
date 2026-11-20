@@ -53,18 +53,19 @@ def test_every_tracked_file_a_check_reads_selects_a_job_that_runs_it():
 def test_python_workflow_gates_each_job_on_its_table_output():
     jobs = _workflow("python.yml")["jobs"]
     outputs = set(jobs["changes"]["outputs"])
-    assert outputs == {"python", "tooling_tests", "ios_guards"}
+    assert outputs == {"python", "tooling_tests", "ios_guards", "swift"}
     assert jobs["python"]["if"] == "needs.changes.outputs.python == 'true'"
     assert jobs["ios-guards"]["if"] == "needs.changes.outputs.ios_guards == 'true'"
     tests = next(s for s in jobs["python"]["steps"] if s.get("name", "").startswith("Tests ("))
     assert tests["if"] == "needs.changes.outputs.tooling_tests == 'true'"
+    assert jobs["swift"]["if"] == "needs.changes.outputs.swift == 'true'"
+    assert set(jobs["swift"]["needs"]) == {"changes", "ios-guards"}
     assert jobs["ci"]["if"] == "always()"
     assert set(jobs["ci"]["needs"]) == set(jobs) - {"ci"}
 
 
-@pytest.mark.parametrize(("workflow", "job"), [("swift.yml", "swift"),
-                                               ("faker-kit-checks.yml", "faker-kit")])
-def test_workflow_path_filters_match_the_table(workflow, job):
+def test_workflow_path_filters_match_the_table():
+    workflow, job = "faker-kit-checks.yml", "faker-kit"
     on = _workflow(workflow)["on"]
     for event in on.values():
         globs = [p.replace("**", "*") for p in event["paths"]]
