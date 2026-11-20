@@ -143,7 +143,6 @@ struct ComputerHelpSheet: View {
         }
         .presentationDetents([.fraction(0.955)])
         .presentationDragIndicator(.hidden)
-        .macSheetFrame()
     }
 }
 

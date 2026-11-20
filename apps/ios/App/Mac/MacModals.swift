@@ -14,6 +14,7 @@ struct MacModalHost: View {
     @Environment(MacShell.self) private var shell
     @Environment(\.macWindowSize) private var windowSize
     @Environment(\.macDialogCenter) private var dialogs
+    @Environment(\.macSheetCenter) private var sheets
     @State private var confirmingSignOut = false
     @State private var confirmingAdd = false
 
@@ -70,6 +71,9 @@ struct MacModalHost: View {
                     .padding(.leading, 15)
                     .padding(.bottom, MacMetrics.footerHeight - 12)
                     .transition(.scale(scale: 0.96, anchor: .bottomLeading).combined(with: .opacity))
+            }
+            if let sheets {
+                MacSheetLayer(center: sheets)
             }
             if let dialogs {
                 MacDialogLayer(center: dialogs, window: windowSize?.size ?? .zero)

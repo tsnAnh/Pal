@@ -529,9 +529,8 @@ private struct MacPermissionsSection: View {
             }
         }
         .task { await model.load(hub: hub) }
-        .sheet(item: $addingTo) { list in
+        .macSheet(item: $addingTo) { list in
             AddRuleSheet(list: list, model: model, hub: hub) { addingTo = nil }
-                .macSheetFrame()
         }
         .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             MacDialogContent(String(localized: "Remove this rule?"), message: removing?.text ?? "", actions: [
@@ -690,13 +689,11 @@ private struct MacVaultSection: View {
             }
         )
         .task { await model.load(api: hub.api) }
-        .sheet(isPresented: $adding) {
+        .macSheet(isPresented: $adding) {
             AddVaultSheet(model: model, api: hub.api) { adding = false }
-                .macSheetFrame()
         }
-        .sheet(item: $editing) { entry in
+        .macSheet(item: $editing) { entry in
             VaultEditSheet(model: model, api: hub.api, entry: entry) { editing = nil }
-                .macSheetFrame()
         }
         .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             MacDialogContent(String(localized: "Remove this item from your vault?"), message: removing?.title ?? "", actions: [

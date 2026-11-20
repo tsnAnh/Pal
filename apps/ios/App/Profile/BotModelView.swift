@@ -53,9 +53,8 @@ struct BotModelView: View {
         .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
-        .sheet(item: $picking) { mode in
+        .macSheet(item: $picking) { mode in
             BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback) { picking = nil }
-                .macSheetFrame()
         }
         .macConfirm(item: $model.confirmation) { confirmation in
             MacDialogContent(
@@ -224,7 +223,7 @@ private struct BotModelPicker: View {
         ) {
             list
         }
-        .sheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }) {
+        .macSheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }, content: {
             #if os(macOS)
             VStack(spacing: 0) {
                 HStack {
@@ -239,7 +238,6 @@ private struct BotModelPicker: View {
                 MacModelProvidersSection(hub: hub)
             }
             .background(PalTokens.content)
-            .macSheetFrame()
             .serviceSignInDialogHost()
             #else
             NavigationStack {
@@ -247,7 +245,7 @@ private struct BotModelPicker: View {
             }
             .serviceSignInDialogHost()
             #endif
-        }
+        })
     }
 
     private var list: some View {

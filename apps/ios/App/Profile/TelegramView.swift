@@ -47,10 +47,9 @@ struct TelegramView: View {
         .safeAreaInset(edge: .bottom, spacing: 0) { action }
         .task { await model.load() }
         .onDisappear { model.stop() }
-        .sheet(isPresented: $model.isEnteringToken, onDismiss: { model.cancelTokenEntry() }) {
+        .macSheet(isPresented: $model.isEnteringToken, onDismiss: { model.cancelTokenEntry() }, content: {
             TelegramTokenSheet(model: model)
-                .macSheetFrame()
-        }
+        })
         .macConfirm(isPresented: $model.confirmsDisconnect) {
             MacDialogContent(
                 String(localized: "Disconnect Telegram?"),

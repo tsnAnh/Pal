@@ -110,13 +110,11 @@ struct VaultScreen: View {
             }
         )
         .task { await model.load(api: api) }
-        .sheet(isPresented: $adding) {
+        .macSheet(isPresented: $adding) {
             AddVaultSheet(model: model, api: api) { adding = false }
-                .macSheetFrame()
         }
-        .sheet(item: $editing) { entry in
+        .macSheet(item: $editing) { entry in
             VaultEditSheet(model: model, api: api, entry: entry) { editing = nil }
-                .macSheetFrame()
         }
         .macAlert(isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
             MacDialogContent(

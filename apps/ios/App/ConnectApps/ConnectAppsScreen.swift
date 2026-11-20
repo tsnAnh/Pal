@@ -110,7 +110,6 @@ private struct ConnectAppsPresentations: ViewModifier {
 
     private func mcpSignInSheet(_ controller: McpSignInController) -> some View {
         McpSignInSheet(controller: controller) { model.mcpSignIn = nil }
-            .macSheetFrame()
     }
 
     func body(content: Content) -> some View {
@@ -132,20 +131,18 @@ private struct ConnectAppsPresentations: ViewModifier {
                     ]
                 )
             }
-            .sheet(isPresented: $model.showsSkills) {
+            .macSheet(isPresented: $model.showsSkills) {
                 SkillsCatalogSheet(model: model.makeSkillsModel(), botName: model.botName) { model.showsSkills = false }
-                    .macSheetFrame()
             }
-            .sheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, content: mcpSignInSheet)
+            .macSheet(item: $model.mcpSignIn, onDismiss: { Task { await model.reload() } }, content: mcpSignInSheet)
             .sheet(isPresented: $model.showsSlackPicker) {
                 SlackBotChoice(model: model.slack, wizard: model.slackWizard) { model.closeSlackPicker() }
                     .macSheetFrame()
             }
             .modifier(OwnerSetupSheet(model: model))
-            .sheet(item: $model.keyRequest) { request in
+            .macSheet(item: $model.keyRequest) { request in
                 CapabilityKeyEntrySheet(model: model, request: request)
                     .presentationDetents([.medium])
-                    .macSheetFrame()
             }
             .sheet(item: $model.credentialPrompt) { prompt in
                 CredentialSheet(prompt: prompt, botName: model.botName) { values in

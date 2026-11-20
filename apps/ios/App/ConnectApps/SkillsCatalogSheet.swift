@@ -42,10 +42,10 @@ struct SkillsCatalogSheet: View {
             }
         )
         .task { await model.start() }
-        .sheet(item: $model.keyRequest) { request in
-            SkillKeyEntrySheet(model: model, request: request, botName: botName)
+        .macSheet(item: $model.keyRequest) { request in
+            SkillKeyEntrySheet(model: model, request: request,
+                               botName: botName)
                 .presentationDetents([.medium])
-                .macSheetFrame()
         }
         .macAlert(item: $model.removeTarget) { target in
             MacDialogContent(

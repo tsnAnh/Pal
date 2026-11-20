@@ -32,7 +32,7 @@ struct DiscordFlowSheet: ViewModifier {
     @Bindable var model: ConnectAppsModel
 
     func body(content: Content) -> some View {
-        content.sheet(
+        content.macSheet(
             item: $model.discordFlow,
             onDismiss: { Task { await model.reload() } },
             content: { session in
@@ -41,7 +41,6 @@ struct DiscordFlowSheet: ViewModifier {
                     savedNote: String(localized: "Saved on your Pal. Mac and iPhone show the same step."), close: { model.closeDiscordFlow() },
                     accessory: { _ in EmptyView() }
                 )
-                .macSheetFrame()
             }
         )
     }
