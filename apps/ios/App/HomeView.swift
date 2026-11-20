@@ -46,7 +46,7 @@ struct HomeView: View {
             }
             if router.capabilities.contains(.kanban) {
                 ToolbarItem(placement: .trailingBar) {
-                    Button { router.presentKanban() } label: {
+                    Button { router.presentKanban() } label: { // mac-controls: ok
                         PalIcon("rectangle.split.3x1")
                     }
                     .accessibilityLabel(Text("Pal Kanban"))
@@ -56,7 +56,7 @@ struct HomeView: View {
             }
             if rooms.canCreate {
                 ToolbarItem(placement: .trailingBar) {
-                    Button { rooms.showsCreate = true } label: {
+                    Button { rooms.showsCreate = true } label: { // mac-controls: ok
                         PalIcon("person.2")
                     }
                     .accessibilityLabel(Text("New Group Chat"))
@@ -65,7 +65,7 @@ struct HomeView: View {
                 }
             }
             ToolbarItem(placement: .trailingBar) {
-                Button { router.present(.createBot) } label: {
+                Button { router.present(.createBot) } label: { // mac-controls: ok
                     PalIcon("plus")
                 }
                 .accessibilityLabel(Text("Create New Bot"))

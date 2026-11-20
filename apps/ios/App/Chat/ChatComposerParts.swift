@@ -118,6 +118,7 @@ struct ReplyBar: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Cancel reply"))
+            .help(Text("Cancel reply"))
             .accessibilityIdentifier("replyCancel")
         }
         .padding(.horizontal, 14)
@@ -165,6 +166,7 @@ struct AttachmentTray: View {
             .buttonStyle(.plain)
             .offset(x: 6, y: -6)
             .accessibilityLabel(Text("Remove \(attachment.name)"))
+            .help(Text("Remove \(attachment.name)"))
             .accessibilityIdentifier("removeAttachment")
         }
         .accessibilityElement(children: .contain)

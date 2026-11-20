@@ -65,6 +65,7 @@ struct FindBar: View {
         .disabled(model.findMatches.isEmpty)
         .opacity(model.findMatches.isEmpty ? 0.35 : 1)
         .accessibilityLabel(Text(label))
+        .help(Text(label))
         .accessibilityIdentifier(id)
     }
 }

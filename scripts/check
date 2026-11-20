@@ -121,6 +121,7 @@ _GUARDS = {
     "profile-archives": ["scripts/ci/check_profile_archive_boundary.py"],
     "swift-brand": ["scripts/ci/check_swift_brand.py"],
     "swift-nav-chrome": ["scripts/ci/check_swift_nav_chrome.py"],
+    "swift-mac-controls": ["scripts/ci/check_swift_mac_controls.py"],
     "swift-bot-tint": ["scripts/ci/check_swift_bot_tint.py"],
     "swift-chat-drop": ["scripts/ci/check_swift_chat_drop.py"],
     "swift-chat-scroll": ["scripts/ci/check_swift_chat_scroll.py"],
