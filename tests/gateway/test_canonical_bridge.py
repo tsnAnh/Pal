@@ -1,8 +1,10 @@
 import secrets
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
 
+from gateway.runtime_bootstrap import _PURPOSE_CAPABILITIES
 from gateway.session_connectors_controls import ACCOUNT_OWNED_VERBS
 from gateway.session_legacy_bridge import handlers as bridge_handlers
 from hermes_cli.primary_profile import primary_profile_name
@@ -10,6 +12,7 @@ from hermes_cli.profiles import get_profile_dir
 from tests.gateway.bots_harness import FULL, READ, bots_state, call, config_of, failure, install_state
 from tui_gateway.contracts.canonical_bridge import BRIDGED, HANDLER_VALIDATED
 from tui_gateway.contracts.registry import CANONICAL_METHODS, METHODS
+from tui_gateway.ws import _authority_or_legacy
 
 install = pytest.fixture(install_state)
 bots = pytest_asyncio.fixture(bots_state)
@@ -264,14 +267,22 @@ async def test_a_telegram_connect_never_echoes_or_logs_the_token_and_needs_contr
 
 
 @pytest.mark.asyncio
-async def test_account_owned_connector_calls_are_served_not_unknown(bots):
-    connection = bots.connect()
-    unknown = await call(connection, 'connectors.operation.status', {'owner': {'type': 'account'}, 'op_id': 'nope'})
-    assert unknown['error']['code'] != -32601, unknown
+@pytest.mark.parametrize('method', ['connectors.operation.status', 'connectors.operation.wake'])
+async def test_account_owned_connector_calls_are_the_legacy_fallbacks_not_the_authoritys(bots, method):
+    request = {'jsonrpc': '2.0', 'id': 1, 'method': method, 'params': {'owner': {'type': 'account'}, 'op_id': 'nope'}}
+    transport = SimpleNamespace(write=lambda frame: True)
+    connection = bots.connect(capabilities=sorted(_PURPOSE_CAPABILITIES['interactive']))
+    assert failure(await connection.dispatch(request), -32601)['data']['reason'] == 'unknown_method'
+    served = await _authority_or_legacy(connection, request, method, transport)
+    assert served['error']['code'] != -32601, served
     reader = bots.connect(capabilities=READ)
-    wake = failure(await call(reader, 'connectors.operation.wake', {'owner': {'type': 'account'}, 'op_id': 'nope'}))
-    assert wake['message'] == 'permission_denied'
-    listed = failure(await call(connection, 'connectors.list', {'owner': {'type': 'session', 'session_id': 's'}}))
+    refused = await _authority_or_legacy(reader, request, method, transport)
+    assert failure(refused, -32601)['data']['reason'] == 'unknown_method'
+
+
+@pytest.mark.asyncio
+async def test_connectors_list_on_the_authority_refuses_a_session_owner(bots):
+    listed = failure(await call(bots.connect(), 'connectors.list', {'owner': {'type': 'session', 'session_id': 's'}}))
     assert listed['data']['field'] == 'owner'
 
 
