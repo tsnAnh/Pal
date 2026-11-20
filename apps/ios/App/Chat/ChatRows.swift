@@ -296,7 +296,7 @@ struct UserQuoteBlock: View {
         HStack(alignment: .top, spacing: 8) {
             Capsule()
                 .fill(foreground.opacity(0.55))
-                .frame(width: 3)
+                .frame(width: 3) // chat-row-alignment: ok quote bar, not a row width
             Text(text)
                 .hermesText(.chatBody)
                 .foregroundStyle(foreground.opacity(0.72))

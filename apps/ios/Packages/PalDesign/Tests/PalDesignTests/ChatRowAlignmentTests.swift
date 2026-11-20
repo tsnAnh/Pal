@@ -10,4 +10,10 @@ struct ChatRowAlignmentTests {
         #expect(ChatMetrics.rowAlignment(for: .user) == .trailing)
         #expect(ChatMetrics.rowAlignment(for: .system) == .center)
     }
+
+    @Test("a bubble column places a narrower child on its own side, never the middle")
+    func bubbleColumnSide() {
+        #expect(ChatMetrics.bubbleColumnAlignment(.leading) == .leading)
+        #expect(ChatMetrics.bubbleColumnAlignment(.trailing) == .trailing)
+    }
 }

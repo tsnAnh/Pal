@@ -23,7 +23,8 @@ extension View {
     @ViewBuilder
     func bubbleWidth(_ alignment: HorizontalAlignment) -> some View {
         #if os(macOS)
-        frame(maxWidth: ChatMetrics.bubbleMaxWidth).chatRowFrame(for: alignment == .trailing ? .user : .bot)
+        frame(maxWidth: ChatMetrics.bubbleMaxWidth, alignment: ChatMetrics.bubbleColumnAlignment(alignment))
+            .chatRowFrame(for: alignment == .trailing ? .user : .bot)
         #else
         FractionalWidthLayout(alignment: alignment) { self }
         #endif
