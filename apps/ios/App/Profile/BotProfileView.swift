@@ -59,7 +59,6 @@ struct BotProfileView: View {
             }
             .disabled(model.isSharing)
             .accessibilityLabel(Text("Share as Template"))
-            .help(Text("Share as Template"))
             .accessibilityIdentifier("profileShareButton")
         }
         ToolbarItem(placement: .trailingBar) {

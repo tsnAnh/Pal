@@ -57,7 +57,6 @@ private struct ReachOfferBanner: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Dismiss"))
-            .help(Text("Dismiss"))
             .accessibilityIdentifier("reach-offer-dismiss")
         }
         .padding(16)

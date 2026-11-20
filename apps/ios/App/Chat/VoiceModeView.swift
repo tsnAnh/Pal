@@ -115,7 +115,6 @@ struct VoiceModeView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("End voice mode"))
-            .help(Text("End voice mode"))
             .accessibilityIdentifier("voiceModeClose")
         }
     }
@@ -129,7 +128,6 @@ struct VoiceModeView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(label))
-        .help(Text(label))
         .accessibilityIdentifier(id)
     }
 }

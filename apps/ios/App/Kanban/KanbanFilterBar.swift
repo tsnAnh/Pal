@@ -102,7 +102,6 @@ struct KanbanFilterBar: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Clear search"))
-                .help(Text("Clear search"))
                 .accessibilityIdentifier("kanbanSearch-clear")
             }
         }

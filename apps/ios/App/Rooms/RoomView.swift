@@ -160,7 +160,6 @@ struct RoomView: View {
         .disabled(!model.canStop)
         .opacity(model.canStop ? 1 : 0)
         .accessibilityLabel(Text("Stop"))
-        .help(Text("Stop"))
         .accessibilityIdentifier("roomStopButton")
     }
 

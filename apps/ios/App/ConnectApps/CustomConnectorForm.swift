@@ -195,7 +195,6 @@ struct CustomConnectorBody: View {
                         .buttonStyle(.plain)
                         .disabled(model.isBusy)
                         .accessibilityLabel(Text("Remove header"))
-                        .help(Text("Remove header"))
                         .accessibilityIdentifier("customConnectorHeaderRemove-\(index)")
                     }
                 }
