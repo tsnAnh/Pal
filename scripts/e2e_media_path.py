@@ -1,11 +1,4 @@
 #!/usr/bin/env -S bash -c 'exec "$BASH" "$(dirname "$0")/run-in-hermes-env" python3 "$0" "$@"'
-"""Send a MEDIA: path through the gateway's library.asset RPC and read the bytes back.
-
-An assistant message carrying MEDIA:<path> or a ::preview{file="<path>"} line is stored through
-the real persistence handle in a throwaway HERMES_HOME, then asked for over JSON-RPC exactly as
-the apps ask. Prints one JSON line per case (sha256 of what was written and what came back) and
-exits 1 when any case differs from what the media policy promises."""
-
 from __future__ import annotations
 
 import base64
