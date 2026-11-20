@@ -15,6 +15,17 @@ from hermes_cli.kanban_external_claim import (
 from hermes_cli.kanban_output import _err, _print_json
 from hermes_cli.kanban_outcomes import EvidenceError
 from hermes_cli.kanban_outcomes_store import list_evidence, record_evidence
+from hermes_cli.kanban_pr_acceptance_store import merged_already_done
+
+
+def _claim_refusal(existing) -> str:
+    if existing is None:
+        return "no such task"
+    if existing.status == "done":
+        return "status=done, and no merged pull request is bound to it, so there is nothing to accept again"
+    holder = f"held by {existing.claim_lock.split(':')[1]}" if (existing.claim_lock or "").startswith("external:") else (
+        "held by a dispatcher worker" if existing.claim_lock else "not claimed")
+    return f"status={existing.status}; {holder}, so it is not ready to claim"
 
 
 def claim(args: argparse.Namespace) -> int:
@@ -27,8 +38,13 @@ def claim(args: argparse.Namespace) -> int:
             return _err(f"kanban: {exc}")
         if task is None:
             existing = kb.get_task(conn, args.task_id)
-            return _err(f"cannot claim {args.task_id}: status={existing.status if existing else 'unknown'}; "
-                        "another claimant holds it or it is not ready")
+            if merged_already_done(conn, args.task_id):
+                if getattr(args, "json", False):
+                    _print_json({"task_id": args.task_id, "status": "done", "already_done": True, "run_id": None})
+                else:
+                    print(f"{args.task_id} is already done and its pull request is merged; nothing to claim")
+                return 0
+            return _err(f"cannot claim {args.task_id}: {_claim_refusal(existing)}")
     if getattr(args, "json", False):
         _print_json({"task_id": task.id, "run_id": task.current_run_id, "profile": task.assignee,
                      "claim_expires": task.claim_expires})

@@ -188,6 +188,95 @@ def _assignee_profile_home(assignee: str | None) -> str | None:
         raise _GateAuthError(f"assignee profile {assignee!r} cannot be resolved") from None
 
 
+def _required_contexts(pr: dict, repo: str, branch: str, profile_home: str | None) -> set:
+    protection = (pr.get("baseRef") or {}).get("branchProtectionRule") or {}
+    required = {(r["context"], (r.get("app") or {}).get("databaseId")) for r in protection.get("requiredStatusChecks", [])}
+    with phase("branch rules"):
+        rules = _api(f"repos/{repo}/rules/branches/{quote(branch, safe='')}?per_page=100",
+                     paginate=True, profile_home=profile_home)
+    for page in rules:
+        for rule in page:
+            if rule["type"] == "required_status_checks":
+                required.update((r["context"], r.get("integration_id"))
+                                for r in rule["parameters"]["required_status_checks"])
+    return required
+
+
+def _required_outcomes(repo: str, sha: str, required: set, profile_home: str | None) -> tuple[list[str], list[dict]]:
+    with phase("check runs"):
+        pages = _api(f"repos/{repo}/commits/{sha}/check-runs?per_page=100&filter=latest",
+                     paginate=True, profile_home=profile_home)
+        runs = [run for page in pages for run in page["check_runs"]]
+        if len({r["id"] for r in runs}) != pages[0]["total_count"]:
+            raise ValueError("Incomplete check-run pagination")
+    with phase("statuses"):
+        statuses = [{**s, "sha": sha} for page in _api(f"repos/{repo}/commits/{sha}/statuses?per_page=100",
+                                                       paginate=True, profile_home=profile_home) for s in page]
+    outcomes, checks = [], []
+    for context, app_id in sorted(required, key=str):
+        matching = [r for r in runs if r["name"] == context and
+                    (app_id in (None, -1) or r["app"]["id"] == app_id)]
+        # A legacy status can satisfy an unpinned context, but never a check pinned to an app.
+        legacy = [s for s in statuses if s["context"] == context] if app_id in (None, -1) else []
+        selected = matching + ([max(legacy, key=lambda s: s["id"])] if legacy else [])
+        if not selected:
+            outcomes.append("missing")
+            checks.append({"name": context, "classification": "missing", "head_sha": sha})
+        for check in selected:
+            is_run = "conclusion" in check
+            outcome = check.get("conclusion") if is_run else check["state"]
+            classification = _classify(check, sha, outcome, is_run)
+            outcomes.append(classification)
+            checks.append({"name": context, "id": check["id"],
+                "url": check.get("html_url") or check.get("target_url"),
+                "head_sha": check.get("head_sha", check.get("sha")),
+                "classification": classification, "conclusion": outcome})
+    return outcomes, checks
+
+
+def ci_warning(sha: str, checks: list[dict]) -> str | None:
+    names = {state: [c["name"] for c in checks if c["classification"] == state] for state in ("failure", "pending")}
+    other = [f"{c['name']} ({c['classification']})" for c in checks if c["classification"] not in ("success", "failure", "pending")]
+    if names["failure"]:
+        return f"accepted; CI failed: {', '.join(names['failure'])} on {sha}"
+    if names["pending"]:
+        return f"accepted; CI pending: {', '.join(names['pending'])} on {sha}"
+    if other:
+        return f"accepted; CI not confirmed: {', '.join(other)} on {sha}"
+    return None
+
+
+def unreadable_ci_warning(sha: str, exc: Exception) -> str:
+    cause = str(exc) if isinstance(exc, (_GateAuthError, _GateInfraError)) else type(exc).__name__
+    return f"accepted; CI state unreadable on {sha}: {cause}"
+
+
+def accept_merged(receipt: dict, warning: str | None) -> dict:
+    receipt.update(ok=True, classification="merged", merged=True)
+    if warning:
+        receipt["warning"] = warning
+    return receipt
+
+
+def refuse_not_merged(receipt: dict, pr_url: str, state: str) -> dict:
+    receipt.update(classification="not_merged",
+                   detail=f"{pr_url} is {state} and was never merged; only a merged pull request, "
+                          "or an open one whose required checks all succeeded, is accepted.")
+    return receipt
+
+
+def _merged_ci_warning(receipt: dict, repo: str, sha: str, branch: str, pr: dict, profile_home: str | None) -> str | None:
+    try:
+        required = _required_contexts(pr, repo, branch, profile_home)
+        receipt["required"] = [{"context": c, "app_id": a} for c, a in sorted(required, key=str)]
+        if not required:
+            return None
+        _, receipt["checks"] = _required_outcomes(repo, sha, required, profile_home)
+    except (_GateAuthError, *_INFRA_ERRORS) as exc:
+        return unreadable_ci_warning(sha, exc)
+    return ci_warning(sha, receipt["checks"])
+
+
 def collect_acceptance(contract: str, published_pr: str | None,
                        assignee: str | None = None) -> dict:
     receipt = {"ok": False, "classification": "missing", "head_sha": None,
@@ -206,7 +295,8 @@ def collect_acceptance(contract: str, published_pr: str | None,
         url = contract if declared else published_pr
         match = _PR.fullmatch(url or "")
         if not match or (not declared and match[1] != contract) or (declared and published_pr and published_pr != contract):
-            receipt["detail"] = "Supply metadata.published_pr matching the persisted completion contract."
+            receipt.update(classification="mismatch" if published_pr else "missing",
+                           detail=binding_detail(contract, published_pr))
             return receipt
         repo, number = match[1], int(match[2])
         receipt["pr_url"] = url
@@ -220,50 +310,18 @@ def collect_acceptance(contract: str, published_pr: str | None,
         pr = repository["pullRequest"]
         sha, branch = pr["headRefOid"], pr["baseRefName"]
         receipt["head_sha"] = sha
+        if pr["state"] == "CLOSED":
+            return refuse_not_merged(receipt, url, "closed")
         if not re.fullmatch(r"[0-9a-f]{40}", sha) or pr["state"] not in {"OPEN", "MERGED"}:
-            raise _GateInfraError("PR is closed or current head is unavailable in phase pull request read")
-        protection = (pr.get("baseRef") or {}).get("branchProtectionRule") or {}
-        required = {(r["context"], (r.get("app") or {}).get("databaseId")) for r in protection.get("requiredStatusChecks", [])}
-        with phase("branch rules"):
-            rules = _api(f"repos/{repo}/rules/branches/{quote(branch, safe='')}?per_page=100",
-                         paginate=True, profile_home=profile_home)
-        for page in rules:
-            for rule in page:
-                if rule["type"] == "required_status_checks":
-                    required.update((r["context"], r.get("integration_id"))
-                                    for r in rule["parameters"]["required_status_checks"])
+            raise _GateInfraError("current head is unavailable in phase pull request read")
+        if pr["state"] == "MERGED":
+            return accept_merged(receipt, _merged_ci_warning(receipt, repo, sha, branch, pr, profile_home))
+        required = _required_contexts(pr, repo, branch, profile_home)
         receipt["required"] = [{"context": c, "app_id": a} for c, a in sorted(required, key=str)]
         if not required:
             receipt["detail"] = "No repository-required checks are configured; explicitly use a local-only contract for non-CI tasks."
             return receipt
-        with phase("check runs"):
-            pages = _api(f"repos/{repo}/commits/{sha}/check-runs?per_page=100&filter=latest",
-                         paginate=True, profile_home=profile_home)
-            runs = [run for page in pages for run in page["check_runs"]]
-            if len({r["id"] for r in runs}) != pages[0]["total_count"]:
-                raise ValueError("Incomplete check-run pagination")
-        with phase("statuses"):
-            statuses = [{**s, "sha": sha} for page in _api(f"repos/{repo}/commits/{sha}/statuses?per_page=100",
-                                                           paginate=True, profile_home=profile_home) for s in page]
-        outcomes = []
-        for context, app_id in sorted(required, key=str):
-            matching = [r for r in runs if r["name"] == context and
-                        (app_id in (None, -1) or r["app"]["id"] == app_id)]
-            # A legacy status can satisfy an unpinned context, but never a check pinned to an app.
-            legacy = [s for s in statuses if s["context"] == context] if app_id in (None, -1) else []
-            selected = matching + ([max(legacy, key=lambda s: s["id"])] if legacy else [])
-            if not selected:
-                outcomes.append("missing")
-                receipt["checks"].append({"name": context, "classification": "missing", "head_sha": sha})
-            for check in selected:
-                is_run = "conclusion" in check
-                outcome = check.get("conclusion") if is_run else check["state"]
-                classification = _classify(check, sha, outcome, is_run)
-                outcomes.append(classification)
-                receipt["checks"].append({"name": context, "id": check["id"],
-                    "url": check.get("html_url") or check.get("target_url"),
-                    "head_sha": check.get("head_sha", check.get("sha")),
-                    "classification": classification, "conclusion": outcome})
+        outcomes, receipt["checks"] = _required_outcomes(repo, sha, required, profile_home)
         # Re-read after all pages: old-head successes are never transferable.
         with phase("final re-read"):
             current = _api(f"repos/{repo}/pulls/{number}", profile_home=profile_home)
@@ -285,6 +343,22 @@ def collect_acceptance(contract: str, published_pr: str | None,
         receipt.update(classification="infra", detail=f"infra: {cause}; GitHub acceptance evidence unavailable or "
                                                       "incomplete, check gh authentication/API access and retry.")
         return receipt
+
+
+def binding_detail(contract: str, published_pr: str | None) -> str:
+    expected = contract if _PR.fullmatch(contract) else f"a pull request in {contract}"
+    found = published_pr or "no metadata.published_pr"
+    return f"completion_contract {contract} expects {expected}; found {found}."
+
+
+def refusal_detail(receipt: dict) -> str:
+    if receipt.get("detail"):
+        return receipt["detail"]
+    sha, pr_url = receipt.get("head_sha") or "unknown head", receipt.get("pr_url") or "the published pull request"
+    unmet = [f"{c['name']} ({c['classification']})" for c in receipt.get("checks", []) if c["classification"] != "success"]
+    if unmet:
+        return f"{pr_url} is not merged and required checks are not successful on {sha}: {', '.join(unmet)}."
+    return f"{pr_url} is not merged and no successful required check was found on {sha} (classification {receipt['classification']})."
 
 
 def _classify(check: dict, sha: str, outcome: str | None, is_run: bool) -> str:

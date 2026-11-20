@@ -30,7 +30,7 @@ def github(tmp_path, monkeypatch):
             sha = state["head"]
             if self.path == "/graphql":
                 value = {"data": {"repository": {"pullRequest": {
-                    "headRefOid": sha, "baseRefName": "main", "state": "OPEN",
+                    "headRefOid": sha, "baseRefName": "main", "state": state.get("pr_state", "OPEN"),
                     "baseRef": {"branchProtectionRule": {"requiredStatusChecks": [
                         {"context": "required", "app": {"databaseId": 1}}]}}}}}}
             elif "/rules/branches/" in self.path:
@@ -82,6 +82,101 @@ def github(tmp_path, monkeypatch):
         thread.join()
 
 
+PR7 = "https://github.com/acme/repo/pull/7"
+
+
+def assert_exact_refusal(conn, tid):
+    receipt = json.loads(conn.execute(
+        "SELECT payload FROM task_events WHERE task_id=? AND kind='pr_acceptance' ORDER BY id DESC", (tid,)).fetchone()[0])
+    detail = receipt["detail"]
+    assert detail.strip() and detail.rstrip(".") != receipt["classification"]
+    assert detail in kb.get_task(conn, tid).last_failure_error
+    return receipt
+
+
+def accept(conn, state, **changes):
+    state.update(changes)
+    tid = kb.create_task(conn, title="Publish", completion_contract="acme/repo")
+    return tid, kb.complete_task(conn, tid, result="done", metadata={"published_pr": PR7})
+
+
+def accepted_receipt(conn, tid):
+    receipt = json.loads(conn.execute(
+        "SELECT payload FROM task_events WHERE task_id=? AND kind='pr_acceptance' ORDER BY id DESC", (tid,)).fetchone()[0])
+    assert receipt["ok"] and receipt["classification"] == "merged" and kb.get_task(conn, tid).status == "done"
+    return receipt
+
+
+@pytest.mark.platforms("linux")
+@pytest.mark.parametrize("conclusion,warning", [
+    ("pending", "accepted; CI pending: required on " + "a" * 40),
+    ("failure", "accepted; CI failed: required on " + "a" * 40),
+    ("cancelled", "accepted; CI not confirmed: required (infra) on " + "a" * 40),
+    ("success", None),
+])
+def test_merged_pr_is_accepted_whatever_its_ci_says(github, conclusion, warning):
+    with connect() as conn:
+        tid, ok = accept(conn, github, pr_state="MERGED", conclusion=conclusion)
+        assert ok
+        assert accepted_receipt(conn, tid).get("warning") == warning
+
+
+@pytest.mark.platforms("linux")
+def test_merged_pr_is_accepted_when_ci_cannot_be_read_or_is_not_required(github):
+    with connect() as conn:
+        github["pr_state"] = "MERGED"
+        github["missing"] = True
+        tid, ok = accept(conn, github)
+        assert ok and accepted_receipt(conn, tid)["warning"] == "accepted; CI not confirmed: required (missing) on " + "a" * 40
+
+
+@pytest.mark.platforms("linux")
+def test_open_pr_is_still_refused_with_the_reason(github):
+    with connect() as conn:
+        tid, ok = accept(conn, github, conclusion="pending")
+        assert not ok
+        receipt = assert_exact_refusal(conn, tid)
+        assert receipt["classification"] == "pending" and PR7 in receipt["detail"] and "required (pending)" in receipt["detail"]
+
+
+@pytest.mark.platforms("linux")
+def test_closed_unmerged_pr_is_refused_with_the_reason(github):
+    with connect() as conn:
+        tid, ok = accept(conn, github, pr_state="CLOSED")
+        assert not ok
+        receipt = assert_exact_refusal(conn, tid)
+        assert receipt["classification"] == "not_merged" and receipt["detail"].startswith(f"{PR7} is closed and was never merged")
+
+
+@pytest.mark.platforms("linux")
+@pytest.mark.parametrize("contract,published,classification,detail", [
+    ("acme/repo", "https://github.com/other/repo/pull/7", "mismatch",
+     "completion_contract acme/repo expects a pull request in acme/repo; found https://github.com/other/repo/pull/7."),
+    (PR7, "https://github.com/acme/repo/pull/8", "mismatch",
+     f"completion_contract {PR7} expects {PR7}; found https://github.com/acme/repo/pull/8."),
+    ("acme/repo", None, "missing", "completion_contract acme/repo expects a pull request in acme/repo; found no metadata.published_pr."),
+])
+def test_pr_of_another_repository_or_card_is_refused_with_both_sides(github, contract, published, classification, detail):
+    with connect() as conn:
+        github["pr_state"] = "MERGED"
+        tid = kb.create_task(conn, title="Publish", completion_contract=contract)
+        assert not kb.complete_task(conn, tid, result="done", metadata={"published_pr": published} if published else None)
+        receipt = assert_exact_refusal(conn, tid)
+        assert (receipt["classification"], receipt["detail"]) == (classification, detail)
+
+
+@pytest.mark.platforms("linux")
+def test_card_already_done_with_merged_pr_is_accepted_idempotently(github):
+    with connect() as conn:
+        tid, ok = accept(conn, github, pr_state="MERGED", conclusion="failure")
+        assert ok
+        events = conn.execute("SELECT count(*) FROM task_events WHERE task_id=?", (tid,)).fetchone()[0]
+        assert kb.complete_task(conn, tid, result="again", metadata={"published_pr": PR7})
+        assert conn.execute("SELECT count(*) FROM task_events WHERE task_id=?", (tid,)).fetchone()[0] == events
+        github["pr_state"] = "OPEN"
+        assert not kb.complete_task(conn, tid, result="again", metadata={"published_pr": PR7})
+
+
 @pytest.mark.platforms("linux")
 def test_pr_completion_requires_current_required_evidence(github):
     with connect() as conn:
@@ -91,6 +186,8 @@ def test_pr_completion_requires_current_required_evidence(github):
             ok = kb.complete_task(conn, tid, result="done", metadata={"published_pr": "https://github.com/acme/repo/pull/7"})
             assert ok is (conclusion == "success")
             task = kb.get_task(conn, tid)
+            if not ok:
+                assert_exact_refusal(conn, tid)
             assert (task.status == "done") is ok
             receipts = [json.loads(r[0]) for r in conn.execute(
                 "SELECT payload FROM task_events WHERE task_id=? AND kind='pr_acceptance'", (tid,))]
