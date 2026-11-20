@@ -72,15 +72,6 @@ def _session_owner(rid, owner):
     return session, None
 
 
-def _account_gate_closed(rid):
-    from tools.connectors import hosted_surface
-    from tui_gateway.contracts.connectors import ConnectorErrorReason
-
-    if hosted_surface.available():
-        return None
-    return _connector_rpc_error(rid, 4031, ConnectorErrorReason.connectors_unavailable, "Connectors are not available.")
-
-
 def _parse_params(rid, params, model):
     from pydantic import ValidationError
 
@@ -133,13 +124,14 @@ def _account_scope(request):
 
 def _operation_for_request(rid, request, session):
     from tools.connectors import live
+    from tools.connectors.hosted_switch import hosted_enabled
     if request.owner.type == "session":
         operation = live.get(session["session_key"], request.op_id, profile_home=session.get("profile_home"))
     else:
         with _account_scope(request):
-            if closed := _account_gate_closed(rid):
-                return None, closed
             operation = live.get_by_op_id(request.op_id, profile_home=_account_home(request))
+            if operation is not None and operation.hosted and not hosted_enabled():
+                return None, _connector_rpc_error(rid, *_refusals().CONNECTORS_UNAVAILABLE)
     if operation is None:
         return None, _connector_rpc_error(rid, *_refusals().UNKNOWN_OPERATION)
     return operation, None

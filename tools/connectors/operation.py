@@ -117,6 +117,10 @@ class ConnectionOperation:
     def target(self, name: str) -> Optional[Target]:
         return next((t for t in self.targets if t.name == name), None)
 
+    @property
+    def hosted(self) -> bool:
+        return any(t.kind == "connector" for t in self.targets)
+
     def transition(
         self, name: str, to: TargetState, actor: Actor, *, detail: Optional[str] = None,
         connect_url: Optional[str] = None, connection_id: Optional[str] = None, attempt: Optional[str] = None,

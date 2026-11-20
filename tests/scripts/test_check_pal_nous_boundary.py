@@ -67,6 +67,39 @@ def test_a_forbidden_import_two_modules_down_the_connector_layer_is_reported_wit
     assert reaches[0][0].startswith("hermes_cli.nous_account")
 
 
+@pytest.mark.parametrize("module", ["hosted_surface", "hosted_install", "hosted_signin"])
+def test_the_hosted_connector_registry_is_a_reach_even_though_it_holds_no_nous_import(guard, tmp_path, module):
+    _write(tmp_path, {
+        ROOT_MODULE: "def gate():\n    from tools.connectors import hosted_surface\n    return hosted_surface.available()\n",
+        "tools/connectors/__init__.py": "",
+        "tools/connectors/hosted_surface.py": "_installed = None\n",
+        "tools/connectors/hosted_install.py": "",
+        "tools/connectors/hosted_signin.py": "",
+    })
+    if module != "hosted_surface":
+        (tmp_path / ROOT_MODULE).write_text(f"from tools.connectors import {module}\n")
+
+    reaches = _reaches(guard, tmp_path)
+
+    assert reaches and reaches[0][0] == f"tools.connectors.{module}"
+
+
+def test_the_registry_reached_two_modules_down_is_reported_with_its_chain(guard, tmp_path):
+    _write(tmp_path, {
+        ROOT_MODULE: "from tools.connectors import run\n",
+        "tools/connectors/__init__.py": "",
+        "tools/connectors/run.py": "from tools.connectors import hosted_surface\n",
+        "tools/connectors/hosted_surface.py": "",
+    })
+
+    assert _reaches(guard, tmp_path) == [
+        ("tools.connectors.hosted_surface", "tui_gateway.methods_connectors -> tools.connectors.run")]
+
+
+def test_a_session_authority_operation_module_is_a_pal_root(guard):
+    assert "gateway/session_connections.py" in guard.root_paths()
+
+
 def test_an_import_under_type_checking_is_not_a_reach(guard, tmp_path):
     _write(tmp_path, {ROOT_MODULE: (
         "from typing import TYPE_CHECKING\n"

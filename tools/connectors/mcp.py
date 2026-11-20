@@ -14,7 +14,7 @@ from tools.connectors.contract import Actor, SettleReason, TargetState
 from tools.connectors.live import operation_session_key
 from tools.connectors.operation import ConnectionOperation, DetachedOperation, IllegalTransition, Target
 from tools.connectors.run import Kind, run_operation
-from tools.connectors.targets import hosted_names, misrouted_to_mcp_error
+from tools.connectors.targets import misrouted_to_mcp_error
 from tools.registry import tool_error
 
 logger = logging.getLogger(__name__)
@@ -55,7 +55,9 @@ def _configured_names() -> list[str]:
     return sorted(installed_servers())
 
 
-def validate_mcp_names(action: str, names: list[str]) -> Optional[str]:
+def validate_mcp_names(
+    action: str, names: list[str], hosted_names: Optional[Callable[[], Optional[set[str]]]] = None,
+) -> Optional[str]:
     try:
         catalog = _catalog_names()
         configured = _configured_names()
@@ -67,7 +69,7 @@ def validate_mcp_names(action: str, names: list[str]) -> Optional[str]:
         return None
     foreign = [n for n in unknown if n not in catalog and n not in configured]
     if foreign:
-        hosted = hosted_names() or set()
+        hosted = (hosted_names() if hosted_names is not None else None) or set()
         misrouted = [n for n in foreign if n in hosted]
         if misrouted:
             return " ".join(misrouted_to_mcp_error(action, name) for name in misrouted)
@@ -824,8 +826,9 @@ def run_mcp_operation(
     session_id: Optional[str],
     tool_call_id: Optional[str] = None,
     backend: Any = None,
+    hosted_names: Optional[Callable[[], Optional[set[str]]]] = None,
 ) -> str:
-    error = validate_mcp_names(action, names)
+    error = validate_mcp_names(action, names, hosted_names)
     if error:
         return tool_error(error)
     runner = open_runner(action, backend)

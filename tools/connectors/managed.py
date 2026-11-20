@@ -11,7 +11,8 @@ from tools.connectors.live import operation_session_key
 from tools.connectors.gateway.errors import RateLimited, ToolGatewayError
 from tools.connectors.operation import ConnectionOperation, DetachedOperation, IllegalTransition, Target
 from tools.connectors.run import Kind, run_operation
-from tools.connectors.targets import HostedTarget, catalog_names, hosted_names, misrouted_to_hosted_error
+from tools.connectors.hosted_surface import names as hosted_names
+from tools.connectors.targets import HostedTarget, catalog_names, misrouted_to_hosted_error
 from tools.registry import tool_error
 
 logger = logging.getLogger(__name__)

@@ -14,6 +14,15 @@ method = _registry.method
 _profile_scoped = _registry.profile_scoped
 
 
+def _account_gate_closed(rid):
+    from tools.connectors import hosted_surface
+    from tui_gateway.contracts.connectors import ConnectorErrorReason
+
+    if hosted_surface.available():
+        return None
+    return _connector_rpc_error(rid, 4031, ConnectorErrorReason.connectors_unavailable, "Connectors are not available.")
+
+
 def _hosted_off_refusal(rid):
     from tools.connectors.hosted_switch import hosted_enabled
 
@@ -489,7 +498,7 @@ def _connector_rpc(rid, params, action):
 
 
 def _reissue(rid, operation, args, *, initiator=None):
-    from tools.connectors.run import reissue
+    from tools.connectors.reissue import reissue
     from tui_gateway.connector_payload import connector_ui_payload
     from tui_gateway.connector_refusals import REISSUE_REFUSALS
 

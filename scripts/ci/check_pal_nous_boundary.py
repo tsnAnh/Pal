@@ -15,12 +15,16 @@ FORBIDDEN = (
     "tools.managed_gateway_auth",
     "tools.connectors.portal",
     "tools.connectors.managed",
+    "tools.connectors.hosted_surface",
+    "tools.connectors.hosted_install",
+    "tools.connectors.hosted_signin",
 )
 
 _ACCOUNT = "tui_gateway/methods_connectors_account.py"
 _OPERATION = "tui_gateway/methods_connectors.py"
 _GOOGLE = "tui_gateway/methods_google_workspace.py"
 _AUTH = "gateway/session_auth_controls.py"
+_SESSION_OPERATION = "gateway/session_connections.py"
 
 PAL_RPC_MODULES = {
     "connectors.catalog": (_ACCOUNT,),
@@ -37,8 +41,9 @@ PAL_RPC_MODULES = {
     "connectors.discord.guilds": (_ACCOUNT,),
     "connectors.discord.token": (_ACCOUNT,),
     "connectors.discord.save": (_ACCOUNT,),
-    "connectors.operation.status": (_OPERATION,),
-    "connection.respond": (_OPERATION,),
+    "connectors.operation.status": (_OPERATION, _SESSION_OPERATION),
+    "connectors.operation.wake": (_OPERATION, _SESSION_OPERATION),
+    "connection.respond": (_OPERATION, _SESSION_OPERATION),
     "google_workspace.status": (_GOOGLE,),
     "google_workspace.signin.start": (_GOOGLE,),
     "google_workspace.signin.finish": (_GOOGLE,),

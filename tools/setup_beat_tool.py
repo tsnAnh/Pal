@@ -95,9 +95,9 @@ def _result(step: flow.Step, beat: str | None = None, extra: str = "") -> str:
 
 def _connector_slugs() -> set[str] | None:
     """The connectors this account can connect, as the card lists them; None when the list is unreachable."""
-    from tools.connectors.targets import hosted_names
+    from tools.connectors import hosted_surface
 
-    return hosted_names()
+    return hosted_surface.names()
 
 
 def _suggest_from(slugs: set[str] | None) -> str:

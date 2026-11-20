@@ -131,12 +131,6 @@ def catalog_names() -> set[str]:
         return set()
 
 
-def hosted_names() -> Optional[set[str]]:
-    from tools.connectors import hosted_surface
-
-    return hosted_surface.names()
-
-
 def misrouted_to_hosted_error(name: str) -> str:
     return (
         f"{name} is a local MCP server, not a hosted connector account. "
