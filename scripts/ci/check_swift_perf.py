@@ -121,10 +121,14 @@ def view_spans(src: Source) -> list[tuple[int, int]]:
 LINE_RULES = (
     LineRule(
         "perf-body-parse",
-        re.compile(r"\bMarkdownDocument\(\s*parsing:|\bParsedMarkdown\(\s*source:|\bAttributedString\(\s*markdown:"),
+        re.compile(
+            r"\bMarkdownDocument\(\s*parsing:|\bParsedMarkdown\(\s*source:|\bAttributedString\(\s*markdown:"
+            r"|\bViewerDocument\(\s*data:|\bDocumentText(?:Chunks\.split|\(\s*data:)"
+        ),
         anywhere,
-        "markdown parsed inside a View body, on every body pass. Take a cached ParsedMarkdown: build it once in the "
-        "model (ChatModel) or call ParsedMarkdown.cached(text), and pass it to MarkdownView(parsed:)",
+        "markdown or file text parsed inside a View body, on every body pass. Take a cached ParsedMarkdown: build it once in the "
+        "model (ChatModel) or call ParsedMarkdown.cached(text), and pass it to MarkdownView(parsed:); a document viewer "
+        "builds its ViewerDocument in Task.detached from a load method and holds the result in @State",
         in_view=True,
     ),
     LineRule(

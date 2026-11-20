@@ -133,6 +133,7 @@ final class ChatModel {
     private(set) var replyTarget: ReplyTarget?
     var isFinding = false
     var imageViewer: ImageViewerState?
+    var documentViewer: DocumentViewerState?
     var filePreview: FileReference?
     var findQuery = "" {
         didSet { findQueryChanged() }
@@ -440,8 +441,7 @@ final class ChatModel {
 
     var fileActions: ChatFileActions {
         ChatFileActions(
-            check: { [self] in try await fileAvailability($0) },
-            load: { [self] in try await loadFile($0) }
+            check: { [self] in try await fileAvailability($0) }, load: { [self] in try await loadFile($0) }
         )
     }
 

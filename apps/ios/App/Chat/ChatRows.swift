@@ -38,7 +38,7 @@ struct ChatRowView: View {
         }
         .padding(.top, leadingGap)
         .environment(\.chatImageOpener) { reference in model.openImage(reference, inRow: row.id) }
-        .environment(\.chatFileOpener) { file in model.filePreview = file }
+        .environment(\.chatFileOpener) { file in model.openFile(file) }
     }
 
     private func timeSeparator(_ date: Date) -> some View {
