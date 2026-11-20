@@ -722,8 +722,8 @@ private struct MacVaultSection: View {
     @ViewBuilder
     private func loaded(_ entries: [VaultEntry]) -> some View {
         HStack(spacing: 4) {
-            ForEach(MacVaultFilter.allCases) { item in tab(item, count: entries.filter(item.includes).count) }
-            Spacer()
+            MacOverflowScroll(.horizontal) { HStack(spacing: 4) { ForEach(MacVaultFilter.allCases) { tab($0, count: entries.filter($0.includes).count) } } }
+            .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 6) {
                 PalIcon("magnifyingglass", ink: .secondary).font(.system(size: 11))
                 TextField("Search Vault", text: $query)

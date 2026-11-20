@@ -18,7 +18,7 @@ Rules (each finding names the file, line and the fix):
   chain. Environment flows only into the view it modifies, so a ``MacModalHost`` attached after it gets no window
   size or dialog centre and its panels collapse.
 * modal-overflow: a view hosted in a window-fit panel (640 x 440 at the 900 x 600 minimum window) has content that can
-  outgrow it (``OVERFLOW_SURFACES``: the step checklist, a failure block with Details open) and
+  outgrow it (``OVERFLOW_SURFACES``: the step checklist, a failure block with Details open, the Vault filter row) and
   does not wrap it in ``MacOverflowScroll`` (PalDesign), the shared container that scrolls only when the content does
   not fit. Add a new view of that kind to ``OVERFLOW_SURFACES`` in the same change.
 
@@ -49,6 +49,7 @@ MODAL_ROOTS = {
 OVERFLOW_SURFACES = {
     "App/Setup/StepFlowProgressViews.swift": ["StepFlowChecklist"],
     "App/Setup/StatusBlock.swift": ["StatusBlock"],
+    "App/Mac/MacSettings.swift": ["MacVaultSection"],
 }
 OVERFLOW_CONTAINER = re.compile(r"\bMacOverflowScroll\b")
 SYSTEM_ALERT = re.compile(r"(?<!SharePresenter)\.(alert|confirmationDialog)\(")
