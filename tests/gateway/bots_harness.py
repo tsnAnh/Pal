@@ -6,7 +6,6 @@ import hermes_yaml as yaml
 from gateway.session_authorities import SessionAuthorities
 from gateway.session_controls import AuthorityConnection
 from hermes_cli.profiles import create_profile, get_profile_dir
-from hermes_state import SessionDB
 from tests.gateway.devices_harness import call, make_authority, transport, write_profile_config
 from tui_gateway import server
 
@@ -35,7 +34,6 @@ async def bots_state(install):
     authorities = {}
     for name, home in (('default', install), ('alpha', get_profile_dir('alpha')), ('beta', get_profile_dir('beta'))):
         authorities[name] = await make_authority(home, runner, register=False)
-        authorities[name].db = SessionDB(db_path=home / 'state.db')
         runner.session_authorities.add(home, authorities[name], name)
     opened = []
 
