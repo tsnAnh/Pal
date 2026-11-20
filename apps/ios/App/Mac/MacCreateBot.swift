@@ -12,6 +12,20 @@ struct MacCreateBot: View {
     @FocusState private var focus: MacCreateBotField?
 
     var body: some View {
+        ViewThatFits(in: .vertical) {
+            layout(scrolls: false)
+            layout(scrolls: true)
+        }
+        .frame(width: MacModalSizing.createBotWidth)
+        .task {
+            for _ in 0..<10 where focus != .name {
+                focus = .name
+                try? await Task.sleep(for: .milliseconds(120))
+            }
+        }
+    }
+
+    private func layout(scrolls: Bool) -> some View {
         VStack(spacing: 0) {
             Text("Create New Bot")
                 .font(.system(size: 14, weight: .medium))
@@ -22,29 +36,31 @@ struct MacCreateBot: View {
                 .frame(height: 49)
                 .accessibilityAddTraits(.isHeader)
             PalHairline(color: PalTokens.divider)
-            VStack(spacing: 14) {
-                MacCreateBotPreview(model: model)
-                MacCreateBotNameField(model: model, focus: $focus, onSubmit: create)
-                MacCreateBotShapeGrid(model: model, focus: $focus, onSubmit: create)
-                MacCreateBotSwatches(model: model, focus: $focus, onSubmit: create)
-                if let message = MacCreateBotNameField.failureBanner(model.failure) {
-                    MacCreateBotBanner(message: message)
-                }
+            if scrolls {
+                ScrollView { fields }
+                    .scrollIndicators(.never)
+            } else {
+                fields
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 10)
-            .padding(.bottom, 16)
-            .disabled(model.isCreating)
             PalHairline(color: PalTokens.divider)
             MacCreateBotFooter(model: model, router: router, onCreate: create)
         }
-        .frame(width: MacModalSizing.createBotWidth)
-        .task {
-            for _ in 0..<10 where focus != .name {
-                focus = .name
-                try? await Task.sleep(for: .milliseconds(120))
+    }
+
+    private var fields: some View {
+        VStack(spacing: 14) {
+            MacCreateBotPreview(model: model)
+            MacCreateBotNameField(model: model, focus: $focus, onSubmit: create)
+            MacCreateBotShapeGrid(model: model, focus: $focus, onSubmit: create)
+            MacCreateBotSwatches(model: model, focus: $focus, onSubmit: create)
+            if let message = MacCreateBotNameField.failureBanner(model.failure) {
+                MacCreateBotBanner(message: message)
             }
         }
+        .padding(.horizontal, 22)
+        .padding(.top, 10)
+        .padding(.bottom, 16)
+        .disabled(model.isCreating)
     }
 
     private func create() {
