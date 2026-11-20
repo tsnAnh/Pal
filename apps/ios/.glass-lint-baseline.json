@@ -24,7 +24,6 @@
   {"file": "App/Computer/TeachViews.swift", "rule": "glass-pill-button", "text": "PillButton(String(localized: \"Discard\"), size: .large, accessibilityIdentifier: \"teachReviewDiscard\") {"},
   {"file": "App/Computer/TeachViews.swift", "rule": "glass-pill-button", "text": "PillButton(String(localized: \"Try again\"), accessibilityIdentifier: \"teachReviewRetry\") {"},
   {"file": "App/Computer/TeachViews.swift", "rule": "glass-pill-button", "text": "PillButton(String(localized: title), kind: kind, accessibilityIdentifier: identifier, action: action)"},
-  {"file": "App/ConnectApps/ConnectAppsList.swift", "rule": "glass-search-field", "text": "struct ConnectAppsSearchField: View {"},
   {"file": "App/ConnectApps/CustomConnectorForm.swift", "rule": "glass-pill-button", "text": ".iOSOnly { $0.buttonStyle(.pill(kind, size: .regular)) }"},
   {"file": "App/ConnectApps/CustomConnectorForm.swift", "rule": "glass-pill-button", "text": ".macOnly { $0.buttonStyle(.palPill(height: 28, fontSize: 12, fill: kind == .accent ? PalTokens.toggleOn.opacity(0.7) : nil)) }"},
   {"file": "App/ConnectApps/PasteAddressEntry.swift", "rule": "glass-pill-button", "text": ".buttonStyle(PillButtonStyle(kind: .accent, size: .large))"},

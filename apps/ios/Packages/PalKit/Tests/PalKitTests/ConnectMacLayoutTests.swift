@@ -11,6 +11,14 @@ struct ConnectMacLayoutTests {
         return ConnectListRow(app: app, state: state)
     }
 
+    func featuredRow(_ id: String, _ category: String, _ state: ConnectRowState = .connect) -> ConnectListRow {
+        let entry = PalCatalogEntry(slug: id, name: id.capitalized, category: category, method: .none, featured: true)
+        let app = ConnectApp(
+            id: id, name: id.capitalized, summary: "", category: category, source: .catalog(entry), state: .disconnected
+        )
+        return ConnectListRow(app: app, state: state)
+    }
+
     func rows(_ category: String, _ count: Int, state: ConnectRowState = .connect) -> [ConnectListRow] {
         (0..<count).map { row("\(category)-\($0)", category, state) }
     }
@@ -111,5 +119,130 @@ struct ConnectMacLayoutTests {
         navigation.back()
         #expect(navigation.cancelAction == .closePanel)
         #expect(navigation.liveCancelActions == 1)
+    }
+
+    private static let categories = ["Developer tools", "Design and web", "Finance", "Communication", "Other"]
+
+    private func phoneSections(
+        _ all: [ConnectListRow], chip: ConnectChip = .all, device: (title: String, count: Int) = (title: "This iPhone", count: 3),
+        searching: Bool = false, keeping: Set<String> = [], includesFeatured: Bool = true
+    ) -> [ConnectMacSection] {
+        ConnectMacLayout.sections(
+            rows: all, categories: Self.categories, chip: chip, isSearching: searching, device: device, keeping: keeping,
+            includesFeatured: includesFeatured
+        )
+    }
+
+    @Test func needsAttentionLeadsThenThisDeviceThenFeaturedThenCategories() {
+        let attention = row("linear", "Work management", .needsAttention(reason: "Sign-in expired"))
+        let all = [attention, featuredRow("github", "Developer tools")] + rows("Finance", 2) + rows("Developer tools", 1)
+        let sections = phoneSections(all)
+        #expect(sections.map(\.kind) == [.needsAttention, .thisDevice, .featured, .category("Developer tools"), .category("Finance")])
+        #expect(sections.map(\.title) == ["Needs attention", "This iPhone", "Featured", "Developer tools", "Finance"])
+    }
+
+    @Test func theDeviceSectionExistsOnlyWithADeviceCountAndItsChipShowsOnlyIt() {
+        let all = [featuredRow("github", "Developer tools")] + rows("Finance", 1)
+        #expect(!phoneSections(all, device: (title: "This iPhone", count: 0)).map(\.kind).contains(.thisDevice))
+        #expect(phoneSections(all, chip: .thisDevice).map(\.kind) == [.thisDevice])
+        #expect(phoneSections(all, chip: .thisDevice, device: (title: "This iPhone", count: 0)).isEmpty)
+    }
+
+    @Test func categoryChipsRankByUnconnectedCountAndTheTopThreeLeadWithTheRestUnderMore() {
+        let all = rows("Finance", 5) + [featuredRow("github", "Developer tools"), featuredRow("figma", "Design and web", .connected)]
+            + rows("Developer tools", 3) + rows("Communication", 4) + rows("Design and web", 1) + rows("Other", 1)
+            + rows("Hidden", 2, state: .connected)
+        let bar = ConnectChipBar(rows: all, categories: Self.categories)
+        #expect(bar.leading == ["Finance", "Developer tools", "Communication"])
+        #expect(bar.more == ["Design and web", "Other"])
+        #expect(!(bar.leading + bar.more).contains("Hidden"))
+    }
+
+    @Test func aSectionTitleSelectsTheChipItBelongsToAndAttentionAndResultsSelectNone() {
+        #expect(ConnectMacSection.Kind.needsAttention.chip == nil)
+        #expect(ConnectMacSection.Kind.results.chip == nil)
+        #expect(ConnectMacSection.Kind.thisDevice.chip == .thisDevice)
+        #expect(ConnectMacSection.Kind.featured.chip == .featured)
+        #expect(ConnectMacSection.Kind.category("Finance").chip == .category("Finance"))
+        #expect(ConnectMacSection(kind: .featured, title: "Featured").id == "featured")
+    }
+
+    @Test func theFeaturedSectionAppearsOnlyWhenAFeaturedRowExists() {
+        let plain = rows("Developer tools", 2) + rows("Finance", 1)
+        #expect(!phoneSections(plain).map(\.kind).contains(.featured))
+        #expect(phoneSections(plain + [featuredRow("github", "Developer tools")]).map(\.kind).contains(.featured))
+    }
+
+    @Test func aConnectedFeaturedRowStaysInFeaturedAndEveryFeaturedRowLeavesItsCategory() throws {
+        let all = [featuredRow("github", "Developer tools", .connected), featuredRow("sentry", "Developer tools"), row("vercel", "Developer tools")]
+        let sections = phoneSections(all)
+        let featured = try #require(sections.first { $0.kind == .featured })
+        #expect(featured.rows.map(\.id) == ["github", "sentry"])
+        let category = try #require(sections.first { $0.kind == .category("Developer tools") })
+        #expect(category.rows.map(\.id) == ["vercel"])
+        let ids = sections.flatMap(\.rows).map(\.id)
+        #expect(Set(ids).count == ids.count)
+    }
+
+    @Test func aCategoryWhoseRowsAreAllFeaturedDisappearsFromTheAllView() {
+        let sections = phoneSections([featuredRow("github", "Developer tools"), row("stripe", "Finance")])
+        #expect(sections.map(\.kind) == [.thisDevice, .featured, .category("Finance")])
+    }
+
+    @Test func aFeaturedRowThatNeedsAttentionShowsOnceUnderNeedsAttention() {
+        let broken = featuredRow("github", "Developer tools", .needsAttention(reason: "Sign-in expired"))
+        let sections = phoneSections([broken, row("vercel", "Developer tools")])
+        #expect(sections.map(\.kind) == [.needsAttention, .thisDevice, .category("Developer tools")])
+        #expect(sections.flatMap(\.rows).map(\.id) == ["github", "vercel"])
+    }
+
+    @Test func theFeaturedChipShowsJustTheFeaturedSectionWithConnectedRowsIncluded() {
+        let all = [featuredRow("github", "Developer tools", .connected), featuredRow("figma", "Design and web"), row("stripe", "Finance")]
+        let sections = phoneSections(all, chip: .featured)
+        #expect(sections.map(\.kind) == [.featured])
+        #expect(sections.first?.rows.map(\.id) == ["github", "figma"])
+        #expect(phoneSections([row("stripe", "Finance")], chip: .featured).isEmpty)
+    }
+
+    @Test func aCategoryChipAndKeptConnectedRowsBehaveAsBeforeWhenFeaturedIsOn() {
+        let all = [featuredRow("github", "Developer tools"), row("vercel", "Developer tools", .connected), row("stripe", "Finance")]
+        let developer = phoneSections(all, chip: .category("Developer tools"), keeping: ["vercel"])
+        #expect(developer.map(\.kind) == [.category("Developer tools")])
+        #expect(developer.first?.rows.map(\.id) == ["github", "vercel"])
+    }
+
+    @Test func withFeaturedOffTheOutputIsTheOldOneAndTheFeaturedChipActsAsAll() {
+        let all = [row("linear", "Work management", .needsAttention(reason: "x")), featuredRow("github", "Developer tools"), row("stripe", "Finance")]
+        let old = ConnectMacLayout.sections(rows: all, categories: Self.categories, chip: .all, isSearching: false, device: device)
+        let off = phoneSections(all, device: device, includesFeatured: false)
+        #expect(off == old)
+        #expect(off.map(\.kind) == [.needsAttention, .thisDevice, .category("Developer tools"), .category("Finance")])
+        #expect(phoneSections(all, chip: .featured, device: device, includesFeatured: false) == old)
+    }
+
+    @Test func searchingGivesOneResultsSectionNoFeaturedAndNothingWhenNothingMatches() {
+        let all = [featuredRow("github", "Developer tools"), row("vercel", "Developer tools")]
+        let found = phoneSections(all, searching: true)
+        #expect(found.map(\.kind) == [.results])
+        #expect(found.first?.rows.map(\.id) == ["github", "vercel"])
+        #expect(phoneSections([], searching: true).isEmpty)
+        #expect(phoneSections([row("slack", "Communication", .connected)], searching: true).isEmpty)
+    }
+
+    @Test func theConnectedCountIsConnectedRowsPlusAllowedDeviceAccess() {
+        let all = [
+            row("a", "Finance", .connected), row("b", "Finance"), featuredRow("c", "Finance", .connected),
+            row("d", "Finance", .needsAttention(reason: "x")),
+        ]
+        #expect(ConnectMacLayout.connectedCount(rows: all, devicesAllowed: 2) == 4)
+        #expect(ConnectMacLayout.connectedCount(rows: [], devicesAllowed: 0) == 0)
+        #expect(ConnectMacLayout.connectedCount(rows: [row("b", "Finance")], devicesAllowed: 1) == 1)
+    }
+
+    @Test func aFeaturedCatalogEntryMakesAFeaturedRowAndOtherSourcesNever() {
+        #expect(featuredRow("github", "Developer tools").featured)
+        #expect(!row("github", "Developer tools").featured)
+        let custom = ConnectApp(id: "x", name: "X", summary: "", category: "Custom", source: .googleWorkspace, state: .disconnected)
+        #expect(!ConnectListRow(app: custom, state: .connect).featured)
     }
 }

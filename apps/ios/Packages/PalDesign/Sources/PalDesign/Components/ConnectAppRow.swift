@@ -22,8 +22,6 @@ public struct AppTile<Content: View>: View {
     public let style: ConnectTileStyle
     private let content: Content
 
-    @Environment(\.hermesTheme) private var theme
-
     public init(style: ConnectTileStyle = .plain, @ViewBuilder content: () -> Content) {
         self.style = style
         self.content = content()
@@ -34,14 +32,14 @@ public struct AppTile<Content: View>: View {
         content
             .frame(width: ConnectRowMetrics.tileSize, height: ConnectRowMetrics.tileSize)
             .background(fill, in: shape)
-            .overlay(shape.strokeBorder(Color(theme.palette.tileStroke), lineWidth: 1))
+            .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
             .clipShape(shape)
             .accessibilityHidden(true)
     }
 
     private var fill: Color {
         switch style {
-        case .plain: Color(theme.palette.groupedCard)
+        case .plain: PalTokens.control
         case .filled(let color): Color(color)
         }
     }

@@ -82,11 +82,13 @@ public struct ConnectListRow: Identifiable, Sendable, Equatable {
     public var state: ConnectRowState
     public var summary: String
     public var hasProblem: Bool
+    public var featured: Bool
 
     public init(app: ConnectApp, state: ConnectRowState, problem: String? = nil, botSummary: String? = nil) {
         id = app.id
         name = app.name
         category = app.category
+        featured = app.isFeatured
         self.state = state
         let note = ConnectorCardState.cleaned(app.summary)
         let issue = ConnectorCardState.cleaned(problem)

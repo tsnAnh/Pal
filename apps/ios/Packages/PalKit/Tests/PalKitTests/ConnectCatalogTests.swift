@@ -161,6 +161,24 @@ struct ConnectCatalogTests {
         #expect(entries[1].mcpURL == nil)
     }
 
+    @Test func featuredDecodesAsABoolAndAnythingElseIsFalseWithoutLosingTheEntry() throws {
+        func entry(_ extra: JSONValue?) throws -> PalCatalogEntry {
+            var row: [String: JSONValue] = [
+                "slug": "x", "name": "X", "category": "Developer", "method": "mcp_oauth", "status": "connected", "verified": true,
+            ]
+            if let extra { row["featured"] = extra }
+            return try JSONValue.object(row).decoded(as: PalCatalogEntry.self)
+        }
+        #expect(try entry(true).featured)
+        #expect(try !entry(false).featured)
+        #expect(try !entry(nil).featured)
+        for wrong: JSONValue in [.null, "yes", "true", 1, ["a": 1], [true]] {
+            let decoded = try entry(wrong)
+            #expect(!decoded.featured)
+            #expect(decoded.slug == "x" && decoded.status == .connected && decoded.verified)
+        }
+    }
+
     @Test(arguments: [
         ("mcp_oauth", PalCatalogEntry.Method.mcpOAuth), ("none", .none), ("api_key", .apiKey), ("native", .native),
         ("oauth_client", .oauthClient), ("bot_app", .botApp), ("telepathy", .unsupported("telepathy")),

@@ -45,11 +45,12 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
     public var notes: String?
     public var setupGuide: SetupGuide?
     public var setupProgress: SetupProgress?
+    public var featured: Bool
 
     public init(
         slug: String, name: String, category: String = "", icon: String = "", method: Method,
         verified: Bool = false, mcpURL: URL? = nil, status: Status = .notConnected, notes: String? = nil,
-        setupGuide: SetupGuide? = nil, setupProgress: SetupProgress? = nil
+        setupGuide: SetupGuide? = nil, setupProgress: SetupProgress? = nil, featured: Bool = false
     ) {
         self.slug = slug
         self.name = name
@@ -62,10 +63,11 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         self.notes = notes
         self.setupGuide = setupGuide
         self.setupProgress = setupProgress
+        self.featured = featured
     }
 
     enum CodingKeys: String, CodingKey {
-        case slug, name, category, icon, method, verified, status, notes
+        case slug, name, category, icon, method, verified, status, notes, featured
         case mcpURL = "mcp_url"
         case setupGuide = "setup_guide"
         case setupProgress = "setup_progress"
@@ -84,6 +86,7 @@ public struct PalCatalogEntry: Decodable, Sendable, Hashable {
         mcpURL = (try container.decodeIfPresent(String.self, forKey: .mcpURL)).flatMap { URL(string: $0) }.flatMap(Self.secure)
         setupGuide = try? container.decodeIfPresent(SetupGuide.self, forKey: .setupGuide)
         setupProgress = try? container.decodeIfPresent(SetupProgress.self, forKey: .setupProgress)
+        featured = (try? container.decodeIfPresent(Bool.self, forKey: .featured)) ?? false
     }
 
     private static func secure(_ url: URL) -> URL? {
@@ -183,6 +186,10 @@ public struct ConnectApp: Identifiable, Sendable, Equatable {
     }
 
     public var isConnected: Bool { state == .connected }
+
+    public var isFeatured: Bool {
+        if case .catalog(let entry) = source { entry.featured } else { false }
+    }
 
     public var setupGuideEntry: PalCatalogEntry? {
         if case .catalog(let entry) = source, entry.setupGuide != nil { entry } else { nil }

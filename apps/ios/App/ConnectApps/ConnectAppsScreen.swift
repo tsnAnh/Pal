@@ -52,14 +52,7 @@ struct ConnectAppsScreen: View {
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("connectApps")
         #else
-        SheetChrome(
-            title: String(localized: "Connect Apps"),
-            titleAlignment: .afterLeadingButton,
-            accessibilityIdentifier: "connectApps",
-            onLeading: close,
-            trailing: { EmptyView() },
-            content: { ConnectAppsList(model: model) }
-        )
+        ConnectAppsPhoneRoot(model: model, close: close)
         #endif
     }
 
@@ -94,7 +87,6 @@ struct ConnectAppsScreen: View {
             onLeading: { Task { await model.leaveCustomConnector() } },
             trailing: {
                 Button(role: .close) { close() }
-                    .tint(.primary)
                     .accessibilityIdentifier("customConnectorCloseButton")
             },
             content: {

@@ -17,7 +17,7 @@ extension ConnectAppsList {
             )
             .padding(.horizontal, PalMetrics.screenMargin)
             .padding(.bottom, PalMetrics.captionToCardGap)
-            ConnectAppsMacChips(model: model, bar: state.chips)
+            ConnectAppsChips(model: model, bar: state.chips)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     resumeBanner
@@ -43,17 +43,8 @@ extension ConnectAppsList {
         return Array(repeating: GridItem(.flexible(), spacing: 18, alignment: .top), count: count)
     }
 
-    @ViewBuilder
     private func macContent(_ state: ConnectMacState) -> some View {
-        switch model.phase {
-        case .loading where model.catalog.apps.isEmpty:
-            DelayedProgressView().frame(maxWidth: .infinity).padding(.top, PalMetrics.cardGap).accessibilityIdentifier("connectAppsLoading")
-        case .unavailable:
-            StatusBlock(status: SetupStatus(code: "offline"), identifierPrefix: "connectAppsUnavailable") { Task { await model.reload() } }
-                .padding(.top, PalMetrics.cardGap)
-        default:
-            macLoaded(state)
-        }
+        content { macLoaded(state) }
     }
 
     @ViewBuilder
@@ -98,7 +89,7 @@ extension ConnectAppsList {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(PalTokens.textPrimary)
                     .accessibilityAddTraits(.isHeader)
-                    .accessibilityIdentifier(macIdentifier(section))
+                    .accessibilityIdentifier(section.identifier)
                 Spacer()
                 if section.hasViewAll {
                     Button(expanded ? String(localized: "Show fewer") : String(localized: "View all")) { model.toggleExpanded(section) }
@@ -121,15 +112,6 @@ extension ConnectAppsList {
         }
         .padding(.top, 14)
         .padding(.horizontal, PalMetrics.screenMargin)
-    }
-
-    private func macIdentifier(_ section: ConnectMacSection) -> String {
-        switch section.kind {
-        case .needsAttention: "connectAppsSection-attention"
-        case .thisDevice: "connectAppsSection-device-this-device"
-        case .category(let name): "connectAppsSection-\(name)"
-        case .results: "connectAppsSection-results"
-        }
     }
 
     private func macRow(_ entry: ConnectListEntry) -> some View {
@@ -219,90 +201,6 @@ struct ConnectMacRow<Icon: View, Trailing: View>: View {
         .padding(.vertical, 8)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier(identifier)
-    }
-}
-
-struct ConnectCapsule: View {
-    let state: ConnectRowState
-    let identifier: String
-    let perform: () -> Void
-
-    var body: some View {
-        switch state {
-        case .connect, .setUp, .needsAttention, .connected:
-            Button(action: perform) { Text(verbatim: state.actionTitle ?? "") }
-                .buttonStyle(.palClearCapsule)
-                .opacity(state == .connected ? 0.7 : 1)
-                .accessibilityIdentifier(identifier)
-        case .waiting:
-            Button {} label: {
-                HStack(spacing: 6) {
-                    ProgressView().controlSize(.small)
-                    Text("Connecting")
-                }
-            }
-            .buttonStyle(.palClearCapsule)
-            .disabled(true)
-            .accessibilityIdentifier(identifier)
-        case .unavailable:
-            EmptyView()
-        }
-    }
-}
-
-struct ConnectAppsMacChips: View {
-    @Bindable var model: ConnectAppsModel
-    let bar: ConnectChipBar
-
-    private var isSearching: Bool { !model.trimmedQuery.isEmpty }
-
-    var body: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 8) {
-                chip(String(localized: "All"), .all, identifier: "all")
-                chip(model.devices.thisDevice.title, .thisDevice, identifier: "device")
-                ForEach(bar.leading, id: \.self) { name in chip(name, .category(name), identifier: name) }
-                if !bar.more.isEmpty { moreMenu }
-                Spacer(minLength: 0)
-            }
-        }
-        .padding(.horizontal, PalMetrics.screenMargin)
-        .padding(.bottom, 10)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("connectAppsChips")
-    }
-
-    private func isSelected(_ value: ConnectChip) -> Bool { !isSearching && model.chip == value }
-
-    private func chip(_ title: String, _ value: ConnectChip, identifier: String) -> some View {
-        Button { model.selectChip(value) } label: { Text(title) }
-            .buttonStyle(.palClearChip(selected: isSelected(value)))
-            .accessibilityAddTraits(isSelected(value) ? .isSelected : [])
-            .accessibilityIdentifier("connectAppsChip-\(identifier)")
-    }
-
-    private var moreSelected: Bool { !isSearching && bar.moreIsSelected(model.chip) }
-
-    private var moreTitle: String {
-        if moreSelected, case .category(let name) = model.chip { name } else { String(localized: "More") }
-    }
-
-    private var moreMenu: some View {
-        Menu {
-            ForEach(bar.more, id: \.self) { name in
-                Button(name) { model.selectChip(.category(name)) }
-            }
-        } label: {
-            HStack(spacing: 6) {
-                Text(moreTitle)
-                PalIcon("chevron.down").font(.system(size: 9, weight: .semibold))
-            }
-        }
-        .menuStyle(.button)
-        .buttonStyle(.palClearChip(selected: moreSelected))
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .accessibilityIdentifier("connectAppsChip-more")
     }
 }
 #endif
