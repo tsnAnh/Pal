@@ -173,5 +173,4 @@ struct ChatFileCard: View {
             notice = String(localized: "Couldn't save this file")
         }
     }
-    }
 }
