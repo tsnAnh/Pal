@@ -4,6 +4,7 @@ import SwiftUI
 
 struct BotKeysScreen: View {
     @State private var model: BotKeysModel
+    @State private var openKeyName: String?
     let displayName: String
 
     @Environment(\.hermesTheme) private var theme
@@ -14,9 +15,11 @@ struct BotKeysScreen: View {
     }
 
     var body: some View {
-        BotSettingsScreen(title: String(localized: "Keys"), identifier: "botKeysScreen", spacing: PalMetrics.cardGap) {
-            content
-        }
+        BotSettingsScreen(
+            title: openRow?.label ?? String(localized: "Keys"), identifier: "botKeysScreen",
+            depth: openRow == nil ? 0 : 1, spacing: PalMetrics.cardGap, back: { openKeyName = nil },
+            content: { content }
+        )
         .task { await model.load() }
         .refreshable { await model.load() }
         .sheet(item: Binding(get: { model.entry }, set: { if $0 == nil { model.cancel() } })) { row in
@@ -36,6 +39,14 @@ struct BotKeysScreen: View {
         }
     }
 
+    private var openRow: BotKeyRow? {
+        #if os(macOS)
+        openKeyName.flatMap { name in model.groups.lazy.flatMap(\.keys).first { $0.name == name } }
+        #else
+        nil
+        #endif
+    }
+
     @ViewBuilder
     private var content: some View {
         switch model.phase {
@@ -46,8 +57,12 @@ struct BotKeysScreen: View {
                 Task { await model.load() }
             }
         case .ready:
-            ForEach(model.groups) { group in
-                section(group)
+            if let row = openRow {
+                keyCard(row)
+            } else {
+                ForEach(model.groups) { group in
+                    section(group)
+                }
             }
             CardFootnote(
                 "Keys are never shown after you save them. A new key applies to new chats.",
@@ -58,9 +73,20 @@ struct BotKeysScreen: View {
     private func section(_ group: BotKeyGroup) -> some View {
         VStack(alignment: .leading, spacing: PalMetrics.captionToCardGap) {
             SectionCaption(group.label, accessibilityIdentifier: "botKeysCaption-\(group.id)")
+            #if os(macOS)
+            GroupedCard(accessibilityIdentifier: "botKeysGroup-\(group.id)") {
+                ForEach(group.keys) { row in
+                    SettingsRow.navigate(
+                        row.label, subtitle: row.name, value: row.state.word,
+                        accessibilityIdentifier: "botKeysRow-\(row.name)"
+                    ) { openKeyName = row.name }
+                }
+            }
+            #else
             ForEach(group.keys) { row in
                 keyCard(row)
             }
+            #endif
         }
     }
 

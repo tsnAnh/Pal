@@ -14,7 +14,6 @@ struct BotModelView: View {
     @State private var picking: Picking?
     @State private var addingKey = false
     let displayName: String
-    @Environment(\.hermesTheme) private var theme
     @Environment(SettingsHub.self) private var hub
 
     init(model: BotModelsModel, displayName: String) {
@@ -216,13 +215,11 @@ struct BotModelView: View {
         case .saved(let text):
             CardFootnote(text, accessibilityIdentifier: "botModelStatus")
         case .failed(let text):
-            Text(text)
-                .hermesText(.rowSubtitle)
-                .foregroundStyle(Color(theme.palette.destructive))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, PalMetrics.screenMargin + PalMetrics.rowInset - 3)
-                .padding(.top, PalMetrics.captionToCardGap)
-                .accessibilityIdentifier("botModelStatus")
+            BotSettingsBanner(
+                kind: .failed, text: text, identifier: "botModelStatus",
+                retry: model.canRetrySave ? { Task { await model.retrySave() } } : nil
+            )
+            .padding(.top, PalMetrics.captionToCardGap)
         }
     }
 }

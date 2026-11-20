@@ -120,4 +120,35 @@ struct BotModelsTests {
         #expect(model.settings.fallbacks.map(\.model) == ["m1", "m2"])
         #expect(model.save == .failed(BotModelClient.couldNotSaveFallbacks))
     }
+
+    @Test("Try again re-sends the same failed change once, and only a failure offers it")
+    func retryResendsTheSameChange() async {
+        let bots = ScriptedBots()
+        let model = await loaded(bots)
+        #expect(!model.canRetrySave)
+        bots.script("profiles.configure", applied("model", false))
+        let pick = ModelChoice(provider: "anthropic", model: "claude-b")
+        await model.choose(pick)
+        #expect(model.canRetrySave)
+        bots.script("profiles.configure", applied("model"))
+        await model.retrySave()
+        #expect(model.settings.current == pick)
+        #expect(!model.canRetrySave)
+        let sent = bots.calls(to: "profiles.configure").map { $0.params["model"] }
+        #expect(sent == ["claude-b", "claude-b"])
+        await model.retrySave()
+        #expect(bots.calls(to: "profiles.configure").count == 2)
+    }
+
+    @Test("Try again re-sends the same fallback list")
+    func retryFallbacks() async {
+        let bots = ScriptedBots()
+        let model = await loaded(bots)
+        bots.script("profiles.configure", applied("fallback_providers", false))
+        await model.removeFallback(ModelChoice(provider: "openrouter", model: "m1"))
+        bots.script("profiles.configure", applied("fallback_providers"))
+        await model.retrySave()
+        #expect(model.settings.fallbacks.map(\.model) == ["m2"])
+        #expect(bots.calls(to: "profiles.configure").map { $0.params["fallback_providers"]?.arrayValue?.count } == [1, 1])
+    }
 }
