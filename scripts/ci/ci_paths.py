@@ -72,11 +72,7 @@ JOB_CHECKS: dict[str, tuple[str, ...]] = {
     "tooling-tests": ("tooling-tests",),
     "ios-guards": ("shebangs", "no-tmp", "agents-md", "case-collisions", "profile-archives", "line-endings",
                    "blob-size", "swift-brand", "swift-nav-chrome", "swift-bot-tint", "swift-chat-drop", "swift-chat-scroll", "swift-chat-row-alignment", "swift-mac-layout", "swift-modal-size", "swift-glass",
-<<<<<<< HEAD
-                   "swift-icon-tint", "swift-image-viewer", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint"),
-=======
-                   "swift-icon-tint", "swift-image-viewer", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-lint"),
->>>>>>> origin/main
+                   "swift-icon-tint", "swift-image-viewer", "swift-bot-settings", "swift-perf", "swift-fault-details", "swift-entitlements", "swift-lint"),
     "swift": (),
     "faker-kit": (),
 }
