@@ -27,7 +27,7 @@ struct SpeechMemoryScreen: View {
         }
         .task { await model.load() }
         .refreshable { await model.load() }
-        .sheet(
+        .macSheet(
             item: Binding(get: { model.keyEntry }, set: { if $0 == nil { model.cancelKeyEntry() } })
         ) { target in
             keyEntrySheet(target)
@@ -176,7 +176,6 @@ struct SpeechMemoryScreen: View {
         )
         .padding(24)
         .presentationDetents([.medium])
-        .macSheetFrame()
     }
 
     private var entryState: SecretEntryState {

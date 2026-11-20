@@ -35,12 +35,11 @@ struct GoogleAdsFlowSheet: ViewModifier {
     @Bindable var model: ConnectAppsModel
 
     func body(content: Content) -> some View {
-        content.sheet(
+        content.macSheet(
             item: $model.googleAdsFlow,
             onDismiss: { Task { await model.reload() } },
             content: { session in
                 StepFlowView(model: session.model, title: GoogleAdsConnector.name, close: { model.closeGoogleAdsFlow() }, accessory: { _ in EmptyView() })
-                    .macSheetFrame()
             }
         )
     }

@@ -88,10 +88,9 @@ struct PermissionsScreen: View {
             }
         }
         .task { await model.load(hub: hub) }
-        .sheet(item: $addingTo) { list in
+        .macSheet(item: $addingTo) { list in
             AddRuleSheet(list: list, model: model, hub: hub) { addingTo = nil }
                 .presentationDetents([.medium])
-                .macSheetFrame()
         }
         .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
             MacDialogContent(

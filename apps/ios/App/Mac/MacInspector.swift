@@ -57,13 +57,11 @@ struct MacInspector: View {
         .task { await suggestions.load() }
         .task(id: sessionID) { await autoApprove.load(sessionID: sessionID) }
         .toast($profile.toast)
-        .sheet(item: $creation) { created in
+        .macSheet(item: $creation) { created in
             NewRoutineSheet(model: created) { creation = nil }
-                .macSheetFrame()
         }
-        .sheet(item: Binding(get: { profile.editing }, set: { if $0 == nil { profile.endEditing() } })) { editing in
+        .macSheet(item: Binding(get: { profile.editing }, set: { if $0 == nil { profile.endEditing() } })) { editing in
             EditBotSheet(model: editing) { profile.endEditing() }
-                .macSheetFrame()
         }
         .macConfirm(isPresented: $profile.confirmsReplacePrimary) {
             MacDialogContent(

@@ -76,10 +76,9 @@ struct PublicAccessContent: View {
                 CardFootnote(PublicAccessCopy.blindSpots, accessibilityIdentifier: "publicAccessBlindSpots")
             }
         }
-        .sheet(isPresented: $adding, onDismiss: { model.clearIssuedSecret(); model.resetAdd() }) {
+        .macSheet(isPresented: $adding, onDismiss: { model.clearIssuedSecret(); model.resetAdd() }, content: {
             AddPublicRouteSheet(model: model) { adding = false }
-                .macSheetFrame()
-        }
+        })
         .macAlert(isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } })) {
             MacDialogContent(
                 String(localized: "Public access"),

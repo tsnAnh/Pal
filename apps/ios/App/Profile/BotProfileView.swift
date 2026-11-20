@@ -34,9 +34,8 @@ struct BotProfileView: View {
         .task { await suggestions.load() }
         .task(id: model.row?.conversationID) { await autoApprove.load(sessionID: model.row?.conversationID) }
         .toast($model.toast)
-        .sheet(item: Binding(get: { model.editing }, set: { if $0 == nil { model.endEditing() } })) { editing in
+        .macSheet(item: Binding(get: { model.editing }, set: { if $0 == nil { model.endEditing() } })) { editing in
             EditBotSheet(model: editing) { model.endEditing() }
-                .macSheetFrame()
         }
         .macConfirm(isPresented: $model.confirmsReplacePrimary) {
             MacDialogContent(
