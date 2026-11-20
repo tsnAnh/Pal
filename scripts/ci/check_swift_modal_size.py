@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Fail when a Mac modal carries its own size or a Mac alert goes around the shared dialog.
 
-Every Mac dialog takes 90% of the window (``MacModalSizing.frame(window:)``, PalDesign) or is
-content-sized and capped at 90% (``MacModalPanel(fit: .content)``). The size lives in the shared modal
+Every Mac dialog takes 70% of the window, never under 640 x 440 or over 90% (``MacModalSizing.frame(window:)``,
+PalDesign), or is content-sized and capped at that size (``MacModalPanel(fit: .content)``). The size lives in the shared modal
 container, ``MacModalPanel`` (App/Mac/MacModalSupport.swift); a panel never carries a ``width:`` or ``height:``,
 and a Mac modal view never frames its own root with a number. System ``.alert`` and ``.confirmationDialog`` cannot
 be resized, so on Mac every alert and confirmation goes through ``.macAlert`` / ``.macConfirm`` (PalDesign
@@ -48,14 +48,14 @@ PANEL_SIZE_DECL = re.compile(r"^\s*(?:let|var)\s+(width|height)\s*:")
 ROOT_FRAME = re.compile(r"^\s{8}\.frame\([^\n]*\b(?:width|height|minWidth|minHeight|idealWidth|idealHeight)\s*:\s*\d")
 IF_OS = re.compile(r"^\s*#if\s+os\((macOS|iOS)\)\s*$")
 FIX_PANEL = (
-    "MacModalPanel sizes itself from the window (MacModalSizing.frame(window:), 90%); "
+    "MacModalPanel sizes itself from the window (MacModalSizing.frame(window:), 70%); "
     "drop it, or pass fit: .content for a content-sized dialog"
 )
-FIX_ROOT = "size comes from MacModalPanel (90% of the window, or fit: .content); read a number from MacModalSizing"
+FIX_ROOT = "size comes from MacModalPanel (70% of the window, or fit: .content); read a number from MacModalSizing"
 MODAL_ENV = ".macModalEnvironment()"
 CHAIN_ATTACH = re.compile(r"^\s*\.(overlay|background)\b")
 FIX_ENV = "apply .macModalEnvironment() last, after every .overlay and .background, so the modal host inherits it"
-FIX_ALERT = "use .macAlert(...) or .macConfirm(...) (PalDesign MacDialog) so Mac shows the shared dialog at its content size, capped at 90% of the window"
+FIX_ALERT = "use .macAlert(...) or .macConfirm(...) (PalDesign MacDialog) so Mac shows the shared dialog at its content size, capped at 70% of the window"
 
 
 def _swift_files(root: Path) -> list[Path]:

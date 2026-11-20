@@ -35,7 +35,8 @@ final class MacModalVisibleE2ETests: BotProfileTestCase {
         let expected = MacModalSizing.frame(window: window.size)
         XCTAssertGreaterThan(frame.width * frame.height, 0, "\(identifier) has a non-zero frame")
         XCTAssertTrue(window.insetBy(dx: -Self.tolerance, dy: -Self.tolerance).contains(frame), "\(identifier) \(frame) sits inside the window \(window)")
-        XCTAssertLessThanOrEqual(frame.width, expected.width + Self.tolerance, "\(identifier) is at most 90% of the window wide")
+        XCTAssertLessThanOrEqual(frame.width, expected.width + Self.tolerance, "\(identifier) is at most the shared panel width")
+        XCTAssertLessThanOrEqual(frame.height, expected.height + Self.tolerance, "\(identifier) is at most the shared panel height")
         waitFor(any(app, inside), timeout: 30, "\(inside) inside \(identifier)")
         if let label {
             waitFor(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", label)).firstMatch, timeout: 30, "\(label) in the accessibility tree")
@@ -46,25 +47,27 @@ final class MacModalVisibleE2ETests: BotProfileTestCase {
         let app = signedInApp(extraArguments: ["-hermes-open-connect-apps"])
         resizeWindow(app, toWidth: Self.windowWidth)
         assertPanelVisible(app, "connectAppsPanel", label: "Connect Apps", inside: "connectAppsSearch")
-        let ninety = MacModalSizing.frame(window: app.windows.firstMatch.frame.size).width
-        XCTAssertGreaterThan(any(app, "connectAppsPanel").frame.width, ninety - Self.tolerance - 1, "Connect Apps takes 90% of the window")
+        let expected = MacModalSizing.frame(window: app.windows.firstMatch.frame.size).width
+        XCTAssertGreaterThan(any(app, "connectAppsPanel").frame.width, expected - Self.tolerance - 1, "Connect Apps takes the shared panel width")
         app.typeKey(.escape, modifierFlags: [])
         waitGone(any(app, "connectAppsPanel"), timeout: 10, "Connect Apps closes")
     }
 
     func test2SettingsShortcutsAndSearchOpenAsVisiblePanels() throws {
         let app = signedInApp()
-        resizeWindow(app, toWidth: Self.windowWidth)
         let cases = [
             PanelCase(key: ",", panel: "settingsSheetPanel", label: "General", inside: "settingsSheet"),
             PanelCase(key: "/", panel: "shortcutsSheet", label: "Keyboard shortcuts", inside: "shortcut-compactSidebar"),
             PanelCase(key: "k", panel: "searchPanel", label: nil, inside: "searchField"),
         ]
-        for entry in cases {
-            app.typeKey(entry.key, modifierFlags: .command)
-            assertPanelVisible(app, entry.panel, label: entry.label, inside: entry.inside)
-            app.typeKey(.escape, modifierFlags: [])
-            waitGone(any(app, entry.panel), timeout: 10, "\(entry.panel) closes")
+        for width in [Self.windowWidth, MacLayoutMetrics.windowMin] {
+            resizeWindow(app, toWidth: width)
+            for entry in cases {
+                app.typeKey(entry.key, modifierFlags: .command)
+                assertPanelVisible(app, entry.panel, label: entry.label, inside: entry.inside)
+                app.typeKey(.escape, modifierFlags: [])
+                waitGone(any(app, entry.panel), timeout: 10, "\(entry.panel) closes")
+            }
         }
     }
 }

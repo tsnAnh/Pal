@@ -64,7 +64,7 @@ Glass is a control and navigation layer floating above content, never the conten
 | Chat rows name their side | `chatRowFrame(for: ChatSender)`: bot leading, user trailing, chips `.system`; no max- or fixed-width `.frame` without `alignment:` | `swift-chat-row-alignment` |
 | One design system | Mac and iOS share PalDesign components; no Electron (`apps/desktop` is not Pal) | review |
 | Design first | UI changes start from an owner-approved mockup (Rule 4) | review |
-| Mac dialogs size from the window | No `width:`/`height:` on `MacModalPanel` (90%, `fit: .content`); `.macAlert`/`.macConfirm`; `.macModalEnvironment()` last | `swift-modal-size` |
+| Mac dialogs: 70% of window | No `width:`/`height:` on `MacModalPanel` (640x440 floor, `fit: .content`); `.macAlert`/`.macConfirm`; `.macModalEnvironment()` last | `swift-modal-size` |
 | Default build signs without extra capabilities | Communication Notifications, the App Group and extensions live in `Variants/CommNotifications/`, on only with `PAL_COMM_NOTIFICATIONS=1`; their app code is `#if PAL_COMM_NOTIFICATIONS` | `swift-entitlements` |
 
 Apple sources: HIG Materials, Toolbars, Search fields, Color; WWDC25 219, 323, 356. Reduce Transparency and Increase Contrast are automatic for system glass: never branch on them.
