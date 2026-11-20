@@ -29,6 +29,8 @@ _URL_RE = re.compile(r"https?://[^\s<>\"'`\[\]\x00-\x1f]+", re.IGNORECASE)
 _QUOTED_VALUE = r"`[^`\n]+`|\"[^\"\n]+\"|'[^'\n]+'"
 _DIRECTIVE_RE = re.compile(rf"(?<![\w/])@(?P<kind>image|file):(?P<value>{_QUOTED_VALUE}|\S+)")
 _MEDIA_TAG_RE = re.compile(r"MEDIA:[ \t]*(?P<value>(?:~/|/|[A-Za-z]:[\\/]|https?://)\S+)")
+_PREVIEW_LINE_RE = re.compile(
+    r"^[ \t]*::preview\{[^}\n]*?\bfile=(?:\"(?P<double>[^\"\n]+)\"|'(?P<single>[^'\n]+)')[^}\n]*\}[ \t]*$", re.MULTILINE)
 _IMAGE_HINT_RE = re.compile(r"\[Image attached at: ([^\n\]]+)\]")
 _SENT_NOTE_RE = re.compile(
     r"\[The user sent [^\n]*?(?:saved at|voice message): (?P<path>(?:/|[A-Za-z]:[\\/])[^\s\]]+)")
@@ -175,6 +177,12 @@ def _media_tag_occurrences(text: str) -> Iterator[Occurrence]:
             yield found
 
 
+def _preview_occurrences(text: str) -> Iterator[Occurrence]:
+    for match in _PREVIEW_LINE_RE.finditer(text):
+        if (found := path_occurrence(match.group("double") or match.group("single"))) is not None:
+            yield found
+
+
 def _attachment_note_occurrences(text: str) -> Iterator[Occurrence]:
     for match in _IMAGE_HINT_RE.finditer(text):
         if (found := path_occurrence(match.group(1), media_class="image")) is not None:
@@ -200,6 +208,7 @@ def _text_occurrences(role: str, text: str) -> Iterator[Occurrence]:
         yield from _attachment_note_occurrences(plain)
     elif role == "assistant":
         yield from _media_tag_occurrences(plain)
+        yield from _preview_occurrences(plain)
     yield from _url_occurrences(plain)
 
 

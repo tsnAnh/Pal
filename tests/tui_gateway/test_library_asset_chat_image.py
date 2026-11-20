@@ -54,7 +54,7 @@ def test_an_image_outside_the_media_roots_is_refused_even_when_named_in_a_row(bo
     seed = _seed(bots["alpha"])
     seed.message("s1", "user", f"Look\n\n[Image attached at: {outside}]")
     seed.close()
-    assert _error("library.asset", {"profile": "alpha", "asset_ref": _client_ref(outside)}) == 4151
+    assert _error("library.asset", {"profile": "alpha", "asset_ref": _client_ref(outside)}) == 4154
 
 
 def test_an_image_whose_file_is_gone_is_unavailable(bots):

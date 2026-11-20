@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 CATCH_UP_BUDGET_S = 2.0
 SCAN_CHUNK_ROWS = 400
 KINDS = ("link", "media", "file")

@@ -30,6 +30,10 @@ class AssetUnavailable(Exception):
     pass
 
 
+class AssetNotAllowed(Exception):
+    pass
+
+
 class AssetTooLarge(Exception):
     pass
 
@@ -57,19 +61,29 @@ def _delivered_path(locator: str) -> Path | None:
     return Path(safe) if safe else None
 
 
-def servable_path(home: Path, locator: str, *, assistant_produced: bool = False) -> Path | None:
+def resolve_servable(home: Path, locator: str, *, assistant_produced: bool = False) -> Path:
     if not os.path.isabs(locator) or locator.lower().startswith(("http://", "https://")):
-        return None
+        raise AssetUnavailable("This item is not available to download.")
     try:
         target = Path(locator).resolve()
         if not any(root in target.parents for root in serve_roots(home)):
-            if not assistant_produced:
-                return None
-            target = _delivered_path(locator)
-            if target is None:
-                return None
-        return target if stat.S_ISREG(target.stat().st_mode) else None
-    except (OSError, RuntimeError, ValueError):
+            delivered = _delivered_path(locator) if assistant_produced else None
+            if delivered is None:
+                if stat.S_ISREG(target.stat().st_mode):
+                    raise AssetNotAllowed("The bot's file-sharing policy does not allow this file.")
+                raise AssetUnavailable("This item is no longer available.")
+            target = delivered
+        if not stat.S_ISREG(target.stat().st_mode):
+            raise AssetUnavailable("This item is no longer available.")
+        return target
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise AssetUnavailable("This item is no longer available.") from exc
+
+
+def servable_path(home: Path, locator: str, *, assistant_produced: bool = False) -> Path | None:
+    try:
+        return resolve_servable(home, locator, assistant_produced=assistant_produced)
+    except (AssetUnavailable, AssetNotAllowed):
         return None
 
 
@@ -129,9 +143,9 @@ def _thumbnail(data: bytes) -> tuple[bytes, str] | None:
 def read_asset(
     home: Path, item: IndexedItem, *, max_bytes: int, thumbnail: bool, assistant_produced: bool = False,
 ) -> AssetPayload:
-    path = servable_path(home, item.locator, assistant_produced=assistant_produced) if item.kind != "link" else None
-    if path is None:
+    if item.kind == "link":
         raise AssetUnavailable("This item is not available to download.")
+    path = resolve_servable(home, item.locator, assistant_produced=assistant_produced)
     mime = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     wants_thumbnail = thumbnail and mime in _THUMBNAIL_MIMES
     try:
