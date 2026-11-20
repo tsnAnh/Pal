@@ -94,6 +94,7 @@ struct VaultScreen: View {
                     PalIcon("plus")
                 }
                 .accessibilityLabel(Text("Add to vault"))
+                .help(Text("Add to vault"))
                 .accessibilityIdentifier("vaultAddButton")
             },
             content: {

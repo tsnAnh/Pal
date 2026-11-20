@@ -64,6 +64,7 @@ struct KanbanCardView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Close card"))
+                .help(Text("Close card"))
                 .accessibilityIdentifier("kanbanCard-close")
                 #endif
             }

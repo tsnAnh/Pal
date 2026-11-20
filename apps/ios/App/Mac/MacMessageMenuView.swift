@@ -102,6 +102,7 @@ struct MacMessageMenuView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("More reactions"))
+            .help(Text("More reactions"))
             .accessibilityIdentifier("contextMoreReactions")
         }
     }

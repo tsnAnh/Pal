@@ -178,6 +178,7 @@ struct BotModelView: View {
         .buttonStyle(.plain)
         .disabled(disabled || model.isSaving)
         .accessibilityLabel(Text(label))
+        .help(Text(label))
         .accessibilityIdentifier("botFallback-\(id)-\(choice.id)")
     }
 

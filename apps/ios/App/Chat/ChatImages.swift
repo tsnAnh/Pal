@@ -290,6 +290,7 @@ struct ChatImageViewer: View {
             }
             .disabled(!state.canGoPrevious)
             .accessibilityLabel(Text("Previous image"))
+            .help(Text("Previous image"))
             .accessibilityIdentifier("imageViewerPrevious")
             Spacer()
             Button { _ = go(1) } label: {
@@ -297,6 +298,7 @@ struct ChatImageViewer: View {
             }
             .disabled(!state.canGoNext)
             .accessibilityLabel(Text("Next image"))
+            .help(Text("Next image"))
             .accessibilityIdentifier("imageViewerNext")
         }
         .buttonStyle(.plain)
