@@ -15,7 +15,7 @@ final class RowHoverState {
 
     @ObservationIgnored private var inside: Set<Region> = []
     @ObservationIgnored private var pendingHide: Task<Void, Never>?
-    @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
+    private let sleep: @Sendable (Duration) async throws -> Void
 
     init(sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
         self.sleep = sleep

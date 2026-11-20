@@ -67,18 +67,20 @@ struct MessageChromePlacementTests {
         CGRect(x: side == .user ? tracked.maxX - width : tracked.minX, y: 120, width: width, height: 60)
     }
 
-    @Test(arguments: [MessageSide.assistant, .user], [120.0, 300, 478, 516, 568], [false, true])
-    func theBarAndBadgeStayInsideTheTrackedColumnAtEveryBubbleWidth(side: MessageSide, points: Double, hasReaction: Bool) throws {
+    @Test(arguments: [MessageSide.assistant, .user], [120.0, 300, 478, 516, 568])
+    func theBarAndBadgeStayInsideTheTrackedColumnAtEveryBubbleWidth(side: MessageSide, points: Double) throws {
         let width = CGFloat(points)
-        let resolved = resolve(bubble(width: width, side: side), side: side, hasReaction: hasReaction)
-        #expect(tracked.contains(resolved.frames.bar))
-        if hasReaction {
-            let badge = try #require(resolved.frames.badge)
-            #expect(badge.minX >= tracked.minX)
-            #expect(badge.maxX <= tracked.maxX)
+        for hasReaction in [false, true] {
+            let resolved = resolve(bubble(width: width, side: side), side: side, hasReaction: hasReaction)
+            #expect(tracked.contains(resolved.frames.bar))
+            if hasReaction {
+                let badge = try #require(resolved.frames.badge)
+                #expect(badge.minX >= tracked.minX)
+                #expect(badge.maxX <= tracked.maxX)
+            }
+            let room = tracked.width - width - MessageChromePlacement.barGap
+            #expect(resolved.chrome == (room >= bar.width ? .beside : .insideBubble))
         }
-        let room = tracked.width - width - MessageChromePlacement.barGap
-        #expect(resolved.chrome == (room >= bar.width ? .beside : .insideBubble))
     }
 
     @Test(arguments: [MessageSide.assistant, .user])

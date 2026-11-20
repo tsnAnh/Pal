@@ -305,6 +305,7 @@ private struct MacMessageHoverBar: View {
         .onHover { inside in
             if inside { rowHover?.enter(.bar) } else { rowHover?.exit(.bar) }
         }
+        .onDisappear { rowHover?.exit(.bar) }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("messageActionBar")
         .modifier(BarAccessibilityActions(

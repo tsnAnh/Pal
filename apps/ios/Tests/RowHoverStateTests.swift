@@ -56,7 +56,14 @@ struct RowHoverStateTests {
     }
 
     private func settle() async {
-        for _ in 0..<30 { await Task.yield() }
+        try? await Task.sleep(for: .milliseconds(50))
+    }
+
+    private func until(_ condition: () -> Bool) async {
+        let deadline = ContinuousClock.now + .seconds(2)
+        while !condition(), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
     }
 
     @Test func hoveringOneRowNotifiesOnlyThatRowsPill() {
@@ -99,14 +106,13 @@ struct RowHoverStateTests {
         state.enter(.bar)
         state.exit(.message)
         state.exit(.bar)
-        await settle()
+        await until { gate.waiters == 1 }
 
         #expect(state.isHovering)
-        #expect(gate.waiters == 1)
         #expect(gate.requested == [.milliseconds(120)])
 
         gate.open()
-        await settle()
+        await until { !state.isHovering }
 
         #expect(!state.isHovering)
     }
@@ -115,7 +121,7 @@ struct RowHoverStateTests {
         let (state, gate) = gatedState()
         state.enter(.message)
         state.exit(.message)
-        await settle()
+        await until { gate.waiters == 1 }
         #expect(gate.waiters == 1)
 
         state.enter(.message)
@@ -131,7 +137,7 @@ struct RowHoverStateTests {
         state.enter(.bar)
         state.exit(.message)
         state.exit(.bar)
-        await settle()
+        await until { gate.waiters == 1 }
         state.exit(.bar)
         await settle()
 
