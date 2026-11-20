@@ -14,7 +14,7 @@ _ROWS_SQL = (
     " WHEN role = 'user' THEN substr(content, 1, 400)"
     " WHEN role = 'assistant' AND COALESCE(content, '') = '' AND length(tool_calls) < 65536 THEN tool_calls END AS probe,"
     " tool_call_id"
-    " FROM messages WHERE session_id = ? AND active = 1 AND message_uid IS NOT NULL ORDER BY id")
+    " FROM messages WHERE session_id = ? AND (active = 1 OR compacted = 1) AND message_uid IS NOT NULL ORDER BY id")
 
 
 @dataclass(frozen=True, slots=True)
