@@ -12,51 +12,47 @@ struct BotModelView: View {
 
     @State private var model: BotModelsModel
     @State private var picking: Picking?
+    @State private var addingKey = false
     let displayName: String
-
     @Environment(\.hermesTheme) private var theme
+    @Environment(SettingsHub.self) private var hub
 
     init(model: BotModelsModel, displayName: String) {
         _model = State(initialValue: model)
         self.displayName = displayName
     }
 
+    private var depth: Int { (picking == nil ? 0 : 1) + (addingKey ? 1 : 0) }
+
+    private var title: String {
+        if addingKey { return String(localized: "Add a key") }
+        switch picking {
+        case .primary: return String(localized: "Choose a model")
+        case .fallback: return String(localized: "Add a backup model")
+        case nil: return String(localized: "Model, effort and backups")
+        }
+    }
+
+    private func goBack() {
+        if addingKey {
+            addingKey = false
+            Task { await model.load() }
+        } else {
+            picking = nil
+        }
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                switch model.phase {
-                case .loading:
-                    DelayedProgressView().padding(.top, 40).accessibilityIdentifier("botModelLoading")
-                case .failed:
-                    FailureCard(message: "Couldn't load this bot's models.", identifier: "botModelFailure") {
-                        Task { await model.load() }
-                    }
-                case .ready:
-                    overview
-                }
-            }
-            .padding(.top, 16)
-            .padding(.bottom, 32)
+        BotSettingsScreen(title: title, identifier: "botModelScreen", depth: depth, back: goBack) {
+            stepContent
         }
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
-        .accessibilityIdentifier("botModelScreen")
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Model")
-                    .hermesText(.sheetTitle)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .accessibilityAddTraits(.isHeader)
-            }
-            .sharedBackgroundVisibility(.hidden)
-        }
-        .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
+        #if os(iOS)
         .sheet(item: $picking) { mode in
-            BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback) { picking = nil }
-                .macSheetFrame()
+            BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback, addKey: {}, finish: { picking = nil })
         }
+        #endif
         .confirmationDialog(
             "Use this model?",
             isPresented: Binding(get: { model.confirmation != nil }, set: { if !$0 { model.confirmation = nil } }),
@@ -68,6 +64,35 @@ struct BotModelView: View {
             Button("Cancel", role: .cancel) { model.confirmation = nil }
         } message: { confirmation in
             Text(confirmation.message)
+        }
+    }
+
+    @ViewBuilder
+    private var stepContent: some View {
+        #if os(macOS)
+        if addingKey {
+            MacModelProvidersSection(hub: hub, embedded: true)
+        } else if let mode = picking {
+            BotModelPicker(model: model, mode: mode == .primary ? .primary : .fallback, addKey: { addingKey = true }, finish: { picking = nil })
+        } else {
+            phaseContent
+        }
+        #else
+        phaseContent
+        #endif
+    }
+
+    @ViewBuilder
+    private var phaseContent: some View {
+        switch model.phase {
+        case .loading:
+            DelayedProgressView().padding(.top, 40).accessibilityIdentifier("botModelLoading")
+        case .failed:
+            FailureCard(message: "Couldn't load this bot's models.", identifier: "botModelFailure") {
+                Task { await model.load() }
+            }
+        case .ready:
+            overview
         }
     }
 
@@ -210,6 +235,7 @@ private struct BotModelPicker: View {
 
     let model: BotModelsModel
     let mode: Mode
+    let addKey: () -> Void
     let finish: () -> Void
 
     @State private var query = ""
@@ -218,91 +244,84 @@ private struct BotModelPicker: View {
     @Environment(\.hermesTheme) private var theme
 
     var body: some View {
+        #if os(macOS)
+        list.accessibilityIdentifier("botModelPicker")
+        #else
         SheetChrome(
             title: mode == .primary ? String(localized: "Choose a model") : String(localized: "Add a backup model"),
             accessibilityIdentifier: "botModelPicker",
             leadingAccessibilityIdentifier: "botModelPickerCancel",
             onLeading: finish
         ) {
-            list
+            ScrollView {
+                list
+                    .padding(.top, 16)
+            }
         }
         .sheet(isPresented: $showsKeys, onDismiss: { Task { await model.load() } }) {
-            #if os(macOS)
-            VStack(spacing: 0) {
-                HStack {
-                    Button("Done") { showsKeys = false }
-                        .buttonStyle(.palPill(height: 28))
-                        .keyboardShortcut(.cancelAction)
-                        .accessibilityIdentifier("modelProvidersDone")
-                    Spacer()
-                }
-                .padding(.leading, 20)
-                .padding(.top, 16)
-                MacModelProvidersSection(hub: hub)
-            }
-            .background(PalTokens.content)
-            .macSheetFrame()
-            .serviceSignInDialogHost()
-            #else
             NavigationStack {
                 ModelProvidersScreen(hub: hub) { showsKeys = false }
             }
             .serviceSignInDialogHost()
-            #endif
         }
+        #endif
+    }
+
+    private func requestKey() {
+        #if os(macOS)
+        addKey()
+        #else
+        showsKeys = true
+        #endif
     }
 
     private var list: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                TextField("Search models", text: $query)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, PalMetrics.rowInset)
-                    .frame(minHeight: PalMetrics.rowMinimumHeight)
-                    .background(Color(theme.palette.groupedCard), in: Capsule())
-                    .padding(.horizontal, PalMetrics.screenMargin)
-                    .accessibilityIdentifier("botModelSearch")
-                let matches = model.models(matching: query)
-                ForEach(matches) { provider in
-                    SectionCaption(provider.name, accessibilityIdentifier: "botModelProvider-\(provider.id)")
-                        .padding(.top, PalMetrics.cardGap)
-                        .padding(.bottom, PalMetrics.captionToCardGap)
-                    GroupedCard(accessibilityIdentifier: "botModelProviderCard-\(provider.id)") {
-                        ForEach(provider.models, id: \.self) { name in
-                            let choice = ModelChoice(provider: provider.id, model: name)
-                            SettingsRow(
-                                title: name,
-                                trailing: .none,
-                                icon: isMarked(choice) ? RowIcon.symbol("checkmark") : nil,
-                                accessibilityIdentifier: "botModelOption-\(choice.id)"
-                            ) {
-                                pick(choice)
-                            }
-                        }
-                    }
-                }
-                if matches.isEmpty {
-                    CardFootnote(String(localized: "No models match."), accessibilityIdentifier: "botModelNoMatch")
-                        .padding(.top, PalMetrics.cardGap)
-                }
-                let locked = model.providersNeedingKey
-                if !locked.isEmpty {
-                    SectionCaption(String(localized: "Needs a key"), accessibilityIdentifier: "botModelKeyCaption")
-                        .padding(.top, PalMetrics.cardGap)
-                        .padding(.bottom, PalMetrics.captionToCardGap)
-                    GroupedCard(accessibilityIdentifier: "botModelKeyCard") {
-                        ForEach(locked) { provider in
-                            SettingsRow.navigate(
-                                provider.name,
-                                value: String(localized: "Add a key"),
-                                accessibilityIdentifier: "botModelAddKey-\(provider.id)"
-                            ) { showsKeys = true }
+        VStack(spacing: 0) {
+            TextField("Search models", text: $query)
+                .textFieldStyle(.plain)
+                .padding(.horizontal, PalMetrics.rowInset)
+                .frame(minHeight: PalMetrics.rowMinimumHeight)
+                .background(Color(theme.palette.groupedCard), in: Capsule())
+                .padding(.horizontal, PalMetrics.screenMargin)
+                .accessibilityIdentifier("botModelSearch")
+            let matches = model.models(matching: query)
+            ForEach(matches) { provider in
+                SectionCaption(provider.name, accessibilityIdentifier: "botModelProvider-\(provider.id)")
+                    .padding(.top, PalMetrics.cardGap)
+                    .padding(.bottom, PalMetrics.captionToCardGap)
+                GroupedCard(accessibilityIdentifier: "botModelProviderCard-\(provider.id)") {
+                    ForEach(provider.models, id: \.self) { name in
+                        let choice = ModelChoice(provider: provider.id, model: name)
+                        SettingsRow(
+                            title: name,
+                            trailing: .none,
+                            icon: isMarked(choice) ? RowIcon.symbol("checkmark") : nil,
+                            accessibilityIdentifier: "botModelOption-\(choice.id)"
+                        ) {
+                            pick(choice)
                         }
                     }
                 }
             }
-            .padding(.top, 16)
-            .padding(.bottom, 32)
+            if matches.isEmpty {
+                CardFootnote(String(localized: "No models match."), accessibilityIdentifier: "botModelNoMatch")
+                    .padding(.top, PalMetrics.cardGap)
+            }
+            let locked = model.providersNeedingKey
+            if !locked.isEmpty {
+                SectionCaption(String(localized: "Needs a key"), accessibilityIdentifier: "botModelKeyCaption")
+                    .padding(.top, PalMetrics.cardGap)
+                    .padding(.bottom, PalMetrics.captionToCardGap)
+                GroupedCard(accessibilityIdentifier: "botModelKeyCard") {
+                    ForEach(locked) { provider in
+                        SettingsRow.navigate(
+                            provider.name,
+                            value: String(localized: "Add a key"),
+                            accessibilityIdentifier: "botModelAddKey-\(provider.id)"
+                        ) { requestKey() }
+                    }
+                }
+            }
         }
     }
 

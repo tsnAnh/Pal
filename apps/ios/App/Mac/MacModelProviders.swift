@@ -5,6 +5,7 @@ import SwiftUI
 
 struct MacModelProvidersSection: View {
     let hub: SettingsHub
+    var embedded = false
 
     @State private var model: ModelProvidersModel
 
@@ -14,16 +15,23 @@ struct MacModelProvidersSection: View {
     }
 
     var body: some View {
-        MacSectionPage(
-            section: .providers,
-            accessory: {
-                Button("Refresh") { Task { await model.load() } }
-                    .buttonStyle(.palPill(height: 28))
-                    .disabled(model.isLoading)
-                    .accessibilityIdentifier("providersRefreshButton")
-            },
-            content: { content }
-        )
+        Group {
+            if embedded {
+                VStack(alignment: .leading, spacing: 26) { content }
+                    .padding(.horizontal, PalMetrics.screenMargin)
+            } else {
+                MacSectionPage(
+                    section: .providers,
+                    accessory: {
+                        Button("Refresh") { Task { await model.load() } }
+                            .buttonStyle(.palPill(height: 28))
+                            .disabled(model.isLoading)
+                            .accessibilityIdentifier("providersRefreshButton")
+                    },
+                    content: { content }
+                )
+            }
+        }
         .task { await model.load() }
         .tracksProviderSignIns(model)
         .providerRemovalConfirmation(model)

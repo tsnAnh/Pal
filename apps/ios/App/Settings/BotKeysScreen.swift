@@ -14,26 +14,9 @@ struct BotKeysScreen: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: PalMetrics.cardGap) {
-                content
-            }
-            .padding(.top, 16)
-            .padding(.bottom, 32)
+        BotSettingsScreen(title: String(localized: "Keys"), identifier: "botKeysScreen", spacing: PalMetrics.cardGap) {
+            content
         }
-        .scrollEdgeEffectStyle(.soft, for: .top)
-        .background(Color(theme.palette.sheetBackground).ignoresSafeArea())
-        .accessibilityIdentifier("botKeysScreen")
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("Keys")
-                    .hermesText(.sheetTitle)
-                    .foregroundStyle(Color(theme.palette.textPrimary))
-                    .accessibilityAddTraits(.isHeader)
-            }
-            .sharedBackgroundVisibility(.hidden)
-        }
-        .toolbarTitleDisplayMode(.inline)
         .task { await model.load() }
         .refreshable { await model.load() }
         .sheet(item: Binding(get: { model.entry }, set: { if $0 == nil { model.cancel() } })) { row in

@@ -39,6 +39,27 @@ struct BotKeysServiceTests {
         #expect(groups[0].keys.map(\.statusWord) == ["Set", "Not set"])
     }
 
+    @Test("a row carries a name, a label and Set or Not set, never a value, even when the gateway sends one")
+    func rowsNeverCarryAValue() async throws {
+        let leak = "sk-leak-marker-1234"
+        let bots = ScriptedBots()
+        bots.script("bot_keys.status", [
+            "profile": "atlas",
+            "groups": [[
+                "id": "search", "label": "Search",
+                "keys": [
+                    ["name": "EXA_API_KEY", "label": "Exa", "is_set": .bool(true), "value": .string(leak)],
+                    ["name": "FIRECRAWL_API_KEY", "label": "Firecrawl", "is_set": .bool(false), "value": .string(leak)],
+                ],
+            ]],
+        ])
+        let groups = try await BotKeysService(gateway: bots.gateway).status(profile: "atlas")
+        let rows = groups.flatMap(\.keys)
+        #expect(rows.map(\.state) == [.set, .notSet])
+        #expect(rows.map(\.state.word) == ["Set", "Not set"])
+        #expect(!String(describing: groups).contains(leak))
+    }
+
     @Test("the value travels only in the set call, and removing sends null")
     func setParams() async throws {
         let bots = ScriptedBots()
