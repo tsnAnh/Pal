@@ -58,7 +58,7 @@ Glass is a control and navigation layer floating above content, never the conten
 | System colours with light, dark and increased-contrast variants | Colours come from `PalTokens`, `theme.palette` or system colours; no raw hex, `Color(red:`, `Color(white:` in `App/` | `glass-raw-color` |
 | Bot accents stay on small shapes | Surfaces use the neutral palette | `swift-bot-tint` |
 | Icons are the primary ink | `PalIcon`, `Label(_, palIcon:)`; no raw `Image(systemName:)`, `systemImage:` or blue; exceptions in `swift_icon_tint_allowlist.txt` | `swift-icon-tint` |
-| Connect Apps: clear glass, ink only | `PalTokens` ink, `.palClearGlass`, `ClearGlassSearchField`; no blue, hex, `.tint(`, `Glass.regular` | `swift-connect-palette` |
+| Connect Apps: clear glass, ink | `PalTokens` ink, `.palClearGlass`, `ClearGlassSearchField`; no blue, hex, `.tint(`, `Glass.regular` | `swift-connect-palette` |
 | iPhone rows scroll | Row drags: `ScrollSafePan` | `swift-scroll-gesture` |
 | Mac window fits: one `MacLayoutMetrics`, one `MacShellLayout`; sidebar rows use `.boundedToColumn()` | No width literal outside `MacLayoutMetrics`; the shell never lays out with a stack; a `Mac*Row` or row `LazyVStack` is bounded and has no `fixedSize` | `swift-mac-layout`, `MacLayoutMetricsTests` |
 | Chat rows name their side | `chatRowFrame(for: ChatSender)`: bot leading, user trailing, chips `.system`; no max- or fixed-width `.frame` without `alignment:` | `swift-chat-row-alignment` |
