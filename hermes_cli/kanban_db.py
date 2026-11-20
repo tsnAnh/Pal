@@ -2669,10 +2669,10 @@ def complete_task(
     # Cheap pre-check; re-checked inside the txn to close the parent-reopen race.
     if not _parents_satisfied(conn, task_id):
         return False
-    from hermes_cli.kanban_outcomes_store import (
-        append_outcome_verified, prepare_outcome, record_outcome,
-    )
-    from hermes_cli.kanban_pr_acceptance_store import prepare_acceptance, record_acceptance
+    from hermes_cli.kanban_outcomes_store import append_outcome_verified, prepare_outcome, record_outcome
+    from hermes_cli.kanban_pr_acceptance_store import merged_already_done, prepare_acceptance, record_acceptance
+    if merged_already_done(conn, task_id, metadata):
+        return True
     verified_cards = _gate_created_cards(conn, task_id, created_cards, summary or result)
     _gate_empty_completion(conn, task_id, result=result, summary=summary)
     metadata = _merge_completion_prose_artifacts(

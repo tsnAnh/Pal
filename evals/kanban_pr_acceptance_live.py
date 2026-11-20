@@ -44,6 +44,14 @@ with tempfile.TemporaryDirectory(prefix='hermes-pr-live-') as home:
                 row = conn.execute("SELECT payload FROM task_events WHERE task_id=? AND kind='pr_acceptance' ORDER BY id DESC", (tid,)).fetchone()
                 receipt = json.loads(row[0]) if row else None
                 reports.append({'case': outcome, 'accepted': accepted, 'status': kb.get_task(conn, tid).status, 'receipt': receipt})
+            for outcome in ('pending', 'failure', 'success'):
+                state.update(conclusion=outcome, pr_state='MERGED')
+                tid = create(conn, 'Merged PR acceptance live')
+                accepted = kb.complete_task(conn, tid, metadata={'published_pr': 'https://github.com/acme/repo/pull/7'})
+                row = conn.execute("SELECT payload FROM task_events WHERE task_id=? AND kind='pr_acceptance' ORDER BY id DESC", (tid,)).fetchone()
+                reports.append({'case': 'merged-' + outcome, 'accepted': accepted, 'status': kb.get_task(conn, tid).status,
+                                'warning': (json.loads(row[0]) if row else {}).get('warning')})
+            state.pop('pr_state')
             for outcome in (('success', 'failure') if 'completion_contract' in inspect.signature(kb.create_task).parameters else ()):
                 tid = kb.create_task(conn, title='Concurrent ownership', completion_contract='acme/repo')
                 owner = kb.claim_task(conn, tid)

@@ -1,8 +1,10 @@
 """Persist acceptance with the same ownership snapshot as the terminal write."""
 from __future__ import annotations
 
+import json
+
 from hermes_cli.kanban_db_connect import write_txn
-from hermes_cli.kanban_pr_acceptance import _PR, collect_acceptance, split_contract
+from hermes_cli.kanban_pr_acceptance import _PR, collect_acceptance, refusal_detail, split_contract
 
 
 def _snapshot(conn, task_id):
@@ -38,8 +40,27 @@ def prepare_acceptance(conn, task_id, expected_run_id, metadata, outcome=None):
     verified = outcome[1]["verified"] if outcome and outcome[1]["kind"] == "merged_pr" else None
     if receipt["ok"] and verified and (verified["pr_url"], verified["head_sha"]) != (receipt["pr_url"], receipt["head_sha"]):
         receipt.update(ok=False, classification="mismatch",
-                       detail="The merged outcome and the CI acceptance name different pull requests or heads.")
+                       detail=f"The merged outcome names {verified['pr_url']} at {verified['head_sha']}; "
+                              f"the CI acceptance names {receipt['pr_url']} at {receipt['head_sha']}.")
+    if not receipt["ok"]:
+        receipt["detail"] = refusal_detail(receipt)
     return snapshot, receipt
+
+
+def merged_already_done(conn, task_id, metadata=None) -> bool:
+    row = conn.execute("SELECT status, completion_contract, assignee FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if row is None or row["status"] != "done" or not row["completion_contract"] or row["completion_contract"] == "local-only":
+        return False
+    published_pr = metadata.get("published_pr") if isinstance(metadata, dict) else None
+    receipt = collect_acceptance(row["completion_contract"], published_pr if isinstance(published_pr, str) else None,
+                                 assignee=row["assignee"])
+    return receipt["ok"] and receipt.get("merged", False)
+
+
+def acceptance_warning(conn, task_id) -> str | None:
+    row = conn.execute("SELECT payload FROM task_events WHERE task_id=? AND kind='pr_acceptance' ORDER BY id DESC LIMIT 1",
+                       (task_id,)).fetchone()
+    return (json.loads(row["payload"]) if row else {}).get("warning")
 
 
 def record_acceptance(conn, task_id, acceptance):
@@ -50,6 +71,6 @@ def record_acceptance(conn, task_id, acceptance):
         return False
     _append_event(conn, task_id, "pr_acceptance", receipt, run_id=snapshot[0])
     if not receipt["ok"]:
-        detail = f"PR acceptance {receipt['classification']}: {receipt.get('detail', '')} {receipt['recovery']}"
+        detail = f"PR acceptance {receipt['classification']}: {receipt['detail']} {receipt['recovery']}"
         conn.execute("UPDATE tasks SET last_failure_error=? WHERE id=?", (detail, task_id))
     return receipt["ok"]

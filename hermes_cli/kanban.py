@@ -26,6 +26,7 @@ from hermes_cli import kanban_workflow
 from hermes_cli.kanban_board_mode import ExternalBoardError
 from hermes_cli.kanban_external_claim import ExternalRunFenceError, bound_profile as _bound_profile
 from hermes_cli.kanban_outcomes_store import OutcomeRefusedError
+from hermes_cli.kanban_pr_acceptance_store import acceptance_warning
 from hermes_cli.kanban_output import (
     _ATTACHMENT_FIELDS, _RUNS_RUN_FIELDS, _SHOW_RUN_FIELDS, _bulk_apply, _err,
     _fmt_counts, _fmt_task_line, _fmt_ts, _json_out, _obj_dict, _print_json,
@@ -908,6 +909,16 @@ def _goal_gate_error(conn, tid: str, evidence: str, handoff: str, blocked_hint: 
     return None
 
 
+def _completion_refusal(task, tid: str) -> str:
+    if task is None:
+        return f"cannot complete {tid}: no such task"
+    acceptance = task.last_failure_error if (task.last_failure_error or "").startswith("PR acceptance") else None
+    if acceptance:
+        return f"cannot complete {tid}: {acceptance} Status, dependents and workspace are unchanged."
+    return (f"cannot complete {tid}: status={task.status}; the completion was not applied "
+            f"(already terminal, or the run changed while it was being checked)")
+
+
 def _cmd_complete(args: argparse.Namespace) -> int:
     """Mark one or more tasks done. Supports a single id or a list."""
     ids, rc = _require_ids(args)
@@ -951,16 +962,22 @@ def _cmd_complete(args: argparse.Namespace) -> int:
                                  f"describing what was done (an empty completion is not evidence).")
                 return False
             if not done:
-                # complete_task returns bare False for a dependency refusal too;
-                # name the open parents instead of claiming the id is unknown.
+                # complete_task returns bare False for a dependency or acceptance refusal too;
+                # name the open parents or the stored acceptance reason instead of a generic line.
                 blockers = kb.unsatisfied_parents(conn, tid)
                 if blockers:
                     detail = ", ".join(f"{pid} ({status})" for pid, status in blockers)
                     fail_msg[tid] = (f"cannot complete {tid}: unsatisfied parent dependencies: {detail}; "
                                      f"complete the parents first, or `hermes kanban unlink <parent> {tid}`.")
+                else:
+                    fail_msg[tid] = _completion_refusal(kb.get_task(conn, tid), tid)
             return done
 
-        return _bulk_apply(ids, op, lambda tid: f"Completed {tid}", fail_msg.__getitem__)
+        def completed(tid: str) -> str:
+            warning = acceptance_warning(conn, tid)
+            return f"Completed {tid}" + (f" ({warning})" if warning else "")
+
+        return _bulk_apply(ids, op, completed, fail_msg.__getitem__)
 
 
 def _cmd_edit(args: argparse.Namespace) -> int:

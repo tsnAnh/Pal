@@ -183,8 +183,6 @@ def push_run(s, same_workflows):
 
 
 SUCCESS = [
-    ("merged PR whose runs lost pull_requests, proven by the commit-to-PR link", merged_shape),
-
     ("exact head", lambda s: None),
     ("150 neutral/skipped checks around the success", lambda s: many_skipped(s)),
     ("ignored claude-review job and security-review status", lambda s: (
@@ -198,28 +196,6 @@ SUCCESS = [
     ("push run with branch workflows equal to the default branch", lambda s: push_run(s, True)),
 ]
 REFUSED = [
-    ("merged shape, commit-to-PR list omits this PR", lambda s: merged_shape(s, linked=False), "missing"),
-    ("merged shape, commit-to-PR list names a different PR", lambda s: (
-        merged_shape(s, linked=False),
-        s["commit_prs"].append({"number": 8, "state": "closed", "base": {"ref": "main"}, "head": {"sha": HEAD}})), "missing"),
-    ("merged shape, run lists another PR though this PR is linked", lambda s: (
-        merged_shape(s), set_run(s, pull_requests=[{"number": 8, "base": {"ref": "main"}}])), "missing"),
-    ("merged shape, linked PR has a non-default base", lambda s: (
-        merged_shape(s, linked=False),
-        s["commit_prs"].append({"number": 7, "state": "closed", "base": {"ref": "dev"}, "head": {"sha": HEAD}})), "missing"),
-    ("merged shape, linked PR head differs", lambda s: (
-        merged_shape(s, linked=False),
-        s["commit_prs"].append({"number": 7, "state": "closed", "base": {"ref": "main"}, "head": {"sha": "b" * 40}})), "missing"),
-    ("merged shape, run on another head", lambda s: (merged_shape(s), set_run(s, head_sha="b" * 40)), "missing"),
-    ("merged shape, run from a fork", lambda s: (merged_shape(s), set_run(s, head_repository={"full_name": "fork/widget"})), "missing"),
-    ("merged shape, run started before the PR opened", lambda s: (merged_shape(s), set_run(s, run_started_at="2025-12-31T00:00:00Z")), "missing"),
-    ("merged shape, run on another branch", lambda s: (merged_shape(s), set_run(s, head_branch="other")), "missing"),
-    ("merged shape, push-event run with empty list", lambda s: (merged_shape(s), set_run(s, event="push"), s["trees"].update({HEAD: {}})), "missing"),
-    ("merged shape, retargeted sibling", lambda s: (
-        merged_shape(s), s["branch_prs"].append({"number": 3, "base": {"ref": "dev"}}), s["sibling_timelines"].update({3: []})), "provenance"),
-    ("merged shape, another open PR shares the head", lambda s: (
-        merged_shape(s), s["commit_prs"].append({"number": 9, "state": "open", "base": {"ref": "main"}, "head": {"sha": HEAD}})), "provenance"),
-    ("merged shape, unreadable commit-to-PR page", lambda s: (merged_shape(s), s.update(commit_prs_raw={"message": "gone"})), "infra"),
 
     ("pending", lambda s: add_check(s, status="in_progress", conclusion=None), "pending"),
     ("failure beyond the first page", lambda s: many_skipped(s, failing_at=120), "failure"),
@@ -271,8 +247,9 @@ def test_fleet_refuses_everything_the_provenance_rules_reject(github, conn, name
     mutate(github)
     tid, done = attempt(conn)
     assert not done and kb.get_task(conn, tid).status != "done"
-    assert receipts(conn, tid)[-1]["classification"] == expected
-    assert not receipts(conn, tid)[-1]["ok"]
+    receipt = receipts(conn, tid)[-1]
+    assert receipt["classification"] == expected and not receipt["ok"]
+    assert_exact_refusal(conn, tid, receipt)
 
 
 def test_incomplete_check_run_pagination_fails_closed(github, conn, monkeypatch):
@@ -362,6 +339,158 @@ def test_denied_read_is_an_auth_receipt(github, conn, monkeypatch, tmp_path):
     (tmp_path / "bin" / "gh").write_text(f"#!{sys.executable}\nimport sys\nsys.stderr.write('HTTP 404')\nsys.exit(1)\n")
     tid, done = attempt(conn)
     assert not done and receipts(conn, tid)[-1]["classification"] == "auth"
+
+
+def assert_exact_refusal(conn, tid, receipt):
+    detail = receipt["detail"]
+    assert detail.strip() and detail.rstrip(".") != receipt["classification"]
+    assert detail in kb.get_task(conn, tid).last_failure_error
+
+
+def merge(state, runs=()):
+    state["pr"].update(state="closed", merged=True)
+    for check in runs:
+        add_check(state, **check)
+
+
+def accepted_with(conn, tid_done):
+    tid, done = tid_done
+    assert done and kb.get_task(conn, tid).status == "done"
+    receipt = receipts(conn, tid)[-1]
+    assert receipt["ok"] and receipt["classification"] == "merged" and receipt["merged"]
+    return tid, receipt
+
+
+def test_merged_pr_with_pending_ci_is_accepted_with_a_warning(github, conn):
+    merge(github, runs=[{"status": "in_progress", "conclusion": None, "name": "slow"}])
+    _, receipt = accepted_with(conn, attempt(conn))
+    assert receipt["warning"] == f"accepted; CI pending: slow on {HEAD}"
+    assert not any(c["classification"] == "stale" for c in receipt["checks"])
+
+
+def test_merged_pr_with_failed_ci_is_accepted_with_a_warning(github, conn):
+    merge(github, runs=[{"conclusion": "failure", "name": "lint"}, {"conclusion": "failure", "name": "unit"}])
+    _, receipt = accepted_with(conn, attempt(conn))
+    assert receipt["warning"] == f"accepted; CI failed: lint, unit on {HEAD}"
+
+
+def test_merged_pr_with_green_ci_is_accepted_without_a_warning(github, conn):
+    merge(github)
+    _, receipt = accepted_with(conn, attempt(conn))
+    assert "warning" not in receipt
+
+
+def test_merged_pr_with_unreadable_ci_is_accepted_with_a_warning(github, conn, tmp_path):
+    merge(github)
+    failing_gh(github, tmp_path, "/check-runs")
+    _, receipt = accepted_with(conn, attempt(conn))
+    assert receipt["warning"].startswith(f"accepted; CI state unreadable on {HEAD}")
+    assert "secret-host" not in receipt["warning"]
+
+
+def test_merged_pr_skips_the_ci_provenance_rules_but_not_repository_identity(github, conn):
+    merged_shape(github, linked=False)
+    github["branch_prs"].append({"number": 3, "base": {"ref": "dev"}})
+    accepted_with(conn, attempt(conn))
+    github["pr"]["base"]["ref"] = "dev"
+    tid, done = attempt(conn)
+    receipt = receipts(conn, tid)[-1]
+    assert not done and receipt["classification"] == "provenance"
+    assert f"{PR} must be same-repository ({REPO}) and target the default branch main" in receipt["detail"]
+
+
+def test_open_pr_is_still_refused_with_the_reason(github, conn):
+    add_check(github, status="in_progress", conclusion=None, name="slow")
+    tid, done = attempt(conn)
+    receipt = receipts(conn, tid)[-1]
+    assert not done and receipt["classification"] == "pending" and not receipt["ok"]
+    assert PR in receipt["detail"] and "slow (pending)" in receipt["detail"]
+    assert_exact_refusal(conn, tid, receipt)
+
+
+def test_closed_unmerged_pr_is_refused_with_the_reason(github, conn):
+    github["pr"].update(state="closed", merged=False)
+    tid, done = attempt(conn)
+    receipt = receipts(conn, tid)[-1]
+    assert not done and kb.get_task(conn, tid).status != "done"
+    assert receipt["classification"] == "not_merged"
+    assert receipt["detail"].startswith(f"{PR} is closed and was never merged")
+    assert_exact_refusal(conn, tid, receipt)
+
+
+@pytest.mark.parametrize("published,classification", [
+    (f"https://github.com/{REPO}/pull/8", "mismatch"),
+    ("https://github.com/other/widget/pull/7", "mismatch"),
+])
+def test_pr_bound_to_another_card_or_repository_is_refused_with_both_sides(github, conn, published, classification):
+    tid = kb.create_task(conn, title="pr", assignee=PROFILE, completion_contract=f"fleet-ci:{PR}")
+    metadata = {"published_pr": published} if published else None
+    assert not kb.complete_task(conn, tid, result="done", metadata=metadata)
+    receipt = receipts(conn, tid)[-1]
+    assert receipt["classification"] == classification
+    assert PR in receipt["detail"] and (published is None or published in receipt["detail"])
+    assert_exact_refusal(conn, tid, receipt)
+
+
+def test_repository_contract_without_a_published_pr_is_refused_naming_what_it_expects(github, conn):
+    tid = kb.create_task(conn, title="pr", assignee=PROFILE, completion_contract=f"fleet-ci:{REPO}")
+    assert not kb.complete_task(conn, tid, result="done")
+    receipt = receipts(conn, tid)[-1]
+    assert receipt["classification"] == "missing"
+    assert receipt["detail"] == f"completion_contract {REPO} expects a pull request in {REPO}; found no metadata.published_pr."
+    assert_exact_refusal(conn, tid, receipt)
+
+
+def test_card_already_done_with_merged_pr_is_accepted_idempotently(github, conn):
+    merge(github, runs=[{"conclusion": "failure", "name": "lint"}])
+    tid, _ = accepted_with(conn, attempt(conn))
+    events = conn.execute("SELECT count(*) FROM task_events WHERE task_id=?", (tid,)).fetchone()[0]
+    assert kb.complete_task(conn, tid, result="again", metadata={"published_pr": PR})
+    assert conn.execute("SELECT count(*) FROM task_events WHERE task_id=?", (tid,)).fetchone()[0] == events
+    assert kb.get_task(conn, tid).result == "done"
+
+
+def test_card_already_done_but_pr_not_merged_is_not_accepted_again(github, conn):
+    tid = kb.create_task(conn, title="pr", assignee=PROFILE, completion_contract=f"fleet-ci:{PR}")
+    assert kb.complete_task(conn, tid, result="done", metadata={"published_pr": PR})
+    github["pr"].update(state="open", merged=False)
+    add_check(github, conclusion="failure", name="lint")
+    assert not kb.complete_task(conn, tid, result="again", metadata={"published_pr": PR})
+
+
+def test_claim_cli_treats_a_done_merged_card_as_already_done_and_explains_every_other_refusal(github, conn, capsys):
+    import argparse
+    from hermes_cli import kanban_outcomes_cli
+    merge(github, runs=[{"conclusion": "failure", "name": "lint"}])
+    tid, _ = accepted_with(conn, attempt(conn))
+    args = argparse.Namespace(task_id=tid, session=None, ttl=None, json=True)
+    assert kanban_outcomes_cli.claim(args) == 0
+    assert json.loads(capsys.readouterr().out) == {"task_id": tid, "status": "done", "already_done": True, "run_id": None}
+    github["pr"].update(state="open", merged=False)
+    assert kanban_outcomes_cli.claim(args) == 1
+    assert f"cannot claim {tid}: status=done, and no merged pull request is bound to it" in capsys.readouterr().err
+    held = kb.create_task(conn, title="held", assignee=PROFILE)
+    claim(conn, held)
+    args.task_id = held
+    assert kanban_outcomes_cli.claim(args) == 1
+    assert f"cannot claim {held}: status=running; held by {PROFILE}, so it is not ready to claim" in capsys.readouterr().err
+
+
+def test_complete_cli_prints_the_warning_and_names_the_exact_refusal(github, conn, capsys):
+    from hermes_cli import kanban as kanban_cli
+    merge(github, runs=[{"status": "in_progress", "conclusion": None, "name": "slow"}])
+    tid = kb.create_task(conn, title="pr", assignee=PROFILE, completion_contract=f"fleet-ci:{PR}")
+    args = type("A", (), {"task_ids": [tid], "ids": [tid], "result": "done", "summary": None,
+                          "metadata": json.dumps({"published_pr": PR}), "run_id": None, "force": False})
+    assert kanban_cli._cmd_complete(args) == 0
+    assert f"Completed {tid} (accepted; CI pending: slow on {HEAD})" in capsys.readouterr().out
+    github["pr"].update(state="closed", merged=False)
+    other = kb.create_task(conn, title="pr2", assignee=PROFILE, completion_contract=f"fleet-ci:{PR}")
+    args.task_ids = args.ids = [other]
+    assert kanban_cli._cmd_complete(args) == 1
+    err = capsys.readouterr().err
+    assert f"cannot complete {other}: PR acceptance not_merged: {PR} is closed and was never merged" in err
+    assert "unknown id or terminal state" not in err
 
 
 def governed_card(conn, contract=f"fleet-ci:{REPO}"):

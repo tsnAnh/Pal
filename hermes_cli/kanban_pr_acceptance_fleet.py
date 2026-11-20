@@ -8,7 +8,10 @@ from __future__ import annotations
 
 import re
 
-from hermes_cli.kanban_pr_acceptance import _api, _PR, phase
+from hermes_cli.kanban_pr_acceptance import (
+    _api, _GateAuthError, _INFRA_ERRORS, _PR, accept_merged, binding_detail, ci_warning, phase,
+    refuse_not_merged, unreadable_ci_warning,
+)
 
 _SHA = re.compile(r"[0-9a-f]{40}")
 _WORKFLOW_DIR = ".github/workflows/"
@@ -45,6 +48,58 @@ def _tree(repo: str, ref: str, profile_home: str | None) -> dict[str, str]:
     return {e["path"]: e["sha"] for e in tree["tree"] if e["path"].startswith(_WORKFLOW_DIR)}
 
 
+def _classify_run(run: dict, sha: str) -> str:
+    if run.get("head_sha") != sha:
+        return "stale"
+    if run.get("status") != "completed":
+        return "pending"
+    return "success" if run.get("conclusion") in _NON_FAILING else "failure"
+
+
+def _classify_status(status: dict) -> str:
+    return {"success": "success", "pending": "pending"}.get(status["state"], "failure")
+
+
+def _latest_statuses(statuses: list[dict]) -> dict[str, dict]:
+    latest: dict[str, dict] = {}
+    for status in statuses:
+        if status["context"] not in latest or status["id"] > latest[status["context"]]["id"]:
+            latest[status["context"]] = status
+    return latest
+
+
+def _workflow_runs(repo: str, sha: str, profile_home: str | None) -> dict:
+    with phase("workflow runs"):
+        return {r["check_suite_id"]: r for r in _pages(
+            f"repos/{repo}/actions/runs?head_sha={sha}&per_page=100", "workflow_runs", profile_home)}
+
+
+def _ignored_run(run: dict, workflow_runs: dict) -> bool:
+    workflow = workflow_runs.get((run.get("check_suite") or {}).get("id"))
+    return workflow is not None and _workflow_path(workflow) in _IGNORED_WORKFLOWS
+
+
+def _merged_ci_warning(receipt: dict, repo: str, sha: str, profile_home: str | None) -> str | None:
+    try:
+        workflow_runs = _workflow_runs(repo, sha, profile_home)
+        with phase("check runs"):
+            runs = _pages(f"repos/{repo}/commits/{sha}/check-runs?per_page=100&filter=latest", "check_runs", profile_home)
+        with phase("statuses"):
+            statuses = _pages(f"repos/{repo}/commits/{sha}/statuses?per_page=100", None, profile_home)
+    except (_GateAuthError, *_INFRA_ERRORS) as exc:
+        return unreadable_ci_warning(sha, exc)
+    receipt["checks"] = [
+        {"name": run["name"], "id": run["id"], "url": run.get("html_url"), "head_sha": run.get("head_sha"),
+         "classification": _classify_run(run, sha), "conclusion": run.get("conclusion")}
+        for run in runs if not _ignored_run(run, workflow_runs)
+    ] + [
+        {"name": context, "id": status["id"], "url": status.get("target_url"), "head_sha": sha,
+         "classification": _classify_status(status), "conclusion": status["state"]}
+        for context, status in sorted(_latest_statuses(statuses).items()) if not _IGNORED_STATUS.fullmatch(context)
+    ]
+    return ci_warning(sha, receipt["checks"])
+
+
 def _qualifies(run: dict, *, repo: str, sha: str, number: int, branch: str, default: str,
                opened: str, workflows_match, linked: bool) -> bool:
     path = _workflow_path(run)
@@ -70,7 +125,7 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
     url = target if declared else published_pr
     match = _PR.fullmatch(url or "")
     if not match or (not declared and match[1] != target) or (declared and published_pr and published_pr != target):
-        receipt["detail"] = "Supply metadata.published_pr matching the persisted completion contract."
+        receipt.update(classification="mismatch" if published_pr else "missing", detail=binding_detail(target, published_pr))
         return receipt
     repo, number = match[1], int(match[2])
     receipt.update(pr_url=url, policy="fleet-ci")
@@ -78,15 +133,21 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
         pr = _api(f"repos/{repo}/pulls/{number}", profile_home=profile_home)
         sha, branch = pr["head"]["sha"], pr["head"]["ref"]
         receipt["head_sha"] = sha
-        if not _SHA.fullmatch(sha) or pr["state"] not in {"open", "closed"} or (pr["state"] == "closed" and not pr.get("merged")):
-            raise ValueError("PR is closed or current head is unavailable")
+        if pr["state"] == "closed" and not pr.get("merged"):
+            return refuse_not_merged(receipt, url, "closed")
+        if not _SHA.fullmatch(sha) or pr["state"] not in {"open", "closed"}:
+            raise ValueError("current head is unavailable")
     with phase("repository read"):
         default = _api(f"repos/{repo}", profile_home=profile_home)["default_branch"]
     if pr["base"]["ref"] != default or any(
             (pr[side].get("repo") or {}).get("full_name", "").lower() != repo.lower() for side in ("head", "base")):
-        receipt["detail"] = "PR must be same-repository and target the default branch."
-        receipt["classification"] = "provenance"
+        sides = ", ".join(f"{side} {(pr[side].get('repo') or {}).get('full_name') or 'unknown'}:{pr[side]['ref']}"
+                          for side in ("head", "base"))
+        receipt.update(classification="provenance",
+                       detail=f"{url} must be same-repository ({repo}) and target the default branch {default}; found {sides}.")
         return receipt
+    if pr.get("merged"):
+        return accept_merged(receipt, _merged_ci_warning(receipt, repo, sha, profile_home))
     owner = repo.split("/")[0]
     with phase("commit-to-PR pages"):
         commit_prs = _pages(f"repos/{repo}/commits/{sha}/pulls?per_page=100", None, profile_home)
@@ -103,9 +164,7 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
     if problems:
         receipt.update(classification="provenance", detail="; ".join(problems) + ".")
         return receipt
-    with phase("workflow runs"):
-        workflow_runs = {r["check_suite_id"]: r for r in _pages(
-            f"repos/{repo}/actions/runs?head_sha={sha}&per_page=100", "workflow_runs", profile_home)}
+    workflow_runs = _workflow_runs(repo, sha, profile_home)
     cache: list[bool] = []
 
     def workflows_match() -> bool:
@@ -117,23 +176,13 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
         runs = _pages(f"repos/{repo}/commits/{sha}/check-runs?per_page=100&filter=latest", "check_runs", profile_home)
     with phase("statuses"):
         statuses = _pages(f"repos/{repo}/commits/{sha}/statuses?per_page=100", None, profile_home)
-    latest = {}
-    for status in statuses:
-        if status["context"] not in latest or status["id"] > latest[status["context"]]["id"]:
-            latest[status["context"]] = status
+    latest = _latest_statuses(statuses)
     outcomes, qualifying = [], 0
     for run in runs:
-        workflow = workflow_runs.get((run.get("check_suite") or {}).get("id"))
-        if workflow is not None and _workflow_path(workflow) in _IGNORED_WORKFLOWS:
+        if _ignored_run(run, workflow_runs):
             continue
-        if run.get("head_sha") != sha:
-            classification = "stale"
-        elif run.get("status") != "completed":
-            classification = "pending"
-        elif run.get("conclusion") not in _NON_FAILING:
-            classification = "failure"
-        else:
-            classification = "success"
+        workflow = workflow_runs.get((run.get("check_suite") or {}).get("id"))
+        classification = _classify_run(run, sha)
         counted = (classification == "success" and run["conclusion"] == "success" and workflow is not None
                    and _qualifies(workflow, repo=repo, sha=sha, number=number, branch=branch, default=default,
                                   opened=pr["created_at"], workflows_match=workflows_match, linked=linked))
@@ -146,7 +195,7 @@ def collect(receipt: dict, target: str, published_pr: str | None, profile_home: 
     for context, status in sorted(latest.items()):
         if _IGNORED_STATUS.fullmatch(context):
             continue
-        classification = {"success": "success", "pending": "pending"}.get(status["state"], "failure")
+        classification = _classify_status(status)
         outcomes.append(classification)
         receipt["checks"].append({"name": context, "id": status["id"], "url": status.get("target_url"),
                                   "head_sha": sha, "classification": classification, "conclusion": status["state"]})

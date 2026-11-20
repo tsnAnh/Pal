@@ -830,10 +830,13 @@ def _handle_complete(args: dict, **kw) -> str:
         # read `kanban_attachments` before completing saw an empty list and has
         # no way to observe what its completion just registered (#117360).
         # Report the card's durable attachment set in the result.
+        from hermes_cli.kanban_pr_acceptance_store import acceptance_warning
+        warning = acceptance_warning(conn, tid)
         return _ok(task_id=tid, run_id=run.id if run else None,
                    attachments=[
                        _fields(a, _ATTACHMENT_FIELDS)
-                       for a in kb.list_attachments(conn, tid)])
+                       for a in kb.list_attachments(conn, tid)],
+                   **({"acceptance_warning": warning} if warning else {}))
 
 
 @_kanban_handler("kanban_block")

@@ -240,6 +240,7 @@ class TestCLIJudgeGate:
         monkeypatch.setattr("hermes_cli.kanban.kb.get_task", lambda conn, tid: fake_task)
         monkeypatch.setattr("hermes_cli.kanban.kb.complete_task", fake_complete_task)
         monkeypatch.setattr("hermes_cli.kanban.kbc.connect_closing", fake_connect_closing)
+        monkeypatch.setattr("hermes_cli.kanban.acceptance_warning", lambda conn, tid: None)
         monkeypatch.setattr("hermes_cli.kanban._worker_run_id_for", lambda _: None)
 
         _aux_client = (object(), "judge-model") if judge_available else (None, None)

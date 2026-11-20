@@ -78,6 +78,16 @@ login. A login that cannot see the repository is rejected with
 `classification=auth`, naming the profile and repository, instead of a
 retryable infra failure.
 
+A pull request that GitHub reports **merged** is accepted whatever its CI says: pending,
+running, red or unreadable CI on the merged head becomes a warning on the receipt and in the
+completion output (`accepted; CI pending: <checks> on <sha>`, `accepted; CI failed: <checks> on <sha>`),
+never a refusal. Completing an already-done card whose PR is merged succeeds without changing it.
+Only a real mismatch refuses, and every refusal names what was expected, what was found and
+which pull request: a PR that is open with required checks not green, a PR closed without
+merging (`classification=not_merged`), a published PR in another repository or other than the one
+the card is bound to (`classification=mismatch`), a missing `published_pr` for a repository
+contract, or an unreadable pull request.
+
 Rejection retains the active card and workspace. Durable `pr_acceptance` events
 store PR URL, SHA, required contexts, check IDs/URLs, classifications and recovery
 instructions; `last_failure_error` surfaces the next step. Fix failures, rerun
