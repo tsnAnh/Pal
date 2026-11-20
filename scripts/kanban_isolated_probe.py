@@ -510,9 +510,9 @@ class Probe:
         status = (show.get("task") or {}).get("status", MISSING) if isinstance(show, dict) else MISSING
         acceptance = (_last(events, "pr_acceptance") or {}).get("payload") or {}
         verified = ((_last(events, "outcome_verified") or {}).get("payload") or {}).get("verified") or {}
-        qualifying = [c for c in acceptance.get("checks", []) if c.get("qualifying")]
-        notes = {"classification": acceptance.get("classification", "unknown"), "qualifying_checks": len(qualifying),
-                 "checks": len(acceptance.get("checks", [])), "detail": self.redact(acceptance.get("detail") or done.refusal())}
+        ci_checks = acceptance.get("checks", [])
+        notes = {"classification": acceptance.get("classification", "unknown"), "ci_checks": len(ci_checks),
+                 "warning": self.redact(acceptance.get("warning") or "none"), "detail": self.redact(acceptance.get("detail") or done.refusal())}
         title = "completion accepted by CI-evidence policy"
         if done.refused and done.reason("outcome refused") == "unverifiable":
             return self._unknown_completion(title, "GitHub could not confirm the merge", notes)
@@ -523,7 +523,7 @@ class Probe:
             Check("verified_head", self.target.head, verified.get("head_sha", MISSING)),
             Check("verified_merge_commit", self.target.merge_commit, verified.get("merge_commit", MISSING)),
             Check("acceptance_ok", True, acceptance.get("ok", MISSING)),
-            Check("qualifying_checks_at_least_1", True, len(qualifying) >= 1 if acceptance else MISSING)], notes))
+            Check("ci_checks_read_at_least_1", True, len(ci_checks) >= 1 if acceptance else MISSING)], notes))
 
     def _unknown_completion(self, title: str, reason: str, notes: Mapping[str, Any]) -> None:
         self.add(Step.unknown("5", title, reason, {k: v for k, v in notes.items() if k == "detail"}))

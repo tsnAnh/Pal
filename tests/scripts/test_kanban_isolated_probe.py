@@ -113,19 +113,19 @@ def offline(tmp_path_factory):
 
 
 @pytest.mark.parametrize("step", ["0", "1", "2", "3", "3c", "4", "4a", "4b", "5", "6", "6w"])
-def test_every_step_passes_against_recorded_pr139_with_qualifying_ci(accepted, step):
+def test_every_step_passes_against_recorded_merged_pr139(accepted, step):
     assert accepted["rows"][step][0] == "pass", accepted["stdout"]
     assert accepted["rc"] == 0
 
 
-def test_step5_evidence_names_the_real_pr_head_and_a_qualifying_check(accepted):
+def test_step5_evidence_names_the_merged_acceptance_and_the_ci_it_read(accepted):
     evidence = accepted["rows"]["5"][1]
-    assert "classification=success" in evidence and "qualifying_checks=1" in evidence
+    assert "classification=merged" in evidence and "ci_checks=3" in evidence and "warning=none" in evidence
 
 
 def test_ci_policy_accepts_the_unmodified_pr139_recording(recorded):
     status, evidence = recorded["rows"]["5"]
-    assert status == "pass" and "classification=success" in evidence and "qualifying_checks=1" in evidence, recorded["stdout"]
+    assert status == "pass" and "classification=merged" in evidence and "ci_checks=3" in evidence and "warning=none" in evidence, recorded["stdout"]
     assert recorded["rc"] == 0
     for step in ("4a", "4b", "6", "6w"):
         assert recorded["rows"][step][0] == "pass", recorded["stdout"]
