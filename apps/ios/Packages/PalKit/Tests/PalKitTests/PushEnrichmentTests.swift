@@ -5,7 +5,7 @@ import Testing
 @Suite("A push becomes a bot-avatar notification only when it can do so whole")
 struct PushEnrichmentTests {
     private static let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3])
-    private static let userInfo: [AnyHashable: Any] = ["profile": "hermes-bot-mobile", "session_id": "s-1"]
+    private static var userInfo: [AnyHashable: Any] { ["profile": "hermes-bot-mobile", "session_id": "s-1"] }
 
     private func cache() throws -> PushAvatarCache {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("push-avatars-\(UUID().uuidString)")
@@ -36,17 +36,23 @@ struct PushEnrichmentTests {
     }
 
     @Test("a payload without a usable profile or a title is not enriched", arguments: [
-        ([AnyHashable: Any](), "Memolly"),
-        (["profile": ""], "Memolly"),
-        (["profile": "../etc"], "Memolly"),
-        (["profile": String(repeating: "a", count: 65)], "Memolly"),
-        (["profile": 7], "Memolly"),
-        (["profile": "memolly"], "   "),
+        ("", "Memolly"),
+        ("../etc", "Memolly"),
+        (String(repeating: "a", count: 65), "Memolly"),
+        ("memolly", "   "),
     ])
-    func unusable(userInfo: [AnyHashable: Any], title: String) throws {
+    func unusable(profile: String, title: String) throws {
         let cache = try cache()
         cache.store(Self.png, for: "memolly")
-        #expect(PushEnrichment(userInfo: userInfo, title: title, body: "x", cache: cache) == nil)
+        #expect(PushEnrichment(userInfo: ["profile": profile], title: title, body: "x", cache: cache) == nil)
+    }
+
+    @Test("a payload with no profile or a non-text profile is not enriched")
+    func missingProfile() throws {
+        let cache = try cache()
+        cache.store(Self.png, for: "memolly")
+        #expect(PushEnrichment(userInfo: [:], title: "Memolly", body: "x", cache: cache) == nil)
+        #expect(PushEnrichment(userInfo: ["profile": 7], title: "Memolly", body: "x", cache: cache) == nil)
     }
 }
 
