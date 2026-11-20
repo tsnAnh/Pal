@@ -273,8 +273,8 @@ struct ChatImageViewer: View {
                 .updating($pinch) { value, gesture, _ in gesture = value.magnification }
                 .onEnded { zoom = min(max(zoom * $0.magnification, 1), 6) }
         )
-        .simultaneousGesture(
-            DragGesture(minimumDistance: Self.swipeDistance).onEnded { drag in
+        .simultaneousGesture( // scroll-gesture: ok full-screen image viewer, no scroll view under it
+            DragGesture(minimumDistance: Self.swipeDistance).onEnded { drag in // scroll-gesture: ok full-screen image viewer
                 guard zoom <= 1 else { return }
                 _ = go(drag.translation.width < 0 ? 1 : -1)
             }
