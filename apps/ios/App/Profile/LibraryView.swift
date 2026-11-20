@@ -49,8 +49,11 @@ struct LibraryView: View {
         .inAppBrowser(url: $model.safariURL)
         .quickLookPreview($model.previewURL)
         .onChange(of: model.previewURL) { model.cleanUpPreview() }
-        .alert(Text("This item can't be opened right now"), isPresented: Binding(get: { model.previewFailed }, set: { if !$0 { model.dismissPreviewFailure() } })) {
-            Button("OK", role: .cancel) {}
+        .macAlert(isPresented: Binding(get: { model.previewFailed }, set: { if !$0 { model.dismissPreviewFailure() } })) {
+            MacDialogContent(
+                String(localized: "This item can't be opened right now"),
+                actions: [MacDialogAction(String(localized: "OK"), role: .cancel)]
+            )
         }
     }
 

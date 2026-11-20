@@ -86,16 +86,22 @@ struct BotComputerScreen: View {
             }
         }
         .task { await model.load(api: hub.api) }
-        .confirmationDialog("Reset Computer?", isPresented: $confirming, titleVisibility: .visible) {
-            Button("Reset Computer", role: .destructive) { Task { await model.reset(api: hub.api) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Rebuild from your last saved snapshot. Very recent changes may be lost.")
+        .macConfirm(isPresented: $confirming) {
+            MacDialogContent(
+                String(localized: "Reset Computer?"),
+                message: String(localized: "Rebuild from your last saved snapshot. Very recent changes may be lost."),
+                actions: [
+                    MacDialogAction("Reset Computer", role: .destructive) { Task { await model.reset(api: hub.api) } },
+                    MacDialogAction("Cancel", role: .cancel),
+                ]
+            )
         }
-        .alert("Bot Computer", isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.failure ?? "")
+        .macAlert(isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
+            MacDialogContent(
+                String(localized: "Bot Computer"),
+                message: model.failure ?? "",
+                actions: [MacDialogAction("OK", role: .cancel)]
+            )
         }
     }
 }
@@ -235,20 +241,24 @@ private struct DeviceDetailScreen: View {
                 }
             }
         }
-        .confirmationDialog(
-            "Remove \(device.name)?", isPresented: $confirming, titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                Task { if await model.forget(device, api: hub.api, localDeviceID: connection.localDeviceID) { back() } }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("It will be signed out and will stop receiving notifications.")
+        .macConfirm(isPresented: $confirming) {
+            MacDialogContent(
+                String(localized: "Remove \(device.name)?"),
+                message: String(localized: "It will be signed out and will stop receiving notifications."),
+                actions: [
+                    MacDialogAction("Remove", role: .destructive) {
+                        Task { if await model.forget(device, api: hub.api, localDeviceID: connection.localDeviceID) { back() } }
+                    },
+                    MacDialogAction("Cancel", role: .cancel),
+                ]
+            )
         }
-        .alert("Devices", isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.failure ?? "")
+        .macAlert(isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
+            MacDialogContent(
+                String(localized: "Devices"),
+                message: model.failure ?? "",
+                actions: [MacDialogAction("OK", role: .cancel)]
+            )
         }
     }
 }

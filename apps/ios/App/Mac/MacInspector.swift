@@ -65,16 +65,15 @@ struct MacInspector: View {
             EditBotSheet(model: editing) { profile.endEditing() }
                 .macSheetFrame()
         }
-        .confirmationDialog(
-            Text("Replace Primary Bot?"),
-            isPresented: $profile.confirmsReplacePrimary,
-            titleVisibility: .visible
-        ) {
-            Button("Replace") { Task { await profile.replacePrimary() } }
-                .accessibilityIdentifier("replacePrimaryConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(profile.displayName) becomes your primary bot. Nothing is copied or deleted.")
+        .macConfirm(isPresented: $profile.confirmsReplacePrimary) {
+            MacDialogContent(
+                String(localized: "Replace Primary Bot?"),
+                message: String(localized: "\(profile.displayName) becomes your primary bot. Nothing is copied or deleted."),
+                actions: [
+                    MacDialogAction("Replace", identifier: "replacePrimaryConfirm") { Task { await profile.replacePrimary() } },
+                    MacDialogAction("Cancel", role: .cancel)
+                ]
+            )
         }
     }
 

@@ -89,10 +89,8 @@ struct MacPalette: View {
                 results(sections, rows: rows)
             }
         }
-        .frame(width: 590)
-        .background(PalTokens.elevated, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(PalTokens.panelBorder, lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 40, y: 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .preference(key: MacPanelCloseKey.self, value: MacPanelCloseOverride(hidden: true))
         .background {
             Button("") { router.closeSearch() }
                 .keyboardShortcut(.cancelAction)
@@ -164,7 +162,7 @@ struct MacPalette: View {
                 .padding(.horizontal, 10)
             }
             .scrollIndicators(.never)
-            .frame(maxHeight: 455)
+            .frame(maxHeight: .infinity)
             .onChange(of: selection) { _, index in
                 if rows.indices.contains(index) { proxy.scrollTo(rows[index].id) }
             }

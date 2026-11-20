@@ -167,7 +167,7 @@ struct MacShortcutsSheet: View {
                 }
             }
         }
-        .frame(width: 354, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func rowView(_ row: MacShortcutRow) -> some View {

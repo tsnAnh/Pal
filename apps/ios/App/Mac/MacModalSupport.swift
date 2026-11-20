@@ -39,9 +39,13 @@ enum MacPanelClosePlacement {
     var alignment: Alignment { self == .leading ? .topLeading : .topTrailing }
 }
 
+enum MacModalFit {
+    case window
+    case content
+}
+
 struct MacModalPanel<Content: View>: View {
-    let width: CGFloat
-    var height: CGFloat?
+    var fit = MacModalFit.window
     var background = PalTokens.elevated
     var clearClose = false
     var closePlacement = MacPanelClosePlacement.leading
@@ -51,11 +55,25 @@ struct MacModalPanel<Content: View>: View {
     let close: () -> Void
     @ViewBuilder let content: Content
 
+    @Environment(\.macWindowSize) private var windowSize
+
     private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 12, style: .continuous) }
 
+    @ViewBuilder
+    private var sized: some View {
+        let cap = MacModalSizing.frame(window: windowSize?.size ?? .zero)
+        if cap.width > 0, cap.height > 0 {
+            switch fit {
+            case .window: content.frame(width: cap.width, height: cap.height)
+            case .content: content.frame(maxWidth: cap.width, maxHeight: cap.height)
+            }
+        } else {
+            content
+        }
+    }
+
     var body: some View {
-        content
-            .frame(width: width, height: height)
+        sized
             .background(background, in: shape)
             .overlay(shape.strokeBorder(PalTokens.panelBorder, lineWidth: 1))
             .overlayPreferenceValue(MacPanelCloseKey.self, alignment: closePlacement.alignment) { override in

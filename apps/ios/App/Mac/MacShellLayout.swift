@@ -8,7 +8,7 @@ struct MacShellLayout: Layout {
         let idealHeight = subviews.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
         return CGSize(
             width: max(proposal.width ?? MacLayoutMetrics.windowMin, MacLayoutMetrics.windowMin),
-            height: max(proposal.height ?? idealHeight, minimumHeight)
+            height: max(proposal.height ?? idealHeight, minimumHeight, MacLayoutMetrics.windowMinHeight)
         )
     }
 

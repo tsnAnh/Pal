@@ -125,16 +125,20 @@ struct MacSectionPage<Accessory: View, Content: View>: View {
                 Spacer()
                 accessory
             }
+            .frame(maxWidth: MacModalSizing.readableColumn)
             .padding(.leading, 37)
             .padding(.trailing, 51)
             .padding(.top, 29)
+            .frame(maxWidth: .infinity)
             .frame(height: 57, alignment: .top)
             ScrollView {
                 VStack(alignment: .leading, spacing: 26) { content }
+                    .frame(maxWidth: MacModalSizing.readableColumn)
                     .padding(.leading, 29)
                     .padding(.trailing, 30)
                     .padding(.top, 20)
                     .padding(.bottom, 28)
+                    .frame(maxWidth: .infinity)
             }
             .scrollIndicators(.never)
         }
@@ -208,21 +212,22 @@ private struct MacGeneralSection: View {
         }
         .task { await notifications.refresh() }
         .task { await sharing.load(api: hub.api) }
-        .confirmationDialog("Sign out of Pal on this device?", isPresented: $confirmingSignOut, titleVisibility: .visible) {
-            Button("Sign Out", role: .destructive) { Task { await connection.signOut() } }
-            Button("Cancel", role: .cancel) {}
+        .macConfirm(isPresented: $confirmingSignOut) {
+            MacDialogContent(String(localized: "Sign out of Pal on this device?"), actions: [
+                MacDialogAction("Sign Out", role: .destructive) { Task { await connection.signOut() } },
+                MacDialogAction("Cancel", role: .cancel)
+            ])
         }
-        .confirmationDialog(
-            "Signing in with another account replaces this one on this device.",
-            isPresented: $confirmingAdd, titleVisibility: .visible
-        ) {
-            Button("Continue", role: .destructive) { Task { await connection.signOut() } }
-            Button("Cancel", role: .cancel) {}
+        .macConfirm(isPresented: $confirmingAdd) {
+            MacDialogContent(String(localized: "Signing in with another account replaces this one on this device."), actions: [
+                MacDialogAction("Continue", role: .destructive) { Task { await connection.signOut() } },
+                MacDialogAction("Cancel", role: .cancel)
+            ])
         }
-        .alert("Settings", isPresented: Binding(get: { hub.message != nil }, set: { if !$0 { hub.message = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(hub.message ?? "")
+        .macAlert(isPresented: Binding(get: { hub.message != nil }, set: { if !$0 { hub.message = nil } })) {
+            MacDialogContent(String(localized: "Settings"), message: hub.message ?? "", actions: [
+                MacDialogAction("OK", role: .cancel)
+            ])
         }
     }
 
@@ -397,34 +402,38 @@ private struct MacComputerSection: View {
         }
         .task { await computer.load(api: hub.api) }
         .task { await devices.load(api: hub.api, localDeviceID: connection.localDeviceID) }
-        .confirmationDialog("Reset Computer?", isPresented: $confirmingReset, titleVisibility: .visible) {
-            Button("Reset Computer", role: .destructive) { Task { await computer.reset(api: hub.api) } }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Rebuild from your last saved snapshot. Very recent changes may be lost.")
+        .macConfirm(isPresented: $confirmingReset) {
+            MacDialogContent(
+                String(localized: "Reset Computer?"),
+                message: String(localized: "Rebuild from your last saved snapshot. Very recent changes may be lost."),
+                actions: [
+                    MacDialogAction("Reset Computer", role: .destructive) { Task { await computer.reset(api: hub.api) } },
+                    MacDialogAction("Cancel", role: .cancel)
+                ]
+            )
         }
-        .confirmationDialog(
-            removing.map { "Remove \($0.name)?" } ?? "",
-            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                if let device = removing {
-                    Task { _ = await devices.forget(device, api: hub.api, localDeviceID: connection.localDeviceID) }
-                }
-                removing = nil
-            }
-            Button("Cancel", role: .cancel) { removing = nil }
-        } message: {
-            Text("It will be signed out and will stop receiving notifications.")
+        .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            MacDialogContent(
+                removing.map { String(localized: "Remove \($0.name)?") } ?? "",
+                message: String(localized: "It will be signed out and will stop receiving notifications."),
+                actions: [
+                    MacDialogAction("Remove", role: .destructive) {
+                        if let device = removing {
+                            Task { _ = await devices.forget(device, api: hub.api, localDeviceID: connection.localDeviceID) }
+                        }
+                        removing = nil
+                    },
+                    MacDialogAction("Cancel", role: .cancel) { removing = nil }
+                ]
+            )
         }
-        .alert("Computer", isPresented: Binding(
+        .macAlert(isPresented: Binding(
             get: { computer.failure != nil || devices.failure != nil },
             set: { if !$0 { computer.failure = nil; devices.failure = nil } }
         )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(computer.failure ?? devices.failure ?? "")
+            MacDialogContent(String(localized: "Computer"), message: computer.failure ?? devices.failure ?? "", actions: [
+                MacDialogAction("OK", role: .cancel)
+            ])
         }
     }
 
@@ -524,23 +533,19 @@ private struct MacPermissionsSection: View {
             AddRuleSheet(list: list, model: model, hub: hub) { addingTo = nil }
                 .macSheetFrame()
         }
-        .confirmationDialog(
-            "Remove this rule?",
-            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                if let rule = removing { Task { await model.remove(rule, hub: hub) } }
-                removing = nil
-            }
-            Button("Cancel", role: .cancel) { removing = nil }
-        } message: {
-            Text(removing?.text ?? "")
+        .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            MacDialogContent(String(localized: "Remove this rule?"), message: removing?.text ?? "", actions: [
+                MacDialogAction("Remove", role: .destructive) {
+                    if let rule = removing { Task { await model.remove(rule, hub: hub) } }
+                    removing = nil
+                },
+                MacDialogAction("Cancel", role: .cancel) { removing = nil }
+            ])
         }
-        .alert("Permissions", isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.actionFailure ?? "")
+        .macAlert(isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
+            MacDialogContent(String(localized: "Permissions"), message: model.actionFailure ?? "", actions: [
+                MacDialogAction("OK", role: .cancel)
+            ])
         }
     }
 
@@ -693,24 +698,19 @@ private struct MacVaultSection: View {
             VaultEditSheet(model: model, api: hub.api, entry: entry) { editing = nil }
                 .macSheetFrame()
         }
-        .confirmationDialog(
-            "Remove this item from your vault?",
-            isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }),
-            titleVisibility: .visible
-        ) {
-            Button("Remove", role: .destructive) {
-                if let entry = removing { Task { await model.remove(entry, api: hub.api) } }
-                removing = nil
-            }
-            .accessibilityIdentifier("vaultRemoveConfirm")
-            Button("Cancel", role: .cancel) { removing = nil }
-        } message: {
-            Text(removing?.title ?? "")
+        .macConfirm(isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } })) {
+            MacDialogContent(String(localized: "Remove this item from your vault?"), message: removing?.title ?? "", actions: [
+                MacDialogAction("Remove", role: .destructive, identifier: "vaultRemoveConfirm") {
+                    if let entry = removing { Task { await model.remove(entry, api: hub.api) } }
+                    removing = nil
+                },
+                MacDialogAction("Cancel", role: .cancel) { removing = nil }
+            ])
         }
-        .alert("Vault", isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.actionFailure ?? "")
+        .macAlert(isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
+            MacDialogContent(String(localized: "Vault"), message: model.actionFailure ?? "", actions: [
+                MacDialogAction("OK", role: .cancel)
+            ])
         }
     }
 

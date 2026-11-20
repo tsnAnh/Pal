@@ -162,10 +162,8 @@ struct DataSharingScreen: View {
             }
         }
         .task { await model.load(api: hub.api) }
-        .alert("Data sharing", isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.failure ?? "")
+        .macAlert(isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
+            MacDialogContent(String(localized: "Data sharing"), message: model.failure ?? "", actions: [MacDialogAction("OK", role: .cancel)])
         }
     }
 }
@@ -297,10 +295,8 @@ struct ImportMemoryScreen: View {
             }
             .frame(maxWidth: .infinity)
         }
-        .alert("Import Memory", isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.failure ?? "")
+        .macAlert(isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
+            MacDialogContent(String(localized: "Import Memory"), message: model.failure ?? "", actions: [MacDialogAction("OK", role: .cancel)])
         }
     }
 }
@@ -387,10 +383,8 @@ struct BotNotificationsScreen: View {
             }
         }
         .task { await model.load(bots: hub.roster.bots, api: hub.api) }
-        .alert("Notifications", isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.failure ?? "")
+        .macAlert(isPresented: Binding(get: { model.failure != nil }, set: { if !$0 { model.failure = nil } })) {
+            MacDialogContent(String(localized: "Notifications"), message: model.failure ?? "", actions: [MacDialogAction("OK", role: .cancel)])
         }
     }
 }

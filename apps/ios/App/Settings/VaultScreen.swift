@@ -118,10 +118,12 @@ struct VaultScreen: View {
             VaultEditSheet(model: model, api: api, entry: entry) { editing = nil }
                 .macSheetFrame()
         }
-        .alert("Vault", isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.actionFailure ?? "")
+        .macAlert(isPresented: Binding(get: { model.actionFailure != nil }, set: { if !$0 { model.actionFailure = nil } })) {
+            MacDialogContent(
+                String(localized: "Vault"),
+                message: model.actionFailure ?? "",
+                actions: [MacDialogAction("OK", role: .cancel)]
+            )
         }
     }
 
@@ -139,18 +141,16 @@ struct VaultScreen: View {
                 }
             }
         }
-        .confirmationDialog(
-            "Vault item", isPresented: $choosingAction, titleVisibility: .visible, presenting: selected
-        ) { entry in
-            if entry.isEditable {
-                Button("Edit") { editing = entry }
-                    .accessibilityIdentifier("vaultEditButton-\(entry.id)")
-            }
-            Button("Remove", role: .destructive) { Task { await model.remove(entry, api: api) } }
-                .accessibilityIdentifier("vaultRemoveConfirm")
-            Button("Cancel", role: .cancel) {}
-        } message: { entry in
-            Text(entry.title)
+        .macConfirm(item: Binding(get: { choosingAction ? selected : nil }, set: { if $0 == nil { choosingAction = false } })) { entry in
+            MacDialogContent(
+                String(localized: "Vault item"),
+                message: entry.title,
+                actions: (entry.isEditable ? [MacDialogAction("Edit", identifier: "vaultEditButton-\(entry.id)") { editing = entry }] : [])
+                    + [
+                        MacDialogAction("Remove", role: .destructive, identifier: "vaultRemoveConfirm") { Task { await model.remove(entry, api: api) } },
+                        MacDialogAction("Cancel", role: .cancel),
+                    ]
+            )
         }
     }
 }
