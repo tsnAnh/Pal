@@ -185,7 +185,7 @@ jobs:
 
   swift-build:
     name: swift-build (${{ matrix.name }})
-    needs: [changes, ios-guards]
+    needs: [changes]
     if: needs.changes.outputs.swift == 'true'
     runs-on: xcode-27
     timeout-minutes: 60
@@ -206,6 +206,18 @@ jobs:
         working-directory: apps/ios
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+
+      - name: Name this week's compile cache
+        id: cas
+        working-directory: .
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the compile cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/swift-cas
+          key: swift-cas-v1-${{ matrix.name }}-${{ steps.cas.outputs.week }}-${{ github.sha }}
+          restore-keys: swift-cas-v1-${{ matrix.name }}-${{ steps.cas.outputs.week }}-
 
       # App/Intents uses the iOS/macOS 27 SDK (LongRunningIntent, the messages app schemas),
       # which only the xcode-27 image carries; macos-15 and macos-26 stop at Xcode 26.x.
@@ -231,24 +243,37 @@ jobs:
         if: matrix.kind == 'app'
         run: >-
           xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots
-          -destination '${{ matrix.destination }}'
+          -derivedDataPath build/DerivedData -destination '${{ matrix.destination }}'
           -skipPackagePluginValidation -skipMacroValidation
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           ARCHS=arm64 ONLY_ACTIVE_ARCH=NO COMPILER_INDEX_STORE_ENABLE=NO DEBUG_INFORMATION_FORMAT=dwarf
+          COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH=${{ runner.temp }}/swift-cas
 
       # Compile only: the packages target macOS 26, which a macos-15 host cannot launch, so
-      # `swift test` cannot run the tests here.
+      # the tests are built, not run. xcodebuild, not `swift build`, so the compile cache applies.
       - name: Build HermesKit and its tests
         if: matrix.kind == 'package'
         working-directory: apps/ios/Packages/PalKit
-        run: swift build --build-tests
+        run: >-
+          xcodebuild build-for-testing -scheme PalKit-Package
+          -derivedDataPath ../../build/DerivedData -destination 'generic/platform=macOS'
+          -skipPackagePluginValidation -skipMacroValidation
+          ARCHS=arm64 ONLY_ACTIVE_ARCH=NO COMPILER_INDEX_STORE_ENABLE=NO DEBUG_INFORMATION_FORMAT=dwarf
+          COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH=${{ runner.temp }}/swift-cas
+
+      - name: Save the compile cache
+        if: github.event_name == 'push' || github.head_ref == 'ci/under-two-minutes'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/swift-cas
+          key: swift-cas-v1-${{ matrix.name }}-${{ steps.cas.outputs.week }}-${{ github.sha }}
 
   # PAL_COMM_NOTIFICATIONS=1 adds the Notification Service Extension, the Communication
   # Notifications entitlement and the App Group; build it so the switched-on path keeps compiling.
   # Only when the files it compiles change (ci_paths.py swift-variant) and on every push to main.
   swift-variant:
     name: swift-variant (${{ matrix.name }})
-    needs: [changes, ios-guards]
+    needs: [changes]
     if: needs.changes.outputs.swift == 'true' && needs.changes.outputs.swift_variant == 'true'
     runs-on: xcode-27
     timeout-minutes: 60
@@ -265,6 +290,18 @@ jobs:
         working-directory: apps/ios
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a # v7.0.1
+
+      - name: Name this week's compile cache
+        id: cas
+        working-directory: .
+        run: echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the compile cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/swift-cas
+          key: swift-cas-v1-variant-${{ matrix.name }}-${{ steps.cas.outputs.week }}-${{ github.sha }}
+          restore-keys: swift-cas-v1-variant-${{ matrix.name }}-${{ steps.cas.outputs.week }}-
 
       - name: Select Xcode 27
         working-directory: .
@@ -287,10 +324,18 @@ jobs:
       - name: Build with Communication Notifications
         run: >-
           xcodebuild build -project HermesBots.xcodeproj -scheme HermesBots
-          -destination '${{ matrix.destination }}'
+          -derivedDataPath build/DerivedData -destination '${{ matrix.destination }}'
           -skipPackagePluginValidation -skipMacroValidation
           CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           ARCHS=arm64 ONLY_ACTIVE_ARCH=NO COMPILER_INDEX_STORE_ENABLE=NO DEBUG_INFORMATION_FORMAT=dwarf
+          COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH=${{ runner.temp }}/swift-cas
+
+      - name: Save the compile cache
+        if: github.event_name == 'push' || github.head_ref == 'ci/under-two-minutes'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/swift-cas
+          key: swift-cas-v1-variant-${{ matrix.name }}-${{ steps.cas.outputs.week }}-${{ github.sha }}
 
   swift:
     name: swift

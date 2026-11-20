@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -73,43 +74,65 @@ def _child_env(gh_dir: Path, home: Path, extra: dict | None = None) -> dict:
                  "HERMES_STATE_DB_GUARD_BYPASS": "1"} | (extra or {})
 
 
-def _run_probe(tmp_path_factory, gh_script: str, *, extra_args=(), extra_env=None) -> dict:
+def _prepare_probe(tmp_path_factory, gh_script: str, *, extra_args=(), extra_env=None) -> dict:
     root = tmp_path_factory.mktemp("probe-run")
     scratch = root / "scratch"
+    return {
+        "argv": [sys.executable, str(SCRIPT), "--home", str(scratch), "--pr-url", PR_URL, "--head", HEAD,
+                 "--merge-commit", MERGE, *extra_args],
+        "env": _child_env(_gh_dir(tmp_path_factory, gh_script), root / "real-home", extra_env),
+        "scratch": scratch,
+    }
+
+
+def _execute_probe(prepared: dict) -> dict:
     done = subprocess.run(
-        [sys.executable, str(SCRIPT), "--home", str(scratch), "--pr-url", PR_URL, "--head", HEAD,
-         "--merge-commit", MERGE, *extra_args],
-        cwd=REPO, env=_child_env(_gh_dir(tmp_path_factory, gh_script), root / "real-home", extra_env),
+        prepared["argv"], cwd=REPO, env=prepared["env"],
         stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=280, check=False)
     rows = {}
     for line in done.stdout.splitlines():
         cells = [c.strip() for c in line.strip("|").split(" | ")]
         if len(cells) == 3 and cells[1] in ("pass", "fail", "unknown"):
             rows[cells[0].split(" ")[0]] = (cells[1], cells[2])
-    return {"rc": done.returncode, "rows": rows, "stdout": done.stdout, "stderr": done.stderr, "scratch": scratch}
+    return {"rc": done.returncode, "rows": rows, "stdout": done.stdout, "stderr": done.stderr,
+            "scratch": prepared["scratch"]}
 
 
-@pytest.fixture(scope="module")
-def accepted(tmp_path_factory):
-    fixture = _fixture(attach_pull_requests=True)
-    path = tmp_path_factory.mktemp("fixture") / "pr139.json"
+def _fake_gh_script(path: Path, fixture: dict) -> str:
     path.write_text(json.dumps(fixture))
-    return _run_probe(tmp_path_factory, FAKE_GH.format(python=sys.executable, fixture=str(path)),
-                      extra_args=("--keep", "--github-token-env", "PROBE_TEST_TOKEN"),
-                      extra_env={"PROBE_TEST_TOKEN": FAKE_TOKEN})
+    return FAKE_GH.format(python=sys.executable, fixture=str(path))
 
 
 @pytest.fixture(scope="module")
-def recorded(tmp_path_factory):
-    fixture = _fixture(attach_pull_requests=False)
-    path = tmp_path_factory.mktemp("fixture") / "pr139.json"
-    path.write_text(json.dumps(fixture))
-    return _run_probe(tmp_path_factory, FAKE_GH.format(python=sys.executable, fixture=str(path)))
+def probe_runs(tmp_path_factory):
+    fixtures = tmp_path_factory.mktemp("fixture")
+    prepared = {
+        "accepted": _prepare_probe(
+            tmp_path_factory, _fake_gh_script(fixtures / "accepted.json", _fixture(attach_pull_requests=True)),
+            extra_args=("--keep", "--github-token-env", "PROBE_TEST_TOKEN"),
+            extra_env={"PROBE_TEST_TOKEN": FAKE_TOKEN}),
+        "recorded": _prepare_probe(
+            tmp_path_factory, _fake_gh_script(fixtures / "recorded.json", _fixture(attach_pull_requests=False))),
+        "offline": _prepare_probe(tmp_path_factory, GH_NO_LOGIN),
+    }
+    with ThreadPoolExecutor(max_workers=len(prepared)) as pool:
+        futures = {name: pool.submit(_execute_probe, run) for name, run in prepared.items()}
+        return {name: future.result() for name, future in futures.items()}
 
 
 @pytest.fixture(scope="module")
-def offline(tmp_path_factory):
-    return _run_probe(tmp_path_factory, GH_NO_LOGIN)
+def accepted(probe_runs):
+    return probe_runs["accepted"]
+
+
+@pytest.fixture(scope="module")
+def recorded(probe_runs):
+    return probe_runs["recorded"]
+
+
+@pytest.fixture(scope="module")
+def offline(probe_runs):
+    return probe_runs["offline"]
 
 
 @pytest.mark.parametrize("step", ["0", "1", "2", "3", "3c", "4", "4a", "4b", "5", "6", "6w"])
