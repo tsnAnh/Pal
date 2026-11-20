@@ -97,6 +97,31 @@ jobs:
           OPENAI_API_KEY: ""
           NOUS_API_KEY: ""
 
+      # Only the files that build a session authority through tests/gateway/devices_harness.py and
+      # bots_harness.py, so a signature change to initialize_session_authority cannot go unseen again.
+      # tests/gateway/test_canonical_bridge.py stays out: two tests in it are red on main.
+      - name: Tests (gateway harness users)
+        if: needs.changes.outputs.tooling_tests == 'true'
+        run: >-
+          scripts/run_tests.sh
+          tests/gateway/test_push_notifications.py
+          tests/gateway/test_push_silence.py
+          tests/gateway/test_diag_trace_ledger.py
+          tests/gateway/test_chat_native_owner.py
+          tests/gateway/test_device_kind_stays_mac.py
+          tests/gateway/test_kanban_boards_unopenable.py
+          tests/gateway/test_devices_presence.py
+          tests/gateway/test_primary_bot.py
+          tests/gateway/test_toolset_pin_retired.py
+          tests/gateway/test_vault_canonical_e2e.py
+          tests/gateway/test_canonical_display_lease_resolve.py
+          tests/tui_gateway/test_connectors_legacy.py
+          tests/hermes_cli/test_native_device_grants.py
+        env:
+          OPENROUTER_API_KEY: ""
+          OPENAI_API_KEY: ""
+          NOUS_API_KEY: ""
+
   ci:
     name: ci
     needs: [changes, ios-guards, python]
