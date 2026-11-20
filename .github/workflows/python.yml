@@ -264,13 +264,6 @@ jobs:
           ARCHS=arm64 ONLY_ACTIVE_ARCH=NO COMPILER_INDEX_STORE_ENABLE=NO DEBUG_INFORMATION_FORMAT=dwarf
           COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH=${{ runner.temp }}/swift-cas
 
-      - name: Diagnose compile cache determinism
-        if: matrix.kind == 'app' && github.head_ref == 'ci/under-two-minutes'
-        run: |
-          xcodebuild -project HermesBots.xcodeproj -scheme HermesBots -destination '${{ matrix.destination }}' -showBuildSettings 2>/dev/null | grep -E "^\s+(SDKROOT|SDK_NAME|SDK_VERSION|SDK_PRODUCT_BUILD_VERSION|XCODE_PRODUCT_BUILD_VERSION|SWIFT_VERSION|TARGET_TEMP_DIR) " | sort -u | head -12
-          rm -rf build/DerivedData
-          xcodebuild build-for-testing -project HermesBots.xcodeproj -scheme HermesBots -derivedDataPath build/DerivedData -destination '${{ matrix.destination }}' -skipPackagePluginValidation -skipMacroValidation CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ARCHS=arm64 ONLY_ACTIVE_ARCH=NO COMPILER_INDEX_STORE_ENABLE=NO DEBUG_INFORMATION_FORMAT=dwarf COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH=${{ runner.temp }}/swift-cas 2>&1 | grep -E "cacheable tasks|BUILD|error:" | head
-
       # Compile only: the packages target macOS 26, which a macos-15 host cannot launch, so
       # the tests are built, not run. xcodebuild, not `swift build`, so the compile cache applies.
       - name: Build HermesKit and its tests
@@ -284,7 +277,7 @@ jobs:
           COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH=${{ runner.temp }}/swift-cas
 
       - name: Save the compile cache
-        if: github.event_name == 'push' || github.head_ref == 'ci/under-two-minutes'
+        if: github.event_name == 'push'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/swift-cas
@@ -353,7 +346,7 @@ jobs:
           COMPILATION_CACHE_ENABLE_CACHING=YES COMPILATION_CACHE_CAS_PATH=${{ runner.temp }}/swift-cas
 
       - name: Save the compile cache
-        if: github.event_name == 'push' || github.head_ref == 'ci/under-two-minutes'
+        if: github.event_name == 'push'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/swift-cas
