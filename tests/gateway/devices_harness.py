@@ -90,9 +90,11 @@ async def make_authority(home: Path, runner=None, answer=None, *, register: bool
     from gateway.config import GatewayConfig, Platform
     from gateway.session import SessionSource, SessionStore
     from gateway.session_authority import LiveSession, initialize_session_authority
+    from hermes_state import SessionDB
 
     home.mkdir(parents=True, exist_ok=True)
     store = SessionStore(home / "sessions", GatewayConfig())
+    store._db = SessionDB(db_path=home / "state.db")
     if runner is None:
         runner = SimpleNamespace(config=SimpleNamespace(multiplex_profiles=False), session_authorities=None)
     for name, value in (("_session_db", store._db), ("session_store", store), ("_draining", False),
@@ -100,8 +102,8 @@ async def make_authority(home: Path, runner=None, answer=None, *, register: bool
         if not hasattr(runner, name):
             setattr(runner, name, value)
     authority = await initialize_session_authority(runner, profile_id=str(home), instance_id="owner",
-                                                   db=store._db, register=register)
-    store._db.create_session("s", source="telegram")
+                                                   register=register)
+    authority.db.create_session("s", source="telegram")
     authority.sessions["s"] = LiveSession(SessionSource(platform=Platform.TELEGRAM, chat_id="c"), "s")
     return authority
 
