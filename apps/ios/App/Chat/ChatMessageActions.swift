@@ -49,26 +49,31 @@ extension EnvironmentValues {
 }
 
 extension View {
-    func messageActions(side: MessageSide) -> some View {
-        modifier(MessageActionsModifier(side: side))
+    func messageActions(side: MessageSide, placement: MessageChromePlacement = .beside) -> some View {
+        modifier(MessageActionsModifier(side: side, placement: placement))
     }
 }
 
 private struct MessageActionsModifier: ViewModifier {
     let side: MessageSide
+    let placement: MessageChromePlacement
 
     @Environment(\.messageActions) private var actions
+
+    private var badgeOffset: CGSize {
+        placement == .insideBubble ? placement.badgeOffset : CGSize(width: side == .user ? -13 : 13, height: -21)
+    }
 
     func body(content: Content) -> some View {
         content
             .overlay(alignment: side == .user ? .topLeading : .topTrailing) {
                 if let reaction = actions?.reaction {
                     MessageReactionBadge(emoji: reaction)
-                        .offset(x: side == .user ? -13 : 13, y: -21)
+                        .offset(badgeOffset)
                 }
             }
             #if os(macOS)
-            .modifier(MacMessageActionsModifier(side: side, actions: actions))
+            .modifier(MacMessageActionsModifier(side: side, placement: placement, actions: actions))
             #else
             .modifier(TouchMessageActions(side: side, actions: actions))
             #endif

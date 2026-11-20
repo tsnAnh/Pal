@@ -58,13 +58,13 @@ struct AssistantBubble: View {
         case .text(let textSegment):
             textBubble(textSegment, lead: leadsMessage ? failureLead : nil, carries: carries, label: single ? text : textSegment.spoken)
         case .table(_, let table):
-            withActions(TableBubbleView(table: table, highlight: highlight, isCurrentMatch: isCurrentMatch), carries)
+            withActions(TableBubbleView(table: table, highlight: highlight, isCurrentMatch: isCurrentMatch), carries, placement: .insideBubble)
         }
     }
 
     @ViewBuilder
-    private func withActions<Bubble: View>(_ bubble: Bubble, _ carries: Bool) -> some View {
-        if carries { bubble.messageActions(side: .assistant) } else { bubble }
+    private func withActions<Bubble: View>(_ bubble: Bubble, _ carries: Bool, placement: MessageChromePlacement = .beside) -> some View {
+        if carries { bubble.messageActions(side: .assistant, placement: placement) } else { bubble }
     }
 
     private func leadView(_ lead: String) -> some View {
