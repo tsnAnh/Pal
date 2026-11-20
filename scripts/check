@@ -132,6 +132,7 @@ _GUARDS = {
     "swift-image-viewer": ["scripts/ci/check_swift_image_viewer.py"],
     "swift-perf": ["scripts/ci/check_swift_perf.py"],
     "swift-fault-details": ["scripts/ci/check_swift_fault_details.py"],
+    "swift-entitlements": ["scripts/ci/check_swift_entitlements.py"],
     "backend-imports": ["scripts/ci/check_backend_imports.py"],
 }
 # Guards that judge a diff, not a tree: they get the same base/head as the ratchet

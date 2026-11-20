@@ -1,0 +1,35 @@
+targets:
+  HermesBots:
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: Variants/CommNotifications/HermesBots.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: Variants/CommNotifications/HermesBots-macOS.entitlements
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) PAL_COMM_NOTIFICATIONS
+    dependencies:
+      - target: NotificationService
+  NotificationService:
+    type: app-extension
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: NotificationService
+    info:
+      path: NotificationService/Info.plist
+      properties:
+        CFBundleDisplayName: Pal Notifications
+        CFBundleName: Pal Notifications
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.tsnanh.hermes.bot.notification-service
+        PRODUCT_NAME: PalNotificationService
+        PRODUCT_MODULE_NAME: NotificationService
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+        CODE_SIGN_ENTITLEMENTS: Variants/CommNotifications/NotificationService.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=macosx*]: Variants/CommNotifications/NotificationService-macOS.entitlements
+        ENABLE_HARDENED_RUNTIME: YES
+    dependencies:
+      - package: PalKit
+        product: PalPush

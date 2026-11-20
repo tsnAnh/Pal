@@ -16,11 +16,5 @@
 	<true/>
 	<key>com.apple.security.personal-information.location</key>
 	<true/>
-	<key>com.apple.developer.usernotifications.communication</key>
-	<true/>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>group.dev.tsnanh.hermes.bot</string>
-	</array>
 </dict>
 </plist>

@@ -103,4 +103,38 @@ struct PushAvatarCacheTests {
         #expect(cache.image(for: "a") != nil && cache.image(for: "c") != nil)
         #expect(cache.image(for: "b") == nil)
     }
+
+    @Test("a build without the app group has no cache, so the push stays the plain alert")
+    func withoutAppGroup() {
+        #expect(PushAvatarCache.shared(fileManager: GrouplessFileManager()) == nil)
+        let enrichment = PushEnrichment(
+            userInfo: ["profile": "atlas"], title: "Atlas", body: "Done",
+            cache: PushAvatarCache.shared(fileManager: GrouplessFileManager())
+        )
+        #expect(enrichment == nil)
+    }
+
+    @Test("a build with the app group keeps its avatars inside the group container")
+    func withAppGroup() {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("group-\(UUID().uuidString)")
+        let cache = PushAvatarCache.shared(fileManager: GroupContainerFileManager(root: root))
+        #expect(cache?.directory.deletingLastPathComponent().path == root.path)
+    }
+}
+
+private final class GrouplessFileManager: FileManager, @unchecked Sendable {
+    override func containerURL(forSecurityApplicationGroupIdentifier groupIdentifier: String) -> URL? { nil }
+}
+
+private final class GroupContainerFileManager: FileManager, @unchecked Sendable {
+    private let root: URL
+
+    init(root: URL) {
+        self.root = root
+        super.init()
+    }
+
+    override func containerURL(forSecurityApplicationGroupIdentifier groupIdentifier: String) -> URL? {
+        groupIdentifier == PushAvatarCache.groupIdentifier ? root : nil
+    }
 }
