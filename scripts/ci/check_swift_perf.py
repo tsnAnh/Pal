@@ -15,7 +15,7 @@ perf-animation-container, perf-eager-stack, perf-monitor-per-view, perf-geometry
 perf-state-model-init, perf-model-in-body, perf-shadow-radius, perf-glass-over-fill, perf-unguarded-write,
 perf-body-array-work, perf-row-reads-model, perf-observed-image-dictionary, perf-monitor-unpaired, perf-dropped-value,
 perf-avatar-row-slot, perf-drag-writes-binding, perf-open-ungated, perf-hover-state-in-row-body, perf-selection-island,
-perf-table-in-text-bubble.
+perf-table-in-text-bubble, perf-hover-pill-outside-tracker, perf-hover-tracker-per-bubble.
 
 Run: python scripts/ci/check_swift_perf.py [apps_ios_root] [--write-baseline] [--no-baseline]
 """
@@ -82,6 +82,14 @@ def row_file(parts: tuple[str, ...], text: str) -> bool:
 
 def chat_row_view_file(parts: tuple[str, ...], text: str) -> bool:
     return parts[:2] == ("App", "Chat") and "struct ChatRowView" in text
+
+
+def hover_pill_file(parts: tuple[str, ...], text: str) -> bool:
+    return parts[0] == "App" and "MacMessageHoverBar" in text
+
+
+def bubble_file(parts: tuple[str, ...], text: str) -> bool:
+    return parts[:2] == ("App", "Chat") and parts not in {("App", "Chat", "ChatRows.swift")}
 
 
 def avatar_row_file(parts: tuple[str, ...], text: str) -> bool:
@@ -172,6 +180,23 @@ LINE_RULES = (
         "ChatRowView reads per-row hover state, so every pointer enter or exit re-runs chat.row.body. Only the small "
         "view that shows the hover affordance may read RowHoverState (MacMessageHoverBar); the row injects it with "
         ".environment(\\.rowHover, hover) and never reads it",
+    ),
+    LineRule(
+        "perf-hover-pill-outside-tracker",
+        re.compile(r"\.alignmentGuide\(|\.overlay\("),
+        hover_pill_file,
+        "the hover pill is placed by an overlay or alignmentGuide on its bubble, so it can sit outside the row's "
+        "tracking rect (a bubble at the column edge): the pointer then leaves the tracker, mouseExited hides the pill "
+        "under it and its buttons cannot be clicked. Resolve its frame with MessageChromePlacement.place(bubble:region:"
+        "side:preferred:bar:hasReaction:) inside MessageChromeLayout, whose region is the tracked row",
+    ),
+    LineRule(
+        "perf-hover-tracker-per-bubble",
+        re.compile(r"\bmacRowHover\(|\browHoverWiring\(|\bMacRowTracker\("),
+        bubble_file,
+        "a hover tracker per bubble: a message drawn as several bubbles (text, table, text) shares one RowHoverState "
+        "per message, so moving between its bubbles or onto the pill must not exit. Wire hover once per message in "
+        "ChatRows.swift (rowHoverWiring) and let the carrier bubble report its frame with .messageActions(side:placement:)",
     ),
     LineRule(
         "perf-observed-image-dictionary",

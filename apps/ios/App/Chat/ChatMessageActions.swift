@@ -60,11 +60,10 @@ private struct MessageActionsModifier: ViewModifier {
 
     @Environment(\.messageActions) private var actions
 
-    private var badgeOffset: CGSize {
-        placement == .insideBubble ? placement.badgeOffset : CGSize(width: side == .user ? -13 : 13, height: -21)
-    }
-
     func body(content: Content) -> some View {
+        #if os(macOS)
+        content.modifier(MacMessageActionsModifier(side: side, placement: placement, actions: actions))
+        #else
         content
             .overlay(alignment: side == .user ? .topLeading : .topTrailing) {
                 if let reaction = actions?.reaction {
@@ -72,12 +71,17 @@ private struct MessageActionsModifier: ViewModifier {
                         .offset(badgeOffset)
                 }
             }
-            #if os(macOS)
-            .modifier(MacMessageActionsModifier(side: side, placement: placement, actions: actions))
-            #else
             .modifier(TouchMessageActions(side: side, actions: actions))
-            #endif
+        #endif
     }
+
+    #if os(iOS)
+    private var badgeOffset: CGSize {
+        if placement == .insideBubble { return placement.badgeOffset }
+        let outset = MessageChromePlacement.besideBadgeOutset
+        return CGSize(width: side == .user ? -outset.width : outset.width, height: outset.height)
+    }
+    #endif
 }
 
 #if os(iOS)
